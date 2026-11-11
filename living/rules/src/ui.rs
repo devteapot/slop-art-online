@@ -62,6 +62,9 @@ vocab! {
         Item = "item",
         /// The ways chips in the text box (ways of speaking only).
         Box = "box",
+        /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), the offer
+        /// it answers as the act's reference once the grammar carries one (rules-offers-2).
+        Offer = "offer",
     }
 }
 
@@ -101,7 +104,8 @@ vocab! {
         AimPoint = "aim_point",
         /// Aim a direction.
         AimDir = "aim_dir",
-        PickPerson = "pick_person",
+        /// Pick the target: the one hovered, or cycle with Tab within reach.
+        PickTarget = "pick_target",
         PickItem = "pick_item",
         PickQty = "pick_qty",
         DragOnto = "drag_onto",
@@ -112,8 +116,9 @@ vocab! {
 vocab! {
     /// What the player must choose (`picks`), each mapping onto the spec.
     Pick, PICKS {
-        /// A creature: the spec takes a target.
-        Person = "person",
+        /// A target (a creature or a thing): the spec takes a target. Not a combat skill aimed at
+        /// a point, whose aim is the target.
+        Target = "target",
         /// An item: the spec takes an item.
         Item = "item",
         /// An amount: the spec reads `qty`.
@@ -122,6 +127,8 @@ vocab! {
         Want = "want",
         /// Words: the spec reads `text`.
         Words = "words",
+        /// A technique the words describe: the spec reads `topic` (`write`).
+        Topic = "topic",
     }
 }
 
@@ -130,22 +137,24 @@ impl Pick {
     pub fn fits(self, spec: &SkillSpec) -> bool {
         let arg = |a: &str| spec.args.iter().any(|x| x == a);
         match self {
-            Pick::Person => spec.needs_target,
+            Pick::Target => spec.needs_target,
             Pick::Item => spec.needs_item,
             Pick::Qty => arg("qty"),
             Pick::Want => arg("want"),
             Pick::Words => arg("text"),
+            Pick::Topic => arg("topic"),
         }
     }
 
     /// What the spec must have for this choice, in words.
     pub fn needs(self) -> &'static str {
         match self {
-            Pick::Person => "a spec with `target: true`",
+            Pick::Target => "a spec with `target: true`",
             Pick::Item => "a spec with `item`",
             Pick::Qty => "`qty` in the spec's args",
             Pick::Want => "`want` in the spec's args",
             Pick::Words => "`text` in the spec's args",
+            Pick::Topic => "`topic` in the spec's args",
         }
     }
 }
@@ -156,11 +165,34 @@ vocab! {
 }
 
 vocab! {
-    /// What a press does while the skill's combat stance is not met (`unready`).
+    /// Where an item choice comes from (`source`).
+    ItemSource, SOURCES {
+        /// What I carry.
+        Pack = "pack",
+        /// What I know (`teach`).
+        Techniques = "techniques",
+        /// My body's signals (`signal`).
+        Signals = "signals",
+        /// The words the spec lists (`build`: campfire, shelter...).
+        SpecItems = "spec_items",
+        /// What the target holds (`take` from a storage), once a client can see it.
+        TargetHolds = "target_holds",
+        /// What the world's recipes make (`make`).
+        Products = "products",
+        /// Any item of the world: what the client offered toward a target before it could see
+        /// what the target holds (it assumes the target has what is asked).
+        World = "world",
+    }
+}
+
+vocab! {
+    /// What a press does while the skill's combat stance is not met (`unready`). There is no
+    /// stance yet (the Spark's drawn state), so a declared `unready` is refused until there is.
     Unready, UNREADY {
         /// The press switches the state instead.
         Toggle = "toggle",
-        /// The slot is greyed.
+        /// The slot is greyed. A grey is a hint: a press still goes to the authority, which
+        /// decides.
         Grey = "grey",
     }
 }
@@ -173,7 +205,9 @@ vocab! {
 vocab! {
     /// How a refusal the client foresees is shown (`refused`).
     Refused, REFUSALS {
-        /// Greyed, with the rules' own `_check` text as the reason.
+        /// Greyed, with the rules' own `_check` text as the reason. A hint only: the client's
+        /// check runs on the facts it has (some faked today: noon, grass, age 30), and a press
+        /// still goes to the authority, which decides for players and minds alike.
         Grey = "grey",
         /// A note when the act is tried.
         Note = "note",
@@ -197,7 +231,8 @@ vocab! {
 
 /// Named icons for skills and acts (`look.icon`). The client's theme maps each to an image.
 pub const ICONS: &[&str] = &["sword", "bow", "fire", "shield", "dodge", "heal", "sheath", "give", "trade", "talk", "wave", "eye", "book", "hammer", "pot", "hand"];
-/// Named icons for items (an item's `icon` trait).
+/// Named icons for items (an item's `icon` trait). Not checked at install: the goods' icon ids
+/// are the dev-box's (docs/WORLD_RULES.md), and this list follows them when they land.
 pub const ITEM_ICONS: &[&str] = &["berries", "bread", "meat", "arrow", "spear", "wood", "stone", "herb", "torch", "cloth", "tablet", "tool", "vessel", "bundle"];
 /// Clip families (`look.clip`): the client maps a family to its clips, rates and beats. `throw`
 /// is the spear throw's take; `turn`, `step` and `play` are the town-life looks of `_shows()`.
@@ -207,11 +242,12 @@ pub const EFFECTS: &[&str] = &["slash", "arrow", "bolt", "burst", "glow", "guard
 /// Body states a declaration may switch (`toggles`). Each is added only when the authority has
 /// it; the drawn state is the Spark's to add, so none is listed yet.
 pub const STATES: &[&str] = &[];
-/// Item groups that order the pack (an item's `group` trait).
+/// Item groups that order the pack (an item's `group` trait). Not checked at install, as for
+/// [`ITEM_ICONS`].
 pub const ITEM_GROUPS: &[&str] = &["food", "tool", "material", "garment", "money"];
 
 /// The keys of a `<name>_ui()` map.
-pub const UI_TRAITS: &[&str] = &["label", "on", "place", "order", "input", "picks", "choose", "detail", "unready", "toggles", "drag", "pin", "running", "refused", "look", "marker", "key", "tip", "alias", "to_label", "room_label", "rows", "bubble"];
+pub const UI_TRAITS: &[&str] = &["label", "on", "place", "order", "input", "picks", "choose", "detail", "unready", "toggles", "drag", "pin", "running", "refused", "look", "marker", "key", "tip", "alias", "to_label", "room_label", "rows", "bubble", "source"];
 /// The keys only a way of speaking's `_ui()` may have.
 pub const WAY_UI_TRAITS: &[&str] = &["alias", "to_label", "room_label", "rows", "bubble"];
 /// The keys of `look`.
@@ -274,6 +310,8 @@ pub struct UiSpec {
     pub order: Option<i64>,
     pub input: Input,
     pub picks: Vec<Pick>,
+    /// Where an item choice comes from (none: the skill takes no item).
+    pub source: Option<ItemSource>,
     pub choose: Choose,
     /// A script function that takes a choice's name and returns words describing it.
     pub detail: Option<String>,
@@ -398,6 +436,9 @@ pub fn on_by_spec(src: &Source) -> Vec<On> {
         on.push(On::Bar);
     }
     let Some(spec) = src.spec else { return on };
+    // Real-time combat is the bar's, as the client's F list had it (its combat-only test, not
+    // `real_time`: a moment skill such as sleep or follow is commanded from the lists as a
+    // one-shot graph, a capability players and minds share).
     if src.shape.is_some_and(|s| s.real_time) || spec.args.iter().any(|a| a == "graph") {
         return on;
     }
@@ -409,22 +450,50 @@ pub fn on_by_spec(src: &Source) -> Vec<On> {
     } else {
         on.push(On::Me);
     }
-    if spec.needs_item {
+    // From the pack: an item of my own that the act takes, with no one else to choose.
+    if spec.needs_item && !spec.needs_target && item_source_by_spec(spec) == ItemSource::Pack {
         on.push(On::Item);
     }
     on
 }
 
-/// What must be chosen, from the spec.
-pub fn picks_by_spec(spec: &SkillSpec) -> Vec<Pick> {
-    Pick::ALL.iter().copied().filter(|p| p.fits(spec)).collect()
+/// Where a skill's item comes from, by its spec: the words it lists, its techniques, its
+/// signals, any item of the world toward a target (what the client offered before it could see
+/// what a target holds), else my pack.
+pub fn item_source_by_spec(spec: &SkillSpec) -> ItemSource {
+    if !spec.items.is_empty() {
+        ItemSource::SpecItems
+    } else if spec.item_arg.contains("technique") {
+        ItemSource::Techniques
+    } else if spec.item_arg.contains("signal") {
+        ItemSource::Signals
+    } else if spec.needs_target {
+        ItemSource::World
+    } else {
+        ItemSource::Pack
+    }
+}
+
+/// What must be chosen, from the spec and combat shape: a combat skill aimed at a point takes
+/// its target from the aim, and a held guard its amount from the hold.
+pub fn picks_by_spec(spec: &SkillSpec, shape: Option<&Shape>) -> Vec<Pick> {
+    let aimed = shape.is_some_and(|s| s.aim == Aim::Point);
+    let held = shape.is_some_and(|s| s.aim == Aim::Facing || s.hold_ms > 0);
+    Pick::ALL.iter().copied().filter(|p| p.fits(spec) && !(aimed && *p == Pick::Target) && !(held && *p == Pick::Qty)).collect()
+}
+
+/// Whether a shape is drawn as a fight move: on the bar, or used against someone.
+pub fn fights(src: &Source) -> bool {
+    src.on_bar || src.shape.is_some_and(|s| s.hostile)
 }
 
 /// A skill's presentation when it declares nothing. A world that declares nothing plays as the
 /// game client did before declarations.
 pub fn defaults(src: &Source) -> UiSpec {
-    let aim = src.shape.map_or(Aim::None, |s| s.aim);
-    let mut look = src.shape.map(|s| look_by_aim(s, src.missile)).unwrap_or_default();
+    // A fight move's input, marker and look follow its aim; any other combat shape (tend,
+    // seize) is presented as the act it is.
+    let aim = if fights(src) { src.shape.map_or(Aim::None, |s| s.aim) } else { Aim::None };
+    let mut look = src.shape.filter(|_| fights(src)).map(|s| look_by_aim(s, src.missile)).unwrap_or_default();
     // A shown skill plays its `_shows().look` (a gesture, work, sleep), when that is a family.
     if let Some(c) = src.shows.and_then(|l| name_in(CLIPS, l)) {
         look.clips = vec![c];
@@ -443,7 +512,8 @@ pub fn defaults(src: &Source) -> UiSpec {
         place: None,
         order: None,
         input: input_by_aim(aim),
-        picks: src.spec.map(picks_by_spec).unwrap_or_default(),
+        picks: src.spec.map(|k| picks_by_spec(k, src.shape)).unwrap_or_default(),
+        source: src.spec.filter(|k| k.needs_item).map(item_source_by_spec),
         choose: Choose::List,
         detail: None,
         unready: Unready::Grey,
@@ -541,8 +611,8 @@ impl Bar {
     }
 }
 
-/// The most skill keys a declared `order` may name.
-const MOST_SKILL_KEYS: usize = 12;
+/// The most skill keys a declared `order` may name (an `order` is 0..12).
+pub const MOST_SKILL_KEYS: usize = 12;
 
 /// Which skill goes on which place, from the bar's skills in bar order. Declared places come
 /// first: a `skill` place with an `order` takes that key, one without the first free key; an
@@ -669,6 +739,9 @@ pub enum ActTarget {
     Thing { kind: String, at: Option<[f32; 2]> },
     /// A point on the ground.
     At([f32; 2]),
+    /// An incoming offer: toward its sender. The offer's id goes with the act once the grammar
+    /// carries a reference (rules-offers-2); until then the act names the sender only.
+    Offer { from: u32, offer: u64 },
 }
 
 /// What the player chose for an act (an item's amount is 1 unless chosen, as today).
@@ -679,6 +752,8 @@ pub struct Picked {
     pub want: Option<String>,
     pub want_qty: Option<u32>,
     pub text: Option<String>,
+    /// A technique the words describe (`write`).
+    pub topic: Option<String>,
 }
 
 /// The `human_act` node for an act: the leaf `{"do": skill, ...}` a mind writes, or toward a
@@ -689,7 +764,7 @@ pub fn act_node(skill: &str, target: &ActTarget, picked: &Picked) -> serde_json:
     let mut leaf = json!({"do": skill});
     match target {
         ActTarget::Me => {}
-        ActTarget::Creature(id) => leaf["target"] = json!({"id": id}),
+        ActTarget::Creature(id) | ActTarget::Offer { from: id, .. } => leaf["target"] = json!({"id": id}),
         ActTarget::Thing { kind, .. } => leaf["target"] = json!({"nearest": kind}),
         ActTarget::At(p) => leaf["target"] = json!({"at": p}),
     }
@@ -704,22 +779,36 @@ pub fn act_node(skill: &str, target: &ActTarget, picked: &Picked) -> serde_json:
     if let Some(t) = &picked.text {
         leaf["text"] = t.clone().into();
     }
+    if let Some(t) = &picked.topic {
+        leaf["topic"] = t.clone().into();
+    }
     match target {
         ActTarget::Thing { at: Some(p), .. } => json!({"seq": [{"do": "goto", "target": {"at": p}}, leaf]}),
         _ => leaf,
     }
 }
 
-/// The graph leaf a bar press is the same as (`use_skill(skill, target, x, y)` on the authority;
-/// the leaf a mind writes in its graph): a creature for a skill aimed at one, oneself or an ally,
-/// else the aimed point.
-pub fn bar_act(skill: &str, aim: Aim, target: Option<u32>, at: [f32; 2]) -> serde_json::Value {
-    let t = match (aim, target) {
-        (Aim::Creature, Some(id)) | (Aim::SelfOrAlly, Some(id)) => ActTarget::Creature(id),
-        (Aim::SelfOrAlly, None) => ActTarget::Me,
-        _ => ActTarget::At(at),
+/// The graph leaf a bar press means (`use_skill(skill, target, x, y)` on the authority; the leaf
+/// a mind writes in its graph), resolved as `use_skill` resolves it: a skill aimed at a creature
+/// needs one; oneself or an ally is the ally, else oneself; a skillshot goes to the aimed point,
+/// else at the creature; a guard or a dash goes the aimed way, else (no target) toward or away
+/// from what is coming. None where the authority refuses the press ("no one there", "aim
+/// somewhere").
+///
+/// The equivalence is of intent and target only. A press is used where the body stands: the
+/// authority refuses one out of reach, while the leaf with `{"id": n}` walks into reach first.
+pub fn bar_act(skill: &str, aim: Aim, target: Option<u32>, at: Option<[f32; 2]>) -> Option<serde_json::Value> {
+    let t = match (aim, target, at) {
+        (Aim::Creature, Some(id), _) | (Aim::SelfOrAlly, Some(id), _) => ActTarget::Creature(id),
+        (Aim::Creature, None, _) => return None,
+        (Aim::SelfOrAlly, None, _) => ActTarget::Me,
+        (Aim::Point, _, Some(p)) => ActTarget::At(p),
+        (Aim::Point, Some(id), None) => ActTarget::Creature(id),
+        (Aim::Point, None, None) => return None,
+        (Aim::Facing | Aim::Dash | Aim::None, _, Some(p)) => ActTarget::At(p),
+        (Aim::Facing | Aim::Dash | Aim::None, _, None) => ActTarget::Me,
     };
-    act_node(skill, &t, &Picked::default())
+    Some(act_node(skill, &t, &Picked::default()))
 }
 
 #[cfg(test)]

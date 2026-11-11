@@ -169,10 +169,19 @@ fn defaults_reproduce_todays_looks() {
         for (skill, shape) in s.shapes().iter() {
             let u = s.ui(skill).unwrap_or_else(|| panic!("{world}: no UiSpec for combat skill `{skill}`"));
             let radius = combat_radius(&s, skill);
+            let fight = s.shapes().on_bar(skill) || shape.hostile;
             match s.shows().get(skill) {
                 // A shown skill (tend) is drawn by how others see it (the town look), not as a blow.
                 Some(sh) => assert_eq!(u.look.clips, vec![name_in(CLIPS, &sh.look).expect("a family")], "{world}: `{skill}` plays its shown look"),
-                None => assert_eq!(as_today(&u.look), today_look(skill, shape.aim.as_str(), radius), "{world}: `{skill}` looks as the client drew it"),
+                // A fight move (on the bar, or used against someone) looks as the client drew it.
+                None if fight => assert_eq!(as_today(&u.look), today_look(skill, shape.aim.as_str(), radius), "{world}: `{skill}` looks as the client drew it"),
+                // Any other combat shape (seize, yield) is no blow: no sword, no slash, no circle
+                // (the client drew them with the creature fallback only as a fighter's move,
+                // which an untimed shape never is).
+                None => {
+                    assert!(!shape.timed, "{world}: `{skill}` is timed: it would be drawn as a move");
+                    assert_eq!((u.look.clone(), u.marker, u.input), (Look::default(), Marker::None, Input::Tap), "{world}: `{skill}` is presented as an act");
+                }
             }
             n += 1;
         }
@@ -304,7 +313,9 @@ fn defaults_reproduce_todays_aims_and_lists() {
             // Toward an animal the client still asks the rules' check first (a runtime filter).
             assert!(!plan_offers(&s, name, Aimed::OtherKind) || u.is_on(On::Person));
             assert_eq!(u.is_on(On::Bar), s.shapes().on_bar(name), "{world}: `{name}` on the bar");
-            assert_eq!(u.is_on(On::Item), spec.needs_item && (u.is_on(On::Me) || u.is_on(On::Person)), "{world}: `{name}` from the pack");
+            // From the pack: only an item of my own, with no one else to choose (eat, drop, experiment).
+            assert_eq!(u.is_on(On::Item), spec.needs_item && !spec.needs_target && u.source == Some(ItemSource::Pack) && u.is_on(On::Me), "{world}: `{name}` from the pack");
+            assert_eq!(u.source.is_some(), spec.needs_item, "{world}: `{name}`'s item source");
             // The label: the name with spaces (the client's `pretty`), capitalised.
             assert_eq!(u.label.to_lowercase(), name.replace('_', " "));
         }
@@ -351,26 +362,25 @@ fn want(t: &ActTarget) -> Kind {
         ActTarget::Creature(i) => Kind::Id(*i),
         ActTarget::Thing { kind, .. } => Kind::Nearest(kind.clone()),
         ActTarget::At(_) => Kind::At,
+        ActTarget::Offer { from, .. } => Kind::Id(*from),
     }
 }
 
 /// The items a player could pick for a skill: its own words, else the world's items (or its
 /// techniques, or the body's signals).
 fn item_choices(spec: &crate::catalog::SkillSpec, body: &Species) -> Vec<String> {
-    if !spec.items.is_empty() {
-        return spec.items.clone();
+    match item_source_by_spec(spec) {
+        ItemSource::SpecItems | ItemSource::Products => spec.items.clone(),
+        ItemSource::Techniques => catalog::technique_names(),
+        ItemSource::Signals => body.signals.keys().cloned().collect(),
+        ItemSource::Pack | ItemSource::World | ItemSource::TargetHolds => {
+            let mut v = catalog::item_names();
+            if spec.item_arg.contains("food") {
+                v.push("food".into());
+            }
+            v
+        }
     }
-    if spec.item_arg.contains("technique") {
-        return catalog::technique_names();
-    }
-    if spec.item_arg.contains("signal") {
-        return body.signals.keys().cloned().collect();
-    }
-    let mut v = catalog::item_names();
-    if spec.item_arg.contains("food") {
-        v.push("food".into());
-    }
-    v
 }
 
 /// The targets a place sends, for a skill.
@@ -383,6 +393,7 @@ fn targets(on: On, spec: &crate::catalog::SkillSpec) -> Vec<ActTarget> {
         On::Me => vec![ActTarget::Me],
         On::Item if spec.needs_target => vec![ActTarget::Creature(7)],
         On::Item => vec![ActTarget::Me],
+        On::Offer => vec![ActTarget::Offer { from: 7, offer: 1 }],
         On::Bar | On::Box => vec![],
     }
 }
@@ -396,14 +407,9 @@ fn player_acts(s: &Scripts, u: &UiSpec, body: &Species) -> Vec<(On, ActTarget, P
     for &on in &u.on {
         if on == On::Bar {
             let shape = s.shapes().get(&u.name).expect("a bar skill is a combat skill");
-            for t in [Some(7), None] {
-                let node = bar_act(&u.name, shape.aim, t, [3.0, 4.0]);
-                let at = match (shape.aim, t) {
-                    (Aim::Creature, Some(i)) | (Aim::SelfOrAlly, Some(i)) => ActTarget::Creature(i),
-                    (Aim::SelfOrAlly, None) => ActTarget::Me,
-                    _ => ActTarget::At([3.0, 4.0]),
-                };
-                out.push((on, at, Picked::default(), node));
+            for (t, aim) in [(Some(7), Some([3.0, 4.0])), (None, Some([3.0, 4.0])), (Some(7), None), (None, None)] {
+                let Some(node) = bar_act(&u.name, shape.aim, t, aim) else { continue };
+                out.push((on, use_skill_resolves(shape.aim, t, aim).expect("bar_act gives a leaf only where use_skill takes the press"), Picked::default(), node));
             }
             continue;
         }
@@ -415,6 +421,7 @@ fn player_acts(s: &Scripts, u: &UiSpec, body: &Species) -> Vec<(On, ActTarget, P
                     want: u.picks.contains(&Pick::Want).then(|| catalog::item_names().into_iter().find(|w| Some(w) != item.as_ref()).unwrap()),
                     want_qty: None,
                     text: u.picks.contains(&Pick::Words).then(|| "a few words".to_string()),
+                    topic: u.picks.contains(&Pick::Topic).then(|| catalog::technique_names()[0].clone()),
                 };
                 let node = act_node(&u.name, &t, &p);
                 out.push((on, t.clone(), p, node));
@@ -472,6 +479,7 @@ fn every_default_act_is_one_a_mind_could_write() {
                     assert_eq!(a.qty, p.item.as_ref().map(|_| p.qty.unwrap_or(1)), "{at}: another amount");
                     assert_eq!(a.want, p.want, "{at}: another thing asked in return");
                     assert_eq!(a.text, p.text, "{at}: other words");
+                    assert_eq!(a.topic, p.topic, "{at}: another topic");
                     checked += 1;
                 }
                 // Every choice a picks list names is one the spec takes.
@@ -578,6 +586,7 @@ fn the_same_facts_allow_the_same_acts_to_both() {
                         want: p.want.clone().unwrap_or_default(),
                         want_qty: p.want.as_ref().map_or(0, |_| 1),
                         text: p.text.clone().unwrap_or_default(),
+                        topic: p.topic.clone().unwrap_or_default(),
                         ..base.clone()
                     };
                     let a = mind_reads(&s, &node, person).unwrap();
@@ -589,6 +598,7 @@ fn the_same_facts_allow_the_same_acts_to_both() {
                         want: a.want.clone().unwrap_or_default(),
                         want_qty: a.want_qty.unwrap_or(0),
                         text: a.text.clone().unwrap_or_default(),
+                        topic: a.topic.clone().unwrap_or_default(),
                         ..base.clone()
                     };
                     let (x, y) = (s.check(&spec.name, &player), s.check(&a.skill, &mind));
@@ -638,6 +648,23 @@ fn a_bad_declaration_is_logged_by_a_client_and_refused_at_install() {
         ("fn give_ui() { #{ drag: \"ground\" } }", "`drag` is `person` or `thing`"),
         ("fn rest_ui() { #{ alias: \"/r\" } }", "`alias` is for a way of speaking"),
         ("fn rest_ui() { #{ running: #{ show: \"spin\" } } }", "`running.show` is one of windup"),
+        // The review's rule-safety cases (findings 1 and 6): a presentation may not take a skill
+        // from players only, send an act the grammar refuses, or pair an input with nothing.
+        ("fn wave_ui() { #{ on: \"self\" } }", "`self` sends no target, and `wave_spec()` needs one"),
+        ("fn gather_ui() { #{ on: [] } }", "to hide a skill from both, its spec says `listed: false`"),
+        ("fn gather_ui() { #{ on: \"ground\" } }", "`ground` needs a combat aim of `point`"),
+        ("fn rest_ui() { #{ on: \"offer\" } }", "`offer` needs a spec with `target: true`"),
+        ("fn dodge_ui() { #{ input: \"toggle\" } }", "`input: \"toggle\"` needs `toggles`"),
+        ("fn dodge_ui() { #{ unready: \"toggle\" } }", "`unready` needs a combat `stance`"),
+        ("fn rest_ui() { #{ input: \"hold\" } }", "needs a held combat shape"),
+        ("fn rest_ui() { #{ input: \"aim_dir\" } }", "needs a combat aim of `facing` or `dash`"),
+        ("fn give_ui() { #{ input: \"pick_target\", picks: [\"item\"] } }", "needs `target` in `picks`"),
+        ("fn give_ui() { #{ input: \"drag_onto\" } }", "needs `drag`"),
+        ("fn heal_ui() { #{ place: \"skill\", order: 13 } }", "`order` is a whole number 0..12"),
+        ("fn block_ui() { #{ place: \"skill\", order: -1 } }", "`order` is a whole number 0..12"),
+        ("fn rest_ui() { #{ source: \"pack\" } }", "`rest_spec()` takes no item"),
+        ("fn eat_ui() { #{ source: \"spec_items\" } }", "lists no `items`"),
+        ("fn eat_ui() { #{ source: \"target_holds\" } }", "takes no target"),
     ];
     for (src, want) in cases {
         let s = with(src);
@@ -655,20 +682,21 @@ fn a_bad_declaration_is_logged_by_a_client_and_refused_at_install() {
 }
 
 #[test]
-fn an_item_names_its_icon_and_group_from_the_vocabulary() {
+fn an_items_look_traits_are_not_refused_yet() {
+    // An item's `icon` and `group` are the dev-box's vocabulary (goods-2): step 1 does not refuse
+    // names it does not list, so a world's goods never fail an install over presentation.
     let shipped = include_str!("../../../scripts/skills.rhai");
-    let s = Scripts::new(&crate::floors::compose(shipped, "fn items() { base_items() + [#{ name: \"glass\", icon: \"vessel\", group: \"material\" }, #{ name: \"slag\", icon: \"lump\" }] }").unwrap()).unwrap();
-    assert_eq!(s.ui_errors().len(), 1, "{:?}", s.ui_errors());
-    assert!(s.ui_errors()[0].contains("the `icon` of `slag` is one of berries"));
+    let s = Scripts::new(&crate::floors::compose(shipped, "fn items() { base_items() + [#{ name: \"glass\", icon: \"vessel\", group: \"glass\" }, #{ name: \"slag\", icon: \"lump\" }] }").unwrap()).unwrap();
+    assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
 }
 
 #[test]
 fn declarations_place_and_present() {
     let s = with(
-        "fn firebolt_ui() { #{ label: \"Fire bolt\", place: \"skill\", order: 2, marker: \"circle\", unready: \"toggle\", look: #{ icon: \"fire\", clip: \"cast\", effect: \"bolt\" }, running: #{ show: \"windup\" }, refused: \"grey\" } }\n\
+        "fn firebolt_ui() { #{ label: \"Fire bolt\", place: \"skill\", order: 2, marker: \"circle\", look: #{ icon: \"fire\", clip: \"cast\", effect: \"bolt\" }, running: #{ show: \"windup\" }, refused: \"grey\" } }\n\
          fn block_ui() { #{ place: \"skill\", order: 0 } }\n\
          fn heal_ui() { #{ place: \"skill\", order: 1 } }\n\
-         fn give_ui() { #{ label: \"Give\", on: [\"person\", \"item\"], picks: [\"person\", \"item\", \"qty\"], drag: \"person\", pin: true, order: 0, look: #{ icon: \"give\", clip: \"hand\" }, refused: \"note\" } }\n\
+         fn give_ui() { #{ label: \"Give\", on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true, order: 0, look: #{ icon: \"give\", clip: \"hand\" }, refused: \"note\" } }\n\
          fn make_ui() { #{ on: \"thing\", picks: [\"item\"], choose: \"grid\", detail: \"made_how\", running: #{ show: \"progress\", text: \"Making {item}\" }, look: #{ icon: \"hammer\", clip: \"work\" } } }",
     );
     assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
@@ -676,9 +704,9 @@ fn declarations_place_and_present() {
     let b = bar_places(&s);
     assert_eq!(b.skill, vec![Some("block".into()), Some("heal".into()), Some("firebolt".into())]);
     let f = s.ui("firebolt").unwrap();
-    assert_eq!((f.label.as_str(), f.marker, f.unready, f.refused_at(On::Bar)), ("Fire bolt", Marker::Circle, Unready::Toggle, Refused::Grey));
+    assert_eq!((f.label.as_str(), f.marker, f.unready, f.refused_at(On::Bar)), ("Fire bolt", Marker::Circle, Unready::Grey, Refused::Grey));
     let g = s.ui("give").unwrap();
-    assert_eq!((g.on.clone(), g.drag, g.pin, g.picks.clone()), (vec![On::Person, On::Item], Some(On::Person), true, vec![Pick::Person, Pick::Item, Pick::Qty]));
+    assert_eq!((g.on.clone(), g.drag, g.pin, g.picks.clone()), (vec![On::Person, On::Item], Some(On::Person), true, vec![Pick::Target, Pick::Item, Pick::Qty]));
     let m = s.ui("make").unwrap();
     assert_eq!((m.choose, m.detail.as_deref(), m.running.show, m.running.text.as_str()), (Choose::Grid, Some("made_how"), RunShow::Progress, "Making {item}"));
 }
@@ -710,7 +738,8 @@ fn the_vocabulary_round_trips() {
     // A player's acts are written as a mind writes them.
     assert_eq!(act_node("give", &ActTarget::Creature(4), &Picked { item: Some("fish".into()), ..Default::default() }), json!({"do": "give", "target": {"id": 4}, "item": "fish", "qty": 1}));
     assert_eq!(act_node("gather", &ActTarget::Thing { kind: "tree".into(), at: Some([1.0, 2.0]) }, &Picked::default()), json!({"seq": [{"do": "goto", "target": {"at": [1.0, 2.0]}}, {"do": "gather", "target": {"nearest": "tree"}}]}));
-    assert_eq!(bar_act("heal", Aim::SelfOrAlly, None, [0.0, 0.0]), json!({"do": "heal"}));
+    assert_eq!(bar_act("heal", Aim::SelfOrAlly, None, None), Some(json!({"do": "heal"})));
+    assert_eq!(bar_act("strike", Aim::Creature, None, Some([1.0, 2.0])), None);
 }
 
 // ---- no skill names in Rust interface code ---------------------------------------------------
@@ -903,15 +932,15 @@ fn rules_of(s: &Scripts) -> String {
 fn the_rules_are_the_same_without_any_declaration() {
     let shipped = include_str!("../../../scripts/skills.rhai");
     let stripped = without_ui(shipped);
-    assert!(stripped.len() < shipped.len() && !stripped.contains("_ui()"), "every declaration is taken out");
+    assert!(stripped.len() < shipped.len() && !stripped.lines().any(|l| l.starts_with("fn ") && l.contains("_ui()")), "every declaration is taken out");
     let heavy = format!(
         "{shipped}\n\
-         fn firebolt_ui() {{ #{{ label: \"Fire bolt\", place: \"skill\", order: 0, input: \"aim_point\", unready: \"toggle\", refused: \"note\", look: #{{ icon: \"fire\", clip: \"cast\", effect: \"bolt\" }} }} }}\n\
+         fn firebolt_ui() {{ #{{ label: \"Fire bolt\", place: \"skill\", order: 0, input: \"aim_point\", refused: \"note\", look: #{{ icon: \"fire\", clip: \"cast\", effect: \"bolt\" }} }} }}\n\
          fn block_ui() {{ #{{ place: \"primary\" }} }}\n\
-         fn give_ui() {{ #{{ on: [\"person\", \"item\"], picks: [\"person\", \"item\", \"qty\"], drag: \"person\", pin: true }} }}\n\
+         fn give_ui() {{ #{{ on: [\"person\", \"item\"], picks: [\"target\", \"item\", \"qty\"], drag: \"person\", pin: true }} }}\n\
          fn make_ui() {{ #{{ on: \"thing\", choose: \"grid\", detail: \"made_how\" }} }}\n\
          fn graze_ui() {{ #{{ on: \"self\", label: \"Graze\" }} }}\n\
-         fn rest_ui() {{ #{{ on: [] }} }}\n"
+         fn rest_ui() {{ #{{ on: [\"self\"] }} }}\n"
     );
     let pairs = [
         ("island", Scripts::new(shipped).unwrap(), Scripts::new(&stripped).unwrap()),
@@ -926,4 +955,222 @@ fn the_rules_are_the_same_without_any_declaration() {
             panic!("DRIFT ({world}): a `_ui()` declaration changed the rules at line {at}:\n with: {}\n without: {}", a.lines().nth(at).unwrap_or(""), b.lines().nth(at).unwrap_or(""));
         }
     }
+}
+
+// ---- the review's coverage items (SPARK_REVIEW.md, 2026-11-11) ---------------------------------
+
+/// What `use_skill` resolves a press to (`authority/src/combat.rs` `use_skill`, the match on the
+/// shape's aim), or None where it refuses ("no one there", "aim somewhere"). A target id given
+/// with a skill aimed at a creature, or with a heal, is that creature; a heal with none is
+/// oneself; a skillshot goes the aimed way, else at the given creature; a guard faces the aim,
+/// else the body's heading; a dash goes the aimed way, else away from what is coming.
+fn use_skill_resolves(aim: Aim, target: Option<u32>, at: Option<[f32; 2]>) -> Option<ActTarget> {
+    match aim {
+        Aim::Creature => target.map(ActTarget::Creature),
+        Aim::SelfOrAlly => Some(target.map_or(ActTarget::Me, ActTarget::Creature)),
+        Aim::Point => at.map(ActTarget::At).or(target.map(ActTarget::Creature)),
+        Aim::Facing | Aim::Dash | Aim::None => Some(at.map_or(ActTarget::Me, ActTarget::At)),
+    }
+}
+
+#[test]
+fn a_bar_press_is_the_leaf_use_skill_resolves() {
+    // Coverage 2: per aim, the same resolved target, or both refuse.
+    for aim in [Aim::Creature, Aim::SelfOrAlly, Aim::Point, Aim::Facing, Aim::Dash] {
+        for (t, at) in [(Some(7), Some([3.0, 4.0])), (None, Some([3.0, 4.0])), (Some(7), None), (None, None)] {
+            let leaf = bar_act("x", aim, t, at);
+            let want = use_skill_resolves(aim, t, at).map(|r| act_node("x", &r, &Picked::default()));
+            assert_eq!(leaf, want, "{aim:?} target {t:?} aim {at:?}");
+        }
+    }
+}
+
+#[test]
+fn offered_for_no_species_is_a_persons() {
+    // Coverage 3: a body the species list does not describe is offered what a person is.
+    let sp = species();
+    for (world, s) in worlds() {
+        let a: Vec<&str> = offered(s.skills(), None).iter().map(|k| k.name.as_str()).collect();
+        let b: Vec<&str> = offered(s.skills(), Some(&sp["person"])).iter().map(|k| k.name.as_str()).collect();
+        assert_eq!(a, b, "{world}");
+    }
+}
+
+#[test]
+fn real_time_is_one_definition_for_every_name() {
+    // Coverage 4: every skill and combat shape of both worlds.
+    for (world, s) in worlds() {
+        let names: Vec<String> = s.skills().names().map(String::from).chain(s.shapes().names().map(String::from)).collect();
+        catalog::scoped(s.skills().clone(), || {
+            for n in &names {
+                let x = real_time(s.skills(), s.shapes(), n);
+                assert_eq!(x, s.shapes().real_time(n), "{world}: `{n}`");
+                assert_eq!(x, s.shapes().real_time_in(s.skills(), n), "{world}: `{n}`");
+                assert_eq!(x, crate::acts::not_an_act(n, s.shapes()).is_some(), "{world}: `{n}`");
+            }
+        });
+    }
+}
+
+/// A default written back as a declaration: every field the reader checks against the rules.
+fn as_declaration(u: &UiSpec) -> String {
+    let list = |v: Vec<&str>| format!("[{}]", v.iter().map(|x| format!("\"{x}\"")).collect::<Vec<_>>().join(", "));
+    let mut f = vec![format!("label: \"{}\"", u.label), format!("input: \"{}\"", u.input.as_str()), format!("choose: \"{}\"", u.choose.as_str()), format!("marker: \"{}\"", u.marker.as_str())];
+    if !u.on.is_empty() {
+        f.push(format!("on: {}", list(u.on.iter().map(|o| o.as_str()).collect())));
+    }
+    f.push(format!("picks: {}", list(u.picks.iter().map(|p| p.as_str()).collect())));
+    if let Some(src) = u.source {
+        f.push(format!("source: \"{}\"", src.as_str()));
+    }
+    f.push(format!("running: #{{ show: \"{}\", text: \"{}\" }}", u.running.show.as_str(), u.running.text));
+    let mut look = vec![format!("effect: \"{}\"", u.look.effect.unwrap_or("none"))];
+    if let Some(i) = u.look.icon {
+        look.push(format!("icon: \"{i}\""));
+    }
+    if !u.look.clips.is_empty() {
+        look.push(format!("clip: {}", list(u.look.clips.clone())));
+    }
+    f.push(format!("look: #{{ {} }}", look.join(", ")));
+    format!("fn {}_ui() {{ #{{ {} }} }}\n", u.name, f.join(", "))
+}
+
+#[test]
+fn every_default_is_a_declaration_the_rules_accept() {
+    // Coverage 6: each default is consistent with its spec and shape: declared as it stands, it
+    // reads back without a problem and as the same presentation.
+    let shipped = include_str!("../../../scripts/skills.rhai");
+    let bare = without_ui(shipped);
+    let s = Scripts::new(&bare).unwrap();
+    let decls: String = s.ui_specs().map(as_declaration).collect();
+    let d = Scripts::new(&format!("{bare}\n{decls}")).unwrap();
+    assert!(d.ui_errors().is_empty(), "defaults the reader refuses: {:#?}", d.ui_errors());
+    for u in s.ui_specs() {
+        assert_eq!(UiSpec { declared: false, ..d.ui(&u.name).unwrap().clone() }, *u, "`{}`", u.name);
+    }
+}
+
+/// Every vocabulary list as first published (ui-decl-1, 2026-11-11). Lists only grow at their
+/// end: a world installed with a name must keep installing after the vocabulary changes.
+const GOLDEN: &[(&str, &[&str])] = &[
+    ("PLACES", &["bar", "person", "thing", "ground", "self", "item", "box", "offer"]),
+    ("BAR_PLACES", &["primary", "secondary", "skill", "jump", "dodge", "weapon", "extra"]),
+    ("INPUTS", &["tap", "hold", "toggle", "aim_point", "aim_dir", "pick_target", "pick_item", "pick_qty", "drag_onto", "words"]),
+    ("PICKS", &["target", "item", "qty", "want", "words", "topic"]),
+    ("CHOOSE", &["list", "grid"]),
+    ("SOURCES", &["pack", "techniques", "signals", "spec_items", "target_holds", "products", "world"]),
+    ("UNREADY", &["toggle", "grey"]),
+    ("RUN_SHOWS", &["windup", "progress", "held", "none"]),
+    ("REFUSALS", &["grey", "note"]),
+    ("MARKERS", &["circle", "arc", "line", "none"]),
+    ("ROWS", &["line", "dots", "hidden"]),
+    ("BUBBLES", &["normal", "hushed", "none"]),
+    ("ICONS", &["sword", "bow", "fire", "shield", "dodge", "heal", "sheath", "give", "trade", "talk", "wave", "eye", "book", "hammer", "pot", "hand"]),
+    ("ITEM_ICONS", &["berries", "bread", "meat", "arrow", "spear", "wood", "stone", "herb", "torch", "cloth", "tablet", "tool", "vessel", "bundle"]),
+    ("CLIPS", &["slash", "overhead", "thrust", "shoot", "throw", "cast", "guard", "dash", "jump", "bite", "leap", "gesture", "turn", "step", "play", "work", "eat", "sleep", "rest", "hand"]),
+    ("EFFECTS", &["slash", "arrow", "bolt", "burst", "glow", "guard_arc"]),
+    ("STATES", &[]),
+    ("ITEM_GROUPS", &["food", "tool", "material", "garment", "money"]),
+    ("UI_TRAITS", &["label", "on", "place", "order", "input", "picks", "choose", "detail", "unready", "toggles", "drag", "pin", "running", "refused", "look", "marker", "key", "tip", "alias", "to_label", "room_label", "rows", "bubble", "source"]),
+    ("WAY_UI_TRAITS", &["alias", "to_label", "room_label", "rows", "bubble"]),
+    ("LOOK_TRAITS", &["icon", "clip", "effect"]),
+    ("RUNNING_TRAITS", &["show", "text"]),
+];
+
+#[test]
+fn the_vocabulary_only_grows() {
+    // Coverage 8.
+    let now: &[(&str, &[&str])] = &[
+        ("PLACES", PLACES), ("BAR_PLACES", BAR_PLACES), ("INPUTS", INPUTS), ("PICKS", PICKS), ("CHOOSE", CHOOSE), ("SOURCES", SOURCES),
+        ("UNREADY", UNREADY), ("RUN_SHOWS", RUN_SHOWS), ("REFUSALS", REFUSALS), ("MARKERS", MARKERS), ("ROWS", ROWS), ("BUBBLES", BUBBLES),
+        ("ICONS", ICONS), ("ITEM_ICONS", ITEM_ICONS), ("CLIPS", CLIPS), ("EFFECTS", EFFECTS), ("STATES", STATES), ("ITEM_GROUPS", ITEM_GROUPS),
+        ("UI_TRAITS", UI_TRAITS), ("WAY_UI_TRAITS", WAY_UI_TRAITS), ("LOOK_TRAITS", LOOK_TRAITS), ("RUNNING_TRAITS", RUNNING_TRAITS),
+    ];
+    assert_eq!(now.len(), GOLDEN.len());
+    for ((n, list), (g, golden)) in now.iter().zip(GOLDEN) {
+        assert_eq!(n, g);
+        assert!(list.len() >= golden.len() && &list[..golden.len()] == *golden, "{n} lost, renamed or reordered a name: it only grows at its end (was {golden:?}, is {list:?})");
+    }
+}
+
+#[test]
+fn renamed_skills_are_placed_and_presented_alike() {
+    // Coverage 9: no skill name in the defaults: rename every combat skill and the presentation is
+    // the same, name for name.
+    let shipped = without_ui(include_str!("../../../scripts/skills.rhai"));
+    let s = Scripts::new(&shipped).unwrap();
+    let names: Vec<String> = s.shapes().names().map(String::from).collect();
+    let mut renamed = shipped.clone();
+    // Whole words only, longest first, so `shoot` is not renamed inside `bowshot`.
+    let mut by_len = names.clone();
+    by_len.sort_by_key(|n| std::cmp::Reverse(n.len()));
+    let word = |src: &str, from: &str, to: &str| {
+        let mut out = String::new();
+        let b = src.as_bytes();
+        let mut i = 0;
+        let ident = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+        while i < src.len() {
+            if src[i..].starts_with(from) && (i == 0 || !ident(b[i - 1])) && b.get(i + from.len()).is_none_or(|c| !ident(*c) || src[i + from.len()..].starts_with('_')) {
+                out.push_str(to);
+                i += from.len();
+            } else {
+                let c = src[i..].chars().next().unwrap();
+                out.push(c);
+                i += c.len_utf8();
+            }
+        }
+        out
+    };
+    for n in &by_len {
+        renamed = word(&renamed, n, &format!("zz{n}"));
+    }
+    let r = Scripts::new(&renamed).unwrap_or_else(|e| panic!("renamed script: {e}"));
+    let back = |x: &Option<String>| x.as_ref().map(|n| n.trim_start_matches("zz").to_string());
+    let (a, b) = (bar_places(&s), bar_places(&r));
+    assert_eq!((a.primary.clone(), a.secondary.clone(), a.jump.clone(), a.dodge.clone()), (back(&b.primary), back(&b.secondary), back(&b.jump), back(&b.dodge)));
+    assert_eq!(a.skill, b.skill.iter().map(back).collect::<Vec<_>>());
+    for n in &names {
+        let (x, y) = (s.ui(n).unwrap(), r.ui(&format!("zz{n}")).unwrap());
+        assert_eq!(UiSpec { name: x.name.clone(), label: x.label.clone(), ..y.clone() }, *x, "`{n}` renamed is presented otherwise");
+    }
+}
+
+#[test]
+fn a_floor_overlay_restyles_a_base_declaration() {
+    // From the review's programs: an overlay over the shipped script keeps the base's declaration
+    // as `base_strike_ui` and may build on it.
+    let shipped = include_str!("../../../scripts/skills.rhai");
+    let over = crate::floors::compose(shipped, r#"fn strike_ui() { let u = base_strike_ui(); u.label = "Hit"; u }"#).unwrap();
+    let s = Scripts::new(&over).unwrap();
+    assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
+    let u = s.ui("strike").unwrap();
+    assert_eq!((u.label.as_str(), u.look.clips.len()), ("Hit", 3));
+    assert!(s.ui("base_strike").is_none());
+}
+
+#[test]
+fn seventy_declarations_cost_little_to_compile() {
+    // Coverage 11: the shipped script against the same with a declaration for every one of its
+    // skills (best of a few compiles each; a debug build, so the bound is loose).
+    let shipped = include_str!("../../../scripts/skills.rhai");
+    let bare = without_ui(shipped);
+    let s = Scripts::new(&bare).unwrap();
+    let decls: String = s.ui_specs().map(as_declaration).collect();
+    let declared = format!("{bare}\n{decls}");
+    let n = s.ui_specs().count();
+    // Every skill the island has (62 on 2026-11-11), the design's "about 70".
+    assert!(n >= 60, "{n} declarations");
+    let best = |src: &str| (0..3).map(|_| { let t = std::time::Instant::now(); Scripts::new(src).unwrap(); t.elapsed() }).min().unwrap();
+    let (a, b) = (best(&bare), best(&declared));
+    println!("compile: {n} declarations {b:?}, none {a:?} (+{:.0}%)", (b.as_secs_f64() / a.as_secs_f64() - 1.0) * 100.0);
+    assert!(b.as_secs_f64() < a.as_secs_f64() * 1.6 + 0.05, "{n} declarations: {b:?} against {a:?}");
+}
+
+#[test]
+fn the_grammar_has_no_offer_reference_yet() {
+    // Finding 7: an act toward an incoming offer names its sender; the offer's own id joins the
+    // act when the grammar carries a reference (rules-offers-2). This fails when it does, so that
+    // `act_node` starts sending it.
+    assert!(serde_json::from_value::<graph::Action>(json!({"skill": "accept", "offer": 1})).is_err(), "the grammar carries `offer` now: send `ActTarget::Offer`'s id in `act_node`");
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
 }
