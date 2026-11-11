@@ -1,5 +1,13 @@
 # Internal mind validation
 
+## 2026-11-12 arrive-2: exp-arrive's trial tooling on main, without the newcomer laws (Spark)
+
+Branch `arrive-2` (exp-arrive `1e63a30` with origin/main `a221a78` merged; the newcomer laws removed after the owner rejected them). Worktree, trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only. The branch's Rust is identical to main's; it changes trials.py, arrive_report.py, the arrive trials and docs.
+
+- `just living-check` exits 0. Every step was skipped: its inputs were identical to a tree that had already passed (`.local/living/arrive2/living-check-2.log`).
+- `minds-arrive2c-000819`: roundtrip, conversation, greet, alongside and parked pass. Two earlier attempts (`minds-arrive2-000308`, `minds-arrive2b-000749`) stopped at the mind's own tests: `llm::tests::unreachable_provider_holds_calls` returned 1.97 s and 1.62 s into a 2 s probe pause (load average 66–87). It also failed 1 of 3 runs alone. It is a pre-existing timing defect in main's llm.rs; this branch does not change it.
+- Trials `a2f1`: `arrive` and `arrive-answer` × `arrive-control`, 3 minutes, `--fake --fake-script living/trials/fake/arrive-answer.json`. Both ran to their duration with one mind start each, concurrency 64, and the laws guard passed. The fake's new trigger (#13 in the scene) made Ilsa address the player, who answered once (`human_answer`). `arrive_report.py a2f1` reports both runs (`.local/living/arrive2/a2f1-arrive-report.md`) after its fix for a stand cut short by the run's end. The databases were cleaned, and the tagged module was removed from the `/wasm` mount.
+
 ## 2026-11-11 exp-arrive after merging main 6caebe2 (Spark)
 
 Trials `af8`: `arrive` and `arrive-answer` × control and `arrive-all`, 6 minutes, fake. All four ran to their duration with one mind start each and concurrency 64; the player answered once. `just living-check` exits 0 (`.local/living/arrive/living-check-6.log`).

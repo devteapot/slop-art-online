@@ -747,7 +747,7 @@ Per run, it gives the share of residents in range who acted, the time from the a
 - **Crowding**, a cost, since several converging at once reads as scripted: `converge_60s`, the most residents who spoke, gestured or aimed an activity at the newcomer within one minute; `together_4m`, the most within 4 m at once who had; `runs_3plus`. `converge_any_60s` and `together_any_4m` add approaches by distance, which routines make in every arm.
 - **Cost**: dollars per hour and per run, calls and tokens per minute. Also `reused_share` (reason lines an earlier thought of the same resident already had) and `reused_events` (those that are one-time events rather than plan states: the stale-reasons effect).
 
-`--journal DIR --subject ID --from-ms --to-ms` reads a play-test's journals (no positions).
+`--journal DIR --subject ID --from-ms --to-ms` reads a play-test's journals (no positions). A stand the run's end cut short (no `human_stand_end`) ends at the run's last position sample, so a short or stopped run still reports.
 
 **`arrive-answer`** ([trial](../living/trials/arrive-answer.json)) is `arrive` with one change: the player says "Hello. I'm new here." back to the first resident who addresses it, then is silent again. It runs only with the control (the trial's `variants`). Its question is whether contact becomes a conversation.
 

@@ -259,8 +259,10 @@ def _detail(t):
     return v if isinstance(v, dict) else {}
 
 
-def windows_of(events):
-    """The silent stands (arrive) or listening windows (greet) as [(from_ms, to_ms)]."""
+def windows_of(events, end_ms=None):
+    """The silent stands (arrive) or listening windows (greet) as [(from_ms, to_ms)]. A stand
+    the run's end cut short (no `_end` event) ends at `end_ms`, the run's last position sample,
+    when given."""
     out, opened = [], {}
     for e in events:
         for key, end in (("human_stand", "human_stand_end"), ("human_listen", "human_listen_end")):
@@ -270,7 +272,8 @@ def windows_of(events):
                 k = (key, e[end].get("stand", e[end].get("cycle")))
                 if k in opened:
                     out.append((opened.pop(k), e[end]["to_ms"]))
-    return out
+    out += [(a, end_ms) for a in opened.values() if end_ms and end_ms > a]
+    return sorted(out)
 
 
 def run_report(d):
@@ -283,7 +286,7 @@ def run_report(d):
         m = re.search(r"#(\d+)", str(summary.get("subject", "")))
         sid = int(m.group(1)) if m else None
     events = jl(d / "events.jsonl")
-    wins = windows_of(events)
+    wins = windows_of(events, max((p.get("ms") or 0 for p in jl(d / "positions.jsonl")), default=None))
     if sid is None or not wins:
         return None
     t0 = wins[0][0]
