@@ -133,6 +133,26 @@ A declaration without `about` or `cadence` is refused when the script compiles.
 
 **Where the constants were read:** `common::sight` and `sight_for` (graphs' scenes, perceived sets, witnesses, the combat feed), `perceive` speech (hearing), `perception::widest_sight`. Three readers skipped the laws and are fixed: the nearest tile of a terrain used the crate's `SIGHT`/`NIGHT_SIGHT` and ignored the torch (`brain.rs`); a chase was lost beyond 1.4 × the world's sight, not the chaser's (`motion.rs`); an empty `if` compared a theft against `SIGHT` (`act.rs`, removed). A graph's `count` with no `within` used to be given 11 at normalization; it now counts everyone in sight (the count already read only the scene).
 
+**Other rule numbers that were Rust constants** are now world constants in `laws()` (read once per script revision into `Laws`, so reading one costs nothing per tick). Values unchanged:
+
+| Law | Value | Was | Read where |
+| --- | ---: | --- | --- |
+| `follow_s` | 12 s | `FOLLOW_MS` (`act.rs`) | how long one `follow` lasts |
+| `read_sign_m` | 8 m | literal (`act.rs`) | `read` with nothing named |
+| `kin_near_m` | 4 m | literal (`act.rs`) | `a.actor.kin_near` |
+| `trade_window_s` | 180 s | three literals (`act.rs`, `perceive.rs`) | accepting a trade offer; dropped 60 s after (was 240 s, a fourth literal in `tick.rs`) |
+| `join_window_s` | 300 s | two literals | a request to join a community |
+| `address_m` | 6 m | two literals (`perceive.rs`) | speech to no one in particular is for the only listener this close |
+| `keep_seen_m` | 1 m | `KEEP_MARGIN` (`perception.rs`) | a player's perceived set keeps a creature this far past sight |
+| `chase_lost_share` | 1.4 | literal (`motion.rs`) | a chase is lost beyond this share of the chaser's sight |
+| `spawn_hunger`, `spawn_energy` | 25, 85 | literals (`seed.rs`) | a body that comes into the world |
+| `pasture_per_tile` | 0.02 | `PASTURE_PER_TILE` (`common.rs`) | grazing a grassy tile holds |
+
+Two couplings that let a law and the engine disagree are fixed:
+
+- **Bond offers** were dropped after 180 s whatever `bond_window_s` said; now 60 s after the window, like trade offers.
+- **Need rates' key.** `settle_needs` (`brain.rs`) re-asks `rates(a)` when a body's state changes. Its key compared hunger and energy with 100, 70, 15 and 0, copies of the law's `starving_at`, `fed_below`, `rested_above` and `spent_at`. A world whose law moved a threshold kept stale rates until something else changed the key. The key now compares with the thresholds the law last gave that body (`NeedLaw::cuts`, kept per body for the module instance; unknown after a restart, which asks the law once).
+
 **Old scripts.** A script installed before a required law existed (`REQUIRED_LAWS`: `senses`, `motion`) runs with the shipped script's functions underneath its own until its next install, and `install_script` refuses a script without it. An old `laws()` with `sight_day`, `run_speed`, `turn_rate` and the rest is ignored: those keys are no longer read.
 
 ## Primitives

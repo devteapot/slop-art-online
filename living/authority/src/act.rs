@@ -41,7 +41,6 @@ fn has(sc: &living_rules::script::Scripts, skill: &str, t: impl Fn(&Shape) -> bo
 }
 
 /// How long a `follow` walks alongside its target.
-const FOLLOW_MS: u64 = 12_000;
 /// Mark (in `mind_state.marks`, kept across plan installs) holding when a character last yielded.
 pub const YIELD_MARK: u16 = 0xD400;
 /// Mark spacing the story's record of an animal holding back from attacking a person.
@@ -294,7 +293,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
     let mut actor = facts(ctx, id, now);
     actor.practice = common::practice_of(ctx, id);
     let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-    actor.kin_near = common::creatures_near(ctx, from, 4.0, now).iter().filter(|c| c.id != id && *c.kind == *actor.kind).count() as u32;
+    actor.kin_near = common::creatures_near(ctx, from, common::laws(ctx).kin_near_m, now).iter().filter(|c| c.id != id && *c.kind == *actor.kind).count() as u32;
     if a.skill == "graze" {
         actor.pasture = common::pasture_now(ctx, chunk_of(from.0, from.1), now);
     }
@@ -732,7 +731,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             }
         };
         if skill == "follow" {
-            act.ends_ms = now + FOLLOW_MS;
+            act.ends_ms = now + (common::laws(ctx).follow_s * 1000.0) as u64;
         }
         if let Some(first) = motion::start(ctx, id, goal, now)? {
             if aim == Aim::Dash {
@@ -1388,7 +1387,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     .trade_offer()
                     .from()
                     .filter(from)
-                    .find(|o| o.to == me && now.saturating_sub(o.at_ms) <= 180_000)
+                    .find(|o| o.to == me && now.saturating_sub(o.at_ms) as f32 <= common::laws(ctx).trade_window_s * 1000.0)
                     .ok_or("they have no standing offer for you")?;
                 if common::inv_count(ctx, from as u64, &offer.give_item) < offer.give_qty {
                     return Err(format!("they no longer have {} {}", offer.give_qty, offer.give_item));
@@ -1454,7 +1453,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     .join_request()
                     .asker()
                     .filter(asker)
-                    .find(|r| r.community == mine.community && now.saturating_sub(r.at_ms) <= 300_000)
+                    .find(|r| r.community == mine.community && now.saturating_sub(r.at_ms) as f32 <= common::laws(ctx).join_window_s * 1000.0)
                     .ok_or("they have not asked to join")?;
                 ctx.db.join_request().id().delete(req.id);
                 if let Some(old) = ctx.db.membership().member().find(asker) {

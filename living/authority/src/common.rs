@@ -602,11 +602,8 @@ pub fn food_count(ctx: &ReducerContext, owner: u64) -> u32 {
 
 // ---- resources ----------------------------------------------------------------
 
-/// Resource amount now: regrowth counts only growing (non-winter) time.
-/// Grazing per grassy tile a chunk holds, and its regrowth per minute of growing time.
-/// Regrowth is a world law (`pasture_regen` in the rules script).
-const PASTURE_PER_TILE: f32 = 0.02;
-
+/// A chunk's pasture: grazing per grassy tile it holds (`pasture_per_tile`) and its regrowth per
+/// minute of growing time (`pasture_regen`), both world laws.
 fn pasture_row(ctx: &ReducerContext, chunk: u32, now: u64) -> Pasture {
     if let Some(p) = ctx.db.pasture().chunk().find(chunk) {
         return p;
@@ -622,7 +619,7 @@ fn pasture_row(ctx: &ReducerContext, chunk: u32, now: u64) -> Pasture {
             }
         }
     }
-    let max = tiles as f32 * PASTURE_PER_TILE;
+    let max = tiles as f32 * laws(ctx).pasture_per_tile;
     Pasture { chunk, amount: max, max, regen: tiles as f32 * laws(ctx).pasture_regen, at_ms: now }
 }
 
@@ -631,7 +628,7 @@ pub fn pasture_now(ctx: &ReducerContext, chunk: u32, now: u64) -> f32 {
     let p = pasture_row(ctx, chunk, now);
     let (epoch, day, year) = calendar(ctx);
     // Regrowth follows the current rules (the row keeps the chunk's grassy tiles as its max).
-    let regen = p.max / PASTURE_PER_TILE * laws(ctx).pasture_regen;
+    let regen = p.max / laws(ctx).pasture_per_tile.max(1e-6) * laws(ctx).pasture_regen;
     (p.amount + regen * living_rules::growing_ms(p.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(p.max)
 }
 

@@ -28,6 +28,22 @@ fn laws() {
         // Seconds a played character stands with no connection of its person before the
         // world's minds take it over (it keeps living; the person takes it back on return).
         takeover_s: 30.0,
+        // How long one `follow` lasts before the follower looks again (seconds), and how far
+        // `read` with nothing named looks for a sign (metres).
+        follow_s: 12.0, read_sign_m: 8.0,
+        // Others of one's kind within this many metres are kin near (`a.actor.kin_near`).
+        kin_near_m: 4.0,
+        // How long a trade offer can be accepted and a request to join stands (seconds).
+        trade_window_s: 180.0, join_window_s: 300.0,
+        // Speech to no one in particular is for the only listener within this many metres.
+        address_m: 6.0,
+        // A creature in a player's sight stays seen until this far beyond it (metres); a chase
+        // is lost beyond this share of the chaser's sight.
+        keep_seen_m: 1.0, chase_lost_share: 1.4,
+        // A body that comes into the world: its hunger and energy.
+        spawn_hunger: 25.0, spawn_energy: 85.0,
+        // Grazing each grassy or forest tile holds.
+        pasture_per_tile: 0.02,
     }
 }
 

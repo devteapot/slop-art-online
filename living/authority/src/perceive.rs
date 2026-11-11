@@ -297,14 +297,15 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, decided: b
         let who = common::label_for(ctx, &me, to);
         percept(ctx, &me, now, "silence", to, speaker, at, format!("No answer from {who}; they don't seem to be within earshot."), 0.35);
     }
-    let close = hearers.iter().filter(|(_, d)| *d <= 6.0).count();
+    let address = common::laws(ctx).address_m;
+    let close = hearers.iter().filter(|(_, d)| *d <= address).count();
     // Saying one's own name tells it to everyone who hears (an introduction).
     let introduces = mentions(&text, &me.name);
     for (c, d) in hearers {
         if introduces {
             crate::perception::introduce(ctx, c.id, speaker, now);
         }
-        let addressed = to == c.id || (to == 0 && (close == 1 && d <= 6.0 || mentions(&text, &c.name)));
+        let addressed = to == c.id || (to == 0 && (close == 1 && d <= address || mentions(&text, &c.name)));
         // Spoken to by someone with a mind: an instinct-only resident wakes before it hears it.
         let c = if addressed {
             crate::woken::engage(ctx, c.id, speaker, "speech", decided, now);
@@ -494,11 +495,13 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     for o in ctx.db.bond_offer().to().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
     }
-    for o in ctx.db.trade_offer().iter().filter(|o| o.to == id && now.saturating_sub(o.at_ms) <= 180_000) {
+    let laws = common::laws(ctx);
+    let (trade_ms, join_ms) = ((laws.trade_window_s * 1000.0) as u64, (laws.join_window_s * 1000.0) as u64);
+    for o in ctx.db.trade_offer().iter().filter(|o| o.to == id && now.saturating_sub(o.at_ms) <= trade_ms) {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange)", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
-        for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= 300_000) {
+        for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= join_ms) {
             asked.push(json!({"from": r.asker, "name": common::label_for(ctx, &me, r.asker), "asks": "to join your community (welcome them to let them in)", "when": ago(r.at_ms)}));
         }
     }
@@ -509,7 +512,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
     }
-    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {
+    for o in ctx.db.trade_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= trade_ms) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "when": ago(o.at_ms)}));
     }
     if !mine.is_empty() {

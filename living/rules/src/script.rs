@@ -351,6 +351,28 @@ pub struct Laws {
     /// How long a played character stands without any connection of its person before the
     /// world's minds take it over (seconds; docs/PLAYER_MEMORY.md).
     pub takeover_s: f32,
+    /// How long one `follow` lasts before the follower looks again, seconds.
+    pub follow_s: f32,
+    /// `read` with nothing named reads the nearest sign within this many metres.
+    pub read_sign_m: f32,
+    /// Others of one's own kind within this many metres count as kin near (`a.actor.kin_near`).
+    pub kin_near_m: f32,
+    /// A trade offer can be accepted for this many seconds.
+    pub trade_window_s: f32,
+    /// A request to join a community stands this many seconds.
+    pub join_window_s: f32,
+    /// Speech to no one in particular is taken as addressed to the only listener within this many metres.
+    pub address_m: f32,
+    /// A creature already in a player's sight stays seen until this many metres beyond the player's sight.
+    pub keep_seen_m: f32,
+    /// A chased creature is lost from sight beyond this share of the chaser's sight (or its scent, if farther).
+    pub chase_lost_share: f32,
+    /// Hunger of a body that comes into the world.
+    pub spawn_hunger: f32,
+    /// Energy of a body that comes into the world.
+    pub spawn_energy: f32,
+    /// Grazing each grassy or forest tile holds (grazing units).
+    pub pasture_per_tile: f32,
 }
 
 
@@ -379,6 +401,17 @@ impl Default for Laws {
             face_slack: 0.35,
             flee_clear: 9.0,
             takeover_s: 30.0,
+            follow_s: 12.0,
+            read_sign_m: 8.0,
+            kin_near_m: 4.0,
+            trade_window_s: 180.0,
+            join_window_s: 300.0,
+            address_m: 6.0,
+            keep_seen_m: 1.0,
+            chase_lost_share: 1.4,
+            spawn_hunger: 25.0,
+            spawn_energy: 85.0,
+            pasture_per_tile: 0.02,
         }
     }
 }
@@ -516,6 +549,15 @@ pub enum NeedLaw {
 }
 
 impl NeedLaw {
+    /// The hunger and energy levels where the rates change (starving at, fed below, rested
+    /// above, spent at): crossing one needs the law asked again. None for finished rates.
+    pub fn cuts(&self) -> Option<[f32; 4]> {
+        match self {
+            NeedLaw::Params { starving_at, fed_below, rested_above, spent_at, .. } => Some([*starving_at as f32, *fed_below as f32, *rested_above as f32, *spent_at as f32]),
+            NeedLaw::Final(_) => None,
+        }
+    }
+
     /// The body's rates: health from its hunger and energy (starving drains it; fed and rested,
     /// it heals by the state's share of healing), tiring divided by the tiring gene, healing
     /// multiplied by the healing gene, and exposure added last.
@@ -1152,6 +1194,17 @@ impl Scripts {
             face_slack: g("face_slack", l.face_slack).clamp(0.0, 3.0),
             flee_clear: g("flee_clear", l.flee_clear).clamp(1.0, 60.0),
             takeover_s: g("takeover_s", l.takeover_s).clamp(0.0, 3_600.0),
+            follow_s: g("follow_s", l.follow_s).clamp(0.5, 600.0),
+            read_sign_m: g("read_sign_m", l.read_sign_m).clamp(0.0, 64.0),
+            kin_near_m: g("kin_near_m", l.kin_near_m).clamp(0.0, 32.0),
+            trade_window_s: g("trade_window_s", l.trade_window_s).clamp(1.0, 3_600.0),
+            join_window_s: g("join_window_s", l.join_window_s).clamp(1.0, 7_200.0),
+            address_m: g("address_m", l.address_m).clamp(0.0, 64.0),
+            keep_seen_m: g("keep_seen_m", l.keep_seen_m).clamp(0.0, 8.0),
+            chase_lost_share: g("chase_lost_share", l.chase_lost_share).clamp(1.0, 8.0),
+            spawn_hunger: g("spawn_hunger", l.spawn_hunger).clamp(0.0, 100.0),
+            spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
+            pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
         };
         l
     }
@@ -1565,6 +1618,10 @@ mod tests {
         c.target.dist = 9.0;
         assert!(sc.check("appraise", &c).is_err());
         assert_eq!(sc.laws().takeover_s, 30.0);
+        // Rule numbers that were Rust constants, with their values.
+        let l = sc.laws();
+        assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));
+        assert_eq!((l.keep_seen_m, l.chase_lost_share, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 1.4, 25.0, 85.0, 0.02));
     }
 
     fn ctx() -> SkillCtx {

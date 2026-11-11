@@ -411,10 +411,13 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             }
         }
     }
-    for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > 180_000).map(|o| o.id).collect::<Vec<_>>() {
+    // Offers are dropped a minute after they can no longer be taken up (the laws' windows).
+    let laws = common::laws(ctx);
+    let (bond_ms, trade_ms) = ((laws.bond_window_s * 1000.0) as u64 + 60_000, (laws.trade_window_s * 1000.0) as u64 + 60_000);
+    for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > bond_ms).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.bond_offer().id().delete(o);
     }
-    for o in ctx.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > 240_000).map(|o| o.id).collect::<Vec<_>>() {
+    for o in ctx.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > trade_ms).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.trade_offer().id().delete(o);
     }
 

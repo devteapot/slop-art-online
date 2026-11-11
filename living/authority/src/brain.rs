@@ -24,6 +24,9 @@ const ROOT_MARK: u16 = u16::MAX - 1;
 const FAIL_MARK: u16 = u16::MAX - 2;
 pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
 thread_local! {
+    /// The hunger and energy levels where each body's need rates change, from the law's last
+    /// answer for it (`NeedLaw::cuts`).
+    static NEED_CUTS: std::cell::RefCell<std::collections::HashMap<u32, [f32; 4]>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// When each person last checked for, and last felt, knowing something alone (kept here:
     /// evaluator marks are reset when a new plan is installed).
     static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
@@ -152,12 +155,17 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
     let season = common::season(ctx, now);
     let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
-    let key = 1
+    // The levels where the state's rates change are the law's (`starving_at`, `fed_below`,
+    // `rested_above`, `spent_at`), as it last answered for this body. Unknown (a fresh module
+    // instance): ask the law again.
+    let cuts = NEED_CUTS.with(|c| c.borrow().get(&me.id).copied());
+    let [starving_at, fed_below, rested_above, spent_at] = cuts.unwrap_or([f32::NAN; 4]);
+    let key = (cuts.is_some() as u32)
         | (night as u32) << 1
-        | ((n.hunger >= 100.0) as u32) << 2
-        | ((n.hunger < 70.0) as u32) << 3
-        | ((n.energy > 15.0) as u32) << 4
-        | ((n.energy <= 0.0) as u32) << 5
+        | ((n.hunger >= starving_at) as u32) << 2
+        | ((n.hunger < fed_below) as u32) << 3
+        | ((n.energy > rested_above) as u32) << 4
+        | ((n.energy <= spent_at) as u32) << 5
         | (near_fire as u32) << 6
         | (near_shelter as u32) << 7
         | ((activity == "sleep") as u32) << 8
@@ -165,7 +173,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         | (cloak as u32) << 10
         | ((season == "winter") as u32) << 11
         | (crate::town::raining(ctx) as u32) << 12;
-    if key == v.rate_key {
+    if cuts.is_some() && key == v.rate_key {
         return Some(v);
     }
     // Profiled: what a recompute costs (the facts and the law), and how many there are.
@@ -175,7 +183,14 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let hour = common::hour(w, now);
     let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
-    if let Ok(r) = sc.rates(&sctx) {
+    let law = sc.need_law(&sctx);
+    let mut key = key;
+    if let Ok(c) = law.as_ref().map(|l| l.cuts().unwrap_or([f32::INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::NEG_INFINITY])) {
+        NEED_CUTS.with(|m| m.borrow_mut().insert(me.id, c));
+        // The key as the new thresholds read it, so the next look does not ask again.
+        key = (key & !0b11_1101) | 1 | ((n.hunger >= c[0]) as u32) << 2 | ((n.hunger < c[1]) as u32) << 3 | ((n.energy > c[2]) as u32) << 4 | ((n.energy <= c[3]) as u32) << 5;
+    }
+    if let Ok(r) = law.map(|l| l.rates(&sctx.actor)) {
         common::settle(&mut v, now);
         v.hp_rate = r.hp_per_min;
         v.hunger_rate = r.hunger_per_min;

@@ -14,7 +14,7 @@
 //!   projection, so a mind and a player know the same things about the same target.
 //! - **The perceived set.** Every [`SWEEP_MS`] the authority works out, for each living
 //!   character a person controls, which creatures it sees. A creature already seen stays seen
-//!   until it is [`KEEP_MARGIN`] beyond sight, so one at the edge does not flicker. The answer
+//!   until it is the `keep_seen_m` law beyond sight, so one at the edge does not flicker. The answer
 //!   is kept as `perceived` rows (private), written only when someone comes into or goes out of
 //!   sight, and its projections as `projected` rows (private), written when a creature comes
 //!   into sight and when its projection changes (whom the viewer knows, a reveal, a band).
@@ -43,8 +43,6 @@ use std::rc::Rc;
 
 /// How often each player's perceived set is worked out again (ms), staggered by character.
 pub const SWEEP_MS: u64 = 200;
-/// Tiles beyond sight a creature already seen stays seen.
-pub const KEEP_MARGIN: f32 = 1.0;
 
 /// A body's current motion segment as clients draw it (see `Body`): from `(x, y)` facing
 /// `heading` at `t_ms`, moving at velocity `(vx, vy)`, turning at `turn` rad/s for `turn_s`
@@ -370,11 +368,12 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
-    for c in common::creatures_near(ctx, here, sight + KEEP_MARGIN, now) {
+    let keep = common::laws(ctx).keep_seen_m;
+    for c in common::creatures_near(ctx, here, sight + keep, now) {
         if c.id == id {
             continue;
         }
-        let reach = if had.contains(&c.id) { sight + KEEP_MARGIN } else { sight };
+        let reach = if had.contains(&c.id) { sight + keep } else { sight };
         if in_sight(map, here, c.pos, c.dist, reach) {
             seen.insert(c.id);
         }
