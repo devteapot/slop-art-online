@@ -1,6 +1,6 @@
 //! Client-only perception mock, for feeling out "the view is what your character perceives"
 //! (docs/GAME_BRIEF.md, "The view as perception"). Nothing here is enforced: the authority still
-//! sends every row, and its own sight laws are circles (`sight_day` 11, `sight_night` 6 tiles).
+//! sends every row, and its own sight is the script's `senses(a)` law, a circle per creature (11 m by day, 6 at night, 9 with a torch; one tile is one metre).
 //!
 //! You see within `radius`, either all around or in a forward `cone` with a small all-round
 //! `close` ring. Tiles you have seen stay remembered (dimmed); tiles never seen stay dark.

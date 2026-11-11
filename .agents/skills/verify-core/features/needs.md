@@ -36,3 +36,9 @@ After feeding the adults to prevent unrelated starvation/injury requests, a cloa
 - The infant fixture holds food/energy thresholds and the cry cause stable; values still change through the real authority. Hunger stays below starvation during the measured interval. Reminder timing begins at the last prompt, not its completion. A pending request already carrying this infant's cry receives no same-cause refresh; an unrelated pending request receives the cry when the reminder is due. The witness has positive affinity, so parent-only routing is checked against an otherwise eligible caring adult. Dawn, personal drives and reflection may independently update requests; the counter excludes those updates rather than treating every request row change as a cry.
 - A cold infant can still heal if the positive healing rate exceeds the cold penalty. Compare the same infant's rates rather than assuming any cold appearance means net health loss.
 - Starvation, winter's extra cold, infant campfire placement, sleep recovery and long-term survival are not established by these live scenes. Winter and campfire remain covered by the rules tests. Authentic mind responses and paid calls belong to other surfaces.
+
+## Since `laws-2` (2026-11-11)
+
+- Warmth by structure is the script's `structure_traits()` (`warms`, `roof`), at the laws' `fire_warmth` and `shelter_warmth`; the values and the result are unchanged (docs/WORLD_RULES.md, "Traits instead of lists").
+- The need-rate key compares hunger and energy with the thresholds the `rates` law last gave that body (`NeedLaw::cuts`), not copies of them in `brain.rs`: a world whose law moves `starving_at` or `fed_below` recomputes at its own levels. `scenes.py needs` and `food` drive the shipped values.
+- A new body's hunger and energy are the laws `spawn_hunger` (25) and `spawn_energy` (85). Food kept in a structure spoils at `kept_spoil(kind)` (1/3).

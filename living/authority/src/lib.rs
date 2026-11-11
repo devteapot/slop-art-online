@@ -80,6 +80,8 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     // one call); a floor module waits for `create_floor` (floor.rs).
     if !seed::VALLEY.is_empty() {
         let s: seed::Seed = serde_json::from_str(seed::VALLEY).map_err(|e| format!("seed: {e}"))?;
+        let over: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        sc.laws_with(&over).map_err(|e| format!("seed rules: {e}"))?;
         floor::begin(ctx, &s, now);
     }
     Ok(())
@@ -130,7 +132,8 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
     let now = common::now_ms(ctx);
-    let rev = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision + 1).unwrap_or(1);
+    // Past the clock's too: writing a world's own laws moves it without a new script.
+    let rev = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision).unwrap_or(0).max(common::clock(ctx).scripts_rev) + 1;
     ctx.db.script().name().delete("skills".to_string());
     ctx.db.script().insert(Script { name: "skills".into(), source, revision: rev, updated_ms: now });
     let mut k = common::clock(ctx);

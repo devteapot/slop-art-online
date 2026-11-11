@@ -62,9 +62,9 @@ living-reset: living-build
 # A floor (docs/FLOORS.md): the floor module, built without a seed, on database `db`, given seed
 # `name` at runtime by `create_floor` (DELETES the database's data). A land larger than 2048 m is
 # created in steps after the call returns: watch `SELECT * FROM genesis` until `done`. The seed's
-# `rules` switches are compiled in (LIVING_RULES), so the module accepts that seed.
+# `rules` are the world's own values of the script's laws, kept when the world is created.
 living-floor name db=living_db:
-    LIVING_SEED=none LIVING_RULES="$(python3 -c 'import json; r = json.load(open("living/seeds/{{name}}.json")).get("rules", {}); print(",".join(f"{k}={str(v).lower()}" for k, v in r.items()))')" cargo build --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release
+    LIVING_SEED=none cargo build --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release
     {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{db}} --delete-data -y
     {{living_stdb}} call -s local {{db}} create_floor "$(python3 -c 'import json; print(json.dumps(open("living/seeds/{{name}}.json").read()))')"
     just living-token

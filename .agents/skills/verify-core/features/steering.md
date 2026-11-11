@@ -30,6 +30,10 @@ Run the existing driver through the recorder using [SKILL.md](../SKILL.md). It s
 
 - Live, on a `stage1-acts` run: `scenes.py flee` holds every graph on `wait`, puts a wolf 6 tiles from a deer and gives the deer the graph `flee` the wolf. It checks that the deer's `steer` row runs from the wolf itself (`goal` 4, `target` the wolf's id), that the distance sampled about every 0.5 s never falls, and that the flight ends about `flee_clear` (a law, 9) tiles farther than it began. A deer told "cornered" is put back on `wait` and the next deer is tried. Before 2026-11-10 the goal ran from a point 9 tiles beyond the deer, so the deer ran at the wolf.
 
+## Moving as a law
+
+Since `laws-2` (2026-11-11) a creature's run, flight and step aside (as shares of its walk), its turn rate, the speed it keeps in sharp turns and its separation from others are the script's per-creature `motion(a)` law (docs/WORLD_RULES.md, "Laws"), asked through `common::moves_of`. `scenes.py moves` on a default-seed run: a person walks off (its cruising speed in `body.speed` is its walk), flees a second person (1.15 times that), then turns on the spot to face someone placed behind it (`body.turn` ±6 rad/s). An installed overlay with a flight of 2 and turning at 3 shows both changed; the shipped script is installed again at the end. Evidence: `moves-*.json`.
+
 ## Gotchas
 
 - Pass an explicit `verify-core-*` database. The driver publishes and deletes it itself.

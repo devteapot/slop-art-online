@@ -2,7 +2,7 @@
 
 | Feature | Cases | File |
 | --- | --- | --- |
-| Think, compile, install, act, speak | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
+| Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt) | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
 | Answer speech and close an exchange | `conversation` | [conversations.md](conversations.md) |
 | No-store persona/cursor, patch-loss XFAIL | `consolidation` | [consolidation.md](consolidation.md) |
 | Validate graphs, restrict actors, recover connection | `prune`, `reject`, `only`, `reconnect` | [robustness.md](robustness.md) |

@@ -64,7 +64,7 @@ $V sql --run $R "SELECT id, skill FROM activity WHERE id = $ME" --save activity-
 # a command runs once (4 s here), then the character waits for you; it does not start over
 python3 .agents/skills/verify-player/scripts/command.py --run $R > .local/living/verify/$R/command.txt   # writes command.json
 
-# a failed command is told as an AI is told: {do:graze} refused at start ("only deer graze", sent twice,
+# a failed command is told as an AI is told: {do:graze} refused at start ("only grazing animals graze", before `laws-2` "only deer graze"; sent twice,
 # one line), a gift whose receiver is moved 6 m away while it is handed over ("they moved away"); an AI
 # character runs the same graphs for the text to compare (default seed: it needs ai = true people)
 python3 .agents/skills/verify-player/scripts/told.py --run $R > .local/living/verify/$R/told.txt     # writes told.json

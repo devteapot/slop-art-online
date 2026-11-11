@@ -277,7 +277,7 @@ fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &S
             items.extend(me.actor.inv.iter().map(|(i, _)| i.clone()));
             items.extend(me.actor.knows.iter().cloned());
             if !matches!(aim, Aim::Me) {
-                items.extend(catalog::ITEMS.iter().map(|i| i.name.to_string()));
+                items.extend(catalog::item_names());
             }
         }
         items.extend(spec.items.iter().cloned());
@@ -302,7 +302,7 @@ fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill,
         }
         // A skill that asks something in return is checked with something to ask for (each
         // thing there is becomes its own choice below).
-        let want = if spec.args.iter().any(|a| a == "want") { catalog::ITEMS.iter().map(|i| i.name).find(|w| *w != item).unwrap_or_default() } else { "" };
+        let want = if spec.args.iter().any(|a| a == "want") { catalog::item_names().into_iter().find(|w| w != item).unwrap_or_default() } else { String::new() };
         SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, want: want.to_string(), want_qty: (!want.is_empty()) as u32, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
     };
     let allowed = |item: &str, text: &str| sc.check(skill, &ctx(item, text, (!item.is_empty()).then_some(item))).is_ok();
@@ -328,7 +328,7 @@ fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill,
     let c = Choice { item: Some(item.to_string()), words, ..Choice::new(skill, label) };
     // A trade or terms name what I ask in return: one choice per thing to ask for.
     if plan.asks {
-        for w in catalog::ITEMS.iter().map(|i| i.name.to_string()).chain(spec.items.iter().cloned()).filter(|w| w != item) {
+        for w in catalog::item_names().into_iter().chain(spec.items.iter().cloned()).filter(|w| w != item) {
             out.push(Choice { want: Some(w.clone()), label: format!("{} {} for {}", pretty(skill), pretty(item), pretty(&w)), ..c.clone() });
         }
     } else {

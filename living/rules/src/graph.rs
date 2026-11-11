@@ -258,16 +258,13 @@ fn one() -> u32 {
 #[serde(deny_unknown_fields)]
 pub struct CountCond {
     pub of: Filter,
-    #[serde(default = "count_within")]
-    pub within: f32,
+    /// How far to count; none counts everyone in sight (the creature's own `senses`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at_least: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at_most: Option<u32>,
-}
-
-fn count_within() -> f32 {
-    crate::SIGHT
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -825,7 +822,10 @@ pub fn describe_cond(c: &Cond) -> String {
                 (None, Some(b)) => format!("at most {b}"),
                 _ => "any".into(),
             };
-            format!("{n} {who} within {}", c.within)
+            match c.within {
+                Some(w) => format!("{n} {who} within {w}"),
+                None => format!("{n} {who} in sight"),
+            }
         }
         Cond::HealthOf(h) => {
             let mut s = format!("health of {}", describe_target(&h.target));

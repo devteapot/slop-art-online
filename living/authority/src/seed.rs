@@ -496,6 +496,9 @@ pub struct Seed {
     /// Records the world starts with (a community's regard for another; docs/WORLD_RULES.md).
     #[serde(default)]
     pub records: Vec<crate::records::SeedRecord>,
+    /// The world's own values of laws (`laws()` in the script), by name: `{"minds": false}`.
+    #[serde(default)]
+    pub rules: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1063,8 +1066,8 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         id,
         hp: max_hp,
         max_hp,
-        hunger: 25.0,
-        energy: 85.0,
+        hunger: common::laws(ctx).spawn_hunger,
+        energy: common::laws(ctx).spawn_energy,
         at_ms: now,
         hp_rate: 0.0,
         hunger_rate: 0.0,
@@ -1300,22 +1303,10 @@ fn fresh_name(ctx: &ReducerContext) -> String {
     }
 }
 
-/// Know-how that goes with a history in an occupation (plus fire for everyone in a town).
-fn occupation_know_how(occ: &str) -> &'static [&'static str] {
-    match occ {
-        "fisher" => &["spear", "cooking", "fishing"],
-        "farmer" => &["planting", "storage"],
-        "builder" => &["shelter", "storage", "carpentry", "masonry"],
-        "mason" => &["masonry", "toolmaking"],
-        "carpenter" => &["shelter", "carpentry", "toolmaking"],
-        "guard" => &["spear", "torch"],
-        "hunter" => &["spear", "cloak", "torch", "trapping"],
-        "cook" => &["cooking", "storage"],
-        "scribe" => &["writing"],
-        "healer" => &["cooking", "planting", "medicine"],
-        "trader" => &["writing", "storage", "basketry"],
-        _ => &[],
-    }
+/// Know-how that goes with a history in an occupation (plus fire for everyone in a town): the
+/// script's `occupation_knows` law.
+fn occupation_know_how(ctx: &ReducerContext, occ: &str) -> Vec<String> {
+    common::scripts(ctx).words_of("occupation_knows", occ)
 }
 
 /// A place a family would choose to live: grass with the most berry bushes within 10
@@ -1447,8 +1438,8 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
             x: p.0,
             y: p.1,
             chunk: chunk_of(p.0, p.1),
-            amount: 5.0,
-            max: 5.0,
+            amount: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
+            max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
             regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
             at_ms: now,
         });
@@ -1499,8 +1490,8 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
             let id = spawn_with(ctx, &names[k], "person", admin, minded, walkable_near(map, at), now, life.age_at(f, pace), (0, 0));
             common::inv_add(ctx, id as u64, "berries", 4);
             common::learn(ctx, id, "fire", "seed", now);
-            for tech in occupation_know_how(occ) {
-                common::learn(ctx, id, tech, "seed", now);
+            for tech in occupation_know_how(ctx, occ) {
+                common::learn(ctx, id, &tech, "seed", now);
             }
             give_repertoire(ctx, id, occ, now);
             if let Some(mut ch) = ctx.db.character().id().find(id) {
@@ -1604,8 +1595,8 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
             }
         } else if stage >= 2 {
             common::learn(ctx, id, "fire", "seed", now);
-            for tech in occupation_know_how(&occ) {
-                common::learn(ctx, id, tech, "seed", now);
+            for tech in occupation_know_how(ctx, &occ) {
+                common::learn(ctx, id, &tech, "seed", now);
             }
         }
         if stage >= 1 {

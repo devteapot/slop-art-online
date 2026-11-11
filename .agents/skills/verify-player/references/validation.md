@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-11 laws-2 (dev-box)
+
+Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. `deal.py`, `new_skill.py`, `told.py` (the refusal now reads "only grazing animals graze"), `appraise.py` pass (`player-l6`, default seed); `combat.py` 25 of 25 on an island run after `join` (`player-x1-combat`; two earlier attempts ran it without a joined player or on the default seed, a harness error); `gesture.py` 10 of 10 (`player-l6c-island`; the first run, under the overloaded batch, failed its `face` check 9 of 10: the driver compares with where the resident stood before it walked on).
+
 ## 2026-11-11 player-told (dev-box): a failed command told to the player
 
 Branch `player-told` (from `4b75812`), the worker's own container `player-told-stdb` (2.14.1, port 3447), default seed, `scoped`. `act::tell` tells a played character's failed graph action as an AI's is told.
