@@ -112,8 +112,9 @@ pub struct Combat {
     predicted: Option<(String, f64)>,
     /// When I last pressed each skill (display ms), for the HUD until readiness arrives.
     pub pressed: HashMap<String, f64>,
-    /// The last refusal (why, display ms).
+    /// The last refusal (why, display ms), and of which skill.
     pub refusal: Option<(String, f64)>,
+    pub refused_skill: Option<String>,
     /// Which skill key is held (indicators), and since when.
     pub aiming: Option<String>,
     pub guarding: bool,
@@ -168,11 +169,87 @@ impl Cards {
     }
 }
 
+/// The bar's places and the rules' skills on them: `living_rules::ui::bar_places` (declared
+/// places first, then by aim), with the bar skills the rules call hostile (greyed while the
+/// weapon is sheathed, `weapon.rs`, until the rules' `stance` replaces it).
+#[derive(Resource, Default, Clone, Debug, PartialEq)]
+pub struct Roles {
+    pub bar: living_rules::ui::Bar,
+    pub hostile: Vec<String>,
+    /// Each bar skill's label (`<name>_ui()`'s, else its name as words).
+    pub labels: HashMap<String, String>,
+}
+
+impl Roles {
+    /// The skill a binding uses, if any.
+    pub fn skill(&self, a: crate::keys::Act) -> Option<&str> {
+        use crate::keys::Act;
+        use living_rules::ui::BarPlace;
+        match a {
+            Act::Primary => self.bar.at(BarPlace::Primary, 0),
+            Act::Secondary => self.bar.at(BarPlace::Secondary, 0),
+            Act::Skill1 => self.bar.at(BarPlace::Skill, 0),
+            Act::Skill2 => self.bar.at(BarPlace::Skill, 1),
+            Act::Skill3 => self.bar.at(BarPlace::Skill, 2),
+            Act::Extra(i) => self.bar.at(BarPlace::Extra, i as usize),
+            Act::Jump => self.bar.at(BarPlace::Jump, 0),
+            Act::Dodge => self.bar.at(BarPlace::Dodge, 0),
+            _ => None,
+        }
+    }
+
+    pub fn is_hostile(&self, skill: &str) -> bool {
+        self.hostile.iter().any(|h| h == skill)
+    }
+
+    pub fn dodge(&self) -> Option<&str> {
+        self.bar.dodge.as_deref()
+    }
+
+    pub fn extra(&self) -> &[String] {
+        &self.bar.extra
+    }
+}
+
+/// The bar's acts, in the order presses are sent (as before: the mouse, then the keys).
+pub const BAR_ACTS: [crate::keys::Act; 13] = {
+    use crate::keys::Act::*;
+    [Primary, Secondary, Skill1, Skill3, Skill2, Extra(0), Extra(1), Extra(2), Extra(3), Extra(4), Extra(5), Jump, Dodge]
+};
+
+fn read_roles(rules: NonSend<crate::verbs::Rules>, mut roles: ResMut<Roles>, mut names: ResMut<crate::ui::settings::SkillNames>, mut revision: Local<Option<u32>>) {
+    // Once per compile of the world's rules.
+    let Some(sc) = rules.scripts.as_ref() else { return };
+    if *revision == Some(rules.revision) {
+        return;
+    }
+    *revision = Some(rules.revision);
+    let bar = living_rules::ui::bar_places(sc);
+    let shapes = sc.shapes();
+    let hostile = bar.iter().filter(|(_, _, n)| shapes.get(n).is_some_and(|s| s.hostile)).map(|(_, _, n)| n.to_string()).collect();
+    let labels: HashMap<String, String> = bar.iter().map(|(_, _, n)| (n.to_string(), sc.ui(n).map_or_else(|| living_rules::ui::label_of(n), |u| u.label.clone()))).collect();
+    if let Ok(mut g) = LOOK_NAMES.write() {
+        *g = Some(sc.ui_specs().map(|u| (u.name.clone(), u.look.clone())).collect());
+    }
+    for e in sc.ui_errors() {
+        warn!("rules: {e} (shown with its defaults)");
+    }
+    use living_rules::ui::BarPlace;
+    info!("combat: bar places primary {:?}, secondary {:?}, keys {:?}, jump {:?}, dodge {:?}, more {:?}", bar.primary, bar.secondary, bar.skill, bar.jump, bar.dodge, bar.extra);
+    *names = crate::ui::settings::SkillNames {
+        slots: [bar.at(BarPlace::Primary, 0), bar.at(BarPlace::Secondary, 0), bar.at(BarPlace::Skill, 0), bar.at(BarPlace::Skill, 1), bar.at(BarPlace::Skill, 2)].map(|s| s.map(|n| labels.get(n).cloned().unwrap_or_else(|| n.to_string()))),
+        extra: (0..crate::keys::EXTRA as usize).map(|i| bar.at(BarPlace::Extra, i).map(|n| labels.get(n).cloned().unwrap_or_else(|| n.to_string()))).collect(),
+        jump: bar.jump.as_ref().map(|n| labels.get(n).cloned().unwrap_or_else(|| n.clone())),
+        dodge: bar.dodge.as_ref().map(|n| labels.get(n).cloned().unwrap_or_else(|| n.clone())),
+    };
+    *roles = Roles { bar, hostile, labels };
+}
+
 /// How a skill looks on this client.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Look {
     /// Clips its move plays (one per press, in turn), their rate, and a pose to hold.
-    pub clips: &'static [&'static str],
+    pub clips: Vec<&'static str>,
     pub rate: f32,
     pub hold: Option<f32>,
     /// Its release draws a slash.
@@ -182,33 +259,74 @@ pub struct Look {
     pub icon: SkillIcon,
 }
 
-/// A missile at least this wide is drawn as a bolt.
-const BOLT_RADIUS: f32 = 0.25;
 
-/// How a skill looks: the skills drawn for by name, any other from how the rules aim it.
-pub fn look(card: &SkillCard) -> Look {
-    let l = |clips: &'static [&'static str], rate: f32, hold: Option<f32>, icon: SkillIcon| Look { clips, rate, hold, slash: false, bolt: false, icon };
-    match card.skill.as_str() {
-        "strike" => Look { slash: true, ..l(&["sword_slash", "sword_overhead", "sword_thrust"], 2.8, None, SkillIcon::Sword) },
-        "attack" => Look { slash: true, ..l(&["sword_slash"], 2.0, None, SkillIcon::Sword) },
-        "bowshot" | "shoot" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
-        "throw" => l(&["attack"], 1.3, None, SkillIcon::Sword),
-        "firebolt" => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
-        "heal" => l(&["cast"], 2.6, None, SkillIcon::Heal),
-        "block" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
+/// The names each skill's look is made of (its `<name>_ui()` look, or the defaults by aim:
+/// `living_rules::ui`), read when the rules compile (`read_roles`). Kept outside the ECS so the
+/// draw paths that take a card (`clip_of`, `vfx.rs`, the bar) read it as they read the card.
+static LOOK_NAMES: std::sync::RwLock<Option<HashMap<String, living_rules::ui::Look>>> = std::sync::RwLock::new(None);
+
+/// The client's theme table for clip families (docs/INTERFACE.md §4: the client maps a family to
+/// its clips, rates and held pose; `BEATS` times them to the windup).
+fn clip_family(name: &str) -> (&'static [&'static str], f32, Option<f32>) {
+    match name {
+        "slash" => (&["sword_slash"], 2.8, None),
+        "overhead" => (&["sword_overhead"], 2.8, None),
+        "thrust" => (&["sword_thrust"], 2.8, None),
+        "shoot" => (&["bow_shoot"], 3.4, None),
+        "throw" => (&["attack"], 1.3, None),
+        "cast" => (&["cast"], 2.2, None),
+        "guard" => (&["block"], 2.2, Some(0.42)),
         // The dash on the rules' track (2.6 m at 5.2 m/s): the clip carries no travel of its own.
-        "dodge" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
+        "dash" => (&["dodge"], 1.0, None),
         // Drawn by jump.rs over whatever the body plays (no jump take yet).
-        "jump" => l(&[crate::jump::CLIP], 1.0, None, SkillIcon::Dodge),
-        _ => match card.aim.as_str() {
-            "point" if card.radius >= BOLT_RADIUS => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
-            "point" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
-            "facing" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
-            "dash" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
-            "self_or_ally" => l(&["cast"], 2.6, None, SkillIcon::Heal),
-            "creature" => Look { slash: true, ..l(&["sword_slash"], 2.0, None, SkillIcon::Sword) },
-            _ => l(&[], 1.0, None, SkillIcon::Empty),
-        },
+        "jump" => (&[crate::jump::CLIP], 1.0, None),
+        _ => (&[], 1.0, None),
+    }
+}
+
+/// The client's theme table for skill icons.
+fn icon_named(name: Option<&str>) -> SkillIcon {
+    match name {
+        Some("sword") => SkillIcon::Sword,
+        Some("bow") => SkillIcon::Bow,
+        Some("fire") => SkillIcon::Fire,
+        Some("shield") => SkillIcon::Shield,
+        Some("dodge") => SkillIcon::Dodge,
+        Some("heal") => SkillIcon::Heal,
+        Some("jump") => SkillIcon::Jump,
+        _ => SkillIcon::Empty,
+    }
+}
+
+/// How a skill looks on this client: its look names through the theme tables. No skill name is
+/// matched: a skill the rules add, or restyle, shows by its declaration.
+pub fn look(card: &SkillCard) -> Look {
+    let names = LOOK_NAMES.read().ok().and_then(|g| g.as_ref().and_then(|m| m.get(&card.skill).cloned()));
+    let names = names.unwrap_or_else(|| by_card(card));
+    let mut clips: Vec<&'static str> = Vec::new();
+    let (mut rate, mut hold) = (1.0, None);
+    for (i, f) in names.clips.iter().enumerate() {
+        let (c, r, h) = clip_family(f);
+        clips.extend_from_slice(c);
+        if i == 0 {
+            (rate, hold) = (r, h);
+        }
+    }
+    Look { clips, rate, hold, slash: names.effect == Some("slash"), bolt: names.effect == Some("bolt"), icon: icon_named(names.icon) }
+}
+
+/// Before the rules compile here: the look by the card's aim, as `living_rules::ui::look_by_aim`
+/// gives it.
+fn by_card(card: &SkillCard) -> living_rules::ui::Look {
+    let l = |icon: &'static str, clip: &'static str, effect: Option<&'static str>| living_rules::ui::Look { icon: Some(icon), clips: vec![clip], effect };
+    match card.aim.as_str() {
+        "point" if card.radius >= living_rules::ui::BOLT_RADIUS => l("fire", "cast", Some("bolt")),
+        "point" => l("bow", "shoot", Some("arrow")),
+        "facing" => l("shield", "guard", None),
+        "dash" => l("dodge", "dash", None),
+        "self_or_ally" => l("heal", "cast", None),
+        "creature" => l("sword", "slash", Some("slash")),
+        _ => living_rules::ui::Look::default(),
     }
 }
 
@@ -231,8 +349,9 @@ impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Combat>()
             .init_resource::<Cards>()
+            .init_resource::<Roles>()
             .init_resource::<Scripted>()
-            .add_systems(Update, (read_cards, ingest).chain().in_set(Phase::Mirror))
+            .add_systems(Update, (read_cards, read_roles, ingest).chain().in_set(Phase::Mirror))
             // After movement: a dash goes the way I move, a skill aims where I look.
             .add_systems(Update, (pick, input).chain().in_set(Phase::Input).after(crate::controls::movement))
             .add_systems(Update, actions.in_set(Phase::Present))
@@ -312,6 +431,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
             }
             seen::REFUSED => {
                 c.refusal = Some((r.note.clone(), now));
+                c.refused_skill = cards.by_code(r.skill).map(|k| k.skill.clone());
                 if c.predicted.as_ref().is_some_and(|(s, _)| cards.code(s) == r.skill) {
                     c.predicted = None;
                 }
@@ -380,6 +500,7 @@ pub fn input(
     mut scripted: ResMut<Scripted>,
     (pointer, mut talk): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>),
     mut c: ResMut<Combat>,
+    (binds, roles, mut weapon, taps): (Res<crate::keys::Binds>, Res<Roles>, ResMut<crate::weapon::Weapon>, Res<crate::keys::DoubleTap>),
 ) {
     let now = now_ms(&scene);
     if c.predicted.as_ref().is_some_and(|(_, t)| now - t > PREDICT_MS) {
@@ -399,22 +520,15 @@ pub fn input(
     }
     c.script_aim = scripted_aiming.as_ref().map(|(_, (p, _))| *p);
     let mut releases: Vec<String> = Vec::new();
-    // The bar's skills by slot (the rules' `skill_bar()`).
-    let slot = |i: usize| cards.slot(i).map(|card| card.skill.clone());
-    let shift = |b: &ButtonInput<KeyCode>, f: fn(&ButtonInput<KeyCode>, KeyCode) -> bool| f(b, KeyCode::ShiftLeft) || f(b, KeyCode::ShiftRight);
+    // The bar's places by binding (`keys.rs`), their skills by how the rules aim them (`Roles`).
+    use crate::keys::{Act, Bind};
+    let mouse_bound = |a: Act| binds.get(a).iter().any(|b| matches!(b, Bind::Mouse(_)));
+    let ok = |a: Act| !mouse_bound(a) || free_mouse;
     if !input.demo {
         // A held guard is let go with its key, also while typing: the key went up either way,
         // and a release missed would leave the guard raised until pressed again.
-        let went_up = [
-            mouse.just_released(MouseButton::Left),
-            mouse.just_released(MouseButton::Right),
-            keys.just_released(KeyCode::KeyQ),
-            keys.just_released(KeyCode::KeyE),
-            keys.just_released(KeyCode::KeyR),
-            shift(&keys, |b, k| b.just_released(k)),
-        ];
-        for (i, up) in went_up.into_iter().enumerate() {
-            if let Some(card) = cards.slot(i).filter(|card| up && card.aim == "facing") {
+        for a in BAR_ACTS {
+            if let Some(card) = roles.skill(a).and_then(|s| cards.by_name(s)).filter(|card| card.aim == "facing" && binds.went_up(a, &keys, &mouse)) {
                 releases.push(card.skill.clone());
             }
         }
@@ -422,61 +536,47 @@ pub fn input(
     if !input.demo && typing {
         c.aiming = None;
     }
-    // A tap on a person who is not hostile to me talks to them instead of striking (play-test 2:
-    // the owner, tapping to interact, struck the first resident who greeted him). Striking them
-    // takes a held press; animals and hostile people are struck by a tap as before.
-    let peaceful = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|k| k.kind == "person") && !hostile_to_me(conn, id, me_id, now);
-    let tap_talks = |c: &Combat| {
-        let card = cards.slot(0).filter(|card| card.aim == "creature")?;
-        let whom = c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), card.reach + 0.4))?;
-        peaceful(whom).then_some(whom)
+    // Sheathed (`weapon.rs`), a tap on a person talks to them (play-test 2: the owner, tapping to
+    // interact, struck the first resident who greeted him). Drawn, a tap strikes whoever is
+    // under the cursor.
+    let person = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|k| k.kind == "person");
+    let tap_target = |c: &Combat| {
+        let reach = roles.skill(Act::Primary).and_then(|s| cards.by_name(s)).map_or(0.0, |k| k.reach);
+        c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), reach + 0.4))
     };
+    let tap_talks = |c: &Combat| (!weapon.drawn).then(|| tap_target(c)).flatten().filter(|id| person(*id));
     if !input.demo && pointer.tapped && free_mouse {
         // Open: a tap on someone addresses them instead; closed: it opens the box to them.
-        let whom = if typing { c.target.filter(|id| peaceful(*id)) } else { tap_talks(&c) };
+        let whom = if typing { c.target.filter(|id| person(*id)) } else { tap_talks(&c) };
         if let (Some(id), Some(t)) = (whom, talk.as_mut()) {
             t.open_to = Some(id);
         }
     }
     let tapped_talk = !input.demo && !typing && pointer.tapped && talk.is_some() && tap_talks(&c).is_some();
     if !input.demo && !typing && pointer.tapped {
-        let whom = c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), cards.slot(0).map_or(0.0, |k| k.reach) + 0.4));
-        info!("tap: {} (at {:?}{})", if tapped_talk { "talk" } else { "strike" }, whom, whom.map_or(String::new(), |w| format!(", {}", if peaceful(w) { "peaceful" } else { "hostile or not a person" })));
+        let whom = tap_target(&c);
+        info!("tap: {} (at {:?}, weapon {})", if tapped_talk { "talk" } else if weapon.drawn { "strike" } else { "draw" }, whom, if weapon.drawn { "drawn" } else { "sheathed" });
     }
     if !input.demo && !typing {
-        let held = |k| keys.pressed(k);
-        // Held keys show their skill's indicator: RMB, Q, LMB, R, E.
-        c.aiming = if mouse.pressed(MouseButton::Right) && free_mouse {
-            slot(1)
-        } else if held(KeyCode::KeyQ) {
-            slot(2)
-        } else if mouse.pressed(MouseButton::Left) && free_mouse {
-            slot(0)
-        } else if held(KeyCode::KeyR) {
-            slot(4)
-        } else if held(KeyCode::KeyE) {
-            slot(3)
-        } else {
-            None
-        };
-        let went_down = [
-            mouse.just_pressed(MouseButton::Left) && free_mouse && !tapped_talk,
-            mouse.just_pressed(MouseButton::Right) && free_mouse,
-            keys.just_pressed(KeyCode::KeyQ),
-            keys.just_pressed(KeyCode::KeyE),
-            keys.just_pressed(KeyCode::KeyR),
-            shift(&keys, |b, k| b.just_pressed(k)),
-            keys.just_pressed(KeyCode::Space),
-        ];
-        // In bar order, as before: LMB, RMB, Q, then R before E, then Shift, then Space (the
-        // jump, not drawn on the bar).
-        for i in [0, 1, 2, 4, 3, 5, 6] {
-            if went_down[i] {
-                if let Some(s) = slot(i) {
-                    presses.push((s, None, None));
-                }
+        // Held keys show their skill's indicator.
+        c.aiming = [Act::Secondary, Act::Skill1, Act::Primary, Act::Skill3, Act::Skill2].into_iter().chain((0..crate::keys::EXTRA).map(Act::Extra)).find(|a| ok(*a) && binds.down(*a, &keys, &mouse)).and_then(|a| roles.skill(a)).map(String::from);
+        for a in BAR_ACTS {
+            let down = binds.went_down(a, &keys, &mouse) && ok(a) && !(a == Act::Primary && tapped_talk);
+            if let Some(s) = roles.skill(a).filter(|_| down) {
+                presses.push((s.to_string(), None, None));
             }
         }
+        // The dodge's default: a double tap of a direction key, that way.
+        if let (Some(v), Some(s)) = (taps.fired, roles.dodge()) {
+            let (up, right) = cam.control_axes();
+            let d = (up * v.y + right * v.x).normalize_or_zero();
+            presses.push((s.to_string(), Some(me + d * 2.0), None));
+        }
+    }
+    // Sheathed, the first press of an attack skill draws the weapon instead.
+    if !weapon.drawn && presses.iter().any(|(s, _, _)| roles.is_hostile(s)) {
+        weapon.set(true, crate::weapon::Why::Attack, now, &net);
+        presses.retain(|(s, _, _)| !roles.is_hostile(s));
     }
     if let Some((s, _)) = scripted_aiming {
         c.aiming = Some(s);
@@ -497,6 +597,7 @@ pub fn input(
     }
     for (skill, aim, tgt) in presses {
         let Some(card) = cards.by_name(&skill) else { continue };
+        let given = aim.is_some() && card.aim == "dash";
         let aim = aim.unwrap_or_else(|| aim_point(&cam, me, &input));
         // Who or where it goes, by how the rules aim it.
         let (target_id, point) = match card.aim.as_str() {
@@ -504,6 +605,7 @@ pub fn input(
             "self_or_ally" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
             // A dash goes the way I move, else back from where I face (a jump: toward it). Facing
             // where I walk and not aiming, that is the facing drawn, not the cursor.
+            "dash" if given => (0, aim),
             "dash" => {
                 let drawn = input.face.filter(|_| !input.faces_cursor(c.aims));
                 let back = drawn.map_or((me - aim).normalize_or(Vec2::NEG_Y), |f| -f.normalize_or(Vec2::Y));
@@ -512,7 +614,8 @@ pub fn input(
             }
             _ => (tgt.unwrap_or(0), aim),
         };
-        let r = conn.reducers.use_skill_then(skill.clone(), target_id, point.x, point.y, net.on_reply("skill"));
+        let args = || serde_json::json!({"skill": skill, "target": target_id, "x": point.x, "y": point.y});
+        let r = conn.reducers.use_skill_then(skill.clone(), target_id, point.x, point.y, net.on_reply("skill", "use_skill", args));
         net.report("skill", r);
         c.pressed.insert(skill.clone(), now);
         if look(card).clips.len() > 1 {
@@ -525,7 +628,7 @@ pub fn input(
         c.predicted = Some((skill, now));
     }
     for skill in releases {
-        let r = conn.reducers.release_skill_then(skill.clone(), net.on_reply("release"));
+        let r = conn.reducers.release_skill_then(skill.clone(), net.on_reply("release", "release_skill", || serde_json::json!({"skill": skill})));
         net.report("release", r);
         if cards.by_name(&skill).is_some_and(|card| card.aim == "facing") {
             c.guarding = false;

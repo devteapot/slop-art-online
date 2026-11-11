@@ -17,13 +17,17 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+pub mod body;
 mod check;
+#[cfg(test)]
+mod seed_check;
 pub mod context;
 pub mod fields;
 pub mod speech;
 mod ui;
 pub use ui::UiWork;
 pub use check::Report;
+pub use body::{Alarm, BodyFacts, Meter, MeterMax, Status, Think};
 
 #[derive(Clone, Debug, Default)]
 pub struct ActorFacts {
@@ -837,6 +841,8 @@ pub struct Scripts {
     /// How each skill is presented (`<name>_ui()` over its defaults), and what was wrong with
     /// the declarations (an install refuses them; a client plays on with the defaults).
     ui: ui::UiRead,
+    /// The body's meters and the memo of its statuses (`meters()`, `status_of(a)`).
+    body: body::Body,
 }
 
 /// What a kind of structure does for those near it (its traits in `structures()`).
@@ -948,12 +954,65 @@ pub struct Limits {
 /// 2026-11-11) and 2,373 after, so the string limit is 4,096.
 pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 4_096, array: 256, map: 512 };
 
+/// Rhai's hashing keys, the same in every build of every program that runs the laws: the
+/// authority, the game client and the mind service (docs/LIVING_CORE.md, "One hashing seed").
+///
+/// Rhai hashes function names, call signatures and `switch` cases with `ahash`, and turns on
+/// `ahash`'s `compile-time-rng`. Unless a seed is set, the keys are random numbers drawn each
+/// time `ahash` compiles (a new target folder, a cache miss, a toolchain update), and they
+/// decide where entries land in Rhai's tables and in which order it hands back a script's
+/// functions. So the same source cost a different fuel per call from build to build (`tool-8`),
+/// and a rule that followed that order (`fov-1`'s field analysis) decided differently by build.
+/// Fixed keys make both a function of the code alone.
+///
+/// The value is the fuel bench's key set 0 since `tool-8` (`sb_bench::hashing_seed(0)`), so the
+/// gate's history at that set is the game's; nothing else about it matters but that it is not
+/// zero (Rhai takes zero keys as no seed) and never changes: changing it moves every law's fuel.
+/// It was not chosen for a law's fuel. Fixed keys are public, so whoever chooses a string that
+/// Rhai hashes could look for collisions: to slow the engine (hash flooding) or to take a wrong
+/// `switch` branch (Rhai matches a case by its hash alone). Acceptable while scripts come from a
+/// world's seed and admin installs; the docs list where a player's words reach a hashed
+/// position today (an act's item) and when to revisit.
+pub const HASHING_SEED: [u64; 4] = [0x5eed_0000_0000_0001, 0x5eed_0000_0000_0002, 0x5eed_0000_0000_0003, 0x5eed_0000_0000_0004];
+
+/// Fix Rhai's hashing keys to [`HASHING_SEED`] (`rhai::config::hashing::set_hashing_seed`) and
+/// return the keys in force. Rhai reads them once per process (a module instance), so this must
+/// run before anything touches Rhai: every engine of this crate is made by [`new_engine`], which
+/// calls it. Keys set earlier by someone else stay in force (the fuel bench's other key sets).
+pub fn fix_hashing() -> [u64; 4] {
+    #[cfg(test)]
+    if let Some(k) = test_seed() {
+        let _ = rhai::config::hashing::set_hashing_seed(k);
+        return k.unwrap_or_default();
+    }
+    let _ = rhai::config::hashing::set_hashing_seed(Some(HASHING_SEED));
+    rhai::config::hashing::get_hashing_seed().unwrap_or_default()
+}
+
+/// Tests only: other keys for this process (`LIVING_RHAI_TEST_SEED`: four numbers, or `build`
+/// for the keys this build of `ahash` drew), for the check that no rule depends on them.
+#[cfg(test)]
+fn test_seed() -> Option<Option<[u64; 4]>> {
+    let v = std::env::var("LIVING_RHAI_TEST_SEED").ok()?;
+    if v == "build" {
+        return Some(None);
+    }
+    let k: Vec<u64> = v.split(',').map(|w| w.trim().parse().expect("LIVING_RHAI_TEST_SEED: four numbers or `build`")).collect();
+    Some(Some(k.try_into().expect("LIVING_RHAI_TEST_SEED: four numbers")))
+}
+
+/// A bare Rhai engine, after [`fix_hashing`]. The only way this crate makes one.
+pub fn new_engine() -> Engine {
+    fix_hashing();
+    Engine::new_raw()
+}
+
 fn engine(t: &Rc<RefCell<Tables>>) -> Engine {
     engine_with(LIMITS, t)
 }
 
 fn engine_with(l: Limits, t: &Rc<RefCell<Tables>>) -> Engine {
-    let mut e = Engine::new_raw();
+    let mut e = new_engine();
     register_tables(&mut e, t);
     rhai::packages::StandardPackage::new().register_into_engine(&mut e);
     e.set_max_operations(l.operations);
@@ -1058,7 +1117,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default(), body: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1093,6 +1152,8 @@ impl Scripts {
         // Presentation last: it reads the skills, shapes, shows and tables, and never fails the
         // compile (`ui_errors`).
         s.ui = s.read_ui();
+        // The body's meters: never fail the compile either (`meter_errors`, refused at install).
+        s.body = s.read_body();
         Ok(s)
     }
 
@@ -2323,7 +2384,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 /// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
@@ -2366,6 +2427,19 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         return Err(format!("{f}: `about` describes the skill for a mind: what it does, when it is useful, what it is not"));
     }
     let reach = m.get("reach").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `reach` must be a number")))?;
+    // What the target may be: a class or a list of them.
+    let target_class = match m.get("target_class") {
+        None => Vec::new(),
+        Some(v) if v.is_string() => vec![v.clone().into_string().unwrap_or_default()],
+        Some(_) => list("target_class")?,
+    };
+    let classes = crate::catalog::TARGET_CLASSES;
+    if let Some(c) = target_class.iter().find(|c| !classes.contains(&c.as_str())) {
+        return Err(format!("{f}: `target_class` '{c}' is not a target class ({})", classes.join(", ")));
+    }
+    if !target_class.is_empty() && !flag("target", false)? {
+        return Err(format!("{f}: `target_class` needs `target: true`"));
+    }
     Ok(crate::catalog::SkillSpec {
         name: skill.to_string(),
         needs_target: flag("target", false)?,
@@ -2384,6 +2458,7 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         moving: flag("moving", false)?,
         moment: flag("moment", false)?,
         reflex: flag("reflex", false)?,
+        target_class,
     })
 }
 

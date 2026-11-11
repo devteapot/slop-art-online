@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -31,6 +31,7 @@ Stop driving if launch or doctor fails. Run cleanup and retain the error. The sc
 python3 "$C/cargo_checks.py" --run "$R"
 python3 "$C/scenes.py" tick --run "$R" > "$E/tick.txt" 2>&1
 python3 "$C/scenes.py" needs --run "$R" > "$E/needs.txt" 2>&1
+python3 "$C/scenes.py" alarms --run "$R" > "$E/alarms.txt" 2>&1
 python3 "$C/scenes.py" food --run "$R" > "$E/food.txt" 2>&1
 python3 "$C/scenes.py" refusal --run "$R" > "$E/refusal.txt" 2>&1
 python3 "$C/scenes.py" teach --run "$R" > "$E/teach.txt" 2>&1
@@ -40,9 +41,13 @@ python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
 python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
+# Another's health in fight reports and health_of: the band, exact only while appraised (features/combat.md).
+python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
 python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
+# Admin placement on free walkable tiles (features/steering.md#admin-placement); last: its bodies stay.
+python3 "$C/scenes.py" placement --run "$R" > "$E/placement.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
 # Speech (features/speech.md): each scene on its own launched run (they spawn people named
@@ -100,7 +105,8 @@ python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
 
 # Rhythms at any hour and Cullet's trades (about 17 min): a night stoker rising at 14:00 and
 # working the night, the day watch feeding the furnace and making glass, a baker's second sleep,
-# Cullet's life stages (features/town.md, features/laws.md, docs/SEEDED_LIVES.md).
+# Cullet's life stages, and five trades at the places of the plan's open lots in their hours
+# (features/town.md, features/laws.md, docs/SEEDED_LIVES.md, docs/CULLET_LAYOUT.md pass 2).
 Y=$R-rhythm
 mkdir -p ".local/living/verify/$Y"
 python3 "$C/rhythm.py" seed --run "$Y" > ".local/living/verify/$Y/seed.txt" 2>&1

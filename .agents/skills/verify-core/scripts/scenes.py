@@ -336,6 +336,121 @@ def death_names(s):
              {"death": deaths[bystander], "remains": remains[bystander]}, fatal=False)
 
 
+def health_seen(s):
+    """Another's health reaches a fighter as the band everyone sees, never as a number, except
+    while the fighter's own appraisal of them holds (docs/PERCEPTION.md, `perception::health_seen`).
+
+    Strangers fight in pairs; the scene plays the mind's part by reading each pending
+    `deliberation` (fight reports, `act::fight_report`, arrive there) and skipping it, so the
+    next report can come. Pair one fights once (band words); then a graph's `health_of` on it
+    reads the band's middle, and B's exact health once A appraises B. Pair two: C appraises D
+    and they fight within the 20 s reveal (exact for C, band for D), then fight again after it
+    ends (band). Each pair fights at most twice so no one dies of the scene."""
+    thought = {"kind": "verify", "summary": "scripted acknowledgement, no model",
+               "detail": "", "latency_ms": 0, "tokens": 0, "model": "none", "reference": "verify-core-health-seen"}
+    a, b, c, d = s.people(4)
+    s.call("place_near", b, a)
+    s.call("place_near", c, a)
+    s.call("place_near", d, c)
+    reports, seen = [], set()
+    exact_re = re.compile(r"they have (\d+) of (\d+) health\.$")
+    words = ("unhurt", "scratched", "hurt", "badly hurt", "barely standing")
+    pair = {a: b, b: a, c: d, d: c}
+
+    def drain(phase):
+        for row in s.rows(f"SELECT * FROM deliberation WHERE actor = {a} OR actor = {b} OR actor = {c} OR actor = {d}"):
+            for line in row["reason"].splitlines():
+                key = (row["actor"], line, row["updated_ms"])
+                if line.startswith("The fight with") and key not in seen:
+                    seen.add(key)
+                    reports.append({"phase": phase, "actor": row["actor"], "text": line, "at_ms": row["updated_ms"],
+                                    "revealed": [r["what"] for r in s.rows(f"SELECT * FROM reveal WHERE observer = {row['actor']}")]})
+            s.call("mind_skip", row["actor"], row["updated_ms"], thought)
+
+    def fight(x, y, phase, want, seconds=40):
+        s.graph(x, {"first": [{"do": {"skill": "attack", "target": {"id": y}}}, {"wait": 1}]})
+        s.graph(y, {"first": [{"do": {"skill": "attack", "target": {"id": x}}}, {"wait": 1}]})
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and not want():
+            drain(phase)
+            time.sleep(0.4)
+        for z in (x, y):
+            s.graph(z, {"wait": 120})
+        time.sleep(1.5)
+        drain(phase)
+
+    def of(phase, actor):
+        return [r for r in reports if r["phase"] == phase and r["actor"] == actor]
+
+    def band_only(r):
+        return any(r["text"].endswith(f"they look {w}.") for w in words) and not exact_re.search(r["text"]) and "%" not in r["text"]
+
+    def alive(*ids):
+        return all(s.rows(f"SELECT alive FROM character WHERE id = {i}")[0]["alive"] for i in ids)
+
+    drain("before")
+    fight(a, b, "band", lambda: of("band", a) and of("band", b))
+    s.expect("fight reports reach both fighters", of("band", a) and of("band", b), reports, fatal=False)
+    s.expect("without an appraisal, fight reports carry the band's words, no number",
+             of("band", a) and all(band_only(r) for r in reports if r["phase"] == "band"), [r["text"] for r in reports], fatal=False)
+
+    s.act(c, {"do": "appraise", "target": {"id": d}})
+    look = s.wait(lambda: s.told(c, "over:", "appraise"), seconds=20)
+    reveal = s.wait(lambda: s.rows(f"SELECT * FROM reveal WHERE observer = {c} AND target = {d}", "reveal"), seconds=10)[0]
+    s.expect("appraise tells exact health and starts a 20 s reveal",
+             re.search(r"over: \d+ of \d+ health\.$", look[-1]["text"]) is not None, look[-1]["text"])
+    max_d = round(s.vitals(d)["max_hp"])
+    fight(c, d, "appraised", lambda: of("appraised", c), seconds=16)
+    inside = [r for r in of("appraised", c) if r["at_ms"] < reveal["until_ms"]]
+    s.expect("while C's appraisal holds, C's fight report gives D's exact health",
+             inside and all(exact_re.search(r["text"]) and int(exact_re.search(r["text"]).group(2)) == max_d for r in inside),
+             {"reports": [r["text"] for r in of("appraised", c)], "until_ms": reveal["until_ms"]}, fatal=False)
+    s.expect("D, who appraised no one, still gets only C's band", all(band_only(r) for r in of("appraised", d)),
+             [r["text"] for r in of("appraised", d)], fatal=False)
+    s.wait(lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"] > reveal["until_ms"] + 1500, seconds=30)
+    s.wait(lambda: not s.rows(f"SELECT * FROM reveal WHERE observer = {c}"), seconds=10)
+    s.expect("C and D alive for the fight after the reveal", alive(c, d))
+    fight(c, d, "after", lambda: of("after", c), seconds=40)
+    s.expect("after the reveal ends, C's reports are back to the band", of("after", c) and all(band_only(r) for r in of("after", c)),
+             [r["text"] for r in of("after", c)], fatal=False)
+    (s.out / f"{s.name}-reports.json").write_text(json.dumps(reports, indent=2) + "\n")
+    print(json.dumps([[r["phase"], r["actor"], r["text"]] for r in reports], indent=2), flush=True)
+
+    # A graph's health_of reads the same perception: a threshold between B's exact share and
+    # its band's middle tells which one the condition saw. A person's non-urgent think is
+    # dropped within its think_min_s (20 s) of the last deliberation unless one is pending:
+    # wait it out once, then leave the request pending so the second ask joins it.
+    time.sleep(21)
+    s.expect("A and B alive for health_of", alive(a, b))
+    v = s.vitals(b)
+    pct = s.needs(b, "health-of-b")["hp"] / v["max_hp"] * 100
+    band = 4 if pct >= 90 else 3 if pct >= 65 else 2 if pct >= 40 else 1 if pct >= 20 else 0
+    middle = {4: 95, 3: 77, 2: 52, 1: 30, 0: 10}[band]
+    if abs(middle - pct) < 4 or min(abs(pct - e) for e in (20, 40, 65, 90)) < 2:
+        s.expect("health_of: B's exact share is clear of its band's edges and middle", False,
+                 {"pct": pct, "middle": middle}, fatal=False, known=True)
+        return
+    thr = (pct + middle) / 2
+    exact_says = "below" if pct < thr else "above"
+    band_says = "below" if middle < thr else "above"
+
+    def asked(label):
+        s.graph(a, {"if": {"cond": {"health_of": {"target": {"id": b}, "below": thr}},
+                           "then": {"think": f"verify health_of {label} below"},
+                           "else": {"think": f"verify health_of {label} above"}}})
+        row = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM deliberation WHERE actor = {a}") if f"verify health_of {label}" in r["reason"]], seconds=30)[0]
+        s.graph(a, {"wait": 120})
+        return "below" if f"verify health_of {label} below" in row["reason"] else "above"
+    plain = asked("plain")
+    s.expect("health_of without an appraisal reads the band's middle", plain == band_says,
+             {"pct": round(pct, 1), "band": band, "middle": middle, "below": round(thr, 1), "said": plain}, fatal=False)
+    s.act(a, {"do": "appraise", "target": {"id": b}})
+    s.wait(lambda: s.rows(f"SELECT * FROM reveal WHERE observer = {a} AND target = {b}"), seconds=20)
+    shown = asked("appraised")
+    s.expect("health_of during an appraisal reads exact health", shown == exact_says,
+             {"pct": round(pct, 1), "below": round(thr, 1), "said": shown}, fatal=False)
+
+
 def lifecycle(s):
     w = s.rows("SELECT * FROM world", "world")[0]
     s.expect("compressed lifecycle seed selected", w["run"] == "s1-acts" and w["life_pace"] < 0.1)
@@ -2022,7 +2137,154 @@ def say(s):
         s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40)
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov}
+
+def alarms(s):
+    """A body's alarms are the world's `status_of` law's (docs/WORLD_RULES.md, "The body: meters
+    and statuses"): an overlay adds a status with an alarm to every body; a person the minds hold
+    is told it once while it lasts (a `body` line), asked to think with its words ("Your body:
+    …"), and told again only after it has ended and begun again. A meter naming a field the vitals
+    row lacks is refused at install. The shipped script is installed again at the end."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    word = "You feel the verify alarm."
+    status = 'fn status_of(a) { let out = base_status_of(a); out.push(#{ name: "verify", tone: "warn", text: "Verify", alarm: "%s", salience: 0.6, think: "always" }); out }' % word
+    on = compose(shipped, {"status_of": status})
+    a = s.people(1)[0]
+    try:
+        s.expect("the shipped law gives no such alarm", not s.told(a, word, "body"))
+        s.call("install_script", on)
+        s.wait(lambda: s.told(a, word, "body"), seconds=30)
+        time.sleep(6)
+        once = s.told(a, word, "body")
+        s.expect("an alarm the law gives is told once while it lasts", len(once) == 1, once)
+        reasons = s.rows(f"SELECT reason FROM deliberation WHERE actor = {a}", "alarm-requests")
+        s.expect("think: always asks the mind to think, in the alarm's words", any(f"Your body: {word}" in r["reason"] for r in reasons), reasons)
+        s.call("install_script", shipped)
+        time.sleep(5)
+        s.call("install_script", on)
+        s.wait(lambda: len(s.told(a, word, "body")) >= 2, seconds=30)
+        s.expect("ended and begun again, it is told again", len(s.told(a, word, "body")) == 2, s.told(a, word, "body"))
+        bad = compose(shipped, {"meters": 'fn meters() { base_meters() + [#{ name: "stamina", value: "stamina", max: 100.0 }] }'})
+        r = s.call("install_script", bad, check=False)
+        out = (r.stdout or "") + (r.stderr or "")
+        s.expect("a meter naming a field the vitals row lacks is refused at install", r.returncode != 0 and "not a my_vitals field" in out, out[-300:])
+    finally:
+        s.call("install_script", shipped)
+
+
+def world_tiles(s):
+    """This world's tiles (`terrain_chunk`) and a walkable test by tile code (water, rock,
+    wall, drop and low tiles are not walkable; off the map is rock)."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
+    return W, H, at, lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
+
+
+def old_snap(walk, x, y):
+    """The tile the pre-fix `place_at` chose (`Map::nearest_walkable`: rings outward, first
+    walkable tile in row order), for the evidence."""
+    tx, ty = math.floor(x), math.floor(y)
+    for r in range(12):
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if (abs(dx) == r or abs(dy) == r) and walk(tx + dx, ty + dy):
+                    return (tx + dx, ty + dy)
+    return None
+
+
+PLACE_RADIUS = 6.0
+
+
+def placement(s):
+    """Admin placement (`place_near`, `place_at`) puts a body on the nearest free walkable tile:
+    walkable, and no other body on it, within 6 m (`PLACE_RADIUS` in living/authority/src/lib.rs),
+    and refuses when there is none. `place_near` beside a target whose east tile is an obstacle
+    lands on a walkable tile of the target's ground and the body then walks (`goto`) away; two
+    `place_at` requests 1.9 m apart that the old nearest-walkable snapping put on one tile land
+    on two; a request with no free walkable tile within the radius is refused."""
+    W, H, at, walk = world_tiles(s)
+    tile = lambda p: (math.floor(p[0]), math.floor(p[1]))
+    # A target tile with an obstacle (rock, wall or water) east and open ground west of it,
+    # more than 10 m from every body (the world's people, an earlier attempt's actors).
+    now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    others = [body_at(s, None, now, row=b) for b in s.rows("SELECT x, y, t_ms, vx, vy, next_ms FROM body")]
+    spot = next(((x, y) for y in range(8, H - 8) for x in range(12, W - 8)
+                 if walk(x, y) and at(x + 1, y) in (2, 4, 7)
+                 and all(math.dist((x + .5, y + .5), o) > 10 for o in others)
+                 and all(walk(x - i, y + d) for i in range(1, 7) for d in (-1, 0, 1))), None)
+    if spot is None:
+        raise RuntimeError("no walkable tile with an obstacle east of it on this map")
+    # Two requests 1.9 m apart that the old snapping put on one tile, a few metres off.
+    pair = None
+    for y in range(4, H - 4):
+        for x in range(4, W - 4):
+            if walk(x, y):
+                continue
+            p = (x + .5, y + .5)
+            for q in ((p[0] + 1.9, p[1]), (p[0], p[1] + 1.9)):
+                o = old_snap(walk, *p)
+                if not walk(*tile(q)) and o is not None and o == old_snap(walk, *q) \
+                        and max(math.dist(r, (o[0] + .5, o[1] + .5)) for r in (p, q)) <= 2.5:
+                    pair = (p, q)
+                    break
+            if pair:
+                break
+        if pair:
+            break
+    # A point with no walkable tile within the radius: deep water or rock if the map has it,
+    # else off the map's edge (off the map is rock).
+    deep = next(((x + .5, y + .5) for y in range(0, H, 2) for x in range(0, W, 2)
+                 if not any(walk(x + dx, y + dy) for dy in range(-7, 8) for dx in range(-7, 8))), (-20.0, -20.0))
+    (s.out / f"{s.name}-spots.json").write_text(json.dumps({"target": spot, "pair": pair, "deep": deep,
+        "old_pair_tiles": [old_snap(walk, *p) for p in pair] if pair else None}, indent=2) + "\n")
+    target, near, c, d, e = s.people(5)
+    s.call("place_at", target, spot[0] + .5, spot[1] + .5)
+    s.expect("place_at on a free walkable tile puts the body on that tile's centre",
+             body_at(s, target) == (spot[0] + .5, spot[1] + .5), body_at(s, target))
+    s.call("place_near", near, target)
+    p = body_at(s, near)
+    s.expect("place_near beside an obstacle lands on a walkable tile, not the target's own",
+             walk(*tile(p)) and tile(p) != spot and tile(p) != (spot[0] + 1, spot[1]) and math.dist(p, (spot[0] + .5, spot[1] + .5)) <= PLACE_RADIUS + .5,
+             {"placed": p, "tile_code": at(*tile(p)), "obstacle": (spot[0] + 1, spot[1]), "obstacle_code": at(spot[0] + 1, spot[1])})
+    goal = (spot[0] - 5 + .5, spot[1] + .5)
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(near, {"seq": [{"do": {"skill": "goto", "target": {"at": list(goal)}}}, {"wait": 300}]})
+    s.wait(lambda: math.dist(body_at(s, near), goal) < 1.0, seconds=20)
+    uses = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {near}", "near-uses") if u["skill"] == "goto" and u["at_ms"] >= t0]
+    s.expect("the placed body can then goto (it walks 5 m away)", math.dist(body_at(s, near), goal) < 1.0
+             and not any("could not get there" in (u["outcome"] or "") or "blocked" in (u["outcome"] or "") for u in uses),
+             {"at": body_at(s, near), "goal": goal, "goto": [u["outcome"] for u in uses]})
+    s.call("place_near", e, target)
+    pe = body_at(s, e)
+    s.expect("a second place_near beside the same target takes another free tile",
+             walk(*tile(pe)) and tile(pe) not in (spot, tile(body_at(s, near))), {"placed": pe})
+    if pair:
+        s.call("place_at", c, *pair[0])
+        s.call("place_at", d, *pair[1])
+        pc, pd = body_at(s, c), body_at(s, d)
+        s.expect("two place_at requests 1.9 m apart land on different free walkable tiles",
+                 tile(pc) != tile(pd) and walk(*tile(pc)) and walk(*tile(pd)),
+                 {"requests": pair, "placed": [pc, pd], "old_snap": [old_snap(walk, *q) for q in pair]})
+    else:
+        s.expect("this map has two requests 1.9 m apart the old snapping joined", False, "none found", fatal=False)
+    before = body_at(s, c)
+    r = s.call("place_at", c, *deep, check=False)
+    out = (r.stdout or "") + (r.stderr or "")
+    s.expect("a request with no free walkable tile within 6 m is refused, and the body stays",
+             r.returncode != 0 and "no free walkable tile within 6 m" in out and body_at(s, c) == before,
+             {"request": deep, "exit": r.returncode, "error": out[-300:]})
+
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen}
 
 
 def goods(s):

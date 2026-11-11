@@ -1,0 +1,321 @@
+{
+ "schema": 1,
+ "family": "building:heron",
+ "id": "20261111-a34e317f-610498",
+ "published": "2026-11-11T21:07:09+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. New: the last landmark. The crane house on its lot and the jib, a fixture, photographed apart",
+ "source": {
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "building",
+ "media": "media/building-heron/20261111-a34e317f-610498",
+ "members": [
+  {
+   "name": "heron",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/heron/heron.glb",
+   "sha256": "dfcc52ffdba4fe268c69c0f8f9ac6e0260476cdd9a81befe1f3a7b74f253cd11",
+   "stats": {
+    "file": "heron.glb",
+    "sha256": "dfcc52ffdba4fe268c69c0f8f9ac6e0260476cdd9a81befe1f3a7b74f253cd11",
+    "bytes": 145656,
+    "triangles": 2152,
+    "vertices": 4112,
+    "parts": {
+     "heron": 2152
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#40424b",
+      "share": 0.3241
+     },
+     {
+      "hex": "#242121",
+      "share": 0.271
+     },
+     {
+      "hex": "#605f60",
+      "share": 0.1726
+     },
+     {
+      "hex": "#34312f",
+      "share": 0.1577
+     },
+     {
+      "hex": "#868178",
+      "share": 0.045
+     },
+     {
+      "hex": "#4c5259",
+      "share": 0.0104
+     },
+     {
+      "hex": "#774227",
+      "share": 0.0062
+     },
+     {
+      "hex": "#aca491",
+      "share": 0.0046
+     },
+     {
+      "hex": "#5e3b2a",
+      "share": 0.0034
+     },
+     {
+      "hex": "#687287",
+      "share": 0.0027
+     },
+     {
+      "hex": "#62a08f",
+      "share": 0.0015
+     },
+     {
+      "hex": "#8a969b",
+      "share": 0.0007
+     },
+     {
+      "hex": "#2d6748",
+      "share": 0.0001
+     }
+    ]
+   },
+   "file": "files/heron.glb",
+   "report": {
+    "file": "heron/heron.glb",
+    "what": "lot",
+    "kind": "heron",
+    "size_m": [
+     7.0,
+     5.0
+    ],
+    "plan_height_m": 13.0,
+    "seed": 22480,
+    "above_floor_m": [
+     [
+      -3.492,
+      -2.507
+     ],
+     [
+      3.492,
+      2.488
+     ]
+    ],
+    "height_m": 13.0,
+    "foundation_m": 1.8,
+    "tris": 2152,
+    "materials": {
+     "Body": 2152
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8364,
+    "palette_wear_blend_share": 0.1636,
+    "budget_tris": 9000,
+    "hidden_faces_removed": 21,
+    "coplanar_sheets_parted": 39,
+    "doors": [],
+    "sha256": "dfcc52ffdba4fe268c69c0f8f9ac6e0260476cdd9a81befe1f3a7b74f253cd11",
+    "ridge_m": 13.0,
+    "wheel_m": 3.9,
+    "opening_m": 3.25,
+    "jib": "a fixture: heron_jib",
+    "eye_solid": 0.077,
+    "eye_cells": "14:1c1e10a1e1c1f1k1h1a1d2a1d3a1h1k1f1a1k2a1i2h1i4a1k2a1k2a1e2a1e4a1k2a1k1a2f4a2f1a1k2a1k1a1f1h2a1e1a2f1a1k1b1a1k1a1d1c4a1c1d1a1k1b1a1k2a1b1c1g1f4a1k1a1c1k2a1j1h2k4a1k1c1f12k1f"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     7.057788372039795,
+     14.800000190734863,
+     5.033181190490723
+    ],
+    "triangles": 2152,
+    "vertices": 4112,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "jib",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/heron_jib/heron_jib.glb",
+   "sha256": "0ddf66707360b615b8f4ed17d68543b2c4886eb661390cfe4b6406848ae8b5cc",
+   "stats": {
+    "file": "heron_jib.glb",
+    "sha256": "0ddf66707360b615b8f4ed17d68543b2c4886eb661390cfe4b6406848ae8b5cc",
+    "bytes": 39488,
+    "triangles": 518,
+    "vertices": 1100,
+    "parts": {
+     "heron_jib": 518
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#2c2928",
+      "share": 0.4419
+     },
+     {
+      "hex": "#aca491",
+      "share": 0.1505
+     },
+     {
+      "hex": "#44401e",
+      "share": 0.1335
+     },
+     {
+      "hex": "#383634",
+      "share": 0.1165
+     },
+     {
+      "hex": "#734128",
+      "share": 0.107
+     },
+     {
+      "hex": "#5f9f8f",
+      "share": 0.025
+     },
+     {
+      "hex": "#5c3a2a",
+      "share": 0.0227
+     },
+     {
+      "hex": "#535226",
+      "share": 0.0029
+     }
+    ]
+   },
+   "file": "files/jib.glb",
+   "report": {
+    "file": "heron_jib/heron_jib.glb",
+    "what": "fixture",
+    "kind": "heron_jib",
+    "size_m": [
+     1.6,
+     9.0
+    ],
+    "plan_height_m": 13.0,
+    "seed": 15236,
+    "above_floor_m": [
+     [
+      -0.6,
+      -4.494
+     ],
+     [
+      0.6,
+      4.349
+     ]
+    ],
+    "height_m": 12.905,
+    "foundation_m": -1.551,
+    "tris": 518,
+    "materials": {
+     "Body": 518
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7857,
+    "palette_wear_blend_share": 0.2143,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 8,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "0ddf66707360b615b8f4ed17d68543b2c4886eb661390cfe4b6406848ae8b5cc",
+    "ridge_m": 12.3,
+    "reach_m": 9.0
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     1.2000000476837158,
+     11.353286743164062,
+     8.842893600463867
+    ],
+    "triangles": 518,
+    "vertices": 1100,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

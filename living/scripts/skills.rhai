@@ -1353,12 +1353,25 @@ fn tend_combat() { #{ aim: "creature" } }
 fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"] }
 // How a skill is presented to a player: `<skill>_ui()`, read once when the script is installed
 // (docs/INTERFACE.md). It only shows: what a skill may do is its spec, shape and check. A skill
-// that declares nothing is presented by how the rules aim it; these three look otherwise.
-fn strike_ui() { #{ look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" } } }
+// that declares nothing is presented by how the rules aim it. The bar's seven say where each
+// sits, the input it takes and its named look (step 2): Q blocks, E heals, R casts the fire bolt
+// (1–3 are their twins); Space jumps; a double tap of a direction dodges.
+fn strike_ui() { #{ label: "Strike", place: "primary", look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" }, running: #{ show: "windup" } } }
+fn bowshot_ui() { #{ label: "Bow shot", place: "secondary", input: "aim_point", marker: "line", look: #{ icon: "bow", clip: "shoot", effect: "arrow" }, running: #{ show: "windup" } } }
+fn block_ui() { #{ label: "Block", place: "skill", order: 0, input: "hold", marker: "arc", look: #{ icon: "shield", clip: "guard", effect: "guard_arc" }, running: #{ show: "held" } } }
+fn heal_ui() { #{ label: "Heal", place: "skill", order: 1, look: #{ icon: "heal", clip: "cast" }, running: #{ show: "windup" } } }
+fn firebolt_ui() { #{ label: "Fire bolt", place: "skill", order: 2, input: "aim_point", look: #{ icon: "fire", clip: "cast", effect: "bolt" }, running: #{ show: "windup" } } }
+fn dodge_ui() { #{ label: "Dodge", place: "dodge", look: #{ icon: "dodge", clip: "dash" } } }
+fn jump_ui() { #{ label: "Jump", place: "jump", look: #{ icon: "jump", clip: "jump" } } }
+// Accept is also an answer on an offer's card (its window): toward the offer's maker.
+fn accept_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
 fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
+// A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
+// theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
+fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
-fn decline_ui() { #{ look: #{ icon: "trade" } } }
+fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }
@@ -2094,7 +2107,7 @@ fn rework_spec() {
 
 fn wave_spec() { #{ target: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
 fn nod_spec() { #{ target: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
-fn appraise_spec() { #{ target: true, reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
+fn appraise_spec() { #{ target: true, target_class: "creature", reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
 fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
 fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
 fn keep_spec() { #{ about: "Keep your post a while (a stall, a workshop, a gate, a door): stand at it and attend to whoever comes by.", takes: "10 seconds at your post", gives: "you are seen at work there" } }
@@ -2236,6 +2249,75 @@ fn rates_awake() {
     ()
 }
 
+// ---- the body's meters and statuses (players' screens and minds' words alike) ----------------
+// `meters()`: the bars a body has, each naming fields of its `my_vitals` row: `value`, and `max`
+// a field or a number; `shown: false` keeps a meter off the screen while it still bounds its
+// value and feeds the statuses. A world that adds a vital adds its column and a row here.
+fn meters() {
+    [
+        #{ name: "health", value: "hp", max: "max_hp", order: 0 },
+        #{ name: "energy", value: "energy", max: 100.0, order: 1 },
+        #{ name: "hunger", value: "hunger", max: 100.0, order: 2, shown: false },
+    ]
+}
+
+// How a body is: one set of thresholds for the players' screens, the minds' words about their
+// bodies and their bodily alarms. `a` is the body, not a skill's context: each my_vitals field by
+// name as it stands now (a rate moved along it; whole numbers), `hurt_ago_s` (-1: never hurt; at
+// most 120), `share` (each meter over its max: `a.share.health`), `kind`, `stage` and `night`.
+// Each status is `#{ name, tone, text }` (tone: good, warn, bad or plain; text for a screen), with
+// `meter` (the meter it speaks of), `felt` (a mind's words) and an alarm told once each time it
+// begins: `alarm`, `salience`, `think` (always, no_food or never: whether it makes the mind think)
+// and `routine` (the want whose routine is quoted when it does).
+fn hunger_status(h) {
+    if h >= 97.0 {
+        #{ name: "starving", tone: "bad", text: "Starving", meter: "hunger", felt: "starving, your body wasting away",
+           alarm: "You are starving: your body is wasting away.", salience: 0.8, think: "always", routine: "food" }
+    } else if h >= 80.0 {
+        #{ name: "very_hungry", tone: "warn", text: "Very hungry", meter: "hunger", felt: "very hungry",
+           alarm: "You are very hungry.", salience: 0.5, think: "no_food" }
+    } else if h > 55.0 { #{ name: "hungry", tone: "warn", text: "Hungry", meter: "hunger", felt: "hungry" } }
+    else if h > 40.0 { #{ name: "peckish", tone: "plain", text: "Peckish", meter: "hunger", felt: "beginning to feel hungry" } }
+    else if h <= 15.0 { #{ name: "fed", tone: "good", text: "Well fed", meter: "hunger", felt: "well fed" } }
+    else { #{ name: "not_hungry", tone: "plain", text: "Not hungry", meter: "hunger", felt: "not hungry" } }
+}
+fn energy_status(e) {
+    if e <= 0.0 {
+        #{ name: "spent", tone: "bad", text: "Spent", meter: "energy", felt: "utterly spent", alarm: "You are exhausted.", salience: 0.4 }
+    } else if e < 12.0 {
+        #{ name: "exhausted", tone: "bad", text: "Exhausted", meter: "energy", felt: "exhausted", alarm: "You are exhausted.", salience: 0.4 }
+    } else if e < 30.0 { #{ name: "tired", tone: "warn", text: "Tired", meter: "energy", felt: "tired" } }
+    else if e < 50.0 { #{ name: "a_little_tired", tone: "plain", text: "A little tired", meter: "energy", felt: "a little tired" } }
+    else if e >= 85.0 { #{ name: "well_rested", tone: "good", text: "Well rested", meter: "energy", felt: "well rested" } }
+    else { #{ name: "rested", tone: "plain", text: "Rested", meter: "energy", felt: "rested" } }
+}
+// By the share of full health.
+fn health_status(f) {
+    if f < 0.15 {
+        #{ name: "barely_alive", tone: "bad", text: "Barely alive", meter: "health", felt: "barely alive", alarm: "You are badly hurt.", salience: 0.7, think: "always" }
+    } else if f < 0.35 {
+        #{ name: "badly_hurt", tone: "bad", text: "Badly hurt", meter: "health", felt: "badly wounded", alarm: "You are badly hurt.", salience: 0.7, think: "always" }
+    } else if f < 0.6 { #{ name: "hurt", tone: "warn", text: "Hurt", meter: "health", felt: "hurt" } }
+    else if f < 0.9 { #{ name: "a_little_hurt", tone: "plain", text: "A little hurt", meter: "health", felt: "a little hurt" } }
+    else { #{ name: "unhurt", tone: "plain", text: "Unhurt", meter: "health", felt: "unhurt" } }
+}
+fn status_of(a) {
+    let out = [];
+    if a.hunger != () { out.push(hunger_status(a.hunger)); }
+    if a.energy != () { out.push(energy_status(a.energy)); }
+    let f = a.share.health;
+    if f != () { out.push(health_status(f)); }
+    let falling = if a.hp_rate == () { 0.0 } else { a.hp_rate };
+    // Losing health in the night air without starving: the cold (an alarm the mind acts on).
+    if a.night && a.kind == "person" && falling < 0.0 && a.hunger != () && a.hunger < 100.0 {
+        out.push(#{ name: "freezing", tone: "bad", text: "Freezing", alarm: "You are freezing in the night air; you need a fire or shelter.", salience: 0.6, think: "always" });
+    }
+    if a.hurt_ago_s != () && a.hurt_ago_s >= 0.0 && a.hurt_ago_s < 15.0 { out.push(#{ name: "in_combat", tone: "bad", text: "In combat" }); }
+    if falling < -0.01 { out.push(#{ name: "wasting", tone: "bad", text: "Wasting", felt: "you are growing weaker" }); }
+    else if falling > 0.01 && f != () && f < 0.99 { out.push(#{ name: "recovering", tone: "good", text: "Recovering", felt: "your wounds are mending" }); }
+    out
+}
+
 // A rate of the rates law in real minutes, as the engine turns it (`per`: a game hour or a minute).
 fn per_real_minute(r, x) { if r.per == "hour" { x * 60000.0 / hour_ms() } else { x } }
 
@@ -2243,7 +2325,7 @@ fn needs_law() {
     let awake = rates_awake();
     let l = laws();
     let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(per_real_minute(awake, awake.hunger))}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-per_real_minute(awake, awake.energy))}/min` };
-    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing"],
+    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing", "meters", "status_of"],
        about: `${rise} awake and recovers while sleeping (faster within ${short(l.shelter_warmth)} m of a shelter or house). At night, people farther than ${short(l.fire_warmth)} m from a campfire and ${short(l.shelter_warmth)} m from a shelter or house, and without a warm cloak, are cold: it tires them, and on winter nights or in the rain it also costs health. Health recovers slowly when fed and rested. Death is permanent.` }
 }
 

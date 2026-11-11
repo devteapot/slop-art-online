@@ -1,0 +1,545 @@
+{
+ "schema": 1,
+ "family": "prop:open-lots",
+ "id": "20261111-a34e317f-74a372",
+ "published": "2026-11-11T21:12:11+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. New: the open lots' own ground (no floors): a root plot's bed, the Cone yard, the slip, the graveyard's glass markers",
+ "source": {
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "prop",
+ "media": "media/prop-open-lots/20261111-a34e317f-74a372",
+ "members": [
+  {
+   "name": "root_plot",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/root_plot/root_plot_5.glb",
+   "sha256": "138428665f0c0e1b970466b32ffe34c1fc31a7c6e6037fe85c12f088463b1196",
+   "stats": {
+    "file": "root_plot_5.glb",
+    "sha256": "138428665f0c0e1b970466b32ffe34c1fc31a7c6e6037fe85c12f088463b1196",
+    "bytes": 58800,
+    "triangles": 594,
+    "vertices": 1689,
+    "parts": {
+     "root_plot_5": 594
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#5a7448",
+      "share": 0.4864
+     },
+     {
+      "hex": "#423e1e",
+      "share": 0.214
+     },
+     {
+      "hex": "#6c6b5f",
+      "share": 0.1557
+     },
+     {
+      "hex": "#637c52",
+      "share": 0.1046
+     },
+     {
+      "hex": "#564e27",
+      "share": 0.0199
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.0128
+     },
+     {
+      "hex": "#605e56",
+      "share": 0.0066
+     }
+    ]
+   },
+   "file": "files/root_plot.glb",
+   "report": {
+    "file": "root_plot/root_plot_5.glb",
+    "what": "lot",
+    "kind": "root_plot",
+    "size_m": [
+     8.0,
+     6.0
+    ],
+    "plan_height_m": 0,
+    "seed": 78041,
+    "above_floor_m": [
+     [
+      -3.135,
+      -2.06
+     ],
+     [
+      3.258,
+      2.426
+     ]
+    ],
+    "height_m": 1.001,
+    "foundation_m": 0.007,
+    "tris": 594,
+    "materials": {
+     "Body": 594
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.3199,
+    "palette_wear_blend_share": 0.6801,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "138428665f0c0e1b970466b32ffe34c1fc31a7c6e6037fe85c12f088463b1196",
+    "ridge_m": 0.0,
+    "rows": 5,
+    "eye_solid": 0.0,
+    "eye_cells": "16:192a"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     6.392507076263428,
+     1.0078468322753906,
+     4.495573997497559
+    ],
+    "triangles": 594,
+    "vertices": 1689,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "cone_yard",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/cone_yard/cone_yard.glb",
+   "sha256": "0138ef45041da06cbccec77a8718af933f84309761134a1f7782556666e5c61c",
+   "stats": {
+    "file": "cone_yard.glb",
+    "sha256": "0138ef45041da06cbccec77a8718af933f84309761134a1f7782556666e5c61c",
+    "bytes": 56252,
+    "triangles": 778,
+    "vertices": 1576,
+    "parts": {
+     "cone_yard": 778
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#494c53",
+      "share": 0.5828
+     },
+     {
+      "hex": "#747c81",
+      "share": 0.2241
+     },
+     {
+      "hex": "#2c2a2c",
+      "share": 0.1756
+     },
+     {
+      "hex": "#241d1b",
+      "share": 0.0175
+     }
+    ]
+   },
+   "file": "files/cone_yard.glb",
+   "report": {
+    "file": "cone_yard/cone_yard.glb",
+    "what": "lot",
+    "kind": "cone_yard",
+    "size_m": [
+     36,
+     13
+    ],
+    "plan_height_m": 0,
+    "seed": 36759,
+    "above_floor_m": [
+     [
+      -17.99,
+      -6.5
+     ],
+     [
+      17.99,
+      4.64
+     ]
+    ],
+    "height_m": 0.129,
+    "foundation_m": -0.0,
+    "tris": 778,
+    "materials": {
+     "Body": 778
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8792,
+    "palette_wear_blend_share": 0.1208,
+    "budget_tris": 2500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 1,
+    "doors": [],
+    "sha256": "0138ef45041da06cbccec77a8718af933f84309761134a1f7782556666e5c61c",
+    "ridge_m": 0.0,
+    "eye_solid": 0.0,
+    "eye_cells": "72:1872a"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     35.97999954223633,
+     0.12936435639858246,
+     12.630229949951172
+    ],
+    "triangles": 778,
+    "vertices": 1576,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "slip",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/slip/slip.glb",
+   "sha256": "07a0af08b4a44c7654c18292a186d28bf16b8f281b65e0d1db3582b71b31c8f9",
+   "stats": {
+    "file": "slip.glb",
+    "sha256": "07a0af08b4a44c7654c18292a186d28bf16b8f281b65e0d1db3582b71b31c8f9",
+    "bytes": 39880,
+    "triangles": 620,
+    "vertices": 1094,
+    "parts": {
+     "slip": 620
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#5f5c54",
+      "share": 0.501
+     },
+     {
+      "hex": "#4d4a46",
+      "share": 0.34
+     },
+     {
+      "hex": "#aca491",
+      "share": 0.1058
+     },
+     {
+      "hex": "#4e481f",
+      "share": 0.0226
+     },
+     {
+      "hex": "#7a766d",
+      "share": 0.0161
+     },
+     {
+      "hex": "#735746",
+      "share": 0.0145
+     }
+    ]
+   },
+   "file": "files/slip.glb",
+   "report": {
+    "file": "slip/slip.glb",
+    "what": "lot",
+    "kind": "slip",
+    "size_m": [
+     10,
+     10
+    ],
+    "plan_height_m": 0,
+    "seed": 9563,
+    "above_floor_m": [
+     [
+      -3.62,
+      -5.013
+     ],
+     [
+      2.604,
+      4.199
+     ]
+    ],
+    "height_m": 1.2,
+    "foundation_m": -0.0,
+    "tris": 620,
+    "materials": {
+     "Body": 620
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.1806,
+    "palette_wear_blend_share": 0.8194,
+    "budget_tris": 2500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 40,
+    "doors": [],
+    "sha256": "07a0af08b4a44c7654c18292a186d28bf16b8f281b65e0d1db3582b71b31c8f9",
+    "ridge_m": 0.0,
+    "eye_solid": 0.0,
+    "eye_cells": "20:400a"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     6.223882675170898,
+     1.2000000476837158,
+     9.212879180908203
+    ],
+    "triangles": 620,
+    "vertices": 1094,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "graveyard",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/graveyard/graveyard.glb",
+   "sha256": "f249b1c9471c0b35a7eb5fb96263b8670b23df1a90d853adeb23f48496c9a3fc",
+   "stats": {
+    "file": "graveyard.glb",
+    "sha256": "f249b1c9471c0b35a7eb5fb96263b8670b23df1a90d853adeb23f48496c9a3fc",
+    "bytes": 79972,
+    "triangles": 1060,
+    "vertices": 2264,
+    "parts": {
+     "graveyard": 1060
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#3c3f46",
+      "share": 0.2379
+     },
+     {
+      "hex": "#4a4e54",
+      "share": 0.2317
+     },
+     {
+      "hex": "#9dcac5",
+      "share": 0.171
+     },
+     {
+      "hex": "#346c4e",
+      "share": 0.0946
+     },
+     {
+      "hex": "#869298",
+      "share": 0.0696
+     },
+     {
+      "hex": "#646049",
+      "share": 0.053
+     },
+     {
+      "hex": "#c48025",
+      "share": 0.0514
+     },
+     {
+      "hex": "#939fa3",
+      "share": 0.0399
+     },
+     {
+      "hex": "#817d45",
+      "share": 0.0223
+     },
+     {
+      "hex": "#274599",
+      "share": 0.0216
+     },
+     {
+      "hex": "#4a4c41",
+      "share": 0.0048
+     },
+     {
+      "hex": "#8f8850",
+      "share": 0.0021
+     }
+    ]
+   },
+   "file": "files/graveyard.glb",
+   "report": {
+    "file": "graveyard/graveyard.glb",
+    "what": "lot",
+    "kind": "graveyard",
+    "size_m": [
+     26,
+     18
+    ],
+    "plan_height_m": 0,
+    "seed": 83674,
+    "above_floor_m": [
+     [
+      -11.018,
+      -9.0
+     ],
+     [
+      11.438,
+      5.018
+     ]
+    ],
+    "height_m": 1.1,
+    "foundation_m": 0.068,
+    "tris": 1060,
+    "materials": {
+     "Body": 1060
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7877,
+    "palette_wear_blend_share": 0.2123,
+    "budget_tris": 2500,
+    "hidden_faces_removed": 24,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "f249b1c9471c0b35a7eb5fb96263b8670b23df1a90d853adeb23f48496c9a3fc",
+    "ridge_m": 0.0,
+    "markers": 24,
+    "eye_solid": 0.0,
+    "eye_cells": "52:1872a"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     22.457984924316406,
+     1.1675324440002441,
+     14.018102645874023
+    ],
+    "triangles": 1060,
+    "vertices": 2264,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

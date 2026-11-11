@@ -294,6 +294,11 @@ pub fn all_keys() -> impl Iterator<Item = KeyCode> {
     KEYS.iter().map(|(_, k)| *k)
 }
 
+/// Whether a key types a character in the text box (then it cannot also change whom).
+pub fn types(k: KeyCode) -> bool {
+    key_name(k).is_some_and(|n| n.starts_with("Key") || n.starts_with("Digit") || matches!(n, "Space" | "Backquote" | "Minus" | "Equal" | "BracketLeft" | "BracketRight" | "Semicolon" | "Quote" | "Comma" | "Period" | "Slash" | "Backslash"))
+}
+
 pub fn key_label(k: KeyCode) -> String {
     let n = key_name(k).unwrap_or("?");
     if let Some(l) = n.strip_prefix("Key").or_else(|| n.strip_prefix("Digit")) {
@@ -361,11 +366,15 @@ pub struct Prefs {
     pub dirty: bool,
     /// The interface's theme (`ui::wood::Name`: clear, night, linen, walnut).
     pub theme: Option<String>,
+    /// How the body looks aside while walking: a `twist::LookWalk` preset (head, chest, loose).
+    pub look_walk: Option<String>,
+    /// How unseen ground is drawn (`sightedge::Look`: memory, grey, wash, lantern, shadows, hatch).
+    pub sight_look: Option<String>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None }
+        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None }
     }
 }
 
@@ -409,6 +418,8 @@ pub fn load() -> (Binds, Prefs) {
         auto_draw: v["auto_draw"].as_bool().unwrap_or(d.auto_draw),
         dirty: false,
         theme: v["theme"].as_str().map(String::from),
+        look_walk: v["look_walk"].as_str().map(String::from),
+        sight_look: v["sight_look"].as_str().map(String::from),
     };
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
     (binds, prefs)
@@ -425,6 +436,8 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "tips": prefs.tips,
         "auto_draw": prefs.auto_draw,
         "theme": prefs.theme,
+        "look_walk": prefs.look_walk,
+        "sight_look": prefs.sight_look,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);

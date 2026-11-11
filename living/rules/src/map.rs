@@ -316,6 +316,33 @@ impl Map {
         self.nearest_walkable(x, y)
     }
 
+    /// Nearest walkable tile within `radius` tiles of a point that `taken` does not claim (a
+    /// tile another body stands on), nearest tile centre first: the point itself when its own
+    /// tile qualifies and `exact`, else that tile's centre. With `from`, only tiles of the
+    /// ground walkable from there count once routes are warmed (`warm_routes`). Reads at most
+    /// the (2r+1)² tiles around the point; None when none qualifies.
+    pub fn nearest_free(&self, x: f32, y: f32, radius: f32, exact: bool, from: Option<(f32, f32)>, taken: impl Fn(i32, i32) -> bool) -> Option<(f32, f32)> {
+        let home = from.and_then(|f| self.component_near(f));
+        let ok = |tx: i32, ty: i32| self.walkable(tx, ty) && !taken(tx, ty) && home.map_or(true, |h| self.component_of(tx, ty) == Some(h));
+        let (tx, ty) = (x.floor() as i32, y.floor() as i32);
+        if exact && ok(tx, ty) {
+            return Some((x, y));
+        }
+        let r = radius.ceil() as i32;
+        let mut best: Option<(f32, i32, i32)> = None;
+        for dy in -r..=r {
+            for dx in -r..=r {
+                let (cx, cy) = ((tx + dx) as f32 + 0.5, (ty + dy) as f32 + 0.5);
+                let d = (cx - x).hypot(cy - y);
+                if d > radius || best.is_some_and(|b| d >= b.0) || !ok(tx + dx, ty + dy) {
+                    continue;
+                }
+                best = Some((d, tx + dx, ty + dy));
+            }
+        }
+        best.map(|(_, bx, by)| (bx as f32 + 0.5, by as f32 + 0.5))
+    }
+
     /// True when the straight segment only crosses walkable tiles.
     pub fn line_clear(&self, a: (f32, f32), b: (f32, f32)) -> bool {
         let d = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
@@ -671,6 +698,40 @@ mod tests {
         c.set(3, 4, Terrain::Wall);
         c.set(4, 3, Terrain::Wall);
         assert!(!c.sight_clear((2.5, 5.5), (5.5, 2.5)), "two walls meeting at a corner hide");
+    }
+
+    #[test]
+    fn nearest_free_skips_walls_taken_tiles_and_cut_off_ground() {
+        let mut m = Map { w: 16, h: 16, tiles: vec![Terrain::Grass as u8; 256], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        m.set(6, 5, Terrain::Wall);
+        let none = |_: i32, _: i32| false;
+        // The point's own tile is free: the point itself, or its tile's centre.
+        assert_eq!(m.nearest_free(5.2, 5.3, 6.0, true, None, none), Some((5.2, 5.3)));
+        assert_eq!(m.nearest_free(5.2, 5.3, 6.0, false, None, none), Some((5.5, 5.5)));
+        // Inside the wall: the nearest walkable tile centre instead.
+        let p = m.nearest_free(6.6, 5.5, 6.0, true, None, none).unwrap();
+        assert!(m.free(p.0, p.1) && (p == (7.5, 5.5)), "{p:?}");
+        // A taken tile is passed over for the next nearest.
+        let taken = |x: i32, y: i32| (x, y) == (5, 5);
+        let q = m.nearest_free(5.4, 5.5, 6.0, false, None, taken).unwrap();
+        assert_ne!((q.0.floor() as i32, q.1.floor() as i32), (5, 5));
+        assert!(((q.0 - 5.4).hypot(q.1 - 5.5)) <= 1.2, "{q:?}");
+        // Nothing free within the radius.
+        let all = |_: i32, _: i32| true;
+        assert_eq!(m.nearest_free(5.5, 5.5, 6.0, true, None, all), None);
+        // A pocket walled off from the walker's ground is not offered once routes are warm.
+        let mut w = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 1024], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        for i in 9..=13 {
+            for (x, y) in [(i, 9), (i, 13), (9, i), (13, i)] {
+                w.set(x, y, Terrain::Wall);
+            }
+        }
+        while w.warm_routes(64) {}
+        let inside = w.nearest_free(11.5, 11.5, 6.0, true, Some((11.5, 11.5)), none).unwrap();
+        assert_eq!((inside.0.floor() as i32, inside.1.floor() as i32), (11, 11));
+        let out = w.nearest_free(11.5, 11.5, 6.0, true, Some((5.5, 5.5)), none).unwrap();
+        let (ox, oy) = (out.0.floor() as i32, out.1.floor() as i32);
+        assert!(!(9..=13).contains(&ox) || !(9..=13).contains(&oy), "outside the walls: {out:?}");
     }
 
     /// A mind's scene tells a drop and a low thing in words, with how they meet the foot and the

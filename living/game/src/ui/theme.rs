@@ -40,6 +40,7 @@ pub fn school(icon: super::model::SkillIcon) -> (Color, Color) {
         Shield => (Color::srgb(0.96, 0.84, 0.56), Color::srgb(0.32, 0.24, 0.12)),
         Dodge => (Color::srgb(0.56, 0.90, 0.92), Color::srgb(0.10, 0.26, 0.31)),
         Heal => (Color::srgb(0.72, 0.96, 0.70), Color::srgb(0.13, 0.30, 0.20)),
+        Jump => (Color::srgb(0.80, 0.78, 0.98), Color::srgb(0.22, 0.18, 0.40)),
         Empty => (Color::srgba(1.0, 1.0, 1.0, 0.35), Color::srgba(0.06, 0.07, 0.11, 0.6)),
     }
 }

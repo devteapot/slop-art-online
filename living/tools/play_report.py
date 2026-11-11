@@ -221,6 +221,16 @@ class Session:
             self.sources.append(f"mind log {d / 'mind.log'} ({len(self.mind_log)} lines; times to the second)")
         else:
             self.notes.append("No mind.log in --logs.")
+        # The client's action log (actions.rs): every reducer call it sent, with the reply.
+        self.actions = []
+        if d and (d / "actions.jsonl").exists():
+            for line in (d / "actions.jsonl").read_text(errors="replace").splitlines():
+                try:
+                    self.actions.append(json.loads(line))
+                except ValueError:
+                    pass
+            self.actions.sort(key=lambda a: a.get("seq") or 0)
+            self.sources.append(f"action log {d / 'actions.jsonl'} ({len(self.actions)} reducer calls)")
         # The client's 2 s `island perf` line: frame times, and where my body was drawn.
         self.frames, self.my_track = [], []
         for l in self.client_log:
@@ -763,6 +773,28 @@ def analyse(s):
     return out
 
 
+def actions_summary(rows):
+    """Calls per reducer from the client's action log (actions.rs): replies by kind and the reply
+    latency (median and 95th percentile, ms; from the call to its callback in the client)."""
+    def pct(v, q):
+        v = sorted(v)
+        return round(v[min(len(v) - 1, int(q * len(v)))], 1) if v else None
+    by = {}
+    for r in rows:
+        b = by.setdefault(r.get("reducer") or "?", {"calls": 0, "replies": Counter(), "lat": [], "errors": Counter()})
+        b["calls"] += 1
+        b["replies"][r.get("reply") or "?"] += 1
+        if r.get("reply_ms") is not None:
+            b["lat"].append(r["reply_ms"])
+        if r.get("reply") not in ("ok", None) and r.get("error"):
+            b["errors"][r["error"]] += 1
+    out = {k: {"calls": b["calls"], "replies": dict(b["replies"]), "reply_ms_p50": pct(b["lat"], 0.5), "reply_ms_p95": pct(b["lat"], 0.95),
+               "errors": b["errors"].most_common(5)} for k, b in sorted(by.items(), key=lambda kv: -kv[1]["calls"])}
+    lat = [r["reply_ms"] for r in rows if r.get("reply_ms") is not None]
+    out_all = {"calls": len(rows), "replies": dict(Counter(r.get("reply") or "?" for r in rows)), "reply_ms_p50": pct(lat, 0.5), "reply_ms_p95": pct(lat, 0.95)}
+    return {"by_reducer": out, "all": out_all}
+
+
 def costs(s):
     """Model calls in the session (arrival to quit) and in the whole run, by purpose and model."""
     rows = {}
@@ -943,6 +975,7 @@ class Page:
         P.append(self.timeline_section())
         P.append(self.fights_section())
         P.append(self.refused_section())
+        P.append(self.actions_section())
         P.append(self.errors_section())
         P.append(self.cost_section(c))
         P.append(self.sources_section())
@@ -1194,6 +1227,28 @@ class Page:
         P.append("</table>")
         return "".join(P)
 
+    def actions_section(self):
+        rows = self.s.actions
+        P = ["<h2>Commands sent</h2><p class=mut>Every reducer call the client sent, from its action log (<code>actions.jsonl</code> in the session folder, "
+             "<code>living/game/src/actions.rs</code>). Latency runs from the call to its reply in the client, so it includes up to a frame of waiting.</p>"]
+        if not rows:
+            return P[0] + "<p class=mut>No action log for this session.</p>"
+        a = actions_summary(rows)
+        P.append("<table><tr><th>Reducer</th><th class=n>Calls</th><th class=n>ok</th><th class=n>Refused</th><th class=n>Other</th><th class=n>Reply p50</th><th class=n>p95</th><th>Most common errors</th></tr>")
+        def row(name, b, errs, head=False):
+            r = b["replies"]
+            other = sum(v for k, v in r.items() if k not in ("ok", "refused"))
+            ms = lambda v: f"{v:.1f} ms" if v is not None else "–"
+            td = "th" if head else "td"
+            e = "; ".join(f"{esc(t[:120])}{' ×%d' % n if n > 1 else ''}" for t, n in errs)
+            return (f"<tr><{td}>{esc(name)}</{td}><{td} class=n>{b['calls']}</{td}><{td} class=n>{r.get('ok', 0)}</{td}><{td} class=n>{r.get('refused', 0)}</{td}>"
+                    f"<{td} class=n>{other}</{td}><{td} class=n>{ms(b['reply_ms_p50'])}</{td}><{td} class=n>{ms(b['reply_ms_p95'])}</{td}><{td}>{e}</{td}></tr>")
+        for name, b in a["by_reducer"].items():
+            P.append(row(name, b, b["errors"]))
+        P.append(row("All", a["all"], [], head=True))
+        P.append("</table>")
+        return "".join(P)
+
     def errors_section(self):
         an = self.an
         errs = [e for e in an["errors"] if not e["benign"]]
@@ -1256,6 +1311,7 @@ class Page:
             "approaches": [{"ms": a["ms"], "name": a["name"], "via": a["via"], "half": bool(a.get("half"))} for a in an["approaches"]],
             "errors": [{"ms": e["ms"], "src": e["src"], "msg": e["msg"][:200]} for e in an["errors"] if not e["benign"]],
             "cost_session_usd": round(c["session"].get(("all", ""), {}).get("usd", 0), 4), "cost_run_usd": round(c["run"].get(("all", ""), {}).get("usd", 0), 4),
+            "actions": actions_summary(self.s.actions) if self.s.actions else None,
             "stills": len(self.stills), "video": self.video_rel, "video_note": self.video_note, "player": self.player,
         }
 
