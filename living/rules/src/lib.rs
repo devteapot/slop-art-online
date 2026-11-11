@@ -11,6 +11,7 @@ pub mod height;
 pub mod host;
 pub mod land;
 pub mod settle;
+pub mod sight;
 pub mod map;
 pub mod nav;
 pub mod city;
@@ -18,6 +19,7 @@ pub mod genes;
 pub mod life;
 pub mod rhythm;
 pub mod realm;
+pub mod reasons;
 pub mod records;
 pub mod normalize;
 #[cfg(feature = "scripting")]

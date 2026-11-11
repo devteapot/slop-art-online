@@ -148,7 +148,13 @@ def raw(k, polys, glow=None, two=False):
                 r = pv[(i + 1) % len(pv)]
                 nn += Vector(((q.y - r.y) * (q.z + r.z), (q.z - r.z) * (q.x + r.x), (q.x - r.x) * (q.y + r.y)))
             off = nn.normalized() * 0.003 if nn.length > 1e-12 else Vector((0, 0, 0))
-            rings = (pts, [q - off for q in pv[::-1]])
+            # Whichever of the two moves, it moves towards the model's middle, so a sheet at a
+            # lot's edge does not grow past it.
+            mid = sum(pv, Vector((0, 0, 0))) / len(pv)
+            if off.x * mid.x + off.y * mid.y >= 0:
+                rings = (pts, [q - off for q in pv[::-1]])
+            else:
+                rings = ([q + off for q in pv], pv[::-1])
         for ring in rings:
             try:
                 f = b.bm.faces.new([b.bm.verts.new(q) for q in ring])
@@ -4060,8 +4066,9 @@ def gen_crown_bench(k, rng, lot):
 
 
 # ---------------------------------------------------------------------------------------------
-# Pass 2. Dressing: Cinder Row's yard, the Rows' backs, the Ladder's beds, the Hanger's trees,
-# and the three things the engine stands in a town (a sign, the common store, the yard's fire).
+# Pass 2. Dressing: Cinder Row's yard, the Hanger's trees, the open lots' own ground, and what
+# the engine stands in a town (a sign, the common store, fires and lamps). The Rows' backs and
+# the Ladder's beds are layout pass 1's enclosures (`gen_enclosure`).
 # Each is a fixture of the plan (or a structure's model), built for the cause the plan gives it.
 
 ROPE = on(mix(P.sand, P.drift, 0.55), "cloth")
@@ -4467,152 +4474,6 @@ def gen_smoke_fire(k, rng, lot):
     return dict(ridge_m=1.6, glow="GlowEmber")
 
 
-def gen_lean_to(k, rng, lot):
-    """A lean-to against a house's back wall (the plan's `use` says whose, and for what): tarred
-    boards under a slope of odd slates, or under an upturned boat's hull where a Strand house
-    had one. Its door stands ajar on what is kept in it."""
-    W, D = lot["size"]
-    hw, hd, w, env, use = W / 2, D / 2, lot["wear"], Env(lot), lot.get("use", "store")
-    ZB, ZF = lot["height_m"] - 0.06, 1.75
-    YF, YB = -hd + 0.25, hd - 0.02
-    put(k, box((-hw, YF, 0.0), (hw, YB, 0.25)), jit(P.basalt, rng, 0.02))
-    ff = Face((0, YF, 0), X, W)
-    dh = (hw - 1.0, hw - 0.2, 0.25, ZF - 0.1)
-    planked(k, rng, lambda a, z: ff.p(a, z, 0.0), -Y, -hw + 0.02, hw - 0.02, 0.25, ZF, lot, env, holes=[dh], bare=0.25)
-    for sx in (-1, 1):
-        planked(k, rng, lambda a, z, sx=sx: Vector((sx * (hw - 0.02), YF + (a if sx > 0 else YB - YF - a), z)), X * sx, 0.0, YB - YF, 0.25,
-                (lambda a, sx=sx: ZF + (ZB - ZF) * ((a if sx > 0 else YB - YF - a) / (YB - YF))), lot, env, bare=0.2)
-    dark = mix(P.tar, P.basalt, 0.3)
-    room(k, ff, dh[0], dh[1], 0.25, dh[3], 0.9, dark, dark)
-    raw(k, [([ff.p(dh[0], dh[2], 0.0), ff.p(dh[0], dh[3], 0.0), ff.p(dh[0] - 0.74, dh[3], 0.2), ff.p(dh[0] - 0.74, dh[2], 0.2)], jit(mix(P.tar, P.drift, 0.35), rng))], two=True)  # the door, ajar
-    if use == "boat":  # an upturned boat's hull for a roof
-        M = Matrix.Translation((0, (YF + YB) / 2 - 0.05, ZF - 0.1)) @ Matrix.Rotation(PI, 4, "X") @ Matrix.Translation((0, 0, -(ZB - ZF + 0.55)))
-        ship(k, rng, M, W - 0.3, D - 0.15, ZB - ZF + 0.5, 0.0, 4, 4, 2, n_st=8, post=0.0, rib=0.035)
-    else:
-        lean_roof(k, rng, lot, env, -hw + 0.0, hw - 0.0, YF - 0.2, ZF - 0.08, YB, ZB, big=1.1)
-    # What is kept in it shows at the door and beside it.
-    if use == "peat":
-        for i in range(5):
-            put(k, box((dh[0] + 0.05, YF + 0.15, 0.25 + 0.13 * i), (dh[1] - 0.05, YF + 0.75, 0.37 + 0.13 * i)), jit(P.peat, rng, 0.04))
-    elif use in ("nets", "boat"):
-        net = on(mix(P.kelp, P.drift, 0.5), "cloth")
-        raw(k, [([ff.p(dh[0] + 0.1 + 0.2 * i, dh[3] - 0.1, -0.4), ff.p(dh[0] + 0.26 + 0.2 * i, dh[3] - 0.1, -0.4), ff.p(dh[0] + 0.3 + 0.2 * i, 0.5 + 0.2 * (i % 2), -0.3), ff.p(dh[0] + 0.06 + 0.2 * i, 0.45, -0.3)], jit(net, rng, 0.03)) for i in range(3)], two=True)
-        glass_float(k, rng, ff.p(-hw + 0.5, 1.2, 0.14), P.green, r=0.11, cord=ff.p(-hw + 0.5, 1.6, 0.02))
-    else:  # potting: pots and a seed tray on a shelf under a small-paned light
-        window(k, rng, ff, -hw + 0.85, 0.95, (2, 2, 0.3, 0.3), glazing(rng, P.aqua, P.green, 1, CELLS(2, 2)), recess=-0.012, sill=None, bars=P.drift)
-        put(k, ff.box(-hw + 0.3, -hw + 1.4, 0.82, 0.86, 0.0, 0.2), jit(P.drift, rng))
-        for i in range(3):
-            put(k, lathe([(0.06, 0.0), (0.09, 0.13)], 6, Matrix.Translation(ff.p(-hw + 0.5 + 0.3 * i, 0.86, 0.1)), caps=(True, False)), on(mix(P.sand, P.newbrick, 0.4), "earth"), closed=False)
-            tuft(k, rng, ff.p(-hw + 0.5 + 0.3 * i, 0.97, 0.1), 0.07, 0.14, LEAF, 3)
-    found(k, 0.6)
-    return dict(ridge_m=lot["height_m"], use=use)
-
-
-def gen_privy(k, rng, lot):
-    """A privy at the yard's end against the retaining wall, one to a pair of houses: tarred
-    boards on a stone base, a slate slope, a heart cut in the door."""
-    W, D = lot["size"]
-    hw, hd, w, env = W / 2, D / 2, lot["wear"], Env(lot)
-    H = lot["height_m"]
-    ZF, ZB = H - 0.45, H - 0.06
-    YF, YB = -hd + 0.12, hd - 0.02
-    put(k, box((-hw, YF, 0.0), (hw, YB, 0.2)), jit(P.basalt, rng, 0.02))
-    ff = Face((0, YF, 0), X, W)
-    dh = (-0.36, 0.36, 0.2, ZF - 0.12)
-    planked(k, rng, lambda a, z: ff.p(a, z, 0.0), -Y, -hw + 0.02, hw - 0.02, 0.2, ZF, lot, env, holes=[dh], bare=0.2, pw=0.2)
-    for i in range(3):
-        put(k, ff.box(dh[0] + 0.24 * i + 0.004, dh[0] + 0.24 * (i + 1) - 0.004, dh[2], dh[3], -0.03, 0.01, back=False), jit(mix(P.tar, P.drift, 0.4), rng, 0.03))
-    raw(k, [([ff.p(-0.07, dh[3] - 0.42, 0.014), ff.p(0.0, dh[3] - 0.52, 0.014), ff.p(0.07, dh[3] - 0.42, 0.014), ff.p(0.0, dh[3] - 0.36, 0.014)], P.tar)])
-    put(k, ff.box(dh[1] - 0.12, dh[1] - 0.06, 1.0, 1.08, 0.01, 0.04, back=False), mix(P.iron, P.rust, 0.6))
-    for sx in (-1, 1):
-        planked(k, rng, lambda a, z, sx=sx: Vector((sx * (hw - 0.02), YF + (a if sx > 0 else YB - YF - a), z)), X * sx, 0.0, YB - YF, 0.2,
-                (lambda a, sx=sx: ZF + (ZB - ZF) * ((a if sx > 0 else YB - YF - a) / (YB - YF))), lot, env, bare=0.15, pw=0.2)
-    lean_roof(k, rng, lot, env, -hw, hw, YF - 0.1, ZF - 0.04, YB, ZB, big=0.9)
-    found(k, 0.5)
-    return dict(ridge_m=H)
-
-
-def gen_washing_line(k, rng, lot):
-    """A line of washing (the plan says whose, how much, and what it is slung between): from an
-    iron hook at one end to a driftwood post at the other, high enough to walk under. Smoke-grey
-    and sand-coloured linen; one piece is the colour the household paints its door."""
-    W, D = lot["size"]
-    hw, n, H = W / 2, lot.get("pieces", 5), lot["height_m"]
-    a, b = Vector((-hw + 0.05, 0, H - 0.1)), Vector((hw - 0.12, 0, H - 0.15))
-    sag = 0.035 * W
-    line = [a.lerp(b, i / 8) - Z * (sag * sin(PI * i / 8)) for i in range(9)]
-    put(k, tube(line, 0.008, 3, caps=False), ROPE, closed=False)
-    put(k, beam(a - X * 0.04, a + X * 0.06, 0.03, 0.03), P.iron)
-    if lot.get("post", True):
-        put(k, tube([(hw - 0.1, 0, 0.0), (hw - 0.1, 0.02, H)], [0.06, 0.045], 5), jit(P.drift, rng))
-    else:
-        put(k, beam(b + X * 0.04, b - X * 0.06, 0.03, 0.03), P.iron)
-    mark = DOOR.get(lot.get("door_colour"), P.oldlime)
-    cloth = [on(mix(P.oldlime, P.smoke, 0.5), "cloth"), on(mix(P.sand, P.oldlime, 0.5), "cloth"), on(P.lime, "cloth")]
-    for i in range(n):
-        t = (i + 0.7) / (n + 0.6)
-        q = a.lerp(b, t) - Z * (sag * sin(PI * t) + 0.012)
-        ww = min(0.8, (W - 0.6) / n * 0.8) * (0.6 if i % 3 == 1 else 1.0)
-        L = (0.55, 0.75, 0.42)[i % 3]
-        c = on(mix(mark, P.oldlime, 0.25), "cloth") if i == n // 2 else cloth[i % 3]
-        sway = 0.05 * sin(i * 2.1)
-        raw(k, [([q - X * ww / 2, q + X * ww / 2, q + X * (ww / 2 - 0.03) + Y * sway - Z * L, q - X * (ww / 2 - 0.03) + Y * (sway + 0.03) - Z * (L - 0.04)], jit(c, rng, 0.03))], two=True)
-    return dict(ridge_m=H, pieces=n)
-
-
-def gen_rain_butt(k, rng, lot):
-    """A rain butt at a house's back: a tarred cask on two stones under the downpipe, a board
-    over it, green where it overflows."""
-    for e in (-0.2, 0.2):
-        put(k, box((-0.3, e - 0.09, 0.0), (0.3, e + 0.09, 0.14)), jit(P.basalt, rng))
-    barrel(k, rng, (0, 0, 0.14), 0.33, 0.95, wood=mix(P.drift, P.tar, 0.55), head=False, hoops=(0.12, 0.5, 0.88))
-    put(k, lathe([(0.0, 0.0), (0.29, 0.0)], 10, Matrix.Translation((0, 0, 0.95 + 0.14 - 0.1)), caps=(False, True)), on(mix(P.smoke, P.seagreen, 0.45), "glass"), closed=False)
-    put(k, box((-0.36, -0.1, 1.1), (0.1, 0.36, 1.13)), jit(P.drift, rng))
-    put(k, tube([(0.2, 0.3, 1.75), (0.2, 0.3, 1.25), (0.1, 0.18, 1.15)], 0.04, 5), mix(P.iron, P.rust, 0.5))
-    raw(k, [([Vector((0.34 * cos(a), 0.34 * sin(a), 0.2)) for a in (-0.4, 0.4)] + [Vector((0.345 * cos(a), 0.345 * sin(a), 0.75)) for a in (0.3, -0.3)], mix(P.tar, P.kelp, 0.5))])
-    found(k, 0.4)
-    return dict(ridge_m=1.75)
-
-
-def gen_hen_coop(k, rng, lot):
-    """A hen coop in a yard: a boarded box under a tarred lid, a ramp, a run of driftwood
-    stakes, three hens."""
-    put(k, box((-0.9, 0.0, 0.25), (0.1, 0.55, 0.85)), jit(P.drift, rng))
-    for x in (-0.85, 0.05):
-        put(k, box((x - 0.04, 0.02, 0.0), (x + 0.04, 0.5, 0.25)), jit(P.tar, rng))
-    put(k, prism([(-0.06, 0.85), (0.62, 0.85), (0.62, 0.92), (-0.06, 1.08)], -0.96, 0.16, lambda a, s, z: Vector((a, s, z))), jit(P.tar, rng, 0.02))
-    raw(k, [([Vector((-0.3, -0.005, 0.3)), Vector((-0.02, -0.005, 0.3)), Vector((-0.02, -0.005, 0.62)), Vector((-0.3, -0.005, 0.62))], P.tar)])
-    put(k, beam((-0.16, 0.0, 0.28), (-0.16, -0.5, 0.0), 0.22, 0.03), jit(P.drift, rng))
-    for i in range(9):
-        x = 0.16 + 0.1 * i
-        put(k, beam((x, -0.55, 0.0), (x, -0.55, 0.62 + 0.06 * (i % 3)), 0.03, 0.03), jit(P.drift, rng, 0.05))
-    put(k, beam((0.14, -0.55, 0.5), (1.0, -0.55, 0.5), 0.03, 0.03), jit(P.drift, rng))
-    for q in ((0.4, -0.2), (0.75, 0.1), (0.55, 0.35)):
-        c = Vector((q[0], q[1], 0.16))
-        put(k, sphere(c, 0.12, 1, squash=0.8), jit(on(mix(P.oldlime, P.drift, 0.3 * (q[1] > 0)), "cloth"), rng, 0.03), soft=c)
-        put(k, sphere(c + Vector((0.1, 0, 0.1)), 0.055, 0), jit(on(P.oxblood, "cloth"), rng), soft=c)
-    found(k, 0.4)
-    return dict(ridge_m=1.08, hens=3)
-
-
-def gen_cane_wigwam(k, rng, lot):
-    """Canes tied in a wigwam over an outdoor bed, beans climbing them: what the Ladder grows
-    out of doors, where a wall breaks the wind."""
-    H = lot["height_m"]
-    top = Vector((0, 0, H - 0.1))
-    for i in range(6):
-        a = i / 6 * TAU + 0.2
-        foot = Vector((0.45 * cos(a), 0.45 * sin(a), 0.0))
-        put(k, tube([foot, top + Vector((-0.04 * cos(a), -0.04 * sin(a), 0.1))], 0.012, 3), jit(mix(P.sand, P.drift, 0.5), rng))
-        for j in range(4):
-            if rng.random() < 0.25:
-                continue
-            c = foot.lerp(top, 0.15 + 0.2 * j + rng.uniform(-0.04, 0.04))
-            put(k, sphere(c, 0.13 - 0.02 * j, 0, squash=0.8), jit(LEAF, rng, 0.04), soft=c)
-    put(k, ring(0.03, 0.05, -0.02, 0.02, 6, Matrix.Translation(top - Z * 0.02)), ROPE, closed=False)
-    return dict(ridge_m=H)
-
-
 TREES = {  # the Hanger's six forms: (height, lean reach, crown, bare limbs): one planting, one age, bent to one wind
     1: (6.4, 2.4, 1.0, 0.0), 2: (7.2, 2.9, 0.9, 0.2), 3: (5.6, 2.6, 1.15, 0.0), 4: (6.8, 3.2, 0.8, 0.35), 5: (5.2, 2.0, 1.2, 0.0), 6: (7.6, 2.6, 0.95, 0.15),
 }
@@ -4661,8 +4522,7 @@ GEN = dict(
     thorn=(gen_thorn, 1500), crown_bench=(gen_crown_bench, 600), root_plot=(gen_root_plot, 1500), cone_yard=(gen_cone_yard, 2500), slip=(gen_slip, 2500), graveyard=(gen_graveyard, 2500),
     blowpipe_rack=(gen_blowpipe_rack, 1500), crucible_stack=(gen_crucible_stack, 1500), cullet_heap=(gen_cullet_heap, 1500), ash_sacks=(gen_ash_sacks, 1500), handcart=(gen_handcart, 1500),
     trough=(gen_trough, 1500), cone_bench=(gen_cone_bench, 1500), sign=(gen_sign, 1500), storage=(gen_storage, 2500), campfire=(gen_campfire, 1500),
-    lean_to=(gen_lean_to, 1500), privy=(gen_privy, 1500), washing_line=(gen_washing_line, 600), rain_butt=(gen_rain_butt, 1500), hen_coop=(gen_hen_coop, 1500),
-    cane_wigwam=(gen_cane_wigwam, 600), hanger_tree=(gen_hanger_tree, 1500), stump=(gen_stump, 600),
+    hanger_tree=(gen_hanger_tree, 1500), stump=(gen_stump, 600),
 )
 PALETTE = [tuple(v) for v in vars(P).values()]
 
@@ -4802,11 +4662,12 @@ def drop_hidden(k, tol=0.001):
     return len(gone)
 
 
-def part_coplanar(k, tol=0.001, step=0.002):
+def part_coplanar(k, tol=0.0015, step=0.003):
     """Give every sheet of faces its own plane. Where two parts' faces lie in one plane and
     overlap (flakes of lime laid one over another, a stack's face in its gable's, a door's foot
     on its step), the later part is moved along its own normal by a real gap of `step` (more
-    for a third and a fourth layer): what was laid later lies on top, and what looks the other
+    for a third and a fourth layer; "one plane" is `tol`, half as much again as the check's 1 mm,
+    so nothing is left on the check's edge): what was laid later lies on top, and what looks the other
     way sinks into the solid behind it. A sheet is the faces of one plane that share corners, so
     a wall stays whole. Returns how many sheets moved."""
     bm = k.b.bm
@@ -4901,14 +4762,27 @@ def part_coplanar(k, tol=0.001, step=0.002):
     for f in info:
         r = find(f)
         first[r] = min(first.get(r, 1 << 60), f.index)
-    place, moved_n = {}, 0
+    # A sheet moves out along its own normal, unless it already lies on the model's outermost
+    # plane that way: then it moves in instead, so that parting faces never widens a model past
+    # its lot (a yard's rubble against its wall line).
+    faces_of = {}
+    for f in info:
+        faces_of.setdefault(find(f), []).append(f)
+    place = {}
     for sh in sorted(touch, key=lambda r: first[r]):
-        flip = info[sh][2]
+        m, flip = info[sh][0], info[sh][2]
         taken = {place[o] for o in touch[sh] if o in place}
-        kk = 0
-        while round(flip * kk * step, 6) in taken:
-            kk += 1
-        place[sh] = round(flip * kk * step, 6)
+        reach = max(vt.co.dot(m) * flip for f in faces_of[sh] for vt in f.verts)
+        bound = max(vt.co.dot(m) * flip for vt in bm.verts)
+        cands = [0.0]
+        for kk in range(1, 40):
+            cands += [flip * kk * step, -flip * kk * step]
+        for c in cands:
+            c = round(c, 6)
+            if c in taken or (c * flip > 0 and reach + abs(c) > bound + 1e-6):
+                continue
+            place[sh] = c
+            break
     shift = {}
     for f in info:
         r = find(f)
@@ -4946,6 +4820,654 @@ def merge_table(path, table):
         f.write(",\n".join("  " + json.dumps(m) for m in models))
         f.write("\n ]\n}\n")
     print(f"GEN table {path}: {sum(1 for m in models if m['style'] == 'cullet')} cullet models of {len(models)}")
+
+
+# ---------------------------------------------------------------------------------------------
+# Layout pass 1 (docs/CULLET_LAYOUT.md): enclosures. What stands between the Rows, in the old
+# house plots, behind the quay's buildings and in the Ladder's corners. The plan writes each one
+# out (cullet_plan.py `enclosure`): its walls (where, how high, of what make, with which gaps)
+# and its contents (what, where), every one with its cause. This builds exactly that, and rolls
+# only for which stone is a shade darker or which way a hen looks.
+# An enclosure faces south, so its own frame is the plan's: +X east, +Y north.
+
+
+def e_M(at, turn=0.0, z=0.0):
+    return Matrix.Translation((at[0], at[1], z)) @ Matrix.Rotation(rad(turn), 4, "Z")
+
+
+def e_box(k, M, lo, hi, col, bevel=0.0, open_bottom=False):
+    put(k, lbox(Vector(lo), Vector(hi), fn=lambda q: M @ q, bevel=bevel, open_bottom=open_bottom), col)
+
+
+def e_soil(rng, t=0.25):
+    return jit(mix(P.peat, P.kelp, t), rng, 0.02)
+
+
+def e_wall(k, rng, env, wear, w, inward):
+    """A free-standing wall along a line. `dry`: rough basalt, each stone its own height; `coped`:
+    coursed, with a coping; `stub`: a pulled-down house's wall, falling from h to `low` along its
+    length in broken steps, old limewash still on its inner face."""
+    p0, p1 = Vector((*w["from"], 0.0)), Vector((*w["to"], 0.0))
+    L = (p1 - p0).length
+    t = (p1 - p0) / L
+    n = Vector((-t.y, t.x, 0.0))
+    if n.dot(inward) > 0:  # n looks out of the enclosure
+        n = -n
+    h, style, th = w["h"], w["style"], w.get("th", 0.4)
+    low = w.get("low", h)
+    gaps = sorted(w.get("gaps", []))
+    runs, a = [], 0.0
+    for g0, g1 in gaps:
+        if g0 - a > 0.25:
+            runs.append((a, g0))
+        a = g1
+    if L - a > 0.25:
+        runs.append((a, L))
+    lich_out = env.weather(n) * (0.3 + wear["wind"])
+    soot = wear["soot"]
+    course = 0.42 if style == "dry" else 0.36
+    polys = []
+    for r0, r1 in runs:
+        m = max(1, round((r1 - r0) / (1.05 if style != "coped" else 1.2)))
+        hs = []
+        for i in range(m):
+            f = (r0 + (r1 - r0) * (i + 0.5) / m) / L
+            if style == "stub":
+                hh = low + (h - low) * (1 - f) ** 1.5 + rng.uniform(-0.18, 0.18)
+            elif style == "dry":
+                hh = h * rng.uniform(0.9, 1.0) * (1.0 - 0.25 * wear.get("empty_top", 0.0) * rng.random())
+            else:
+                hh = h - 0.12
+            hs.append(max(0.3, hh))
+        for i in range(m):
+            a0, a1, hh = r0 + (r1 - r0) * i / m, r0 + (r1 - r0) * (i + 1) / m, hs[i]
+            rows = max(1, round(hh / course))
+            for side, nn in ((1, n), (-1, -n)):
+                o = p0 + nn * (th / 2)
+                for j in range(rows):
+                    za, zb = hh * j / rows, hh * (j + 1) / rows
+                    b0 = a0 + (0.0 if j % 2 == 0 or i == 0 else -0.3 * (a1 - a0))
+                    b1 = a1 + (0.0 if j % 2 == 0 or i == m - 1 else -0.3 * (a1 - a0))
+                    c = jit(P.basalt if rng.random() < 0.72 else P.pale, rng, 0.03)
+                    if soot > 0.05:
+                        c = mix(c, P.tar, 0.4 * soot)
+                    elif side > 0 and lich_out > 0.25 and rng.random() < lich_out * 0.5 and zb > 0.5:
+                        c = mix(c, P.lichen, 0.35)
+                    elif style == "stub" and side < 0 and za > 0.8 and nz((a0 + a1) * 0.4, za * 0.9, 3.0 + w["h"]) > -0.15:
+                        c = jit(mix(P.oldlime, P.basalt, 0.25), rng, 0.02)  # the lost room's limewash
+                    polys.append((oriented([o + t * b0 + Z * za, o + t * b1 + Z * za, o + t * b1 + Z * zb, o + t * b0 + Z * zb], nn), c))
+            top = jit(mix(P.basalt, P.pale, 0.5), rng, 0.02)
+            q = [p0 + t * a0 + n * (th / 2), p0 + t * a1 + n * (th / 2), p0 + t * a1 - n * (th / 2), p0 + t * a0 - n * (th / 2)]
+            polys.append((oriented([v + Z * hh for v in q], Z), top))
+            for e, an in ((a0, -t), (a1, t)):  # its ends, where they show: a run's end or a step
+                nb = hs[i - 1] if an is not t and i > 0 else hs[i + 1] if an is t and i < m - 1 else 0.0
+                if nb < hh - 0.03:
+                    polys.append((oriented([p0 + t * e + n * (th / 2) + Z * nb, p0 + t * e - n * (th / 2) + Z * nb, p0 + t * e - n * (th / 2) + Z * hh, p0 + t * e + n * (th / 2) + Z * hh], an), jit(P.basalt, rng, 0.03)))
+        if style == "coped":
+            mc = max(1, round((r1 - r0) / 1.15))
+            for i in range(mc):
+                a0, a1 = r0 + (r1 - r0) * i / mc + 0.01, r0 + (r1 - r0) * (i + 1) / mc - 0.01
+                put(k, lbox(Vector((a0, -th / 2 - 0.04, h - 0.12)), Vector((a1, th / 2 + 0.04, h * rng.uniform(0.995, 1.0))), fn=lambda q: p0 + t * q.x + n * q.y + Z * q.z, open_bottom=True), jit(P.pale, rng, 0.025))
+    raw(k, polys)
+    for g0, g1 in gaps:
+        mid, gw = p0 + t * (g0 + g1) / 2, g1 - g0
+        if w.get("gate"):  # a driftwood gate, a hand ajar
+            gh = min(1.5, max(0.9, h * 0.8))
+            hinge = p0 + t * (g0 + 0.06)
+            d = (t * cos(rad(14)) - n * sin(rad(14))).normalized()
+            for j in range(4):
+                u0, u1 = (gw - 0.12) * j / 4 + 0.01, (gw - 0.12) * (j + 1) / 4 - 0.01
+                put(k, lbox(Vector((u0, -0.02, 0.08)), Vector((u1, 0.02, gh + 0.05 * (j % 2))), fn=lambda q: hinge + d * q.x + Vector((-d.y, d.x, 0)) * q.y + Z * q.z), jit(P.drift, rng, 0.03))
+            put(k, beam(hinge + Z * 0.3, hinge + d * (gw - 0.14) + Z * (gh - 0.2), 0.035, 0.08, up=Vector((-d.y, d.x, 0))), jit(mix(P.drift, P.tar, 0.3), rng, 0.02))
+        elif w.get("boarded"):
+            for j in range(3):
+                put(k, beam(mid - t * (gw / 2 + 0.15) + Z * (0.4 + 0.5 * j), mid + t * (gw / 2 + 0.15) + Z * (0.45 + 0.5 * j + 0.06 * (j % 2)), 0.03, 0.16, up=n), jit(P.tar, rng, 0.02))
+
+
+def c_privy(k, rng, M, o, f):
+    """A privy against the wall: tarred boards, a slate lid falling to the back, a plank door."""
+    for (x0, x1, y0, y1) in ((-0.55, -0.5, -0.6, 0.6), (0.5, 0.55, -0.6, 0.6), (-0.55, 0.55, 0.55, 0.6)):
+        e_box(k, M, (x0, y0, 0), (x1, y1, 1.95), jit(P.tar, rng, 0.025))
+    e_box(k, M, (-0.5, -0.6, 0), (-0.3, -0.56, 1.95), jit(P.tar, rng, 0.025))
+    e_box(k, M, (0.3, -0.6, 0), (0.5, -0.56, 1.95), jit(P.tar, rng, 0.025))
+    e_box(k, M, (-0.3, -0.62, 0.06), (0.3, -0.58, 1.85), jit(P.drift, rng, 0.03))
+    roof = [M @ Vector(q) for q in ((-0.68, -0.75, 2.22), (0.68, -0.75, 2.22), (0.68, 0.66, 1.94), (-0.68, 0.66, 1.94))]
+    raw(k, [(oriented(roof, Z), jit(P.slate, rng)), (oriented([v - Z * 0.05 for v in roof], -Z), jit(P.tar, rng, 0.02)),
+            (oriented([roof[0], roof[1], roof[1] - Z * 0.3, roof[0] - Z * 0.3], M.to_3x3() @ -Y), jit(P.tar, rng, 0.02))])
+
+
+def c_lean_to(k, rng, M, o, f, boat=False):
+    """A lean-to against the house's back wall: tarred boards under a slate lid; or, for a
+    fisher, a low shed roofed with an upturned boat."""
+    w = o.get("w", 2.4)
+    hw = w / 2
+    if boat:
+        for x0, x1, y0, y1 in ((-hw, hw, 0.5, 0.56), (-hw, -hw + 0.06, -0.6, 0.56), (hw - 0.06, hw, -0.6, 0.56)):
+            e_box(k, M, (x0, y0, 0), (x1, y1, 1.0), jit(P.tar, rng, 0.025))
+        e_box(k, M, (-0.35, 0.56, 0.05), (0.35, 0.6, 0.95), jit(P.drift, rng, 0.03))
+        bm = sphere((0, 0, 0), 1.0, 2)
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -0.01], context="VERTS")
+        for v in bm.verts:
+            v.co = M @ Vector((v.co.x * (hw + 0.25) * (1 - 0.25 * abs(v.co.y)), v.co.y * 0.78, 0.98 + v.co.z * 0.85))
+        put(k, bm, lambda co, n, c=jit(P.tar, rng, 0.02): mix(c, P.drift, 0.3) if n.z > 0.75 else c, closed=False)
+        put(k, beam(M @ Vector((-hw - 0.2, 0, 1.86)), M @ Vector((hw + 0.2, 0, 1.86)), 0.07, 0.08), jit(mix(P.tar, P.drift, 0.6), rng, 0.02))
+        return
+    for x0, x1, y0, y1 in ((-hw, hw, 0.62, 0.68), (-hw, -hw + 0.06, -0.7, 0.68), (hw - 0.06, hw, -0.7, 0.68)):
+        e_box(k, M, (x0, y0, 0), (x1, y1, 1.7), jit(P.tar, rng, 0.025))
+    e_box(k, M, (-0.4, 0.68, 0.05), (0.4, 0.71, 1.6), jit(P.drift, rng, 0.03))
+    roof = [M @ Vector(q) for q in ((-hw - 0.1, -0.72, 2.2), (hw + 0.1, -0.72, 2.2), (hw + 0.1, 0.82, 1.68), (-hw - 0.1, 0.82, 1.68))]
+    raw(k, [(oriented(roof, Z), jit(P.slate if f.get("family") == "kiln" else P.tar, rng)), (oriented([v - Z * 0.05 for v in roof], -Z), jit(P.tar, rng, 0.02))])
+    for e in (-1, 1):
+        raw(k, [(oriented([M @ Vector((e * hw, -0.7, 1.7)), M @ Vector((e * hw, 0.68, 1.7)), M @ Vector((e * hw, -0.7, 2.14))], M.to_3x3() @ (X * e)), jit(P.tar, rng, 0.02))], two=True)
+
+
+def c_peat(k, rng, M, o, f):
+    """Peat for the hearth: stacks of cut turves, a tarred cloth weighted with stones."""
+    n = o.get("n", 1)
+    for i in range(n):
+        x = (i - (n - 1) / 2) * 1.25
+        hgt = 0.75 + 0.3 * ((i * 7 + f["seed"]) % 3) / 2
+        rows = max(3, round(hgt / 0.16))
+        for j in range(rows):
+            ins = 0.015 * j
+            e_box(k, M, (x - 0.55 + ins, -0.42 + ins, hgt * j / rows), (x + 0.55 - ins, 0.42 - ins, hgt * (j + 1) / rows - 0.012), jit(P.peat if j % 2 else mix(P.peat, P.grass, 0.12), rng, 0.03), open_bottom=True)
+        e_box(k, M, (x - 0.6, -0.47, hgt - 0.01), (x + 0.6, 0.47, hgt + 0.04), on(jit(P.tar, rng, 0.02), "cloth"))
+        e_box(k, M, (x - 0.5, -0.4, hgt + 0.04), (x - 0.3, -0.22, hgt + 0.13), jit(P.pale, rng, 0.03))
+
+
+def c_butt(k, rng, M, o, f):
+    """A rain butt under the eave: a coopered cask, dark water to its brim."""
+    barrel(k, rng, None, 0.36, 0.95, wood=P.drift, M=M, salt=0.0, head=False, sides=8, hoops=(0.2, 0.8))
+    raw(k, [([M @ Vector((cos(i / 8 * TAU) * 0.3, sin(i / 8 * TAU) * 0.3, 0.86)) for i in range(8)], mix(P.smoke, P.tar, 0.6))])
+
+
+CLOTH = dict(linen=("lime", "oldlime", "lime", "oldlime", "sand"), colours=("chalkblue", "oldlime", "oxblood", "lime", "mustard", "seagreen", "oldlime"), smoke=("smoke", "oldlime", "smoke"))
+
+
+def c_washing(k, rng, M, o, f, env=None):
+    """A line of washing between two poles (or two walls, across a wynd), blown north-east."""
+    a, b = Vector((0, 0, 0)), Vector((o["to"][0] - o["_at"][0], o["to"][1] - o["_at"][1], 0.0))
+    L = b.length
+    t = b / L
+    top = 3.5 if o.get("high") else 2.6 if o.get("tall") else 2.2
+    if not o.get("high"):
+        for q in (a, b):
+            put(k, tube([M @ q, M @ (q + Z * (top + 0.1))], [0.05, 0.035], 5), jit(P.drift, rng))
+    blow = env.ne * 0.16 if env else Vector((0.11, 0.11, 0))
+    def line(s):
+        return a + t * (L * s) + Z * (top - 0.14 * sin(PI * s))
+    put(k, tube([M @ line(i / 6) for i in range(7)], 0.012, 3, caps=False), on(P.sand, "cloth"), closed=False)
+    names = CLOTH[o.get("cloth", "linen")]
+    polys, s, i = [], 0.35 / L, 0
+    while s < 1 - 0.75 / L:
+        wd = rng.uniform(0.45, 0.85) if o.get("cloth") != "linen" else rng.uniform(0.7, 1.25)
+        hg = rng.uniform(0.5, 0.95) if o.get("cloth") != "linen" else rng.uniform(0.9, 1.3)
+        s1 = min(1 - 0.3 / L, s + wd / L)
+        c = on(jit(mix(getattr(P, names[i % len(names)]), P.tar, 0.3) if o.get("cloth") == "smoke" and names[i % len(names)] == "oldlime" else getattr(P, names[i % len(names)]), rng, 0.02), "cloth")
+        p0, p1 = line(s), line(s1)
+        m0, m1 = p0 - Z * hg * 0.5 + blow * 0.5, p1 - Z * hg * 0.5 + blow * 0.5
+        e0, e1 = p0 - Z * hg + blow * 1.6, p1 - Z * hg + blow * 1.6
+        polys += [([M @ p0, M @ p1, M @ m1, M @ m0], c), ([M @ m0, M @ m1, M @ e1, M @ e0], mix(c, P.tar, 0.06))]
+        s, i = s1 + rng.uniform(0.12, 0.3) / L, i + 1
+    raw(k, polys, two=True)
+
+
+def c_hens(k, rng, M, o, f):
+    """A hen run: a tarred coop on legs with a ramp, stakes and rails round the run, the hens."""
+    w, d, n = o.get("w", 4.0), o.get("d", 4.0), o.get("n", 5)
+    hw, hd = w / 2, d / 2
+    cx, cy = -hw + 0.8, hd - 0.7
+    for ex in (-1, 1):
+        for ey in (-1, 1):
+            e_box(k, M, (cx + ex * 0.5 - 0.04, cy + ey * 0.4 - 0.04, 0), (cx + ex * 0.5 + 0.04, cy + ey * 0.4 + 0.04, 0.4), jit(P.drift, rng))
+    e_box(k, M, (cx - 0.6, cy - 0.5, 0.4), (cx + 0.6, cy + 0.5, 1.0), jit(P.tar, rng, 0.025))
+    roof = [M @ Vector(q) for q in ((cx - 0.72, cy - 0.62, 1.0), (cx + 0.72, cy - 0.62, 1.0), (cx + 0.72, cy + 0.6, 1.28), (cx - 0.72, cy + 0.6, 1.28))]
+    raw(k, [(oriented(roof, Z), jit(P.slate, rng)), (oriented([v - Z * 0.04 for v in roof], -Z), jit(P.tar, rng, 0.02))])
+    raw(k, [([M @ Vector((cx + 0.1, cy - 0.5, 0.42)), M @ Vector((cx + 0.4, cy - 0.5, 0.42)), M @ Vector((cx + 0.4, cy - 1.25, 0.02)), M @ Vector((cx + 0.1, cy - 1.25, 0.02))], jit(P.drift, rng))], two=True)
+    ring = [(-hw, -hd), (hw, -hd), (hw, hd), (-hw, hd)]
+    for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
+        m = max(2, round(math.hypot(x1 - x0, y1 - y0) / 1.3))
+        for i in range(m):
+            x, y = x0 + (x1 - x0) * i / m, y0 + (y1 - y0) * i / m
+            put(k, tube([M @ Vector((x, y, 0)), M @ Vector((x + rng.uniform(-0.04, 0.04), y, 1.15 + rng.uniform(-0.08, 0.08)))], 0.03, 4), jit(P.drift, rng))
+        for z in (0.45, 1.0):
+            put(k, tube([M @ Vector((x0, y0, z)), M @ Vector((x1, y1, z))], 0.016, 3), jit(mix(P.drift, P.tar, 0.4), rng, 0.02))
+    for i in range(n):
+        x, y = rng.uniform(-hw + 0.4, hw - 0.4), rng.uniform(-hd + 0.3, hd - 1.5)
+        H_ = M @ Matrix.Translation((x, y, 0)) @ Matrix.Rotation(rng.uniform(0, TAU), 4, "Z")
+        c = jit((P.oldlime, P.newbrick, P.tar, P.oldlime, P.drift)[(i + f["seed"]) % 5], rng, 0.03)
+        put(k, lathe([(0.02, 0.12), (0.11, 0.16), (0.13, 0.24), (0.09, 0.33), (0.02, 0.36)], 6, H_ @ Matrix.Scale(1.5, 4, X)), on(c, "cloth"))
+        put(k, lathe([(0.02, 0.3), (0.06, 0.36), (0.05, 0.43), (0.01, 0.46)], 5, H_ @ Matrix.Translation((0.17, 0, 0))), on(c, "cloth"))
+        raw(k, [([H_ @ Vector((0.19, -0.01, 0.46)), H_ @ Vector((0.19, 0.01, 0.46)), H_ @ Vector((0.17, 0, 0.51))], P.oxblood)], two=True)
+
+
+def c_beds(k, rng, M, o, f, what="beds"):
+    """Dug beds: ridges of dark soil fed with kelp, a row of greens on each. `herbs`: slate-edged
+    squares of many greens; `flowers`: the same in bloom; `poor`: half of it weeds."""
+    w, d = o.get("w", 4.0), o.get("d", 4.0)
+    hw, hd = w / 2, d / 2
+    if what == "beds":
+        rows = max(2, round(d / 0.95))
+        for i in range(rows):
+            y = -hd + d * (i + 0.5) / rows
+            put(k, prism([(-0.3, 0.0), (0.3, 0.0), (0.1, 0.17), (-0.1, 0.17)], -hw, hw, lambda a, s, z, y=y: M @ Vector((a, y + s, z))), e_soil(rng))
+            m = max(3, round(w / 0.55))
+            for j in range(m):
+                if o.get("poor") and (i + j) % 2:
+                    continue
+                tuft(k, rng, M @ Vector((-hw + w * (j + 0.5) / m, y, 0.15)), 0.2, 0.26, P.kelp if o.get("poor") and j % 3 == 0 else LEAF, 4)
+        return
+    nx, ny = max(1, round(w / 2.2)), max(2, round(d / 2.0))
+    herbs = (LEAF, P.grass, mix(P.grass, P.lime, 0.3), mix(P.green, P.smoke, 0.5), P.kelp)
+    blooms = (P.heather, P.mustard, P.chalkblue, P.lime, P.oxblood)
+    for i in range(nx):
+        for j in range(ny):
+            x0, x1 = -hw + w * i / nx + 0.25, -hw + w * (i + 1) / nx - 0.25
+            y0, y1 = -hd + d * j / ny + 0.25, -hd + d * (j + 1) / ny - 0.25
+            e_box(k, M, (x0, y0, 0), (x1, y1, 0.14), e_soil(rng, 0.15), open_bottom=True)
+            for a0, a1, b0, b1 in ((x0 - 0.06, x1 + 0.06, y0 - 0.06, y0), (x0 - 0.06, x1 + 0.06, y1, y1 + 0.06), (x0 - 0.06, x0, y0, y1), (x1, x1 + 0.06, y0, y1)):
+                e_box(k, M, (a0, b0, 0), (a1, b1, 0.2), jit(P.slate, rng, 0.03), open_bottom=True)
+            kind = (i * 3 + j * 2 + f["seed"]) % 5
+            m = max(3, round((x1 - x0) * (y1 - y0) / 0.42))
+            for q in range(m):
+                at = M @ Vector((rng.uniform(x0 + 0.15, x1 - 0.15), rng.uniform(y0 + 0.15, y1 - 0.15), 0.13))
+                tuft(k, rng, at, 0.17, 0.3 + 0.12 * (kind % 3), herbs[kind], 4)
+                if what == "flowers" and q % 2 == 0:
+                    tuft(k, rng, at + Z * 0.22, 0.09, 0.14, blooms[(kind + q // 2) % 5], 3)
+
+
+def c_boat(k, rng, M, o, f):
+    """A boat keel up on two trestles: tarred, grey along the keel."""
+    bm = sphere((0, 0, 0), 1.0, 2)
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -0.01], context="VERTS")
+    for v in bm.verts:
+        s = v.co.x
+        v.co = M @ Vector((s * 1.95, v.co.y * 0.68 * (1 - abs(s) ** 2.4) ** 0.5 + 0.0, 0.62 + v.co.z * 0.62 * (1 - 0.15 * s * s)))
+    put(k, bm, lambda co, n, c=jit(P.tar, rng, 0.02), g=jit(mix(P.tar, P.drift, 0.4), rng, 0.02): g if n.z > 0.8 else c, closed=False)
+    put(k, beam(M @ Vector((-1.9, 0, 1.24)), M @ Vector((1.9, 0, 1.24)), 0.06, 0.08), jit(mix(P.tar, P.drift, 0.6), rng, 0.02))
+    for x in (-1.0, 1.0):
+        put(k, beam(M @ Vector((x, -0.75, 0.56)), M @ Vector((x, 0.75, 0.56)), 0.1, 0.1), jit(P.drift, rng))
+        for ey in (-1, 1):
+            for ex in (-1, 1):
+                put(k, beam(M @ Vector((x, ey * 0.6, 0.52)), M @ Vector((x + ex * 0.25, ey * 0.68, 0.0)), 0.07, 0.07, up=M.to_3x3() @ Y), jit(P.drift, rng))
+    put(k, tube([M @ Vector((-1.6, 0.2, 0.64)), M @ Vector((1.5, 0.26, 0.64))], 0.03, 4), jit(P.drift, rng))
+
+
+def c_nets(k, rng, M, o, f):
+    """Nets drying: three poles and a rail, a tarred net hung over it, glass floats on its head."""
+    L = o.get("len", 4.0)
+    for x in (-L / 2, 0.0, L / 2):
+        put(k, tube([M @ Vector((x, 0, 0)), M @ Vector((x, 0, 2.3))], [0.055, 0.04], 5), jit(P.drift, rng))
+    put(k, tube([M @ Vector((-L / 2 - 0.2, 0, 2.2)), M @ Vector((L / 2 + 0.2, 0, 2.2))], 0.035, 4), jit(P.drift, rng))
+    net = on(P.tar, "cloth")
+    nu, nv = max(4, round(L / 0.42)), 4
+    def node(i, j, e):
+        v = j / nv
+        return M @ Vector((-L / 2 + 0.15 + (L - 0.3) * i / nu, e * (0.05 + 0.32 * v ** 0.8), 2.2 - 1.75 * v * (1 if e < 0 else 0.6) - 0.05 * sin(i * 1.7)))
+    polys = []
+    for e in (-1, 1):
+        for i in range(nu):
+            for j in range(nv):
+                if (i * 5 + j * 3 + f["seed"]) % 17 == 0:
+                    continue  # a tear
+                a, b = (node(i, j, e), node(i + 1, j + 1, e)) if (i + j) % 2 == 0 else (node(i + 1, j, e), node(i, j + 1, e))
+                side = (b - a).cross(M.to_3x3() @ Y).normalized()
+                polys += [(q, jit(net, rng, 0.02)) for q in ribbon([a, b], 0.03, side)]
+                a2, b2 = (node(i + 1, j, e), node(i, j + 1, e)) if (i + j) % 2 == 0 else (node(i, j, e), node(i + 1, j + 1, e))
+                polys += [(q, jit(net, rng, 0.02)) for q in ribbon([a2, b2], 0.03, (b2 - a2).cross(M.to_3x3() @ Y).normalized())]
+    raw(k, polys, two=True)
+    for i, c in ((1, P.green), (nu // 2, P.amber), (nu - 1, P.aqua)):
+        put(k, sphere(node(i, 0, -1) + Vector((0, 0, 0.1)), 0.11, 1), jit(c, rng, 0.03))
+
+
+def c_kelp(k, rng, M, o, f):
+    """Wrack: a heap for the beds, or hung over a driftwood rack to dry for the kilns."""
+    L = o.get("len", 1.6)
+    at = M @ Vector((0, 0, 0))
+    if o.get("rack"):
+        for x in (-L / 2, L / 2):
+            for e in (-1, 1):
+                put(k, tube([M @ Vector((x, e * 0.3, 0)), M @ Vector((x, 0, 1.05))], 0.035, 4), jit(P.drift, rng))
+        put(k, tube([M @ Vector((-L / 2 - 0.15, 0, 1.03)), M @ Vector((L / 2 + 0.15, 0, 1.03))], 0.03, 4), jit(P.drift, rng))
+        polys = []
+        m = max(4, round(L / 0.22))
+        for i in range(m):
+            x = -L / 2 + L * (i + 0.5) / m
+            for e in (-1, 1):
+                ln = rng.uniform(0.45, 0.85)
+                pts = [M @ Vector((x + 0.03 * sin(j * 2.0 + i), e * (0.03 + 0.1 * j / 3), 1.05 - ln * j / 3)) for j in range(4)]
+                polys += [(q, jit(P.kelp if (i + e) % 3 else mix(P.kelp, P.tar, 0.35), rng, 0.03)) for q in ribbon(pts, rng.uniform(0.1, 0.17), M.to_3x3() @ X)]
+        raw(k, polys, two=True)
+        return
+    bm = sphere((0, 0, 0), 1.0, 1)
+    for v in bm.verts:
+        b = 1 + 0.25 * nz(v.co.x * 2.1 + at.x, v.co.y * 2.1 + at.y, v.co.z * 2.1)
+        v.co = M @ Vector((v.co.x * L * 0.32 * b, v.co.y * L * 0.26 * b, max(-0.02, v.co.z) * min(0.6, 0.3 * L) * b))
+    put(k, bm, lambda co, n: mix(P.kelp, P.tar, 0.25 + 0.25 * nz(co.x * 6, co.y * 6, co.z * 6)), soft=at)
+    kelp(k, rng, at, 7, L * 0.45)
+    if o.get("fork"):
+        tip = M @ Vector((L * 0.2, -L * 0.3, 0.25))
+        put(k, tube([tip, tip + Vector((0.18, -0.25, 1.15))], 0.022, 4), jit(P.drift, rng))
+        for e in (-1, 0, 1):
+            put(k, tube([tip + Vector((e * 0.07, 0, 0.0)), tip + Vector((e * 0.07 - 0.04, 0.06, -0.26))], 0.01, 3), P.iron)
+
+
+def c_frames(k, rng, M, o, f):
+    """Cold frames: a driftwood box each, a sloping lid of small panes. Mended with boards and odd
+    panes unless `whole` (the glazier's own)."""
+    n = o.get("n", 2)
+    for i in range(n):
+        F = M @ Matrix.Translation(((i - (n - 1) / 2) * 1.6, 0, 0))
+        wood = jit(P.drift, rng, 0.03)
+        for x0, x1, y0, y1, z in ((-0.7, 0.7, -0.5, -0.45, 0.24), (-0.7, 0.7, 0.45, 0.5, 0.48), (-0.7, -0.65, -0.5, 0.5, 0.24), (0.65, 0.7, -0.5, 0.5, 0.24)):
+            e_box(k, F, (x0, y0, 0), (x1, y1, z), wood, open_bottom=True)
+        for e in (-1, 1):
+            raw(k, [(oriented([F @ Vector((e * 0.675, -0.5, 0.24)), F @ Vector((e * 0.675, 0.5, 0.24)), F @ Vector((e * 0.675, 0.5, 0.48))], F.to_3x3() @ (X * e)), wood)], two=True)
+        raw(k, [([F @ Vector((-0.65, -0.45, 0.05)), F @ Vector((0.65, -0.45, 0.05)), F @ Vector((0.65, 0.45, 0.05)), F @ Vector((-0.65, 0.45, 0.05))], e_soil(rng))])
+        up = 0.32 if (i + f["seed"]) % 3 == 0 else 0.0  # one lid propped open
+        polys = []
+        for a in range(4):
+            for b in range(3):
+                x0, x1 = -0.68 + 1.36 * a / 4 + 0.02, -0.68 + 1.36 * (a + 1) / 4 - 0.02
+                y0, y1 = -0.5 + 1.0 * b / 3 + 0.02, -0.5 + 1.0 * (b + 1) / 3 - 0.02
+                z0, z1 = 0.26 + 0.24 * (y0 + 0.5) + up * (0.5 - y0), 0.26 + 0.24 * (y1 + 0.5) + up * (0.5 - y1)
+                r = (a * 7 + b * 5 + i * 3 + f["seed"]) % 11
+                c = jit(P.aqua, rng, 0.03) if o.get("whole") and r != 0 else jit((P.aqua, P.aqua, P.aqua, P.green, P.aqua, P.drift, P.aqua, P.amber, P.aqua, P.smoke, P.drift)[r], rng, 0.03)
+                polys.append(([F @ Vector((x0, y0, z0)), F @ Vector((x1, y0, z0)), F @ Vector((x1, y1, z1)), F @ Vector((x0, y1, z1))], c))
+        raw(k, polys, two=True)
+        tuft(k, rng, F @ Vector((0.2, 0.0, 0.05)), 0.2, 0.2, LEAF, 4)
+
+
+def c_slates(k, rng, M, o, f):
+    """Slates stripped from the empty houses, stacked on edge by size, no two stacks one shade."""
+    for i, (x, n, hgt) in enumerate(((-0.7, 7, 0.55), (0.1, 9, 0.42), (0.8, 5, 0.7))):
+        for j in range(n):
+            y = -0.35 + 0.1 * j
+            S = M @ Matrix.Translation((x, y, 0)) @ Matrix.Rotation(rad(-12 + 2 * (j % 3)), 4, "X")
+            e_box(k, S, (-0.3, -0.02, 0), (0.3, 0.02, hgt), jit((P.slate, P.newslate, P.slate, mix(P.slate, P.lichen, 0.25))[(i + j) % 4], rng, 0.03))
+
+
+def c_blocks(k, rng, M, o, f):
+    """Cut basalt never carried down: squared blocks, one on another, pale on the sawn faces."""
+    for x, y, z, sx, sy, sz, tw in ((0.0, 0.0, 0.0, 1.2, 0.6, 0.5, 4), (0.75, 0.75, 0.0, 0.9, 0.55, 0.45, -18), (0.15, 0.05, 0.5, 0.9, 0.5, 0.4, 12), (-0.9, 0.6, 0.0, 0.6, 0.5, 0.35, 40)):
+        S = M @ Matrix.Translation((x, y, z)) @ Matrix.Rotation(rad(tw), 4, "Z")
+        put(k, lbox(Vector((-sx / 2, -sy / 2, 0)), Vector((sx / 2, sy / 2, sz)), fn=lambda q, S=S: S @ q, bevel=0.02, open_bottom=z == 0.0),
+            lambda co, n, c=jit(P.basalt, rng, 0.03): mix(c, P.pale, 0.45) if n.z > 0.5 else c)
+
+
+def c_pots(k, rng, M, o, f):
+    """Otto Brandt's crucibles drying on a plank: island clay, paler as they dry."""
+    for x in (-0.8, 0.8):
+        e_box(k, M, (x - 0.12, -0.2, 0), (x + 0.12, 0.2, 0.4), jit(P.basalt, rng, 0.03), open_bottom=True)
+    e_box(k, M, (-1.1, -0.22, 0.4), (1.1, 0.22, 0.45), jit(P.drift, rng, 0.03))
+    for i in range(5):
+        c = jit(mix(P.sand, P.newbrick, 0.25 + 0.1 * (i % 3)), rng, 0.02)
+        put(k, lathe([(0.1, 0.45), (0.16, 0.6), (0.17, 0.78), (0.14, 0.86), (0.11, 0.86), (0.12, 0.6)], 8, M @ Matrix.Translation((-0.84 + 0.42 * i, 0, 0)), caps=(True, False)), c, closed=False)
+
+
+def c_cullet(k, rng, M, o, f):
+    """Ode Pontil's cullet: a crate a colour. As a `bed`: a border of lumps round dug ground, one
+    of every glass the Cone has made, and the Rows' one piece of cobalt."""
+    cols = (P.green, P.amber, P.aqua, P.smoke, P.green, P.aqua)
+    if o.get("bed"):
+        w, d = o.get("w", 3.6), o.get("d", 6.0)
+        hw, hd = w / 2, d / 2
+        e_box(k, M, (-hw + 0.3, -hd + 0.3, 0), (hw - 0.3, hd - 0.3, 0.1), e_soil(rng, 0.1), open_bottom=True)
+        ring = [(-hw, -hd), (hw, -hd), (hw, hd), (-hw, hd)]
+        i = 0
+        for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
+            m = max(3, round(math.hypot(x1 - x0, y1 - y0) / 0.55))
+            for j in range(m):
+                c = P.cobalt if i == 5 else cols[(i * 5 + i // 3) % 6]
+                put(k, sphere(M @ Vector((x0 + (x1 - x0) * j / m, y0 + (y1 - y0) * j / m, 0.1)), rng.uniform(0.12, 0.2), 1, squash=0.8), jit(c, rng, 0.03))
+                i += 1
+        for j in range(5):
+            tuft(k, rng, M @ Vector((rng.uniform(-hw + 0.6, hw - 0.6), rng.uniform(-hd + 0.6, hd - 0.6), 0.1)), 0.2, 0.3, LEAF, 4)
+        return
+    for i in range(4):
+        C = M @ Matrix.Translation((-0.95 + 0.63 * i, 0.0, 0.0))
+        wood = jit(P.drift, rng, 0.03)
+        for x0, x1, y0, y1 in ((-0.28, 0.28, -0.25, -0.22), (-0.28, 0.28, 0.22, 0.25), (-0.28, -0.25, -0.25, 0.25), (0.25, 0.28, -0.25, 0.25)):
+            e_box(k, C, (x0, y0, 0), (x1, y1, 0.36), wood, open_bottom=True)
+        bm = sphere((0, 0, 0), 1.0, 1)
+        for v in bm.verts:
+            v.co = C @ Vector((v.co.x * 0.24, v.co.y * 0.21, 0.3 + max(0.0, v.co.z) * 0.22))
+        put(k, bm, jit(cols[(i + f["seed"]) % 4], rng, 0.03))
+
+
+def c_timber(k, rng, M, o, f):
+    """Timber seasoning for the Second Thought: planks on bearers, stickered; or ship's knees."""
+    L = o.get("len", 3.6)
+    if o.get("knees"):
+        for i in range(3):
+            K = M @ Matrix.Translation((-L / 2 + 0.6 + i * (L - 1.2) / 2, 0, 0)) @ Matrix.Rotation(rad(-20 + 25 * i), 4, "Z")
+            c = jit(P.drift, rng, 0.04)
+            put(k, beam(K @ Vector((0, 0, 0.08)), K @ Vector((0.9, 0, 0.08)), 0.16, 0.16), c)
+            put(k, beam(K @ Vector((0.05, 0, 0.08)), K @ Vector((0.05, 0, 0.85)), 0.16, 0.16, up=K.to_3x3() @ Y), c)
+        return
+    for x in (-L / 2 + 0.4, 0.0, L / 2 - 0.4):
+        e_box(k, M, (x - 0.07, -0.5, 0), (x + 0.07, 0.5, 0.12), jit(P.tar, rng, 0.02), open_bottom=True)
+    for j in range(4):
+        for i in range(3):
+            e_box(k, M, (-L / 2 + 0.1 * (j % 2), -0.48 + 0.33 * i, 0.12 + 0.11 * j), (L / 2 - 0.15 * ((i + j) % 2), -0.48 + 0.33 * i + 0.29, 0.12 + 0.11 * j + 0.07), jit(P.drift if (i + j) % 3 else mix(P.drift, P.sand, 0.4), rng, 0.03))
+
+
+def e_wheel(k, rng, c, axis, r):
+    a = Vector(axis).normalized()
+    put(k, B.cyl(Vector(c) - a * 0.03, Vector(c) + a * 0.03, r, r, 10), jit(mix(P.drift, P.tar, 0.35), rng, 0.02))
+
+
+def c_handcart(k, rng, M, o, f):
+    """Davin Vane's handcart: a flat bed on two wheels, its shafts on the ground."""
+    T = M @ Matrix.Rotation(rad(-7), 4, "Y")
+    e_box(k, T, (-0.8, -0.45, 0.5), (0.8, 0.45, 0.56), jit(P.drift, rng, 0.03))
+    for y in (-0.45, 0.42):
+        e_box(k, T, (-0.8, y, 0.56), (0.8, y + 0.03, 0.8), jit(P.drift, rng, 0.03))
+    for e in (-1, 1):
+        e_wheel(k, rng, M @ Vector((0.0, e * 0.52, 0.42)), M.to_3x3() @ Y, 0.42)
+        put(k, beam(T @ Vector((0.75, e * 0.4, 0.5)), T @ Vector((1.8, e * 0.4, 0.5)), 0.05, 0.05), jit(P.drift, rng))
+
+
+def c_barrow(k, rng, M, o, f):
+    """A wheelbarrow: driftwood tray, one wheel."""
+    c = jit(P.drift, rng, 0.03)
+    e_box(k, M, (-0.35, -0.3, 0.3), (0.45, 0.3, 0.34), c)
+    for y in (-0.3, 0.27):
+        e_box(k, M, (-0.35, y, 0.34), (0.45, y + 0.03, 0.58), c)
+    e_box(k, M, (0.42, -0.3, 0.34), (0.45, 0.3, 0.6), c)
+    e_wheel(k, rng, M @ Vector((0.62, 0, 0.2)), M.to_3x3() @ Y, 0.2)
+    for e in (-1, 1):
+        put(k, beam(M @ Vector((0.62, e * 0.08, 0.2)), M @ Vector((-1.0, e * 0.3, 0.5)), 0.04, 0.05), c)
+        put(k, beam(M @ Vector((-0.3, e * 0.26, 0.3)), M @ Vector((-0.36, e * 0.26, 0.0)), 0.04, 0.04, up=M.to_3x3() @ Y), c)
+
+
+def c_barrels(k, rng, M, o, f):
+    """Fish barrels, salt-crusted."""
+    for x, y, hgt in ((-0.4, 0.0, 0.9), (0.38, 0.12, 0.95), (0.0, -0.62, 0.85)):
+        barrel(k, rng, None, 0.3, hgt, M=M @ Matrix.Translation((x, y, 0)), salt=0.6, sides=8, hoops=(0.15, 0.85))
+
+
+def c_creels(k, rng, M, o, f):
+    for i, (x, y) in enumerate(((-0.3, 0.0), (0.35, 0.15))):
+        creel(k, rng, M @ Matrix.Translation((x, y, 0)), fill=0.2 if i else None, sides=8, rows=4)
+
+
+def c_bench(k, rng, M, o, f):
+    """A bench: a plank (a boat's thwart) on two stones; on a sill, a back rail too."""
+    L = o.get("len", 1.8)
+    for x in (-L / 2 + 0.25, L / 2 - 0.25):
+        e_box(k, M, (x - 0.14, -0.17, 0), (x + 0.14, 0.17, 0.4), jit(P.basalt, rng, 0.03), open_bottom=True)
+    e_box(k, M, (-L / 2, -0.2, 0.4), (L / 2, 0.2, 0.46), jit(P.drift, rng, 0.03))
+    if o.get("back"):
+        e_ = -1 if o["back"] == "s" else 1
+        for x in (-L / 2 + 0.2, L / 2 - 0.2):
+            e_box(k, M, (x - 0.03, e_ * 0.2 - 0.03, 0.4), (x + 0.03, e_ * 0.2 + 0.03, 0.88), jit(P.drift, rng, 0.03))
+        e_box(k, M, (-L / 2, e_ * 0.2 - 0.025, 0.7), (L / 2, e_ * 0.2 + 0.025, 0.88), jit(P.drift, rng, 0.03))
+
+
+def c_weeds(k, rng, M, o, f):
+    """Gone to weed: docks, nettles and moor grass, thick at the walls."""
+    r = o.get("r", 1.5)
+    for i in range(max(6, round(r * r * 5))):
+        a, d = rng.uniform(0, TAU), r * rng.uniform(0.05, 1.0) ** 0.6
+        big = i % 4 == 0
+        tuft(k, rng, M @ Vector((cos(a) * d, sin(a) * d, 0)), 0.3 if big else 0.18, 0.62 if big else 0.3, (P.grass, mix(P.grass, P.kelp, 0.5), P.kelp, mix(P.grass, P.heather, 0.3))[i % 4], 5 if big else 4)
+
+
+def c_rubble(k, rng, M, o, f):
+    """What fell: a heap of wall stone, a rafter or two, broken slates."""
+    r = o.get("r", 1.4)
+    bm = sphere((0, 0, 0), 1.0, 2)
+    at = M @ Vector((0, 0, 0))
+    for v in bm.verts:
+        b = 1 + 0.35 * nz(v.co.x * 2.6 + at.x, v.co.y * 2.6 + at.y, v.co.z * 2.6)
+        v.co = M @ Vector((v.co.x * r * b, v.co.y * r * 0.8 * b, max(-0.02, v.co.z) * 0.6 * b))
+    put(k, bm, lambda co, n, a=jit(P.basalt, rng, 0.02), b_=jit(P.pale, rng, 0.02): b_ if nz(co.x * 3.1, co.y * 3.1, co.z * 3.1) > 0.15 else a)
+    for i in range(2):
+        a = rng.uniform(0, PI)
+        put(k, beam(M @ Vector((cos(a) * -r * 0.9, sin(a) * -r * 0.7, 0.15)), M @ Vector((cos(a) * r * 0.9, sin(a) * r * 0.7, 0.55 + 0.2 * i)), 0.12, 0.12), jit(mix(P.drift, P.tar, 0.4), rng, 0.03))
+    raw(k, [([M @ Vector((x, y, 0.03)), M @ Vector((x + 0.3, y + 0.05, 0.03)), M @ Vector((x + 0.2, y + 0.26, 0.05))], jit(P.slate, rng, 0.03)) for x, y in ((r * 0.9, 0.3), (-r, -0.5), (0.2, r * 0.8), (r * 0.5, -r * 0.7))], two=True)
+
+
+def c_hearth(k, rng, M, o, f):
+    """A lost house's hearth, left standing when its walls came down: the breast and a stump of
+    flue, sooted above the opening."""
+    def col(co, n, c=jit(P.basalt, rng, 0.03)):
+        q = M.inverted() @ co
+        return mix(c, P.tar, 0.5) if q.z > 1.0 and abs(q.x) < 0.5 and q.y < 0 else mix(c, P.pale, 0.3) if n.z > 0.5 else c
+    put(k, lbox(Vector((-0.85, -0.3, 0)), Vector((0.85, 0.3, 1.9)), fn=lambda q: M @ q, open_bottom=True), col)
+    put(k, lbox(Vector((-0.5, -0.26, 1.9)), Vector((0.5, 0.3, 2.7)), fn=lambda q: M @ q, open_bottom=True), col)
+    put(k, lbox(Vector((-0.34, -0.2, 2.7)), Vector((0.3, 0.3, 3.3)), fn=lambda q: M @ q, open_bottom=True), lambda co, n, c=jit(P.brick, rng, 0.03): c)
+    raw(k, [([M @ Vector((-0.45, -0.31, 0.0)), M @ Vector((0.45, -0.31, 0.0)), M @ Vector((0.45, -0.31, 0.95)), M @ Vector((-0.45, -0.31, 0.95))], P.tar)])
+    e_box(k, M, (-0.6, -0.36, 0.95), (0.6, -0.28, 1.12), jit(P.pale, rng, 0.02))
+
+
+def c_paving(k, rng, M, o, f):
+    """A court cleared to the setts: big worn flags, paler where feet cross to the oven."""
+    w, d = o.get("w", 10.0), o.get("d", 8.0)
+    nx, ny = max(2, round(w / 2.2)), max(2, round(d / 2.0))
+    for i in range(nx):
+        for j in range(ny):
+            x0, x1, y0, y1 = -w / 2 + w * i / nx, -w / 2 + w * (i + 1) / nx, -d / 2 + d * j / ny, -d / 2 + d * (j + 1) / ny
+            worn = j == 0 or abs((x0 + x1) / 2 - w * 0.28) < 1.6
+            e_box(k, M, (x0 + 0.02, y0 + 0.02, 0.0), (x1 - 0.02, y1 - 0.02, 0.035 + 0.008 * rng.random()), jit(mix(P.basalt, P.pale, 0.75 if worn else 0.35), rng, 0.025), open_bottom=True)
+
+
+def c_table(k, rng, M, o, f):
+    """The bread board: a long plank table where loaves cool and roots wait their turn."""
+    L = o.get("len", 3.0)
+    for x in (-L / 2 + 0.3, L / 2 - 0.3):
+        for e in (-1, 1):
+            put(k, beam(M @ Vector((x, e * 0.3, 0)), M @ Vector((x, e * 0.08, 0.76)), 0.07, 0.07, up=M.to_3x3() @ X), jit(P.drift, rng))
+    e_box(k, M, (-L / 2, -0.4, 0.76), (L / 2, 0.4, 0.82), jit(P.drift, rng, 0.03))
+    for i in range(5):
+        x = -L / 2 + 0.4 + i * (L - 0.8) / 4
+        put(k, sphere(M @ Vector((x, 0.1 * (i % 2), 0.9)), 0.13, 1, squash=0.6), jit(mix(P.sand, P.amber, 0.45), rng, 0.02))
+
+
+def c_sundial(k, rng, M, o, f):
+    e_box(k, M, (-0.25, -0.25, 0), (0.25, 0.25, 0.12), jit(P.pale, rng, 0.02), open_bottom=True)
+    put(k, lathe([(0.14, 0.12), (0.1, 0.5), (0.12, 0.9), (0.24, 0.96), (0.24, 1.0)], 8, M), jit(P.pale, rng, 0.02))
+    raw(k, [([M @ Vector((0, -0.16, 1.0)), M @ Vector((0, 0.16, 1.0)), M @ Vector((0, 0.16, 1.16))], P.iron)], two=True)
+
+
+def c_trough(k, rng, M, o, f):
+    """A stone trough for rinsing roots, filled from the butts."""
+    c = jit(P.basalt, rng, 0.03)
+    for x0, x1, y0, y1 in ((-0.9, 0.9, -0.35, -0.25), (-0.9, 0.9, 0.25, 0.35), (-0.9, -0.8, -0.35, 0.35), (0.8, 0.9, -0.35, 0.35)):
+        e_box(k, M, (x0, y0, 0), (x1, y1, 0.55), c, open_bottom=True)
+    raw(k, [([M @ Vector((-0.8, -0.25, 0.45)), M @ Vector((0.8, -0.25, 0.45)), M @ Vector((0.8, 0.25, 0.45)), M @ Vector((-0.8, 0.25, 0.45))], mix(P.smoke, P.tar, 0.55))])
+
+
+def c_ropewalk(k, rng, M, o, f):
+    """A ropewalk: the jack and its wheel at one end, T-posts down the run to carry the strands,
+    the traveller at the far end; three strands laid up between them."""
+    L = math.hypot(o["to"][0] - o["_at"][0], o["to"][1] - o["_at"][1])
+    wood = lambda: jit(P.drift, rng, 0.03)  # noqa: E731
+    e_box(k, M, (-0.1, -0.45, 0), (0.1, 0.45, 1.25), wood())
+    e_wheel(k, rng, M @ Vector((-0.16, 0, 0.95)), M.to_3x3() @ X, 0.42)
+    put(k, tube([M @ Vector((-0.2, 0, 0.95)), M @ Vector((-0.34, 0, 0.95)), M @ Vector((-0.34, 0, 0.7))], 0.02, 4), P.iron)
+    m = max(2, round(L / 4.6))
+    for i in range(1, m):
+        x = L * i / m
+        put(k, tube([M @ Vector((x, 0, 0)), M @ Vector((x, 0, 1.3))], 0.05, 5), wood())
+        put(k, beam(M @ Vector((x, -0.5, 1.3)), M @ Vector((x, 0.5, 1.3)), 0.06, 0.08), wood())
+        for y in (-0.3, 0.0, 0.3):
+            put(k, tube([M @ Vector((x, y, 1.33)), M @ Vector((x, y, 1.45))], 0.012, 3), wood())
+    e_box(k, M, (L - 0.3, -0.4, 0), (L, 0.4, 0.12), wood())
+    e_box(k, M, (L - 0.2, -0.05, 0.12), (L - 0.1, 0.05, 1.2), wood())
+    rope = on(mix(P.sand, P.drift, 0.5), "cloth")
+    for y in (-0.3, 0.0, 0.3):
+        pts = [M @ Vector((0.1 + (L - 0.25) * i / (2 * m), y * (1 - 0.7 * (i / (2 * m)) ** 3), (1.15 if i % 2 else 1.34) if 0 < i < 2 * m else 1.1)) for i in range(2 * m + 1)]
+        put(k, tube(pts, 0.014, 3, caps=False), jit(rope, rng, 0.02), closed=False)
+    for i in range(3):
+        put(k, lathe([(0.2, 0.0), (0.22, 0.08), (0.2, 0.16)], 8, M @ Matrix.Translation((1.2 + 0.5 * i, 0.9, 0.0)) ), jit(rope, rng, 0.02))
+
+
+def c_wigwam(k, rng, M, o, f):
+    """Canes tied at the top, a climber on them."""
+    for i in range(5):
+        a = i / 5 * TAU
+        put(k, tube([M @ Vector((cos(a) * 0.45, sin(a) * 0.45, 0)), M @ Vector((cos(a) * 0.03, sin(a) * 0.03, 1.85))], 0.014, 3), jit(P.drift, rng))
+        for z in (0.35, 0.8, 1.2):
+            t = z / 1.85
+            tuft(k, rng, M @ Vector((cos(a) * 0.45 * (1 - t), sin(a) * 0.45 * (1 - t), z)), 0.13, 0.16, LEAF, 3)
+
+
+def c_stoop(k, rng, M, o, f):
+    """A door step with no door: two worn stones."""
+    w = o.get("w", 1.2)
+    e_box(k, M, (-w / 2, -0.3, 0), (w / 2, 0.3, 0.16), jit(mix(P.basalt, P.pale, 0.6), rng, 0.02), open_bottom=True)
+    e_box(k, M, (-w / 2 + 0.1, -0.05, 0.16), (w / 2 - 0.1, 0.3, 0.32), jit(mix(P.basalt, P.pale, 0.75), rng, 0.02), open_bottom=True)
+
+
+def c_ash_sacks(k, rng, M, o, f):
+    """Kelp ash in sacks, kept off the ground on a board."""
+    e_box(k, M, (-0.8, -0.3, 0), (0.8, 0.3, 0.06), jit(P.drift, rng, 0.03), open_bottom=True)
+    for i, (x, z) in enumerate(((-0.5, 0.06), (0.05, 0.06), (0.55, 0.06), (-0.2, 0.42))):
+        bm = sphere((0, 0, 0), 1.0, 1)
+        for v in bm.verts:
+            v.co = M @ Vector((x + v.co.x * 0.27, v.co.y * 0.24, z + 0.2 + v.co.z * 0.2))
+        put(k, bm, on(jit(mix(P.sand, P.smoke, 0.45), rng, 0.025), "cloth"))
+
+
+CONTENT = dict(
+    privy=c_privy, lean_to=c_lean_to, boat_shed=lambda k, rng, M, o, f: c_lean_to(k, rng, M, o, f, boat=True), peat=c_peat, butt=c_butt, hens=c_hens,
+    beds=c_beds, herbs=lambda k, rng, M, o, f: c_beds(k, rng, M, o, f, "herbs"), flowers=lambda k, rng, M, o, f: c_beds(k, rng, M, o, f, "flowers"),
+    boat=c_boat, nets=c_nets, kelp=c_kelp, frames=c_frames, slates=c_slates, blocks=c_blocks, pots=c_pots, cullet=c_cullet, timber=c_timber, handcart=c_handcart,
+    barrels=c_barrels, creels=c_creels, bench=c_bench, weeds=c_weeds, rubble=c_rubble, hearth=c_hearth, paving=c_paving, table=c_table, sundial=c_sundial,
+    trough=c_trough, ropewalk=c_ropewalk, barrow=c_barrow, wigwam=c_wigwam, stoop=c_stoop, ash_sacks=c_ash_sacks,
+)
+
+
+def gen_enclosure(k, rng, lot):
+    """An enclosure of the plan: its walls and what stands in it, as written there."""
+    env, wear_ = Env(lot), dict(lot["wear"])
+    wear_["empty_top"] = 1.0 if lot.get("state") in ("empty, sound", "roofless shell") else 0.0
+    for w in lot.get("walls", []):
+        mid = (Vector((*w["from"], 0)) + Vector((*w["to"], 0))) / 2
+        e_wall(k, rng, env, wear_, w, -mid if mid.length > 0.05 else Y)
+    top = 0.3
+    for c in lot.get("contents", []):
+        o = dict(c, _at=c["at"])
+        turn = o.get("turn", 0.0)
+        if c["what"] == "ropewalk":
+            turn = math.degrees(math.atan2(o["to"][1] - c["at"][1], o["to"][0] - c["at"][0]))
+        M = e_M(c["at"], turn)
+        if c["what"] == "washing":
+            c_washing(k, rng, Matrix.Translation((c["at"][0], c["at"][1], 0)), o, lot, env)
+        else:
+            CONTENT[c["what"]](k, rng, M, o, lot)
+    if not k.b.bm.verts:  # nothing written: a marker stone, so the model is never empty
+        e_box(k, Matrix.Identity(4), (-0.1, -0.1, 0), (0.1, 0.1, 0.1), P.basalt)
+    top = max(v.co.z for v in k.b.bm.verts)
+    return dict(ridge_m=round(top, 3))
+
+
+# The plan's enclosure kinds (one folder each, so the client and the checks tell them apart).
+ENCLOSURES = dict(yard=3000, back_plot=3000, toft=3500, walled_garden=3500, oven_court=3500, drying_green=4000, wind_wall=1500, ladder_corner=1500,
+                  ropewalk=1500, quarry_bench=1500, graveyard_wall=3000, sill=600, wynd_washing=600)
+GEN.update({kind: (gen_enclosure, budget) for kind, budget in ENCLOSURES.items()})
 
 
 def neighbours(plan):

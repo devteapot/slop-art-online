@@ -1,5 +1,21 @@
 # Validation record (player)
 
+## 2026-11-11 goods-2: making glass at a furnace that burns fuel (dev-box)
+
+Branch `goods-2` (from main `62d861f0`, merged with main four times, last with `94050f9a` at `6fefe997`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+- `workplace.py` (new) on cullet-laws: `player-goods2-glass` 15 of 15, merged `player-goods2m-glass` 15 of 15, third merge `player-goods2f-glass` 15 of 15, fourth `player-goods2g-glass` 15 of 15. Out: refused "the furnace is out: feed it first", nothing taken. Fed one peat: lit for 40 s (one unit at 3 a game hour on the 48-minute day), the feed seen as `doing` (code `feed`) at the furnace; glass refused "has too little fuel left for it (it takes 1, it has 0.99)". Fed three more: glass made from 1 ash and 2 sand, the furnace's `lit_until_ms` 40,001 ms earlier than before, `doing` (code `make`) at the furnace while it lasts and gone after; "You did what you had decided: make glass → furnace (+1 glass)." in `my_experience`.
+- The authority has no offered-acts list; the client's F list is the client's own `_check` on its facts (features/workplace.md).
+
+## 2026-11-11 fov-1: perceiving by facing (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `player-face1-a` (`human_face`): `face.py` 11 of 11 (`face.json`). The first two runs failed only the bucket check: 40 looks over HTTP never exhausted the shipped refill (30 a second), then a refill of 1 a second refilled before the `human_move`. The laws are now narrowed to 0.2 a second and a burst of 3 for that check.
+- `player-fov1-m` (after merging `origin/main` `accf27c8`): `fov.py` 18 of 18.
+- `player-fov1-d` (the final build before the merge): `fov.py` 18 of 18 (`fov.json`). `player-fov1-a` (the build before): 18 of 18. Two runs in between (`-b`, `-c`) wrote no `fov.json`, because the driver's output was piped into `head`, which closed it. The first attempt failed the field's edge and "R behind not in view" with R 4 m off, because the keep metre widens the 3 m near ring and the 3.7 m daytime side vision past 4 m. R is now 5.5 m off.
+- Not run on this change: the other player scripts (`appraise`, `approach`, `combat`, `gesture`, `deal`, `drop`, `new_skill`, `told`, `host`, `command`).
+
 
 
 ## 2026-11-11 rules-offers: trade offers a player receives (Spark)

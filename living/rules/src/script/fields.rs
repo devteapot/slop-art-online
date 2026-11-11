@@ -142,6 +142,16 @@ impl Fields {
         self.summaries.get(&(name.to_string(), arity)).map(|v| v.as_slice())
     }
 
+    /// These summaries with `top`'s over them (a script whose functions replace some of these):
+    /// what each function reads, each from its own source. Either giving up gives up.
+    pub fn under(mut self, top: Fields) -> Fields {
+        if self.gave_up || top.gave_up {
+            return Fields { summaries: HashMap::new(), gave_up: true };
+        }
+        self.summaries.extend(top.summaries);
+        self
+    }
+
     pub fn analyze(ast: &AST) -> Fields {
         let defs: Vec<_> = ast.iter_fn_def().collect();
         let key = |p: rhai::Position| (p.line().unwrap_or(0), p.position().unwrap_or(0));

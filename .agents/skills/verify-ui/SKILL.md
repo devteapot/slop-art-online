@@ -1,6 +1,6 @@
 ---
 name: verify-ui
-description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), what you stand on never fading (stairs, terraces, the quay's edge, on a Cullet world), and later the skill bar with sheathe and draw, and Settings. Use when changing living/game/src/ui/*, the camera's fade (envs.rs cutaway), keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, pointer.rs or the live script, or when the screen shows something other than what the client received.
+description: Verify Slop Art Online's game interface (interface D in living/game, Bevy, in its themes) by driving the real client headless through its live script (cursor, clicks, slides, keys, UI dumps) on scratch verify-ui-* worlds. Covers the windows (opening, moving and snapping between anchors, closing, the Esc order, Menu), the themes (F4, Settings › Play › Look, kept in the settings file), talking to a person (addressing, the person window, Log and people, introduce yourself), items on people (the pack, item acts, dragging onto someone, hold F › Give ›), what you stand on never fading (stairs, terraces, the quay's edge, on a Cullet world), the cursor while the view turns or zooms (a two-finger pan, a pinch, a left drag), and later the skill bar with sheathe and draw, and Settings. Use when changing living/game/src/ui/*, the camera's fade (envs.rs cutaway), camera.rs, keys.rs, looks.rs, heard.rs, talk.rs, verbs.rs, pointer.rs or the live script, or when the screen shows something other than what the client received.
 ---
 
 # Verify the game interface
@@ -29,7 +29,7 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 ```bash
 S=.agents/skills/verify-ui/scripts
-$S/check.py --run $R                       # all scenarios: windows talk items themes pick (PASS/FAIL per check)
+$S/check.py --run $R                       # all scenarios: windows talk items themes pick turns (PASS/FAIL per check)
 LIVING_GAME_THEME=night $S/check.py --run $R windows talk items   # the same in a theme; evidence in <scenario>-night/
 $S/check.py --run $R windows               # one
 $S/check.py --run $R support               # on a Cullet world (`--seed cullet`): what you stand on never fades
@@ -47,6 +47,7 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `dump:NAME` | Writes `NAME.json`: open windows (top last) with anchors and rectangles, the Menu list, the list of acts, the box and whom it addresses, settings, every tagged node shown with its centre, and the cursor pick: `under` (who is under the cursor, `living/game/src/pick.rs`), `hovered` (id, label: the nameplates shown as hovered), `targeted` (the target plate) and `seen` (each body's feet and head on screen, its depth and its distance from the cursor's ground point) |
 | `point:ID[:H]` | Keeps the game's cursor on character ID as drawn, H m above their feet (default 0.3; 1.3 is the chest), frame after frame, until `cursor:` or another `point:` |
 | `menu:f@id:N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list on someone; wait for a scene; a photograph; two-finger scroll; a double tap |
+| `cursor:X,Y`, `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | The cursor at fractions of the picture; a two-finger pan, a left drag or a pinch through the pointer's paths; no framing contexts (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
 
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
 - buttons and Menu: `pack`, `menu`, `menu:Character|Skills|Log|Settings|Leave`;
@@ -83,7 +84,7 @@ It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. 
 
 ## What this skill does not prove
 
-- A real window, trackpad or system cursor: runs are headless, so the cursor is the script's. The capture, Esc giving the system cursor back and two-finger gestures need hardware (a play-test).
+- A real window, trackpad or system cursor: runs are headless, so the cursor is the script's. The capture, Esc giving the system cursor back and how winit reports a real two-finger pan or pinch need hardware (a play-test); `turns` drives what the pointer does with them.
 - What residents answer: no mind service runs.
 - That the rules handle what the UI sends correctly: use `verify-player` and `verify-core`.
 - Frame time or scale.

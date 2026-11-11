@@ -184,6 +184,7 @@ pub fn draw(
             ui.add(egui::Slider::new(&mut s.line_strength, 0.0..=1.0).text("edge lines"));
             ui.add(egui::Slider::new(&mut s.depth_threshold, 0.01..=0.3).text("depth edge threshold"));
             ui.add(egui::Slider::new(&mut s.normal_threshold, 0.05..=1.5).text("crease threshold"));
+            ui.add(egui::Slider::new(&mut s.crease_step, 0.0..=0.3).text("smallest crease step (m)"));
             ui.add(egui::Slider::new(&mut s.line_width, 0.5..=3.0).text("line width (px)"));
             ui.horizontal(|ui| {
                 ui.label("line colour");

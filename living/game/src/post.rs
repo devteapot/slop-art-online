@@ -108,7 +108,8 @@ pub fn update(
         params: Vec4::new(s.depth_threshold, s.normal_threshold, s.line_width * scale, near),
         fade: Vec4::new(s.line_fade[0], s.line_fade[1], s.screen_rim_width * scale, if on { s.screen_rim } else { 0.0 }),
         rim: Vec4::new(rr, rg, rb, 0.0),
-        sun: screen_sun.extend(0.0).extend(0.0),
+        // z: the smallest step a crease line marks (`Style::crease_step`).
+        sun: screen_sun.extend(s.crease_step).extend(0.0),
         grade: Vec4::new(gr, gg, gb, if on { s.grade } else { 0.0 }),
         screen: Vec4::new(w, h, 1.0 / w, 1.0 / h),
         world_from_clip: gtf.to_matrix() * camera.clip_from_view().inverse(),

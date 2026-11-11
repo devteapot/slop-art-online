@@ -6,7 +6,8 @@ publish = false
 
 [features]
 default = []
-rhai = ["dep:rhai"]
+# The Rhai adapters (rhai_engine.rs). Rhai itself is always linked: living-rules runs it.
+rhai = []
 rune = ["dep:rune"]
 wasmi = ["dep:wasmi"]
 piccolo = ["dep:piccolo", "dep:getrandom02", "dep:getrandom03"]
@@ -19,7 +20,9 @@ all = ["rhai", "rune", "wasmi", "piccolo", "koto"]
 living-rules = { workspace = true }
 # Record terms in the hook fixtures.
 serde_json = "1"
-rhai = { workspace = true, optional = true }
+# The same pinned Rhai as living-rules (one crate after feature unification), for its hashing
+# seed (`fix_hashing`) and the adapters.
+rhai = { workspace = true }
 rune = { version = "=0.14.2", default-features = false, features = ["std"], optional = true }
 wasmi = { version = "=2.0.0", default-features = false, features = ["std", "validate", "stable", "auto-dispatch"], optional = true }
 piccolo = { version = "=0.3.3", optional = true }
