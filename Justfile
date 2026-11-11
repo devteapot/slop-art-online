@@ -47,7 +47,7 @@ living-token:
 # Update the module in place (keeps world data) and install the current skill rules.
 living-publish: living-build
     {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{living_db}} -y
-    {{living_stdb}} call -s local {{living_db}} install_script "$(python3 -c 'import json,sys; print(json.dumps(open("living/scripts/skills.rhai").read()))')"
+    python3 living/tools/install_script.py {{living_db}}
     just living-token
 
 # Choose the active seed (living/seeds/<name>.json → world.json); takes effect at the next reset.

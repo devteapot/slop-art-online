@@ -109,23 +109,52 @@ impl Resolved {
     }
 }
 
-/// Whether a spot is near a fire and near a shelter (a house is both: a roof and a hearth).
-pub fn warmth(ctx: &ReducerContext, at: (f32, f32)) -> (bool, bool) {
-    let mut near_fire = false;
-    let mut near_shelter = false;
+/// What the structures near a spot give it: a fire's warmth and a roof (light is
+/// `common::lit_at`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Warmth {
+    pub fire: bool,
+    pub shelter: bool,
+}
+
+/// Whether a spot is near a fire and near a shelter (a house is both: a roof and a hearth). What
+/// each kind does is the script's (its traits in `structures()`): a roof shelters within
+/// `shelter_warmth`; a fire that needs no feeding warms within `fire_warmth` (a building with
+/// one within `shelter_warmth`); a fire that burns fuel warms within its `burns.warmth` only
+/// while lit (`lit_until_ms` ahead of now).
+pub fn warmth(ctx: &ReducerContext, at: (f32, f32), now: u64) -> Warmth {
+    let mut w = Warmth::default();
     let laws = common::laws(ctx);
     let sc = common::scripts(ctx);
-    for (s, d) in common::structures_near(ctx, at, laws.fire_warmth.max(laws.shelter_warmth)) {
-        // What each kind does is the script's (`structure_traits()`): a hearth warms, a roof
-        // shelters. An open fire warms within `fire_warmth`; a building within `shelter_warmth`.
+    for (s, d) in common::structures_near(ctx, at, sc.warmth_reach(&laws)) {
         let t = sc.structure(&s.kind);
-        let reach = if t.roof { laws.shelter_warmth } else { laws.fire_warmth };
-        if d <= reach {
-            near_fire |= t.warms;
-            near_shelter |= t.roof;
+        if t.roof && d <= laws.shelter_warmth {
+            w.shelter = true;
+        }
+        match &t.burns {
+            Some(b) => {
+                if living_rules::fire::lit(s.lit_until_ms, now) {
+                    w.fire |= d <= b.warmth;
+                }
+            }
+            None => {
+                let reach = if t.roof { laws.shelter_warmth } else { laws.fire_warmth };
+                w.fire |= t.warms && d <= reach;
+            }
         }
     }
-    (near_fire, near_shelter)
+    w
+}
+
+/// Whether a structure is a fire burning now, and the fuel it holds (units; a fire that needs
+/// no feeding always burns and holds none).
+pub fn fire_state(ctx: &ReducerContext, s: &Structure, now: u64) -> (bool, f32) {
+    let sc = common::scripts(ctx);
+    let t = sc.structure(&s.kind);
+    match &t.burns {
+        Some(b) => (living_rules::fire::lit(s.lit_until_ms, now), living_rules::fire::fuel_left(s.lit_until_ms, now, b.rate, common::world(ctx).day_ms)),
+        None => (t.fire(), 0.0),
+    }
 }
 
 pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
@@ -138,7 +167,7 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         let n = common::needs(&v, now);
         (n.hp, n.hunger, n.energy, v.hurt_by, (v.hurt_ms != 0).then(|| now.saturating_sub(v.hurt_ms) as f32))
     }).unwrap_or((0.0, 0.0, 0.0, 0, None));
-    let (near_fire, near_shelter) = warmth(ctx, at);
+    let warm = warmth(ctx, at, now);
     ActorFacts {
         id,
         kind,
@@ -146,8 +175,8 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         hp,
         hunger,
         energy,
-        near_fire,
-        near_shelter,
+        near_fire: warm.fire,
+        near_shelter: warm.shelter,
         terrain: common::map(ctx).at(at.0, at.1).name().into(),
         activity: ctx.db.activity().id().find(id).filter(|a| a.phase == 1).map(|a| a.skill).unwrap_or_default(),
         inv: common::inv_list(ctx, id as u64),
@@ -242,7 +271,8 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
             if let Some(n) = ctx.db.resource_node().id().find(t.id) {
                 f.class = "resource".into();
                 f.id = n.id;
-                f.amount = common::amount_now(ctx, &n, now);
+                // A spot of a shared stock has what its stock has.
+                f.amount = common::amount_now(ctx, &common::stock_of(ctx, &n), now);
                 f.dist = dist(from, (n.x, n.y));
                 f.kind = n.kind;
             }
@@ -255,6 +285,7 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
                 f.class = "structure".into();
                 f.id = s.id;
                 f.dist = dist(from, (s.x, s.y));
+                (f.lit, f.fuel) = fire_state(ctx, &s, now);
                 f.inv = common::inv_list(ctx, STRUCTURE_BIT | s.id);
                 f.kind = s.kind;
             }
@@ -339,7 +370,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
             // A seed's hostile pack has no fear of people (its background says so).
             actor.bold = ctx.db.background().id().find(id).is_some_and(|b| b.text.contains("\"bold\":true"));
             if let Some(tp) = target_pos(ctx, &a.target, now) {
-                target.near_fire = warmth(ctx, tp).0;
+                target.near_fire = warmth(ctx, tp, now).fire;
                 let (me, them) = (id, target.id as u32);
                 target.company = common::creatures_near(ctx, tp, common::laws(ctx).alone_within, now).iter().filter(|c| &*c.kind == "person" && c.id != me && c.id != them).count() as u32;
             }
@@ -1184,7 +1215,9 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
             }
             Effect::Remove { item, qty } => common::inv_remove(ctx, me as u64, &item, qty)?,
             Effect::Harvest { qty } => {
-                let mut n = ctx.db.resource_node().id().find(a.target.id).ok_or("resource gone")?;
+                let spot = ctx.db.resource_node().id().find(a.target.id).ok_or("resource gone")?;
+                // A spot of a shared stock takes from the node that holds it.
+                let mut n = common::stock_of(ctx, &spot);
                 let have = common::amount_now(ctx, &n, now);
                 if have < qty {
                     return Err(format!("the {} is depleted", n.kind));
@@ -1358,7 +1391,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 let _ = w;
                 let holder = if a.item == "sign" {
                     common::invalidate_structures(ctx);
-                    let s = ctx.db.structure().insert(Structure { id: 0, kind: "sign".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now });
+                    let s = ctx.db.structure().insert(Structure { id: 0, kind: "sign".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now, lit_until_ms: 0 });
                     STRUCTURE_BIT | s.id
                 } else {
                     common::inv_add(ctx, me as u64, "tablet", 1);
@@ -1528,6 +1561,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
                     regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
                     at_ms: now,
+                    pool: 0,
                 });
                 common::chronicle(ctx, now, "plant", me, 0, at, format!("{my_name} planted a berry bush"));
                 notes.push("planted a berry bush".into());
@@ -1581,7 +1615,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 } else {
                     let p = (tx as f32 + 0.5, ty as f32 + 0.5);
                     common::invalidate_structures(ctx);
-                    let s = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: me, built_ms: now });
+                    let s = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: me, built_ms: now, lit_until_ms: 0 });
                     let community = ctx.db.membership().member().find(me).map(|m| m.community).unwrap_or(0);
                     ctx.db.gate().insert(Gate { id: s.id, x: tx, y: ty, open: true, community, changed_ms: now, changed_by: me });
                     common::chronicle(ctx, now, "build", me, 0, p, format!("{my_name} built a gate"));
@@ -1615,12 +1649,21 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     notes.push(note);
                 }
             }
+            Effect::Fuel { item, qty } => notes.push(feed(ctx, me, a.target.id, &item, qty, now)?),
+            Effect::Burn { units } => {
+                let mut s = ctx.db.structure().id().find(a.target.id).ok_or("the fire is gone")?;
+                let sc = common::scripts(ctx);
+                let Some(b) = sc.structure(&s.kind).burns.clone() else { return Err(format!("the {} burns no fuel", s.kind)) };
+                s.lit_until_ms = living_rules::fire::drawn(s.lit_until_ms, now, units, b.rate, common::world(ctx).day_ms).ok_or_else(|| format!("the {} has too little fuel left", s.kind))?;
+                common::invalidate_structures(ctx);
+                ctx.db.structure().id().update(s);
+            }
             Effect::Build { kind } => {
-                if !catalog::STRUCTURES.contains(&kind.as_str()) {
+                if !catalog::is_structure(&kind) {
                     return Err(format!("cannot build {kind}"));
                 }
                 common::invalidate_structures(ctx);
-                let s = ctx.db.structure().insert(Structure { id: 0, kind: kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now });
+                let s = ctx.db.structure().insert(Structure { id: 0, kind: kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now, lit_until_ms: 0 });
                 common::chronicle(ctx, now, "build", me, 0, at, format!("{my_name} built a {kind}"));
                 witnessed(ctx, now, at, "built", me, 0, &format!("{{a}} built a {kind} at ({:.0},{:.0})", at.0, at.1), 0.4, &[me]);
                 notes.push(format!("built {kind} #{}", s.id));
@@ -1641,8 +1684,30 @@ fn move_tablets(ctx: &ReducerContext, item: &str, from: u64, to: u64, qty: u32) 
     }
 }
 
-fn technique_help(t: &str) -> &'static str {
-    living_rules::catalog::technique(t).map(|t| t.help).unwrap_or("")
+fn technique_help(t: &str) -> String {
+    living_rules::catalog::technique(t).map(|t| t.help).unwrap_or_default()
+}
+
+/// Put `qty` of `item` from the actor's pack on the fire `id` as fuel: each worth the item's
+/// fuel trait (the kind's `burns.fuel`) in units. An out fire is lit, a lit one burns longer;
+/// the fire's one written value is when it runs out (`lit_until_ms`), and the items are gone.
+fn feed(ctx: &ReducerContext, me: u32, id: u64, item: &str, qty: u32, now: u64) -> Result<String, String> {
+    let mut s = ctx.db.structure().id().find(id).ok_or("the fire is gone")?;
+    let sc = common::scripts(ctx);
+    let Some(b) = sc.structure(&s.kind).burns.clone() else { return Err(format!("the {} burns no fuel", s.kind)) };
+    let worth = sc.tables().number("items", item, &b.fuel).filter(|w| *w > 0.0).ok_or_else(|| format!("{item} is not fuel for the {}", s.kind))?;
+    let was_lit = living_rules::fire::lit(s.lit_until_ms, now);
+    let until = living_rules::fire::fed(s.lit_until_ms, now, worth as f32 * qty as f32, b.rate, common::world(ctx).day_ms, b.holds).ok_or_else(|| format!("the {} cannot hold that much fuel", s.kind))?;
+    common::inv_remove(ctx, me as u64, item, qty)?;
+    s.lit_until_ms = until;
+    let (kind, at) = (s.kind.clone(), (s.x, s.y));
+    common::invalidate_structures(ctx);
+    ctx.db.structure().id().update(s);
+    if !was_lit {
+        witnessed(ctx, now, at, "lit", me, 0, &format!("{{a}} lit the {kind}"), 0.3, &[me]);
+    }
+    let left_h = (until - now) as f64 / (common::world(ctx).day_ms as f64 / 24.0);
+    Ok(format!("{} the {kind} with {qty} {item}: it burns about {left_h:.1} more hours", if was_lit { "fed" } else { "lit" }))
 }
 
 
@@ -2156,7 +2221,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     let held: Vec<Artifact> = ctx.db.artifact().holder().filter(id as u64).collect();
     if !left.is_empty() || !held.is_empty() || kind == "person" {
         common::invalidate_structures(ctx);
-        let s = ctx.db.structure().insert(Structure { id: 0, kind: "remains".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: id, built_ms: now });
+        let s = ctx.db.structure().insert(Structure { id: 0, kind: "remains".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: id, built_ms: now, lit_until_ms: 0 });
         for (item, q) in left {
             common::inv_add(ctx, STRUCTURE_BIT | s.id, &item, q);
         }

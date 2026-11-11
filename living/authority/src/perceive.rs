@@ -629,7 +629,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
 
     let mut groups: Vec<(String, u32, Value)> = Vec::new();
     for (n, d) in common::resources_near(ctx, at, r) {
-        let amount = common::amount_now(ctx, &n, now).floor();
+        let amount = common::amount_now(ctx, &common::stock_of(ctx, &n), now).floor();
         if let Some(g) = groups.iter_mut().find(|g| g.0 == n.kind) {
             g.1 += 1;
             continue;
@@ -644,7 +644,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         if s.owner != 0 {
             o["by"] = json!(common::label_for(ctx, &me, s.owner));
         }
-        if s.kind == "campfire" {
+        // A fire that needs no feeding burns; one that burns fuel burns while it has fuel (what
+        // anyone near it sees: the flames, and roughly how much is left on it).
+        let sc = common::scripts(ctx);
+        let t = sc.structure(&s.kind);
+        if let Some(b) = &t.burns {
+            let (lit, fuel) = crate::act::fire_state(ctx, &s, now);
+            o["state"] = json!(if lit { format!("burning, about {:.0} hours of {} left on it", (fuel / b.rate).max(0.5), b.fuel) } else { "out".to_string() });
+        } else if t.fire() {
             o["state"] = json!("burning");
         }
         if s.kind == "sign" {

@@ -58,8 +58,8 @@ flowchart LR
 | `vitals` | hp, hunger, energy anchored at `at_ms` with current rates | on rate change / damage |
 | `activity` | current skill, target, start/end | per action |
 | `inventory` | `(owner, item) → qty` | per action |
-| `resource_node` | kind, position, amount, lazy regrowth anchor | on gather |
-| `structure` | campfire / shelter / storage | on build |
+| `resource_node` | kind, position, amount, lazy regrowth anchor; `pool`: the node whose stock it shares (a fishing ground) | on gather |
+| `structure` | campfire / shelter / storage / a fire that eats fuel; `lit_until_ms`: when a fire that burns fuel runs out ([goods](WORLD_RULES.md#goods-recipes-and-fuel)) | on build; on feeding a fire or a recipe drawing its fuel |
 | `brain` | behavior graph JSON, revision, sequence cursors, active path, `next_think_ms` | per think (only when changed) |
 | `experience` | durable per-character log of what reached the senses; minds track progress in `mind_cursor` | per event × witnesses |
 | `deliberation` (private, per-controller view) | pending LLM deliberation with a scene snapshot | per trigger |

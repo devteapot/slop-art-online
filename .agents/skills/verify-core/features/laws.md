@@ -29,5 +29,5 @@ Start it right after launch: the day checks need the world's morning, then the s
 - Started at night (a rerun on the same database), the scene skips the day checks and says so; launch afresh for them. The mirrored dark spot is skipped when it is not open ground with a clear line.
 - `launch` does not install the plain `skills.rhai` on a seed with its own laws (it would drop them); `state.json` records `seed_laws`.
 - `install_script` installs a whole script: installing the shipped one on such a world removes its laws until it is created again.
-- The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it".
+- The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it". Since `goods-1` the lamp burns oil and lights only while lit: the seed gives it 8 units (32 game hours, past the scene's night at 21:00); a lamp seeded without fuel is dark and the lamplight check fails.
 - These checks do not measure cost: longer sight and re-projection every sweep cost more per player (docs/CULLET_RULES.md, "Costs").

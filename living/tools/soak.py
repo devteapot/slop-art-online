@@ -667,8 +667,11 @@ def _run(a, procs):
     start_stdb(r)
     start_neo4j(r, neo_pw)
     stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", db, "--delete-data", "-y")
-    stdb("call", "-s", "local", db, "install_script", json.dumps((ROOT / "living/scripts/skills.rhai").read_text()))
     token = admin_token()
+    # Over HTTP: the script is past the 128 KiB one command-line argument may hold.
+    code, body = http(f"/v1/database/{db}/call/install_script", [(ROOT / "living/scripts/skills.rhai").read_text()], token, timeout=180)
+    if code != 200:
+        raise RuntimeError(f"install_script: {code} {body[-500:]}")
     ident = json.loads(http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
     land = sql(db, "SELECT * FROM land", token)[0]
     world = sql(db, "SELECT * FROM world", token)[0]

@@ -152,7 +152,10 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let night = common::night(ctx, w, now);
     // How dark it is matters to the key only when the rates law reads it (an eased dusk).
     let dark = if common::scripts(ctx).reads("rates", "daylight") { common::dark(ctx, w, now) } else if night { 1.0 } else { 0.0 };
-    let (near_fire, near_shelter) = act::warmth(ctx, at);
+    // A fire that goes out changes this on the next look (its `lit_until_ms` passes): nothing
+    // has to be told when it burns down.
+    let warm = act::warmth(ctx, at, now);
+    let (near_fire, near_shelter) = (warm.fire, warm.shelter);
     let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
     let season = common::season(ctx, now);
     let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
