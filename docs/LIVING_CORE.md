@@ -588,7 +588,7 @@ Names such as `db`, `run`, `neo4j.container` and `neo4j.volume` are taken litera
 
 Options for tests and captures:
 - `--client-env K=V` adds client environment, for example a scripted `LIVING_GAME_LIVE_PLAN` with `LIVING_GAME_LIVE={session}/live` for a headless run that quits by itself.
-- `--no-record` skips tool 1's recorder, and `--no-screen` keeps its rows but not the screen.
+- `--no-record` skips tool 1's recorder. By default the client records the session's video from its own frames ([play report](PLAY_REPORT.md)); `--no-video` records stills every few seconds instead.
 - `--cost DIR --json` prints the totals as JSON.
 
 The launcher clears inherited `LIVING_*` and `TRIALS_*` variables from the shell before starting children. The admin token, the store's password and provider keys reach the children only through their environments; they are never printed or logged.
