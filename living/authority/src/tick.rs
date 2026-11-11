@@ -213,7 +213,7 @@ fn spoil(ctx: &ReducerContext, now: u64) {
     let mut kept: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
     let mut carrier: (u64, f32) = (u64::MAX, 1.0);
     for mut r in rows.into_iter().filter(|r| r.qty > 0) {
-        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.num_of("spoil_rate", &r.item, 0.0) as f32);
+        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.spoil_per_min(&r.item) as f32);
         if rate <= 0.0 {
             continue;
         }
@@ -304,7 +304,7 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
     };
     let Some(at) = ctx.db.body().id().find(first.id).map(|bd| common::pos(&bd, now)) else { return };
     let kind = first.kind.clone();
-    let litter = ctx.rng().gen_range(1..=common::life_of(&kind).litter.max(1));
+    let litter = ctx.rng().gen_range(1..=common::life_of(ctx, &kind).litter.max(1));
     let (controller, minded) = if first.ai { (first.controller, true) } else { common::mind_controller(ctx) };
     let mut names = Vec::new();
     for _ in 0..litter {
@@ -409,7 +409,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     migration(ctx, &kinds, now);
     // Life stages and deaths of old age, at the world's pace.
     for c in alive {
-        let life = common::life_of(&c.kind);
+        let life = common::life_of(ctx, &c.kind);
         let age = common::age_days(&c, &w, now);
         if life.fraction(age, common::pace(&w)) >= life.deathline(c.id) {
             crate::act::die(ctx, c.id, "old age", now, 0);
@@ -429,7 +429,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         birth(ctx, e.a, e.b, now);
         let w = common::world(ctx);
         let kind = ctx.db.character().id().find(e.a).map(|c| c.kind).unwrap_or_default();
-        let until = now + (common::life_of(&kind).interbirth_days(common::pace(&w)) * w.day_ms as f32) as u64;
+        let until = now + (common::life_of(ctx, &kind).interbirth_days(common::pace(&w)) * w.day_ms as f32) as u64;
         for id in [e.a, e.b] {
             ctx.db.rearing().id().delete(id);
             if ctx.db.character().id().find(id).is_some_and(|c| c.alive) {

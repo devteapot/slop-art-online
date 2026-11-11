@@ -140,6 +140,83 @@ pub fn sight(s: &Scripts) -> (f32, f32, f32, f32, f32, f32) {
     (sense(&person(false, false, false)).sight, sense(&person(false, false, true)).sight, sense(&person(true, false, true)).sight, s.glow_unshared(&person(false, true, true)).unwrap_or(0.0), s.glow_unshared(&person(true, false, true)).unwrap_or(0.0), sense(&person(false, false, false)).hearing)
 }
 
+/// Share of a stack of `item` left after `days` game days, spoiling as the authority spoils it:
+/// once a real minute, that minute's share in expectation (`tick::spoil`), carried by a person or
+/// kept in a storage (`kept_spoil`).
+pub fn kept_after(s: &Scripts, item: &str, days: f64, in_store: bool) -> f64 {
+    let rate = s.spoil_per_min(item) * if in_store { s.num_of("kept_spoil", "storage", 1.0 / 3.0) } else { s.num_of("carried_spoil", "person", 1.0) };
+    (1.0 - rate).powf(days * 24.0 * s.hour_ms() / 60_000.0)
+}
+
+/// Game days until half a stack has spoilt (as [`kept_after`]).
+pub fn half_gone_days(s: &Scripts, item: &str, in_store: bool) -> f64 {
+    let rate = s.spoil_per_min(item) * if in_store { s.num_of("kept_spoil", "storage", 1.0 / 3.0) } else { s.num_of("carried_spoil", "person", 1.0) };
+    if rate <= 0.0 {
+        return f64::INFINITY;
+    }
+    0.5f64.ln() / (1.0 - rate).ln() / (24.0 * s.hour_ms() / 60_000.0)
+}
+
+/// Units a resource regrowing `per_min` a real minute (the `regen` the authority keeps) gives in
+/// a game day of growing time.
+pub fn regrown_a_day(s: &Scripts, per_min: f64) -> f64 {
+    per_min * 24.0 * s.hour_ms() / 60_000.0
+}
+
+/// Cullet's plan, as `living/tools/cullet_plan.py` writes it.
+pub fn cullet_plan() -> serde_json::Value {
+    serde_json::from_str(include_str!("../../seeds/worlds/cullet/plan.json")).expect("Cullet's plan parses")
+}
+
+/// What the plan's resources give in a game day, by kind (a pool counted once): each node's
+/// `regrow_per_h` turned into real time for the day as the authority keeps it, then back into a
+/// game day.
+pub fn plan_daily(s: &Scripts, plan: &serde_json::Value) -> std::collections::BTreeMap<String, f64> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut pools = std::collections::BTreeSet::new();
+    for r in plan["resources"].as_array().unwrap() {
+        let kind = r["kind"].as_str().unwrap();
+        let pool = r["pool"].as_str().unwrap_or("");
+        if !pool.is_empty() && !pools.insert(pool.to_string()) {
+            continue;
+        }
+        let per_min = r["regrow_per_h"].as_f64().map_or_else(|| s.regrow_per_min(kind, 0.5), |v| (v as f32) as f64 * s.per_minute()) as f32;
+        *out.entry(kind.to_string()).or_insert(0.0) += regrown_a_day(s, per_min as f64);
+    }
+    out
+}
+
+/// The goods outcomes in a game day (docs/CULLET_RULES.md): spoiling, regrowth, traps, remains.
+#[derive(Debug, Clone)]
+pub struct Goods {
+    pub fish_left_a_day: f64,
+    pub fish_half_gone_days: f64,
+    pub fish_half_gone_stored_days: f64,
+    pub smoked_half_gone_days: f64,
+    pub roots_half_gone_days: f64,
+    pub greens_half_gone_days: f64,
+    pub store_left_after_6_days: (f64, f64),
+    pub traps_a_day: f64,
+    pub person_remains_days: f64,
+    pub fishing_spot_a_day: f64,
+}
+
+pub fn goods(s: &Scripts) -> Goods {
+    let day_ms = 24.0 * s.hour_ms();
+    Goods {
+        fish_left_a_day: kept_after(s, "fish", 1.0, false),
+        fish_half_gone_days: half_gone_days(s, "fish", false),
+        fish_half_gone_stored_days: half_gone_days(s, "fish", true),
+        smoked_half_gone_days: half_gone_days(s, "smoked_fish", false),
+        roots_half_gone_days: half_gone_days(s, "roots", false),
+        greens_half_gone_days: half_gone_days(s, "greens", false),
+        store_left_after_6_days: (kept_after(s, "smoked_fish", 6.0, true), kept_after(s, "roots", 6.0, true)),
+        traps_a_day: if s.trap_every_ms() > 0.0 { day_ms / s.trap_every_ms() } else { 0.0 },
+        person_remains_days: s.remains_ms("person") / day_ms,
+        fishing_spot_a_day: regrown_a_day(s, s.regrow_per_min("fishing_spot", 0.5)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,6 +319,49 @@ mod tests {
     }
 
     /// Prints docs/CULLET_RULES.md's outcome table from the scripts.
+    /// Cullet's goods per game day against SMALL_CITY §2 and §4: raw fish gone in about a day,
+    /// stored food that lasts the six days it is meant to, and a land that yields 1.3 times what
+    /// 64 residents and 10 players eat, fish 55%, roots 30%, greens 15%, with peat the tight
+    /// resource (the cutters bring in about 70% of what the Cone and the homes burn, and the
+    /// Cone's stock lasts 12 days of full firing).
+    #[test]
+    fn cullet_s_goods_meet_their_targets_in_a_game_day() {
+        let (c, i) = (goods(&cullet()), goods(&island()));
+        println!("cullet {c:#?}\nisland {i:#?}");
+        // Raw fish: half gone in about a day, carried; a storage keeps it three times longer.
+        assert!(c.fish_half_gone_days > 0.9 && c.fish_half_gone_days < 1.4, "{}", c.fish_half_gone_days);
+        assert!(close(c.fish_half_gone_stored_days as f32, 3.0 * c.fish_half_gone_days as f32, 0.05), "{}", c.fish_half_gone_stored_days);
+        // The same per game day as on the island, but for the sweep's step: the authority spoils
+        // once a real minute, 12 times an island day and 48 times a Cullet day.
+        assert!((c.fish_left_a_day - i.fish_left_a_day).abs() < 0.01, "{} {}", c.fish_left_a_day, i.fish_left_a_day);
+        // Smoked fish keeps for weeks, roots about a fortnight, greens a day or so.
+        assert!(c.smoked_half_gone_days > 25.0 && c.roots_half_gone_days > 12.0 && c.roots_half_gone_days < 18.0, "{c:?}");
+        assert!(c.greens_half_gone_days > 0.8 && c.greens_half_gone_days < 1.6, "{}", c.greens_half_gone_days);
+        // The Store's food mostly lasts the six days it is meant for: about 5% of the smoked fish
+        // and 9% of the roots spoil over them if none were eaten (the plan stocks no margin).
+        assert!(c.store_left_after_6_days.0 > 0.95 && c.store_left_after_6_days.1 > 0.90, "{:?}", c.store_left_after_6_days);
+        // No small game on the Wrack; the dead lie two days.
+        assert_eq!(c.traps_a_day, 0.0);
+        assert!(close(c.person_remains_days as f32, 2.0, 1e-6));
+        // The island: one meat in 3 game days, remains for 5 game days, as before in real time.
+        assert!(close(i.traps_a_day as f32, 3.0, 1e-6) && close(i.person_remains_days as f32, 5.0, 1e-6), "{i:?}");
+
+        let s = cullet();
+        let daily = plan_daily(&s, &cullet_plan());
+        println!("{daily:#?}");
+        let n = |item: &str| s.num_of("nutrition", item, 0.0);
+        let eaten = 74.0 * 48.0;
+        let fish = (daily["fishing_spot"] + daily["weir"]) * n("smoked_fish");
+        let roots = daily["root_plot"] * n("baked_roots");
+        let greens = daily["greens_bed"] * n("greens");
+        let all = fish + roots + greens;
+        assert!(all / eaten > 1.28 && all / eaten < 1.35, "yield {:.2} of what is eaten", all / eaten);
+        assert!(close((fish / all) as f32, 0.55, 0.01) && close((roots / all) as f32, 0.30, 0.01) && close((greens / all) as f32, 0.15, 0.01), "{fish} {roots} {greens}");
+        // Peat: the Cone at full firing and the homes about as much; the cutters bring 70%.
+        let furnace = s.structure("furnace").burns.as_ref().unwrap().rate as f64 * 24.0;
+        assert!(close((daily["peat_bank"] / (2.0 * furnace)) as f32, 0.70, 0.01), "{}", daily["peat_bank"]);
+    }
+
     #[test]
     #[ignore]
     fn print_cullet_table() {
@@ -267,5 +387,115 @@ mod tests {
             println!("| {what} | {:.1} | {:.1} |", a + 0.0, b + 0.0);
         }
         println!("sight island {:?} cullet {:?}", sight(&island()), sight(&cullet()));
+        let (c, i) = (goods(&cullet()), goods(&island()));
+        let goods_rows: [(&str, f64, f64); 9] = [
+            ("Raw fish left after a game day, carried", i.fish_left_a_day, c.fish_left_a_day),
+            ("Game days until half of raw fish is gone, carried", i.fish_half_gone_days, c.fish_half_gone_days),
+            ("The same in a storage", i.fish_half_gone_stored_days, c.fish_half_gone_stored_days),
+            ("Game days until half of smoked fish is gone, carried", i.smoked_half_gone_days, c.smoked_half_gone_days),
+            ("Game days until half of roots are gone, carried", i.roots_half_gone_days, c.roots_half_gone_days),
+            ("Game days until half of greens are gone, carried", i.greens_half_gone_days, c.greens_half_gone_days),
+            ("Smoked fish and roots left in a storage after 6 game days", i.store_left_after_6_days.0, c.store_left_after_6_days.0),
+            ("Meat a trap catches in a game day", i.traps_a_day, c.traps_a_day),
+            ("Game days a person's remains lie", i.person_remains_days, c.person_remains_days),
+        ];
+        for (what, a, b) in goods_rows {
+            println!("| {what} | {a:.3} | {b:.3} |");
+        }
+        println!("roots left in a storage after 6 days: island {:.3} cullet {:.3}; a fishing spot (unpooled) regrows island {:.1} cullet {:.1} a game day", i.store_left_after_6_days.1, c.store_left_after_6_days.1, i.fishing_spot_a_day, c.fishing_spot_a_day);
+        println!("Cullet's plan, a game day: {:#?}", plan_daily(&cullet(), &cullet_plan()));
+    }
+}
+
+#[cfg(test)]
+mod life_tests {
+    use super::*;
+
+    fn species() -> Vec<(String, crate::life::Life)> {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../seeds/species.json")).unwrap();
+        v.as_object().unwrap().iter().filter_map(|(k, s)| Some((k.clone(), serde_json::from_value(s.get("life")?.clone()).ok()?))).collect()
+    }
+
+    fn same(a: crate::life::Life, b: crate::life::Life) -> bool {
+        [a.years, a.infant, a.child, a.elder, a.old_age, a.gestation, a.interbirth, a.breeding_radius].map(f32::to_bits) == [b.years, b.infant, b.child, b.elder, b.old_age, b.gestation, b.interbirth, b.breeding_radius].map(f32::to_bits) && a.litter == b.litter
+    }
+
+    /// Without a `life_years` law (the shipped script: every world but Cullet) each species'
+    /// table is exactly `species.json`'s.
+    #[test]
+    fn worlds_without_the_law_keep_the_species_tables() {
+        let s = island();
+        assert!(!s.has("life_years"));
+        for (k, l) in species() {
+            assert!(same(s.life(&k, l), l), "{k}");
+        }
+    }
+
+    /// Cullet's people: a child until 15, deaths of old age from 75 to 90; infancy, old age as a
+    /// stage (59.5) and pregnancy keep their years; animals keep their tables.
+    #[test]
+    fn cullet_people_live_longer_and_grow_up_sooner() {
+        let s = cullet();
+        s.validate().expect("Cullet's laws install");
+        for (k, base) in species() {
+            let l = s.life(&k, base);
+            if k != "person" {
+                assert!(same(l, base), "{k}");
+                continue;
+            }
+            let y = |f: f32| f * l.years;
+            let close = |a: f32, b: f32| (a - b).abs() < 1e-3;
+            assert!(close(l.years, 90.0) && close(y(l.child), 15.0) && close(y(l.old_age), 75.0), "{l:?}");
+            assert!(close(y(l.infant), base.infant * base.years) && close(y(l.elder), base.elder * base.years) && close(y(l.gestation), base.gestation * base.years));
+            let pace = crate::life::Pace { year_days: 8.0, pace: 1.0 };
+            let at = |years: f32| l.stage(years * 8.0, pace);
+            assert_eq!(at(14.9), crate::life::Stage::Child);
+            assert_eq!(at(15.0), crate::life::Stage::Adult);
+            assert_eq!(at(59.0), crate::life::Stage::Adult);
+            assert_eq!(at(61.0), crate::life::Stage::Elder);
+            // Nobody dies of old age before 75; the cast's eldest (70) lives on.
+            for id in 0..5000 {
+                assert!(y(l.deathline(id)) >= 75.0 - 1e-3);
+            }
+        }
+    }
+
+    /// A law that gets the table wrong is refused at install.
+    #[test]
+    fn a_wrong_life_table_is_refused() {
+        let src = crate::floors::compose(BASE, "fn life_years(t) { t.child = 80.0; t }\nfn life_years_law() { #{ cadence: \"compile\", topic: \"\", about: \"x\" } }").unwrap();
+        let e = Scripts::new(&src).unwrap().validate().unwrap_err();
+        assert!(e.contains("life_years") && e.contains("child"), "{e}");
+    }
+}
+
+#[cfg(test)]
+mod ways_tests {
+    use super::*;
+
+    /// Cullet's starting ways (`worlds/cullet/ways.json`, merged into the seed by
+    /// cullet_plan.py) are graphs its rules accept: every routine, the top level, and nothing
+    /// a person may not do; each trade has a workplace.
+    #[test]
+    fn cullet_ways_are_valid_graphs() {
+        let s = cullet();
+        let w: serde_json::Value = serde_json::from_str(include_str!("../../seeds/worlds/cullet/ways.json")).unwrap();
+        crate::catalog::scoped(s.skills().clone(), || {
+            let parse = |what: &str, g: &serde_json::Value| {
+                let g = crate::graph::parse(&g.to_string()).unwrap_or_else(|e| panic!("{what}: {e}"));
+                assert!(crate::graph::skills_used(&g.root).iter().all(|k| s.skills().get(k).is_some()), "{what}");
+            };
+            for (k, g) in w["common"].as_object().unwrap() {
+                parse(k, g);
+            }
+            for (k, o) in w["occupations"].as_object().unwrap() {
+                parse(k, &o["graph"]);
+                assert!(k == "child" || w["town_life"]["work"].get(k).is_some(), "{k} has no workplace");
+            }
+            let top = w["top"].to_string().replace("\"WORK\"", "\"fishing\"");
+            parse("top", &serde_json::from_str(&top).unwrap());
+            let work = w["top"]["desires"].as_array().unwrap().iter().find(|d| d["want"] == "work").unwrap();
+            assert!(work["weight"]["work_hours"].as_f64().unwrap() > 0.0);
+        });
     }
 }

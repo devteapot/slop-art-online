@@ -2,7 +2,7 @@
  "world": "cullet",
  "into": "cullet",
  "plan": "plan.json",
- "about": "Cullet's 64 residents on the first morning (docs/SMALL_CITY.md section 3), the anchors the drafted sheets must honour. Hand-written; checked by `living/tools/author_world.py cullet --check`. Each member: `occupation` is Cullet's trade key, `trade` its words; `wants` and `going_on` are section 3's anchors (private to the person's own sheet); `kin` names each relative and what they are to this person; `rhythm` is the starting day (wakes, sleep_h, works as [from, to] hours past midnight, past 24 for after midnight, work_at and evening as `lot:<plan id>` places or resource kinds); `secret` is known only to the people `secrets` lists.",
+ "about": "Cullet's 64 residents on the first morning (docs/SMALL_CITY.md section 3), the anchors the drafted sheets must honour. Hand-written; checked by `living/tools/author_world.py cullet --check`. Each member: `occupation` is Cullet's trade key, `trade` its words; `wants` and `going_on` are section 3's anchors (private to the person's own sheet); `kin` names each relative and what they are to this person; `rhythm` is the starting day (wakes, sleep_h, works as [from, to] hours past midnight, past 24 for after midnight, an optional second_sleep as [from, to], work_at and evening as `lot:<plan id>` places or resource kinds, and a note); the compile turns it into the seed's `rhythm` (rises, sleeps, evening_hours, works as one span, second_sleep); `secret` is known only to the people `secrets` lists.",
  "counts": {"residents": 64, "adults": 50, "elders": 6, "children": 14, "households": 22, "adult_from": 15, "elder_from": 60},
  "prompt": {
   "dead": "The dead (the fever winter's nine, Sander Vane and the others the bible names) may appear in memories and stances but never in relations.",
@@ -373,7 +373,7 @@
        "kin": {"Chidi Okoro": "husband", "Zeke Okoro": "son", "Ife Okoro": "daughter"},
        "ties": ["wife of Chidi Okoro", "mother of Zeke Okoro and Ife Okoro", "gathers kelp beside Hana Sato and Lark Morrow", "carries kelp up to Nan Fenwick's root plots, never as much as Nan wants"],
        "inventory": {"cloak": 1, "mark": 4},
-       "rhythm": {"wakes": 4, "sleep_h": 7.5, "works": [[4.5, 11]], "work_at": ["kelp_bed", "lot:ash_house"], "evening": ["lot:low_5", "lot:wash_house"]}},
+       "rhythm": {"wakes": 4, "sleep_h": 7.5, "works": [[4.5, 11]], "work_at": ["kelp_bed", "lot:ash_house"], "evening": ["lot:low_5", "lot:wash_house"], "note": "Fixed early hours until a tide exists: once the rules have a tide, wrack gatherers go out at low water, 50 minutes later each day (docs/SMALL_CITY.md, Different rhythms)."}},
       {"name": "Zeke Okoro", "age": 11, "sex": "m", "occupation": "child", "trade": "Child",
        "role": "Chidi and Amara's son; one of the cullet yard children",
        "wants": "To find a colour of sea-glass his mother has never seen.",
@@ -438,7 +438,7 @@
        "kin": {"Ingrid Morrow": "grandmother"},
        "ties": ["granddaughter of Ingrid Morrow", "gathers kelp with Amara Okoro and Hana Sato", "goes to the tip of the mole at dusk, where Anselm Faro lights the Watchglass", "Col Roon walks the strand when she does"],
        "inventory": {"cloak": 1, "mark": 1},
-       "rhythm": {"wakes": 5, "sleep_h": 8, "works": [[5, 11]], "work_at": ["kelp_bed", "lot:ash_house"], "evening": ["lot:watchglass", "lot:fish_steps"]}}
+       "rhythm": {"wakes": 5, "sleep_h": 8, "works": [[5, 11]], "work_at": ["kelp_bed", "lot:ash_house"], "evening": ["lot:watchglass", "lot:fish_steps"], "note": "Fixed early hours until a tide exists: once the rules have a tide, wrack gatherers go out at low water, 50 minutes later each day (docs/SMALL_CITY.md, Different rhythms)."}}
      ]
     },
     {
@@ -461,7 +461,7 @@
        "kin": {"Kenji Sato": "husband", "Ren Sato": "son"},
        "ties": ["wife of Kenji Sato", "mother of Ren Sato", "gathers kelp beside Amara Okoro and Lark Morrow", "agrees with Greta Dunmore about the smoke"],
        "inventory": {"cloak": 1, "mark": 3},
-       "rhythm": {"wakes": 4.5, "sleep_h": 8, "works": [[5, 11]], "work_at": ["kelp_bed", "lot:ash_house"], "evening": ["lot:wash_house"]}},
+       "rhythm": {"wakes": 4.5, "sleep_h": 8, "works": [[5, 11]], "work_at": ["kelp_bed", "lot:ash_house"], "evening": ["lot:wash_house"], "note": "Fixed early hours until a tide exists: once the rules have a tide, wrack gatherers go out at low water, 50 minutes later each day (docs/SMALL_CITY.md, Different rhythms)."}},
       {"name": "Ren Sato", "age": 20, "sex": "m", "occupation": "fisher", "trade": "Fisher",
        "role": "line fisher; Kenji and Hana's son",
        "wants": "Sabine Quill.",
@@ -667,7 +667,7 @@
        "kin": {"Dolly Achterberg": "wife", "Roos Achterberg": "daughter"},
        "ties": ["husband of Dolly Achterberg", "father of Roos Achterberg", "plays counters with Anselm Faro at dawn", "asks everyone who bakes at the Batch for a little peat"],
        "inventory": {"cloak": 1, "mark": 8, "baked_roots": 4},
-       "rhythm": {"wakes": 2.5, "sleep_h": 13.5, "works": [[3, 10]], "work_at": ["lot:batch"], "evening": ["lot:batch"]}},
+       "rhythm": {"wakes": 2.5, "sleep_h": 4.5, "second_sleep": [13, 19], "works": [[3, 10]], "work_at": ["lot:batch"], "evening": ["lot:batch"], "note": "Two sleeps, as the owner read his hours (2026-11-11): 22:00-02:30 and a long one from 13:00 to 19:00 after the Batch cools."}},
       {"name": "Roos Achterberg", "age": 18, "sex": "f", "occupation": "server", "trade": "Serves at the Marver",
        "role": "serves at the Marver; carved the town's best counters and runs the nightly game under the arcade",
        "wants": "To beat Aldous Quill at counters, once.",

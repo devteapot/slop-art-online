@@ -222,17 +222,28 @@ pub fn map_size() -> (u32, u32) {
 
 /// Set once at startup from the active seed: its setting text and map size.
 /// Set once at startup from the active seed: setting, map size, calendar and the people's life table.
+/// The seed's calendar and the species' person life table, for the life line (`life_line`).
+static LIFE: std::sync::OnceLock<(f32, f32, living_rules::life::Life)> = std::sync::OnceLock::new();
+
 pub fn set_world(setting: &str, w: u32, h: u32, year_days: f32, pace: f32, life: living_rules::life::Life) {
     let _ = SIZE.set((w, h));
+    let _ = LIFE.set((year_days, pace, life));
     let season_days = year_days / 4.0;
     let seasons = format!(
         "a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
         year_days.round(),
         living_rules::describe_days(season_days)
     );
+    let world = format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}; a tile is a metre).");
+    let _ = WORLD_PARTS.set((world, seasons, life_line(year_days, pace, life)));
+}
+
+/// What people are told of a person's life: the species' table under the world's `life_years`
+/// law (its rules; without the law, the table as given).
+fn life_line(year_days: f32, pace: f32, life: living_rules::life::Life) -> String {
     let years = |f: f32| (f * life.years).round();
     let t = living_rules::life::Pace { year_days, pace };
-    let life_line = format!(
+    format!(
         "a person lives about {} years (a year is {} days): a baby until about {}, a child until about {}, old from about {}. \
 Babies cannot walk far or feed themselves; they cry when hungry, cold or alone. Children are slow, cannot build, craft or fight, and depend on others. \
 Old people tire sooner and heal slower. Two adults who both choose to start a family (the act `conceive` toward each other) within two minutes, while fed, have a child about {} later.",
@@ -242,9 +253,7 @@ Old people tire sooner and heal slower. Two adults who both choose to start a fa
         years(life.child),
         years(life.elder),
         living_rules::describe_days(life.gestation_days(t))
-    );
-    let world = format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}; a tile is a metre).");
-    let _ = WORLD_PARTS.set((world, seasons, life_line));
+    )
 }
 
 /// The world's rules as every mind is told them: the world's line, then the rule script's
@@ -257,8 +266,15 @@ pub fn world_rules() -> Arc<str> {
             return t.clone();
         }
     }
-    let (world, seasons, life) = WORLD_PARTS.get().cloned().unwrap_or_default();
-    let text = compiled().map(|s| s.world_text(&[("seasons", seasons), ("life", life)])).unwrap_or_default();
+    let (world, seasons, mut life) = WORLD_PARTS.get().cloned().unwrap_or_default();
+    let rules = compiled();
+    // A world whose rules change people's life table tells it as its rules have it.
+    if let (Some(s), Some((year_days, pace, base))) = (rules.as_ref(), LIFE.get()) {
+        if s.has("life_years") {
+            life = life_line(*year_days, *pace, s.life("person", *base));
+        }
+    }
+    let text = rules.map(|s| s.world_text(&[("seasons", seasons), ("life", life)])).unwrap_or_default();
     let full: Arc<str> = if world.is_empty() { text.into() } else { format!("{world}\n{text}").into() };
     *RULES_TEXT.write().unwrap() = Some((rev, full.clone()));
     full
@@ -303,7 +319,7 @@ Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"a
 Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
   {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight is (% of full)
-  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
+  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
 Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
@@ -314,9 +330,9 @@ Skills:
 {}
 - {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep and can rewrite; see below).
 - {{\"desires\": [{{\"want\": \"what it is for\", \"weight\": W, \"do\": N}}, ...]}} every check, the strongest desire that can act now wins (a desire whose node fails lets the next one act). \
-W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\", \"courted\", \"starving\", \"exhausted\", \"rain\", \"hailed\", \"commotion\", \"bedtime\", \"evening\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
+W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\", \"courted\", \"starving\", \"exhausted\", \"rain\", \"hailed\", \"commotion\", \"bedtime\", \"evening\", \"work_hours\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
 strength = base + Σ factor × signal, each signal 0..1 (hunger 0 fed..1 starving; tired 0 rested..1 exhausted; hurt; night/day; threatened = an attack or a threat is coming at you; \
-alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; courted = someone in sight just offered to start a family with you; starving = hunger 90+; exhausted = energy 10 or less; rain = it is raining; hailed = someone just greeted you with a gesture; commotion = a fight or a death in sight; bedtime = your own hours for sleep (when you go to bed until you rise); evening = your own evening, the hours before your bedtime; believes = your stance's value). A desire at or below 0 does not act.
+alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; courted = someone in sight just offered to start a family with you; starving = hunger 90+; exhausted = energy 10 or less; rain = it is raining; hailed = someone just greeted you with a gesture; commotion = a fight or a death in sight; bedtime = your own hours for sleep (when you go to bed until you rise); evening = your own evening, the hours before your bedtime; work_hours = your own working hours (with none set, waking hours outside your evening); believes = your stance's value). A desire at or below 0 does not act.
 Limits: each graph (your top level, or one routine) at most 64 nodes, depth 10, 12 children per composite. The root restarts whenever it finishes, so a root \"first\" loops forever.
 REPERTOIRE: your behavior is a repertoire you build over your life: routines (named graphs) for the things you do, called from a top level, usually desires weighed by what you want. \
 Routines are built from skills, and each skill takes something and gives something (see takes/gives above): a routine works only if its earlier steps get what its later steps take, \

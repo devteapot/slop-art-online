@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm, places, weather, gestures), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -77,6 +77,16 @@ python3 "$V" launch --run "$T" --seed island > ".local/living/verify/$T/launch.t
 python3 "$C/town.py" --run "$T" > ".local/living/verify/$T/town.txt" 2>&1
 python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
 
+# Rhythms at any hour and Cullet's trades (about 17 min): a night stoker rising at 14:00 and
+# working the night, the day watch feeding the furnace and making glass, a baker's second sleep,
+# Cullet's life stages (features/town.md, features/laws.md, docs/SEEDED_LIVES.md).
+Y=$R-rhythm
+mkdir -p ".local/living/verify/$Y"
+python3 "$C/rhythm.py" seed --run "$Y" > ".local/living/verify/$Y/seed.txt" 2>&1
+python3 "$V" launch --run "$Y" --seed "$PWD/.local/living/verify/$Y/cullet-rhythm" > ".local/living/verify/$Y/launch.txt" 2>&1
+python3 "$C/rhythm.py" drive --run "$Y" > ".local/living/verify/$Y/rhythm.txt" 2>&1
+python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
+
 # Seeded lives on an island world (about 25 min): placement, routes, the road, ties
 # (features/lives.md, docs/SEEDED_LIVES.md).
 L=$R-lives
@@ -102,6 +112,15 @@ mkdir -p ".local/living/verify/$W"
 python3 "$V" launch --run "$W" --seed cullet-laws > ".local/living/verify/$W/launch.txt" 2>&1
 python3 "$C/scenes.py" laws --run "$W" > ".local/living/verify/$W/laws.txt" 2>&1
 python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
+
+# Spoiling and regrowth in game time on a world's own day (features/laws.md#decay; a whole
+# Cullet game day is 48 real minutes, `--game-hours 2` about 5 minutes): raw fish carried and
+# stored, an emptied greens bed regrowing, both at the laws' per-hour numbers in real time.
+Y=$R-decay
+mkdir -p ".local/living/verify/$Y"
+python3 "$V" launch --run "$Y" --seed cullet-laws > ".local/living/verify/$Y/launch.txt" 2>&1
+python3 "$C/scenes.py" decay --run "$Y" > ".local/living/verify/$Y/decay.txt" 2>&1
+python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
 
 # Infant assertions use their own small, long-lived family fixture.
 I=$R-infant
@@ -181,7 +200,7 @@ python3 "$C/scenes.py" wildlife --run "$W" > ".local/living/verify/$W/wildlife.t
 python3 "$V" cleanup --run "$W"
 
 # Remains: every death leaves the carcass law's items, a kill feeds nobody by itself, two wolves
-# take from one kill, remains expire (remains_s shortened to 90 s here), wander keeps its heading.
+# take from one kill, remains expire (remains_h shortened to 3 game hours, 90 s on the 12-minute day), wander keeps its heading.
 M=$R-remains
 mkdir -p ".local/living/verify/$M"
 python3 "$V" launch --run "$M" --seed stage1-acts > ".local/living/verify/$M/launch.txt" 2>&1

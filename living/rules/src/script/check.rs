@@ -104,7 +104,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 12] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight"];
+pub const ENGINE_LAWS: [&str; 13] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -158,6 +158,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     record_texts(&mut p)?;
     regard(&mut p)?;
     daylight(&mut p)?;
+    life_years(s)?;
     Ok(p.report)
 }
 
@@ -471,6 +472,16 @@ fn answer_samples(c: SkillCtx) -> Vec<SkillCtx> {
         out.push(SkillCtx { offer_id, record_id, offer: at_hand, ..c.clone() });
     }
     out
+}
+
+/// A world's life table: the `life_years` law over a person's table (the shipped one's
+/// numbers; the engine gives it each species' own) gives ages in order within the lifespan.
+fn life_years(s: &Scripts) -> Result<(), String> {
+    let person = crate::life::Life { years: 70.0, infant: 0.03, child: 0.23, elder: 0.85, old_age: 0.87, gestation: 0.011, litter: 1, interbirth: 0.03, breeding_radius: 0.0 };
+    for (kind, base) in [("person", person), ("wolf", crate::life::Life::default())] {
+        s.life_law(kind, base).map_err(|e| format!("install refused: {e}"))?;
+    }
+    Ok(())
 }
 
 fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx {

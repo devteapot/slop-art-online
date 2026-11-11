@@ -181,8 +181,8 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         activity: ctx.db.activity().id().find(id).filter(|a| a.phase == 1).map(|a| a.skill).unwrap_or_default(),
         inv: common::inv_list(ctx, id as u64),
         knows: common::knows(ctx, id),
-        stage: ch.as_ref().map(|c| common::stage_of(c, &w, now).name().to_string()).unwrap_or_else(|| "adult".into()),
-        life: ch.as_ref().map(|c| common::life_of(&c.kind).fraction(age, common::pace(&w))).unwrap_or(0.3),
+        stage: ch.as_ref().map(|c| common::stage_of(ctx, c, &w, now).name().to_string()).unwrap_or_else(|| "adult".into()),
+        life: ch.as_ref().map(|c| common::life_of(ctx, &c.kind).fraction(age, common::pace(&w))).unwrap_or(0.3),
         genes: (*common::genes_of(ctx, id)).clone(),
         practice: Default::default(),
         kin_near: 0,
@@ -233,8 +233,8 @@ pub fn law_ctx(ctx: &ReducerContext, id: u32, w: &World, now: u64, plan: &living
     if ["kind", "stage", "age", "life"].iter().any(|f| reads(f)) {
         if let Some(ch) = ctx.db.character().id().find(id) {
             let age = common::age_days(&ch, w, now);
-            c.actor.stage = common::stage_of(&ch, w, now).name().to_string();
-            c.actor.life = common::life_of(&ch.kind).fraction(age, common::pace(w));
+            c.actor.stage = common::stage_of(ctx, &ch, w, now).name().to_string();
+            c.actor.life = common::life_of(ctx, &ch.kind).fraction(age, common::pace(w));
             c.actor.age = age;
             c.actor.kind = ch.kind;
         }
@@ -296,7 +296,7 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
                 f.id = c.id as u64;
                 f.alive = c.alive;
                 f.kind = c.kind.clone();
-                f.stage = common::stage_of(&c, &common::world(ctx), now).name().to_string();
+                f.stage = common::stage_of(ctx, &c, &common::world(ctx), now).name().to_string();
                 f.name = c.name;
                 if let Some(b) = ctx.db.body().id().find(c.id) {
                     f.dist = dist(from, pos(&b, now));
@@ -1610,7 +1610,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     chunk: chunk_of(at.0, at.1),
                     amount: 0.0,
                     max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
-                    regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
+                    regen: sc.regrow_per_min("berry_bush", 1.0) as f32,
                     at_ms: now,
                     pool: 0,
                 });
@@ -1776,7 +1776,7 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     }
     // In a pack only one pair breeds: none while another pair nearby is expecting or raising young.
     let kind = ctx.db.character().id().find(me).map(|c| c.kind).unwrap_or_default();
-    let radius = common::life_of(&kind).breeding_radius;
+    let radius = common::life_of(ctx, &kind).breeding_radius;
     if radius > 0.0 {
         let breeding = |id: u32| id != me && id != other && (ctx.db.expecting().iter().any(|e| e.a == id || e.b == id) || rearing(id));
         if common::creatures_near(ctx, at, radius, now).iter().any(|c| *c.kind == *kind && breeding(c.id)) {
@@ -1792,7 +1792,7 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
         }
         let w = common::world(ctx);
         let kind = ctx.db.character().id().find(me).map(|c| c.kind).unwrap_or_default();
-        let days = common::life_of(&kind).gestation_days(common::pace(&w));
+        let days = common::life_of(ctx, &kind).gestation_days(common::pace(&w));
         let gestation = (days * w.day_ms as f32) as u64;
         ctx.db.expecting().insert(Expecting { id: 0, a: other, b: me, due_ms: now + gestation });
         common::chronicle(ctx, now, "family", other, me, at, format!("{other_name} and {my_name} are expecting a child"));
@@ -2282,7 +2282,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
             t.holder = STRUCTURE_BIT | s.id;
             ctx.db.artifact().id().update(t);
         }
-        let last_ms = (sc.num_of("remains_s", &kind, 1800.0).max(0.0) * 1000.0) as u64;
+        let last_ms = sc.remains_ms(&kind).max(0.0) as u64;
         ctx.db.rot().insert(Rot { structure: s.id, due_ms: now + last_ms });
     }
     if kind == "person" {

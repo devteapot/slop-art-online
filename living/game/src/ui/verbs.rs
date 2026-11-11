@@ -173,7 +173,7 @@ fn icon_key(skill: &str, binds: &crate::keys::Binds) -> (Option<Mark>, String) {
         "talk" => (Some(Mark::Talk), binds.first(Act::Interact)),
         "window" => (Some(Mark::People), String::new()),
         "give" => (Some(Mark::Give), String::new()),
-        "offer" | "offer_terms" | "accept" | "decline" => (Some(Mark::Trade), String::new()),
+        "offer" | "offer_terms" | "accept" => (Some(Mark::Trade), String::new()),
         "wave" => (Some(Mark::Wave), binds.first(Act::Wave)),
         "nod" => (Some(Mark::Wave), binds.first(Act::Nod)),
         "appraise" => (Some(Mark::Eye), binds.first(Act::LookOver)),
