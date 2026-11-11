@@ -3,7 +3,9 @@
 //!
 //! - **Play:** the interface's theme (Clear, Night, Linen, Walnut; F4 cycles it), the control scheme (facing the cursor, or where you walk; F3 switches it too),
 //!   how the body looks aside while walking (a look-walk preset, `twist.rs`),
-//!   how the edge of sight is drawn (not seen now, limited view, fade; F2 cycles it too), the
+//!   how the edge of sight is drawn (not seen now, limited view, fade; F2 cycles it too), how
+//!   unseen ground looks (memory by default, grey, wash, lantern, shadows, hatch), facing sight
+//!   (on/off, its five values and its switch where the launcher allows it: `ui/facing.rs`), the
 //!   weapon drawing itself when something attacks you, and key hints and first-time tips (with
 //!   "Show tips again").
 //! - **Controls:** the skill-key preset ("Q E R, plus 1–9", "1–9 only", "My own") and every
@@ -43,7 +45,7 @@ pub enum Page {
 
 #[derive(Component)]
 pub struct PageBody(Page);
-/// The place kept for the facing-sight line (not built yet).
+/// Where Settings › Play shows facing sight (`ui/facing.rs` fills it).
 #[derive(Component)]
 pub struct FacingSight;
 /// A binding's chip: its act and which of its keys.
@@ -117,10 +119,11 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 row(pg, f, "Facing", "Which way your character looks while walking (F3)", |c| kit::seg(c, f, "settings:control", &[("Face where you walk", "travel"), ("Face the cursor", "cursor")]));
                 row(pg, f, "Looking aside", "Walking one way and looking another: how far the head and chest turn before the body follows", |c| kit::seg(c, f, "settings:look_walk", &crate::twist::PRESETS));
                 row(pg, f, "Edge of sight", "How what you can't see now is drawn (F2)", |c| kit::seg(c, f, "settings:sight", &[("Not seen now", "unseen"), ("Limited view", "limited"), ("Fade", "fade")]));
+                row(pg, f, "Unseen ground", "How ground you don't see now looks, with \"not seen now\"", |c| kit::seg(c, f, "settings:look", &crate::sightedge::Look::ALL.map(|l| (l.label(), l.name()))));
                 row(pg, f, "Weapon", "Draw it by itself when something attacks you", |c| kit::toggle(c, "settings:auto_draw"));
-                // Reserved: a read-only "Facing sight: on/off" line with the field's five values
-                // (focal, side, side share, near, margin) comes here once the rules have it.
-                pg.spawn((FacingSight, Node { display: Display::None, ..default() }, Pickable::IGNORE));
+                // Facing sight: on/off, the switch where the launcher allows it, and the field's
+                // five values (filled by `ui/facing.rs`).
+                pg.spawn((FacingSight, Node { display: Display::None, flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE));
                 row(pg, f, "Key hints and first-time tips", "", |c| {
                     kit::toggle(c, "settings:tips");
                     kit::button(c, f, "Show tips again", "settings:tips_again", true);
@@ -165,7 +168,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
     }
 }
 
-fn row(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, help: &str, control: impl FnOnce(&mut ChildSpawnerCommands)) {
+pub(super) fn row(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, help: &str, control: impl FnOnce(&mut ChildSpawnerCommands)) {
     p.spawn((Node { display: Display::Grid, grid_template_columns: vec![GridTrack::px(220.0), GridTrack::fr(1.0)], column_gap: Val::Px(12.0), align_items: AlignItems::Center, padding: UiRect::vertical(Val::Px(9.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE)).with_children(|r| {
         r.spawn((Node { flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|l| {
             l.spawn((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE));
@@ -238,6 +241,12 @@ pub fn update(
                     changed = true;
                 }
             }
+            "settings:look" => {
+                if let (Some(e), Some(l)) = (edge.as_mut(), crate::sightedge::Look::parse(value)) {
+                    e.look = l;
+                    changed = true;
+                }
+            }
             "settings:preset" if value != "own" => {
                 *binds = Binds::preset(if value == "numbers" { Preset::Numbers } else { Preset::Letters });
                 changed = true;
@@ -273,10 +282,12 @@ pub fn update(
         prefs.control = input.control;
         if let Some(e) = edge.as_ref() {
             prefs.sight_edge = Some(e.mode.name().into());
+            prefs.sight_look = Some(e.look.name().into());
         }
         crate::keys::save(&binds, &prefs);
     }
     let sight = edge.as_ref().map(|e| e.mode.name());
+    let look = edge.as_ref().map(|e| e.look.name());
     let control = if input.control == crate::controls::Control::Cursor { "cursor" } else { "travel" };
     let (pg, preset, theme_now, look_walk) = (*page, binds.preset.name(), theme.name.key(), lw.base().to_string());
     kit::light(&mut lit, |t| {
@@ -285,6 +296,7 @@ pub fn update(
             "settings:page" => Some((value == "controls") == (pg == Page::Controls)),
             "settings:control" => Some(value == control),
             "settings:sight" => Some(Some(value) == sight),
+            "settings:look" => Some(Some(value) == look),
             "settings:preset" => Some(value == preset),
             "settings:theme" => Some(value == theme_now),
             "settings:look_walk" => Some(value == look_walk),
@@ -331,7 +343,11 @@ pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>,
     if std::env::var("LIVING_GAME_CONTROL").is_err() {
         input.control = prefs.control;
     }
-    if let (Some(mut e), Some(m), true) = (edge, prefs.sight_edge.as_deref().and_then(crate::sightedge::Mode::parse), std::env::var("LIVING_SIGHT_EDGE").is_err()) {
+    let Some(mut e) = edge else { return };
+    if let (Some(m), true) = (prefs.sight_edge.as_deref().and_then(crate::sightedge::Mode::parse), std::env::var("LIVING_SIGHT_EDGE").is_err()) {
         e.mode = m;
+    }
+    if let (Some(l), true) = (prefs.sight_look.as_deref().and_then(crate::sightedge::Look::parse), std::env::var("LIVING_SIGHT_LOOK").is_err()) {
+        e.look = l;
     }
 }

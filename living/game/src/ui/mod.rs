@@ -16,6 +16,7 @@
 
 mod cluster;
 mod death;
+mod facing;
 mod frame;
 pub mod hit;
 mod icons;
@@ -95,9 +96,9 @@ impl Plugin for UiPlugin {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
-            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
+            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
-                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
                 .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare));
             if perf_on() {
@@ -338,6 +339,8 @@ fn dump(
         "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground})).collect::<Vec<_>>()),
         "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.name})).collect::<Vec<_>>(),
         "targeted": model.actors.iter().find(|a| a.targeted).map(|a| a.id),
+        // The notes on screen now (the facing-sight readout among them).
+        "toasts": model.verbs.toasts.iter().map(|(t, _, _)| t.clone()).collect::<Vec<_>>(),
         "extra": extra.json(),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
     });
@@ -361,6 +364,9 @@ pub struct DumpExtra<'w, 's> {
     tip_text: Query<'w, 's, &'static Text, (With<prim::TooltipText>, Without<prim::TooltipTitle>)>,
     pointer: Res<'w, crate::pointer::Pointer>,
     cam: Res<'w, crate::camera::Cam>,
+    fov: Option<Res<'w, crate::facing::FovState>>,
+    heard: Option<Res<'w, crate::heardmark::HeardMarks>>,
+    edge: Option<Res<'w, crate::sightedge::SightEdge>>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -374,10 +380,17 @@ impl DumpExtra<'_, '_> {
         let size = crate::capture::size().as_vec2();
         let cursor = self.pointer.pos.map(|p| serde_json::json!({"x": p.x, "y": p.y, "fx": p.x / size.x, "fy": p.y / size.y}));
         let ground = self.cam.cursor_ground.map(|g| serde_json::json!([g.x, g.y, g.z]));
+        // Facing sight: whether it is on, the field's five values, whether this client can switch
+        // it, and the heard marks (`facing.rs`, `heardmark.rs`).
+        let fov = self.fov.as_ref().map(|f| {
+            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last,
+                "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
+        });
         serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
-            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground})
+            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
+            "facing_sight": fov, "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
     }
 }
 

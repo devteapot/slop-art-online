@@ -368,11 +368,13 @@ pub struct Prefs {
     pub theme: Option<String>,
     /// How the body looks aside while walking: a `twist::LookWalk` preset (head, chest, loose).
     pub look_walk: Option<String>,
+    /// How unseen ground is drawn (`sightedge::Look`: memory, grey, wash, lantern, shadows, hatch).
+    pub sight_look: Option<String>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None }
+        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None }
     }
 }
 
@@ -417,6 +419,7 @@ pub fn load() -> (Binds, Prefs) {
         dirty: false,
         theme: v["theme"].as_str().map(String::from),
         look_walk: v["look_walk"].as_str().map(String::from),
+        sight_look: v["sight_look"].as_str().map(String::from),
     };
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
     (binds, prefs)
@@ -434,6 +437,7 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "auto_draw": prefs.auto_draw,
         "theme": prefs.theme,
         "look_walk": prefs.look_walk,
+        "sight_look": prefs.sight_look,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);
