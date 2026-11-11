@@ -103,6 +103,35 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     catalog::scoped(s.skills().clone(), || validate_scoped(s, limits))
 }
 
+/// Laws the engine asks by name, besides those it calls with a context, a name or an event.
+pub const ENGINE_LAWS: [&str; 8] = ["perceived_of", "record_text", "items", "structure_traits", "occupation_knows", "source_of", "wakes", "woken_ring"];
+
+/// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
+/// in another's `covers`), and every world constant has its words in `laws_about`.
+fn described(s: &Scripts) -> Result<(), String> {
+    let declared: std::collections::BTreeSet<&str> = s.laws.values().flat_map(|l| std::iter::once(l.name.as_str()).chain(l.covers.iter().map(|c| c.as_str()))).collect();
+    let mut asked: Vec<String> = s.ctx_laws().into_iter().filter(|f| CTX_LAWS.contains(&f.as_str()) || f.starts_with("on_")).collect();
+    asked.extend(super::name_laws(s).into_iter().map(|(f, _)| f));
+    asked.extend(ENGINE_LAWS.iter().filter(|f| s.has(f)).map(|f| f.to_string()));
+    asked.sort();
+    asked.dedup();
+    if let Some(e) = s.law_errors.borrow().first() {
+        return Err(format!("install refused: a law's description failed: {e}"));
+    }
+    if let Some(f) = asked.iter().find(|f| !declared.contains(f.as_str())) {
+        return Err(format!("install refused: the law `{f}` has no description (declare `{f}_law()` with `about`, or list it in another law's `covers`)"));
+    }
+    if s.has("laws") {
+        let about = s.laws_about();
+        for k in s.law_names() {
+            if !about.iter().any(|(n, t)| *n == k && !t.trim().is_empty()) {
+                return Err(format!("install refused: the world constant `{k}` has no description (give it words in `laws_about(l)`)"));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     // Every law reads only fields the engine provides.
     for f in s.ctx_laws() {
@@ -121,6 +150,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     skills(&mut p)?;
     hooks(&mut p)?;
     yes_or_no(&mut p)?;
+    described(s)?;
     record_texts(&mut p)?;
     regard(&mut p)?;
     Ok(p.report)

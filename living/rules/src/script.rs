@@ -511,10 +511,12 @@ pub struct LawSpec {
     pub cadence: Cadence,
     /// The section of the minds' world text it belongs to (empty: not part of it).
     pub topic: String,
+    /// The functions it declares besides its own name (`max_hp`, `lunge` under one law).
+    pub covers: Vec<String>,
 }
 
 /// The traits of a law's declaration.
-pub const LAW_TRAITS: &[&str] = &["about", "cadence", "topic", "reach"];
+pub const LAW_TRAITS: &[&str] = &["about", "cadence", "topic", "reach", "covers"];
 
 /// Laws the engine asks for that a script installed before they existed may lack: such a script
 /// runs with the shipped script's functions underneath its own until its next install, and an
@@ -634,6 +636,10 @@ pub struct Scripts {
     reach: Reach,
     /// Required laws the script lacks, taken from the shipped script (an install refuses them).
     borrowed: Vec<String>,
+    /// The script's source (for the order of its declarations).
+    source: String,
+    /// Law declarations that failed when read (an install refuses them).
+    law_errors: RefCell<Vec<String>>,
     /// What each kind of structure does for those near it (`structure_traits()`).
     structures: HashMap<String, StructureTraits>,
 }
@@ -753,7 +759,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), source: source.to_string(), law_errors: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -972,7 +978,15 @@ impl Scripts {
             if law.is_empty() {
                 continue;
             }
-            let m = self.law_map(f)?;
+            // A description built from laws that fail is refused by an install, after the laws
+            // themselves are checked (their own failure says more).
+            let m = match self.law_map(f) {
+                Ok(m) => m,
+                Err(e) => {
+                    self.law_errors.borrow_mut().push(e);
+                    continue;
+                }
+            };
             if let Some(k) = m.keys().find(|k| !LAW_TRAITS.contains(&k.as_str())) {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", LAW_TRAITS.join(", ")));
             }
@@ -982,7 +996,11 @@ impl Scripts {
                 return Err(format!("{f}: `about` says what the law is, for a mind (in the world's units: one tile is one metre)"));
             }
             let cadence = Cadence::parse(&text("cadence")?).ok_or_else(|| format!("{f}: `cadence` is compile, event or hot"))?;
-            out.insert(law.to_string(), LawSpec { name: law.to_string(), about, cadence, topic: text("topic")? });
+            let covers = match m.get("covers") {
+                None => Vec::new(),
+                Some(v) => v.clone().try_cast::<Array>().ok_or_else(|| format!("{f}: `covers` is a list of function names"))?.into_iter().map(|x| x.into_string().map_err(|_| format!("{f}: `covers` is a list of function names"))).collect::<Result<_, _>>()?,
+            };
+            out.insert(law.to_string(), LawSpec { name: law.to_string(), about, cadence, topic: text("topic")?, covers });
         }
         Ok(out)
     }
@@ -1002,6 +1020,55 @@ impl Scripts {
     /// Every law the script declares, by name.
     pub fn law_specs(&self) -> &std::collections::BTreeMap<String, LawSpec> {
         &self.laws
+    }
+
+    /// What each world constant is (`laws_about(laws())`), by name: the script's words for the
+    /// values in force. Empty when the script does not say.
+    pub fn laws_about(&self) -> Vec<(String, String)> {
+        if !self.has("laws_about") {
+            return Vec::new();
+        }
+        let m = self.laws_map();
+        let Ok(d) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)) else { return Vec::new() };
+        d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect()
+    }
+
+    /// The world's rules as minds are told them, built from the laws' descriptions: one line per
+    /// section of `world_topics()`, its laws' `about` in the order the source declares them.
+    /// `world` gives the sections that are the world's own (`seasons`, `life`). It changes only
+    /// when the script does, so a prompt's static prefix that holds it stays cached.
+    pub fn world_text(&self, world: &[(&str, String)]) -> String {
+        let topics: Vec<(String, String)> = if self.has("world_topics") {
+            let a = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "world_topics", ()).ok().and_then(|d| d.try_cast::<Array>()).unwrap_or_default();
+            a.into_iter()
+                .filter_map(|p| {
+                    let p = p.try_cast::<Array>()?;
+                    Some((p.first()?.clone().into_string().ok()?, p.get(1)?.clone().into_string().ok()?))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let mut laws: Vec<&LawSpec> = self.laws.values().filter(|l| !l.topic.is_empty()).collect();
+        laws.sort_by_key(|l| (self.source_at(&format!("fn {}_law(", l.name)), l.name.clone()));
+        let mut lines = Vec::new();
+        for (topic, heading) in &topics {
+            let mut parts: Vec<String> = laws.iter().filter(|l| &l.topic == topic).map(|l| l.about.trim().to_string()).collect();
+            if let Some((_, t)) = world.iter().find(|(k, _)| k == topic) {
+                parts.push(t.trim().to_string());
+            }
+            if parts.is_empty() {
+                continue;
+            }
+            let body = parts.join(" ");
+            lines.push(if heading.is_empty() { body } else { format!("{heading}: {body}") });
+        }
+        lines.join("\n")
+    }
+
+    /// Where a declaration starts in the script (for the source's order).
+    fn source_at(&self, needle: &str) -> usize {
+        self.source.find(needle).unwrap_or(usize::MAX)
     }
 
     /// The farthest anyone's senses reach.
@@ -1667,6 +1734,40 @@ mod tests {
         SkillCtx { actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), inv, ..Default::default() }, night, ..Default::default() }
     }
 
+    /// The minds' world text is built from the laws' descriptions, in the sections the script
+    /// orders, with the world's own sections (seasons, life) where they belong; every law the
+    /// engine asks and every world constant must be described, or an install is refused.
+    #[test]
+    fn world_text_is_built_from_the_laws() {
+        let s = scripts();
+        let t = s.world_text(&[("seasons", "a year is 8 days.".into()), ("life", "a person lives about 70 years.".into())]);
+        let heads: Vec<&str> = t.lines().map(|l| l.split(':').next().unwrap_or("")).collect();
+        assert_eq!(heads[1..].join(" "), "SENSES MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
+        assert!(t.starts_with("One day lasts 12 real minutes; night is 20:00-06:00.\nSENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m; at night 6 m, or 9 m carrying a torch."), "{t}");
+        assert!(t.contains("FOOD: berries 12, fish 16, meat 20, cooked_fish 34, cooked_meat 42, smoked_fish 24, smoked_meat 30 (hunger points). Cook raw fish or meat at a campfire"), "{t}");
+        assert!(t.contains("BODY: hunger rises ~5/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");
+        assert!(t.contains("SETTLEMENTS: walls block the way;") && t.contains("Taking from someone else's store"), "{t}");
+        assert_eq!(t, s.world_text(&[("seasons", "a year is 8 days.".into()), ("life", "a person lives about 70 years.".into())]), "the same rules give the same text");
+        // A floor that changes a law changes what minds are told.
+        let src = include_str!("../../scripts/skills.rhai");
+        let dim = Scripts::new(&crate::floors::compose(src, "fn sight_in(light) { if light == \"day\" { 7.0 } else { base_sight_in(light) } }").unwrap()).unwrap();
+        assert!(dim.world_text(&[]).contains("By day one sees 7 m"));
+        // Undescribed laws are refused.
+        let bare = Scripts::new(&src.replace("fn theft_law()", "fn theft_old_law()")).unwrap();
+        assert!(bare.validate().unwrap_err().contains("the law `theft` has no description"));
+        let mute = Scripts::new(&src.replace("        follow_s: `one follow lasts", "        follow_z: `one follow lasts")).unwrap();
+        assert!(mute.validate().unwrap_err().contains("the world constant `follow_s` has no description"));
+        assert!(s.validate().is_ok());
+    }
+
+    /// The minds' world text the shipped rules give:
+    /// `cargo test -p living-rules --lib print_world_text -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn print_world_text() {
+        println!("{}", scripts().world_text(&[("seasons", "(the world's calendar)".into()), ("life", "(the world's life table)".into())]));
+    }
+
     /// Items, kinds and skills are declared with traits, and the rules read the traits: the
     /// lists the engine had (catalog::ITEMS, LATCHES, the notable skills, MOVES, the skills done
     /// moving) come out of the script unchanged, and a new item or kind is a line of script.
@@ -2072,7 +2173,7 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         let unpaid = s.hook("expire", &SkillCtx { actor: me(1, "10,10"), record: Some(demand("by")), ..Default::default() }).unwrap();
         assert!(unpaid.iter().any(|e| matches!(e, Effect::Close { status, .. } if status == "unpaid")));
         // A hook may not move goods: an install refuses one that tries.
-        assert!(Scripts::new(&format!("{}\nfn on_give(a) {{ [#{{ op: \"add\", item: \"berries\", qty: 1 }}] }}", include_str!("../../scripts/skills.rhai").replace("fn on_give(a)", "fn on_give_old(a)"))).unwrap().validate().unwrap_err().contains("a hook only makes, amends and closes records"));
+        assert!(Scripts::new(&format!("{}\nfn on_give(a) {{ [#{{ op: \"add\", item: \"berries\", qty: 1 }}] }}", include_str!("../../scripts/skills.rhai").replace("fn on_give(a)", "fn old_on_give(a)"))).unwrap().validate().unwrap_err().contains("a hook only makes, amends and closes records"));
         // How a party reads its records.
         let regard = RecordFacts { kind: "regard".into(), parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: "holder".into(), terms: serde_json::json!({"label": "rival town", "value": -35, "why": "the broken match"}).as_object().unwrap().clone(), ..Default::default() };
         assert_eq!(s.record_text(&regard).unwrap(), format!("your people hold {{id:{}}} as rival town (the broken match)", crate::records::COMMUNITY | 3));

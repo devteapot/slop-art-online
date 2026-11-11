@@ -163,6 +163,41 @@ Two couplings that let a law and the engine disagree are fixed:
 
 **Old scripts.** A script installed before a required law existed (`REQUIRED_LAWS`: `senses`, `motion`) runs with the shipped script's functions underneath its own until its next install, and `install_script` refuses a script without it. An old `laws()` with `sight_day`, `run_speed`, `turn_rate` and the rest is ignored: those keys are no longer read.
 
+### Traits instead of lists
+
+Rules read what a thing is, declared in the script, instead of lists of names in Rust or in rules:
+
+| Was | Now |
+| --- | --- |
+| `catalog::ITEMS` (26 names in Rust) | `items()`: the world's items in order, each with its traits; read once into `catalog::Skills::items` (`catalog::item`, `item_names`), so normalization, install samples, the game client's verbs and name laws take the world's items |
+| `cook_check`, `smoke_check`: only `"fish"` or `"meat"`, and `"cooked_" + item` | the items' `cooks_to` and `smokes_to` traits (`item_trait`, `items_with`); the refusal lists them ("only raw fish or meat can be cooked") |
+| `graze_check`: "only deer graze"; `act.rs` filled `pasture` and ate the grass for the skill named `graze` | `kinds()`: the kind's `grazes` trait ("only grazing animals graze"); the engine works out `a.actor.pasture` for any skill whose rules read it (`Scripts::skill_reads_actor`), and grass is eaten by the `graze` effect `graze_done` returns |
+| `lunge`, `max_hp`, `carcass_meat`, `carcass_hide`, `dodge_dist`, `dodge_speed` switches by species, and an attack's bare damage | traits of each kind in `kinds()` (`blow` for the bare attack); the functions read the table, so the engine's calls by name are unchanged |
+| `foods_text` listed seven foods; `source_of("food")` and `act.rs`'s food hint named berries and fish | built from the items' `nutrition` and the resources' yields; `act.rs` asks `source_of("food")` (`Scripts::text_of`) |
+| `LATCHES` (`brain.rs`), the notable skills in `report()` (`act.rs`), `rooted` (`act.rs`), `MOVES` (`combat.rs`), `skill == "flee"` for a reflex | skill spec traits `latch`, `notable`, `moving`, `moment`, `reflex` (`catalog::SkillSpec`) |
+| the theft rule in `act.rs` (owner, community, guest) | the `theft(a)` law; the engine fills `a.target.community` and the new `a.target.hosts` (the actor is the owner's guest) for a structure, and does what follows: the owner roused if it sees, onlookers told |
+| warmth by structure kind (`act.rs` `warmth`: campfire, shelter, house, hall, inn, workshop) | `structure_traits()`: `warms` (a hearth) and `roof`; distances stay the laws' `fire_warmth` and `shelter_warmth` |
+| food in any structure spoils at a third (`tick.rs`) | `kept_spoil(kind)`, a name law over the structure kinds |
+| a planted bush's 5 berries (`act.rs`, `seed.rs`) | `planted_max(kind)` |
+| `occupation_know_how` (`seed.rs`) | `occupation_knows(occ)` (`Scripts::words_of`) |
+
+**Stayed in Rust as primitives,** and why:
+
+- The torch in `senses`: the law names the item it reads (`inv(a, "torch")`), in the script. A `light` trait read through the items would make the law read the whole pack, so the per-state key would be every pack and the hot-path memo would stop sharing answers.
+- `catalog::CREATURES`, `RESOURCES`, `STRUCTURES` and `TECHNIQUES`: the names generation, species files and the client draw from. Their rules (what a kind, a structure or a technique does) are the script's; the name lists are the world's vocabulary. Moving them is the next step of the same kind as `items()`.
+- The calendar (night 20:00–06:00, the world starting at 07:00, winter as a quarter of the year): `is_night` and `season_of` run in the rules crate, the authority and the client on every frame or tick. The minds' world text states them (`calendar_law`).
+- Infrastructure limits (memo sizes, sweep and step cadences, table bounds, input buckets' clamps) and generation constants: not rules a world varies.
+- Many remaining numbers the survey found (alert thresholds in `brain.rs`, think and re-think timings, fight-report pacing, mutation sizes, wander distances): rules, still in Rust; listed for the next pass in the branch's survey.
+
+### Every law described, and the minds' world text built from them
+
+- **Declarations.** Every law the engine asks is declared by `<law>_law()` with `about`, `cadence` and, for laws that belong in the minds' world text, a `topic`; `covers` lists further functions one declaration describes (`combat_law` covers `lunge`, `max_hp`, …). A law with no function of its own states a rule the engine keeps (`calendar_law`, `settlements_law`).
+- **World constants.** `laws_about(l)` gives each `laws()` key its words for the values in force (`a campfire warms those within 3.5 m`).
+- **Install refusal** (`check::described`, run last so a law's own failure is reported first): "the law `theft` has no description (declare `theft_law()` with `about`, or list it in another law's `covers`)", "the world constant `follow_s` has no description", or "a law's description failed: …". The asked laws are the context laws, the hooks, the laws by name (`name_laws`) and `ENGINE_LAWS`.
+- **Numbers come from the laws.** Each `about` is built when the script compiles, from the same functions the engine asks: sight from `sight_in`, walking speeds from `move_speed` on sample bodies, foods from `nutrition`, recipes from `cost`, a blow's reach from `attack_spec().reach + lunge(kind)`, a yield's seconds from `yield_ms`. A floor that changes a law changes what minds are told (`world_text_is_built_from_the_laws`: day sight 7 on a floor gives "By day one sees 7 m").
+- **The minds' world text** (`Scripts::world_text`): one line per section of `world_topics()`, its laws' `about` in source order, with the world's own sections (`seasons`, `life`, from the seed) where they belong. `prompts::world_rules` builds it once per rules revision (the WORLD line from the seed first), so the static prefix of every prompt changes only when the rules do; the prefix-cache tests (`*_shares_prefix`) pass. Print it with `cargo test -p living-rules --lib print_world_text -- --ignored --nocapture`.
+- **What changed in the text** against the old hard-coded `RULES` (`living/mind/src/prompts.rs`): two numbers it had wrong are now the laws' (a deer gives 5 meat, not 3; a person moves 2.6 m/s walking, the old line called it running), warmth distances are exact (3.5 and 2.5 m, not 3 and 2), sight, hearing and moving have their own sections (SENSES, MOVING; hearing moved out of OTHERS), recipes list every ingredient, theft is stated under SETTLEMENTS, and OTHERS says when a name is known.
+
 ## Primitives
 
 Four engine primitives, with no engine code per kind of social state:

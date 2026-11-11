@@ -92,13 +92,14 @@ fn motion(a) {
 }
 
 // A grown, rested body of a kind at its normal pace (for descriptions).
-fn walk_of(kind) { move_speed(#{ actor: #{ kind: kind, stage: "adult", speed: 1.0, energy: 100.0 } }) }
+fn walk_of(kind) { try { return move_speed(#{ actor: #{ kind: kind, stage: "adult", speed: 1.0, energy: 100.0 } }); } catch { } 0.0 }
 
 fn motion_law() {
     let m = motion(#{ actor: #{ kind: "person", stage: "adult" }, night: false });
     #{
         cadence: "hot",
         topic: "moving",
+        covers: ["move_speed"],
         about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. Running is ${short(m.run)} times one's walk and a flight ${short(m.flee)} times; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can.`,
     }
 }
@@ -1673,3 +1674,146 @@ fn eat_shows() { #{ look: "eat" } }
 fn graze_shows() { #{ look: "eat" } }
 fn sleep_shows() { #{ look: "sleep" } }
 fn rest_shows() { #{ look: "rest" } }
+
+// ---- laws: what each is, for minds (read once when the script compiles) --------------------
+// Every law the engine asks is declared by a `<name>_law()`: `about` says what it is for a mind
+// (the minds' world text is built from these, so it follows the rules), `cadence` how often
+// the engine runs it, `topic` the section of the world text it belongs to, and `covers` the
+// functions it declares besides its own name. A law with no function of its own states a rule
+// the engine keeps (the calendar, death). Numbers in the texts come from the laws themselves.
+
+// The sections of the minds' world text, in order: [topic, heading]. `seasons` and `life` are
+// the world's own (its calendar and its people's life table) and come from the seed.
+fn world_topics() {
+    [["time", ""], ["senses", "SENSES"], ["moving", "MOVING"], ["seasons", "SEASONS"], ["body", "BODY"], ["know_how", "KNOW-HOW"],
+     ["food", "FOOD"], ["making", "MAKING"], ["settlements", "SETTLEMENTS"], ["life", "LIFE"], ["combat", "COMBAT"], ["force", "FORCE"],
+     ["communities", "COMMUNITIES"], ["purpose", "TIME"], ["others", "OTHERS"]]
+}
+
+// A person in a state, as the needs law reads one (for descriptions).
+fn person_now(act, night) { #{ actor: #{ kind: "person", stage: "adult", activity: act, near_fire: false, near_shelter: false, inv: #{} }, night: night, season: "summer", raining: false } }
+
+fn calendar_law() { #{ cadence: "hot", topic: "time", about: "One day lasts 12 real minutes; night is 20:00-06:00." } }
+
+// The need rates of a grown person awake by day (for descriptions); () when the rates law
+// cannot say (a world's own rates, or rates given finished).
+fn rates_awake() {
+    try { let r = rates(person_now("", false)); if r.starving_at != () { return r; } } catch { }
+    ()
+}
+
+fn needs_law() {
+    let awake = rates_awake();
+    let l = laws();
+    let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(awake.hunger)}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-awake.energy)}/min` };
+    #{ cadence: "event", topic: "body", covers: ["rates", "body_state"],
+       about: `${rise} awake and recovers while sleeping (faster within ${short(l.shelter_warmth)} m of a shelter or house). At night, people farther than ${short(l.fire_warmth)} m from a campfire and ${short(l.shelter_warmth)} m from a shelter or house, and without a warm cloak, lose health to the cold. Health recovers slowly when fed and rested. Death is permanent.` }
+}
+
+fn know_how_law() {
+    #{ cadence: "event", topic: "know_how",
+       about: "you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs), masonry (walls), carpentry (houses and gates; needs shelter), toolmaking (axe, pick). Others may know what you don't: ask them to teach you (teach takes time beside each other), read what someone wrote, or experiment with materials to work something out yourself. What only one person knows dies with them unless they teach it or write it down." }
+}
+
+fn food_law() {
+    #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_rate", "carried_spoil", "kept_spoil", "carry_limit", "source_of", "items"],
+       about: `${foods_text()} (hunger points). Cook raw ${or_list(items_with("cooks_to"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass_meat("deer")} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
+}
+
+fn making_law() {
+    let parts = [];
+    for k in ["campfire", "shelter", "storage", "spear", "cloak", "torch", "house", "gate", "wall", "road", "axe", "pick"] {
+        let c = cost(k);
+        let need = "";
+        for m in c.keys() { if need != "" { need += " + "; } need += `${c[m]} ${m}`; }
+        parts.push(`${k} = ${need}`);
+    }
+    #{ cadence: "event", topic: "making", covers: ["structure_traits", "regrow", "planted_max", "trap_every_s", "trap_holds"],
+       about: `${list(parts)} (a wall and a road per tile; a tablet or sign is 1 wood, to write on). A spear hits much harder and fishes faster; an axe cuts wood and a pick breaks stone twice as fast; a cloak keeps the night cold off; a house is a home, warm like a shelter and a fire; walking on road is faster; anyone can take from a storage.` }
+}
+
+fn settlements_law() {
+    #{ cadence: "event", topic: "settlements",
+       about: "walls block the way; a gate lets people through while open, and only the members of the community that keeps it may open or shut it. Who is let in, when gates are shut and who keeps watch is for each community to decide." }
+}
+
+fn theft_law() {
+    #{ cadence: "event", topic: "settlements",
+       about: "Taking from someone else's store when you are not of their people and not their guest is theft: if the owner sees it, they are roused, and anyone watching sees you take it." }
+}
+
+fn combat_law() {
+    #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "lunge", "max_hp", "carcass_meat", "carcass_hide", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
+       about: `fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
+}
+
+fn force_law() {
+    #{ cadence: "event", topic: "force", covers: ["yield_ms"],
+       about: `every blow, shot or bolt does its full damage, and whoever reaches 0 health dies; a blow cannot be held back. threaten = menace someone within a few tiles with harm for 2 s (no harm yet; they see it coming, as {"threatened": true}, and so does anyone watching). It is a threat of violence: to ask, wake, urge or call someone, speak (say) instead. seize = take items from a person's pack against their will, only from someone who has yielded to force or is badly hurt (to get goods by force you need not kill). yield = give in, guard down and hands up: for ${short(yield_ms("person") / 1000.0)} s you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in. Everyone nearby sees which force was used.` }
+}
+
+fn communities_law() {
+    #{ cadence: "event", topic: "communities", about: `people can found a community (the act {"do": "found", "text": "its name"}), ask a member to join it (join), welcome someone who asked (welcome), or leave. What a community means, who does what and how it treats others is up to its members.` }
+}
+
+fn purpose_law() { #{ cadence: "event", topic: "purpose", about: "beyond staying alive, how you spend your days is yours to decide, from who you are and what you want." } }
+
+fn perceived_of_law() {
+    #{ cadence: "event", topic: "others",
+       about: "You cannot read minds; what others say may be false. You only know what you perceived or were told. You know someone's name once they say it, or you are family, of one community, or close; until then they are a stranger to you." }
+}
+
+fn dealings_law() {
+    #{ cadence: "event", covers: ["record_text", "on_give", "on_store", "on_host", "on_expire", "due_by_dark"],
+       about: "Agreements and demands are kept by the world: it counts what each side hands over, stores or hosts for the other, and tells both sides when an agreement is kept, broken or lapses at its dusk, and when a demand is met or goes unpaid." }
+}
+
+fn woken_law() {
+    #{ cadence: "event", covers: ["wakes", "woken_ring", "woken_stage"],
+       about: "Townsfolk live on their habits until something calls for a mind: being spoken to, a skill aimed at them, being hurt or robbed. Then they wake and think for themselves for a while." }
+}
+
+fn occupations_law() {
+    #{ cadence: "compile", covers: ["occupation_knows"], about: "What someone of an occupation knows from the start of the world: a fisher spears and cooks, a builder builds shelters and houses, and so on." }
+}
+
+// What each world constant (`laws()`) is, given the values: every key needs a text.
+fn laws_about(l) {
+    #{
+        fire_warmth: `a campfire warms those within ${short(l.fire_warmth)} m`,
+        shelter_warmth: `a shelter or a house shelters (and a house warms) those within ${short(l.shelter_warmth)} m`,
+        gestation_days: `a child is carried about ${short(l.gestation_days)} days (the species' life table may say otherwise)`,
+        bond_window_s: `two adults who both choose to start a family do so within ${short(l.bond_window_s)} s of each other`,
+        crowd: `more than ${short(l.crowd)} people in sight is a crowd`,
+        danger_near: `a predator within ${short(l.danger_near)} m is a danger near`,
+        danger_far: `a predator within ${short(l.danger_far)} m is noticed as a danger`,
+        repeat_failure_s: `the same failure within ${short(l.repeat_failure_s)} s is not news again`,
+        road_speed: `walking on road is ${short(l.road_speed)} times as fast`,
+        slow_radius: `walkers slow down within ${short(l.slow_radius)} m of where they are going`,
+        corner_radius: `walkers cut a corner from ${short(l.corner_radius)} m before it`,
+        steer_s: `a walker alone looks again at least every ${short(l.steer_s)} s`,
+        crowd_hz: `among others a walker looks again ${short(l.crowd_hz)} times a second`,
+        chase_hz: `a chaser or follower looks again ${short(l.chase_hz)} times a second`,
+        combat_hz: `in a fight a body looks again ${short(l.combat_hz)} times a second`,
+        input_hz: `a player may send ${short(l.input_hz)} movement inputs a second`,
+        input_burst: `and ${short(l.input_burst)} in a burst`,
+        pasture_regen: `grass regrows ${l.pasture_regen} grazing units per grassy tile per growing minute`,
+        alone_within: `someone with no other person within ${short(l.alone_within)} m is alone`,
+        face_slack: `a body within ${short(l.face_slack)} radians of facing something already faces it`,
+        flee_clear: `a flight ends ${short(l.flee_clear)} m farther from the threat than it began`,
+        takeover_s: `a played character with no connection of its person for ${short(l.takeover_s)} s lives on under the world's minds`,
+        follow_s: `one follow lasts ${short(l.follow_s)} s before the follower looks again`,
+        read_sign_m: `reading with nothing named reads the nearest sign within ${short(l.read_sign_m)} m`,
+        kin_near_m: `others of one's kind within ${short(l.kin_near_m)} m are kin near`,
+        trade_window_s: `a trade offer can be accepted for ${short(l.trade_window_s)} s`,
+        join_window_s: `a request to join a community stands ${short(l.join_window_s)} s`,
+        address_m: `speech to no one in particular is for the only listener within ${short(l.address_m)} m`,
+        keep_seen_m: `a creature in a player's sight stays seen until ${short(l.keep_seen_m)} m beyond it`,
+        chase_lost_share: `a chase is lost beyond ${short(l.chase_lost_share)} times the chaser's sight`,
+        spawn_hunger: `a body comes into the world with hunger ${short(l.spawn_hunger)}`,
+        spawn_energy: `and energy ${short(l.spawn_energy)}`,
+        pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
+        minds: if l.minds { "characters nobody plays have minds of their own" } else { "characters nobody plays live on their habits alone, without minds" },
+        cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
+    }
+}
