@@ -1,26 +1,40 @@
 #!/usr/bin/env bash
-# Spike (branch char-spike): generate the scripted people (living/tools/blender/person.py) and run
-# them through the same steps as the VRoid bases (gen_anim.sh): animate.py's clip library,
-# merge_primitives.py, face_normals.py. Output is git-ignored: lookdev/own-<variant>.glb and
-# lookdev/anim/own-<variant>.{glb,clips.json,face.png}.
-# Usage: living/tools/blender/gen_person.sh [variant ...]     (default: every variant)
-#   KIMODO_DIR=<dir>  the library's generated NPZs (default .local/kimodo/outputs/library)
-#   ONLY=<clips>      comma-separated library entries (default: those the spike's page shows; the
-#                     archived cache of 2026-11-11 lacks gather, work, eat, play, the ground sits
-#                     and dodge, so the whole library cannot be built from it)
+# Generate people with the character generator (living/tools/blender/person.py, docs/CHARACTERS.md)
+# and run them through the steps every character base goes through (as gen_anim.sh does for the
+# VRoid bases): animate.py's clip library, merge_primitives.py, face_normals.py.
+# Output is git-ignored: lookdev/own-<name>.glb with <name>.params.json (the person's full
+# parameters and the game recipe's height and proportions) and <name>.atlas.png (the painted face)
+# beside it, and lookdev/anim/own-<name>.{glb,clips.json,face.png}, which is what the game loads.
+# Usage: living/tools/blender/gen_person.sh [PERSON ...]     (default: the presets)
+#   PERSON is [NAME=]SPEC. SPEC is a preset (man, woman, elder, youth, boy, girl, heavy), `<seed>:<kind>` (kind: man,
+#   woman, elder_man, elder_woman, boy, girl), a seed alone, or a parameter file (*.json). NAME
+#   defaults to the spec (a file's own name).
+#   PERSON_ARGS=<args>  more arguments for person.py (e.g. "--set age=70 --set beard.style=full")
+#   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/outputs/library)
+#   ONLY=<clips>        comma-separated library entries (default: those the cache of 2026-11-11
+#                       holds of what the check pages show; it lacks gather, work, eat, play, the
+#                       ground sits and dodge, so the whole library cannot be built from it)
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 src=living/game/assets/lookdev
 blender=${BLENDER:-blender}
 kimodo=${KIMODO_DIR:-.local/kimodo/outputs/library}
 only=${ONLY:-idle,idle_look,walk,walk_brisk,run,run_fast,talk,wave,sit_down,sit_idle,stand_up,sword_slash,sword_overhead}
-variants=("$@")
-[ ${#variants[@]} -gt 0 ] || variants=(man youth elder woman)
+people=("$@")
+[ ${#people[@]} -gt 0 ] || people=(man woman elder youth boy girl heavy)
 mkdir -p "$src/anim"
-for v in "${variants[@]}"; do
-  name=own-${v//:/-}
+for p in "${people[@]}"; do
+  spec=${p#*=}
+  case "$spec" in
+    *.json) arg=(--params "$spec"); name=$(basename "$spec" .json) ;;
+    *[!0-9]*) arg=(--variant "$spec"); name=${spec//:/-} ;;
+    *) arg=(--seed "$spec"); name=$spec ;;
+  esac
+  [ "$p" = "$spec" ] || name=${p%%=*}
+  name=own-$name
   log=$(mktemp)
-  if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- --variant "$v" --out "$src/$name.glb" > "$log" 2>&1; then
+  # shellcheck disable=SC2086
+  if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} --out "$src/$name.glb" > "$log" 2>&1; then
     grep -v OpenColorIO "$log" | tail -30; rm -f "$log"; exit 1
   fi
   grep -E '^PERSON' "$log" || true

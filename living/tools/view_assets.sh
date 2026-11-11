@@ -18,8 +18,10 @@ files=$2
 env_id=${3:-}
 height=${4:-}
 cargo build --release -q -p living-game --manifest-path living/Cargo.toml
+# A private CARGO_TARGET_DIR (shared build machines) is honoured; relative ones are from the repository root.
+target=${CARGO_TARGET_DIR:-living/target}
 LIVING_GAME_VIEW="$files" LIVING_GAME_VIEW_OUT="$out" LIVING_GAME_VIEW_ENV="$env_id" LIVING_GAME_VIEW_HEIGHT="$height" \
-  RUST_LOG=${RUST_LOG:-warn,living_game=info} living/target/release/living-game 2>&1 | grep -E 'view:|ERROR|panicked' || true
+  RUST_LOG=${RUST_LOG:-warn,living_game=info} "$target/release/living-game" 2>&1 | grep -E 'view:|ERROR|panicked' || true
 for d in "$out"/*/; do
   name=$(basename "$d")
   shots=$(ls "$d"[0-9][0-9]-*.png 2>/dev/null || true)

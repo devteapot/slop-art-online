@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Spike (branch char-spike): photograph a character recipe through the game's renderer for the
-# comparison page: the same stills and the same clip frames for every character.
-# Usage: living/tools/char_spike/capture.sh RECIPE NAME OUT_DIR [stills|clips|blink|all]
+# Photograph a character recipe through the game's renderer for the check page
+# (living/tools/characters/page.py): the same stills and the same clip frames for every character.
+# Usage: living/tools/characters/capture.sh RECIPE NAME OUT_DIR [stills|clips|blink|all]
+#   FACE_K=<factor> FACE_AIM=<0..1>  scale and aim the close face shots (see below)
 #   OUT_DIR/NAME/stills/<shot>.png and OUT_DIR/NAME/frames/<clip>-<view>/NNN.png
 # Clip frames are poses held at a time (the asset view's `clip@seconds/view`), so spring bones
 # (VRoid hair and skirts) rest instead of swinging.
@@ -24,7 +25,10 @@ view() { # size, shots, dest dir, prefix
 if [ "$what" = stills ] || [ "$what" = all ]; then
   names=(front three-quarter side back face face-three-quarter face-side hands rest-front rest-three-quarter)
   # `rest`: the pose at time 0 of sword_slash is the library's neutral stand.
-  view 1000x1000 "idle@1.0/0:8:0.62,idle@1.0/40:14:0.62,idle@1.0/90:8:0.62,idle@1.0/180:8:0.62,idle@1.0/0:4:0.2:0.92,idle@1.0/40:6:0.2:0.92,idle@1.0/90:4:0.2:0.92,talk@2.0/35:10:0.3:0.62,sit_idle@1.0/40:14:0.62,sit_idle@1.0/90:8:0.62" "$out/$name/stills"
+  # The view frames a model by its own size, so a face shot's zoom is relative to the whole
+  # figure. FACE_K scales it (and FACE_AIM moves it) to frame a head of another proportion alike.
+  fz=$(python3 -c "print(f'{0.2 * ${FACE_K:-1}:.4f}')"); fa=${FACE_AIM:-0.92}
+  view 1000x1000 "idle@1.0/0:8:0.62,idle@1.0/40:14:0.62,idle@1.0/90:8:0.62,idle@1.0/180:8:0.62,idle@1.0/0:4:$fz:$fa,idle@1.0/40:6:$fz:$fa,idle@1.0/90:4:$fz:$fa,talk@2.0/35:10:0.3:0.62,sit_idle@1.0/40:14:0.62,sit_idle@1.0/90:8:0.62" "$out/$name/stills"
   mv "$out/$name/stills/rest-front.png" "$out/$name/stills/sit-three-quarter.png"
   mv "$out/$name/stills/rest-three-quarter.png" "$out/$name/stills/sit-side.png"
   names=(game game-walk)
@@ -59,7 +63,8 @@ if [ "$what" = blink ]; then
   # The game blinks and moves the mouth by itself (LIVING_GAME_ACT=talk); photograph the face many
   # times and let media.py pick a blink and an open mouth.
   rm -rf "$out/$name/blink"
-  LIVING_GAME_ACT=talk LIVING_GAME_SIZE=600x600 LIVING_GAME_VIEW_SHOTS="$(python3 -c "print(','.join(['idle@1.0/0:4:0.2:0.92'] * 90))")" \
+  fz=$(python3 -c "print(f'{0.2 * ${FACE_K:-1}:.4f}')")
+  LIVING_GAME_ACT=talk LIVING_GAME_SIZE=600x600 LIVING_GAME_VIEW_SHOTS="$(python3 -c "print(','.join(['idle@1.0/0:4:$fz:${FACE_AIM:-0.92}'] * 90))")" \
     living/tools/view_assets.sh "$tmp" "recipe:$recipe" 2>&1 | grep -E "ERROR|panicked" || true
   mkdir -p "$out/$name/blink" && cp "$tmp"/recipe:*/[0-9]*.png "$out/$name/blink/" && rm -rf "$tmp"
 fi

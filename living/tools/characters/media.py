@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Spike (branch char-spike): turn capture.sh's frames into the comparison page's media.
+"""Turn capture.sh's frames into the character check page's media.
 
-    python3 living/tools/char_spike/media.py CAPTURE_DIR PAGE_DIR [CAST_DIR]
+    python3 living/tools/characters/media.py CAPTURE_DIR PAGE_DIR [TOWN_DIR] [SHEETS_DIR]
 
-CAPTURE_DIR holds one folder per character (`ours`, `vroid`, `vroid-smith`, and optional
-variants) as capture.sh writes them. PAGE_DIR gets:
+CAPTURE_DIR holds one folder per character (`ours`, `woman`, `vroid`, and optional others) as
+capture.sh writes them. PAGE_DIR gets:
 - `img/<character>-<shot>.jpg`: the stills;
-- `img/game-<character>.png`: the game-camera frame's middle, enlarged four times without
+- `img/<character>-game-crop.png`: the game-camera frame's middle, enlarged four times without
   smoothing, since a character is only a few dozen pixels tall there;
-- `clips/<clip>-<view>.mp4`: ours beside the VRoid control, the same frames at the same times;
-- `img/cast-lineup.jpg`, `img/cast-faces.jpg` and `cast.json` from cast.py's CAST_DIR, if given;
+- `clips/<clip>-<view>.mp4`: ours beside the VRoid control, the same frames at the same times
+  (`ours`, then `woman` if captured, then `vroid`);
+- `img/town-*.jpg|png` and `town.json` from town.py's TOWN_DIR, if given;
+- `img/<name>.jpg` for every picture in SHEETS_DIR (faces.py's sheets), if given;
 - `stats.json`: what each character file holds (triangles by part, bones, materials, textures,
   morph targets, spring groups, bytes).
 Needs Pillow and ffmpeg.
@@ -25,7 +27,7 @@ from PIL import Image
 
 REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 ANIM = os.path.join(REPO, "living", "game", "assets", "lookdev", "anim")
-FILES = {"ours": "own-man", "vroid": "vroid-Sendagaya_Shino", "elder": "own-elder", "woman": "own-woman", "youth": "own-youth"}
+FILES = {"ours": "own-man", "woman": "own-woman", "vroid": "vroid-Sendagaya_Shino", "elder": "own-elder", "youth": "own-youth"}
 CLIPS = [("idle", "tq", 12), ("walk", "tq", 15), ("walk", "side", 15), ("run", "tq", 24), ("run", "side", 24), ("sword_slash", "tq", 15), ("sit_down", "tq", 15), ("sit_idle", "tq", 12)]
 LOOPS = {"walk": 4, "run": 6}
 
@@ -101,32 +103,56 @@ def main():
         seen = []
         for f in sorted(os.listdir(d)):
             im = Image.open(os.path.join(d, f)).convert("RGB")
-            px = np.asarray(im).astype(int)[150:450, 150:450]
+            full = np.asarray(im).astype(int)
+            px = full[150:450, 150:450]
             r, g, b = px[..., 0], px[..., 1], px[..., 2]
             white = int(((r > 185) & (g > 185) & (b > 180) & (abs(r - b) < 25)).sum())
-            mouth = int(((r < 125) & (r > 50) & (g < 75) & (b < 75) & (r > g + 15)).sum())
+            # The mouth's inside, where a mouth is: dark red, below the middle of the frame.
+            m = full[300:470, 215:385]
+            r, g, b = m[..., 0], m[..., 1], m[..., 2]
+            mouth = int(((r < 150) & (r > 50) & (g < 80) & (b < 85) & (r > g + 18)).sum())
             seen.append((white, mouth, im))
-        picks = {"shut": min(seen, key=lambda x: x[0]), "open": min(seen, key=lambda x: (x[1], -x[0])), "mouth-open": max(seen, key=lambda x: x[1])}
+        most = max(x[0] for x in seen)
+        awake = [x for x in seen if x[0] >= 0.8 * most]
+        picks = {"shut": min(seen, key=lambda x: x[0]), "open": min(awake, key=lambda x: (x[1], -x[0])), "mouth-open": max(awake, key=lambda x: x[1])}
         picks["blink-shut"], picks["blink-open"] = picks.pop("shut"), picks.pop("open")
         for k, x in picks.items():
             x[2].save(os.path.join(page, "img", f"{c}-{k}.jpg"), quality=92)
         print(f"blink {c}: eye-white pixels {picks['blink-shut'][0]} shut, {picks['blink-open'][0]} open; mouth pixels {picks['mouth-open'][1]} open")
     # Clips: ours beside the control.
-    if all(os.path.isdir(os.path.join(cap, c, "frames")) for c in ("ours", "vroid")):
+    side = [c for c in ("ours", "woman", "vroid") if os.path.isdir(os.path.join(cap, c, "frames"))]
+    if len(side) >= 2:
         for clip, view, fps in CLIPS:
-            a, b = (os.path.join(cap, c, "frames", f"{clip}-{view}") for c in ("ours", "vroid"))
-            n = min(len(os.listdir(a)), len(os.listdir(b)))
+            dirs = [os.path.join(cap, c, "frames", f"{clip}-{view}") for c in side]
+            if not all(os.path.isdir(d) for d in dirs):
+                continue
+            n = min(len(os.listdir(d)) for d in dirs)
             loop = LOOPS.get(clip, 1)
             out = os.path.join(page, "clips", f"{clip}-{view}.mp4")
-            filt = f"[0:v][1:v]hstack=inputs=2,loop=loop={loop - 1}:size={n}:start=0,format=yuv420p[v]"
-            run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i", os.path.join(a, "%03d.png"), "-framerate", str(fps), "-i", os.path.join(b, "%03d.png"),
-                 "-frames:v", str(n * loop), "-filter_complex", filt, "-map", "[v]", "-c:v", "libopenh264", "-b:v", "3500k", "-movflags", "+faststart", out])
-            print(f"clip {out}: {n} frames x{loop} at {fps} fps")
-    if len(sys.argv) > 3:
-        import shutil
+            ins = []
+            for d in dirs:
+                ins += ["-framerate", str(fps), "-i", os.path.join(d, "%03d.png")]
+            filt = "".join(f"[{i}:v]" for i in range(len(dirs))) + f"hstack=inputs={len(dirs)},scale=iw*{2 / len(dirs):.4f}:-2,loop=loop={loop - 1}:size={n}:start=0,format=yuv420p[v]"
+            run(["ffmpeg", "-y", "-loglevel", "error"] + ins + ["-frames:v", str(n * loop), "-filter_complex", filt, "-map", "[v]", "-c:v", "libopenh264", "-b:v", "3500k", "-movflags", "+faststart", out])
+            print(f"clip {out}: {n} frames x{loop} at {fps} fps, {' | '.join(side)}")
+    with open(os.path.join(page, "clips.json"), "w") as f:
+        json.dump(side, f)
+    import shutil
 
-        for src, dst in (("lineup.jpg", "img/cast-lineup.jpg"), ("faces.jpg", "img/cast-faces.jpg"), ("cast.json", "cast.json")):
-            shutil.copy(os.path.join(sys.argv[3], src), os.path.join(page, dst))
+    if len(sys.argv) > 3 and os.path.isdir(sys.argv[3]):
+        for src in ("lineup.jpg", "faces.jpg", "faces-24.jpg", "game.png"):
+            if os.path.exists(os.path.join(sys.argv[3], src)):
+                shutil.copy(os.path.join(sys.argv[3], src), os.path.join(page, "img", "town-" + src))
+        shutil.copy(os.path.join(sys.argv[3], "town.json"), os.path.join(page, "town.json"))
+    if len(sys.argv) > 4 and os.path.isdir(sys.argv[4]):
+        for f in sorted(os.listdir(sys.argv[4])):
+            if f.endswith((".jpg", ".png")):
+                shutil.copy(os.path.join(sys.argv[4], f), os.path.join(page, "img", f))
+    # The painted faces.
+    for c, f in FILES.items():
+        atlas = os.path.join(os.path.dirname(ANIM), f + ".atlas.png")
+        if os.path.exists(atlas):
+            shutil.copy(atlas, os.path.join(page, "img", f"{c}-atlas.png"))
     stats = {c: glb_stats(os.path.join(ANIM, f + ".glb")) for c, f in FILES.items() if os.path.exists(os.path.join(ANIM, f + ".glb"))}
     with open(os.path.join(page, "stats.json"), "w") as f:
         json.dump(stats, f, indent=1)
