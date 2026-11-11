@@ -5,6 +5,13 @@
 
 `drive.py`'s `SCOPED` lacked the `audience` table that exp-greet added under the `LIVING_PERCEPTION` switch, so `run.py` stopped at the inventory guard ("scoped table inventory changed") on origin/main `3216b06d` too (`client-far2-233156`, drive.log). With `audience` added: `client-far3-234118` on branch `mind-act-outcome-far` at 3328c7bb, every check passes (39), the reducer permission matrix 229 calls and 0 mismatches, 77 tables private in the scoped build; `my_act_outcomes` gives only the caller's character's rows.
 
+## 2026-11-11 look-2 (dev-box)
+
+Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.
+
+- `seen_bodies` and `my_body` return `Moving` (the facing fields added) and `motion_seen` gains three columns; bindings regenerated. `run.py` `client-look2-m` (merged build, `scoped`): 39 of 39. `LIVING_PERCEPTION=open` `client-look2-open`: 39 of 39.
+- Migration: `origin/main`'s module published on a scratch world with a player joined, then this module over it without deleting data: accepted in place, rows kept; the server reported that all clients are disconnected (the views' row type changed).
+
 ## 2026-11-11 rules-senses-outcomes: my_senses, my_act_outcomes (Spark)
 
 Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change (perception and visibility; the inventories and own-state check), without the per-feature reader fan-out.

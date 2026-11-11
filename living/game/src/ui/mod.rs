@@ -93,14 +93,17 @@ impl Plugin for UiPlugin {
         let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
         let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update);
         if lookdev {
-            app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
+            app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(sample::fill).before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
             app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
                 .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
-                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare));
+                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare))
+                // Light text gets the theme's drop the frame it is spawned (Glass).
+                .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(kit::paint).after(UiWork).before(UiSystems::Prepare));
             if perf_on() {
                 app.init_resource::<UiPerf>()
                     .add_systems(Update, (perf_begin::<0>.before(UiInput).in_set(crate::phase::Phase::Input), perf_end::<0>.after(UiInput).in_set(crate::phase::Phase::Input)))
@@ -336,7 +339,8 @@ fn dump(
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
         // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.
         "under": pick.as_ref().and_then(|p| p.under),
-        "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground})).collect::<Vec<_>>()),
+        // `holds`: the cursor is inside its outline as `pick.rs` draws it (its own test).
+        "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground, "holds": extra.pointer.pos.is_some_and(|c| s.contains(c))})).collect::<Vec<_>>()),
         "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.name})).collect::<Vec<_>>(),
         "targeted": model.actors.iter().find(|a| a.targeted).map(|a| a.id),
         // The notes on screen now (the facing-sight readout among them).
