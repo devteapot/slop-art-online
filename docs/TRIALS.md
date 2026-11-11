@@ -21,12 +21,13 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `cast.<role>.pick` | Scripted characters, picked the same way. |
 | `timeline` | Steps. `"at": "prepare"` runs right after publishing, `"at": "start"` at the start hour before the mind starts, `"at": <minutes>` during the run, and `"when": {…}` on a trigger. An entry is one step or has `steps`, each with an optional `after` (seconds). |
 | `probes` | Probes the trial is about (all probes are computed for every trial). |
-| `minds` | Who the mind service thinks for. Default: the subject (`LIVING_ONLY`). `"only": "all"`: every person and animal. With `"max": N` as well, at most N at a time: those already thinking who are alive, then the earliest-born of the rest past infancy. A death frees a place, and a newborn takes one when it becomes a child. The runner restarts the mind with the new `LIVING_ONLY` when someone joins the set, at most every 2 minutes (a `reslot` event; planned restarts do not count toward the runaway watchdog's restarts). A death alone only drops the dead from the set. |
+| `minds` | Who the mind service thinks for. Default: the subject (`LIVING_ONLY`). `"only": "all"`: every person and animal. With `"max": N` as well, at most N at a time: those already thinking who are alive, then the earliest-born of the rest past infancy. A death frees a place, and a newborn takes one when it becomes a child. The runner restarts the mind with the new `LIVING_ONLY` when someone joins the set, at most every 2 minutes (a `reslot` event; planned restarts do not count toward the runaway watchdog's restarts). A death alone only drops the dead from the set. `concurrency`: how many model calls the trial's mind service runs at once (`LIVING_CONCURRENCY`); default 64 where many think (`only: "all"` or `max`) and 4 for a single thinker, recorded in `mind-env.json` and the summary (`concurrency`). Every trial ran at 4 before 2026-11-11 (see below). |
 | `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. A world seed with its own laws (`laws`/`laws_file`) has them composed over the file first (`compose_laws`, as `floors::compose` does at creation), and the runner checks its composition against the world's. |
 | `census_s` | Every so many seconds, every character of the world goes to `census.jsonl`: stage, alive, cause and time of death, parents, position, hunger, activity, and who the mind thinks for. This is meant for small worlds (four whole-table reads per census). |
 | `life.stop_on_death` | `false`: a life run goes on to its duration after the subject dies, and the mind keeps running (default `true`: it stops 20 s after the death). |
 | `subject.join` | A human player joins as the subject through the real `join` reducer with its own identity (`Player` in trials.py): `name`, and `after_s`, how long the world lives first. |
-| `human` | The joined player's script, played with the player reducers only: `script: arrive` for [the arrival trial](#arrivals-a-stranger-who-says-nothing-2026-11-11) (`settle_s`, `walk_s`, `within_m`, `stand_s`, `stands`); without `script` it plays the takeover session. |
+| `human` | The joined player's script, played with the player reducers only: `script: arrive` for [the arrival trial](#arrivals-a-stranger-who-says-nothing-2026-11-11) (`settle_s`, `walk_s`, `within_m`, `stand_s`, `stands`, and `answer`: one line said back to the first resident who addresses it); without `script` it plays the takeover session. The player approaches and answers only residents the trial's minds think for (`Player.is_mind`: past infancy, in `LIVING_ONLY` or the `minds.max` thinkers), never one who lives by its graph and could not answer. |
+| `variants` | The only variants the trial runs with; others named on the command line are skipped for it (`arrive-answer` runs with the control and `arrive-all`). |
 | `record` | Small-world evidence, whole-table reads each sample: `speech` (every line said, `speech.jsonl`), `talk` (every conversation turn, `talk.jsonl`), `experiences` (every character's experience rows before minds integrate them, `experiences_all.jsonl`), `gestures` (wave, nod, face, appraise uses, `gestures.jsonl`), `positions` (every person's position, heading and activity target, `positions.jsonl`). |
 
 Steps (`do`): `place` (`to`: an anchor), `graph` (a graph, `instinct:<name>` from `instincts.json`, or `original`: the graph the character had before the trial changed it), `items`, `know`, `say` (`text`, `to`), `act` (`act` or `acts`: `do` nodes), `structure`, `background`, `kill`, `clear_routines`, `clear_items`, `call` (any admin reducer), `note`.
@@ -66,6 +67,8 @@ python3 living/tools/trial_evidence.py b4 --quotes 2      # per instance: death,
 python3 living/tools/trial_evidence.py b1 b4 --table      # one row per trial x variant with spread
 python3 living/tools/trials.py down                      # stop the containers (kept)
 ```
+
+**Mind concurrency (2026-11-11).** The runner gave every trial's mind `LIVING_CONCURRENCY=4`. In the hamlet's greeting batches (12 minds), the queue, not the model, then set the pace: talk turns waited a median 2–7 s in the queue (p90 15–25 s, at most 78 s) for 0.8 s of model time, and deliberations 6–13 s (p90 up to 41 s), by the resident inspector's reading. Play-test 2 ran at 192 and waited under 0.2 s. It is now the trial's `minds.concurrency`, by default 64 where many think and 4 for one thinker, so one-mind batches stay comparable with earlier ones. Batches of many minds before this date ran queued: their latencies are not the model's.
 
 Two runner behaviours from `exp-greet`, ported with the arrival trial (2026-11-11): `run --fake --fake-script FILE` gives the fake server a rules file (`living/trials/fake/latency.json`: model latencies near the real ones, open talk replies), and run from a git worktree `build` copies each module into the container's `/wasm` mount (another checkout's) as `<module>-wt<hash>` (`served_name`), which `run` publishes, so a worktree never overwrites another checkout's modules. Remove the tagged files from the mount when done.
 
@@ -611,7 +614,18 @@ With any law on, a person seen in a crowd gets a familiarity row with `times` 0 
 - `gesture`: wave, nod, face or appraise at them;
 - `to_them`, `about_them`: lines to them, or about them to others or to no one.
 
-Per run, it gives the share of residents in range who acted, the time from the arrival to the first resident-initiated contact, thoughts per resident-minute, and calls, tokens and dollars per hour. `--journal DIR --subject ID --from-ms --to-ms` reads a play-test's journals (no positions).
+Per run, it gives the share of residents in range who acted, the time from the arrival to the first resident-initiated contact, thoughts per resident-minute, and calls, tokens and dollars per hour. Residents are those the minds think for (census `thinkers`, else past infancy). Then, per arm:
+
+- **First contact by class**, per resident: `greeting`, `question` (who are you, are you new, where from), `offer` (food, a bed, help, work, company), `warning/hostility`, `other line`. Without a line: an offer or hostile act aimed at them, else `watching` (a face or appraise gesture; a gaze, standing still and turning to face them from 4–25 m; a thought naming them), else `approach, no line`. Counts per arm and three verbatim examples per class. The classes are keyword heuristics: read the examples.
+- **Follow-through** (`arrive-answer`): whom the newcomer answered, how many lines that resident said after it before 90 s of quiet, the seconds to each, and who else joined.
+- **Crowding**, a cost, since several converging at once reads as scripted: `converge_60s`, the most residents who spoke, gestured or aimed an activity at the newcomer within one minute; `together_4m`, the most within 4 m at once who had; `runs_3plus`. `converge_any_60s` and `together_any_4m` add approaches by distance, which routines make in every arm.
+- **Cost**: dollars per hour and per run, calls and tokens per minute. Also `reused_share` (reason lines an earlier thought of the same resident already had) and `reused_events` (those that are one-time events rather than plan states: the stale-reasons effect).
+
+`--journal DIR --subject ID --from-ms --to-ms` reads a play-test's journals (no positions).
+
+**`arrive-answer`** ([trial](../living/trials/arrive-answer.json)) is `arrive` with one change: the player says "Hello. I'm new here." back to the first resident who addresses it, then is silent again. It runs only with the control and `arrive-all` (the trial's `variants`). Its question is whether contact becomes a conversation.
+
+Both trials think with `minds.concurrency` 64 (the default for many minds since 2026-11-11). The player approaches and answers only residents the minds think for; the greeting trial's script, on `exp-greet`, addressed Tobin, who is not one, 2–5 times a run.
 
 ```bash
 python3 living/tools/trials.py build arrive
@@ -642,6 +656,12 @@ python3 living/tools/trials.py clean --batch af1
 
 The fake run shows the mechanics. Whether residents then greet, watch or talk about the newcomer is for the paid batch.
 
+`af3` (2026-11-11 18:31–18:46): `arrive-answer` × control and `arrive-all`, one run each, 14 minutes, concurrency 64 (in `mind-env.json` and the summary), and the proof-only fake script `living/trials/fake/arrive-answer.json`. In it, every thought whose prompt contains "new to you" says "Hello there. Are you new here?" to #13. The words also occur in region discoveries ("a place new to you"), so the control's residents spoke too. `LIVING_ONLY` left out Tobin (#8, an infant), and the player chose groups among the others.
+
+- The player answered the first resident who addressed it. In control Oren replied in 1.5 s ("verify fake: I heard you."). In `arrive-all` Ilsa did not: a listener whose deliberation is pending or running gets no separate talk turn.
+- First contact by class: 12 of 12 and 7 of 10 `question`, the scripted line. The control's 3 others were `approach, no line`.
+- Crowding: `converge_60s` 11 in `arrive-all` and 4 in control, both `runs_3plus`. Every resident saying the same line at once is what the measure should catch.
+
 Driving the laws on a scratch world: `scenes.py newcomers` on a hamlet run (`core-arrive-n3`) passed 18 of 18 checks. Shipped: the crowd hides the newcomer; the first sight is 0.45, not near home, and asks for no thought. On: seen in the crowd, "near your home", 0.7 (persona-less, temperament 50); asks for a thought; the scene marks them and no neighbour; wonders about them 20 s later and about no neighbour.
 
 ### The paid batch, planned
@@ -649,15 +669,22 @@ Driving the laws on a scratch world: `scenes.py newcomers` on a hamlet run (`cor
 ```bash
 cd <a checkout of exp-arrive with .env>; . ~/slop-sysroot/env.sh
 export CARGO_TARGET_DIR=$HOME/slop-<checkout>-target
-python3 living/tools/trials.py build arrive
-python3 living/tools/trials.py run --batch ar1 arrive \
+python3 living/tools/trials.py build arrive arrive-answer
+python3 living/tools/trials.py run --batch ar1 arrive arrive-answer \
     --variants arrive-control,arrive-notice,arrive-known,arrive-wonder,arrive-all \
     --replicates 4 --parallel 10 --stagger 15
 python3 living/tools/arrive_report.py ar1 --examples 3
 python3 living/tools/trials.py clean --batch ar1
 ```
 
-Five arms × 4 replicates × 14 minutes = 20 runs, 4.7 world-hours with 11–12 minds thinking. The cost is an estimate, not a measurement. The greeting batch's control arm cost $1.62–2.01 per world-hour on the same hamlet and models (`arrive_report.py` over `gr1a` control, `usd_h`). At that rate the batch is about $8–9.5. The switches add thoughts in their arms: the fake rates were 1.2–1.3 times control for `notice` and `wonder`, more for `all`, though fake cadence is not a price. That allows about $10–12 in all. The coordinator's rule of thumb (about $0.10 per thinking person-hour, $1.2 per world-hour) gives $5.6. At `--parallel 10`, two waves take about 35 minutes, about $16–24 an hour while it runs.
+`arrive`: five arms × 4 replicates; `arrive-answer`: two arms (its `variants`) × 4. That is 28 runs of 14 minutes, 6.5 world-hours with 11–12 minds thinking. The cost is an estimate, not a measurement:
+
+- **At the greeting batch's rate:** its control arm cost $1.62–2.01 per world-hour on the same hamlet and models (`arrive_report.py` over `gr1a` control, `usd_h`), which gives about $10.5–13.
+- **The switches' extra thoughts:** the fake rates were 1.2–1.3 times control for `notice` and `wonder`, more for `all`, though fake cadence is not a price. That allows about $13–16 in all.
+- **Concurrency 64** does not change tokens per call. It removes queueing, so minds may think somewhat more often in the same 14 minutes.
+- **The rule of thumb** (about $1.2 per world-hour) gives $7.8.
+
+At `--parallel 10`, three waves take about 50 minutes, about $16–24 an hour while it runs.
 
 Read first: `asked` (did the newcomer get a thought), then `acted` and `first_contact_s` (deliberate contact: lines to them, gestures, activities aimed at them), `lines_about` (talk about them), `mention` (thoughts naming them), against control. Then the examples: a greeting that names the stranger "new here" is the hoped-for answer; residents wondering aloud about every passer-by would be the cost.
 

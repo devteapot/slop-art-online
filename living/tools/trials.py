@@ -211,6 +211,19 @@ def seed_laws(seed):
     return ""
 
 
+def mind_concurrency(trial):
+    """How many model calls the trial's mind service runs at once (`LIVING_CONCURRENCY`):
+    `minds.concurrency`, else 64 where many think (`minds.only` "all" or `minds.max`) and 4 for a
+    single thinker. Before 2026-11-11 every trial ran at 4: in the hamlet's greeting batches the
+    queue, not the model, set the pace (talk turns waited a median 2-7 s, p90 15-25 s, against
+    0.8 s of model time; deliberations 6-13 s). One-mind trials keep 4, so their batches stay
+    comparable."""
+    m = trial.get("minds", {})
+    if m.get("concurrency"):
+        return int(m["concurrency"])
+    return 64 if m.get("only") == "all" or m.get("max") else 4
+
+
 def patch_skills(text, trial, variant):
     """A skills file with the trial's `skills_patch`, then the variant's, applied: each entry is
     name -> [old, new], a law value changed in place. An old text that does not occur exactly
@@ -413,9 +426,22 @@ class Player:
             time.sleep(3)
         self.call("human_move", 0.0, 0.0, False)
 
-    def residents_near(self, within):
+    def is_mind(self, c):
+        """Whether a resident is thought for by the trial's mind service: past infancy, and in its
+        `LIVING_ONLY` set when it has one (`thinkers` under `minds.max`, the subject alone for a
+        one-mind trial, every person under `minds.only: "all"` without `max`). Infants and
+        residents beyond `minds.max` live by their graphs and can never answer."""
+        if c.get("stage", 2) == 0:
+            return False
+        only = self.inst.trial.get("minds", {}).get("only")
+        thinkers = getattr(self.inst, "thinkers", None)
+        if only == "all":
+            return thinkers is None or c["id"] in thinkers
+        return c["id"] in self.inst.roles.get("subject", [])
+
+    def residents_near(self, within, minds=False):
         here = self.me()
-        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject]
+        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject and (not minds or self.is_mind(c))]
         pos = self.inst.bodies([c["id"] for c in people])
         near = sorted(((dist(here, pos[c["id"]]), c) for c in people if c["id"] in pos and here), key=lambda x: x[0])
         return [(d, c) for d, c in near if d <= within]
@@ -425,17 +451,43 @@ class Player:
 
     def hold(self, seconds):
         """Stand still for a while, still present: a call at least every 10 s (an idle player
-        whose client keeps its connection). From exp-greet."""
+        whose client keeps its connection). From exp-greet. While an answer is due (`answer`
+        in the arrival script), it listens every 2 s."""
         end = time.time() + seconds
         while time.time() < end:
             self.call("human_move", 0.0, 0.0, False)
-            time.sleep(min(10.0, max(0.0, end - time.time())))
+            step_end = min(end, time.time() + 10.0)
+            while time.time() < step_end:
+                if getattr(self, "answer_due", None):
+                    self.listen()
+                    time.sleep(min(2.0, max(0.0, step_end - time.time())))
+                else:
+                    time.sleep(max(0.0, step_end - time.time()))
+
+    def listen(self):
+        """The arrival script's one answer: the first line a resident thought for by the minds
+        (`is_mind`) addresses to the player (its own `speech` experience with the player as
+        `object`) gets `answer_due`, said back to that resident; then the player is silent again. The answer is a `human_answer` event
+        with the line it answers."""
+        inst = self.inst
+        rows = sorted(inst.rows(f"SELECT * FROM experience WHERE observer = {inst.subject} AND id > {getattr(self, 'heard_cursor', 0)}"), key=lambda r: r["id"])
+        for r in rows:
+            self.heard_cursor = max(getattr(self, "heard_cursor", 0), r["id"])
+            if r["kind"] == "speech" and r["object"] == inst.subject and r["subject"] != inst.subject and \
+                    any(self.is_mind(c) for c in inst.rows(f"SELECT * FROM character WHERE id = {r['subject']}")):
+                text = self.answer_due
+                self.answer_due = None
+                ok = self.call("human_say", text, r["subject"])
+                inst.emit("events", {"t": inst.t(), "human_answer": {"to": r["subject"], "text": text, "ok": ok, "at_ms": inst.now_ms(),
+                                                                     "heard": {"id": r["id"], "at_ms": r["at_ms"], "text": r["text"][:300]}}})
+                return
 
     def group(self, avoid=()):
         """The densest group of residents: the resident with the most others within 6 m (at
         least two, else the most within 10 m), sharing as few members with `avoid` as can be.
         Returns (centre, member ids)."""
-        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject]
+        # Only residents a mind thinks for: a group of graph-run residents could never answer.
+        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject and self.is_mind(c)]
         pos = self.inst.bodies([c["id"] for c in people])
         ids = [c["id"] for c in people if c["id"] in pos]
         best = None
@@ -463,9 +515,9 @@ class Player:
         start, end, last = time.time(), time.time() + seconds, 0.0
         members = []
         while time.time() < end:
-            if len(self.residents_near(within)) >= 2:
+            if len(self.residents_near(within, minds=True)) >= 2:
                 break
-            if time.time() - start > 90 and self.residents_near(3):
+            if time.time() - start > 90 and self.residents_near(3, minds=True):
                 break
             if time.time() - last >= 15:
                 centre, members = self.group(avoid=getattr(self, "avoid", ()))
@@ -473,9 +525,11 @@ class Player:
                     # A point, not a person: `goto` aims only at someone in sight.
                     self.act({"do": "goto", "target": {"at": [round(centre[0], 1), round(centre[1], 1)]}})
                 last = time.time()
+            if getattr(self, "answer_due", None):
+                self.listen()
             time.sleep(2.0)
         here = self.me()
-        pos = self.inst.bodies([c["id"] for _, c in self.residents_near(8)])
+        pos = self.inst.bodies([c["id"] for _, c in self.residents_near(8, minds=True)])
         if here and pos:
             cx = sum(p[0] for p in pos.values()) / len(pos)
             cy = sum(p[1] for p in pos.values()) / len(pos)
@@ -492,10 +546,13 @@ class Player:
         until two are within `within_m`, stand there silent for `stand_s`; then walk to the
         group that shares fewest members with the first and stand silent `stand_s` more; then
         stay where it is to the end of the run. It never speaks, gestures or acts toward anyone,
-        and its name is never said, so it stays a stranger. Each stand is a `human_stand` event
+        and its name is never said, so it stays a stranger. With `answer`, it says that one line
+        back to the first resident who addresses it (`listen`), then is silent again. Each stand is a `human_stand` event
         (from/to ms, who was within 12 m at its start) for arrive_report.py."""
         inst, end = self.inst, time.time() + spec.get("minutes", 14) * 60
         stands = spec.get("stands", 2)
+        # `answer`: the one line said back to the first resident who addresses the player.
+        self.answer_due = spec.get("answer")
         try:
             self.hold(spec.get("settle_s", 20))
             self.avoid = ()
@@ -1056,7 +1113,7 @@ class Instance:
                    LIVING_TOKEN=self.shared["token"],
                    LIVING_NEO4J_URI=f"127.0.0.1:{NEO4J_PORT}", LIVING_NEO4J_PASSWORD=self.shared["neo4j_pw"],
                    # Off (0) unless a trial asks for a rate: trials measure, they do not cap.
-                   LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY="4",
+                   LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY=str(mind_concurrency(self.trial)),
                    LIVING_VERIFY_FAKE_KEY="dummy-local-only", NO_PROXY="127.0.0.1,localhost",
                    RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
         # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY);
@@ -1071,6 +1128,7 @@ class Instance:
             for k in ("MISTRAL_API_KEY", "CARLID_NPC_API_KEY", "TYPESAFE_API_KEY"):
                 env[k] = ""
         env.update({k: str(x) for k, x in v.get("env", {}).items()})
+        self.concurrency = int(env["LIVING_CONCURRENCY"])
         (self.dir / "mind-env.json").write_text(json.dumps({k: env[k] for k in sorted(env) if k.startswith("LIVING_") and k not in ("LIVING_TOKEN", "LIVING_NEO4J_PASSWORD")}, indent=1))
         log = open(self.dir / "mind.log", "a")
         # A variant may run a mind built from another branch (an iteration's mind change): `mind_bin`,
@@ -1547,7 +1605,8 @@ class Instance:
             summary = summarize(self.dir, self.trial, extra={"db": self.db, "variant": self.variant, "replicate": self.rep,
                                 "stopped_by": self.stopped_by, "fake": bool(self.opts.fake), "minutes_planned": self.opts.minutes or self.trial.get("minutes", 15),
                                 "runaways": self.runaway_seen, "mind_starts": len(self.starts),
-                                "day_ms": (getattr(self, "world", None) or {}).get("day_ms")})
+                                "day_ms": (getattr(self, "world", None) or {}).get("day_ms"),
+                                "concurrency": getattr(self, "concurrency", None) or mind_concurrency(self.trial)})
             (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
             keep = self.opts.keep_db or self.trial.get("keep_db")
             if self.published and not keep and self.status != "failed-keep":
@@ -1938,7 +1997,8 @@ def run(a):
     for v in names:
         if v not in variants():
             sys.exit(f"unknown variant {v}; see living/trials/variants.json")
-    plan = [(t, v, r) for t in trials for v in names for r in range(1, a.replicates + 1)]
+    # A trial may name the only variants it runs with (`variants`): others are skipped for it.
+    plan = [(t, v, r) for t in trials for v in names if not t.get("variants") or v in t["variants"] for r in range(1, a.replicates + 1)]
     led = ledger()
     spent = sum(b.get("tokens", 0) for b in led["batches"].values())
     print(f"batch {a.batch}: {len(plan)} instances; real tokens so far {spent:,}{f' of a cap of {TOTAL_CAP:,}' if TOTAL_CAP else ' (no cap)'}{' (fake: not counted)' if a.fake else ''}")
@@ -2274,7 +2334,7 @@ def reclaim(a):
 def resummarize(a):
     """Recompute every instance's summary from its kept evidence (after a probe changes)."""
     bdir = OUT / a.batch
-    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms")
+    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms", "concurrency")
     for p in sorted(bdir.glob("*/summary.json")):
         old = json.loads(p.read_text())
         extra = {k: old.get(k) for k in keep}
