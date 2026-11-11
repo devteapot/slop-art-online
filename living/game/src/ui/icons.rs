@@ -18,6 +18,94 @@ pub enum Glyph {
     MouseL,
     MouseR,
     Arrow,
+    /// Interface D's marks (`wood.rs`): the fonts lack ✕, ▾ and ⌥, and buttons carry icons.
+    Ui(Mark),
+    /// An item in the pack, by how it is drawn ([`item_mark`]).
+    Item(ItemMark),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Mark {
+    Close,
+    Caret,
+    Option,
+    Pack,
+    Dots,
+    Person,
+    People,
+    Book,
+    Scroll,
+    Gear,
+    Leave,
+    Give,
+    Trade,
+    Wave,
+    Eye,
+    Talk,
+    Needle,
+    NeedleS,
+    Up,
+    Sheathed,
+    Drawn,
+    Tip,
+}
+
+pub const MARKS: [Mark; 22] = [Mark::Close, Mark::Caret, Mark::Option, Mark::Pack, Mark::Dots, Mark::Person, Mark::People, Mark::Book, Mark::Scroll, Mark::Gear, Mark::Leave, Mark::Give, Mark::Trade, Mark::Wave, Mark::Eye, Mark::Talk, Mark::Needle, Mark::NeedleS, Mark::Up, Mark::Sheathed, Mark::Drawn, Mark::Tip];
+
+/// How an item is drawn in the pack: a few shapes by what the item is called, else a bundle.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ItemMark {
+    Berries,
+    Bread,
+    Meat,
+    Arrow,
+    Bow,
+    Spear,
+    Wood,
+    Stone,
+    Herb,
+    Torch,
+    Cloth,
+    Tablet,
+    Tool,
+    Bundle,
+}
+
+pub const ITEM_MARKS: [ItemMark; 14] = [ItemMark::Berries, ItemMark::Bread, ItemMark::Meat, ItemMark::Arrow, ItemMark::Bow, ItemMark::Spear, ItemMark::Wood, ItemMark::Stone, ItemMark::Herb, ItemMark::Torch, ItemMark::Cloth, ItemMark::Tablet, ItemMark::Tool, ItemMark::Bundle];
+
+/// The pack's drawing for an item, by words in its rules name (presentation only: an item the
+/// rules add gets the bundle until it is drawn).
+pub fn item_mark(item: &str) -> ItemMark {
+    let has = |w: &[&str]| w.iter().any(|k| item.contains(k));
+    if has(&["berr", "fruit", "apple"]) {
+        ItemMark::Berries
+    } else if has(&["bread", "grain", "flour", "loaf", "meal"]) {
+        ItemMark::Bread
+    } else if has(&["meat", "fish", "venison", "hide"]) {
+        ItemMark::Meat
+    } else if has(&["arrow"]) {
+        ItemMark::Arrow
+    } else if has(&["bow"]) {
+        ItemMark::Bow
+    } else if has(&["spear", "sword", "knife", "blade"]) {
+        ItemMark::Spear
+    } else if has(&["wood", "log", "stick", "timber"]) {
+        ItemMark::Wood
+    } else if has(&["stone", "rock", "ore", "flint", "clay"]) {
+        ItemMark::Stone
+    } else if has(&["herb", "fibre", "fiber", "reed", "seed", "plant"]) {
+        ItemMark::Herb
+    } else if has(&["torch", "fire"]) {
+        ItemMark::Torch
+    } else if has(&["cloak", "cloth", "coat", "shirt", "wool"]) {
+        ItemMark::Cloth
+    } else if has(&["tablet", "note", "letter", "book", "scroll"]) {
+        ItemMark::Tablet
+    } else if has(&["axe", "pick", "hammer", "tool", "net", "rod"]) {
+        ItemMark::Tool
+    } else {
+        ItemMark::Bundle
+    }
 }
 
 #[derive(Resource, Default)]
@@ -41,10 +129,12 @@ pub fn build(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     for p in [PoiKind::Town, PoiKind::Village, PoiKind::Giants, PoiKind::SmallFolk, PoiKind::Cave, PoiKind::Place] {
         all.push((Glyph::Poi(p), 64));
     }
+    all.extend(MARKS.iter().map(|m| (Glyph::Ui(*m), 64)));
+    all.extend(ITEM_MARKS.iter().map(|m| (Glyph::Item(*m), 96)));
     for (g, n) in all {
         let rim = match g {
             Glyph::Skill(_) => 0.09,
-            Glyph::MouseL | Glyph::MouseR => 0.0,
+            Glyph::MouseL | Glyph::MouseR | Glyph::Ui(_) | Glyph::Item(_) => 0.0,
             _ => 0.12,
         };
         icons.0.insert(g, images.add(raster(n, rim, |p| sdf(g, p))));
@@ -248,5 +338,121 @@ fn sdf(g: Glyph, p: Vec2) -> f32 {
             shell.min(split).min(button)
         }
         Glyph::Arrow => tri(p, v(0.0, 0.86), v(0.62, -0.7), v(0.0, -0.36)).min(tri(p, v(0.0, 0.86), v(0.0, -0.36), v(-0.62, -0.7))),
+        Glyph::Ui(m) => mark(m, p),
+        Glyph::Item(m) => item(m, p),
+    }
+}
+
+fn mark(m: Mark, p: Vec2) -> f32 {
+    use std::f32::consts::PI;
+    match m {
+        Mark::Close => seg(p, v(-0.5, -0.5), v(0.5, 0.5), 0.13).min(seg(p, v(-0.5, 0.5), v(0.5, -0.5), 0.13)),
+        Mark::Caret => tri(p, v(-0.62, 0.3), v(0.62, 0.3), v(0.0, -0.42)),
+        Mark::Option => {
+            // ⌥: a stroke down from the left, across, and a short bar to the right.
+            seg(p, v(-0.8, 0.45), v(-0.3, 0.45), 0.09).min(seg(p, v(-0.3, 0.45), v(0.3, -0.45), 0.09)).min(seg(p, v(0.3, -0.45), v(0.8, -0.45), 0.09)).min(seg(p, v(0.2, 0.45), v(0.8, 0.45), 0.09))
+        }
+        Mark::Pack => {
+            let bag = rbox(p, v(0.0, -0.2), v(0.62, 0.55), 0.22);
+            let handle = arc(p, v(0.0, 0.38), 0.3, 0.08, 0.0, PI);
+            let flap = seg(p, v(-0.6, 0.05), v(0.6, 0.05), 0.06);
+            sub(bag, bag + 0.12).min(handle).min(flap).min(rbox(p, v(0.0, -0.05), v(0.12, 0.14), 0.04))
+        }
+        Mark::Dots => circle(p, v(-0.55, 0.0), 0.16).min(circle(p, v(0.0, 0.0), 0.16)).min(circle(p, v(0.55, 0.0), 0.16)),
+        Mark::Person => circle(p, v(0.0, 0.42), 0.3).min(circle(p, v(0.0, -0.75), 0.62).max(-0.25 - p.y)),
+        Mark::People => {
+            let a = circle(p, v(-0.32, 0.36), 0.24).min(circle(p, v(-0.32, -0.7), 0.5).max(-0.2 - p.y));
+            let b = circle(p, v(0.38, 0.3), 0.21).min(circle(p, v(0.38, -0.72), 0.44).max(-0.24 - p.y));
+            a.min(b)
+        }
+        Mark::Book => {
+            let l = rbox(p, v(-0.36, 0.0), v(0.34, 0.6), 0.05);
+            let r = rbox(p, v(0.36, 0.0), v(0.34, 0.6), 0.05);
+            sub(l.min(r), seg(p, v(0.0, 0.7), v(0.0, -0.7), 0.05))
+        }
+        Mark::Scroll => {
+            let sheet = rbox(p, v(0.0, 0.0), v(0.5, 0.7), 0.1);
+            let lines = seg(p, v(-0.28, 0.3), v(0.28, 0.3), 0.06).min(seg(p, v(-0.28, 0.0), v(0.28, 0.0), 0.06)).min(seg(p, v(-0.28, -0.3), v(0.12, -0.3), 0.06));
+            sub(sheet, lines)
+        }
+        Mark::Gear => {
+            let q = p.length();
+            let a = p.y.atan2(p.x);
+            let teeth = q - (0.62 + 0.14 * (a * 8.0).cos().clamp(-0.4, 0.4) / 0.4);
+            sub(teeth, circle(p, v(0.0, 0.0), 0.24))
+        }
+        Mark::Leave => {
+            let door = sub(rbox(p, v(-0.25, 0.0), v(0.42, 0.72), 0.05), rbox(p, v(-0.25, 0.0), v(0.3, 0.6), 0.02));
+            let arrow = seg(p, v(-0.1, 0.0), v(0.7, 0.0), 0.08).min(tri(p, v(0.5, 0.28), v(0.5, -0.28), v(0.9, 0.0)));
+            door.min(arrow)
+        }
+        Mark::Give => {
+            let palm = rbox(p, v(0.0, -0.45), v(0.7, 0.18), 0.14);
+            let thing = circle(p, v(0.0, 0.25), 0.34);
+            palm.min(thing)
+        }
+        Mark::Trade => {
+            let top = seg(p, v(-0.7, 0.3), v(0.55, 0.3), 0.08).min(tri(p, v(0.4, 0.58), v(0.4, 0.02), v(0.8, 0.3)));
+            let bot = seg(p, v(0.7, -0.3), v(-0.55, -0.3), 0.08).min(tri(p, v(-0.4, -0.02), v(-0.4, -0.58), v(-0.8, -0.3)));
+            top.min(bot)
+        }
+        Mark::Wave => {
+            let palm = rbox(p, v(0.0, -0.25), v(0.42, 0.42), 0.2);
+            let fingers = seg(p, v(-0.3, 0.1), v(-0.38, 0.75), 0.1).min(seg(p, v(-0.05, 0.12), v(-0.05, 0.85), 0.1)).min(seg(p, v(0.2, 0.1), v(0.3, 0.75), 0.1)).min(seg(p, v(0.38, -0.2), v(0.75, 0.15), 0.1));
+            palm.min(fingers)
+        }
+        Mark::Eye => {
+            let lid = circle(p, v(0.0, -0.55), 0.95).max(circle(p, v(0.0, 0.55), 0.95));
+            sub(lid, circle(p, v(0.0, 0.0), 0.3)).min(circle(p, v(0.0, 0.0), 0.15))
+        }
+        Mark::Talk => {
+            let body = rbox(p, v(0.0, 0.14), v(0.74, 0.5), 0.34).min(tri(p, v(-0.42, -0.2), v(-0.02, -0.2), v(-0.56, -0.76)));
+            sub(body, seg(p, v(-0.35, 0.28), v(0.35, 0.28), 0.06).min(seg(p, v(-0.35, 0.0), v(0.15, 0.0), 0.06)))
+        }
+        // The compass needle's halves, each a full image: north up, south down.
+        Mark::Needle => tri(p, v(0.0, 0.98), v(0.3, -0.02), v(-0.3, -0.02)),
+        Mark::NeedleS => tri(p, v(0.0, -0.98), v(0.3, 0.02), v(-0.3, 0.02)),
+        Mark::Up => seg(p, v(0.0, -0.6), v(0.0, 0.5), 0.1).min(tri(p, v(-0.5, 0.2), v(0.5, 0.2), v(0.0, 0.85))).min(seg(p, v(-0.55, -0.75), v(0.55, -0.75), 0.09)),
+        Mark::Sheathed => {
+            // A blade lying in its scabbard, tip down.
+            let scab = seg(p, v(-0.15, -0.15), v(0.55, -0.85), 0.16);
+            let hilt = seg(p, v(-0.3, 0.0), v(0.0, -0.3), 0.08).min(seg(p, v(-0.2, -0.2), v(-0.65, 0.65), 0.07));
+            sub(scab, scab + 0.08).min(hilt)
+        }
+        Mark::Drawn => sword(p),
+        Mark::Tip => {
+            let bulb = circle(p, v(0.0, 0.2), 0.52);
+            let base = rbox(p, v(0.0, -0.58), v(0.22, 0.18), 0.06);
+            bulb.min(base)
+        }
+    }
+}
+
+fn item(m: ItemMark, p: Vec2) -> f32 {
+    use std::f32::consts::PI;
+    match m {
+        ItemMark::Berries => circle(p, v(-0.3, -0.25), 0.3).min(circle(p, v(0.32, -0.2), 0.3)).min(circle(p, v(0.0, 0.22), 0.3)).min(seg(p, v(0.0, 0.5), v(0.25, 0.85), 0.06)),
+        ItemMark::Bread => circle(p, v(0.0, -0.45), 0.95).max(-0.45 - p.y).max(p.y - 0.4),
+        ItemMark::Meat => smin(circle(p, v(0.15, 0.1), 0.5), seg(p, v(-0.2, -0.2), v(-0.7, -0.7), 0.12), 0.1).min(circle(p, v(-0.78, -0.62), 0.12)),
+        ItemMark::Arrow => seg(p, v(-0.65, -0.65), v(0.5, 0.5), 0.06).min(tri(p, v(0.35, 0.62), v(0.62, 0.35), v(0.78, 0.78))).min(tri(p, v(-0.75, -0.45), v(-0.55, -0.6), v(-0.85, -0.85))),
+        ItemMark::Bow => arc(p, v(0.45, 0.0), 0.85, 0.08, PI * 0.65, PI * 1.35).min(seg(p, v(0.45 + 0.85 * (PI * 0.65).cos(), 0.85 * (PI * 0.65).sin()), v(0.45 + 0.85 * (PI * 1.35).cos(), 0.85 * (PI * 1.35).sin()), 0.025)),
+        ItemMark::Spear => seg(p, v(-0.75, -0.75), v(0.45, 0.45), 0.06).min(tri(p, v(0.3, 0.55), v(0.55, 0.3), v(0.85, 0.85))),
+        ItemMark::Wood => {
+            let log = seg(p, v(-0.55, -0.25), v(0.45, 0.25), 0.28);
+            sub(log, circle(p, v(0.45, 0.25), 0.12))
+        }
+        ItemMark::Stone => smin(circle(p, v(-0.2, -0.15), 0.45), circle(p, v(0.3, -0.25), 0.38), 0.2).max(-0.62 - p.y),
+        ItemMark::Herb => seg(p, v(0.0, -0.8), v(0.0, 0.6), 0.06).min(seg(p, v(-0.45, -0.6), v(-0.45, 0.4), 0.06)).min(seg(p, v(0.45, -0.6), v(0.45, 0.4), 0.06)).min(seg(p, v(-0.6, -0.1), v(0.6, -0.1), 0.06)),
+        ItemMark::Torch => seg(p, v(0.0, -0.85), v(0.0, 0.1), 0.09).min(smin(circle(p, v(0.0, 0.32), 0.2), tri(p, v(-0.18, 0.3), v(0.18, 0.3), v(0.0, 0.85)), 0.06)),
+        ItemMark::Cloth => {
+            let body = tri(p, v(-0.6, -0.8), v(0.6, -0.8), v(0.0, 0.6));
+            smin(body, circle(p, v(0.0, 0.55), 0.18), 0.1)
+        }
+        ItemMark::Tablet => sub(rbox(p, v(0.0, 0.0), v(0.5, 0.68), 0.12), seg(p, v(-0.25, 0.25), v(0.25, 0.25), 0.06).min(seg(p, v(-0.25, -0.05), v(0.25, -0.05), 0.06)).min(seg(p, v(-0.25, -0.35), v(0.1, -0.35), 0.06))),
+        ItemMark::Tool => seg(p, v(-0.6, -0.6), v(0.4, 0.4), 0.08).min(rbox(p, v(0.42, 0.42), v(0.36, 0.14), 0.05)),
+        ItemMark::Bundle => {
+            let sack = smin(circle(p, v(0.0, -0.25), 0.55), tri(p, v(-0.25, 0.1), v(0.25, 0.1), v(0.0, 0.6)), 0.15);
+            sub(sack, seg(p, v(-0.25, 0.32), v(0.25, 0.32), 0.05))
+        }
     }
 }
