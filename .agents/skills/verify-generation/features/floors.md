@@ -11,6 +11,8 @@
 
 `living/authority/src/floor.rs`: `create_floor`, `check_rules`, `begin`, `genesis_step` (with the in-memory cache it checks against the `genesis` row), `expected`. `living/authority/src/seed.rs`: `active`, `load`, `world_row`, `populate`, `spawn_resources_rows`. `living/rules/src/land.rs`: `Gen`; `living/rules/src/settle.rs`: `Staged`.
 
+- A seed's own day and laws (since `rules-1`, docs/CULLET_RULES.md): `day_minutes` becomes `world.day_ms`, and `laws` (or `laws_file`, read in by `build.rs` for a compiled seed and by `living/tools/seed_text.py` for `create_floor`) is composed over the shipped script and installed at creation. `create_floor` refuses, before writing anything, a seed naming a laws file without its text ("was not read into `laws`"), laws that fail the install checks ("seed laws: …") and a day outside 1–1440 minutes ("day_minutes is between …"). `floor.rs`: `check`, `set_day`, `begin`; `lib.rs`: `install_source`; `seed.rs`: `Seed::day_ms`, `Seed::script`.
+
 ## How to get to it (user POV)
 
 `just living-floor floor-megacity <db>` builds the floor module with the seed's switches, publishes it and calls `create_floor`. Watch `SELECT * FROM genesis` until `done`; then the world ticks.
@@ -22,6 +24,12 @@
 ```
 
 The child `floor-megacity-4k` derives the megacity seed at 4096 m into the run's directory, launches with `--seed none`, calls `create_floor` as the admin, polls `genesis` every 3 s (up to 900 s) and then runs doctor, the snapshots, the seeded-world checks and the native digests. Its `checks.json` adds: `create_floor refuses a 5000 m land` (not a multiple of 16), `a 9216 m land` (above 8192) and `a 128 m land` (below 256), `resume_genesis is refused before any creation`, `create_floor accepted the seed`; at step 3 or later `resume_genesis is refused while a step is scheduled`, then `stop_genesis` and `a chain stopped midway stalls` (no `genesis_timer` row and the step count holding for 8 s; `genesis-stalled.json`), `stop_genesis is refused when no step is scheduled`, `resume_genesis carries the stopped creation on`; then `the staged creation finished` (with steps and seconds), `resume_genesis is refused once the world is made`, `no generation restarts`, `a second create_floor is refused`. Owner SQL cannot stand in for `stop_genesis`: 2.14.1 refuses "SQL writes to scheduled tables". `genesis-final.json` keeps the last `genesis` row. On the dev-box: 18 s and 138 steps.
+
+The children `cullet-laws` (compiled in) and `cullet-laws-floor` (`--seed none`, then `create_floor` with the seed as `seed_text.py` sends it, created in the one call) add `world day length` and `the seed's laws are composed over the shipped script` to the seeded-world checks (every other seed checks `the installed script is the shipped one` and the 12-minute day), and the floor child the three refusals, `create_floor accepted the seed with its laws` and `a second create_floor is refused`:
+
+```bash
+.agents/skills/verify-generation/scripts/generation.py --run generation-laws-$(date +%Y%m%d-%H%M%S) --feature worlds --seeds cullet-laws,cullet-laws-floor
+```
 
 ## Gotchas
 

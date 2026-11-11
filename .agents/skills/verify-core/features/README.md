@@ -19,6 +19,7 @@
 | Town life: daily rhythm, places, weather, gestures, commotion, `act_card`/`doing` | `town.py` on an island run, and Cargo | [town.md](town.md) |
 | Hospitality (`host`): the skill's rules, the engine's house lookup, the `guest` row and its end in housekeeping, the theft exemption | verify-player's `host.py` on an island run | [town.md](town.md#hospitality) |
 | Seeded lives: authored residents placed, hamlets peopled, sheet relations as rows, carriers' known ways walked and goods moved between stores, outlaws at their spot on the road (threat, yield, seize), gestures by seeded relation | `lives.py` on an island run | [lives.md](lives.md) |
+| A world's own day and laws: `day_minutes`, a seed's laws overlay installed at creation, rates per game hour in real time, sight to 48 m by day, names within 24 m, the dark, lamplight and a carried light at night (`glow`, `lights`), `daylight` | `scenes.py laws` on a `cullet-laws` run, and Cargo (`cullet_check`) | [laws.md](laws.md) |
 | Sight for minds and graphs: a graph's `sees` and a witnessed fight follow the sight line (rock, walls, shut gates hide); names in percepts follow what the observer knows. How far each creature sees and hears is the `senses(a)` law (day, night, torch; installed overlays change it) | `scenes.py sight`, `scenes.py senses` | [sight.md](sight.md) |
 
 Use [SKILL.md](../SKILL.md). Admin setup and `mind_act` do not establish player permissions or authentic model behavior. Read [the validation record](../references/validation.md) before treating a check as green.
