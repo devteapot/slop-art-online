@@ -91,6 +91,8 @@ Defaults come from `prompts.rs` and the parsers in `mind.rs` and `mind/talk.rs`:
 
 The think default also has `feeling` and `impulse` for animal prompt compatibility. `reorganize` returns an empty sleep patch with a summary. `choose` takes each numbered option in turn across requests (`pick` = request count mod options, strength cycling low/mid/high), so a run exercises every option an animal is offered. This skill proves human-purpose parsing. It does not prove all animal flows or every memory patch operation.
 
+Projects (`LIVING_PROJECTS=1`, the mind's experiment) change the defaults only when the prompt carries them: a think request whose system prompt names `"serves"` answers `serves` with the first key listed under `# Your projects` in the user prompt (null when none is listed), and a consolidation or reorganization whose system prompt names `"projects"` answers one project, `project:verify_fake_shelter`, whose progress counts the projects the request listed. Without the switch every reply is as above.
+
 ## Request evidence
 
 The log appends one JSON line before a response delay or injected outage. Each line has `at_ms`, `sequence`, `purpose`, `model`, `reasoning_effort`, `body_excerpt`, full `body`, and the selected `status`, `delay_s`, `close_port` and `content`. Authorization headers are excluded. The excerpt is at most 2,000 characters. Exact prompts remain in `body`, and the real mind independently journals attempts, replies and failures.

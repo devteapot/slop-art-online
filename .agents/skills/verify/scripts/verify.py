@@ -15,7 +15,7 @@ removes what the run started and keeps the evidence.
   verify.py player  --run R say TEXT [--to ID]
   verify.py sql     --run R QUERY [--as-player | --anonymous] [--save NAME]
                                             as the database owner unless told otherwise
-  verify.py call    --run R REDUCER ARGS_JSON|@FILE [--as-player | --as-admin] [--expect-refusal TEXT]
+  verify.py call    --run R REDUCER ARGS_JSON [--as-player | --as-admin] [--expect-refusal TEXT]
   verify.py observer --run R start|shot NAME|stop
   verify.py cleanup --run R [--keep-db]
 
@@ -23,7 +23,7 @@ Paths and ports: SpacetimeDB http://127.0.0.1:3300, the local container's port (
 only name that port, so publishing and HTTP calls always reach the same server); observer
 http://127.0.0.1:8330 (VERIFY_OBSERVER_PORT); Chromium from Playwright's cache (VERIFY_CHROME).
 A worker with its own server sets LIVING_STDB_CONTAINER to that container's name and
-LIVING_STDB_URL to its published port on 127.0.0.1; the helper never starts or stops such a container.
+LIVING_STDB_URL to its published port on 127.0.0.1 (bound to 127.0.0.1 or 0.0.0.0); the helper never starts or stops such a container.
 """
 import argparse
 import glob
@@ -58,8 +58,9 @@ def local_urls():
     if CONTAINER == SHARED:
         return {"http://127.0.0.1:3300", "http://localhost:3300"}
     r = subprocess.run(["docker", "port", CONTAINER, "3000/tcp"], capture_output=True, text=True)
-    # A port bound on every interface (0.0.0.0, as the trial stack's) is reachable on 127.0.0.1 too.
-    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith(("127.0.0.1:", "0.0.0.0:"))}
+    # A port published on every interface (the Spark's trial server, for LAN observers) is
+    # reachable on loopback too.
+    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith(("127.0.0.1:", "0.0.0.0:", "[::]:"))}
     return {f"http://{h}:{p}" for p in ports for h in ("127.0.0.1", "localhost")}
 
 
@@ -92,7 +93,7 @@ def log(st, line, out=sys.stdout):
     print(line, file=out, flush=True)
 
 
-def http(path, body=None, token=None, raw=False, timeout=30):
+def http(path, body=None, token=None, raw=False):
     data = body.encode() if raw else (json.dumps(body).encode() if body is not None else b"")
     req = urllib.request.Request(URL + path, data=data, method="POST" if body is not None or path == "/v1/identity" else "GET")
     if not raw:
@@ -100,7 +101,7 @@ def http(path, body=None, token=None, raw=False, timeout=30):
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:
             return r.status, r.read().decode()
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()
@@ -174,19 +175,11 @@ def launch(a):
     keep = getattr(a, "keep_data", False)
     fresh = [] if keep else ["--delete-data"]
     stdb("publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y")
-    # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
-    # shipped script and installed when its world was created; installing the plain script now
-    # would drop them. Every other world gets the working tree's script, as before.
-    seed_file = Path(a.seed if a.seed.startswith("/") else LIVING / "seeds" / a.seed).with_suffix(".json") if a.seed != "none" else None
-    seed_json = json.loads(seed_file.read_text()) if seed_file and seed_file.exists() else {}
-    st["seed_laws"] = bool(str(seed_json.get("laws") or "").strip() or seed_json.get("laws_file"))
-    if st["seed_laws"]:
-        log(st, "the seed carries its own laws: kept as installed at creation (no install_script)")
-    else:
-        # Over HTTP: the script is past the 128 KiB a command-line argument may hold.
-        code, body = http(f"/v1/database/{st['db']}/call/install_script", [(LIVING / "scripts/skills.rhai").read_text()], admin_token(), timeout=180)
-        if code != 200:
-            sys.exit(f"install_script failed: {code} {body.strip()[-4000:]}")
+    # Over HTTP as the admin: the script no longer fits one command-line argument (133 KB
+    # against Linux's 128 KiB MAX_ARG_STRLEN, "Argument list too long" through the CLI).
+    code, body = http(f"/v1/database/{st['db']}/call/install_script", [(LIVING / "scripts/skills.rhai").read_text()], admin_token())
+    if code != 200:
+        sys.exit(f"install_script refused ({code}): {body[:300]}")
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)
@@ -286,15 +279,12 @@ def call(a):
     token = admin_token() if a.as_admin else st.get("token") if a.as_player else None
     if a.as_player and not token:
         sys.exit("no player yet: run `player join NAME` first")
-    # `@FILE` reads the arguments from a file (a script is past what one command-line argument
-    # may hold).
-    args = json.loads(Path(a.args[1:]).read_text() if a.args.startswith("@") else a.args)
+    args = json.loads(a.args)
     if not isinstance(args, list):
         sys.exit("ARGS_JSON must be a JSON array of the reducer's arguments")
     who = "admin" if a.as_admin else "player" if a.as_player else "anonymous"
-    code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token, timeout=180)
-    shown = json.dumps(args)
-    log(st, f"call {a.reducer}{shown if len(shown) < 4000 else shown[:200] + f'... ({len(shown)} bytes)'} as {who} -> {code} {body.strip()}")
+    code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token)
+    log(st, f"call {a.reducer}{json.dumps(args)} as {who} -> {code} {body.strip()}")
     if a.expect_refusal is not None:
         ok = code != 200 and a.expect_refusal in body
         log(st, f"expected refusal containing {a.expect_refusal!r}: {'yes' if ok else 'NO'}")

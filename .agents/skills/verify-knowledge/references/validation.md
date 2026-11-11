@@ -9,6 +9,9 @@ Main at `7837320` (the merge of `fix-death-labels`: `die` keeps the dead's name 
 - `player_memory.py --mode direct` (`knowledge-pmem-vd-20261111-160643`): all five proofs pass, including the death phase.
 - `player_memory.py --mode batch`: the first run (`knowledge-pmem-vdb-20261111-161258`) failed at `assert 'player memory on' in log`: the mind logged only its subscription before the driver read the log, which the driver reads once right after `world subscribed:`. A harness timing fault under load, not this change; the rerun (`knowledge-pmem-vdb2-20261111-161447`) passes all five.
 - The dead's name kept by its community is not asserted by these runners; `verify-minds`' `death-names` case (this date) and `verify-core`'s `death-names` scene cover it.
+## 2026-11-11 projects (exp-projects, DGX Spark)
+
+Worktree from `origin/main` `e09365b`, branch `exp-projects` (the `LIVING_PROJECTS=1` experiment: docs/LIVING_CORE.md, "Projects"), against the trial server `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`) beside a running trial batch, fake model only. `knowledge-20261111-132650`: all proofs pass, including the new ignored test `projects_are_pursued_served_ended_and_faded` (taken up, revised with since kept, served and reinforced, an ended one closed with `outcome` and refused when served, every unreinforced one faded at a 90-minute fade, history kept). The shared harness needed one fix first: the trial server publishes its port on `0.0.0.0` and `verify.py local_urls` accepted only `127.0.0.1` bindings (a failed `minds-20261111-131717` launch; fixed in the same change).
 
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 

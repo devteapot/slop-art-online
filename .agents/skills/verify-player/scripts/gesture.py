@@ -117,8 +117,8 @@ def main():
         return finish(p)
     x, y = r["at"]
     # A spot 3 m from the resident from which the player sees it: gestures are seen, so since
-    # 2026-11-09 a wall or a stall's building between them hides the resident (and the act at
-    # it is refused, as for anyone out of sight).
+    # 2026-11-09 a wall or a building between them hides the resident (and the act at it is
+    # refused, as for anyone out of sight); since eye-2 an open stall does not.
     sees = lambda: any(c["id"] == r["id"] for c in p.sql("SELECT id FROM seen_characters", "player"))
     for dx, dy in [(3.0, 0.5), (-3.0, 0.5), (0.5, 3.0), (0.5, -3.0)]:
         p.call("place_at", [me, x + dx, y + dy], "admin")

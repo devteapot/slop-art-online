@@ -20,10 +20,18 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
-         'death-names')
+         'takeover', 'sight', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
+         'death-names', 'frame')
+# How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
+PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
+DROP, LOW = 8, 9
+# How a scene tells a mind of a drop and of a low thing (living_rules::map::Terrain::words and
+# ::passage, written by the authority's perceive::scene_json under `terrain_near`).
+TERRAIN_WORDS = {DROP: 'a drop to ground at another level (stairs, ramps and roads join the levels)',
+                 LOW: 'something low or open in the way, such as a cart, a low wall or an open stall'}
+SEE_PAST = 'you can see past it but not walk through it'
 
 
 class Run(shared.Run):
@@ -102,6 +110,74 @@ def wall_spots(run):
     raise RuntimeError('no wall geometry on this map')
 
 
+def across_spots(info, between):
+    """Two walkable tiles 2 to 5 apart on one axis with only tiles of class `between` between them
+    (within even night sight, 6 tiles)."""
+    w, h, tiles = info
+    at = lambda x, y: tiles[y * w + x] if 0 <= x < w and 0 <= y < h else 4
+    walk = lambda x, y: at(x, y) not in UNWALKABLE
+    for y in range(5, h - 5):
+        for x in range(5, w - 5):
+            if not walk(x, y):
+                continue
+            for dx, dy in [(1, 0), (0, 1)]:
+                for gap in (1, 2, 3, 4):
+                    bx, by = x + (gap + 1) * dx, y + (gap + 1) * dy
+                    if walk(bx, by) and all(at(x + i * dx, y + i * dy) == between for i in range(1, gap + 1)):
+                        return {'eye': (x + .5, y + .5), 'across': (bx + .5, by + .5), 'gap': gap}
+    raise RuntimeError(f'no walkable ground on both sides of tiles of class {between}')
+
+
+def scene_sent(sent):
+    """The scene in a prompt the model was sent (one line of JSON under its heading)."""
+    m = re.search(r'# (?:What you perceive right now|Around you now)\n(\{.*\})\n', sent)
+    return json.loads(m.group(1)) if m else None
+
+
+def drop_case(run):
+    """A mind is told of a drop and of a low thing in words that say what they are and that
+    one sees past them but cannot walk through them (`terrain_near`), and sees the creature on
+    the other side, on the island (terraced towns' drops, carts and other low things)."""
+    target = ROOT / '.local/living/target-resident-island'
+    run.harness('launch', '--seed', 'island', '--target-dir', str(target))
+    run.harness('doctor')
+    world = run.sql('SELECT * FROM world', 'world')[0]
+    people = [p['id'] for p in sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id'])
+              if p['ai'] and p['alive'] and p['stage'] == 2 and p['controller'] == world['admin']][:3]
+    assert len(people) == 3, people
+    eye, across, past_low = people
+    info = terrain(run)
+    spots = {'drop': across_spots(info, DROP), 'low': across_spots(info, LOW)}
+    (run.directory / 'spots.json').write_text(json.dumps(spots, indent=2))
+    for who in people:
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    run.start(models, [eye], seed='island')
+    told = {}
+    for n, (name, cls, other) in enumerate((('drop', DROP, across), ('low', LOW, past_low))):
+        run.admin('place_at', eye, *spots[name]['eye'])
+        run.admin('place_at', other, *spots[name]['across'])
+        time.sleep(1.0)
+        run.admin('set_behavior', eye, json.dumps({'think': 'I finished my plan. verify ' + name}))
+        request = run.wait(lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl')
+                                    if e['purpose'] in ('think', 'deliberate') and ('verify ' + name) in json.dumps(e['body'])],
+                           f'the {name} scene sent to the model', 60)[0]
+        sent = '\n'.join(str(m.get('content', '')) for m in request['body'].get('messages', []))
+        (run.directory / f'sent-prompt-{name}.txt').write_text(sent)
+        scene = scene_sent(sent)
+        assert scene, f'no scene in the {name} prompt'
+        (run.directory / f'scene-{name}.json').write_text(json.dumps(scene, indent=2))
+        near = scene.get('terrain_near', {}).get(name)
+        assert near and TERRAIN_WORDS[cls] in near and SEE_PAST in near, (name, scene.get('terrain_near'))
+        ids = [c['id'] for c in scene.get('creatures', [])]
+        assert other in ids, (f'the one across the {name} is seen', ids)
+        told[name] = {'terrain_near': near, 'seen_across': other, 'gap_tiles': spots[name]['gap']}
+        # Let the mind's answer install before the next scene.
+        time.sleep(3.0)
+    return {'status': 'pass', 'told': told}
+
+
 def run_case(run, case):
     if case in ('animals', 'night', 'jev'):
         return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
@@ -113,12 +189,16 @@ def run_case(run, case):
         return dealings_case(run)
     if case == 'sight':
         return sight_case(run)
+    if case == 'drop':
+        return drop_case(run)
     if case == 'death-names':
         return death_names_case(run)
     if case == 'resident':
         return resident_case(run)
     if case == 'parked':
         return parked_case(run)
+    if case == 'frame':
+        return frame_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -203,6 +283,8 @@ def run_case(run, case):
         assert json.loads(thought['detail'])['reply']['say'] == 'verify minds round trip speech'
         assert thought['model'] == 'fake-minds' and thought['tokens'] == 34 and thought['reference']
         assert {e['purpose'] for e in run.exchanges()} >= {'think', 'deliberate'}
+        # The default frame (no LIVING_FRAME) is the character frame: no request is player-framed.
+        assert not any(PLAYER_FRAME_HEAD in system_text(e['body']) for e in shared.rows(run.directory / 'fake-requests.jsonl'))
         # The body as felt, from the vitals the service subscribes to (owner path): in words, no numbers.
         sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
         felt = [m.split('How your body feels: ', 1)[1].split('\n', 1)[0] for e in sent for m in [json.dumps(e, ensure_ascii=False).replace('\\n', '\n')] if 'How your body feels: ' in m]
@@ -945,6 +1027,64 @@ def parked_case(run):
     assert len(talks()) == after_first, 'a talk turn repeated what the deliberation answered'
     assert 'in its deliberation' in run.log()
     return {'status': 'pass', 'talk_turns': len(talks())}
+
+
+def system_text(body):
+    return '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'system')
+
+
+def frame_case(run):
+    """LIVING_FRAME=player: a person's think, compile, talk and consolidation requests open with
+    the player frame, as sent (fake log) and as journaled; a starting identity is not framed; a
+    value that is neither frame stops the service before it connects."""
+    bad = subprocess.run([str(shared.MIND_BIN)], cwd=ROOT, capture_output=True, text=True, timeout=30,
+                         env=dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_FRAME='npc', LIVING_NEO4J='off',
+                                  LIVING_SERVER='http://127.0.0.1:9', LIVING_TOKEN='unused'))
+    (run.directory / 'bad-frame.log').write_text(bad.stdout + bad.stderr)
+    assert bad.returncode != 0 and 'expected character or player' in bad.stdout + bad.stderr, bad.returncode
+    people = prepare(run)
+    actor = people[0]['id']
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'A question.', 'say': 'verify frame answer', 'end': False},
+                          'consolidate': {'summary': 'verify frame integrated speech', 'identity': None}}}
+    models = model(run, script)
+    run.request(actor, 'first')
+    run.start(models, [actor], extra_env={'LIVING_FRAME': 'player'})
+    assert 'prompt frame: player (LIVING_FRAME)' in run.log()
+    accepted(run, actor)
+    run.harness('player', 'join', 'FrameSpeaker')
+    player = run.sql("SELECT id FROM character WHERE name = 'FrameSpeaker'", 'player')[0]['id']
+    run.admin('place_near', player, actor)
+    for line in ('Will you listen to this important verification question?',
+                 'Can you remember the river and the missing berry basket?',
+                 'Did you notice the stone tower and the winter campfire?',
+                 'Will you recall our conversation when morning comes?'):
+        run.harness('player', 'say', line, '--to', str(actor))
+        time.sleep(2.2)
+    sent = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    consolidation = lambda e: e['purpose'] == 'consolidate' and 'self-understanding' in system_text(e['body'])
+    run.wait(lambda: {'think', 'deliberate', 'talk'} <= {e['purpose'] for e in sent()} and any(consolidation(e) for e in sent()),
+             'think, compile, talk and consolidation requests', 110)
+    framed = {}
+    for e in sent():
+        system = system_text(e['body'])
+        kind = 'identity' if 'starting identity' in system else ('consolidation' if consolidation(e) else e['purpose'])
+        framed.setdefault(kind, []).append(system.startswith(PLAYER_FRAME_HEAD))
+    (run.directory / 'frame.json').write_text(json.dumps({k: f'{sum(v)}/{len(v)}' for k, v in framed.items()}, indent=2))
+    for kind in ('think', 'deliberate', 'talk', 'consolidation'):
+        assert framed.get(kind) and all(framed[kind]), (kind, framed.get(kind))
+    assert not any(framed.get('identity', [])), framed.get('identity')
+    # As journaled: system prompts are stored once beside the journal (content_ref).
+    journaled = []
+    for e in run.exchanges():
+        for m in e.get('request', {}).get('messages', []):
+            if m.get('role') == 'system':
+                text = m.get('content') or (run.journal / m['content_ref']).read_text()
+                journaled.append((e['purpose'], text.startswith(PLAYER_FRAME_HEAD)))
+    assert any(f for p, f in journaled if p == 'talk') and any(f for p, f in journaled if p == 'think'), journaled[:6]
+    return {'status': 'pass', 'framed': {k: f'{sum(v)}/{len(v)}' for k, v in framed.items()},
+            'journaled_framed': sum(f for _, f in journaled), 'journaled': len(journaled), 'bad_value_exit': bad.returncode}
 
 
 def main():

@@ -11,7 +11,7 @@
 //!   Q E R freed), and "My own" (any change).
 //! - **Stored** in a small local file, a per-viewer convenience like a window position:
 //!   `LIVING_GAME_SETTINGS`, else `~/.config/slop-art-online/game.json`, with the other settings
-//!   (control scheme, edge of sight, tips, the weapon drawing itself). A missing or unreadable
+//!   (control scheme, edge of sight, tips, the weapon drawing itself, the interface's theme). A missing or unreadable
 //!   file means the defaults.
 //!
 //! Which skill a skill key uses comes from the rules' bar, by how each skill is aimed
@@ -357,13 +357,15 @@ pub struct Prefs {
     pub tips: bool,
     /// The weapon draws itself when something attacks you.
     pub auto_draw: bool,
-    /// Changed by a shortcut (F2, F3): saved by Settings' update.
+    /// Changed by a shortcut (F2, F3, F4): saved by Settings' update.
     pub dirty: bool,
+    /// The interface's theme (`ui::wood::Name`: clear, night, linen, walnut).
+    pub theme: Option<String>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false }
+        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None }
     }
 }
 
@@ -406,6 +408,7 @@ pub fn load() -> (Binds, Prefs) {
         tips: v["tips"].as_bool().unwrap_or(d.tips),
         auto_draw: v["auto_draw"].as_bool().unwrap_or(d.auto_draw),
         dirty: false,
+        theme: v["theme"].as_str().map(String::from),
     };
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
     (binds, prefs)
@@ -421,6 +424,7 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "sight_edge": prefs.sight_edge,
         "tips": prefs.tips,
         "auto_draw": prefs.auto_draw,
+        "theme": prefs.theme,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);
