@@ -403,12 +403,14 @@ def texel(meta, pix, x, y):
 
 
 # The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
-# residents stand round the player (dx, dy metres; +y south): north and south at 4.5 m, east
-# and west at 5.5 m (past side vision's reach and its keep metre, so at a look along the other
-# axis they are clearly unseen), one at 1.4 m (the near ring), one 8 m to the south-east.
+# residents stand round the player (dx, dy metres; +y south; `place_at` puts them on tile
+# centres): north and south at 5 m, east and west at 5.5 m (past the near ring's and side
+# vision's reach and their keep metre, so behind or to the side they are clearly unseen), one at
+# 1.4 m (the near ring), one 8 m to the south-east.
 FOV_LOOKS = [0, 90, 180, 270]
-FOV_PLACES = [(0.0, -4.5), (5.5, 0.0), (0.0, 4.5), (-5.5, 0.0), (1.0, -1.0), (5.7, 5.7)]
-LIT = 100.0   # a light on someone (`glow`) the client can't know: a comparison it could flip is left out
+FOV_PLACES = [(0.0, -5.0), (5.5, 0.0), (0.0, 5.0), (-5.5, 0.0), (1.0, -1.0), (5.7, 5.7)]
+LIT = 100.0   # a light on someone (`glow`) the client can't know, at night: a comparison it could flip is left out
+DAY_SIGHT = 11.0  # the shipped senses law's sight by day: no one is lit by day
 
 
 def compare_fov(snap, dumps, me):
@@ -437,9 +439,13 @@ def compare_fov(snap, dumps, me):
         if d > 15.0:
             continue
         off = wrap(math.atan2(b["y"] - eye[1], b["x"] - eye[0]) - h_auth)
-        answers = {fov_within(sight, f, off, d, g, k) for g in (0.0, LIT) for k in (None, 1.0)}
+        glows = (0.0,) if sight >= DAY_SIGHT else (0.0, LIT)
+        answers = {fov_within(sight, f, off, d, g, k) for g in glows for k in (None, 1.0)}
         v = texel(meta, pix, b["x"], b["y"])
-        row = {"id": bid, "dist": round(d, 2), "off_deg": round(math.degrees(off), 1), "authority": bid in seen, "field": None if v is None else v >= 128}
+        # What the screen shows seen: the field there, within the radius (the field reaches on
+        # past it along the focal angle, for the radius's soft band to draw that edge).
+        shown = None if v is None else (v >= 128 and d <= sight)
+        row = {"id": bid, "dist": round(d, 2), "off_deg": round(math.degrees(off), 1), "authority": bid in seen, "field": shown}
         if len(answers) > 1:
             out["margin"].append(row)
         elif row["field"] == row["authority"]:
@@ -546,9 +552,21 @@ def field(run, c):
         return rows[0] if rows else None
     walk, rel, looked, stood = b("walk"), b("released"), b("looked"), b("stood")
     north = -90.0
+    # The client releases its look while a direction is held (controls::FACE_WHILE_MOVING off,
+    # until look-2): walking north with the cursor east, the body faces and walks north. With it
+    # on, the authority would hold the body 30° toward the look (look_walk_deg).
+    face_moving = re.search(r"pub const FACE_WHILE_MOVING: bool = (\w+);", open(os.path.join(ROOT, "living/game/src/controls.rs")).read())
+    face_moving = face_moving and face_moving.group(1) == "true"
     if walk:
         h = math.degrees(heading_at(walk, snaps["walk"][0]["wall_ms"]))
-        c.check(s, "walking north with the look east: the body turns 30° toward it, not more (look_walk_deg)", abs(abs(math.degrees(wrap(math.radians(h - north)))) - 30.0) < 4.0 and math.hypot(walk["vx"], walk["vy"]) > 0.5, f"heading {h:.1f}°, speed {math.hypot(walk['vx'], walk['vy']):.2f}")
+        off = abs(math.degrees(wrap(math.radians(h - north))))
+        speed = math.hypot(walk["vx"], walk["vy"])
+        if face_moving:
+            c.check(s, "walking north with the look east: the body turns 30° toward it, not more (look_walk_deg)", abs(off - 30.0) < 4.0 and speed > 0.5, f"heading {h:.1f}°, speed {speed:.2f}")
+        else:
+            c.check(s, "walking north with the cursor east: the look is released while moving, the body faces its travel", off < 4.0 and speed > 0.5, f"heading {h:.1f}°, speed {speed:.2f}")
+        moving_rel = re.search(r"look: human_face\(0\.000, 0\.000\)", L) is not None
+        c.check(s, "…the release went as human_face(0, 0)", moving_rel or face_moving)
     if rel:
         h = math.degrees(heading_at(rel, snaps["released"][0]["wall_ms"]))
         c.check(s, "a release while walking snaps back to the travel (north)", abs(math.degrees(wrap(math.radians(h - north)))) < 4.0, f"heading {h:.1f}°")

@@ -354,6 +354,7 @@ living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, kept) -> b
 - **Verified** (`verify-player` `scripts/face.py`, 11 of 11: standing, the slack, a release, walking within 30°, release while walking, finishing the turn on stopping, the shared bucket, an anonymous caller refused; `verify-client` 36 of 36 with `human_face` in the reducer matrix; `verify-core` `moves` and `fov` pass on the same build). A running world takes the two `steer` columns in place: 2.14.1's automatic migration adds a column with a default.
 - **The game client (`fov-client`)** sends it from its single look function (`controls::look`).
   - It sends a look on changes over 4°, at most every 0.1 s, and a release when "face where you walk" stops aiming.
+  - Until dev-box's look-2, it sends looks only while standing and releases the look while a direction is held (`controls::FACE_WHILE_MOVING`). On main a look bends the walk itself, which play-test 5 felt as slower walking with a sideways drift.
   - A look the bucket refused is retried. Any other refusal is not.
   - The client draws its field from the heading on its own motion row (`steer::pose`), never from the cursor, so the field shows what the authority decides ([game brief](GAME_BRIEF.md), "Facing sight").
 - **Data paths:** `human_face` reads the player's `steer` and `body` rows by key, and writes `steer` and `body` only on a change past the slack. The body update reaches the players who perceive it through their frames, as any turn does.

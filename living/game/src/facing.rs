@@ -17,6 +17,10 @@
 //!   opens a second connection with it, used for nothing but that call. F5, or the toggle in
 //!   Settings › Play, asks it. Without the file (normal play), the switch is read-only and F5
 //!   only says so.
+//! - **Other laws:** the same link sets the walking speed ([`WALK_LAW`], one of
+//!   [`WALK_CHOICES`], Settings › Play › Walk speed); [`set_law`] is the one path for both.
+//! - **A switch's cost:** `set_world_law` installs the script again with a new revision, and the
+//!   client recompiles it on the frame (`verbs.rs` logs how long it took).
 //! - **The look input:** `controls::look` sends `human_face(dx, dy)`: facing the cursor, always;
 //!   facing where I walk, only while a move is aimed. It turns `body.heading`, which the field
 //!   reads from my motion row, so the field follows the authority's facing.
@@ -30,6 +34,11 @@ use std::sync::{Arc, Mutex};
 /// The key that asks the world's `fov_on` law to switch (with the admin link only).
 pub const KEY: KeyCode = KeyCode::F5;
 
+/// The world's law for walking speed (m/s) that Settings › Play offers to set, and its choices.
+/// The Spark is adding it (`walk_base`, default 2.6 m/s); rename here when its name lands.
+pub const WALK_LAW: &str = "walk_base";
+pub const WALK_CHOICES: [f32; 3] = [2.6, 3.0, 3.4];
+
 /// Facing sight as this client knows it.
 #[derive(Resource, Default)]
 pub struct FovState {
@@ -39,14 +48,20 @@ pub struct FovState {
     pub field: Option<Field>,
     /// How many times the field changed since joining (the readout showed each).
     pub changes: u32,
-    /// A switch asked for (on or off), sent by the admin link.
-    pub ask: Option<bool>,
+    /// Laws asked for (name, JSON value), sent by the admin link in order.
+    pub asks: Vec<(String, String)>,
     /// The admin link is open: the switch works.
     pub can_switch: bool,
     /// Whether the launcher gave this client an admin token at all.
     pub offered: bool,
-    /// The last answer to a switch ("fov_on → true: done", or the refusal).
+    /// The last answer to a law asked for ("fov_on → true: done", or the refusal).
     pub last: Option<String>,
+    /// The last answer per law name, for Settings.
+    pub answers: std::collections::HashMap<String, String>,
+    /// The world's walking speed law ([`WALK_LAW`]) as the installed script has it, if it has it.
+    pub walk: Option<f32>,
+    /// The script revision `walk` was read for.
+    walk_rev: Option<u32>,
 }
 
 impl FovState {
@@ -84,7 +99,7 @@ enum Signal {
     Built(Result<DbConnection, String>),
     Connected,
     Gone(String),
-    Reply(bool, Result<(), String>),
+    Reply(String, String, Result<(), String>),
 }
 
 pub struct FacingPlugin;
@@ -97,8 +112,17 @@ impl Plugin for FacingPlugin {
     }
 }
 
-/// The field from my senses: on a change, the note and the readout.
-fn watch(mut st: ResMut<FovState>, edge: Res<crate::sightedge::SightEdge>, mut verbs: Option<ResMut<crate::verbs::Verbs>>, time: Res<Time>) {
+/// The field from my senses: on a change, the note and the readout. The walk law's value, per
+/// script revision.
+fn watch(mut st: ResMut<FovState>, edge: Res<crate::sightedge::SightEdge>, rules: NonSend<crate::verbs::Rules>, mut verbs: Option<ResMut<crate::verbs::Verbs>>, time: Res<Time>) {
+    if let Some(sc) = rules.scripts.as_ref().filter(|_| st.walk_rev != Some(rules.revision)) {
+        st.walk_rev = Some(rules.revision);
+        let was = st.walk;
+        st.walk = sc.law_value(WALK_LAW).and_then(|v| v.as_f64()).map(|v| v as f32);
+        if st.walk != was {
+            info!("laws: {WALK_LAW} is {:?} by the installed script (revision {})", st.walk, rules.revision);
+        }
+    }
     let Some(s) = edge.senses else { return };
     if st.known && st.field == s.field {
         return;
@@ -136,12 +160,20 @@ fn keys(mut st: ResMut<FovState>, keys: Res<ButtonInput<KeyCode>>, input: Res<cr
 
 /// Ask the world's `fov_on` law to be `on` (F5, or the toggle in Settings › Play).
 pub fn ask(st: &mut FovState, on: bool) {
+    set_law(st, "fov_on", &on.to_string());
+}
+
+/// Ask the world to set one of its laws (`set_world_law(name, value)`, `value` as JSON text:
+/// `"true"`, `"3.0"`) through the admin link: facing sight's switch, the walk-speed choice. With
+/// no admin link (normal play) nothing is sent and it says so. Returns whether it was queued.
+pub fn set_law(st: &mut FovState, name: &str, value: &str) -> bool {
     if !st.can_switch {
-        info!("facing: switch asked ({on}) but this client has no admin link: read-only");
-        st.last = Some(if st.offered { "The admin link is not open (yet)".into() } else { "Read-only: only a play scene's launcher can switch the world's law".into() });
-        return;
+        info!("laws: {name} → {value} asked but this client has no admin link: read-only");
+        st.last = Some(if st.offered { "The admin link is not open (yet)".into() } else { "Read-only: only a play scene's launcher can change the world's laws".into() });
+        return false;
     }
-    st.ask = Some(on);
+    st.asks.push((name.to_string(), value.to_string()));
+    true
 }
 
 /// The admin link: opened once when the launcher gave a token, then `set_world_law` for asks.
@@ -191,36 +223,40 @@ fn link(mut admin: NonSendMut<AdminLink>, mut st: ResMut<FovState>, net: NonSend
                 st.can_switch = false;
             }
             Signal::Connected => {
-                info!("facing: admin link open: F5 and Settings › Play switch facing sight");
+                info!("facing: admin link open: F5 and Settings › Play switch facing sight (and set the walk speed)");
                 st.can_switch = true;
             }
-            Signal::Reply(on, r) => {
+            Signal::Reply(name, value, r) => {
                 let msg = match &r {
-                    Ok(()) => format!("fov_on → {on}: done"),
-                    Err(e) => format!("fov_on → {on} refused: {e}"),
+                    Ok(()) => format!("{name} → {value}: done"),
+                    Err(e) => format!("{name} → {value} refused: {e}"),
                 };
-                info!("facing: set_world_law {msg}");
+                info!("laws: set_world_law {msg}");
                 if r.is_err() {
                     if let Some(v) = verbs.as_deref_mut() {
-                        v.toasts.push(crate::verbs::Toast { text: format!("Facing sight: {msg}"), ok: Some(false), at: time.elapsed_secs_f64() });
+                        v.toasts.push(crate::verbs::Toast { text: format!("The world's law {msg}"), ok: Some(false), at: time.elapsed_secs_f64() });
                     }
                 }
+                st.answers.insert(name, msg.clone());
                 st.last = Some(msg);
             }
         }
     }
-    if let (Some(on), Some(conn)) = (st.ask.take(), admin.conn.as_ref()) {
-        info!("facing: asking set_world_law(\"fov_on\", \"{on}\")");
+    let asks = if admin.conn.is_some() { std::mem::take(&mut st.asks) } else { Vec::new() };
+    for (name, value) in asks {
+        let Some(conn) = admin.conn.as_ref() else { break };
+        info!("laws: asking set_world_law(\"{name}\", \"{value}\")");
         let inbox = admin.inbox.clone();
-        let r = conn.reducers.set_world_law_then("fov_on".into(), on.to_string(), move |_, r| {
+        let (n, v) = (name.clone(), value.clone());
+        let r = conn.reducers.set_world_law_then(name, value, move |_, r| {
             let r = match r {
                 Ok(o) => o,
                 Err(e) => Err(e.to_string()),
             };
-            inbox.lock().unwrap().push(Signal::Reply(on, r));
+            inbox.lock().unwrap().push(Signal::Reply(n, v, r));
         });
         if let Err(e) = r {
-            warn!("facing: set_world_law could not be sent: {e}");
+            warn!("laws: set_world_law could not be sent: {e}");
         }
     }
 }

@@ -308,6 +308,8 @@ pub fn movement(
         Control::Travel if aims => input.look,
         Control::Travel => None,
     };
+    // While moving, the look is released unless [`FACE_WHILE_MOVING`] (see there).
+    let dir = dir.filter(|_| FACE_WHILE_MOVING || !input.moving);
     let mut looks = std::mem::take(&mut input.looks);
     look(&net, dir, &mut looks, now);
     input.looks = looks;
@@ -373,6 +375,13 @@ pub fn look(net: &Net, dir: Option<Vec2>, st: &mut LookSend, now: f64) {
     });
     net.report("face", r);
 }
+
+/// Whether a look is sent while a direction is held. Off until dev-box's look-2 is on main: on
+/// main a look while walking bends the travel itself up to 30° toward it (`look_walk_deg`), so
+/// the owner walked at 0.87× speed with a sideways drift (play-test 5). look-2 makes the velocity
+/// follow the keys and turns only the facing; then this is the one line to change. Off, a look
+/// is sent standing and released (`human_face(0, 0)`) as soon as a direction is held.
+pub const FACE_WHILE_MOVING: bool = false;
 
 /// A look is sent again when it turns this far (degrees; the authority's own slack is 10°)…
 pub const LOOK_DEG: f32 = 4.0;
