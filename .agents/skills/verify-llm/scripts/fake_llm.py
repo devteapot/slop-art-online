@@ -107,6 +107,15 @@ def valid_reply(purpose, body):
             value['to'] = int(match[1])
     if purpose == 'think':
         value.update(feeling='calm', impulse='wait')
+    # Projects (LIVING_PROJECTS=1): only when the prompt carries them, so other runs are unchanged.
+    user = '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'user')
+    section = user.split('# Your projects', 1)[1].split('\n#', 1)[0] if '# Your projects' in user else ''
+    shown = re.findall(r'^- ([a-z_]+:[^\s:]+):', section, re.M)
+    if purpose == 'think' and '"serves"' in system:
+        value['serves'] = shown[0] if shown else None
+    if purpose in ('consolidate', 'reorganize') and '"projects"' in system:
+        value['projects'] = [{'key': 'project:verify_fake_shelter', 'aim': 'verify fake: raise a shelter by the shore',
+                              'progress': f'verify fake: step {len(shown) + 1}', 'next_step': 'verify fake: gather branches'}]
     if purpose == 'choose':
         # Each choice in turn, so a run exercises every option an animal is offered.
         user = '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'user')

@@ -22,15 +22,32 @@ are made game-ready (`library_clip`):
   removed at constant speed); `--speed`, `--run-speed`, `--sneak-speed` and `--target KEY=M/S` set
   the speed a clip's `speed` key (default: its locomotion) is time-scaled to, within
   `--max-scale`; unset keys keep the natural speed.
+- `travel_deg` (optional, locomotion loops): the take travels this far from where it faces (the
+  game's sense: 0 forward, 180 back, -90 left, 90 right), so it is faced ahead with its travel
+  turned there, and its cycle and speed are measured along that direction. The summary gets
+  `travel_deg`, `locomotion`, `facing_deg` (the hips' mean heading once faced, the same sense) and
+  `cycle_m` (metres a cycle). Entries without it bake exactly as before.
 - `kind: once`: a one-shot (`trim: [a, b]` seconds). It eases from and into the library's
   `neutral` pose at ends keyframed to it (`start`/`end: "neutral"`), so it blends with the idles.
   Travel is kept (`travel: belt` takes it out at constant speed; `travel: path` takes out the
   entry's `path` [[s, x, z], …] in SOMA metres, the track batch.py pinned the hips to and the
   game's body moves along by itself, as for the authority's dodge dash);
   `offset: [x, z]` places a clip that continues another (sitting after sit_down).
+  `turn_deg` (a turn on the spot; the game's sense, -90 a quarter turn left): the turn is taken
+  out of the clip after its feet are planted (`unturn`), so it ends facing ahead in the neutral
+  pose, and the summary gives `turn_deg` (measured), `turn_planned_deg` and `turn_curve`
+  ([[normalised time, degrees so far], …]) for the game to turn the body along. `hop: [a, b]`
+  (seconds, the path's flight) goes to the summary in clip seconds. A `travel: path` one-shot that
+  hops, has `travel_deg`, or starts or ends in a gait's frame (`walk#1@100`) gets `path_m`, the
+  body's track per frame (game metres: to its left, ahead), and a start or end in a gait baked in
+  the same run gets `start_gait`/`end_gait`: {clip, phase}, that frame's phase in the gait's loop.
 - Planted feet (`plant`, default on): Kimodo's foot contacts, plus feet near the floor and still,
   pin the heel or the ball of the foot in the game's world; between plants the correction blends;
   `solve_leg` reaches the targets, lowering the hips smoothly where a leg can't.
+- Floor guard (`floor_guard`, every Kimodo and overlay clip, after the planting): where a
+  foot's heel, ball or toe tip is more than `FLOOR_EPS` (1 cm) under the floor, the ankle is
+  lifted by a smooth curve never below that depth and the leg solved to it; the summary gets
+  `floor_lift_m` and `floor_frames`. A clip that never goes under bakes exactly as without it.
 - `grip: {"R": deg, "L": deg}` curls a hand that holds something (Kimodo's fingers stay relaxed).
 - Foot-down markers (`foot_markers`): every clip's summary gets `contacts: {"L": [[a, b], …],
   "R": …}`, each foot's contact windows in normalised clip time, detected from the baked take
@@ -943,6 +960,11 @@ def soma_window(soma, m, spec, cyc):
         P = P + root[:, None, :]
         d = root[-1] - root[0]
         face = math.atan2(d[0], d[2])  # travel direction → +Z
+        if "travel_deg" in spec:
+            # A take that travels to the side or backward faces ahead: its travel is turned to
+            # `travel_deg` from the facing (the game's sense: -90 left, 90 right, 180 back), so
+            # the cycle and its speed are measured along the take's own direction.
+            face += math.radians(spec["travel_deg"])
     else:
         face = float(h[0])
     R = np_yaw(-face)
@@ -977,7 +999,7 @@ def soma_window(soma, m, spec, cyc):
     P = P - shift[:, None, :]
     residual = float(np.hypot(root[:, 0], root[:, 2]).max()) if travel == "path" else 0.0
     track = (shift - shift[0]) if travel == "path" else None
-    return dict(G=G, P=P, root=root, contacts=C, belt=belt, n=n, residual=residual, track=track)
+    return dict(G=G, P=P, root=root, contacts=C, belt=belt, n=n, residual=residual, track=track, heading=soma_heading(soma, P))
 
 
 def neutral_frame(sk, soma, ref, kdir):
@@ -1236,6 +1258,65 @@ def plant_feet(sk, frames, contacts, belt_v, cyclic, stats, track=None):
     return out
 
 
+# The floor guard leaves a foot alone unless its heel, ball or toe tip is more than this (game m)
+# under the floor. The toe tip is taken at the sole's height at rest, a little low for most feet,
+# so at 3 mm nearly every Kimodo take (the idle by 4 mm) was lifted; 1 cm is where a toe shows
+# through the ground.
+FLOOR_EPS = 0.01
+
+
+def floor_guard(sk, frames, cyclic, stats):
+    """Keep the feet out of the floor: in each frame, how far each foot's heel, ball or toe tip
+    (the sole's corners, from the mesh) is under the floor; where any is, beyond `FLOOR_EPS`, the
+    ankle is lifted by a smooth curve never below that depth (`smooth_drop`) and the leg solved
+    to it, the foot keeping its rotation. A clip that never goes under comes back unchanged (the
+    same frames): the guard is a no-op there. Records `floor_lift_m` (the most a foot was
+    lifted, game m) and `floor_frames` (frames under the floor)."""
+    n = len(frames) - 1
+    count = n if cyclic else n + 1
+    names = [bone(s, x) for s in "LR" for x in LEG]
+    eps = FLOOR_EPS * sk.unit
+
+    def under(fk):
+        out = {s: [0.0] * count for s in "LR"}
+        for k, (rot, pos) in enumerate(fk):
+            for s in "LR":
+                f_ = sk.feet[s]
+                ft, toe = bone(s, "Foot"), bone(s, "ToeBase")
+                ball = Vector((f_["toe"].x, f_["sole"], f_["toe"].z))
+                ys = [(pos[ft] + rot[ft] @ (f_["heel"] - f_["ankle"])).y, (pos[ft] + rot[ft] @ (ball - f_["ankle"])).y, (pos[toe] + rot[toe] @ (f_["tip"] - f_["toe"])).y]
+                out[s][k] = f_["sole"] - min(ys)
+        return out
+
+    fk = [fk_pose(sk, q, off, names) for q, off in frames[:count]]
+    depth = {s: [d if d > eps else 0.0 for d in v] for s, v in under(fk).items()}
+    if not any(any(v) for v in depth.values()):
+        return frames
+    out = [(dict(q), off.copy()) for q, off in frames[:count]]
+    lifted = 0.0
+    for s in "LR":
+        if not any(depth[s]):
+            continue
+        lift = smooth_drop(depth[s], cyclic=cyclic)
+        lifted = max(lifted, max(lift))
+        for k in range(count):
+            if lift[k] <= 0.0:
+                continue
+            rot, pos = fk[k]
+            ft = bone(s, "Foot")
+            pole = rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1))
+            target = pos[ft] + Vector((0.0, lift[k], 0.0))
+            out[k][0].update(solve_leg(sk, s, pos[bone(s, "UpperLeg")], rot[HIPS], target, rot[ft], rot[bone(s, "ToeBase")], stats, pole=pole))
+    stats["floor_lift_m"] = lifted / sk.unit
+    stats["floor_frames"] = sum(1 for k in range(count) if depth["L"][k] or depth["R"][k])
+    # What is left under the floor after the lift (game m; within FLOOR_EPS by construction).
+    left = under([fk_pose(sk, q, off, names) for q, off in out])
+    stats["floor_left_m"] = max(0.0, max(max(v) for v in left.values())) / sk.unit
+    if cyclic:
+        out.append(({b: v.copy() for b, v in out[0][0].items()}, out[0][1].copy()))
+    return out
+
+
 # A foot is down while its heel or ball is within this of the floor (game m) and moves slower than
 # MARK_STILL (game m/s, in the game's world: belt or path travel included).
 MARK_FLOOR = 0.03
@@ -1355,9 +1436,31 @@ def overlay_clip(sk, spec, neutral):
     contacts = [(True,) * 6] * (n + 1)
     stats = {}
     frames = plant_feet(sk, frames, contacts, Vector(), False, stats)
+    frames = floor_guard(sk, frames, False, stats)
     info = {"source": "hand-keyed overlay on the neutral pose", "kind": "once", "loop": False, "frames": n,
             "seconds": round(n / FPS, 3), "speed": 0.0, "contacts": foot_markers(sk, frames, Vector(), False)[0]}
     return frames, info
+
+
+def unturn(frames, heading):
+    """A turn on the spot with its turn taken out: each frame's hips (and everything under them)
+    turned back about the vertical by how far the hips' heading has turned since the first frame
+    (radians, SOMA's sense: + turns to the body's left), so the clip ends facing ahead in the
+    neutral pose and the game turns the body itself along the curve. Feet are planted before."""
+    out = []
+    for f, (q, off) in enumerate(frames):
+        back = Quaternion((0.0, 1.0, 0.0), -float(heading[min(f, len(heading) - 1)] - heading[0]))
+        q = dict(q)
+        q[HIPS] = back @ q[HIPS]
+        out.append((q, back @ off))
+    return out
+
+
+def joins_a_gait(spec):
+    """A one-shot that travels its own path into or out of a gait, or hops (the game draws the
+    body along its path, `path_m`): a start, a stop, a jump. The dodge's dash is the authority's."""
+    ends = str(spec.get("start", "")) + str(spec.get("end", ""))
+    return spec.get("travel") == "path" and ("hop" in spec or "travel_deg" in spec or "#" in ends)
 
 
 def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
@@ -1419,6 +1522,7 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
     track = [TURN @ Vector((float(t[0]), 0.0, float(t[2]))) * soma.k for t in w["track"]] if w["track"] is not None and n == w["n"] else None
     if spec.get("plant", True):
         frames = plant_feet(sk, frames, contacts, belt_v, kind == "loop", stats, track)
+    frames = floor_guard(sk, frames, kind == "loop", stats)
     # Foot-down markers. A gait's loop starts where its right foot comes down (the start of the
     # right foot's longest contact), so phase 0 is the same event in every gait and the game can
     # play them all at one shared phase.
@@ -1428,6 +1532,14 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
         info["phase_shift"] = round(touch["R"] / n, 4)
         marks, touch, _ = foot_markers(sk, frames, belt_v, True, track)
     info["contacts"] = marks
+    if "turn_deg" in spec:
+        # Measured on the take, in the game's sense (-90 is a quarter turn left): the curve is
+        # what the game turns the body by, the clip itself no longer turns.
+        h = w["heading"]
+        info["turn_deg"] = round(-math.degrees(float(h[-1] - h[0])), 1)
+        info["turn_planned_deg"] = spec["turn_deg"]
+        info["turn_curve"] = [[round(f / n, 4), round(-math.degrees(float(h[f] - h[0])), 2)] for f in range(n + 1)]
+        frames = unturn(frames, h)
     if kind == "loop" and loco:
         info["sync"] = "R"
     if kind == "loop":
@@ -1443,6 +1555,22 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
     if spec.get("travel") == "path":
         # How far the hips stray from the body's own track (game metres): the slide left.
         info["path_residual_m"] = round(w["residual"] * soma.k_game, 3)
+    if joins_a_gait(spec) and w["track"] is not None:
+        # The body's own track (game metres per frame: to its left, ahead), which the game draws
+        # it along while the clip plays.
+        info["path_m"] = [[round(float(t[0]) * soma.k_game, 4), round(float(t[2]) * soma.k_game, 4)] for t in w["track"]]
+    if "hop" in spec:
+        # The path's flight window, in clip seconds (the rules' jump).
+        info["hop"] = [round(spec["hop"][0] - i / FPS, 3), round(spec["hop"][1] - i / FPS, 3)]
+    if "travel_deg" in spec:
+        # Where the take travels from its facing (the game's sense), and where its hips faced on
+        # average once its travel was turned there (degrees, the same sense).
+        info["travel_deg"] = spec["travel_deg"]
+        if loco:
+            info["locomotion"] = loco
+        info["facing_deg"] = round(-math.degrees(sum(map(float, w["heading"])) / len(w["heading"])), 1)
+        if kind == "loop":
+            info["cycle_m"] = round(speed * n / FPS, 3)
     if kind == "once" and not moving:
         d = w["root"][-1] - w["root"][0]
         info["end_offset_m"] = round(float(math.hypot(d[0], d[2])) * soma.k_game, 3)
@@ -1678,6 +1806,21 @@ def main():
             # Upper-body clips play over the gait while the body moves (the game's anim.rs).
             if "layer" in e:
                 summary[name]["layer"] = e["layer"]
+            # A one-shot that starts or ends in a frame of a gait baked here (a walk's start or
+            # stop): that frame's phase in the gait's loop, where the game hands over.
+            for key in ("start", "end"):
+                ref = str(e.get(key, ""))
+                if "#" not in ref or "@" not in ref or name not in summary:
+                    continue
+                g, rest = ref.split("#", 1)
+                seed, frame = rest.split("@", 1)
+                ge = next((x for x in lib["clips"] if x["name"] == g), None)
+                sg = summary.get(g)
+                if ge is None or sg is None or not sg.get("sync") or a.seeds != "pick" or ge.get("pick") != int(seed):
+                    continue
+                i, j = sg["cut"]
+                phase = ((int(frame) - i) / (j - i) - sg.get("phase_shift", 0.0)) % 1.0
+                summary[name][f"{key}_gait"] = {"clip": g, "phase": round(phase, 4)}
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)

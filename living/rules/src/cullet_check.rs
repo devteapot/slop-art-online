@@ -387,3 +387,96 @@ mod tests {
         println!("Cullet's plan, a game day: {:#?}", plan_daily(&cullet(), &cullet_plan()));
     }
 }
+
+#[cfg(test)]
+mod life_tests {
+    use super::*;
+
+    fn species() -> Vec<(String, crate::life::Life)> {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../seeds/species.json")).unwrap();
+        v.as_object().unwrap().iter().filter_map(|(k, s)| Some((k.clone(), serde_json::from_value(s.get("life")?.clone()).ok()?))).collect()
+    }
+
+    fn same(a: crate::life::Life, b: crate::life::Life) -> bool {
+        [a.years, a.infant, a.child, a.elder, a.old_age, a.gestation, a.interbirth, a.breeding_radius].map(f32::to_bits) == [b.years, b.infant, b.child, b.elder, b.old_age, b.gestation, b.interbirth, b.breeding_radius].map(f32::to_bits) && a.litter == b.litter
+    }
+
+    /// Without a `life_years` law (the shipped script: every world but Cullet) each species'
+    /// table is exactly `species.json`'s.
+    #[test]
+    fn worlds_without_the_law_keep_the_species_tables() {
+        let s = island();
+        assert!(!s.has("life_years"));
+        for (k, l) in species() {
+            assert!(same(s.life(&k, l), l), "{k}");
+        }
+    }
+
+    /// Cullet's people: a child until 15, deaths of old age from 75 to 90; infancy, old age as a
+    /// stage (59.5) and pregnancy keep their years; animals keep their tables.
+    #[test]
+    fn cullet_people_live_longer_and_grow_up_sooner() {
+        let s = cullet();
+        s.validate().expect("Cullet's laws install");
+        for (k, base) in species() {
+            let l = s.life(&k, base);
+            if k != "person" {
+                assert!(same(l, base), "{k}");
+                continue;
+            }
+            let y = |f: f32| f * l.years;
+            let close = |a: f32, b: f32| (a - b).abs() < 1e-3;
+            assert!(close(l.years, 90.0) && close(y(l.child), 15.0) && close(y(l.old_age), 75.0), "{l:?}");
+            assert!(close(y(l.infant), base.infant * base.years) && close(y(l.elder), base.elder * base.years) && close(y(l.gestation), base.gestation * base.years));
+            let pace = crate::life::Pace { year_days: 8.0, pace: 1.0 };
+            let at = |years: f32| l.stage(years * 8.0, pace);
+            assert_eq!(at(14.9), crate::life::Stage::Child);
+            assert_eq!(at(15.0), crate::life::Stage::Adult);
+            assert_eq!(at(59.0), crate::life::Stage::Adult);
+            assert_eq!(at(61.0), crate::life::Stage::Elder);
+            // Nobody dies of old age before 75; the cast's eldest (70) lives on.
+            for id in 0..5000 {
+                assert!(y(l.deathline(id)) >= 75.0 - 1e-3);
+            }
+        }
+    }
+
+    /// A law that gets the table wrong is refused at install.
+    #[test]
+    fn a_wrong_life_table_is_refused() {
+        let src = crate::floors::compose(BASE, "fn life_years(t) { t.child = 80.0; t }\nfn life_years_law() { #{ cadence: \"compile\", topic: \"\", about: \"x\" } }").unwrap();
+        let e = Scripts::new(&src).unwrap().validate().unwrap_err();
+        assert!(e.contains("life_years") && e.contains("child"), "{e}");
+    }
+}
+
+#[cfg(test)]
+mod ways_tests {
+    use super::*;
+
+    /// Cullet's starting ways (`worlds/cullet/ways.json`, merged into the seed by
+    /// cullet_plan.py) are graphs its rules accept: every routine, the top level, and nothing
+    /// a person may not do; each trade has a workplace.
+    #[test]
+    fn cullet_ways_are_valid_graphs() {
+        let s = cullet();
+        let w: serde_json::Value = serde_json::from_str(include_str!("../../seeds/worlds/cullet/ways.json")).unwrap();
+        crate::catalog::scoped(s.skills().clone(), || {
+            let parse = |what: &str, g: &serde_json::Value| {
+                let g = crate::graph::parse(&g.to_string()).unwrap_or_else(|e| panic!("{what}: {e}"));
+                assert!(crate::graph::skills_used(&g.root).iter().all(|k| s.skills().get(k).is_some()), "{what}");
+            };
+            for (k, g) in w["common"].as_object().unwrap() {
+                parse(k, g);
+            }
+            for (k, o) in w["occupations"].as_object().unwrap() {
+                parse(k, &o["graph"]);
+                assert!(k == "child" || w["town_life"]["work"].get(k).is_some(), "{k} has no workplace");
+            }
+            let top = w["top"].to_string().replace("\"WORK\"", "\"fishing\"");
+            parse("top", &serde_json::from_str(&top).unwrap());
+            let work = w["top"]["desires"].as_array().unwrap().iter().find(|d| d["want"] == "work").unwrap();
+            assert!(work["weight"]["work_hours"].as_f64().unwrap() > 0.0);
+        });
+    }
+}

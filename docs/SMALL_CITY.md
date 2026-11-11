@@ -357,6 +357,8 @@ At the play-test everyone ran for shelter together at dusk. There were three cau
 
 **How this is seeded.** Each resident's sheet carries a small `rhythm`: usual waking hour, hours of sleep needed, working hours, and one or two evening places. The starting routines read those values instead of fixed hours. Sleep follows tiredness more than the clock. These are per-person starting values of the same routines everyone has, not per-role scripts. This needs a small seed and graph change, listed in the build plan.
 
+*Built 2026-11-11 on `lives-3`:* rising and going to bed at any hour, working hours and a second sleep in the seed's rhythm, read by graphs as `bedtime`, `evening` and `work_hours`; Cullet's trades' workplaces and starting habits as seed data (`worlds/cullet/ways.json`); and Cullet's life law (a child until 15, old age from 75) ([seeded lives](SEEDED_LIVES.md#rhythms-at-any-hour-and-cullets-trades), [Cullet's rules](CULLET_RULES.md#peoples-lives-the-life-table-as-a-law)). Pieter's hours are read as 13:00–19:00 plus 22:00–02:30. The wrack gatherers keep fixed early hours until the tide law exists.
+
 **Places need spots.** Today everyone at a place stands on one point. A place needs several named spots, such as a bench's seats, a stall's two sides, or the steps of the Fish Steps, so that six people at the Marver sit at six seats. This is a general rule gap.
 
 ### Tensions

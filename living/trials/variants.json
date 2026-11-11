@@ -25,6 +25,13 @@
    "LIVING_LESSONS": "1"
   }
  },
+ "projects": {
+  "about": "Default with LIVING_PROJECTS=1: each person keeps a few self-chosen projects (self -PURSUES {progress, next_step}-> project:<slug>) that consolidation and the nightly reorganization add, revise and end, and every deliberation sees (at most 3) and may say it serves; the thought row records which.",
+  "models": {},
+  "env": {
+   "LIVING_PROJECTS": "1"
+  }
+ },
  "grounds": {
   "about": "Default with LIVING_GROUNDS=1.",
   "models": {},
@@ -93,6 +100,13 @@
   "models": {},
   "env": {
    "LIVING_ANIMAL_MINDS": "pack,salient,choose"
+  }
+ },
+ "player-frame": {
+  "about": "Default with LIVING_FRAME=player: people's deliberation (think and compile), consolidation and conversation-turn system prompts open with a short frame saying the model is an AI playing this person in a persistent world shared with other players, human and AI, where the person's body, needs, death and the world's rules are real and what to pursue is its own choice, and whatever the person says or writes stays in their own words (prompts.rs PLAYER_FRAME). Everything else as default. Probes: prompt_frame (requests that carried the frame) and ooc_lines/ooc_private (living/tools/ooc.py).",
+  "models": {},
+  "env": {
+   "LIVING_FRAME": "player"
   }
  }
 }

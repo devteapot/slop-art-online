@@ -1,5 +1,9 @@
 # verify-ui: last real run
 
+**2026-11-11, later: themes and density (ui-1 after play-test 4).** `verify-ui-b`, the same harness. Clear (the default): windows, talk, items and the new themes scenario, **43 passed, 0 failed**. Night, Linen and Walnut (`LIVING_GAME_THEME=<t>`): windows, talk and items, **37 passed, 0 failed** each. Changes to the scenarios: the talk scenario reaches Introduce yourself through their window's More…; the second resident is placed beside the first (the stall side is out of sight). Found: Enter picked the hovered person nearest the player, not the cursor (fixed in `ui/say.rs`).
+
+## The first run
+
 **2026-11-11, branch `ui-1` (interface D steps 1–3) on base `90f6fac1`, laptop.**
 
 - **World:** `verify-ui-b`, from `$V launch --run ui-b --seed island --target-dir …` (scoped perception; Brackenford's residents; no mind service, no model calls). `$V doctor --run ui-b`: all ok (v2.14.1, ticking, module newer than the sources).

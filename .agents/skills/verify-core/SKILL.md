@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm, places, weather, gestures), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -75,6 +75,16 @@ mkdir -p ".local/living/verify/$T"
 python3 "$V" launch --run "$T" --seed island > ".local/living/verify/$T/launch.txt" 2>&1
 python3 "$C/town.py" --run "$T" > ".local/living/verify/$T/town.txt" 2>&1
 python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
+
+# Rhythms at any hour and Cullet's trades (about 17 min): a night stoker rising at 14:00 and
+# working the night, the day watch feeding the furnace and making glass, a baker's second sleep,
+# Cullet's life stages (features/town.md, features/laws.md, docs/SEEDED_LIVES.md).
+Y=$R-rhythm
+mkdir -p ".local/living/verify/$Y"
+python3 "$C/rhythm.py" seed --run "$Y" > ".local/living/verify/$Y/seed.txt" 2>&1
+python3 "$V" launch --run "$Y" --seed "$PWD/.local/living/verify/$Y/cullet-rhythm" > ".local/living/verify/$Y/launch.txt" 2>&1
+python3 "$C/rhythm.py" drive --run "$Y" > ".local/living/verify/$Y/rhythm.txt" 2>&1
+python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
 
 # Seeded lives on an island world (about 25 min): placement, routes, the road, ties
 # (features/lives.md, docs/SEEDED_LIVES.md).

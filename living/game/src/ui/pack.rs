@@ -34,6 +34,8 @@ pub struct CellCount(usize);
 #[derive(Component)]
 pub struct Carry;
 #[derive(Component)]
+pub struct PackHint;
+#[derive(Component)]
 pub struct Ghost;
 #[derive(Component)]
 pub struct GhostIcon;
@@ -55,16 +57,18 @@ pub struct KnowDetail(u8);
 pub struct Carrying {
     pub item: Option<String>,
     pub onto: Option<u32>,
+    /// An item has been clicked or carried: the pack's hint has done its work.
+    pub used: bool,
 }
 
 pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<WinBody>>, fonts: Res<Fonts>, icons: Res<Icons>, ghost: Query<(), With<Ghost>>) {
     let f = &*fonts;
     if ghost.is_empty() {
         commands
-            .spawn((HudRoot, Ghost, Node { position_type: PositionType::Absolute, width: Val::Px(58.0), height: Val::Px(58.0), border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(10.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, display: Display::None, ..default() }, BackgroundColor(Color::srgb_u8(0xfa, 0xea, 0xc5)), BorderColor::all(wood::INK), wood::hard_shadow(6.0, 0.4), bevy::ui::UiTransform::from_rotation(Rot2::degrees(-6.0)), GlobalZIndex(Z_DRAG), Pickable::IGNORE))
+            .spawn((HudRoot, Ghost, Node { position_type: PositionType::Absolute, width: Val::Px(58.0), height: Val::Px(58.0), border: wood::b(3.0), border_radius: wood::r(10.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, display: Display::None, ..default() }, BackgroundColor(wood::surface_hi()), BorderColor::all(wood::edge()), wood::hard_shadow(6.0, 0.4), bevy::ui::UiTransform::from_rotation(Rot2::degrees(-6.0)), GlobalZIndex(Z_DRAG), Pickable::IGNORE))
             .with_children(|g| {
-                g.spawn((GhostIcon, Node { width: Val::Px(38.0), height: Val::Px(38.0), ..default() }, ImageNode::new(Handle::default()).with_color(wood::SUB), Pickable::IGNORE));
-                g.spawn((GhostLabelBox, Node { position_type: PositionType::Absolute, left: Val::Px(62.0), top: Val::Px(12.0), padding: UiRect::axes(Val::Px(8.0), Val::Px(2.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), ..default() }, BackgroundColor(wood::TALK_INK), BorderColor::all(wood::INK), bevy::ui::UiTransform::from_rotation(Rot2::degrees(6.0)), Pickable::IGNORE))
+                g.spawn((GhostIcon, Node { width: Val::Px(38.0), height: Val::Px(38.0), ..default() }, ImageNode::new(Handle::default()).with_color(wood::heading()), Pickable::IGNORE));
+                g.spawn((GhostLabelBox, Node { position_type: PositionType::Absolute, left: Val::Px(62.0), top: Val::Px(12.0), padding: UiRect::axes(Val::Px(8.0), Val::Px(2.0)), border: wood::b(2.0), border_radius: wood::r(8.0), ..default() }, BackgroundColor(wood::talk_ink()), BorderColor::all(wood::edge()), bevy::ui::UiTransform::from_rotation(Rot2::degrees(6.0)), Pickable::IGNORE))
                     .with_child((GhostLabel, Text::new(""), f.body(13.0, 900), TextColor(Color::WHITE), TextLayout::new(Justify::Left, LineBreak::NoWrap), Pickable::IGNORE));
             });
     }
@@ -72,37 +76,37 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
         match b.0 {
             Win::Pack => {
                 commands.entity(e).with_children(|body| {
-                    body.spawn((Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|h| {
-                        h.spawn((Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(4.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), ..default() }, wood::gold(), BorderColor::all(wood::INK), Pickable::IGNORE))
-                            .with_child((Text::new("Items"), wood::ink(f, 13.5, 800), Pickable::IGNORE));
-                        h.spawn((Carry, Text::new(""), f.body(14.0, 800), TextColor(wood::SUB), Pickable::IGNORE));
+                    // How much I carry, right; no tabs (there is one page).
+                    body.spawn((Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|h| {
+                        h.spawn((Carry, Text::new(""), f.body(13.0, 700), TextColor(wood::muted()), Pickable::IGNORE));
                     });
                     body.spawn((Node { display: Display::Grid, grid_template_columns: RepeatedGridTrack::px(5, 62.0), row_gap: Val::Px(7.0), column_gap: Val::Px(7.0), overflow: Overflow::scroll_y(), flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() }, ScrollPosition::default(), super::hit::Block)).with_children(|g| {
                         for i in 0..CELLS {
-                            g.spawn((Cell(i), Hot, Tag(format!("pack::{i}")), Node { width: Val::Px(62.0), height: Val::Px(62.0), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(9.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(wood::alpha(Color::srgb_u8(0xa0, 0x78, 0x46), 0.18)), BorderColor::all(Color::srgb_u8(0x8f, 0x6a, 0x43)), bevy::ui::Outline { width: Val::Px(0.0), offset: Val::Px(1.0), color: Color::srgb_u8(0xff, 0xcf, 0x5c) }))
+                            g.spawn((Cell(i), Hot, Tag(format!("pack::{i}")), Node { width: Val::Px(62.0), height: Val::Px(62.0), border: wood::b(2.0), border_radius: wood::r(9.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(wood::surface_lo()), BorderColor::all(wood::edge()), bevy::ui::Outline { width: Val::Px(0.0), offset: Val::Px(1.0), color: Color::srgb_u8(0xff, 0xcf, 0x5c) }))
                                 .with_children(|c| {
-                                    c.spawn((CellIcon(i), Node { width: Val::Px(36.0), height: Val::Px(36.0), display: Display::None, ..default() }, ImageNode::new(Handle::default()).with_color(wood::SUB), Pickable::IGNORE));
-                                    c.spawn((CellCount(i), Text::new(""), f.body(13.0, 900), TextColor(wood::INK), Node { position_type: PositionType::Absolute, right: Val::Px(4.0), bottom: Val::Px(1.0), ..default() }, Pickable::IGNORE));
+                                    c.spawn((CellIcon(i), Node { width: Val::Px(36.0), height: Val::Px(36.0), display: Display::None, ..default() }, ImageNode::new(Handle::default()).with_color(wood::heading()), Pickable::IGNORE));
+                                    c.spawn((CellCount(i), Text::new(""), f.body(13.0, 900), TextColor(wood::text()), Node { position_type: PositionType::Absolute, right: Val::Px(4.0), bottom: Val::Px(1.0), ..default() }, Pickable::IGNORE));
                                 });
                         }
                     });
-                    body.spawn((Text::new("Click an item for what you can do with it. Drag it onto someone, in the world or in their window, to give it."), f.body(12.5, 600), TextColor(wood::MUTED), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                    // Shown until an item is clicked or carried once (always in a dense theme).
+                    body.spawn((PackHint, Text::new("Click an item to use it; drag it onto someone to give it."), f.body(12.5, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::NoWrap), Pickable::IGNORE));
                 });
             }
             Win::Skills => {
                 commands.entity(e).with_children(|body| {
-                    body.spawn((KnowTech, Text::new(""), f.body(13.5, 650), TextColor(wood::INK), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                    body.spawn((KnowTech, Text::new(""), f.body(13.5, 650), TextColor(wood::text()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
                     body.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(16.0), flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }, Pickable::IGNORE)).with_children(|cols| {
                         cols.spawn((Node { width: Val::Px(240.0), flex_direction: FlexDirection::Column, overflow: Overflow::scroll_y(), max_height: Val::Px(480.0), flex_shrink: 0.0, ..default() }, ScrollPosition::default(), super::hit::Block)).with_children(|list| {
                             for i in 0..SKILL_ROWS {
-                                list.spawn((KnowRow(i), Hot, Tag(format!("skill:{i}")), kit::Paint::Row, Lit(false), Node { padding: UiRect::axes(Val::Px(8.0), Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(5.0)), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundGradient::default()))
+                                list.spawn((KnowRow(i), Hot, Tag(format!("skill:{i}")), kit::Paint::Row, Lit(false), Node { padding: UiRect::axes(Val::Px(8.0), Val::Px(2.0)), border_radius: wood::r(5.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundGradient::default()))
                                     .with_child((KnowRowText(i), Text::new(""), wood::ink(f, 13.5, 700), Pickable::IGNORE));
                             }
                         });
                         cols.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), flex_grow: 1.0, ..default() }, Pickable::IGNORE)).with_children(|d| {
-                            d.spawn((KnowDetail(0), Text::new(""), f.title(20.0), TextColor(wood::SUB), Pickable::IGNORE));
+                            d.spawn((KnowDetail(0), Text::new(""), wood::tface(&f, 20.0), TextColor(wood::heading()), Pickable::IGNORE));
                             for k in 1..4u8 {
-                                d.spawn((KnowDetail(k), Text::new(""), f.body(14.0, 600), TextColor(wood::INK), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                                d.spawn((KnowDetail(k), Text::new(""), f.body(14.0, 600), TextColor(wood::text()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
                             }
                         });
                     });
@@ -121,6 +125,7 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, model: Res<HudModel>, mut v
     let cell_of = |e: Entity| tags.get(e).ok().and_then(|t| t.0.strip_prefix("pack:")).and_then(|r| r.rsplit(':').next()).and_then(|i| i.parse::<usize>().ok());
     if let Some(i) = ui.clicked.and_then(cell_of) {
         if let Some(item) = item_of(i) {
+            carrying.used = true;
             // The item's acts, beside its cell (to its left: the pack is on the right).
             let at = cells.iter().find(|(c, _, _)| c.0 == i).map(|(_, n, t)| (t.affine().translation - n.size() / 2.0) * n.inverse_scale_factor());
             v.place_next = at.map(|p| p - Vec2::new(236.0, 10.0));
@@ -149,6 +154,7 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, model: Res<HudModel>, mut v
     }
     if let (Some((e, _)), Some(item)) = (ui.dropped, carrying.item.clone()) {
         if cell_of(e).is_some() {
+            carrying.used = true;
             match carrying.onto {
                 Some(id) => {
                     info!("ui: {item} let go on #{id}");
@@ -175,19 +181,27 @@ pub fn update(
     mut ghost_box: Query<&mut Node, (With<GhostLabelBox>, Without<Ghost>, Without<CellIcon>, Without<KnowRow>)>,
     mut rows: Query<(&KnowRow, &mut Node), (Without<Ghost>, Without<CellIcon>, Without<GhostLabelBox>)>,
     mut lit: Query<(&Tag, &mut Lit)>,
+    (mut cell_nodes, mut hint): (Query<(&Cell, &mut Node), (Without<Ghost>, Without<CellIcon>, Without<KnowRow>, Without<GhostLabelBox>, Without<PackHint>)>, Query<&mut Node, (With<PackHint>, Without<Cell>, Without<Ghost>, Without<CellIcon>, Without<KnowRow>, Without<GhostLabelBox>)>),
 ) {
+    for mut n in &mut hint {
+        show(&mut n, wood::t().help || !carrying.used);
+    }
     if let Some(inv) = &model.verbs.inventory {
+        let need = (inv.rows.len() / 5 + 1).max(1) * 5;
+        for (c, mut n) in &mut cell_nodes {
+            show(&mut n, c.0 < need);
+        }
         for (e, c, mut bg, mut border, mut outline, mut tag) in &mut cells {
             let full = c.0 < inv.rows.len();
             let want = format!("pack:{}:{}", inv.rows.get(c.0).map_or("", |r| r.0.as_str()), c.0);
             if tag.0 != want {
                 tag.0 = want;
             }
-            let col = if full { Color::srgb_u8(0xf6, 0xe6, 0xc4) } else { wood::alpha(Color::srgb_u8(0xa0, 0x78, 0x46), 0.18) };
+            let col = if full { wood::surface_hi() } else { wood::surface_lo() };
             if bg.0 != col {
                 bg.0 = col;
             }
-            let b = if full { Color::srgb_u8(0x8f, 0x6a, 0x43) } else { wood::alpha(Color::srgb_u8(0x8f, 0x6a, 0x43), 0.45) };
+            let b = if full { wood::edge() } else { wood::alpha(wood::edge(), 0.5) };
             if border.top != b {
                 *border = BorderColor::all(b);
             }

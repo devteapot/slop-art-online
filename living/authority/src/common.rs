@@ -496,25 +496,34 @@ pub fn hashed_draws(id: u32, salt: u64) -> impl FnMut() -> f32 {
     }
 }
 
-/// Where a body is in its own day at `hour`: (its bedtime, its evening). A person's rhythm
-/// row says when it rises and goes to bed and how long its evening is; without one, bedtime
-/// is the world's night and the evening 18:00 to 22:00.
-pub fn day_phase(ctx: &ReducerContext, id: u32, hour: f32) -> (bool, bool) {
+/// A rhythm row's hours (`living_rules::rhythm`).
+pub fn hours_of(r: &Rhythm) -> living_rules::rhythm::Hours {
+    living_rules::rhythm::Hours { rise_h: r.rise_h, bed_h: r.bed_h, evening_h: r.evening_h, work_from_h: r.work_from_h, work_to_h: r.work_to_h, nap_from_h: r.nap_from_h, nap_to_h: r.nap_to_h }
+}
+
+/// Where a body is in its own day at `hour`: its bedtime, its evening and its working hours. A
+/// person's rhythm row says when it rises and goes to bed, how long its evening is, its working
+/// hours and any second sleep (`living_rules::rhythm`); without one, bedtime is the world's
+/// night, the evening 18:00 to 22:00 and working hours the rest of the day.
+pub fn day_phase(ctx: &ReducerContext, id: u32, hour: f32) -> living_rules::rhythm::Phase {
     match ctx.db.rhythm().id().find(id) {
-        Some(r) => {
-            // Hours after noon run 12..36, so a bedtime past midnight compares in one range.
-            let h = if hour < 12.0 { hour + 24.0 } else { hour };
-            let bedtime = h >= r.bed_h && h < r.rise_h + 24.0;
-            let evening = h >= r.bed_h - r.evening_h && h < r.bed_h;
-            (bedtime, evening)
+        Some(r) => hours_of(&r).phase(hour),
+        None => {
+            let (bedtime, evening) = (scripts(ctx).is_night(hour), (18.0..22.0).contains(&hour));
+            living_rules::rhythm::Phase { bedtime, evening, work: !bedtime && !evening }
         }
-        None => (scripts(ctx).is_night(hour), (18.0..22.0).contains(&hour)),
     }
 }
 
-/// A species' life table (lifespan and stages).
-pub fn life_of(kind: &str) -> living_rules::life::Life {
+/// A species' life table as `species.json` gives it.
+pub fn species_life(kind: &str) -> living_rules::life::Life {
     species(kind).map(|s| s.life).unwrap_or_default()
+}
+
+/// A species' life table (lifespan and stages) under the world's rules: its species data, as a
+/// world's `life_years` law changes it (docs/CULLET_RULES.md); without the law, the data.
+pub fn life_of(ctx: &ReducerContext, kind: &str) -> living_rules::life::Life {
+    scripts(ctx).life(kind, species_life(kind))
 }
 
 /// The world's time for lives: days per year and pace.
@@ -523,8 +532,8 @@ pub fn pace(w: &World) -> living_rules::life::Pace {
 }
 
 /// Life stage of a character now, at the world's pace.
-pub fn stage_of(c: &Character, w: &World, now: u64) -> living_rules::life::Stage {
-    life_of(&c.kind).stage(age_days(c, w, now), pace(w))
+pub fn stage_of(ctx: &ReducerContext, c: &Character, w: &World, now: u64) -> living_rules::life::Stage {
+    life_of(ctx, &c.kind).stage(age_days(c, w, now), pace(w))
 }
 
 pub fn stage_code(s: living_rules::life::Stage) -> u8 {

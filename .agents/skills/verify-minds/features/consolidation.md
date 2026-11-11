@@ -7,6 +7,7 @@
 - A momentous experience permits persona revision, `living/mind/src/mind.rs:1589`.
 - `mind_consolidated` deletes consumed experiences and advances `mind_cursor`, `living/authority/src/mind.rs:408`.
 - The consolidation reply requests relation, belief, judgment and place updates. Table comparisons expose whether the no-store path applies them, `living/mind/src/mind.rs:825`.
+- With `LIVING_PROJECTS=1` and a store, a person's consolidation also shows and keeps projects (`projects` array); not reachable without a store: [projects.md](projects.md).
 
 ## How to get to it (user POV)
 
