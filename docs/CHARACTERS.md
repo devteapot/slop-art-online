@@ -2,7 +2,7 @@
 
 The game's people are made by our own tool: a set of parameters goes in, a rigged, painted, animated character file comes out. This replaces VRoid Studio bases (decision 2 of [the small city](SMALL_CITY.md)). The owner's bar is VRoid's quality close up, from a parameterized tool of our own.
 
-**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost, and step 2, types and rig as data):**
+**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it):**
 
 - **The bar is the reference character:** the VRoid model the game has used so far (`lookdev/vroid-Sendagaya_Shino.glb`; the asset board's control `vroid=recipe:shino`), close up included. The owner accepted pass 1 as the base and said of it: "a step up … but still far away from the reference model we have been using so far. That is kind of what we want to get to".
 - **Pass 1 (`char-2`):** faces and the parameter model. A seed or a parameter file gives a repeatable person of any sex and age from 1 to about 80, with real eye openings, a mouth that opens, 15 expressions under VRoid's names, stubble and six beard styles, age lines and freckles. One command makes a household or a whole town and its check page.
@@ -26,7 +26,14 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **The parameter model:** a person is a type plus values bounded by their distance from it; families share a line and 0.7 of their values.
   - **The client format:** a person is a recipe line (type id, values, colours, style ids) over shared type and style files.
   - **No wall for bones.** No clip keys anything but `J_Bip_*` rotations and the hips' translation; a probe file in the game holds a posed face through four clips; about 105 joints of Bevy's 256; and bones leave about 0.3 mm of what pass 2's values do.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the head's form and structure, how the hair is finished, the face's painted softness, clothes and silhouette, hands.
+- **Pass 3, step 3: the cage head for each type, with the rig in it** ([the cage head](#the-cage-head)). From this step the generator's people have a type's head, and identity is in bones.
+  - **The head** is a quad cage through each type's measured sections, subdivided and fitted so the surface passes through the designed points: about 4,300 triangles for the whole skull. All 21 types are built by one script and each is within 0.03 of a head height of what it was built to, measured with the reference's own tool.
+  - **The eye** is set the reference's way: the iris a flat disc 4 mm behind the lid, the white a bowl falling away 15 mm, the lid's rim folded in.
+  - **A person is the type's mesh with 25 identity bones moved.** The same person baked into the vertices differs by 0.00 mm on every mesh, and the clips play on it unchanged.
+  - **Type files** are written to the client format's paths (`lookdev/types/<type>.glb`, about 0.93 MB each), with outline normals in them.
+  - **Every value end, alone and in pairs, is a valid head on every type** (60,648 of 60,648) after nine ranges were trimmed.
+  - **Lips and blush do not survive the client's one-colour recolour of a shared skin texture;** the lid's shade does. They are to become their own small meshes or overlay styles ([what the client needs for types](#what-the-client-needs-for-types)).
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the shading across the face's planes, how the hair is finished, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -96,6 +103,8 @@ A pass is also published through the asset board, the record of which version th
 - Pass 2 is their versions `20261111-f32f73f9-…` (`adult-woman`, `adult-man`) and `20261111-27e84b1a-…` (`elder-man`, `youth`, `boy`, `heavy-man`, `cast-64`), each beside pass 1 and the VRoid control `vroid=recipe:shino`, photographed with the same shots and clips. The generator and the models are the same for both commits; the second only added documentation and the crowd tool.
 
 - Pass 3's first step (crowd cost) is their versions `20261111-4448a7e8-…`, beside pass 2 and the control. The six presets are the same people in six meshes, so their photographs should match pass 2's; `cast-64` is now Cullet's actual cast from the world seed, not the stand-in, so its people differ.
+
+- Pass 3's third step (the cage head) is their versions `20261111-26c98cc2-…`: the six presets on their types' heads beside step 1's and the control, `cast-64` with identity in bones, and `character:face-types` with every type as a bare head, three people drawn from each close up and at the game camera, one person composed against baked, the skin-tone sheet and the children's heads beside the adults' at one scale, with the VRoid and Blue Protocol rows.
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -295,7 +304,7 @@ The reference's hair is 16,400 triangles.
 
 ## Types and rig
 
-Pass 3's second step (2026-11-11, branch `char-4`): the plan for how a person is made from here on, as data and diagrams, before any mesh is rebuilt. Nothing in this section is in the generated files yet; pass 2's baked people remain what the tools make until the cage head of step 3.
+Pass 3's second step (2026-11-11, branch `char-4`) set how a person is made from here on, as data and diagrams, before any mesh was rebuilt. Step 3 built it: [the cage head](#the-cage-head). Pass 2's head remains behind `person.py --loft`.
 
 **The decision** (the dev-box coordinator's, after the owner's verdict on pass 2 and the two research reports): identity in bones, on a few shared meshes for each type. Per-person baked meshes stop.
 
@@ -468,7 +477,7 @@ A type's record holds, in H: the sections at nine heights (the face's full width
 
 ### The client format
 
-For the laptop coordinator. Nothing of this is built yet; the type files arrive with step 3.
+For the laptop coordinator. The type files exist since step 3 ([type files](#type-files)); style files (hair, outfit) and the client's side do not yet.
 
 **A person becomes a recipe line**, with a type in place of a base file:
 
@@ -512,6 +521,135 @@ For the laptop coordinator. Nothing of this is built yet; the type files arrive 
 - **Bindless.** Whether per-person colour as a material value under bindless toon materials beats the mesh tag is the client's to measure ([the survey](CHARACTER_RESEARCH.md), §4).
 - **Spring chains** of a hair style hang under `J_Id_Cranium`, so a wider skull moves their roots; the collider spheres on the head should take the cranium's scale.
 - **Normals under a bone's scale.** A bone scaled unevenly skews the normals it carries a little (ranges are within ±15% for the skull and face). Designed normals ride through it; if it shows, the cure is in the ranges.
+
+### The cage head
+
+Pass 3's third step (2026-11-11). `living/tools/blender/cage_head.py` builds a type's head, and `person.py` puts it on every person that has a type (all of them, unless `--loft`).
+
+```bash
+python3 living/tools/characters/cage_accept.py .local/ref                  # every type's head against what it was built to (about 2 minutes)
+living/tools/blender/gen_types.sh                                           # the 21 type files, lookdev/types/<type>.glb (about 1.5 minutes)
+blender -b -P living/tools/blender/person.py -- --variant type:adult-f-a --parts face --out head.glb   # one type's bare head, to look at
+python3 living/tools/characters/compose.py TYPE_OR_PERSON.glb OUT.glb --params NAME.params.json        # move the identity bones, as the client will
+python3 living/tools/characters/compose.py --compare COMPOSED.glb BAKED.glb                            # a composed person against the same one baked
+python3 living/tools/characters/outline_normals.py FILE.glb [--check]       # the outline's directions, written into a file
+python3 living/tools/characters/rig_check.py adult-f-b                      # how far the landmark sketch of each value is from what its bone does
+```
+
+**How it is built.**
+
+- **A cage of quads, not a loft.** 22 rows from the crown to the neck and 28 columns round the head, with the eye openings and the mouth's slit cut in. Each row is set from the type's measured sections: the midline's profile, the plane beside the nose, the cheek's corner at 0.15 H behind the bridge, the side at 0.30 H, the widest point, the ear line and the back.
+- **Subdivided once the Catmull–Clark way,** with creases along the cheek corner, the brow line and the jaw line, so planes meet in edges where the type says so and are smooth elsewhere. The cage is fitted backwards (five rounds), so the subdivided surface passes through the designed points and not inside them.
+- **The eye, with the reference's depths** ([the reference taken apart](CHARACTER_REFERENCE.md)): the lid's rim folds in 2.5 mm; the white is a bowl cut to the lid's own opening, 15 mm deep at its middle; the iris is a flat disc 4 mm behind the lid, on the eye's bone; the lash line stands 4.5 mm forward. Depths are measured from the opening's own plane, which leans back toward the outer corner, and scale with the head.
+- **The skin under the jaw is body skin,** a fourth primitive of the `Face` mesh, so the face's flattened normals stop at the jaw line. A typed person is seven meshes where pass 3's first step had six.
+- **Faces are wound by carrying the winding from face to face.** Asking each face whether it looks away from the head's middle turned the nose's underside inward, which showed as a hole from below.
+- The lash lines, lashes, brows, mouth's inside, ears and the 15 expressions are `head_mesh.py`'s, laid on the cage. An expression is the same subdivision on a moved cage.
+- A typed person's head in the file is 0.2564 m tall whatever the person; the recipe's `head` carries its size ([the parameter model](#the-parameter-model)).
+
+**Acceptance** (`cage_accept.py`). Each type's whole-skull skin (4,264 triangles) is written to a file and measured with the reference's own tool (`living/tools/characters/reference/measure.py`), then compared with the type's record: the face's width within 0.15 H and within 0.30 H of depth at eight heights, and the eyes.
+
+| | Result over the 21 types | Allowed |
+|---|---|---|
+| Widths (16 a type) | worst 0.006 to 0.025 H; `adult-f-b`, the reference's own type, 0.013 H | 0.03 H |
+| Eye centre's height | -0.002 to -0.005 H | 0.03 H |
+| Eye spacing, width, height | 0.000 | 0.03 H |
+| Eye behind the brow | +0.004 to +0.012 H deeper than set | reported |
+| Eye behind the cheek | -0.018 to +0.004 H | reported |
+| Nose tip's height | -0.006 to +0.017 H | reported |
+
+- 0.03 H is 7.7 mm on the file's head. The widest misses are at the temple (0.76 H) on the long types and low on the jaw (0.04 to 0.12 H) on the round ones.
+- `adult-f-b` is the reference's measurements; the other 20 are composed from it and pass 2's average heads, so passing says the cage builds what a type's record says, not that the record is a good face. That is judged on the board.
+
+**The rig in it.** `cage_head.rig_pivots` places the 25 identity bones on the type (the eye bones move under the orbits) and `identity_weights` weights every vertex to at most four of them.
+
+- Features come first, each riding its own bone whole: an eye's opening and the skin round it, the brow, the nose and its tip, the mouth and its corners, the chin, the ears. Then the points that shape the outline (cheek corner, zygoma, cheek, jaw angle), then the forehead and glabella, and what is left goes to the cranium, the jaw and the face block.
+- Hair, headwear, the neck's top and the far head follow the same bones: their weight to `J_Bip_C_Head` is shared out by where each vertex lies (`spread_head_weights`).
+- **The bones are the definition of a value.** `face_types.apply`, which moves a type's landmarks, is kept as a sketch for the diagrams and the validity checks, where a whole head would be slow to build; `rig_check.py` says how far it is from the bones.
+- Two ranges contradicted their names and were reversed (`chin_length`, `mouth_height`: -1 is short and close under the nose). `jaw_angle` turns less (-2° to 2.5°), and `cheeks` moves out of the cheek along a fixed direction (`o`: 0.55 away from the midline, 0.83 forward) in place of a bone turned at rest.
+
+**Composed against baked.** One person (seed 4991, a woman of 35 on `adult-f-a`, 38 values at distance 0.31 from the type) made three ways:
+
+| | Face skin | Eyes | Lashes, brows, lines | Skin under the jaw | Hair |
+|---|---|---|---|---|---|
+| Composed by bones against baked | 0.00 mm | 0.00 mm | 0.00 mm | 0.00 mm | 0.00 mm |
+| The type itself against baked | 2.21 mm | 1.72 mm | 1.70 mm | 4.18 mm | 2.02 mm |
+
+- Root mean square, each vertex to the nearest of the other file's (`compose.py --compare`); the largest single distance for the type is 9.4 mm.
+- **Composed** is the type's mesh with this person's hair and clothes, run through the whole pipeline (clips baked, primitives merged, designed normals, outline normals) and then `compose.py`, which moves 27 bones by the client's rule. **Baked** is `person.py --bake`, which applies the same rule to every vertex and expression and leaves the bones at rest.
+- Blender, importing both files, agrees to 0.00 mm, so the rule in `compose.py` is what a glTF reader does with the nodes.
+- The clips of the composed file key only `J_Bip_*` bones, as before.
+- **Photographs cannot show this to the pixel.** The asset view blinks and moves the eyes, so two photographs of the same file differ by 4% to 25% of pixels. The board shows the three side by side; the numbers are from the files.
+- The first version of `--bake` built the head from the moved landmarks and differed from the bones by 1.8 to 2.6 mm. That was two models of one value, and the landmark one was dropped.
+
+**Value ranges, trimmed.** Step 2 left 109 of 60,648 pairs of value ends that made an invalid head: a long nose, mostly on `elder-f-c` (79), large high eyes under a low brow (22), and a broad front with hollow cheeks (8). Nine ends were shortened, the least that clears them all:
+
+| Value | End | Was | Is |
+|---|---|---|---|
+| `nose_length` | most | ×1.20 | ×1.13 |
+| `face_length` | most | ×1.10 | ×1.095 |
+| `eye_height` | most | 14 ‰H | 10 ‰H |
+| `eye_size` | most | ×1.13 | ×1.105 |
+| `eye_open` | most | ×1.18 | ×1.125 |
+| `brow_height` | least | -12 ‰H | -9.5 ‰H |
+| `mouth_height` | least (up) | 12 ‰H | 9 ‰H |
+| `front_breadth` | most | 16 ‰H | 12 ‰H |
+| `cheeks` | least | -12 ‰H | -9 ‰H |
+
+`face_types.py check` now passes every type, every value end alone and in pairs, and all 4,200 people as drawn (200 a type).
+
+**Outline normals.** `outline_normals.py` writes one smoothed direction a point into every file as the vertex attribute `_OUTLINE_NORMAL`: the angle-weighted mean of the faces round the point, the same for every vertex at that place across the file's meshes and materials. The client makes these up per mesh when it loads a file; written here they also close the line where two meshes meet (the face's skin, the skin under the jaw and the neck). Today's client ignores the attribute without a warning and draws as before.
+
+### Type files
+
+`living/tools/blender/gen_types.sh` writes `lookdev/types/<type>.glb` for the 21 types, with `<type>.face.png` (the face's shadow map) and `<type>.params.json` beside each. A file holds:
+
+| | |
+|---|---|
+| Skeleton | the 52 `J_Bip_*` bones and the root, as every generated person; the 25 `J_Id_*` bones and the two eye bones at rest: 80 joints |
+| `Face` | the whole head (the scalp too, since every hair style shares it): skin, eyes, lashes and lines, and the skin under the jaw; 5,840 triangles; two morph targets, `Fcl_EYE_Close` and `Fcl_MTH_A` |
+| `Skin` | the neck and hands, 4,536 triangles |
+| `FarSkin` | the far head, neck and hands on the same skeleton, 1,964 triangles, with its own small picture |
+| Normals | the designed face normals (`face_normals.py`) and `_OUTLINE_NORMAL` |
+| Not in it | hair, clothes, clips, hair's spring bones |
+
+- **Size:** 0.91 to 0.96 MB a file, 19.6 MB for the 21; the shadow maps are 0.37 MB together.
+- **The figure** a type's file is built on is `person.py --variant type:<id>`: every identity value 0, the band's usual age, height and build, no freckles, stubble or weathering, skin tone 0.25.
+- **Morph data.** A type's file has 3,568 morphed vertices and 2 targets: 86 kB in the file. A person's file today has 15 targets on about 3,170 vertices: 570 kB. At the 36 bytes a vertex a target that Bevy's morph texture holds (position, normal and tangent; our estimate, not measured in the client), that is about 0.26 MB a type against 1.7 MB a person, and 5.3 MB for all 21 types. The laptop measured 339 MiB of morph targets for 64 people. By the same ratio (2 targets of 15, and at most 21 types for any number of people) types bring that to about 15 MiB however large the town.
+- **Expressions.** `--morphs client` keeps the two the game drives. The other 13 (`Fcl_EYE_Joy`, the mouth shapes, the brows) are still built by `--morphs all` and by `gen_person.sh` unless `MORPHS=client`; when the client drives one, it is added to `CLIENT_MORPHS` in `person.py` and each costs a type about 0.13 MB.
+- **`gen_person.sh` switches:** `CLIPS=none` bakes no clips into a file; `MORPHS=client`; `IDENTITY=bake` builds the identity into the vertices where the default moves the bones.
+
+**The standard figure for the shared clips.** `lookdev/anim/own-clips.glb` (`share.py clips`, from the client's `crowd-1`) is baked on the `man` preset, and the client measures a person's stride against that file's figure, so nothing else depends on which figure it is. With the cage head the `man` preset stands 1.803 m in the file; it stood 1.837 m when `crowd-1` chose it, because the head changed. The clip file is to be made again from the current preset when the type files go into use, and is not to move to a type's own figure.
+
+### What the client needs for types
+
+Nothing in `living/game` was edited in step 3, and every file loads in today's client. For the laptop coordinator, in the order they unlock things:
+
+**1. Outline normals from the file** (`lookdev.rs`, `convert` and the scenery path). Small.
+
+- Name the attribute to the glTF loader: `GltfPlugin::default().add_custom_vertex_attribute("_OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL)`.
+- Skip `generate_outline_normals` for a mesh that already has `ATTRIBUTE_OUTLINE_NORMAL`.
+- It saves the generation at load for every person and closes the outline between a person's meshes. Per-vertex line width (step 5) will ride the same path.
+
+**2. Identity** (`characters.rs`, `shape`). Medium. The rule is `living/tools/characters/compose.py`, `transforms`, about 30 lines, and `compose.py --compare` checks a file posed by it:
+
+- each value v in -1 to 1 becomes an amount from `types.json`'s `rig.bones`: at -1 the value's `least`, at 0 nothing, at 1 its `most`;
+- a `move` adds amount ‰ × `file.head_height_m` (0.2564) along the value's axis to the bone's rest translation; a `scale` multiplies the axis; a `turn` rotates about it;
+- the rig's x, y, z are the file's X, -Z, Y; `o` is 0.55 x + 0.83 y; on a paired bone x points away from the midline on both sides, so the right bone (`…_R`, at +X) takes the left's values mirrored;
+- a bone's node gets translation, rotation and scale, and its children ride it.
+- **Order with `shape`'s proportions:** identity is inside the head; the recipe's `head` scales `J_Bip_C_Head` as today, and the identity bones ride it. The helper joints `shape` makes for unevenly scaled bones are not needed for identity bones: their children are meant to take the scale.
+- A person's recipe `head` is written by the generator (`<name>.params.json`, `recipe.proportions.head`); the `cullet-*` lines in `recipes.json` do not carry it yet.
+
+**3. Colours without a texture a person.** The step-3 board's `skin-tones` sheet has one file painted at tone 0.30 recoloured by today's client (mode 3, the texture's mean moved to the person's colour) beside the generator's own paint at seven tones.
+
+- **The lid's shade holds** at every tone.
+- **Lips and blush do not.** They fade toward the skin at every tone, the file's own included, and are nearly gone on the lightest two. A mean-colour move keeps only what differs from the mean in lightness.
+- So lips and blush leave the skin texture: lips become a small mesh of their own with its own tag colour, blush an overlay style, as stubble, lines and freckles are to be. That is the generator's work, with the face's paint (step 6), and needs nothing new from the client beyond the mesh tag it has.
+- **Textures held CPU-side.** The laptop measured about 500 MiB of face pages kept CPU-side for recolouring. Under types the skin texture is one a type (21, about 0.1 MB each as PNG). The format does not need the client to keep or rewrite it: if the tag's colour is applied in the shader (the type's texture as a tint map over the person's skin colour, the same mode-3 sum done per fragment), no picture is copied a person and none needs to stay CPU-side. That is the client's to choose; nothing in the files depends on it.
+
+**4. Type files in place of person files** (the recipe's `type`), with styles. Later: it needs the style files (hair, outfit), which the generator does not write yet. Until then a person is still one file, made by `gen_person.sh`, with its identity in bones.
+
+- A hair style's spring chains hang under `J_Id_Cranium`; a type's file has none of its own.
+- The far switch and clips once are as in [what the client needs](#what-the-client-needs).
 
 ## Motions on generated people
 
@@ -680,7 +818,26 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
-Judged on the pass-2 page and the asset board, where every close-up has the reference beside it. Ordered by how much it shows.
+**After pass 3's third step (the cage head)**, judged on the board's `20261111-26c98cc2-…` versions with the reference beside ours, ordered by how much it shows:
+
+1. **The shading across the face.** Ours splits into light and shade along a straight line down the middle of the face, and again along the jaw. The reference's shade is a drawn shape: under the fringe, down the side of the cheek, never across the nose. The form under it is now close; the normals and the shadow map are still pass 2's. This is step 4.
+2. **The eyes' drawing.** The eye now sits behind the lid as the reference's does and no white shows at the corners. But the reference's upper lash line is a heavy dark shape and its iris has two tones and a large light; ours has thin lines and a plainer, smaller-looking iris. Paint, step 6.
+3. **How the hair is finished** (unchanged): a blocky fringe, ragged ends, and a strand that can stand out at the nape in a fixed shot.
+4. **No lines where the form turns.** The reference draws the jaw, the chin and the mouth's corners with a line; ours has only the silhouette's. Step 5.
+5. **The lower face still reads rounder.** The sections are within 0.013 H of the reference's on its own type, but without the jaw's line and shade the chin does not read as pointed.
+6. **Lips and blush are painted into the skin** and do not survive a shared texture's recolour ([what the client needs for types](#what-the-client-needs-for-types)).
+7. **Clothes and silhouette, hands** (unchanged).
+
+What the cage head closed, from the lists below: the head's form and structure (the owner's "depth … and how it is structured internally"), the eyes' corners, the nose from the front as geometry, and the line under the jaw between the neck's and the face's shading.
+
+New weak points of step 3:
+
+- **Children's types are close to the adult women's** at one scale (the board's `children-beside-adults`): lower, larger eyes and a shorter chin, on much the same skull. A child reads as a child mostly by the body and the head's size on it.
+- **Hair sits less well on the new head at the temple.** On the `man` preset, skin shows between the locks in front of and above the ear from the side, where step 1's did not: the styles were tuned on pass 2's head.
+- **The crown is coarse:** the cage's top rows have edges up to 48 mm, which matters for a bald or thin-haired head seen from above.
+- **The ears are laid on the cage, not part of it** (`head_mesh.py`'s ear): the root meets the skin in doubled edges.
+
+**After pass 2**, judged on the pass-2 page and the asset board, where every close-up has the reference beside it. Ordered by how much it shows.
 
 | | After pass 1 | After pass 2 |
 |---|---|---|
@@ -718,7 +875,7 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 
 1. **Crowd cost.** Done in pass 3's first step ([crowd cost](#crowd-cost)).
 2. **Types and rig, as data and a page before any mesh.** Done in pass 3's second step ([types and rig](#types-and-rig)): which bones, their ranges, what a type fixes and a person varies, three face types for each band, and the client's format. Left for the cage: trimming the value ranges that fail in pairs, the age direction inside a band, the belly and chest bones, and how details a person has (beard, lines, freckles) are carried.
-3. **The cage head for each type, with the rig in it,** accepted against the reference's measured sections ([CHARACTER_REFERENCE.md](CHARACTER_REFERENCE.md)), with its eye depths, and smoothed outline normals written in the same pass.
+3. **The cage head for each type, with the rig in it.** Done in pass 3's third step ([the cage head](#the-cage-head)): 21 types from one script, accepted against the reference's measured sections, with its eye depths, outline normals, the trimmed ranges and the type files. Left from it: lips and blush out of the skin texture (with step 6's paint), the style files for hair and outfits, the age direction inside a band, and a second look at bindless colours with the laptop.
 4. **Designed shadows:** a planar proxy's normals, and a shadow map from script-drawn shapes at several light angles (the cheek triangle, the side of the nose, the eye socket, the underside of the jaw).
 5. **Lines where the form turns:** shell lines at the jaw, chin, mouth and ears; per-vertex line width needs a client outline shader, to be written up for the laptop.
 6. **Later:** hair finish and the face's paint (pass 2's items 1 and 2), the game turning the eyes, clothes as slots with cloth that swings, women's silhouettes, children's own garments, hands.
