@@ -42,6 +42,9 @@ pub const SHEATHE: bool = false;
 pub struct Tip {
     pub shown: bool,
     pub dismissed: bool,
+    /// Lists of acts opened toward someone (the prompt's "hold F · more" stops after two).
+    pub holds: u32,
+    was_open: bool,
 }
 
 /// Lay out words and key chips: `{F}` is a chip, anything else words that wrap.
@@ -69,9 +72,9 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
         .spawn((
             HudRoot,
             Prompt,
-            Node { position_type: PositionType::Absolute, flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(7.0), Val::Px(12.0), Val::Px(6.0), Val::Px(6.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(10.0)), display: Display::None, ..default() },
-            BackgroundColor(wood::PARCH),
-            BorderColor::all(wood::INK),
+            Node { position_type: PositionType::Absolute, flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(7.0), Val::Px(12.0), Val::Px(6.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(10.0), display: Display::None, ..default() },
+            BackgroundColor(wood::surface()),
+            BorderColor::all(wood::edge()),
             wood::hard_shadow(3.0, 0.45),
             GlobalZIndex(15),
             Pickable::IGNORE,
@@ -79,7 +82,7 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
         .with_children(|p| {
             wood::chip(p, f, "F", PromptKey);
             p.spawn((PromptLabel, Text::new(""), wood::ink(f, 15.0, 800), Pickable::IGNORE));
-            p.spawn((PromptMore, Text::new(""), f.body(12.0, 700), TextColor(wood::MUTED), Node { padding: UiRect::left(Val::Px(8.0)), border: UiRect::left(Val::Px(2.0)), ..default() }, BorderColor::all(wood::DASH), Pickable::IGNORE));
+            p.spawn((PromptMore, Text::new(""), f.body(12.0, 700), TextColor(wood::muted()), Node { padding: UiRect::left(Val::Px(8.0)), border: UiRect::left(Val::Px(2.0)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE));
         });
     // The first-time tip, bottom left.
     commands
@@ -87,18 +90,18 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
             HudRoot,
             TipCard,
             Block,
-            Node { position_type: PositionType::Absolute, left: Val::Px(26.0), bottom: Val::Px(130.0), width: Val::Px(376.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(14.0), Val::Px(14.0), Val::Px(12.0), Val::Px(14.0)), border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(12.0)), display: Display::None, ..default() },
+            Node { position_type: PositionType::Absolute, left: Val::Px(26.0), bottom: Val::Px(130.0), width: Val::Px(376.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(14.0), Val::Px(14.0), Val::Px(12.0), Val::Px(14.0)), border: wood::b(3.0), border_radius: wood::r(12.0), display: Display::None, ..default() },
             wood::wood(),
             GlobalZIndex(25),
         ))
         .with_children(|c| {
             c.spawn(wood::rim(9.0));
             c.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() }, Pickable::IGNORE)).with_children(|h| {
-                h.spawn(wood::icon(&icons, Glyph::Ui(Mark::Talk), 18.0, wood::BRASS2));
+                h.spawn(wood::icon(&icons, Glyph::Ui(Mark::Talk), 18.0, wood::t().title));
                 h.spawn((Text::new("New here"), wood::title(f, 18.0), Pickable::IGNORE));
             });
-            rich(c, f, "Point at someone and press {F} to talk to them. {Enter} talks to whoever you point at, or to the room.", wood::PARCH);
-            c.spawn((TipWeapon, Node { display: if SHEATHE { Display::Flex } else { Display::None }, ..default() }, Pickable::IGNORE)).with_children(|w| rich(w, f, "Your weapon is sheathed: a tap never strikes. {X} draws it, and it draws itself if you're attacked.", wood::PARCH));
+            rich(c, f, "Point at someone and press {F} to talk to them. {Enter} talks to whoever you point at, or to the room.", wood::on_panel());
+            c.spawn((TipWeapon, Node { display: if SHEATHE { Display::Flex } else { Display::None }, ..default() }, Pickable::IGNORE)).with_children(|w| rich(w, f, "Your weapon is sheathed: a tap never strikes. {X} draws it, and it draws itself if you're attacked.", wood::on_panel()));
             c.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(10.0), margin: UiRect::top(Val::Px(4.0)), ..default() }, Pickable::IGNORE)).with_children(|b| {
                 kit::button(b, f, "Got it", "tip:ok", false);
                 kit::button(b, f, "All tips", "tip:all", true);
@@ -108,7 +111,7 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
 
 /// The tip's buttons, and showing it once on arrival.
 #[allow(clippy::too_many_arguments)]
-pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut tip: ResMut<Tip>, mut ws: ResMut<Windows>, prefs: Res<crate::keys::Prefs>, net: NonSend<crate::net::Net>, scene: NonSend<crate::world::Scene>, loading: Option<Res<crate::loading::Loading>>, mut page: ResMut<super::settings::Page>) {
+pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut tip: ResMut<Tip>, mut ws: ResMut<Windows>, verbs: Res<crate::verbs::Verbs>, prefs: Res<crate::keys::Prefs>, net: NonSend<crate::net::Net>, scene: NonSend<crate::world::Scene>, loading: Option<Res<crate::loading::Loading>>, mut page: ResMut<super::settings::Page>) {
     match kit::clicked(&ui, &tags) {
         Some("tip:ok") => tip.dismissed = true,
         Some("tip:all") => {
@@ -118,6 +121,11 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut tip: ResMut<Tip>, mut w
         }
         _ => {}
     }
+    let open = verbs.menu.as_ref().is_some_and(|m| m.person);
+    if open && !tip.was_open {
+        tip.holds += 1;
+    }
+    tip.was_open = open;
     let arrived = net.my_id.is_some_and(|id| scene.shown.contains_key(&id)) && crate::loading::Loading::clear(loading.as_deref());
     if arrived && !tip.shown && prefs.tips {
         tip.shown = true;
@@ -150,10 +158,13 @@ pub fn update(
         _ => None,
     });
     let peaceful_person = person.filter(|a| a.stance == super::model::Stance::Neutral && a.kind_person);
+    // "hold F · more" until the list has been opened with a hold a few times (always in a
+    // dense theme).
+    let more_hint = |s: String| if wood::t().help || tip.holds < 2 { s } else { String::new() };
     let (text, more_text) = match (aimed, peaceful_person) {
-        (Some(_), Some(_)) => ("Talk".to_string(), format!("hold {f} · more")),
+        (Some(_), Some(_)) => ("Talk".to_string(), more_hint(format!("hold {f} · more"))),
         (Some(_), None) => match &verbs.likely {
-            Some(c) => (super::label(&wood::readable(&c.label)), if verbs.has_options { format!("hold {f} · more") } else { String::new() }),
+            Some(c) => (super::label(&wood::readable(&c.label)), if verbs.has_options { more_hint(format!("hold {f} · more")) } else { String::new() }),
             None if verbs.has_options => (format!("{} · acts", super::label(&verbs.aim_name)), String::new()),
             None => (String::new(), String::new()),
         },

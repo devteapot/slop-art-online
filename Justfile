@@ -97,12 +97,29 @@ living-test:
 
 # Everything that must keep compiling after any change: authority (wasm), mind, the native
 # and browser observer, the game client, and the rules tests. Run before every commit.
-living-check: living-build
-    cargo build --manifest-path living/Cargo.toml -p living-mind -p living-viewer
-    # The game in release only: the build that is run, without a second ~10 GB debug tree.
-    cargo build --release --manifest-path living/Cargo.toml -p living-game
-    cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer
-    cargo test --manifest-path living/Cargo.toml -p living-rules
+# living/tools/check.py runs these five cargo steps (docs/TOOLING.md): the three cargo build
+# directories at once under one jobserver; a step skipped when it already passed on this
+# machine on byte-identical inputs; rustc through sccache when it is installed
+# (living/tools/install_sccache.sh). `living-check-full` runs every step regardless of stamps;
+# LIVING_CHECK_SERIAL=1 runs them one by one with cargo's output on the terminal.
+living-check:
+    python3 living/tools/check.py
+
+living-check-full:
+    python3 living/tools/check.py --full
+
+# Merge a branch into main end to end, from a clean coordinator worktree: --no-ff merge onto
+# origin/main, living-check, push; when main moved, fetch, merge and check again
+# (docs/TOOLING.md). Arguments after the branch: -m "message", --retries N, --no-push.
+[positional-arguments]
+living-merge branch *args:
+    python3 living/tools/merge.py "$@"
+
+# Remove idle build folders under the policy in docs/TOOLING.md (a dry run unless --apply);
+# `living/tools/disk_clean_install.sh` runs it on a timer.
+[positional-arguments]
+living-disk-clean *args:
+    python3 living/tools/disk_clean.py "$@"
 
 # Fuel budgets of the hot Rhai laws (rates, the strike path, perceived_of, a constant lookup) in
 # the module under SpacetimeDB's wasmtime config; fails over living/tools/script_bench/budgets.json
@@ -121,6 +138,7 @@ living-game-assets:
     living/tools/blender/gen_nature.sh
     living/tools/blender/gen_buildings.sh
     living/tools/blender/gen_city.sh
+    living/tools/blender/gen_cullet.sh
     living/tools/blender/gen_anim.sh
 
 # The asset board (docs/ASSET_BOARD.md): every generated family photographed in the game's own

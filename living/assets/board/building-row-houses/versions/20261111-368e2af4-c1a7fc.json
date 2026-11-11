@@ -1,0 +1,1098 @@
+{
+ "schema": 1,
+ "family": "building:row-houses",
+ "id": "20261111-368e2af4-c1a7fc",
+ "published": "2026-11-11T17:48:09+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1: built for its lot from the plan (footprint, height, wear and seed from plan.json); glow set in the game at 21:30 against 13:00",
+ "source": {
+  "commit": "368e2af4b14033a9e8da023fcc63b95c27a5a9bb",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "5f70615004be4033b28a542e829eaf40b0eef97ddcc9c31bb4e4b906c7bd9803",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-row-houses/20261111-368e2af4-c1a7fc",
+ "members": [
+  {
+   "name": "tarn",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/row_house/low_4.glb",
+   "sha256": "3c347ce327443cb4f7127ec043ec762d771acb0d5946473a9a18afe1ffc0d800",
+   "stats": {
+    "file": "low_4.glb",
+    "sha256": "3c347ce327443cb4f7127ec043ec762d771acb0d5946473a9a18afe1ffc0d800",
+    "bytes": 229256,
+    "triangles": 3245,
+    "vertices": 6487,
+    "parts": {
+     "low_4": 3245
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 56,
+    "palette": [
+     {
+      "hex": "#3a3e43",
+      "share": 0.3806
+     },
+     {
+      "hex": "#c7c8b7",
+      "share": 0.2135
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1644
+     },
+     {
+      "hex": "#5a5f66",
+      "share": 0.1479
+     },
+     {
+      "hex": "#48505c",
+      "share": 0.0438
+     },
+     {
+      "hex": "#48312c",
+      "share": 0.0172
+     },
+     {
+      "hex": "#626e81",
+      "share": 0.0084
+     },
+     {
+      "hex": "#2d2b2f",
+      "share": 0.0066
+     },
+     {
+      "hex": "#8c989d",
+      "share": 0.0051
+     },
+     {
+      "hex": "#6e211f",
+      "share": 0.0039
+     },
+     {
+      "hex": "#a5a69b",
+      "share": 0.0036
+     },
+     {
+      "hex": "#316949",
+      "share": 0.0017
+     },
+     {
+      "hex": "#884837",
+      "share": 0.0007
+     },
+     {
+      "hex": "#e9e4d7",
+      "share": 0.0007
+     },
+     {
+      "hex": "other",
+      "share": 0.0021
+     }
+    ]
+   },
+   "file": "files/tarn.glb",
+   "report": {
+    "file": "row_house/low_4.glb",
+    "what": "lot",
+    "kind": "row_house",
+    "size_m": [
+     6.5,
+     7.5
+    ],
+    "plan_height_m": 9.62,
+    "seed": 28134,
+    "above_floor_m": [
+     [
+      -3.27,
+      -3.75
+     ],
+     [
+      3.27,
+      3.78
+     ]
+    ],
+    "height_m": 11.86,
+    "foundation_m": 1.8,
+    "tris": 3245,
+    "materials": {
+     "Body": 3189,
+     "Glow": 56
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9337,
+    "palette_wear_blend_share": 0.0663,
+    "budget_tris": 4000,
+    "doors": [
+     {
+      "at": [
+       -2.1,
+       -2.6,
+       1.36
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "3c347ce327443cb4f7127ec043ec762d771acb0d5946473a9a18afe1ffc0d800",
+    "ridge_m": 9.62,
+    "state": "lived in",
+    "door_colour": "oxblood",
+    "household": "tarn",
+    "front_m": 6.5,
+    "eave_m": 6.0,
+    "storey_m": 2.6,
+    "lit": [
+     "g",
+     "u0",
+     "u1"
+    ],
+    "keepsake": "a row of glass floats; the Tarns have always painted their door so"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     6.569525241851807,
+     13.65999984741211,
+     7.556145191192627
+    ],
+    "triangles": 3245,
+    "vertices": 6487,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "pontil",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/row_house/high_1.glb",
+   "sha256": "3246652fb8ff3d1401a9fc85a94b73a19fd1f4d095bc9f7427586e94d5e99adf",
+   "stats": {
+    "file": "high_1.glb",
+    "sha256": "3246652fb8ff3d1401a9fc85a94b73a19fd1f4d095bc9f7427586e94d5e99adf",
+    "bytes": 167384,
+    "triangles": 2337,
+    "vertices": 4723,
+    "parts": {
+     "high_1": 2337
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 48,
+    "palette": [
+     {
+      "hex": "#3e4248",
+      "share": 0.3928
+     },
+     {
+      "hex": "#e4e6d6",
+      "share": 0.2292
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.149
+     },
+     {
+      "hex": "#5d6166",
+      "share": 0.1362
+     },
+     {
+      "hex": "#4a525f",
+      "share": 0.0473
+     },
+     {
+      "hex": "#c3c3b5",
+      "share": 0.0127
+     },
+     {
+      "hex": "#442e29",
+      "share": 0.0117
+     },
+     {
+      "hex": "#9ecbc7",
+      "share": 0.0056
+     },
+     {
+      "hex": "#626e80",
+      "share": 0.0055
+     },
+     {
+      "hex": "#809fb9",
+      "share": 0.0041
+     },
+     {
+      "hex": "#2b2b31",
+      "share": 0.0035
+     },
+     {
+      "hex": "#8f9a9e",
+      "share": 0.0008
+     },
+     {
+      "hex": "#c37d27",
+      "share": 0.0007
+     },
+     {
+      "hex": "#814430",
+      "share": 0.0004
+     },
+     {
+      "hex": "other",
+      "share": 0.0005
+     }
+    ]
+   },
+   "file": "files/pontil.glb",
+   "report": {
+    "file": "row_house/high_1.glb",
+    "what": "lot",
+    "kind": "row_house",
+    "size_m": [
+     5.8,
+     7.5
+    ],
+    "plan_height_m": 10.22,
+    "seed": 53250,
+    "above_floor_m": [
+     [
+      -2.92,
+      -3.75
+     ],
+     [
+      2.97,
+      3.78
+     ]
+    ],
+    "height_m": 12.07,
+    "foundation_m": 1.8,
+    "tris": 2337,
+    "materials": {
+     "Body": 2289,
+     "Glow": 48
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9285,
+    "palette_wear_blend_share": 0.0715,
+    "budget_tris": 4000,
+    "doors": [
+     {
+      "at": [
+       1.75,
+       -2.6,
+       1.36
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "3246652fb8ff3d1401a9fc85a94b73a19fd1f4d095bc9f7427586e94d5e99adf",
+    "ridge_m": 10.22,
+    "state": "lived in",
+    "door_colour": "chalk_blue",
+    "household": "pontil",
+    "front_m": 5.8,
+    "eave_m": 6.6,
+    "storey_m": 2.9,
+    "lit": [
+     "g",
+     "u1"
+    ],
+    "keepsake": "a sill of cullet, one piece of every colour Ode has kept"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     5.903722763061523,
+     13.869999885559082,
+     7.557823181152344
+    ],
+    "triangles": 2337,
+    "vertices": 4723,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "greave",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/row_house/mid_1.glb",
+   "sha256": "6353c32d67c80c9fccaea3cde179a76d0bacbd44399a9106f0a1c3cc6f4d1ad2",
+   "stats": {
+    "file": "mid_1.glb",
+    "sha256": "6353c32d67c80c9fccaea3cde179a76d0bacbd44399a9106f0a1c3cc6f4d1ad2",
+    "bytes": 166544,
+    "triangles": 2315,
+    "vertices": 4701,
+    "parts": {
+     "mid_1": 2315
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 48,
+    "palette": [
+     {
+      "hex": "#3f434a",
+      "share": 0.3877
+     },
+     {
+      "hex": "#c4c4b2",
+      "share": 0.2287
+     },
+     {
+      "hex": "#555a62",
+      "share": 0.1626
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1531
+     },
+     {
+      "hex": "#47302b",
+      "share": 0.0197
+     },
+     {
+      "hex": "#464e5b",
+      "share": 0.0144
+     },
+     {
+      "hex": "#637083",
+      "share": 0.0082
+     },
+     {
+      "hex": "#9fcdc8",
+      "share": 0.0067
+     },
+     {
+      "hex": "#a4a498",
+      "share": 0.0043
+     },
+     {
+      "hex": "#3d796f",
+      "share": 0.0042
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.0034
+     },
+     {
+      "hex": "#2e6749",
+      "share": 0.0014
+     },
+     {
+      "hex": "#89857b",
+      "share": 0.0011
+     },
+     {
+      "hex": "#636768",
+      "share": 0.001
+     },
+     {
+      "hex": "other",
+      "share": 0.0034
+     }
+    ]
+   },
+   "file": "files/greave.glb",
+   "report": {
+    "file": "row_house/mid_1.glb",
+    "what": "lot",
+    "kind": "row_house",
+    "size_m": [
+     5.7,
+     7.5
+    ],
+    "plan_height_m": 9.82,
+    "seed": 19180,
+    "above_floor_m": [
+     [
+      -2.87,
+      -3.75
+     ],
+     [
+      2.87,
+      3.78
+     ]
+    ],
+    "height_m": 12.41,
+    "foundation_m": 1.8,
+    "tris": 2315,
+    "materials": {
+     "Body": 2267,
+     "Glow": 48
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9132,
+    "palette_wear_blend_share": 0.0868,
+    "budget_tris": 4000,
+    "doors": [
+     {
+      "at": [
+       1.7,
+       -2.6,
+       1.36
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "6353c32d67c80c9fccaea3cde179a76d0bacbd44399a9106f0a1c3cc6f4d1ad2",
+    "ridge_m": 9.82,
+    "state": "lived in",
+    "door_colour": "sea_green",
+    "household": "greave",
+    "front_m": 5.7,
+    "eave_m": 6.2,
+    "storey_m": 2.7,
+    "lit": [
+     "g",
+     "u1"
+    ],
+    "keepsake": "seedling trays on the sill"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     5.767102241516113,
+     14.210000038146973,
+     7.558073043823242
+    ],
+    "triangles": 2315,
+    "vertices": 4701,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "morrow",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/row_house/low_7.glb",
+   "sha256": "63212facda2e698c7b45a2084177eaa685fc7553ad11a330e7d5dabecc8515c8",
+   "stats": {
+    "file": "low_7.glb",
+    "sha256": "63212facda2e698c7b45a2084177eaa685fc7553ad11a330e7d5dabecc8515c8",
+    "bytes": 154000,
+    "triangles": 2155,
+    "vertices": 4339,
+    "parts": {
+     "low_7": 2155
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 12,
+    "palette": [
+     {
+      "hex": "#3b3e46",
+      "share": 0.3846
+     },
+     {
+      "hex": "#c6c1b5",
+      "share": 0.2425
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1453
+     },
+     {
+      "hex": "#5b6066",
+      "share": 0.1434
+     },
+     {
+      "hex": "#484f5c",
+      "share": 0.0354
+     },
+     {
+      "hex": "#48302b",
+      "share": 0.0196
+     },
+     {
+      "hex": "#647083",
+      "share": 0.0093
+     },
+     {
+      "hex": "#8c989e",
+      "share": 0.0051
+     },
+     {
+      "hex": "#a4a29b",
+      "share": 0.0044
+     },
+     {
+      "hex": "#772728",
+      "share": 0.0023
+     },
+     {
+      "hex": "#6a1a1a",
+      "share": 0.0023
+     },
+     {
+      "hex": "#326a4c",
+      "share": 0.0016
+     },
+     {
+      "hex": "#2b2c31",
+      "share": 0.001
+     },
+     {
+      "hex": "#e3e1d2",
+      "share": 0.001
+     },
+     {
+      "hex": "other",
+      "share": 0.0023
+     }
+    ]
+   },
+   "file": "files/morrow.glb",
+   "report": {
+    "file": "row_house/low_7.glb",
+    "what": "lot",
+    "kind": "row_house",
+    "size_m": [
+     4.9,
+     7.5
+    ],
+    "plan_height_m": 9.62,
+    "seed": 23388,
+    "above_floor_m": [
+     [
+      -2.47,
+      -3.75
+     ],
+     [
+      2.47,
+      3.78
+     ]
+    ],
+    "height_m": 11.38,
+    "foundation_m": 1.8,
+    "tris": 2155,
+    "materials": {
+     "Body": 2143,
+     "Glow": 12
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9295,
+    "palette_wear_blend_share": 0.0705,
+    "budget_tris": 4000,
+    "doors": [
+     {
+      "at": [
+       1.3,
+       -2.6,
+       1.36
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "63212facda2e698c7b45a2084177eaa685fc7553ad11a330e7d5dabecc8515c8",
+    "ridge_m": 9.62,
+    "state": "lived in",
+    "door_colour": "oxblood",
+    "household": "morrow",
+    "front_m": 4.9,
+    "eave_m": 6.0,
+    "storey_m": 2.6,
+    "lit": [
+     "g"
+    ],
+    "keepsake": "a caged gull"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     4.96384334564209,
+     13.180000305175781,
+     7.560145378112793
+    ],
+    "triangles": 2155,
+    "vertices": 4339,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "empty",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/row_house/low_3.glb",
+   "sha256": "0ccbddd19665d4ce9cb32a3796dca45720aef0ae3196a05d5b745ccd475123e1",
+   "stats": {
+    "file": "low_3.glb",
+    "sha256": "0ccbddd19665d4ce9cb32a3796dca45720aef0ae3196a05d5b745ccd475123e1",
+    "bytes": 141008,
+    "triangles": 1940,
+    "vertices": 4006,
+    "parts": {
+     "low_3": 1940
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#3f4048",
+      "share": 0.3874
+     },
+     {
+      "hex": "#c3c5b3",
+      "share": 0.2372
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1485
+     },
+     {
+      "hex": "#5b5e66",
+      "share": 0.1458
+     },
+     {
+      "hex": "#48515f",
+      "share": 0.0348
+     },
+     {
+      "hex": "#4a2f29",
+      "share": 0.0169
+     },
+     {
+      "hex": "#867f77",
+      "share": 0.0122
+     },
+     {
+      "hex": "#a3a59a",
+      "share": 0.0048
+     },
+     {
+      "hex": "#61786e",
+      "share": 0.0046
+     },
+     {
+      "hex": "#8b989c",
+      "share": 0.0029
+     },
+     {
+      "hex": "#858049",
+      "share": 0.0022
+     },
+     {
+      "hex": "#646e84",
+      "share": 0.0015
+     },
+     {
+      "hex": "#6f4028",
+      "share": 0.0008
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.0003
+     },
+     {
+      "hex": "other",
+      "share": 0.0002
+     }
+    ]
+   },
+   "file": "files/empty.glb",
+   "report": {
+    "file": "row_house/low_3.glb",
+    "what": "lot",
+    "kind": "row_house",
+    "size_m": [
+     5.0,
+     7.5
+    ],
+    "plan_height_m": 9.92,
+    "seed": 25637,
+    "above_floor_m": [
+     [
+      -2.52,
+      -3.75
+     ],
+     [
+      2.52,
+      3.78
+     ]
+    ],
+    "height_m": 11.26,
+    "foundation_m": 1.8,
+    "tris": 1940,
+    "materials": {
+     "Body": 1940
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8479,
+    "palette_wear_blend_share": 0.1521,
+    "budget_tris": 4000,
+    "doors": [
+     {
+      "at": [
+       1.35,
+       -2.6,
+       1.36
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "0ccbddd19665d4ce9cb32a3796dca45720aef0ae3196a05d5b745ccd475123e1",
+    "ridge_m": 9.92,
+    "state": "empty, sound",
+    "door_colour": "faded",
+    "household": null,
+    "front_m": 5.0,
+    "eave_m": 6.3,
+    "storey_m": 2.75,
+    "lit": [],
+    "keepsake": null
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     5.06430721282959,
+     13.0600004196167,
+     7.559879779815674
+    ],
+    "triangles": 1940,
+    "vertices": 4006,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "shell",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/row_house/low_9.glb",
+   "sha256": "894e71fe59d8dc4315ea20af2dfab6d16e8a0103191eee81daacac2a05b4173d",
+   "stats": {
+    "file": "low_9.glb",
+    "sha256": "894e71fe59d8dc4315ea20af2dfab6d16e8a0103191eee81daacac2a05b4173d",
+    "bytes": 102940,
+    "triangles": 1324,
+    "vertices": 2932,
+    "parts": {
+     "low_9": 1324
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#3f4249",
+      "share": 0.427
+     },
+     {
+      "hex": "#83847c",
+      "share": 0.2435
+     },
+     {
+      "hex": "#61656a",
+      "share": 0.1193
+     },
+     {
+      "hex": "#ababa0",
+      "share": 0.088
+     },
+     {
+      "hex": "#5e7346",
+      "share": 0.0364
+     },
+     {
+      "hex": "#4c302b",
+      "share": 0.0208
+     },
+     {
+      "hex": "#51555a",
+      "share": 0.0204
+     },
+     {
+      "hex": "#95958c",
+      "share": 0.0177
+     },
+     {
+      "hex": "#544f42",
+      "share": 0.008
+     },
+     {
+      "hex": "#817c44",
+      "share": 0.0078
+     },
+     {
+      "hex": "#cacabb",
+      "share": 0.0043
+     },
+     {
+      "hex": "#34363e",
+      "share": 0.0029
+     },
+     {
+      "hex": "#8c874f",
+      "share": 0.0024
+     },
+     {
+      "hex": "#637481",
+      "share": 0.0016
+     }
+    ]
+   },
+   "file": "files/shell.glb",
+   "report": {
+    "file": "row_house/low_9.glb",
+    "what": "lot",
+    "kind": "row_house",
+    "size_m": [
+     4.8,
+     7.5
+    ],
+    "plan_height_m": 5.9,
+    "seed": 82299,
+    "above_floor_m": [
+     [
+      -2.4,
+      -3.75
+     ],
+     [
+      2.4,
+      3.7
+     ]
+    ],
+    "height_m": 11.56,
+    "foundation_m": 1.8,
+    "tris": 1324,
+    "materials": {
+     "Body": 1324
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8233,
+    "palette_wear_blend_share": 0.1767,
+    "budget_tris": 4000,
+    "doors": [],
+    "sha256": "894e71fe59d8dc4315ea20af2dfab6d16e8a0103191eee81daacac2a05b4173d",
+    "ridge_m": 5.9,
+    "state": "roofless shell",
+    "door_colour": "none"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     4.86336088180542,
+     13.360000610351562,
+     7.515957832336426
+    ],
+    "triangles": 1324,
+    "vertices": 2932,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

@@ -495,6 +495,8 @@ python3 living/tools/mind_load.py <db> <run>           # model load per person, 
 
 **Play session report.** After every owner play session, `living/tools/play_report.py` writes one page of what was on screen and a timeline of the session (lines and who heard and answered them, fights, refusals, errors, cost). The play launcher records each session (`play_report.py record-start`/`record-stop`, `LIVING_GAME_RECORD` for the client) and runs it at the end; by hand: `python3 living/tools/play_report.py --db <database> --run <run> --journal <journal dir> --logs <dir with client.log and mind.log> --out <dir> [--capture <dir>]`. See [the play report](PLAY_REPORT.md).
 
+Checking, merging and disk cleanup (`just living-check`, `just living-merge`, the disk timer) are described in [tooling](TOOLING.md).
+
 `just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
 
 ### Play with one command
@@ -598,7 +600,7 @@ Names such as `db`, `run`, `neo4j.container` and `neo4j.volume` are taken litera
 
 Options for tests and captures:
 - `--client-env K=V` adds client environment, for example a scripted `LIVING_GAME_LIVE_PLAN` with `LIVING_GAME_LIVE={session}/live` for a headless run that quits by itself.
-- `--no-record` skips tool 1's recorder, and `--no-screen` keeps its rows but not the screen.
+- `--no-record` skips tool 1's recorder. By default the client records the session's video from its own frames ([play report](PLAY_REPORT.md)); `--no-video` records stills every few seconds instead.
 - `--cost DIR --json` prints the totals as JSON.
 
 The launcher clears inherited `LIVING_*` and `TRIALS_*` variables from the shell before starting children. The admin token, the store's password and provider keys reach the children only through their environments; they are never printed or logged.
