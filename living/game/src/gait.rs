@@ -1,6 +1,7 @@
 //! Locomotion by actual speed, blended at one shared phase so feet neither slide nor cross.
 //!
-//! A character's animated file comes with `<file>.clips.json` (`living/tools/blender/animate.py
+//! A character's clip file (its own, or generated people's shared one: `anim::clip_file`) comes
+//! with `<file>.clips.json` (`living/tools/blender/animate.py
 //! --library`; the wolf's from `wolf.py`), which gives every clip's length and, for the looping
 //! gaits, the baked speed (m/s at playback rate 1) and natural speed (the take's own, before
 //! `animate.py` time-scaled it). It also gives each clip's **foot-down markers**: every foot's

@@ -579,7 +579,7 @@ fn bodies(
         // A person's clip file: its directional, turn, start and jump takes (`gait.rs`,
         // `takes.rs`), and its pace and stride as drawn last frame.
         let (gaits, pace, stride) = match q.get(s.entity) {
-            Ok((_, _, Some(m), ch, motion, _)) if s.person && crate::takes::enabled() => (Some(crate::gait::of(&m.file)), motion.pace, ch.map_or(1.0, |c| c.stride)),
+            Ok((_, _, Some(m), ch, motion, _)) if s.person && crate::takes::enabled() => (Some(crate::gait::of(&crate::anim::clip_file(&m.file))), motion.pace, ch.map_or(1.0, |c| c.stride)),
             _ => (None, 1.0, 1.0),
         };
         // A jump plays the take for its way, timed to the rules' hop, chosen once per jump from

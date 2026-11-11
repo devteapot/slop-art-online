@@ -3,7 +3,8 @@
 materials and not three a person (docs/CHARACTERS.md, "Crowd cost").
 
     python3 living/tools/characters/share.py strands GLB [GLB ...]
-    python3 living/tools/characters/share.py pages --name cullet [--tile 1024] [--page 4096] [--dir DIR] GLB [GLB ...]
+    python3 living/tools/characters/share.py pages --name cullet [--tile 1024] [--page 4096] [--dir DIR] [--which near|far] GLB [GLB ...]
+    python3 living/tools/characters/share.py clips GLB [GLB ...]
     python3 living/tools/characters/share.py list GLB [GLB ...]
 
 The game makes one toon material for every distinct material content (lookdev.rs `convert`), and
@@ -21,16 +22,20 @@ image's `uri` through the asset server), so those files' materials become one.
   shadow maps (face_normals.py's `<model>.face.png`) are laid out the same way as
   `<name>-<n>.face.png`; the per-person files are removed, and each face material's `extras`
   name the page's map (`face_map`, a path under the asset folder). `<name>.json` records who is
-  on which tile. town.py does this for a town.
+  on which tile. town.py does this for a town. A file with the full and the far model
+  (`--lod both`) has two atlases: `--which near` pages the full model's, `--which far` the far
+  model's picture (its image is named `<person>.far`).
+- `clips`: every generated person has the same skeleton, so the game takes their clips from one
+  shared clip file (`lookdev/anim/own-clips.glb`, anim.rs `clip_file`). Each file's own clips
+  (its `animations` and their data) and its `.clips.json` are removed.
 - `list`: each file's meshes, materials and pictures, to check.
 
 The atlas wraps round the back of the head (head_mesh.py): faces across that seam have
 vertices a full turn on in u. A tile cannot wrap, so those are held at the tile's edge; the
 skin there is plain and under the hair.
 
-Until the client reads `face_map` from a material's extras, paged faces have no shadow map and
-shade as skin (lookdev.rs: "without one the face shades as skin"). docs/CHARACTERS.md lists
-what the client needs.
+The client reads `face_map` from a face material's extras (lookdev.rs `convert`); a client from
+before crowd-1 shades paged faces as skin.
 """
 
 import argparse
@@ -126,13 +131,15 @@ def strands(files, shared=None):
     return done
 
 
-def atlas_users(j):
+def atlas_users(j, which=None):
     """The materials whose picture is an atlas of this person (embedded, and not the hair's),
-    by picture."""
+    by picture; `which` keeps only the full model's (`near`) or the far model's (`far`)."""
     by_image = {}
     for mi, m in enumerate(j.get("materials", [])):
         ii = material_image(j, mi)
         if ii is None or "_HAIR" in m.get("name", "") or "bufferView" not in j["images"][ii]:
+            continue
+        if which is not None and j["images"][ii].get("name", "").endswith(".far") != (which == "far"):
             continue
         by_image.setdefault(ii, []).append(mi)
     return by_image
@@ -164,19 +171,20 @@ def move_uvs(j, binary, materials, col, row, n, tile):
             a.pop("max", None)
 
 
-def pages(files, name, out_dir, tile=1024, page=4096):
-    """Lay the files' atlases out on shared pages and point the files at them."""
+def pages(files, name, out_dir, tile=1024, page=4096, which=None):
+    """Lay the files' atlases out on shared pages and point the files at them (`which`: the full
+    model's or the far model's, for files that hold both)."""
     per = (page // tile) ** 2
     os.makedirs(out_dir, exist_ok=True)
     todo = []
     for f in files:
         j, binary = read_glb(f)
-        users = atlas_users(j)
+        users = atlas_users(j, which)
         if not users:
             print(f"share: {f} has no atlas of its own (already on a page?); left as it is")
             continue
         if len(users) > 1:
-            raise SystemExit(f"share: {f} has {len(users)} atlases; one a file is expected (use `--lod near` or `far` files)")
+            raise SystemExit(f"share: {f} has {len(users)} atlases; one a file is expected (page a `--lod both` file with --which near, then --which far)")
         todo.append(f)
     record = dict(name=name, tile=tile, pages=[], people={})
     for pi in range(math.ceil(len(todo) / per)):
@@ -191,7 +199,7 @@ def pages(files, name, out_dir, tile=1024, page=4096):
         for k, f in enumerate(batch):
             col, row = k % n, k // n
             j, binary = read_glb(f)
-            (ii, mats), = atlas_users(j).items()
+            (ii, mats), = atlas_users(j, which).items()
             im = Image.open(io.BytesIO(image_bytes(j, binary, ii))).convert("RGB")
             if im.size != (tile, tile):
                 im = im.resize((tile, tile), Image.LANCZOS)
@@ -200,7 +208,7 @@ def pages(files, name, out_dir, tile=1024, page=4096):
             point_at(j, ii, page_path, f)
             # The face's shadow map goes onto the page's, in the same tile.
             own = os.path.splitext(f)[0] + ".face.png"
-            if os.path.exists(own):
+            if which != "far" and os.path.exists(own):
                 fm = Image.open(own).convert("RGB")
                 if maps is None:
                     maps = Image.new("RGB", (n * fm.size[0], n * fm.size[1]), (255, 255, 0))
@@ -218,6 +226,52 @@ def pages(files, name, out_dir, tile=1024, page=4096):
     with open(os.path.join(out_dir, f"{name}.json"), "w") as f:
         json.dump(record, f, indent=1)
     return record
+
+
+def drop_clips(files):
+    """Remove each file's own clips and their sidecar (the shared clip file serves them)."""
+    done = 0
+    for f in files:
+        j, binary = read_glb(f)
+        anims = j.pop("animations", None)
+        if anims:
+            used = {s["input"] for a in anims for s in a["samplers"]} | {s["output"] for a in anims for s in a["samplers"]}
+            # Accessors only the clips used go; the others are renumbered.
+            keep = [i for i in range(len(j["accessors"])) if i not in used or accessor_used_elsewhere(j, i)]
+            remap = {old: new for new, old in enumerate(keep)}
+            j["accessors"] = [j["accessors"][i] for i in keep]
+            renumber_accessors(j, remap)
+            write_glb(f, j, compact(j, binary))
+            done += 1
+        side = os.path.splitext(f)[0] + ".clips.json"
+        if os.path.exists(side):
+            os.remove(side)
+    return done
+
+
+def accessor_refs(j):
+    """Every place outside animations that names an accessor: (container, key)."""
+    for m in j.get("meshes", []):
+        for p in m["primitives"]:
+            for k in p["attributes"]:
+                yield p["attributes"], k
+            if "indices" in p:
+                yield p, "indices"
+            for t in p.get("targets", []):
+                for k in t:
+                    yield t, k
+    for s in j.get("skins", []):
+        if "inverseBindMatrices" in s:
+            yield s, "inverseBindMatrices"
+
+
+def accessor_used_elsewhere(j, i):
+    return any(c[k] == i for c, k in accessor_refs(j))
+
+
+def renumber_accessors(j, remap):
+    for c, k in list(accessor_refs(j)):
+        c[k] = remap[c[k]]
 
 
 def listing(files):
@@ -243,14 +297,19 @@ def main():
     p.add_argument("--dir", default=os.path.join(ASSETS, "lookdev", "pages"))
     p.add_argument("--tile", type=int, default=1024, help="a person's tile, in texels (1024 the full atlas, 256 a far model's picture)")
     p.add_argument("--page", type=int, default=4096, help="a page's side, in texels")
+    p.add_argument("--which", choices=("near", "far"), help="for files with both models: the full model's atlas or the far model's picture")
+    c = sub.add_parser("clips", help="remove each file's own clips (the game takes them from the shared clip file)")
+    c.add_argument("files", nargs="+")
     l = sub.add_parser("list", help="each file's meshes, materials and pictures")
     l.add_argument("files", nargs="+")
     a = ap.parse_args()
     if a.cmd == "strands":
         print(f"share: {strands(a.files, a.shared)} of {len(a.files)} files now name the shared strand texture")
     elif a.cmd == "pages":
-        r = pages(a.files, a.name, os.path.abspath(a.dir), a.tile, a.page)
+        r = pages(a.files, a.name, os.path.abspath(a.dir), a.tile, a.page, a.which)
         print(f"share: {len(r['people'])} people on {len(r['pages'])} page(s) " + ", ".join(f"{p['file']} ({p['size']}², {p['people']} people)" for p in r["pages"]))
+    elif a.cmd == "clips":
+        print(f"share: {drop_clips(a.files)} of {len(a.files)} files had their own clips removed")
     else:
         listing(a.files)
 

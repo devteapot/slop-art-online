@@ -168,6 +168,158 @@ pub fn character_shadows(
     }
 }
 
+/// Where characters change to their far model (`person.py --lod both`: the far model's meshes
+/// are nodes named `Far*` on the same skeleton as the full model's). `LIVING_GAME_FAR=<m>`
+/// (default 10; `0` never changes to it), for a 1.75 m character and in proportion to height,
+/// as the spring bones' distance is; `LIVING_GAME_FAR_BAND=<m>` (default 1.5) is how much nearer
+/// a far character must come before it changes back, so one at the edge doesn't flicker.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct FarModels {
+    pub at: f32,
+    pub band: f32,
+}
+
+impl FarModels {
+    pub fn from_env() -> Self {
+        let num = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(d);
+        Self { at: num("LIVING_GAME_FAR", 10.0).max(0.0), band: num("LIVING_GAME_FAR_BAND", 1.5).max(0.0) }
+    }
+
+    /// Whether a character `d` m from the camera, `height` m tall, shows its far model, given
+    /// what it shows now (None: not decided yet).
+    pub fn far(&self, d: f32, height: f32, now: Option<bool>) -> bool {
+        if self.at <= 0.0 {
+            return false;
+        }
+        let d = d * 1.75 / height.max(0.3);
+        match now {
+            Some(true) => d > self.at - self.band,
+            _ => d > self.at,
+        }
+    }
+}
+
+/// A character's full and far meshes (empty `far`: its file has no far model), and which shows.
+#[derive(Component)]
+pub struct Lod {
+    near: Vec<Entity>,
+    far: Vec<Entity>,
+    pub far_now: Option<bool>,
+}
+
+impl Lod {
+    /// Whether this character can change to a far model.
+    pub fn has_far(&self) -> bool {
+        !self.far.is_empty()
+    }
+}
+
+/// Show each character's far model beyond [`FarModels`]'s distance and its full model nearer.
+/// Both are skinned to the same bones, so one animation player, one set of spring bones and one
+/// shaped skeleton serve both; the far model has no morph targets (blinking and the mouth stop
+/// beyond the change). Hidden meshes draw in no view: neither shadows (`character_shadows`) nor
+/// outlines. The animation runs on whichever shows. A mesh is far when it or a node above it
+/// below the character is named `Far*`; meshes that join a character later (an outfit piece, a
+/// style) join its lists and take the side it shows.
+#[allow(clippy::type_complexity)]
+pub fn far_models(
+    mut commands: Commands,
+    settings: Res<FarModels>,
+    cams: Query<&GlobalTransform, With<Camera3d>>,
+    new: Query<(Entity, &GlobalTransform, &Model), (With<crate::characters::Character>, Without<Lod>)>,
+    mut chars: Query<(&GlobalTransform, &Model, &mut Lod)>,
+    added: Query<Entity, Added<Mesh3d>>,
+    children: Query<&Children>,
+    parents: Query<&ChildOf>,
+    names: Query<&Name>,
+    meshes: Query<(), With<Mesh3d>>,
+    mut vis: Query<&mut Visibility>,
+) {
+    let cam = cams.single().ok().map(|c| c.translation());
+    let show = |lod: &Lod, far: bool, vis: &mut Query<&mut Visibility>| {
+        let (show, hide) = if far { (&lod.far, &lod.near) } else { (&lod.near, &lod.far) };
+        for (list, v) in [(show, Visibility::Inherited), (hide, Visibility::Hidden)] {
+            for m in list {
+                if let Ok(mut x) = vis.get_mut(*m) {
+                    *x = v;
+                }
+            }
+        }
+    };
+    // Far when it or a node above it (below the character) is named Far*.
+    let is_far = |d: Entity, e: Entity| {
+        let mut at = d;
+        loop {
+            if names.get(at).is_ok_and(|n| n.as_str().starts_with("Far")) {
+                return true;
+            }
+            match parents.get(at) {
+                Ok(p) if p.parent() != e => at = p.parent(),
+                _ => return false,
+            }
+        }
+    };
+    // Decided as soon as the scene is in, before the model is first shown (`fit`), so the two
+    // never draw together.
+    let mut fresh = Vec::new();
+    for (e, g, model) in &new {
+        if !children.iter_descendants(e).any(|d| meshes.contains(d)) {
+            continue;
+        }
+        fresh.push(e);
+        let (mut near, mut far) = (vec![], vec![]);
+        for d in children.iter_descendants(e).filter(|d| meshes.contains(*d)) {
+            if is_far(d, e) {
+                far.push(d);
+            } else {
+                near.push(d);
+            }
+        }
+        let mut lod = Lod { near, far, far_now: None };
+        if lod.has_far() {
+            debug!("far models: {} has {} full and {} far meshes", model.file, lod.near.len(), lod.far.len());
+            let far = cam.is_some_and(|c| settings.far(g.translation().distance(c), model.height, None));
+            show(&lod, far, &mut vis);
+            lod.far_now = Some(far);
+        }
+        commands.entity(e).insert(lod);
+    }
+    // Meshes that joined a character already listed (outfit pieces, styles).
+    for d in &added {
+        let mut at = d;
+        while let Ok(p) = parents.get(at) {
+            at = p.parent();
+            if fresh.contains(&at) {
+                break;
+            }
+            if let Ok((_, _, mut lod)) = chars.get_mut(at) {
+                if lod.near.contains(&d) || lod.far.contains(&d) {
+                    break;
+                }
+                let far = is_far(d, at);
+                if far { lod.far.push(d) } else { lod.near.push(d) }
+                if let Some(now) = lod.far_now.filter(|_| lod.has_far()) {
+                    if let Ok(mut x) = vis.get_mut(d) {
+                        *x = if far == now { Visibility::Inherited } else { Visibility::Hidden };
+                    }
+                }
+                break;
+            }
+        }
+    }
+    let Some(cam) = cam else { return };
+    for (g, model, mut lod) in &mut chars {
+        if !lod.has_far() {
+            continue;
+        }
+        let want = settings.far(g.translation().distance(cam), model.height, lod.far_now);
+        if lod.far_now != Some(want) {
+            lod.far_now = Some(want);
+            show(&lod, want, &mut vis);
+        }
+    }
+}
+
 /// Whether a character's body currently casts shadows (None until first decided).
 #[derive(Component, Default)]
 pub struct CastsShadow(Option<bool>);
@@ -261,7 +413,7 @@ pub fn convert(
     standards: Res<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     assets: Res<AssetServer>,
-    q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
+    q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>, Option<&bevy::gltf::GltfMaterialExtras>), Without<Converted>>,
     parents: Query<&ChildOf>,
     models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>, Has<Unlit>)>,
     mut glows: ResMut<NightGlows>,
@@ -269,7 +421,7 @@ pub fn convert(
     palette: Res<Palette>,
     mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>)>,
 ) {
-    for (e, mat, mesh, name) in &q {
+    for (e, mat, mesh, name, extras) in &q {
         // Only meshes under a look-dev model.
         let mut cur = e;
         let mut owner = None;
@@ -311,9 +463,17 @@ pub fn convert(
             _ if owner.vrm && (n.contains("_FACE") || n.contains("_EYE")) => Kind::FacePart,
             _ => Kind::Plain,
         };
-        // A face's shadow map sits beside its file (living/tools/face_normals.py, run by
-        // gen_anim.sh); without one the face shades as skin.
-        let face_map = (kind == Kind::Face).then(|| owner.file.trim_end_matches(".glb").to_string() + ".face.png").filter(|f| std::path::Path::new(&asset_root()).join(f).exists());
+        // A face's shadow map (living/tools/face_normals.py, run by gen_anim.sh and
+        // gen_person.sh) sits beside its file, or, for a town's faces on shared pages, is the
+        // page's map that the face material's extras name (`face_map`, a path under the asset
+        // folder: share.py `pages`), so every face on a page is one material. Without one the
+        // face shades as skin.
+        let face_map = (kind == Kind::Face)
+            .then(|| {
+                let own = owner.file.trim_end_matches(".glb").to_string() + ".face.png";
+                std::iter::once(own).chain(extras.and_then(|x| face_map_of(&x.value))).find(|f| std::path::Path::new(&asset_root()).join(f).exists())
+            })
+            .flatten();
         let kind = if kind == Kind::Face && face_map.is_none() { Kind::Skin } else { kind };
         // Face parts (eyes, lashes, brows, mouth, the face itself) are many small morphing
         // meshes whose shadows never read: they never cast one.
@@ -395,6 +555,11 @@ pub fn convert(
             ec.insert(crate::style::stencil());
         }
     }
+}
+
+/// The shadow map a face material's glTF extras name (`{"face_map": "lookdev/pages/…face.png"}`).
+fn face_map_of(extras: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(extras).ok()?["face_map"].as_str().map(String::from)
 }
 
 /// Scale each model to a 1.75 m character once its meshes have bounds, then show it.
@@ -511,9 +676,62 @@ pub fn rig(
         let side = |lower: &str| bones.get(lower).and_then(|b| transforms.get(*b).ok()).map_or(1.0, |t| t.translation.x.signum());
         let arm_side = [side("J_Bip_L_LowerArm"), side("J_Bip_R_LowerArm")];
         info!("look-dev: rigged a VRoid model ({} bones, face {})", bones.len(), if face.is_some() { "found" } else { "missing" });
-        let clips = glb_json(&model.file).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty()));
+        let clips = crate::anim::has_clips(&model.file);
         commands.entity(e).insert(Rig { bones, arm_side, face, seed: (e.index_u32() % 97) as f32 * 0.37, clips });
     }
+}
+
+/// A character file's figure height (file units, cached): the vertical span of its meshes'
+/// bounds at rest (glTF accessor `min`/`max` through the node transforms), the far model's
+/// (`Far*` nodes) left out. What `animate.py` measures the figure by; None without meshes.
+pub fn figure_height(file: &str) -> Option<f32> {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<f32>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(file) {
+        return *v;
+    }
+    let v = (|| {
+        let j = glb_json(file)?;
+        let nodes = j["nodes"].as_array()?;
+        let f = |v: &serde_json::Value, i: usize, d: f32| v.get(i).and_then(|x| x.as_f64()).map_or(d, |x| x as f32);
+        let local = |n: &serde_json::Value| {
+            let (t, r, s) = (&n["translation"], &n["rotation"], &n["scale"]);
+            Mat4::from_scale_rotation_translation(Vec3::new(f(s, 0, 1.0), f(s, 1, 1.0), f(s, 2, 1.0)), Quat::from_xyzw(f(r, 0, 0.0), f(r, 1, 0.0), f(r, 2, 0.0), f(r, 3, 1.0)), Vec3::new(f(t, 0, 0.0), f(t, 1, 0.0), f(t, 2, 0.0)))
+        };
+        let mut parent = HashMap::new();
+        for (i, n) in nodes.iter().enumerate() {
+            for c in n["children"].as_array().into_iter().flatten().filter_map(|c| c.as_u64()) {
+                parent.insert(c as usize, i);
+            }
+        }
+        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        for (i, n) in nodes.iter().enumerate() {
+            let Some(mesh) = n["mesh"].as_u64() else { continue };
+            if n["name"].as_str().is_some_and(|s| s.starts_with("Far")) {
+                continue;
+            }
+            let mut m = local(n);
+            let mut at = i;
+            while let Some(&p) = parent.get(&at) {
+                m = local(&nodes[p]) * m;
+                at = p;
+            }
+            for prim in j["meshes"][mesh as usize]["primitives"].as_array().into_iter().flatten() {
+                let a = &j["accessors"][prim["attributes"]["POSITION"].as_u64()? as usize];
+                let (amin, amax) = (&a["min"], &a["max"]);
+                for k in 0..8 {
+                    let pick = |axis: usize| if k >> axis & 1 == 0 { f(amin, axis, 0.0) } else { f(amax, axis, 0.0) };
+                    let y = m.transform_point3(Vec3::new(pick(0), pick(1), pick(2))).y;
+                    lo = lo.min(y);
+                    hi = hi.max(y);
+                }
+            }
+        }
+        (hi > lo).then_some(hi - lo)
+    })();
+    cache.lock().unwrap().insert(file.to_string(), v);
+    v
 }
 
 /// Whether a GLB file has any emissive material (cached per file).
@@ -782,4 +1000,41 @@ pub fn demo(
         _ => {}
     }
     look.demo = Some((dir, step + 1, now));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_far_model_changes_with_a_band_so_the_edge_does_not_flicker() {
+        let f = FarModels { at: 10.0, band: 1.5 };
+        // Undecided: the distance alone.
+        assert!(!f.far(9.9, 1.75, None) && f.far(10.1, 1.75, None));
+        // Near stays near up to the distance; far stays far down to the band.
+        assert!(!f.far(10.0, 1.75, Some(false)));
+        assert!(f.far(8.6, 1.75, Some(true)) && !f.far(8.4, 1.75, Some(true)));
+        // Walking back and forth across 10 m by less than the band changes once.
+        let (mut now, mut changes) = (None, 0);
+        for i in 0..200 {
+            let d = 10.0 + 0.7 * (i as f32 * 0.3).sin();
+            let want = f.far(d, 1.75, now);
+            if now.is_some() && now != Some(want) {
+                changes += 1;
+            }
+            now = Some(want);
+        }
+        assert!(changes <= 1, "{changes} changes");
+        // In proportion to height: a giant twice as tall changes at twice the distance.
+        assert!(!f.far(19.0, 3.5, None) && f.far(21.0, 3.5, None));
+        // 0 never changes.
+        assert!(!FarModels { at: 0.0, band: 1.5 }.far(100.0, 1.75, None));
+    }
+
+    #[test]
+    fn a_paged_face_names_its_map_in_its_extras() {
+        assert_eq!(face_map_of(r#"{"face_map": "lookdev/pages/cullet-0.face.png"}"#).as_deref(), Some("lookdev/pages/cullet-0.face.png"));
+        assert_eq!(face_map_of("{}"), None);
+        assert_eq!(face_map_of("not json"), None);
+    }
 }
