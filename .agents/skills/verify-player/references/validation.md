@@ -4,9 +4,15 @@
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
 
-- `player-fov1-d` (the final build): `fov.py` 18 of 18 (`fov.json`). `player-fov1-a` (the build before): 18 of 18. Two runs in between (`-b`, `-c`) wrote no `fov.json`, because the driver's output was piped into `head`, which closed it. The first attempt failed the field's edge and "R behind not in view" with R 4 m off, because the keep metre widens the 3 m near ring and the 3.7 m daytime side vision past 4 m. R is now 5.5 m off.
+- `player-fov1-m` (after merging `origin/main` `accf27c8`): `fov.py` 18 of 18.
+- `player-fov1-d` (the final build before the merge): `fov.py` 18 of 18 (`fov.json`). `player-fov1-a` (the build before): 18 of 18. Two runs in between (`-b`, `-c`) wrote no `fov.json`, because the driver's output was piped into `head`, which closed it. The first attempt failed the field's edge and "R behind not in view" with R 4 m off, because the keep metre widens the 3 m near ring and the 3.7 m daytime side vision past 4 m. R is now 5.5 m off.
 - Not run on this change: the other player scripts (`appraise`, `approach`, `combat`, `gesture`, `deal`, `drop`, `new_skill`, `told`, `host`, `command`).
 
+
+
+## 2026-11-11 eye-2: across a drop, unchanged (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. `drop.py` on plan-test (`player-eye2v-drop`): 6 of 6 (both see each other across one drop tile, the walk stops at the edge, the route never crosses, the arrow over the drop strikes). Plan-test's lots name no measured model, so eye-2 changes none of its tiles. Maintained: drop.md (the script reads plan-test's plan whatever the seed; the search's full conditions), comments in `combat.py` and `gesture.py` (open stalls and wells no longer hide).
 
 ## 2026-11-11 drop-1: across a drop (dev-box)
 

@@ -7,6 +7,9 @@
 # directories in which no file changed for the last 2 hours (live labs write continuously),
 # then trims the VM disk. A database left idle for 2 hours loses its data: republish it
 # fresh afterwards. Usage: living/tools/reclaim_disk.sh [minutes-idle, default 120]
+#
+# Manual only: idle replicas include paused reference worlds. The automatic cleanup
+# (living/tools/disk_clean.py, docs/TOOLING.md) never touches databases or volumes.
 set -e
 IDLE="${1:-120}"
 # Docker Compose names it sao-living-spacetimedb-1, podman-compose sao-living_spacetimedb_1.

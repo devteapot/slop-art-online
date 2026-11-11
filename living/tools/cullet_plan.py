@@ -11,7 +11,9 @@ Writes
   asset generator's inputs per lot (wear, household, door colour, keepsake), which the engine
   ignores;
 - `living/seeds/cullet.json`: the land seed, the Wrack (an authored coastline and relief stamps,
-  `docs/AUTHORED_PLANS.md`) with the plan merged into `map.params.plans`.
+  `docs/AUTHORED_PLANS.md`) with the plan merged into `map.params.plans`, and the starting ways
+  and town life of `living/seeds/worlds/cullet/ways.json` (the trades' workplaces and habits) as
+  its `ways` and `town_life`.
 
 Every number that varies has a cause written beside it: a front's width comes from its household's
 size and family, a lot's wear from where it stands (height above the sea, distance and bearing
@@ -22,10 +24,14 @@ import argparse
 import json
 import math
 import sys
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PLAN_OUT = ROOT / "living/seeds/worlds/cullet/plan.json"
+# Cullet's starting ways and town life (the trades' workplaces and habits), hand-written data
+# merged into the seed as they are (docs/SEEDED_LIVES.md).
+WAYS = ROOT / "living/seeds/worlds/cullet/ways.json"
 SEED_OUT = ROOT / "living/seeds/cullet.json"
 
 SEED = 83  # year 83 since the Last Sail
@@ -203,6 +209,29 @@ def front_width(slot):
 # Lots
 
 lots = []
+# The kit's folders (living/tools/blender/cullet.py writes `envs/cullet/<folder>/<id>.glb`): one
+# folder per kind of thing, so a lot whose model is not built yet finds no other model of its
+# folder and stays a grey box. Ids with a number share their folder (net_loft_3 -> net_loft).
+ROW_FOLDER = "row_house"
+# Open lots people walk on are built as fixtures (below), not as lot models: the game client
+# keeps its camera out of every lot's model and fades a low one when you stand by it, which
+# suits a building and not a landing or a terrace. The lots stay, for their names and spots.
+WALKED_ON = {"fish_steps": 0.9, "marver_terrace": 2.6}  # id -> what stands on it, in metres
+
+
+def model_path(id):
+    head = id.rsplit("_", 1)
+    folder = head[0] if len(head) == 2 and head[1].isdigit() else id
+    if folder in ("low", "mid", "high"):
+        folder = ROW_FOLDER
+    return f"cullet/{folder}/{id}.glb"
+
+
+def seed_of(id):
+    """The one number a model may roll from (which stone is a shade darker): fixed by its id."""
+    return zlib.crc32(f"cullet:{id}".encode()) % 100000
+
+
 LANDMARKS = {"cone", "counting_house", "heron", "watchglass", "lintel"}
 
 
@@ -214,6 +243,9 @@ def lot(id, kind, name, at, size, facing, level, height, building=True, age=0.6,
         l["spots"] = [{"name": n, "at": [r2(p[0]), r2(p[1])]} for n, p in spots]
     l["district"] = district
     l["building"] = building
+    if kind not in ("garden", "field") and id not in WALKED_ON:
+        l["model"] = model_path(id)
+    l["seed"] = seed_of(id)
     l["wear"] = wear(at, H[level], facing, age, repair, empty, sheltered)
     l.update(extra)
     lots.append(l)
@@ -377,8 +409,13 @@ for lv in ("low", "mid", "high", "upper", "crown"):
             note += "; Jory Greave's fruit tree in one bay"
         if gh == 4:
             note += "; Cora Stannard's flowers in a corner"
-        lot(f"glasshouse_{gh}", "workshop", f"glasshouse {gh}", c, s, "south", lv, 3.2, age=0.3, repair=0.15 if gh in BROKEN else 0.7, empty=0.6 if gh in BROKEN else 0.0, district=LADDER,
-            spots=[("the door", (4.5, 2.8)), ("the rain butt", (-6.6, 0.0))], note=note, leans_on=f"the {lv} terrace wall", state="broken" if gh in BROKEN else "working")
+        # Repair: the storm's three are broken (0.15). The lowest terrace is sheltered by the Rows
+        # and nearest the Cone, so its panes are whole (0.9); the others are patched (0.7).
+        rep = 0.15 if gh in BROKEN else 0.9 if lv == "low" else 0.7
+        state = "broken" if gh in BROKEN else "sound" if lv == "low" else "patched"
+        lot(f"glasshouse_{gh}", "workshop", f"glasshouse {gh}", c, s, "south", lv, 3.2, age=0.3, repair=rep, empty=0.6 if gh in BROKEN else 0.0, district=LADDER,
+            spots=[("the door", (4.5, 2.8)), ("the rain butt", (-6.6, 0.0))], note=note, leans_on=f"the {lv} terrace wall", state=state,
+            repair_cause="broken in last autumn's storm" if gh in BROKEN else "the lowest terrace, sheltered by the Rows: whole" if lv == "low" else "open to the wind above the Rows: patched")
 assert gh == 14
 # Root plots: three rows of six, 8 x 6 m with dry-stone walls, on the Crown's level west of it.
 p = 0
@@ -524,6 +561,162 @@ FEATURES = {
 }
 
 # ---------------------------------------------------------------------------------------------
+# Fixtures (SMALL_CITY §6 "Ground and structure" and "Street dressing"): what stands in the town
+# and is not a lot. The engine never sees them (they are kept out of the seed); the asset
+# generator builds one model for each and writes where it stands for the game client
+# (`envs/cullet/fixtures.json`). `at` is the centre of the fixture's rectangle (`size`: along its
+# front, then deep), `facing` the way its front looks, `floor_m` the ground its origin stands on.
+
+fixtures = []
+
+
+def fixture(id, kind, at, size, facing, floor_m, height, cause, age=0.8, repair=0.5, **extra):
+    f = {"id": id, "kind": kind, "model": f"cullet/{kind}/{id}.glb", "at": [r2(at[0]), r2(at[1])], "size": [r2(size[0]), r2(size[1])], "facing": facing,
+         "floor_m": r2(floor_m), "height_m": r2(height), "seed": seed_of(id), "cause": cause, "wear": wear(at, floor_m, facing, age, repair, 0.0)}
+    f.update(extra)
+    fixtures.append(f)
+    return f
+
+
+def sections(a, b, most):
+    """a..b cut into equal lengths of at most `most`: [(start, end)]."""
+    n = max(1, math.ceil((b - a - 1e-6) / most))
+    return [(a + (b - a) * i / n, a + (b - a) * (i + 1) / n) for i in range(n)]
+
+
+# The quay's wall and edge: wherever the Strand's level meets the harbour, in sections of at most
+# 12 m. The face stands 0.5 m out over the water and the coping runs 1.5 m in over the quay (the
+# ground's own edge is a bank a metre wide), so the rectangle straddles the edge. Iron ladders every third section (the ship
+# days' spacing); the slip's mouth (x -124..-114) is left open for its own model.
+QUAY_D = 2.0
+SLIP_MOUTH = (-124.0, -114.0)
+qn = 0
+
+
+def quay_run(a, b, edge, facing, note):
+    """A run of quay wall between a and b along x (facing south) or along y (facing east or west)."""
+    global qn
+    for u0, u1 in sections(a, b, 12.0):
+        qn += 1
+        mid, inn = (u0 + u1) / 2, 0.5
+        at = {"south": (mid, edge + inn), "east": (edge - inn, mid), "west": (edge + inn, mid)}[facing]
+        fixture(f"quay_{qn:02d}", "quay", at, (u1 - u0, QUAY_D), facing, H["strand"], 0.3, note, age=1.0, repair=0.45,
+                ladder=qn % 3 == 0, ring=qn % 3 == 1, tide_m=1.2, water_m=H["strand"])
+
+
+OUT = 0.5  # how far the face stands out: runs meet at the corners on that line
+quay_run(SLIP_MOUTH[1], HERON_STAGE[0] - OUT, 0.0, "south", "the ship-day quay, west of the Heron")
+quay_run(HERON_STAGE[2] - OUT, -OUT, HERON_STAGE[0], "west", "the Heron's stage, west side")
+quay_run(HERON_STAGE[0], HERON_STAGE[1], HERON_STAGE[2], "south", "the Heron's stage, its front")
+quay_run(HERON_STAGE[2] - OUT, -OUT, HERON_STAGE[1], "east", "the Heron's stage, east side")
+quay_run(HERON_STAGE[1] + OUT, FISH_STEPS[0][0] - OUT, 0.0, "south", "between the Heron and the Fish Steps")
+quay_run(FISH_STEPS[1][1] - OUT, -OUT, FISH_STEPS[0][0], "west", "the Fish Steps' landing, west flank")
+quay_run(FISH_STEPS[1][1] - OUT, -OUT, FISH_STEPS[3][0], "east", "the Fish Steps' landing, east flank")
+quay_run(FISH_STEPS[3][0] + OUT, MOLE["root"][0] - OUT, 0.0, "south", "the ship-day quay, from the Fish Steps to the mole")
+quay_run(MOLE["root"][1] + OUT, 175.0, 0.0, "south", "the quay before the Cone yard")
+
+# The mole (a P0 landmark): its root, three sections of its 40 m arm and its tip. Sea walls on
+# both sides, a wave wall on the open (east) side, oversized bollards on the harbour (west) side,
+# an iron rail round the tip whose south end went in last autumn's storm.
+mr, ma, mt = MOLE["root"], MOLE["arm"], MOLE["tip"]
+fixture("mole_root", "mole", ((mr[0] + mr[1]) / 2, mr[2] / 2 - 0.25), (mr[1] - mr[0] + 1.0, -mr[2] + 0.5), "south", H["mole"], 1.2, "the mole's root: 20 x 14 m, the lamp house on it",
+        age=1.0, repair=0.5, part="root", arm_x=[ma[0], ma[1]], lamp_house=[139.5, -13.5, 145.5, -7.5], tide_m=1.2, water_m=H["mole"])
+for i, (y1, y0) in enumerate((mr[2] - (mr[2] - ma[2]) * i / 3, mr[2] - (mr[2] - ma[2]) * (i + 1) / 3) for i in range(3)):
+    fixture(f"mole_arm_{i + 1}", "mole", ((ma[0] + ma[1]) / 2, (y0 + y1) / 2), (ma[1] - ma[0] + 1.0, y1 - y0), "south", H["mole"], 1.2,
+            "the mole's arm, a 13.3 m section: the wave wall east, a ship's bollard west", age=1.0, repair=0.5 - 0.1 * i, part="arm", bollard=True, tide_m=1.2, water_m=H["mole"])
+fixture("mole_tip", "mole", ((mt[0] + mt[1]) / 2, (mt[2] + ma[2]) / 2), (mt[1] - mt[0] + 1.0, ma[2] - mt[2] + 1.0), "south", H["mole"], 1.2,
+        "the mole's tip, 13 x 13 m round the Watchglass; the south rail went in the storm", age=1.0, repair=0.25, part="tip", arm_x=[ma[0], ma[1]], rail_gone="south", tide_m=1.2, water_m=H["mole"])
+
+# Retaining walls: along every drop between two levels of the town, in sections of at most 12 m
+# between the wynds' flights. The wall stands in the lower level's 0.6 m drop strip and rises
+# 0.4 m above the upper level as a coping (a low wall to sit on). The same walls the engine
+# derives as 4 m grey pieces (`settle::plan::retaining`), built here for their places.
+WALL_D, COPING = 0.6, 0.4
+DROPS = [  # (lower, upper, axis, edge, from, to, facing)
+    ("strand", "low", "x", 32.0, -125.0, 80.0, "south"),
+    ("strand", "low", "y", 80.0, 32.0, 60.0, "east"),
+    ("strand", "mid", "y", 80.0, 60.0, 62.0, "east"),
+    ("low", "mid", "x", 60.0, WEST["low"], 80.0, "south"),
+    ("mid", "high", "x", 90.0, WEST["mid"], 80.0, "south"),
+    ("high", "upper", "x", 120.0, WEST["high"], 55.0, "south"),
+    ("upper", "crown", "x", 134.0, WEST["upper"], 55.0, "south"),
+]
+wn = 0
+for lo, hi, axis, edge, a, b, facing in DROPS:
+    # The flights that cross this drop leave a gap of their own width.
+    gaps = []
+    for st in stairs:
+        if st["from"] == lo and st["to"] == hi:
+            u = st["head"][0] if axis == "x" else st["head"][1]
+            across = st["head"][1] if axis == "x" else st["head"][0]
+            if abs(across - edge) < 1.0 and a < u < b:
+                gaps.append((u - st["width_m"] / 2, u + st["width_m"] / 2))
+    runs, at = [], a
+    for g0, g1 in sorted(gaps):
+        if g0 - at > 0.3:
+            runs.append((at, g0, at > a, True))
+        at = g1
+    if b - at > 0.3:
+        runs.append((at, b, at > a, False))
+    fall = H[hi] - H[lo]
+    for r0, r1, stair_w, stair_e in runs:
+        secs = sections(r0, r1, 12.0)
+        for k, (u0, u1) in enumerate(secs):
+            wn += 1
+            mid = (u0 + u1) / 2
+            at_ = (mid, edge - WALL_D / 2) if axis == "x" else (edge + WALL_D / 2, mid)
+            fixture(f"wall_{wn:03d}", "retaining_wall", at_, (u1 - u0, WALL_D), facing, H[lo], fall + COPING,
+                    f"the drop from the {hi} level to the {lo} level ({fall:g} m)", age=0.9, repair=0.6, fall_m=fall, coping_m=COPING,
+                    lower=lo, upper=hi, ends=[bool(stair_w and k == 0), bool(stair_e and k == len(secs) - 1)])
+
+# The wynds' flights: one model for each of the plan's stairs, its treads the client's own
+# (0.18 m risers: round(rise / 0.18) treads over the flight's run), between basalt cheek walls.
+for st in stairs:
+    foot, head = st["foot"], st["head"]
+    run = math.hypot(head[0] - foot[0], head[1] - foot[1])
+    down = "south" if abs(head[0] - foot[0]) < 1e-6 else ("east" if foot[0] > head[0] else "west")
+    slug = st["id"].lower().replace("the ", "").replace(",", "").replace(" ", "_")
+    fixture(f"stairs_{slug}", "stairs", ((foot[0] + head[0]) / 2, (foot[1] + head[1]) / 2), (st["width_m"], run), down, H[st["from"]], st["rise_m"] + 0.25,
+            f"{st['id']}: {st['rise_m']:g} m in {round(st['rise_m'] / 0.18)} treads", age=1.0, repair=0.5, rise_m=st["rise_m"], treads=round(st["rise_m"] / 0.18), stair=st["id"], wall_d=WALL_D)
+
+# The open lots people walk on (WALKED_ON): the Fish Steps' landing and flight, the Marver's
+# terrace. Each stands on its lot's rectangle.
+for l in [l for l in lots if l["id"] in WALKED_ON]:
+    f = fixture(l["id"], l["id"], l["at"], l["size"], l["facing"], H[l["level"]], WALKED_ON[l["id"]], f"{l['name']}: {l['note']}", lot=l["id"])
+    f["wear"] = l["wear"]
+
+# Plot walls: dry stone round each root plot, 0.45 m thick and 1.0 m high, with a gate gap on the
+# side of the Crown path (south).
+for l in [l for l in lots if l["id"].startswith("root_plot_")]:
+    n = int(l["id"].rsplit("_", 1)[1])
+    fixture(f"plot_wall_{n}", "plot_wall", l["at"], l["size"], "south", H["crown"], 1.0, f"dry stone round root plot {n}; the gate faces the Crown path",
+            age=0.7, repair=0.6 - 0.02 * ((n - 1) % 6), gate_at=r2(-2.4 + 1.2 * ((n - 1) % 3)), plot=l["id"])
+
+# The Strand's dressing (SMALL_CITY §6): each thing where its use puts it.
+STRAND_H = H["strand"]
+DRESS = [
+    # (id, kind, at, size, facing, height, cause)
+    *[(f"net_rack_{i + 1}", "net_rack", (-72.0 + 6.4 * i, 2.3), (3.0, 0.6), "south", 2.2, f"nets dry on the quay before the lofts they are kept in (loft {6 - 2 * i})") for i in range(3)],
+    ("barrels_1", "barrels", (-47.0, 9.25), (1.8, 1.4), "south", 1.1, "fish barrels at the door of Petra Tarn's smokehouse"),
+    ("barrels_2", "barrels", (6.2, 1.2), (1.8, 1.4), "west", 1.1, "salt barrels beside the Fish Steps, where the catch is divided"),
+    ("creels_1", "creels", (-6.0, 1.0), (1.4, 1.0), "east", 0.9, "creels left beside the Fish Steps by the wrack gatherers"),
+    ("creels_2", "creels", (-59.5, 9.6), (1.4, 1.0), "south", 0.9, "creels at the net lofts' doors"),
+    *[(f"bollard_{i + 1}", "bollard", (x, 0.85), (0.6, 0.6), "south", 1.1, "a ship's bollard: one every 24 m, a ship's length apart, far too big for a fishing boat")
+      for i, x in enumerate((-108.0, -84.0, -60.0, -36.0, 14.0, 38.0, 62.0, 86.0, 110.0))],
+    *[(f"quay_lamp_{i + 1}", "quay_lamp", at, (0.6, 0.6), "south", 3.2, why) for i, (at, why) in enumerate([
+        ((-100.0, 0.9), "the quay lamp at the foot of the Ladder Wynd"), ((-30.0, 0.9), "the quay lamp at the foot of the Net Wynd"),
+        ((-5.3, 0.9), "the quay lamp at the Fish Steps, west"), ((5.3, 0.9), "the quay lamp at the Fish Steps, east"),
+        ((24.0, 0.9), "the quay lamp at the foot of the Tally Wynd"), ((66.0, 0.9), "the quay lamp at the foot of the Store Wynd"),
+        ((127.2, -1.2), "the quay lamp at the root of the mole")])],
+    ("boat_1", "boat", (-80.0, 13.0), (4.2, 1.5), 200, 1.3, "an upturned boat on trestles beside the boatshed, waiting on Bram Calloway"),
+    ("peat_stack_1", "peat_stack", (46.75, 12.2), (2.0, 1.2), "west", 1.4, "peat under a tarred cloth in the gap between the Counting House yard and the Store"),
+    ("floats_1", "floats", (-52.0, 9.7), (1.8, 1.0), "south", 2.0, "a string of glass floats and a crate of cullet between the lofts and the smokehouse"),
+    ("floats_2", "floats", (16.4, 9.6), (1.8, 1.0), "south", 2.0, "floats and cullet for sale at the corner of the Counting House yard"),
+]
+for id, kind, at, size, facing, height, cause in DRESS:
+    fixture(id, kind, at, size, facing, STRAND_H, height, cause, age=0.6, repair=0.5, dressing=True)
+
+# ---------------------------------------------------------------------------------------------
 # The land: the Wrack, about 760 x 560 m in the middle of a 1024 m map (SMALL_CITY §2).
 
 OUTLINE = [
@@ -600,6 +793,7 @@ def plan():
         "stairs": stairs,
         "lots": lots,
         "resources": resources,
+        "fixtures": fixtures,
         "features": FEATURES,
         "terraces": terrace_lots,
         "count": count(),
@@ -625,12 +819,14 @@ def count():
         "glasshouses": len([l for l in b if l["id"].startswith("glasshouse_")]),
         "working": len([l for l in b if l["kind"] != "house" and l["id"] not in LANDMARKS and not l["id"].startswith("glasshouse_")]),
         "open_lots": len([l for l in lots if not l["building"]]),
+        "fixtures": {k: len([f for f in fixtures if f["kind"] == k]) for k in sorted({f["kind"] for f in fixtures})},
         "by_district": by,
     }
 
 
 def seed(p):
-    rough = {k: v for k, v in p.items() if k not in ("features", "terraces", "count")}
+    rough = {k: v for k, v in p.items() if k not in ("fixtures", "features", "terraces", "count")}
+    ways = json.loads(WAYS.read_text())
     return {
         "run": "cullet",
         "seed": SEED,
@@ -655,6 +851,8 @@ def seed(p):
             ],
         }],
         "villages": [],
+        "ways": {k: ways[k] for k in ("top", "common", "occupations")},
+        "town_life": ways["town_life"],
     }
 
 
@@ -667,7 +865,16 @@ def main():
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
     p = plan()
-    out = {PLAN_OUT: dump(p), SEED_OUT: dump(seed(p))}
+    s = seed(p)
+    # The residents and their homes are `author_world.py cullet --compile-only`'s (from the cast
+    # and the drafted sheets, merged into this seed): keep them when rewriting the rest.
+    if SEED_OUT.exists():
+        old = {t["name"]: t for t in json.loads(SEED_OUT.read_text()).get("towns", [])}
+        for t in s["towns"]:
+            for k in ("residents", "homes"):
+                if k in old.get(t["name"], {}):
+                    t[k] = old[t["name"]][k]
+    out = {PLAN_OUT: dump(p), SEED_OUT: dump(s)}
     if a.check:
         bad = [str(k) for k, v in out.items() if not k.exists() or k.read_text() != v]
         if bad:

@@ -25,4 +25,4 @@ python3 "$C/scenes.py" fov --run "$R"   # about 3 min on the default seed
 - At night the near ring is `fov_near_dark_m` (2 m), not 3; the scene sets both values when it lowers the ring.
 - Witnesses are told a fight's first blow only (more than 30 s after the attacker last hurt the victim, `act.rs` `first_blow`): the duels are 31 s apart.
 - Onlookers stand on the open line itself: off the line the map may hide them behind rock.
-- The scene leaves `fov_on` false and the near rings at 3 and 2 m (in `finally`), and its six actors stand on the open line: later scenes on the same world (`doing`) see them.
+- The scene leaves `fov_on` false and the near rings at 3 and 2 m (in `finally`), and moves its six actors off the open line, which later scenes (`doing`) use.

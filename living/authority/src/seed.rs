@@ -153,7 +153,7 @@ pub fn drawn_rhythm(id: u32, day: u32) -> Rhythm {
     let rise_h = (6.0 + 0.8 * normal()).clamp(4.0, 9.0);
     let bed_h = (rise_h + 16.0 + normal()).clamp(19.5, 26.5);
     let evening_h = 1.5 + 3.0 * common::hashed_draws(id, 4)();
-    Rhythm { id, rise_h, bed_h, evening_h, last_day: day }
+    Rhythm { id, rise_h, bed_h, evening_h, last_day: day, work_from_h: 0.0, work_to_h: 0.0, nap_from_h: 0.0, nap_to_h: 0.0 }
 }
 
 /// A newborn's inheritance of ways: its parents' routines (each from one parent or the other)
@@ -326,8 +326,10 @@ pub struct SeedResident {
     pub rhythm: Option<SeedRhythm>,
 }
 
-/// When a person rises and goes to bed (hours of the day; past 24 for after midnight) and how
-/// many hours before bed are their evening.
+/// When a person rises and goes to bed (hours of the day, any hour; past 24 for after
+/// midnight), how many hours before bed are their evening, their working hours (`[from, to]`,
+/// across midnight as `[22, 6]` or `[22, 30]`) and a second sleep in the day (`[from, to]`).
+/// These are the person's starting values of the routines everyone has (`living_rules::rhythm`).
 #[derive(Deserialize, Default, Clone)]
 pub struct SeedRhythm {
     #[serde(default)]
@@ -336,6 +338,19 @@ pub struct SeedRhythm {
     pub sleeps: Option<f32>,
     #[serde(default)]
     pub evening_hours: Option<f32>,
+    #[serde(default)]
+    pub works: Option<[f32; 2]>,
+    #[serde(default)]
+    pub second_sleep: Option<[f32; 2]>,
+}
+
+/// A drawn rhythm row with what the seed gives laid over it (`living_rules::rhythm::given`).
+pub fn given_rhythm(mut row: Rhythm, given: &SeedRhythm) -> Rhythm {
+    let g = living_rules::rhythm::Given { rises: given.rises, sleeps: given.sleeps, evening_hours: given.evening_hours, works: given.works, second_sleep: given.second_sleep };
+    let h = living_rules::rhythm::given(common::hours_of(&row), &g);
+    (row.rise_h, row.bed_h, row.evening_h) = (h.rise_h, h.bed_h, h.evening_h);
+    (row.work_from_h, row.work_to_h, row.nap_from_h, row.nap_to_h) = (h.work_from_h, h.work_to_h, h.nap_from_h, h.nap_to_h);
+    row
 }
 
 fn thirty() -> f32 {
@@ -771,7 +786,7 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
         for _ in 0..p.count {
             let at = (0..30).map(|_| (centre.0 + rng(ctx).gen_range(-4.0f32..4.0), centre.1 + rng(ctx).gen_range(-4.0f32..4.0))).find(|q| map.free(q.0, q.1)).unwrap_or(centre);
             let name = animal_name(ctx, &p.kind);
-            let age = common::life_of(&p.kind).age_at(0.3 + 0.3 * rng(ctx).gen::<f32>(), common::pace(&w));
+            let age = common::life_of(ctx, &p.kind).age_at(0.3 + 0.3 * rng(ctx).gen::<f32>(), common::pace(&w));
             let id = spawn_with(ctx, &name, &p.kind, admin, minded, at, now, age, (0, 0));
             let text = serde_json::json!({ "pack": if p.name.is_empty() { format!("the {}s near {}", p.kind, p.near) } else { p.name.clone() }, "bold": p.bold }).to_string();
             match ctx.db.background().id().find(id) {
@@ -1150,7 +1165,7 @@ pub fn spawn_animal(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64) 
     // A living population has more young than old: ages skew young.
     let u: f32 = rng(ctx).gen_range(0.0f32..1.0);
     let f = 0.05 + 0.75 * u * u;
-    let age = common::life_of(kind).age_at(f, common::pace(&w));
+    let age = common::life_of(ctx, kind).age_at(f, common::pace(&w));
     spawn_with(ctx, &name, kind, admin, minded, at, now, age, (0, 0))
 }
 
@@ -1173,7 +1188,7 @@ pub fn migrate(ctx: &ReducerContext, kind: &str, m: &living_rules::species::Migr
     };
     let (admin, minded) = common::mind_controller(ctx);
     let w = common::world(ctx);
-    let life = common::life_of(kind);
+    let life = common::life_of(ctx, kind);
     for _ in 0..m.group.max(1) {
         let spot = (0..20)
             .map(|_| (at.0 + rng(ctx).gen_range(-3.0f32..3.0), at.1 + rng(ctx).gen_range(-3.0f32..3.0)))
@@ -1222,7 +1237,7 @@ pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &st
 /// A grown creature (a quarter of the way through life) with no known parents.
 pub fn spawn_creature(ctx: &ReducerContext, name: &str, kind: &str, controller: Identity, ai: bool, at: (f32, f32), now: u64) -> u32 {
     let w = common::world(ctx);
-    let age = common::life_of(kind).age_at(0.25, common::pace(&w));
+    let age = common::life_of(ctx, kind).age_at(0.25, common::pace(&w));
     spawn_with(ctx, name, kind, controller, ai, at, now, age, (0, 0))
 }
 
@@ -1245,7 +1260,7 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         parent_b: parents.1,
         stage: {
             let w = common::world(ctx);
-            common::stage_code(common::life_of(kind).stage(age, common::pace(&w)))
+            common::stage_code(common::life_of(ctx, kind).stage(age, common::pace(&w)))
         },
     });
     let id = c.id;
@@ -1612,8 +1627,16 @@ fn walkable_near(map: &living_rules::map::Map, at: (f32, f32)) -> (f32, f32) {
 /// A household's house: the unowned house already standing at its door (a land world's lots),
 /// or a new one.
 fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64) -> u64 {
+    house_at(ctx, map, home, owner, now, false)
+}
+
+/// A household's house at `home`: the unowned house standing there, else a new one. With
+/// `any_kind` (a household the seed binds to a planned lot, docs/AUTHORED_PLANS.md), the
+/// unowned building standing at that lot's door is its home whatever its kind: a family living
+/// over its inn or in its hall owns that building, with no second house beside it.
+fn house_at(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64, any_kind: bool) -> u64 {
     let at = walkable_near(map, home);
-    let standing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| s.kind == "house" && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75);
+    let standing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75);
     match standing {
         Some(mut s) => {
             let id = s.id;
@@ -1782,7 +1805,7 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
         let home = layout.houses.get(h % layout.houses.len().max(1)).copied().unwrap_or(center);
         let names: Vec<String> = members.iter().map(|_| fresh_name(ctx)).collect();
         let mut household_ids = Vec::new();
-        let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
+        let (life, pace) = (common::life_of(ctx, "person"), common::pace(&common::world(ctx)));
         for (k, occ) in members.iter().enumerate() {
             let at = (home.0 + (k as f32 - 1.0) * 0.5, home.1 + 0.6);
             // Working adults of all ages; sometimes a grandparent who still keeps a trade.
@@ -1855,7 +1878,7 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
 fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<(String, u32)> {
     let (admin, minded) = common::mind_controller(ctx);
     let center = layout.center;
-    let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
+    let (life, pace) = (common::life_of(ctx, "person"), common::pace(&common::world(ctx)));
     let keys = household_keys(&t.residents);
     // Households the seed binds to a planned lot live at its door (`homes`); the others take
     // the remaining houses in order, nearest the square first. Without `homes`, household h
@@ -1935,7 +1958,7 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
     for (h, key) in keys.iter().enumerate() {
         let owner = spawned.iter().find(|(j, ..)| household_of(&t.residents[*j]) == *key).map(|s| s.1).unwrap_or(0);
         if homes.get(h).is_some_and(|x| x.1) {
-            house(ctx, map, home_of(h), owner, now);
+            house_at(ctx, map, home_of(h), owner, now, bound.get(h).is_some_and(|b| b.is_some()));
         }
     }
     for (i, id, occ) in &spawned {
@@ -2016,13 +2039,13 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
             }
         }
         if let Some(given) = &r.rhythm {
-            let mut row = ctx.db.rhythm().id().find(id).unwrap_or_else(|| {
-                let w = common::world(ctx);
-                drawn_rhythm(id, living_rules::day_of(now, w.epoch_ms, w.day_ms) as u32)
-            });
-            row.rise_h = given.rises.unwrap_or(row.rise_h).clamp(0.0, 12.0);
-            row.bed_h = given.sleeps.map(|b| if b < 12.0 { b + 24.0 } else { b }).unwrap_or(row.bed_h).clamp(row.rise_h + 8.0, row.rise_h + 22.0);
-            row.evening_h = given.evening_hours.unwrap_or(row.evening_h).clamp(0.0, 8.0);
+            let row = given_rhythm(
+                ctx.db.rhythm().id().find(id).unwrap_or_else(|| {
+                    let w = common::world(ctx);
+                    drawn_rhythm(id, living_rules::day_of(now, w.epoch_ms, w.day_ms) as u32)
+                }),
+                given,
+            );
             if ctx.db.rhythm().id().find(id).is_some() {
                 ctx.db.rhythm().id().update(row);
             } else {
@@ -2079,7 +2102,7 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
 fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: (f32, f32), now: u64) {
     let (admin, minded) = common::mind_controller(ctx);
     let at = walkable_near(map, site);
-    let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
+    let (life, pace) = (common::life_of(ctx, "person"), common::pace(&common::world(ctx)));
     let mut ids = Vec::new();
     if !b.family.is_empty() {
         // A family of all ages; the young are children of the first two adults.
@@ -2186,6 +2209,53 @@ mod tests {
 
     const AUTHORED: &str = include_str!("../../seeds/authored-test.json");
 
+    /// The rule `common::day_phase` used before rhythms could rise after noon (lives-2): hours
+    /// pivoted at noon.
+    fn noon_pivot(r: &Rhythm, hour: f32) -> (bool, bool) {
+        let h = if hour < 12.0 { hour + 24.0 } else { hour };
+        (h >= r.bed_h && h < r.rise_h + 24.0, h >= r.bed_h - r.evening_h && h < r.bed_h)
+    }
+
+    /// Every drawn rhythm (all a seed without `rhythm` has: every world before Cullet) keeps
+    /// exactly its bedtime and evening at every minute (and between minutes) under the new rule,
+    /// and has no working hours or second sleep set, so its working hours are its waking hours
+    /// outside the evening.
+    #[test]
+    fn drawn_rhythms_keep_their_phase() {
+        let mut u = common::hashed_draws(99, 1);
+        for id in 0..20_000u32 {
+            let r = drawn_rhythm(id, 0);
+            assert_eq!((r.work_from_h, r.work_to_h, r.nap_from_h, r.nap_to_h), (0.0, 0.0, 0.0, 0.0));
+            let h = common::hours_of(&r);
+            for m in 0..24 * 60 {
+                for hour in [m as f32 / 60.0, (m as f32 + u()) / 60.0] {
+                    let p = h.phase(hour);
+                    assert_eq!((p.bedtime, p.evening), noon_pivot(&r, hour), "id {id} at {hour}: {r:?}", r = (r.rise_h, r.bed_h, r.evening_h));
+                    assert_eq!(p.work, !p.bedtime && !p.evening);
+                }
+            }
+        }
+    }
+
+    /// A seed's rhythm: rising after noon, a night's work, a second sleep; a rhythm the seed does
+    /// not give is the drawn one unchanged.
+    #[test]
+    fn seeded_rhythms_rise_at_any_hour() {
+        let drawn = drawn_rhythm(7, 0);
+        let g = |v: serde_json::Value| given_rhythm(drawn_rhythm(7, 0), &serde_json::from_value::<SeedRhythm>(v).unwrap());
+        let none = g(serde_json::json!({}));
+        assert_eq!((none.rise_h, none.bed_h, none.evening_h, none.work_to_h, none.nap_to_h), (drawn.rise_h, drawn.bed_h, drawn.evening_h, 0.0, 0.0));
+        let night = g(serde_json::json!({"rises": 14.0, "sleeps": 31.0, "evening_hours": 1.0, "works": [22.0, 30.0]}));
+        assert_eq!((night.rise_h, night.bed_h, night.work_from_h, night.work_to_h), (14.0, 31.0, 22.0, 30.0));
+        let lamp = g(serde_json::json!({"rises": 13.0, "sleeps": 6.0, "works": [19.5, 6.0]}));
+        assert_eq!((lamp.rise_h, lamp.bed_h, lamp.work_from_h, lamp.work_to_h), (13.0, 30.0, 19.5, 30.0));
+        let baker = g(serde_json::json!({"rises": 2.5, "sleeps": 22.0, "evening_hours": 3.0, "works": [3.0, 10.0], "second_sleep": [13.0, 19.0]}));
+        assert_eq!((baker.rise_h, baker.bed_h, baker.nap_from_h, baker.nap_to_h), (2.5, 22.0, 13.0, 19.0));
+        let p = common::hours_of(&night).phase(15.0);
+        assert!(!p.bedtime && !p.work);
+        assert!(common::hours_of(&night).phase(23.0).work && common::hours_of(&night).phase(11.0).bedtime);
+    }
+
     /// Cullet's seed passes the checks `init` makes (`island::params_of`'s plan and relief
     /// refusals, and hosting's reachable doors): a refused seed leaves no world behind.
     #[test]
@@ -2243,7 +2313,7 @@ mod tests {
         assert_eq!(pim.inventory.get("berries"), Some(&2));
         assert_eq!(town.residents[0].inventory.get("berries"), Some(&4), "four berries by default");
         // Ages in years give the right life stage at this seed's pace.
-        let (life, pace) = (common::life_of("person"), living_rules::life::Pace { year_days: s.year_days as f32, pace: s.life_pace });
+        let (life, pace) = (common::species_life("person"), living_rules::life::Pace { year_days: s.year_days as f32, pace: s.life_pace });
         let stage = |n: &str| {
             let r = town.residents.iter().chain(village.residents.iter()).find(|r| r.name == n).unwrap();
             life.stage(life.seeded_age(r.age, pace), pace)

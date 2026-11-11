@@ -1,0 +1,234 @@
+{
+ "schema": 1,
+ "family": "building:row-low",
+ "id": "20261111-368e2af4-ba998f",
+ "published": "2026-11-11T17:42:59+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1: built for its lot from the plan (footprint, height, wear and seed from plan.json); glow set in the game at 21:30 against 13:00. `row` is Low Row's east terrace as the plan has it: five houses (Dunlin, Calloway, an empty one, Tarn, Okoro) on a level street, joined into one model for the board only (cullet.py --join); the game draws each house as its own model on its own lot. The accepted version was the A/B brief's four houses on a stepped street",
+ "source": {
+  "commit": "368e2af4b14033a9e8da023fcc63b95c27a5a9bb",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "5f70615004be4033b28a542e829eaf40b0eef97ddcc9c31bb4e4b906c7bd9803",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-row-low/20261111-368e2af4-ba998f",
+ "members": [
+  {
+   "name": "row",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/terrace/low_row_east.glb",
+   "sha256": "f2ffc23d3f2b12f2fa2653faacbf0a8edab178396a96421d7315cb09a1b40220",
+   "stats": {
+    "file": "low_row_east.glb",
+    "sha256": "f2ffc23d3f2b12f2fa2653faacbf0a8edab178396a96421d7315cb09a1b40220",
+    "bytes": 850408,
+    "triangles": 12087,
+    "vertices": 24239,
+    "parts": {
+     "low_1": 12087
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 142,
+    "palette": [
+     {
+      "hex": "#3d3f46",
+      "share": 0.386
+     },
+     {
+      "hex": "#c7c5b5",
+      "share": 0.23
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1529
+     },
+     {
+      "hex": "#5b5f65",
+      "share": 0.1457
+     },
+     {
+      "hex": "#49515e",
+      "share": 0.0397
+     },
+     {
+      "hex": "#47302a",
+      "share": 0.0153
+     },
+     {
+      "hex": "#616e80",
+      "share": 0.006
+     },
+     {
+      "hex": "#8c989e",
+      "share": 0.005
+     },
+     {
+      "hex": "#a6a59a",
+      "share": 0.0045
+     },
+     {
+      "hex": "#2d2b2f",
+      "share": 0.0034
+     },
+     {
+      "hex": "#868076",
+      "share": 0.0029
+     },
+     {
+      "hex": "#326b4c",
+      "share": 0.0013
+     },
+     {
+      "hex": "#61786e",
+      "share": 0.0009
+     },
+     {
+      "hex": "#6e211f",
+      "share": 0.0009
+     },
+     {
+      "hex": "other",
+      "share": 0.0057
+     }
+    ]
+   },
+   "file": "files/row.glb",
+   "report": {
+    "file": "terrace/low_row_east.glb",
+    "what": "terrace",
+    "terrace": "Low Row east",
+    "houses": [
+     "low_1",
+     "low_2",
+     "low_3",
+     "low_4",
+     "low_5"
+    ],
+    "households": [
+     "Dunlin",
+     "Calloway",
+     "empty, sound",
+     "Tarn",
+     "Okoro"
+    ],
+    "fronts_m": [
+     4.9,
+     5.7,
+     5.0,
+     6.5,
+     5.7
+    ],
+    "ridges_m": [
+     9.62,
+     9.62,
+     9.92,
+     9.62,
+     9.62
+    ],
+    "above_floor_m": [
+     [
+      -13.97,
+      -3.75
+     ],
+     [
+      13.97,
+      3.78
+     ]
+    ],
+    "height_m": 11.86,
+    "foundation_m": 1.8,
+    "tris": 12087,
+    "materials": {
+     "Body": 11945,
+     "Glow": 142
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9,
+    "palette_wear_blend_share": 0.1,
+    "sha256": "f2ffc23d3f2b12f2fa2653faacbf0a8edab178396a96421d7315cb09a1b40220"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     27.939998626708984,
+     13.65999984741211,
+     7.560145854949951
+    ],
+    "triangles": 12087,
+    "vertices": 24239,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": [],
+ "baseline_render": {
+  "version": "20261111-80b4ec94-47f626",
+  "path": "vs/20261111-80b4ec94-47f626/render",
+  "renderer": "86fae680",
+  "members": {
+   "row": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ]
+  }
+ }
+}

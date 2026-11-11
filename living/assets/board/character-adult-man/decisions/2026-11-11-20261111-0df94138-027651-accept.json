@@ -1,0 +1,12 @@
+{
+ "schema": 1,
+ "family": "character:adult-man",
+ "version": "20261111-0df94138-027651",
+ "verdict": "accept",
+ "date": "2026-11-11",
+ "by": "owner",
+ "words": "This is definitely a step up from what we had this morning, but still far away from the reference model we have been using so far. That is kind of what we want to get to, but we are moving in the right direction.",
+ "note": "Accepted as the new base (pass 1, char-2). The target remains the VRoid reference close up; pass 2 starts with hair.",
+ "scope": "base",
+ "recorded": "2026-11-11T17:44:48.094693+01:00"
+}

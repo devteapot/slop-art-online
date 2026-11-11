@@ -4,9 +4,21 @@
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
 
-- `client-fov1-a` (`run.py`, scoped build): 35 of 36. New and passing: the private inventory with `heard`, `hear_salt` and `law_change` (refused to anonymous clients; `heard` and `law_change` refused to the player), `heard_sounds` in the views, `set_world_law` refused to players and anonymous callers ("admin only"), and five field-of-view checks over real subscriptions (`field.json`).
+- `client-fov1-m` (after merging `origin/main` `accf27c8`): 36 of 36, presence included (eye-2's probe fix).
+- `client-fov1-a` (`run.py`, scoped build, before the merge): 35 of 36. New and passing: the private inventory with `heard`, `hear_salt` and `law_change` (refused to anonymous clients; `heard` and `law_change` refused to the player), `heard_sounds` in the views, `set_world_law` refused to players and anonymous callers ("admin only"), and five field-of-view checks over real subscriptions (`field.json`).
 - One failure: presence counts each open connection (`presence.json`: 1 → 2 → 0). The "one closed" step read 0 connections, as if the held connection had already timed out on the loaded host. The change touches nothing in presence. Not rerun.
 - Not run: the `LIVING_PERCEPTION=open` build; `game-client`.
+
+## 2026-11-11 lives-3: four `rhythm` columns (dev-box)
+
+Branch `lives-3` (four columns appended with defaults to the private `rhythm` table; bindings regenerated), own container `lives3-stdb` (2.14.1, port 3321), scoped build. `client-l3-180756`: private table visibility passes (70 tables; `rhythm` refused to an anonymous subscription and to SQL), the reducer matrix 214 calls with no mismatch; "combat feed scoped to its viewer" failed (player-2 received no row) while two other island scenes and builds loaded the machine. `client-l3b-182752` on a quiet machine: that check passed, and "presence counts each open connection of the person" failed (`1 → 2 → 0`); 30 checks pass. Neither failing check touches this change (combat feed and presence timing); each passed in the other run. Not rerun further.
+
+
+## 2026-11-11 eye-2: tile classes a client receives; presence timing (dev-box)
+
+Branch `eye-2` (from main `eead7a29`), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+- Tile classes (new, [game-client.md](../features/game-client.md#tile-classes), `scripts/tile_classes.py`): every `terrain_chunk` of an island world through the probe (16,384 chunks). `client-eye2-tiles1` (drop-1's hosting): 4,116 drop and 61 low tiles, the rules' counts. `client-eye2v-tiles` (eye-2): 4,116 drop, 9,153 low and 35,161 wall tiles, the rules' counts.
+- Fixed suite: `client-eye2v` and `client-eye2v2` each failed one check, "presence counts each open connection" (1 → 1 → 0, then 1 → 2 → 0; the dev-box was at load 45). The probe's holds counted from its own start, so the first connection closed before or right after the second opened. Presence is unchanged on this branch. The driver now waits up to 15 s for each expected count and holds the connections 30 s and 6 s (features/presence.md). `client-eye2v3`: 30 PASS, presence 1 → 2 → 1.
 
 ## 2026-11-11 goods-1 (dev-box)
 

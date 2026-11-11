@@ -1,0 +1,282 @@
+{
+  "Rafe Dunlin": {
+    "narrative": "I fish the mole by the Watchglass's light, ten till three, when the fish come to it. I've done it since Maddy died, because the nights are mine and the days are Tilly's, and I can be there when she wakes. I keep the lamp company and Anselm keeps mine; he's the only man I talk to most nights. Tilly is all I've got, and I want her to have more than a damp house on Low Row and a father who smells of fish.",
+    "values": [
+      "Tilly above all",
+      "the night's quiet",
+      "Anselm's light",
+      "a fair catch"
+    ],
+    "goals": [
+      "See Tilly learn her letters and numbers well enough to choose her own life.",
+      "Keep the night fishing good enough to pay the Store and put a little by.",
+      "Make the house warmer and drier before next winter."
+    ],
+    "pastimes": [
+      "Sitting on the mole at the end of the night, watching the sky pale",
+      "Mending his own lines by the hearth",
+      "Playing counters at the Marver when he wakes early enough"
+    ],
+    "calling": "Night fishing by the lamp: the one work that fits a man who must be awake when his daughter sleeps.",
+    "mood": "Quietly tired, steady, a little lonely.",
+    "traits": {
+      "caution": 55,
+      "sociability": 35,
+      "empathy": 70,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 65,
+      "temper": 30,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Tilly Dunlin",
+        "trust": 95,
+        "affinity": 90,
+        "label": "daughter",
+        "note": "The whole of it. I'd stand on the mole till dawn every night for her."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 80,
+        "affinity": 70,
+        "label": "friend",
+        "note": "We keep each other's nights. He talks about ships; I listen."
+      },
+      {
+        "name": "Thessaly Marl",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "She takes her break on the mole and we talk. She's got a hard row and doesn't complain."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 65,
+        "affinity": 50,
+        "label": "smoker",
+        "note": "She smokes what I catch and pays fair. Her brother Sander was a good man."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 55,
+        "affinity": 45,
+        "label": "catch-divider",
+        "note": "She divides the catch and doesn't cheat a night fisher."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 50,
+        "affinity": 40,
+        "label": "cook",
+        "note": "The Marver is where I eat when I wake. She lets me sit quiet."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 45,
+        "affinity": 35,
+        "label": "neighbour",
+        "note": "She minds Tilly some evenings. Hears everything, says little to me."
+      },
+      {
+        "name": "Livia Faro",
+        "trust": 55,
+        "affinity": 45,
+        "label": "lamp-oil",
+        "note": "Anselm's niece. She buys fish for oil and never haggles too hard."
+      },
+      {
+        "name": "Bram Calloway",
+        "trust": 40,
+        "affinity": 30,
+        "label": "neighbour",
+        "note": "Building his ship. I don't see the sense, but he's a decent man."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: Maddy burning up in our bed, Mirren Quill coming and going, and then the glass slab on the Crown.",
+        "salience": 1.0,
+        "about": [
+          "Tilly Dunlin",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The first night I fished by the Watchglass after Maddy died, Anselm didn't say a word, just left the lamp burning and sat with me a while.",
+        "salience": 0.9,
+        "about": [
+          "Anselm Faro"
+        ]
+      },
+      {
+        "gist": "A night last autumn when the fish came so thick I filled the boat twice and had to give half away before it spoiled.",
+        "salience": 0.7,
+        "about": [
+          "Petra Tarn",
+          "Magda Tarn"
+        ]
+      },
+      {
+        "gist": "Tilly's first day at Benedikt's lessons; she came home spelling her own name and wouldn't stop.",
+        "salience": 0.8,
+        "about": [
+          "Tilly Dunlin",
+          "Benedikt Orme"
+        ]
+      },
+      {
+        "gist": "The storm last autumn took the end rail of the mole; I was out there that night and thought the light would go.",
+        "salience": 0.6,
+        "about": [
+          "Anselm Faro"
+        ]
+      },
+      {
+        "gist": "My father telling me the lean years' stories: how the roofs came off the empty houses for fuel, and how his mother cried when the last ship didn't come back.",
+        "salience": 0.5,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_lamp_must_burn",
+        "value": 0.9,
+        "why": "It's the only light on the water, and Anselm's vow is the town's. I fish by it and I'd not see it go out."
+      },
+      {
+        "key": "a_night_fisher_is_still_a_fisher",
+        "value": 0.8,
+        "why": "Magda divides my catch like any other. I earn my bread."
+      },
+      {
+        "key": "tilly_comes_first",
+        "value": 1.0,
+        "why": "Maddy's gone. Tilly is what I have left to do right."
+      },
+      {
+        "key": "keep_your_debts_small",
+        "value": 0.7,
+        "why": "I've seen men go to cullet over counters. I pay as I go."
+      },
+      {
+        "key": "the_sea_gives_if_you_ask_at_the_right_hour",
+        "value": 0.6,
+        "why": "Night fishing taught me that. Patience and the lamp, and the fish come."
+      }
+    ],
+    "secret": ""
+  },
+  "Tilly Dunlin": {
+    "narrative": "I live with my father on Low Row. He fishes at night and sleeps in the morning, so I'm quiet then. I go to Benedikt's lessons and I like the tablets, and I like Posy. At night I want to stay up with Father and watch the light, but mostly I go to bed. I miss my mother, though I don't say so much.",
+    "values": [
+      "Father",
+      "Posy",
+      "the Watchglass light",
+      "lessons"
+    ],
+    "goals": [
+      "Stay up late with Father by the Watchglass.",
+      "Learn to read the hard tablet in Benedikt's room.",
+      "Have Posy come and sleep over at Low Row 1."
+    ],
+    "pastimes": [
+      "Playing counters with cullet pieces",
+      "Watching the light come on at dusk",
+      "Drawing the Watchglass in the sand"
+    ],
+    "calling": "I want to be a reader, or maybe keep the light like Anselm.",
+    "mood": "Curious, a little wistful, mostly cheerful.",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 70,
+      "curiosity": 80,
+      "ambition": 50,
+      "introspection": 55,
+      "temper": 25,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Rafe Dunlin",
+        "trust": 95,
+        "affinity": 90,
+        "label": "father",
+        "note": "He's tired a lot, but he always has time for me before he goes out."
+      },
+      {
+        "name": "Posy Fenwick",
+        "trust": 85,
+        "affinity": 85,
+        "label": "friend",
+        "note": "We sit together at lessons and play in the cullet yard."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 70,
+        "affinity": 65,
+        "label": "teacher",
+        "note": "He's patient and he knows everything about the old writing."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 75,
+        "affinity": 60,
+        "label": "lamp keeper",
+        "note": "He lets me watch him light the lamp. He smells of oil."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 55,
+        "affinity": 45,
+        "label": "minder",
+        "note": "She minds me sometimes and gives me bread."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night Father first took me out to the mole to see the light; I was small and he carried me.",
+        "salience": 0.9,
+        "about": [
+          "Rafe Dunlin",
+          "Anselm Faro"
+        ]
+      },
+      {
+        "gist": "My mother's glass slab on the Crown, pale green; Father says she chose it herself.",
+        "salience": 0.8,
+        "about": [
+          "Rafe Dunlin"
+        ]
+      },
+      {
+        "gist": "The day Benedikt showed us the tablet with the island drawn on it, and I found our house on it.",
+        "salience": 0.6,
+        "about": [
+          "Benedikt Orme",
+          "Posy Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "father_knows_best",
+        "value": 0.8,
+        "why": "He's the one who's always there."
+      },
+      {
+        "key": "the_light_is_a_promise",
+        "value": 0.7,
+        "why": "Anselm says it burns every night. I like that it does."
+      },
+      {
+        "key": "lessons_matter",
+        "value": 0.6,
+        "why": "I want to read the hard tablets like Sabine."
+      }
+    ],
+    "secret": ""
+  }
+}

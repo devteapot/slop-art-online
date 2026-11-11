@@ -107,7 +107,14 @@ Rules:
 Reply with ONE JSON object: {"sheets": {"<name>": {"narrative": "first person, 2-5 sentences", "values": [...], "goals": [...], "pastimes": [...], "calling": "...", "mood": "...", "traits": {...}, "relations": [{"name": "...", "trust": 0, "affinity": 0, "label": "...", "note": "..."}], "memories": [{"gist": "...", "salience": 0.5, "about": ["..."]}], "stances": [{"key": "...", "value": 0.8, "why": "..."}], "secret": "... or empty"}}}"""
 
 
-def draft_household(world_dir, cast, bible, s, h, profile):
+def draft_household(world_dir, cast, bible, s, h, profile, effort=None):
+    if cast.get("prompt"):
+        # A cast with anchors (wants, what is going on, rhythm, secrets, situations): Cullet's.
+        # About 1,700 output tokens a sheet (the island's journal): a house of seven needs more
+        # than a profile's usual 8,000.
+        cap = min(24000, max(8000, 2500 * len(h["members"])))
+        v = logged_call(profile, sheet_system(cast), household_prompt(world_dir, cast, bible, s, h), effort, f"sheets:{h['key']}", max_tokens=cap)
+        return v.get("sheets", v)
     members = "\n".join(
         f"- {m['name']} ({m['age']:g}, {m['sex']}), {m['role']}. Knows: {', '.join(m['knows']) or 'nothing yet'}. Ties: {'; '.join(m.get('ties', []))}" for m in h["members"]
     )
@@ -795,6 +802,534 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
     return 1 if problems and a.strict else 0
 
 
+# ---- a hand-written cast with anchors and a plan (Cullet, docs/SMALL_CITY.md section 3) --------
+#
+# cast.json may carry, beyond the Aske Coast's shape: `plan` (the world's plan file, so each
+# household's `lot` binds it to its house through `SeedTown.homes`), `counts` (what the cast must
+# add up to), `prompt` (the world's words for the sheet prompt), per member `trade`, `wants`,
+# `going_on` (the anchors a sheet must honour), `kin` (each relative and what they are to this
+# person), `rhythm` (the starting day) and `secret`; top level `secrets` (who knows what),
+# `situations` (with every side's view, as the island's planned casts have) and `tensions`.
+# `--check` checks it without a model; `--dry-run` also builds every prompt the drafting would
+# send, estimates the spend and previews the compiled residents, and never touches the network.
+
+KIN = {
+    # word: (relation, sex of the relative named, inverse relation)
+    "mother": ("parent", "f", "child"), "father": ("parent", "m", "child"),
+    "son": ("child", "m", "parent"), "daughter": ("child", "f", "parent"),
+    "brother": ("sibling", "m", "sibling"), "sister": ("sibling", "f", "sibling"),
+    "husband": ("spouse", "m", "spouse"), "wife": ("spouse", "f", "spouse"),
+    "grandmother": ("grandparent", "f", "grandchild"), "grandfather": ("grandparent", "m", "grandchild"),
+    "grandson": ("grandchild", "m", "grandparent"), "granddaughter": ("grandchild", "f", "grandparent"),
+    "aunt": ("auncle", "f", "nibling"), "uncle": ("auncle", "m", "nibling"),
+    "niece": ("nibling", "f", "auncle"), "nephew": ("nibling", "m", "auncle"),
+    "great-aunt": ("grandauncle", "f", "grandnibling"), "great-uncle": ("grandauncle", "m", "grandnibling"),
+    "great-niece": ("grandnibling", "f", "grandauncle"), "great-nephew": ("grandnibling", "m", "grandauncle"),
+    "cousin": ("cousin", None, "cousin"),
+    "mother-in-law": ("parent-in-law", "f", "child-in-law"), "father-in-law": ("parent-in-law", "m", "child-in-law"),
+    "son-in-law": ("child-in-law", "m", "parent-in-law"), "daughter-in-law": ("child-in-law", "f", "parent-in-law"),
+    "brother-in-law": ("sibling-in-law", "m", "sibling-in-law"), "sister-in-law": ("sibling-in-law", "f", "sibling-in-law"),
+}
+
+# EUR per million tokens (input, cached input, output), from docs/MODEL_COST.md (2026 price table).
+PRICES_EUR = {"deepseek-v4-1-flash-1017": (0.255, 0.006, 1.02), "zai-glm-5-3-flash": (0.1275, 0.0255, 0.425)}
+# From the island's authoring journal (docs/SEEDED_LIVES.md "Spend"): 482,134 sheet output
+# tokens for 277 residents; 133 tie-filling calls for 277 residents, 20,367 output tokens.
+OUT_PER_SHEET = 482134 / 277
+FILLS_PER_PERSON = 133 / 277
+OUT_PER_FILL = 20367 / 133
+
+
+def rhai_names(src, fn):
+    """The `name:` entries of a Rhai table function (`fn items() { [...] }`) in a script."""
+    m = re.search(r"\nfn " + re.escape(fn) + r"\(\)\s*\{(.*?)\n\}", "\n" + src, re.S)
+    return set(re.findall(r'name: "([a-z_]+)"', m.group(1))) if m else set()
+
+
+def world_tables(wd):
+    """Items, techniques and resource kinds of the shipped script and the world's laws file."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    laws_f = wd / "laws.rhai"
+    laws = laws_f.read_text() if laws_f.exists() else ""
+    t = {k: rhai_names(shipped, k) | rhai_names(laws, k) for k in ("items", "know_how", "resources")}
+    t["occupations"] = set()
+    rep = json.loads((ROOT / "living/seeds/repertoire.json").read_text())
+    for k in ("occupations", "makers"):
+        t["occupations"] |= set(rep.get(k, {}).keys())
+    # The world's own starting ways (`ways.json` beside the cast, merged into its seed).
+    ways_f = wd / "ways.json"
+    t["ways"] = json.loads(ways_f.read_text()) if ways_f.exists() else {}
+    t["occupations"] |= set(t["ways"].get("occupations", {}))
+    return t
+
+
+def person_life(wd=None):
+    """A person's life in years: `species.json`'s table, as the world's `life_years` law changes
+    it. This tool cannot run Rhai: it reads the law's `person_years()` map, the form Cullet's
+    laws give it in (each key an age in years that replaces the table's; docs/CULLET_RULES.md),
+    and says when a world's law has another form."""
+    life = json.loads((ROOT / "living/seeds/species.json").read_text())["person"]["life"]
+    y = life["years"]
+    out = {"child_until": life["child"] * y, "elder_from": life["elder"] * y, "old_age_from": life["old_age"] * y, "years": y, "from": "species.json"}
+    laws_f = wd / "laws.rhai" if wd else None
+    if laws_f and laws_f.exists() and re.search(r"\nfn life_years\(", "\n" + laws_f.read_text()):
+        m = re.search(r"\nfn person_years\(\)\s*\{\s*#\{(.*?)\}\s*\}", "\n" + laws_f.read_text(), re.S)
+        if not m:
+            raise SystemExit(f"{laws_f}: a life_years law without a person_years() map; this check cannot read it")
+        given = {k: float(v) for k, v in re.findall(r"(\w+):\s*([0-9.]+)", m.group(1))}
+        keys = {"lifespan": "years", "child": "child_until", "elder": "elder_from", "old_age": "old_age_from"}
+        for k, v in given.items():
+            if k in keys:
+                out[keys[k]] = v
+        out["from"] = f"{laws_f.relative_to(ROOT)} life_years"
+    return out
+
+
+def hour_text(h):
+    h = h % 24
+    return f"{int(h):02d}:{int(round((h - int(h)) * 60)):02d}"
+
+
+def place_text(p, lots):
+    if p.startswith("lot:"):
+        return lots[p[4:]]["name"] if p[4:] in lots else p
+    return {"kelp_bed": "the Wrack Strand", "peat_bank": "the Moss", "fishing_spot": "the Weirs", "tree": "the Hanger"}.get(p, p.replace("_", " "))
+
+
+def rhythm_text(r, lots):
+    bed = r["wakes"] + 24 - r["sleep_h"]
+    work = "; ".join(f"{hour_text(a)}-{hour_text(b)}" for a, b in r.get("works", [])) or "no set hours"
+    at = " or ".join(place_text(p, lots) for p in r.get("work_at", []))
+    eve = " or ".join(place_text(p, lots) for p in r.get("evening", []))
+    nap = f", and sleeps again {hour_text(r['second_sleep'][0])}-{hour_text(r['second_sleep'][1])}" if r.get("second_sleep") else ""
+    return f"wakes about {hour_text(r['wakes'])}, to bed about {hour_text(bed)} ({r['sleep_h']:g} hours' sleep{nap}); works {work}{' at ' + at if at else ''}; evenings at {eve or 'home'}"
+
+
+def plan_of(wd, cast):
+    if not cast.get("plan"):
+        return None
+    return json.loads((wd / cast["plan"]).read_text())
+
+
+def secrets_for(cast, names):
+    return [x for x in cast.get("secrets", []) if set(x["known_to"]) & set(names)]
+
+
+def sheet_system(cast):
+    p = cast["prompt"]
+    s = SYSTEM
+    for old, new in [
+        ("Dead people (like Tomas) may appear in memories and stances but never in relations.", p["dead"]),
+        ("(older people remember the Hunger Winter or the Oath; others last winter, trade days, Tomas's death, small family moments)", p["memories"]),
+        ("people know roughly how many marks they have and what things cost.", "people know roughly how much money they have and what things cost. " + p["money"]),
+    ]:
+        if old not in s:
+            raise SystemExit(f"sheet prompt changed; cannot place: {old[:40]}")
+        s = s.replace(old, new)
+    s += "\n- Situations below are facts of the world as each person in them sees them: write the person's sheet so it agrees with their side (relations, memories, stances, goals). A person who is not in a situation's people list does not know about it."
+    return s + "".join("\n- " + x for x in p.get("extra", []))
+
+
+def household_prompt(wd, cast, bible, s, h):
+    plan = plan_of(wd, cast)
+    lots = {l["id"]: l for l in plan["lots"]} if plan else {}
+    names = [m["name"] for m in h["members"]]
+
+    def line(m):
+        out = f"- {m['name']} ({m['age']:g}, {m['sex']}), {m['role']}. Trade: {m.get('trade', m['occupation'])}. Knows: {', '.join(m['knows']) or 'nothing yet'}."
+        out += f"\n  Wants: {m.get('wants', '')}\n  What is going on: {m.get('going_on', '')}"
+        if m.get("rhythm"):
+            out += f"\n  Usual day: {rhythm_text(m['rhythm'], lots)}."
+        out += f"\n  Ties: {'; '.join(m.get('ties', []))}"
+        if m.get("secret"):
+            out += f"\n  Their own secret: {m['secret']}"
+        return out
+
+    house = f"{h.get('house', h['key'])}, a {h.get('family', '')} household" if h.get("house") else h["key"]
+    sec = "\n".join(f"- {x['text']} Known ONLY to: {', '.join(x['known_to'])}." for x in secrets_for(cast, names)) or "(none)"
+    return f"""# World bible
+{bible}
+
+# The whole cast (public knowledge)
+{roster(cast)}
+
+# Situations these people are part of
+{situations_text(cast.get('situations', []), set(names)) or '(none)'}
+
+# Secrets held in this household (each known ONLY to the people it names)
+{sec}
+
+# Write sheets for this household of {s['name']} ({house})
+{chr(10).join(line(m) for m in h['members'])}
+
+Write one sheet for each of: {', '.join(names)}."""
+
+
+def work_span(works):
+    """One working span for the seed (`works: [from, to]`) from a cast's spans: from the first
+    start to the last end when that is at most 12 hours, else the longest span."""
+    if not works:
+        return None
+    a, b = min(x for x, _ in works), max(y for _, y in works)
+    if b - a <= 12:
+        return [a, b]
+    return list(max(works, key=lambda w: w[1] - w[0]))
+
+
+def seed_rhythm(r, notes, name):
+    """The seed's `rhythm` (rises, sleeps, evening_hours, works, second_sleep; seed.rs
+    `SeedRhythm`) from a cast rhythm, and what the authority's limits (living_rules::rhythm:
+    any rising hour, bed 8-22 h after rising, evening 0-8 h) change."""
+    rises, sleeps = r["wakes"], r["wakes"] + 24 - r["sleep_h"]
+    ends = [b for _, b in r.get("works", [])]
+    last = max(ends) if ends else rises + 8
+    evening = round(max(0.0, min(4.5, sleeps - last)), 2)
+    if not (8 <= sleeps - rises <= 22):
+        notes.append(f"{name}: {sleeps - rises:g} hours awake is outside the seed's 8-22")
+    out = {"rises": rises, "sleeps": round(sleeps, 2), "evening_hours": evening}
+    span = work_span(r.get("works", []))
+    if span:
+        out["works"] = span
+    if r.get("second_sleep"):
+        out["second_sleep"] = list(r["second_sleep"])
+    return out
+
+
+def resident_places(r, lots):
+    """Places for the seed (`residents[].places`): work, the first evening place as `evening`,
+    a second one by its own name. `lot:<id>` kinds are the plan's lots; other kinds are resource
+    or structure kinds, the first that has a reachable spot winning (town.rs `seat`)."""
+    out = []
+    if r.get("work_at"):
+        out.append({"name": "work", "kinds": r["work_at"]})
+    for i, p in enumerate(r.get("evening", [])[:2]):
+        out.append({"name": "evening" if i == 0 else place_text(p, lots), "kinds": [p]})
+    return out
+
+
+def compile_residents(wd, cast, sheets, notes):
+    """The seed's residents and homes from the cast (sheets by name; None leaves them out)."""
+    plan = plan_of(wd, cast)
+    lots = {l["id"]: l for l in plan["lots"]} if plan else {}
+    towns = []
+    for s in cast["settlements"]:
+        residents, homes = [], {}
+        for h in s["households"]:
+            if h.get("lot"):
+                homes[h["key"]] = h["lot"]
+            for m in h["members"]:
+                r = {"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", [])}
+                r["inventory"] = m.get("inventory", {})
+                if m.get("rhythm"):
+                    r["rhythm"] = seed_rhythm(m["rhythm"], notes, m["name"])
+                    r["places"] = resident_places(m["rhythm"], lots)
+                if sheets is not None:
+                    r["sheet"] = sheets[m["name"]]
+                residents.append(r)
+        towns.append({"name": s["name"], "residents": residents, "homes": homes})
+    return towns
+
+
+def check_cast_file(wd, cast):
+    """Checks a hand-written cast without a model. Returns (errors, warnings, report)."""
+    errors, warn, rep = [], [], {}
+    people = list(people_of(cast))
+    by = {}
+    for s, h, m in people:
+        if m["name"] in by:
+            errors.append(f"name used twice: {m['name']}")
+        by[m["name"]] = (s, h, m)
+    keys = [h["key"] for s in cast["settlements"] for h in s["households"]]
+    if len(keys) != len(set(keys)):
+        errors.append("household key used twice")
+    t = world_tables(wd)
+    life = person_life(wd)
+    plan = plan_of(wd, cast)
+    lots = {l["id"]: l for l in plan["lots"]} if plan else {}
+    plan_kinds = {r["kind"] for r in plan.get("resources", [])} if plan else set()
+
+    # Counts, by the cast's own ages and by the rules' life stages.
+    c = cast.get("counts", {})
+    adult_from, elder_from = c.get("adult_from", 15), c.get("elder_from", 60)
+    ages = [m["age"] for _, _, m in people]
+    got = {"residents": len(people), "adults": sum(a >= adult_from for a in ages), "elders": sum(a >= elder_from for a in ages), "children": sum(a < adult_from for a in ages), "households": len(keys)}
+    rep["counts"] = {k: {"want": c.get(k), "got": v} for k, v in got.items()}
+    for k, v in got.items():
+        if k in c and c[k] != v:
+            errors.append(f"count {k}: {v}, the cast says {c[k]}")
+    stage = {"child": [], "adult": [], "elder": []}
+    for _, _, m in people:
+        stage["child" if m["age"] < life["child_until"] else "elder" if m["age"] >= life["elder_from"] else "adult"].append(m["name"])
+    rep["rule_stages"] = {k: len(v) for k, v in stage.items()} | {"person_life": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in life.items()}}
+    young_adults = [f"{m['name']} ({m['age']:g})" for _, _, m in people if adult_from <= m["age"] < life["child_until"]]
+    if young_adults:
+        warn.append(f"the rules' person life puts the child stage before {life['child_until']:.1f} years, so these cast adults start as children: {', '.join(young_adults)}")
+    old = [f"{m['name']} ({m['age']:g})" for _, _, m in people if m["age"] >= life["old_age_from"]]
+    if old:
+        warn.append(f"deaths of old age begin at {life['old_age_from']:.1f} years in the rules' person life; these residents would be seeded just short of it, and could die of age early: {', '.join(old)}")
+
+    # Households and their lots in the plan.
+    for s in cast["settlements"]:
+        for h in s["households"]:
+            if not plan:
+                continue
+            lot = lots.get(h.get("lot", ""))
+            if not lot:
+                errors.append(f"{h['key']}: lot {h.get('lot')!r} is not in the plan")
+                continue
+            if lot.get("household") != h["key"]:
+                errors.append(f"{h['key']}: lot {lot['id']} is the plan's home of {lot.get('household')!r}")
+            if lot.get("people") not in (None, len(h["members"])):
+                errors.append(f"{h['key']}: {len(h['members'])} members, the plan's lot {lot['id']} says {lot['people']}")
+            if lot.get("family") not in (None, h.get("family")):
+                errors.append(f"{h['key']}: family {h.get('family')}, the plan says {lot['family']}")
+        if plan:
+            planned = {l["household"] for l in plan["lots"] if l.get("household")}
+            missing = planned - set(keys)
+            if missing:
+                errors.append(f"plan households with no cast: {sorted(missing)}")
+
+    # Kin both ways, with words that fit the relative's sex; siblings, parents, grandparents.
+    kin_pairs = 0
+    for n, (_, _, m) in by.items():
+        for o, word in m.get("kin", {}).items():
+            kin_pairs += 1
+            if o not in by:
+                errors.append(f"{n}: kin {o!r} is not in the cast")
+                continue
+            if word not in KIN:
+                errors.append(f"{n}: kin word {word!r} unknown")
+                continue
+            rel, sex, inv = KIN[word]
+            if sex and by[o][2]["sex"] != sex:
+                errors.append(f"{n}: calls {o} {word}, but {o} is {by[o][2]['sex']}")
+            back = by[o][2].get("kin", {}).get(n)
+            if not back:
+                errors.append(f"{n} -> {o} ({word}) has no way back")
+            elif KIN.get(back, (None,))[0] != inv:
+                errors.append(f"{n} calls {o} {word}, {o} calls {n} {back}")
+        for p in m.get("parents", []):
+            if p not in by:
+                errors.append(f"{n}: parent {p!r} is not in the cast")
+                continue
+            if KIN.get(m.get("kin", {}).get(p, ""), (None,))[0] != "parent":
+                errors.append(f"{n}: parent {p} is not listed as mother or father in kin")
+            if by[p][2]["age"] - m["age"] < 14:
+                errors.append(f"{n}: parent {p} is less than 14 years older")
+        for o in by:
+            if o != n and set(m.get("parents", [])) & set(by[o][2].get("parents", [])) and KIN.get(m.get("kin", {}).get(o, ""), (None,))[0] != "sibling":
+                errors.append(f"{n} and {o} share a parent but are not listed as siblings")
+        for p in m.get("parents", []):
+            for g in by.get(p, (None, None, {}))[2].get("parents", []):
+                if KIN.get(m.get("kin", {}).get(g, ""), (None,))[0] != "grandparent":
+                    errors.append(f"{n}: grandparent {g} (through {p}) is not listed")
+    rep["kin_links"] = kin_pairs
+
+    # Ties that name other residents; one-sided ones across households are reported.
+    full = sorted(by, key=len, reverse=True)
+    named_in_ties, one_sided = 0, []
+    for n, (_, h, m) in by.items():
+        text = " ".join(m.get("ties", []))
+        for o in full:
+            if o != n and o in text:
+                named_in_ties += 1
+                other = " ".join(by[o][2].get("ties", []))
+                if by[o][1]["key"] != h["key"] and n not in other and o not in m.get("kin", {}):
+                    one_sided.append(f"{n} -> {o}")
+    rep["ties_naming_residents"] = named_in_ties
+    rep["one_sided_cross_household_ties"] = one_sided
+    cross = {(min(n, o), max(n, o)) for n, (_, h, m) in by.items() for o in full if o != n and o in " ".join(m.get("ties", [])) and by[o][1]["key"] != h["key"]}
+    rep["cross_household_pairs_tied"] = len(cross)
+
+    # Anchors, rhythm, know-how, items, occupations.
+    no_ways = {}
+    for n, (_, _, m) in by.items():
+        if m["age"] >= 2 and not (m.get("wants") and m.get("going_on")):
+            errors.append(f"{n}: no wants or going_on anchor")
+        for k in m["knows"]:
+            if k not in t["know_how"]:
+                errors.append(f"{n}: knows {k!r}, which the rules do not define")
+        for k in m.get("inventory", {}):
+            if k not in t["items"]:
+                errors.append(f"{n}: carries {k!r}, which is not an item")
+        if m["occupation"] not in t["occupations"] and m["occupation"] != "child":
+            no_ways.setdefault(m["occupation"], []).append(n)
+        r = m.get("rhythm")
+        if not r:
+            errors.append(f"{n}: no rhythm")
+            continue
+        if not (0 <= r["wakes"] < 24 and 4 <= r["sleep_h"] <= 14):
+            errors.append(f"{n}: rhythm wakes {r['wakes']} / sleeps {r['sleep_h']} h out of range")
+        awake_to = r["wakes"] + 24 - r["sleep_h"]
+        for a, b in r.get("works", []):
+            if not (a < b and (r["wakes"] <= a and b <= awake_to + 0.01 or r["wakes"] <= a + 24 and b + 24 <= awake_to + 24.01)):
+                errors.append(f"{n}: works {a}-{b} is not within waking hours {hour_text(r['wakes'])}-{hour_text(awake_to)}")
+        if r.get("second_sleep"):
+            a, b = r["second_sleep"]
+            if not (0 <= a < 24 and 0 < (b - a) % 24 <= 8):
+                errors.append(f"{n}: second sleep {a}-{b} is not 0-8 hours starting within the day")
+            elif any((x - a) % 24 < (b - a) % 24 for x, _ in r.get("works", [])):
+                errors.append(f"{n}: second sleep {a}-{b} begins after work starts")
+        if not 1 <= len(r.get("evening", [])) <= 2:
+            errors.append(f"{n}: one or two evening places, not {len(r.get('evening', []))}")
+        for p in r.get("work_at", []) + r.get("evening", []):
+            if p.startswith("lot:"):
+                if plan and p[4:] not in lots:
+                    errors.append(f"{n}: place {p} is not a lot of the plan")
+            elif p not in t["resources"] and p not in plan_kinds:
+                errors.append(f"{n}: place kind {p!r} is neither a lot nor a resource kind")
+            elif plan and p not in plan_kinds:
+                warn.append(f"{n}: place kind {p!r} is a resource of the rules but the plan places none (it places {sorted(plan_kinds)}); the next lot listed is used")
+    if no_ways:
+        warn.append("occupations with no starting ways in repertoire.json or the seed (they start as foragers until Cullet's ways exist): " + "; ".join(f"{k} ({len(v)})" for k, v in sorted(no_ways.items())))
+
+    # Secrets: on the knowers' sheets and nobody else's.
+    for x in cast.get("secrets", []):
+        for k in x["known_to"]:
+            if k not in by:
+                errors.append(f"secret {x['id']}: {k} is not in the cast")
+                continue
+            m = by[k][2]
+            sit = next((y for y in cast.get("situations", []) if y["id"] == x["id"]), None)
+            if not (m.get("secret") or any(tt.startswith("SECRET") for tt in m.get("ties", [])) or (sit and k in sit["people"])):
+                errors.append(f"secret {x['id']}: {k} knows it but nothing on their entry says so")
+        sit = next((y for y in cast.get("situations", []) if y["id"] == x["id"]), None)
+        if sit and (not sit["secret"] or set(sit["people"]) != set(x["known_to"])):
+            errors.append(f"secret {x['id']}: its situation must be secret and name exactly {x['known_to']}")
+        for n, (_, _, m) in by.items():
+            public = " ".join([m["role"]] + public_ties(m)).lower()
+            private = " ".join([m.get("wants", ""), m.get("going_on", ""), m.get("secret", "")] + m.get("ties", [])).lower()
+            sides = " ".join(y["sides"].get(n, "") for y in cast.get("situations", [])).lower()
+            for mk in x.get("markers", []):
+                if mk in public:
+                    errors.append(f"secret {x['id']}: '{mk}' in {n}'s public role or ties")
+                if n not in x["known_to"] and (mk in private or mk in sides):
+                    errors.append(f"secret {x['id']}: '{mk}' on {n}'s entry, who does not know it")
+    # The bible goes into every household's prompt, so it must not give a secret away either.
+    bible_f = wd / "bible.md"
+    bible = bible_f.read_text().lower() if bible_f.exists() else ""
+    for x in cast.get("secrets", []):
+        for mk in x.get("markers", []):
+            if mk in bible:
+                errors.append(f"secret {x['id']}: '{mk}' is in the bible, which every household sees")
+    rep["secrets"] = {x["id"]: x["known_to"] for x in cast.get("secrets", [])}
+
+    # Situations and tensions.
+    sit_ids = set()
+    for x in cast.get("situations", []):
+        sit_ids.add(x["id"])
+        for p in x["people"]:
+            if p not in by:
+                errors.append(f"situation {x['id']}: {p} is not in the cast")
+            if not x["sides"].get(p):
+                errors.append(f"situation {x['id']}: no side for {p}")
+        for p in x["sides"]:
+            if p not in x["people"]:
+                errors.append(f"situation {x['id']}: a side for {p}, who is not in it")
+    for x in cast.get("tensions", []):
+        for sid in x.get("situations", []):
+            if sid not in sit_ids:
+                errors.append(f"tension {x['name']}: no situation {sid}")
+        inside = {p for y in cast.get("situations", []) if y["id"] in x.get("situations", []) for p in y["people"]}
+        for p in x["carried_by"]:
+            if p not in by:
+                errors.append(f"tension {x['name']}: {p} is not in the cast")
+            elif p not in inside:
+                errors.append(f"tension {x['name']}: {p} carries it but is in none of its situations")
+    rep["situations"] = len(sit_ids)
+    rep["tensions"] = len(cast.get("tensions", []))
+
+    # What the compile would bind and what the seed's clamps change.
+    notes = []
+    towns = compile_residents(wd, cast, None, notes)
+    rep["homes"] = {t_["name"]: t_["homes"] for t_ in towns}
+    warn += notes
+    return errors, warn, rep
+
+
+def print_checks(errors, warn, rep):
+    c = rep["counts"]
+    print("counts: " + ", ".join(f"{k} {v['got']}" + (f" (want {v['want']})" if v["want"] is not None else "") for k, v in c.items()))
+    rs = rep["rule_stages"]
+    print(f"rule life stages ({rs['person_life']['from']}, person: child < {rs['person_life']['child_until']} y, elder from {rs['person_life']['elder_from']} y, old-age deaths from {rs['person_life']['old_age_from']} y): child {rs['child']}, adult {rs['adult']}, elder {rs['elder']}")
+    print(f"kin links {rep['kin_links']} (each checked both ways); ties naming residents {rep['ties_naming_residents']}; household pairs tied across houses {rep['cross_household_pairs_tied']}; one-sided cross-household ties {len(rep['one_sided_cross_household_ties'])}")
+    print(f"situations {rep['situations']}, tensions {rep['tensions']}, secrets {len(rep['secrets'])}: " + "; ".join(f"{k} known to {', '.join(v)}" for k, v in rep["secrets"].items()))
+    for town, homes in rep["homes"].items():
+        print(f"homes ({town}, SeedTown.homes): {len(homes)} households bound: " + ", ".join(f"{k}->{v}" for k, v in homes.items()))
+    for w in warn:
+        print("  warning:", w)
+    for e in errors:
+        print("  ERROR:", e)
+    print(f"{len(errors)} errors, {len(warn)} warnings")
+
+
+def dry_run(a, wd, cast, bible):
+    """Everything the drafting would do, without a model and without the network."""
+    errors, warn, rep = check_cast_file(wd, cast)
+    print_checks(errors, warn, rep)
+    out = Path(a.out) if a.out else None
+    if out:
+        (out / "prompts").mkdir(parents=True, exist_ok=True)
+    models = json.loads(Path(env_models_path()).read_text())
+    prof = models["profiles"].get(a.profile)
+    if not prof:
+        sys.exit(f"profile {a.profile!r} is not in the models config")
+    sheets_dir = wd / "sheets"
+    system = sheet_system(cast) if cast.get("prompt") else SYSTEM
+    rows, total_in, total_out = [], 0, 0
+    for s in cast["settlements"]:
+        for h in s["households"]:
+            if (sheets_dir / f"{h['key']}.json").exists():
+                continue
+            user = household_prompt(wd, cast, bible, s, h) if cast.get("prompt") else None
+            if user is None:
+                continue
+            p_tokens = (len(system) + len(user)) / 4
+            o_tokens = OUT_PER_SHEET * len(h["members"])
+            total_in += p_tokens
+            total_out += o_tokens
+            secrets = [x["id"] for x in secrets_for(cast, [m["name"] for m in h["members"]])]
+            rows.append((h["key"], len(h["members"]), len(user), round(p_tokens), round(o_tokens), secrets))
+            if out:
+                (out / "prompts" / f"{h['key']}.txt").write_text(f"# system\n{system}\n\n# user\n{user}\n")
+    n = sum(len(h["members"]) for s in cast["settlements"] for h in s["households"])
+    shared = (len(system) + len(bible) + len(roster(cast))) / 4
+    print(f"\nwould draft {len(rows)} households ({sum(r[1] for r in rows)} sheets) with profile {a.profile} ({prof['model']}), reasoning effort {a.effort or 'not sent'}, one call each:")
+    for k, members, chars, pt, ot, sec in rows:
+        print(f"  {k:<11} {members} sheets, prompt {chars:>6} chars (~{pt} tokens), ~{ot} output tokens" + (f", secrets: {', '.join(sec)}" if sec else ""))
+    fills = FILLS_PER_PERSON * n
+    fill_in = fills * (shared + 400)
+    fill_out = fills * OUT_PER_FILL
+    print(f"then about {fills:.0f} small calls to fill one-sided family or named ties (the island's rate, {FILLS_PER_PERSON:.2f} a person), each ~{shared + 400:.0f} prompt tokens")
+    price = PRICES_EUR.get(prof["model"])
+    est = {"profile": a.profile, "model": prof["model"], "effort": a.effort, "calls": len(rows) + round(fills), "sheet_calls": len(rows), "fill_calls": round(fills), "prompt_tokens": round(total_in + fill_in), "shared_prefix_tokens": round(shared), "output_tokens": round(total_out + fill_out)}
+    if price:
+        def eur(cached_share):
+            tin = total_in + fill_in
+            return (tin * (1 - cached_share) * price[0] + tin * cached_share * price[1] + (total_out + fill_out) * price[2]) / 1e6
+        est["eur_no_cache"] = round(eur(0.0), 3)
+        est["eur_cached_80"] = round(eur(0.8), 3)
+        est["eur_with_retries"] = round(eur(0.0) * 1.3, 3)
+        print(f"estimate: {est['calls']} calls, ~{est['prompt_tokens']:,} prompt tokens (~{est['shared_prefix_tokens']:,} of each call is the same bible, cast and rules), ~{est['output_tokens']:,} output tokens")
+        print(f"  EUR {est['eur_cached_80']:.2f} if 80% of the prompt is cached, {est['eur_no_cache']:.2f} with no cache, {est['eur_with_retries']:.2f} with no cache and 30% redrafts (prices: docs/MODEL_COST.md, {prof['model']} in/cached/out {price[0]}/{price[1]}/{price[2]} EUR per M)")
+    else:
+        print(f"no price for {prof['model']} in this tool; see docs/MODEL_COST.md")
+    notes = []
+    towns = compile_residents(wd, cast, None, notes)
+    if out:
+        (out / "compile-preview.json").write_text(json.dumps({"into": f"living/seeds/{cast.get('into', a.world)}.json", "towns": towns, "note": "residents without sheets, as the compile would write them once sheets exist; not written to the seed"}, indent=1, ensure_ascii=False) + "\n")
+        (out / "estimate.json").write_text(json.dumps(est, indent=1) + "\n")
+        (out / "checks.json").write_text(json.dumps({"errors": errors, "warnings": warn, "report": rep}, indent=1, ensure_ascii=False) + "\n")
+    t = towns[0]
+    print(f"compile would write into living/seeds/{cast.get('into', a.world)}.json, town {t['name']}: {len(t['residents'])} residents with rhythm and places, homes for {len(t['homes'])} households (sheets missing: {sum(1 for s in cast['settlements'] for h in s['households'] if not (sheets_dir / (h['key'] + '.json')).exists())} households, so --compile-only would stop)")
+    print("no model was called; no key was read")
+    return 1 if errors else 0
+
+
+def env_models_path():
+    return os.environ.get("LIVING_MODELS", str(ROOT / "living/configs/models.json"))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("world")
@@ -808,21 +1343,39 @@ def main():
     ap.add_argument("--review-effort", default=None)
     ap.add_argument("--redraft", action="store_true", help="redraft households the review flags, once")
     ap.add_argument("--strict", action="store_true", help="exit 1 when the checks find problems")
+    # A hand-written cast with anchors (Cullet): checks and a dry run, neither calls a model.
+    ap.add_argument("--check", action="store_true", help="check the cast (kin, lots, counts, rhythm, secrets) and stop")
+    ap.add_argument("--dry-run", action="store_true", help="check, build every prompt, estimate the spend and preview the compile; no model, no network")
+    ap.add_argument("--out", default="", help="with --dry-run: a directory for the prompts, the estimate and the compile preview")
     a = ap.parse_args()
     wd = ROOT / "living/seeds/worlds" / a.world
     if (wd / "world.json").exists():
         sys.exit(lives(a, wd))
     cast = json.loads((wd / "cast.json").read_text())
     bible = (wd / "bible.md").read_text()
+    if a.check:
+        errors, warn, rep = check_cast_file(wd, cast)
+        print_checks(errors, warn, rep)
+        sys.exit(1 if errors else 0)
+    if a.dry_run:
+        sys.exit(dry_run(a, wd, cast, bible))
     names = {m["name"] for _, _, m in people_of(cast)}
     sheets_dir = wd / "sheets"
+    if cast.get("prompt"):
+        global LOG_PATH
+        LOG_PATH = wd / "authoring-log.jsonl"
+        if not a.compile_only:
+            errors, warn, rep = check_cast_file(wd, cast)
+            if errors:
+                print_checks(errors, warn, rep)
+                sys.exit("the cast has errors; fix them before drafting")
     sheets_dir.mkdir(exist_ok=True)
 
     if not a.compile_only:
         todo = [(s, h) for s in cast["settlements"] for h in s["households"] if not (sheets_dir / f"{h['key']}.json").exists()]
         print(f"drafting {len(todo)} households with {a.profile}", flush=True)
         with concurrent.futures.ThreadPoolExecutor(a.jobs) as ex:
-            futs = {ex.submit(draft_household, wd, cast, bible, s, h, a.profile): h for s, h in todo}
+            futs = {ex.submit(draft_household, wd, cast, bible, s, h, a.profile, a.effort): h for s, h in todo}
             for f in concurrent.futures.as_completed(futs):
                 h = futs[f]
                 try:
@@ -863,7 +1416,7 @@ def main():
             s, h, m = person[o]
             user = f"# World bible\n{bible}\n\n# The whole cast (public knowledge)\n{roster(cast)}\n\n# Person\n{o} ({m['age']:g}), {m['role']}. Ties: {'; '.join(m.get('ties', []))}\nTheir current relations: {json.dumps(sheets[o]['relations'], ensure_ascii=False)}\n\nWrite how {o} feels about: {', '.join(others)}. Reply with ONE JSON object: {{\"relations\": [{{\"name\": \"...\", \"trust\": 0, \"affinity\": 0, \"label\": \"...\", \"note\": \"...\"}}]}}"
             try:
-                v = model_call(a.profile, SYSTEM, user, effort="low")
+                v = logged_call(a.profile, sheet_system(cast), user, a.effort, f"ties:{o}") if cast.get("prompt") else model_call(a.profile, SYSTEM, user, effort="low")
             except RuntimeError as e:
                 notes.append(f"{o}: fill failed: {e}")
                 continue
@@ -873,6 +1426,21 @@ def main():
             f.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n")
             sheets[o] = check_sheet(o, raw[o], names, notes)
 
+    if cast.get("into"):
+        # Merge into the world's existing seed (Cullet's is written by cullet_plan.py): each
+        # settlement's residents and homes; the rest of the seed and the town are kept.
+        out = ROOT / "living/seeds" / f"{cast['into']}.json"
+        seed = json.loads(out.read_text())
+        for t in compile_residents(wd, cast, sheets, notes):
+            town = next((x for x in seed.get("towns", []) + seed.get("villages", []) if x["name"] == t["name"]), None)
+            if town is None:
+                sys.exit(f"{out.name} has no settlement {t['name']}")
+            town["residents"], town["homes"] = t["residents"], t["homes"]
+        out.write_text(json.dumps(seed, indent=1, ensure_ascii=False) + "\n")
+        print(f"wrote {out.relative_to(ROOT)}: {len(sheets)} residents")
+        for n in notes[:30]:
+            print("  note:", n)
+        return
     seed = json.loads((wd / "seed.json").read_text())
     towns, villages = [], []
     for s in cast["settlements"]:

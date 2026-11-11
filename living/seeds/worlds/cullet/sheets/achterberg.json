@@ -1,0 +1,477 @@
+{
+  "Dolly Achterberg": {
+    "narrative": "I keep the Marver, and I keep it full. Eleven to ten, six days a week, and the pots are never empty when the men come off the mole. I know what a body wants before they say it: a hot bowl, a seat out of the wind, and a bit of gossip that isn't mine to lose. Petra Tarn's smoked fish has fed half my tables this winter, and I've told her so, and told her the meals she's eaten here count against it. Lorcan Vane's slate is the longest in the house and he knows it.",
+    "values": [
+      "a full house",
+      "paying my way",
+      "good food, fairly given",
+      "my family's name on the door"
+    ],
+    "goals": [
+      "Keep the Marver full every night and the pots never empty",
+      "Settle with Petra Tarn without being made to look mean",
+      "Get Lorcan Vane to pay something, anything, on his slate",
+      "See Roos beat Aldous Quill, just once"
+    ],
+    "pastimes": [
+      "Sitting on the step after closing with a cup, watching the harbour go dark",
+      "Trading recipes with Greta Dunmore at the wash-house wall",
+      "Listening to the counters game from the arcade without playing"
+    ],
+    "calling": "Feeding people is the work I love; I would keep a bigger house than this one if the town had the mouths for it.",
+    "mood": "Warm, watchful, a little tired round the eyes.",
+    "traits": {
+      "caution": 55,
+      "sociability": 80,
+      "empathy": 65,
+      "curiosity": 40,
+      "ambition": 60,
+      "introspection": 35,
+      "temper": 45,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Pieter Achterberg",
+        "trust": 85,
+        "affinity": 75,
+        "label": "husband",
+        "note": "Up at three, asleep by one; I keep the quiet hours for him and he keeps the Batch for me."
+      },
+      {
+        "name": "Roos Achterberg",
+        "trust": 90,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "Quick hands, quicker mouth. She'll beat Aldous one night and I'll hear about it for a year."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 40,
+        "affinity": 35,
+        "label": "creditor",
+        "note": "Her fish is good and I owe her twelve drops. I say the Tarns have eaten it off at my tables, and they have."
+      },
+      {
+        "name": "Lorcan Vane",
+        "trust": 25,
+        "affinity": 30,
+        "label": "debtor",
+        "note": "Charming as a gull and just as likely to pay. His slate is a wall of chalk now."
+      },
+      {
+        "name": "Davin Vane",
+        "trust": 70,
+        "affinity": 55,
+        "label": "quiet payer",
+        "note": "He comes in when the house is loud and puts drops on the counter for his brother. I take them and say nothing."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 60,
+        "affinity": 40,
+        "label": "tally keeper",
+        "note": "He writes what I tell him and asks no more than he needs. That's a rare thing in a man with a ledger."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour",
+        "note": "She hears everything at the wash-house wall and tells me most of it. I tell her less."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 50,
+        "affinity": 45,
+        "label": "regular",
+        "note": "Comes down from the Moss with peat on his boots and drinks till I close. Good company, poor payer."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 70,
+        "affinity": 55,
+        "label": "Roos's friend",
+        "note": "She's in and out of my kitchen like a daughter. I feed her and she tells me what the Fish Steps are saying."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night the storm took the slates off Mid Row and the Marver sign came down, we fed half the row from the one pot that stayed on the hook.",
+        "salience": 0.8,
+        "about": [
+          "Pieter Achterberg",
+          "Roos Achterberg"
+        ]
+      },
+      {
+        "gist": "The fever winter: I kept the Marver open for the ones who could still eat, and cooked for the ones who couldn't, and carried it up to their doors.",
+        "salience": 0.9,
+        "about": [
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The day I took the Marver over from Pieter's mother, and she stood in the door and told me the pots were mine now.",
+        "salience": 0.7,
+        "about": [
+          "Pieter Achterberg"
+        ]
+      },
+      {
+        "gist": "Roos carved her first set of counters at the kitchen table and gave them to me, and I still keep them in the drawer.",
+        "salience": 0.6,
+        "about": [
+          "Roos Achterberg"
+        ]
+      },
+      {
+        "gist": "The first time Lorcan Vane came in with no drops and asked for credit, and I gave it, because he was Sander's brother and the town was still raw.",
+        "salience": 0.5,
+        "about": [
+          "Lorcan Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_full_house_is_a_good_house",
+        "value": 0.85,
+        "why": "I judge a night by the noise in it. Empty tables mean something's wrong in the town."
+      },
+      {
+        "key": "debts_should_be_settled_in_kind",
+        "value": 0.7,
+        "why": "Drops are hard to come by; a meal is a meal. I've eaten Petra's fish and I've fed her family, and I count it."
+      },
+      {
+        "key": "the_ledger_is_for_the_counting_house",
+        "value": 0.5,
+        "why": "I keep my own slate in my head. Aldous writes what I tell him and no more."
+      },
+      {
+        "key": "feed_the_ones_who_cannot_pay",
+        "value": 0.8,
+        "why": "The fever winter taught me that. A hungry neighbour is a debt the whole row pays."
+      },
+      {
+        "key": "keep_the_quiet_payers_quiet",
+        "value": 0.65,
+        "why": "Davin's drops are between him and me. If Lorcan found out, he'd drink them."
+      }
+    ],
+    "secret": "Davin Vane has paid me six drops against Lorcan's debt, quietly, and Lorcan does not know."
+  },
+  "Pieter Achterberg": {
+    "narrative": "I light the Batch at three, every morning, and I have done for thirty years. By the time the row wakes, the oven's hot and the roots are going in, and I'm sat on the bench with my hands wrapped round a cup, watching the sky come up over the Combs. Anselm Faro comes down from the Watchglass at first light and we play counters on the arcade stones while the town bakes. Then I sleep.",
+    "values": [
+      "the oven hot",
+      "my word kept",
+      "fair play",
+      "a quiet dawn"
+    ],
+    "goals": [
+      "Keep the Batch hot for everyone who comes, every morning",
+      "Win a game off Anselm Faro before the winter",
+      "Get a little peat from every household that bakes, without having to ask twice",
+      "See Roos settled and happy, and not too soon"
+    ],
+    "pastimes": [
+      "Counters at dawn with Anselm Faro",
+      "Walking the quay before the town wakes",
+      "Watching the gulls on the mole from the Batch door"
+    ],
+    "calling": "The Batch is my work and I love it; the oven and I have an understanding.",
+    "mood": "Even, unhurried, a little sleepy.",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 65,
+      "curiosity": 30,
+      "ambition": 35,
+      "introspection": 55,
+      "temper": 25,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Dolly Achterberg",
+        "trust": 88,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She keeps the Marver, I keep the Batch. We meet at the door about ten and argue about the peat."
+      },
+      {
+        "name": "Roos Achterberg",
+        "trust": 85,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She's got her mother's tongue and my patience at the board. She'll beat Aldous, I think."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 80,
+        "affinity": 70,
+        "label": "counters partner",
+        "note": "We play at dawn, when he's finishing and I'm starting. He's better than me and doesn't gloat."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 55,
+        "affinity": 40,
+        "label": "tally keeper",
+        "note": "He's the best at counters and he knows it. I don't begrudge him."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She bakes her roots at the Batch and tells me who's been at the wall. I listen."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 50,
+        "affinity": 45,
+        "label": "peat man",
+        "note": "He brings the peat down and I ask him for a little for the Batch, every time."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 65,
+        "affinity": 50,
+        "label": "fish woman",
+        "note": "Her catch feeds the Marver. She's fair on the Fish Steps and I tell her so."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 55,
+        "affinity": 45,
+        "label": "reader",
+        "note": "He taught me my letters at the Readers' House when I was a boy, and I've not forgotten it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning I first lit the Batch on my own, with my mother watching from the door, and the peat caught first time.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The fever winter: I kept the Batch going for the ones who could still eat, and left roots at doors for the ones who couldn't.",
+        "salience": 0.85,
+        "about": [
+          "Mirren Quill",
+          "Dolly Achterberg"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm took the Batch chimney pot off and I had the fire out for a day; the whole row went hungry for their roots and told me about it for a month.",
+        "salience": 0.75,
+        "about": [
+          "Gwil Stannard"
+        ]
+      },
+      {
+        "gist": "The dawn I beat Anselm at counters, three games to two, and he laughed and said the light had been in my eyes.",
+        "salience": 0.6,
+        "about": [
+          "Anselm Faro"
+        ]
+      },
+      {
+        "gist": "The day Roos was born, and I lit the Batch at three and told everyone who came for their roots.",
+        "salience": 0.8,
+        "about": [
+          "Roos Achterberg",
+          "Dolly Achterberg"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_oven_must_be_hot_for_everyone",
+        "value": 0.9,
+        "why": "It's the common oven. If it's cold, the row goes hungry, and that's on me."
+      },
+      {
+        "key": "ask_for_peat_politely",
+        "value": 0.75,
+        "why": "Everyone who bakes should bring a little. I ask, I don't demand, and mostly they do."
+      },
+      {
+        "key": "counters_is_a_fair_game",
+        "value": 0.8,
+        "why": "You win or you lose and you shake hands. I've played Anselm a thousand mornings and never once cheated."
+      },
+      {
+        "key": "sleep_when_the_work_is_done",
+        "value": 0.6,
+        "why": "I'm no use after one. The town knows to come in the morning."
+      },
+      {
+        "key": "a_quiet_dawn_is_worth_waking_for",
+        "value": 0.7,
+        "why": "The harbour before the boats, the light on the Combs. It's the best hour of the day."
+      }
+    ],
+    "secret": ""
+  },
+  "Roos Achterberg": {
+    "narrative": "I serve at the Marver from eleven to seven, and then I take my counters down to the arcade and run the game. I carved the best set in Cullet out of a piece of wreck-wood, and I've won more drops with it than I can count. What I haven't done is beat Aldous Quill. Not once. He sits there with his cup and his little smile and takes me apart, and I go home and think about it till I sleep.",
+    "values": [
+      "a fair game",
+      "my own counters",
+      "my friends",
+      "beating the best"
+    ],
+    "goals": [
+      "Beat Aldous Quill at counters, once, and have it seen",
+      "Carve a set better than the one I have",
+      "Keep Lorcan Vane's drops coming in without letting him think he's owed",
+      "See Neve Calloway happy, whatever she decides about Imre"
+    ],
+    "pastimes": [
+      "Carving counters by the kitchen fire",
+      "Playing the board alone at night, working out the endgame",
+      "Walking the quay with Neve at dusk"
+    ],
+    "calling": "I'd carve counters and run the game for a living if the town had the drops for it; the Marver pays, but the board is what I love.",
+    "mood": "Sharp, restless, good-humoured on the surface.",
+    "traits": {
+      "caution": 45,
+      "sociability": 75,
+      "empathy": 55,
+      "curiosity": 65,
+      "ambition": 75,
+      "introspection": 50,
+      "temper": 40,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Dolly Achterberg",
+        "trust": 85,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She keeps the house full and the pots hot, and she's never once told me to give up the board."
+      },
+      {
+        "name": "Pieter Achterberg",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "Up at three, asleep by one. He taught me the game and he's never beaten Aldous either."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 50,
+        "affinity": 30,
+        "label": "rival",
+        "note": "The best player in Cullet, and he knows it. I'll have him one night."
+      },
+      {
+        "name": "Lorcan Vane",
+        "trust": 20,
+        "affinity": 25,
+        "label": "debtor",
+        "note": "He loses to me most nights and pays me most nights, and drinks it back the next. I take his drops all the same."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 85,
+        "affinity": 80,
+        "label": "friend",
+        "note": "She's the only one who tells me the truth about my game. And about Imre, when she'll talk about it."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 60,
+        "affinity": 50,
+        "label": "player",
+        "note": "He plays my father at dawn and me at night, and he's the only one who plays slowly enough to teach me something."
+      },
+      {
+        "name": "Davin Vane",
+        "trust": 55,
+        "affinity": 45,
+        "label": "quiet one",
+        "note": "He comes in for his brother's slate and never plays himself. I like him for it."
+      },
+      {
+        "name": "Kit Calloway",
+        "trust": 60,
+        "affinity": 50,
+        "label": "Neve's brother",
+        "note": "He hangs about the yard and the arcade, too young for the board and too proud to say so. I let him watch."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night I carved my first proper set of counters and took them to the arcade, and won three drops off Lorcan Vane.",
+        "salience": 0.7,
+        "about": [
+          "Lorcan Vane"
+        ]
+      },
+      {
+        "gist": "The first time Aldous Quill beat me, and he explained the trap afterwards as if I were a child, and I went home and worked it out on the board till dawn.",
+        "salience": 0.8,
+        "about": [
+          "Aldous Quill"
+        ]
+      },
+      {
+        "gist": "The storm night, when the sign came down and we fed the row from one pot, and I carried bowls up the wynds in the rain.",
+        "salience": 0.75,
+        "about": [
+          "Dolly Achterberg",
+          "Pieter Achterberg"
+        ]
+      },
+      {
+        "gist": "The evening Neve told me about Imre Sarro, and made me swear not to tell a soul, and I haven't.",
+        "salience": 0.65,
+        "about": [
+          "Neve Calloway"
+        ]
+      },
+      {
+        "gist": "The day I watched Anselm Faro play my father at dawn and saw, for the first time, how a game is won before the last counter is taken.",
+        "salience": 0.6,
+        "about": [
+          "Anselm Faro",
+          "Pieter Achterberg"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_board_is_a_fair_judge",
+        "value": 0.85,
+        "why": "It doesn't care who your family is. You win or you lose, and everyone sees."
+      },
+      {
+        "key": "losing_teaches_more_than_winning",
+        "value": 0.7,
+        "why": "Aldous has taught me more than anyone, and he's never lost to me."
+      },
+      {
+        "key": "a_debt_at_the_board_is_a_debt",
+        "value": 0.75,
+        "why": "Lorcan owes me most nights and I take his drops. If he can't pay, it doesn't go in the ledger, because I'd rather have him at the board."
+      },
+      {
+        "key": "friends_before_drops",
+        "value": 0.8,
+        "why": "Neve's worth more than any pot. I'd give her my counters if she asked."
+      },
+      {
+        "key": "carve_your_own",
+        "value": 0.65,
+        "why": "Anyone can buy counters. Mine are mine, and they play better for it."
+      }
+    ],
+    "secret": ""
+  }
+}

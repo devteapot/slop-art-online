@@ -112,6 +112,10 @@ pub struct Weight {
     /// rhythm; without one, 18:00 to 22:00). 0 or 1.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub evening: f32,
+    /// It is the body's own working hours (its rhythm's; with no set hours, any waking hour
+    /// outside its evening). 0 or 1.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub work_hours: f32,
     /// The character's own stances (judgment value 0..1) by key.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub believes: std::collections::BTreeMap<String, f32>,
@@ -223,6 +227,8 @@ pub enum Cond {
     Bedtime(bool),
     /// It is my own evening (the hours before my bedtime).
     Evening(bool),
+    /// It is my own working hours (my rhythm's; with no set hours, waking and not my evening).
+    WorkHours(bool),
     /// It is raining (the world's weather, which falls everywhere at once).
     Raining(bool),
     /// Someone greeted me (a gesture made at me, such as a wave or a nod) within the last N
@@ -764,7 +770,7 @@ pub fn describe(n: &Node) -> String {
 /// A desire's weight in words, e.g. "0.2 + hunger×1.5 + night×0.4".
 pub fn describe_weight(w: &Weight) -> String {
     let mut parts = vec![format!("{}", w.base)];
-    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted), ("starving", w.starving), ("exhausted", w.exhausted), ("rain", w.rain), ("hailed", w.hailed), ("commotion", w.commotion), ("bedtime", w.bedtime), ("evening", w.evening)] {
+    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted), ("starving", w.starving), ("exhausted", w.exhausted), ("rain", w.rain), ("hailed", w.hailed), ("commotion", w.commotion), ("bedtime", w.bedtime), ("evening", w.evening), ("work_hours", w.work_hours)] {
         if v != 0.0 {
             parts.push(format!("{k}×{v}"));
         }
@@ -865,6 +871,8 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Bedtime(false) => "not my bedtime".into(),
         Cond::Evening(true) => "my evening".into(),
         Cond::Evening(false) => "not my evening".into(),
+        Cond::WorkHours(true) => "my working hours".into(),
+        Cond::WorkHours(false) => "not my working hours".into(),
         Cond::Raining(true) => "raining".into(),
         Cond::Raining(false) => "not raining".into(),
         Cond::Hailed(s) => format!("greeted in last {s}s"),

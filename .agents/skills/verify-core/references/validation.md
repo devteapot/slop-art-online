@@ -4,12 +4,39 @@
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
 
-- `core-fov1-j` (default seed, the final build: graph scenes see and hear from one gather, `perception::sensed`): `fov` 18 of 18; `tick` 6, `sight` 6, `senses` 7, `moves` 5, `death-names` 8 pass; `doing` fails as below.
+- `core-fov1-m` (after merging `origin/main` `accf27c8`, eye-2's sight included): `fov` 18 of 18, `sight` 6, `senses` 7.
+- `core-fov1-j` (default seed, the final build before the merge: graph scenes see and hear from one gather, `perception::sensed`): `fov` 18 of 18; `tick` 6, `sight` 6, `senses` 7, `moves` 5, `death-names` 8 pass; `doing` fails as below.
 - `core-fov1-c` (the build before that): `fov` 18 of 18 (new: off as shipped; `set_world_law` refusals, the script block at a new revision, `law_change` and the chronicle row; facing east and west; the 3 m ring guarding a strike from 1 m behind; a 0.5 m ring: 1.5 m behind unseen, no guard, the blow lands; witnesses by facing; off again). Then `tick`, `sight`, `senses` and `moves` pass on the same world.
 - `doing` failed twice on that world (`doing.txt`, `doing-2.txt`): the admin CLI took 1 to 14 s a call on the loaded host, so the walkers finished before the observer's scene was written (`doing-actions.jsonl`). No field was on. It failed the same way on `origin/main` (`6288f599`, exported to `.local/fov1/main-src`, run `core-main-doing`), so it is an existing failure under load, not this change.
 - Earlier `fov` attempts (`core-fov1-a`, `-b`, `-d` to `-i`) found harness faults, now fixed in the scene. `say` lines are 2 s apart. The same graph does not restart, and waits are held to 120 s. The dark near ring (2 m) is a separate law. Onlookers stand on the open line, not off it. Witnesses are told only a fight's first blow (30 s), so duels are 31 s apart. A striker facing away cannot see its target with a 0.5 m ring, so it turns first; a strike cannot be a `mind_act`.
 - Not run on this change: needs, food, refusal, seize, death-names, skirmish, drop, low, dealings, town, lives, goods, laws, infant; mechanics.
 
+
+## 2026-11-11 lives-3: rhythms at any hour, Cullet's trades, Cullet's life law (dev-box)
+
+Branch `lives-3` (from the coordinator's main `3faa7bfb`; origin/main `12fd78ef`, with Cullet's 64 drafted residents, then `bade5c09` merged), own container `lives3-stdb` (2.14.1, port 3321, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- Cargo: rules 171 (163 pass, 8 ignored; new: `rhythm::tests` 4, `cullet_check::life_tests` 3, `cullet_check::ways_tests` 1), authority 18 (new: `drawn_rhythms_keep_their_phase`, `seeded_rhythms_rise_at_any_hour`), mind 82; `just living-check` exits 0. The phase test failed once in a first draft (an hour within float rounding of rising read as bedtime); the rule keeps the old `h < rise + 24` term since.
+- `rhythm.py` (new scene, derived Cullet seed, 12-minute day): `core-l3rhythm1` (before the merge, cast compiled without sheets) 17 of 20: the habits' `take` walked to a storage that had none and back (fixed: `take` targets a storage that `holds` the item), and the scene's people had no food (the seed has no stores yet; the scene now gives them some). `core-l3rhythm2` (after the merge, the seed's own residents with sheets) 19 of 20: "the night stoker is asleep at home in the morning" counted only `sleep`, while in bed hours a rested person rests at home (`keep warm`); the check now counts asleep or resting (re-scored from the same samples: 1.0). `core-l3rhythm3` (final tree) 20 of 20: Thessaly rises at 14:00, bed 31.0, works 22:00–06:00; Anselm 13:00, works 19:30–06:00; Pieter's second sleep 13:00–19:00; Tobiah (16) and Col (15) adults, Halvard (70) an elder; the stokers and the blower start with `stoke the Cone` and `blow glass`; 09:00–13:30 the day stoker at the Cone 32 of 32 samples, the furnace lit 31 of 32, `feed` and `make` seen, the night stoker in bed at home 0.97; 15:00–18:30 she is up 25 of 25 and off work, the baker asleep 25 of 25; 23:00–04:00 she is at the Cone 0.85 and keeps the furnace lit 28 of 33 with 8 feeding samples, the day stoker in bed at home 33 of 33, the lamp keeper at the Watchglass 33 of 33; nobody died of age.
+- `town.py` on an island run (`core-l3-town`): 22 of 23. "A resident faces someone who comes up behind them" failed, and failed again in 3 reruns on that world and 2 of 3 on a fresh one (`core-l3-town2`). On an origin/main build (`bade5c09`, no authority or rules change since the merge point; `core-l3base-town`, evidence kept in `.local/lives3/base-evidence/`) it passed 1 of 5. The recorded flake, more frequent today on both builds; not this change.
+- `lives.py --minutes 24` on island runs: `core-l3-lives` 17 of 19 (two carriers did not set out), `core-l3-lives2` 18 of 19, and `core-l3base-lives` on the origin/main build 18 of 19 with the same failure: Tavvik, the meat carrier, never leaves (stages reached none of 10). Not this change (the island's graphs have no `work_hours`, its rhythms are drawn and unchanged); a finding for the lives owner: the 2026-11-11 `core-hunger-101946-lives` run had 19 of 19.
+- After merging origin/main again (`f793143a`: eye-2's sight, kit-1's plan fixtures): `rhythm.py` 20 of 20 (`core-l3rhythm4`), rules 166 pass (8 ignored), authority 18, `just living-check` exits 0.
+- Not run on this change: tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, goods, stock, laws, infant, lifecycle, wildlife, remains, flee; mechanics and steering.
+
+
+## 2026-11-11 eye-2: things open at eye height are see-through (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `sight` (default world) | `core-eye2v` | 6 of 6 |
+| `senses` (default world) | `core-eye2v` | 6 of 6 |
+| `low` (island; 9,153 low tiles since eye-2) | `core-eye2v-skirmish` | 5 of 5; the run crossed low tiles at (437, 174)–(437, 175) (`low-spots.json`), no longer only a cart's |
+| `drop` (plan-test) | `core-eye2v-drop` | 5 of 5 |
+| Rules | `cargo test -p living-rules` (in `just living-check`) | 154 passed, including `host::tests::a_well_and_an_open_stall_are_seen_through_but_a_closed_building_is_not`, `sight_is_blocked_only_above_eye_height`, `eye_cells_decode`, `pinned_digests_hold`, `map::tests::drops_and_low_things_are_told_in_words` |
+
+Maintained in the same change: sight.md (low things since eye-2, the rules tests, the night-sight gotcha of `drop`/`low`), SKILL.md, features/README.md and `scenes.py`'s docstring no longer say a low thing is a cart.
 
 ## 2026-11-11 drop-1: drops and low things are see-through (dev-box)
 
@@ -40,6 +67,16 @@ Branch `fix-death-labels` (rebased on main `6a905c3`, then on `a8d95fc`), the tr
 - `just living-check` exit 0.
 - On `a8d95fc` + this change (`core-deathnames-head`, `core-deathnames-head-laws`): `cargo_checks.py` pass (rules 145, authority 15, mind 82, viewer-sync 5); death-names 8/8 with the same texts; doing, tick, needs, food, refusal, seize, sight, senses, moves pass; `laws` pass (the same SKIP); `just living-check` exit 0. `remains` and `skirmish` were not rerun on this base (last run on `6a905c3`).
 - Not run: town, lives, infant, lifecycle, wildlife, mechanics, steering, dealings.
+## 2026-11-11, branch fix-graph-say-id (a graph's say: the speaking limit, feedback)
+
+Spark, the trial stack's server (`slop-trials-stdb`, v2.14.1, :3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), worktree on `origin/main` 7a75f6b, private `CARGO_TARGET_DIR`, no minds. Report checked: "a resident's `say` to `{"id": N}` silently fails while `strike` to the same id works".
+
+- Before the change (`core-sayid-i`, island, world hour 7.6, speaker and listener 3 m apart in the open): all 24 combinations of four written forms, three target spellings (`{"id": N}`, `N`, `{"nearest": …}`) and two install paths (`set_behavior`, `mind_install`) spoke to the listener; `do` wave and strike to the same id acted. What failed: the second of two lines within the 2 s speaking limit (two installs back to back, or two says in one `seq`) was never spoken, and a say to someone out of sight left no experience (`say-prefix.txt`, `say-back-to-back.json`, `say-two-lines.json`, `say-out-of-sight-feedback.json`). Cause: the say node set its 45 s pacing mark before `speak`, so a line refused as "speaking too fast" was skipped as done on the next look; a missing listener failed with no feedback.
+- After (`core-sayid-j`, island): the new `scenes.py say` passed 34/34; the second lines came 2.15–2.25 s after the first; the out-of-sight line gave one `own` experience ("You failed to say "…": no #313 in sight").
+- Baseline on the default seed (`core-sayid-d`, say placed after refusal): tick 6, needs 7, food 4, refusal 4, say 34, seize 6, sight 6, senses 7, moves 5 passed; `doing` failed, as it did twice in `core-sayid-b`. All three failures read the observer's scene at night (`time.night`, sight 6 m, world hour 1.2–4.8), with the walkers and follower 8–10 m away; the passes (`core-sayid-c` say then doing, and the `origin/main` control `core-sayid-main` senses then doing, without the change) ran by day (sight 11 m). So `doing` depends on the world's hour, not on the change: a baseline long enough to reach the default seed's night fails it. An earlier reading here (the say scene's actors crowding the scene) was wrong; the say scene still moves its actors off the line, and now runs last in the baseline so it does not push `doing` toward dusk. The `doing` scene should hold its cast within night sight or wait for day; not changed here.
+- Cargo (`cargo_checks.py`, `core-sayid-c`): rules 145, authority 14, mind 82, viewer sync 5. `just living-check` passed. Skirmish 8/8 (`core-sayid-j`), mechanics 23/23, steering 5/5 (published from the run's own module with `--wasm`).
+- On the pushed head b9f9662: `just living-check` passed (a first attempt failed in `living-authority`'s build script, compiled for the removed control worktree with its seed path; `cargo clean -p living-authority` on the shared target dir fixed it: `core-sayid-head/living-check-attempt1-stale-build-script.txt`). `core-sayid-head` (default seed, documented order, say last): cargo 4/4, tick 6, needs 7, food 4, refusal 4, seize 6, sight 6, senses 7, moves 5, say 34 passed; `doing` failed at world hour 1.4 (night, sight 6 m) before say had run. The control `core-sayid-main2` (`origin/main` 7a75f6b, senses then doing) passed both by day (hour 10.4). `core-sayid-headi` (island, hour 7.7): say 34/34 (second lines 2.25 s after the first), skirmish 8/8.
+- Not run: dealings, town, lives, laws, infant, lifecycle, wildlife (no shipped instinct or seed graph has a say node; only mind-written graphs do), and verify-minds (the mind protocol is unchanged).
 
 ## 2026-11-11 rules-1: a world's own day and laws (dev-box)
 

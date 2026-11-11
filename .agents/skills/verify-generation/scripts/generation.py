@@ -34,7 +34,7 @@ FLOORS = ("floor-megacity-4k", "cullet-laws-floor")
 LAWS_FLOORS = {"cullet-laws-floor": "cullet-laws"}
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine", "relation", "acquaintance", "world_law", "script")
+          "place", "routine", "relation", "acquaintance", "world_law", "script", "rhythm")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -324,6 +324,34 @@ def check_seed(seed, rows):
         c = communities.get(community["name"], {})
         equal(f"{community['name']} home", [c.get("home_x"), c.get("home_y")], community["home"])
         equal(f"{community['name']} members", sorted(chars[m["member"]]["name"] for m in rows["membership"] if m["community"] == c.get("id")), sorted(community["members"]))
+    # People's rhythms (docs/SEEDED_LIVES.md): a person without one from the seed has a drawn one
+    # (rising 04:00-09:00, to bed 19:30-02:30, an evening of 1.5-4.5 hours, no working hours and
+    # no second sleep: what every seed before lives-3 gives); one the seed gives is as given.
+    people = [c for c in rows["character"] if c["kind"] == "person"]
+    rhythm = {r["id"]: r for r in rows.get("rhythm", [])}
+    given = {r["name"]: r["rhythm"] for t in seed.get("towns", []) + seed.get("villages", []) for r in t.get("residents", []) if r.get("rhythm")}
+    drawn_ok = lambda r: 4.0 <= r["rise_h"] <= 9.0 and 19.5 <= r["bed_h"] <= 26.5 and 1.5 <= r["evening_h"] <= 4.5 and (r.get("work_from_h", 0), r.get("work_to_h", 0), r.get("nap_from_h", 0), r.get("nap_to_h", 0)) == (0, 0, 0, 0)
+    adults = [c for c in people if c.get("stage", 2) >= 1]
+    unseeded = [c for c in adults if c["name"] not in given]
+    bad = [(c["name"], rhythm.get(c["id"])) for c in unseeded if c["id"] in rhythm and not drawn_ok(rhythm[c["id"]])]
+    present("people without a seeded rhythm have a drawn one (no working hours, no second sleep)" + ("" if unseeded else " (none)"), not bad and sum(c["id"] in rhythm for c in unseeded) >= 0.9 * len(unseeded), {"people": len(unseeded), "with_row": sum(c["id"] in rhythm for c in unseeded), "wrong": bad[:10]})
+    def span(x):
+        # A seed's [from, to] as stored: from in 0..24, to after it within a day; empty is none.
+        if not x or (x[1] - x[0]) % 24 == 0:
+            return (0.0, 0.0)
+        return (x[0] % 24, x[0] % 24 + (x[1] - x[0]) % 24)
+
+    def as_given(r, g):
+        close = lambda a, b: abs(a - b) < 1e-3
+        rise = g["rises"] % 24 if "rises" in g else r["rise_h"]
+        work, nap = span(g.get("works")), span(g.get("second_sleep"))
+        awake = r["bed_h"] - r["rise_h"]
+        bed = "sleeps" not in g or close((r["bed_h"] - g["sleeps"]) % 24, 0) or close((r["bed_h"] - g["sleeps"]) % 24, 24) or close(awake, 8) or close(awake, 22)
+        return close(r["rise_h"], rise) and bed and close(r.get("work_from_h", 0), work[0]) and close(r.get("work_to_h", 0), work[1]) and close(r.get("nap_from_h", 0), nap[0]) and close(r.get("nap_to_h", 0), nap[1])
+
+    seeded = [(c["name"], c["id"]) for c in people if c["name"] in given]
+    wrong = [(n, given[n], rhythm.get(i)) for n, i in seeded if i not in rhythm or not as_given(rhythm[i], given[n])]
+    present("seeded rhythms are as given (any rising hour, working hours, a second sleep)" + ("" if seeded else " (none: the seed gives none)"), not wrong, {"seeded": len(seeded), "wrong": wrong[:10]})
     if m.get("kind") == "land":
         checks.extend(check_land(seed, rows, size[0], tiles))
     return checks
@@ -403,9 +431,11 @@ def check_land(seed, rows, side, tiles):
     present("no structure on open lots", all(l["structure"] == 0 for l in lots if l["kind"] not in DOOR_KINDS))
     present("doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in lots if l["structure"]), [l["id"] for l in lots if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE][:20])
     blocking = [l for l in lots if l["kind"] in BLOCKING]
-    # Wall under what rises above the eye, low (9) under what does not (`LandParams.sight`).
-    walled = [l["id"] for l in blocking if tile(l["x"], l["y"]) in (7, 9)]
-    present("blocking lots stand on wall or low tiles", len(walled) == len(blocking), {"blocking": len(blocking), "wall_at_centre": len(walled), "open": [l["id"] for l in blocking if l["id"] not in walled][:20]})
+    # Wall where a model is solid at eye height, low (9) where it is not (`LandParams.sight`,
+    # the table's `eye_cells`; eye-2); over a drop's edge, a part that does not hide stays a
+    # drop (8). Never walkable.
+    walled = [l["id"] for l in blocking if tile(l["x"], l["y"]) in (7, 8, 9)]
+    present("blocking lots stand on wall, low or drop tiles", len(walled) == len(blocking), {"blocking": len(blocking), "unwalkable_at_centre": len(walled), "wall_at_centre": sum(tile(l["x"], l["y"]) == 7 for l in blocking), "open": [l["id"] for l in blocking if l["id"] not in walled][:20]})
     # Drops between ground levels are `drop` (8), not `wall` (7): people see across them
     # (docs/PERCEPTION.md). A planned settlement always has some; terraced towns usually do.
     drops = sum(t.count(8) for t in tiles)

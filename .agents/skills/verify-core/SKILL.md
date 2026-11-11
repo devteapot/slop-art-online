@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm, places, weather, gestures), sight that depends on facing (the fov_on law, set_world_law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), sight that depends on facing (the fov_on law, set_world_law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -41,6 +41,7 @@ python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
 python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
+python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
 # The starter combat skills under graphs use the island seed (its newcomer kit, pack and
@@ -49,7 +50,7 @@ K=$R-skirmish
 mkdir -p ".local/living/verify/$K"
 python3 "$V" launch --run "$K" --seed island > ".local/living/verify/$K/launch.txt" 2>&1
 python3 "$C/scenes.py" skirmish --run "$K" > ".local/living/verify/$K/skirmish.txt" 2>&1
-# The drop scene over a low thing (tile 9, a cart below eye height) on the same island world.
+# The drop scene over low tiles (9: a cart, an open stall, a well, a building's overhang: open at eye height) on the same island world.
 python3 "$C/scenes.py" low --run "$K" > ".local/living/verify/$K/low.txt" 2>&1
 python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
 
@@ -76,6 +77,16 @@ mkdir -p ".local/living/verify/$T"
 python3 "$V" launch --run "$T" --seed island > ".local/living/verify/$T/launch.txt" 2>&1
 python3 "$C/town.py" --run "$T" > ".local/living/verify/$T/town.txt" 2>&1
 python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
+
+# Rhythms at any hour and Cullet's trades (about 17 min): a night stoker rising at 14:00 and
+# working the night, the day watch feeding the furnace and making glass, a baker's second sleep,
+# Cullet's life stages (features/town.md, features/laws.md, docs/SEEDED_LIVES.md).
+Y=$R-rhythm
+mkdir -p ".local/living/verify/$Y"
+python3 "$C/rhythm.py" seed --run "$Y" > ".local/living/verify/$Y/seed.txt" 2>&1
+python3 "$V" launch --run "$Y" --seed "$PWD/.local/living/verify/$Y/cullet-rhythm" > ".local/living/verify/$Y/launch.txt" 2>&1
+python3 "$C/rhythm.py" drive --run "$Y" > ".local/living/verify/$Y/rhythm.txt" 2>&1
+python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
 
 # Seeded lives on an island world (about 25 min): placement, routes, the road, ties
 # (features/lives.md, docs/SEEDED_LIVES.md).
@@ -129,7 +140,7 @@ cargo test --manifest-path living/Cargo.toml -p living-mind
 cargo test --manifest-path living/Cargo.toml -p living-viewer sync::tests
 ```
 
-The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
+The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. It skips a step that already passed on this machine on identical inputs (docs/TOOLING.md); `just living-check-full` runs every step, and `LIVING_CHECK_SERIAL=1` shows cargo's output and the test counts on the terminal. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
 
 ## Drive the existing mechanics and steering scripts
 

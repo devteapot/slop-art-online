@@ -1,0 +1,369 @@
+{
+ "schema": 1,
+ "family": "building:marver",
+ "id": "20261111-368e2af4-4bacd3",
+ "published": "2026-11-11T17:48:57+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1: built for its lot from the plan (footprint, height, wear and seed from plan.json); glow set in the game at 21:30 against 13:00",
+ "source": {
+  "commit": "368e2af4b14033a9e8da023fcc63b95c27a5a9bb",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "5f70615004be4033b28a542e829eaf40b0eef97ddcc9c31bb4e4b906c7bd9803",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-marver/20261111-368e2af4-4bacd3",
+ "members": [
+  {
+   "name": "marver",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/marver/marver.glb",
+   "sha256": "1366e373c668a37f2316fe6fbce0571987e68a56c7587e2c822334c5e18997d3",
+   "stats": {
+    "file": "marver.glb",
+    "sha256": "1366e373c668a37f2316fe6fbce0571987e68a56c7587e2c822334c5e18997d3",
+    "bytes": 401696,
+    "triangles": 5656,
+    "vertices": 11392,
+    "parts": {
+     "marver": 5656
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowAmber",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 79,
+    "palette": [
+     {
+      "hex": "#3a3d44",
+      "share": 0.3642
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.19
+     },
+     {
+      "hex": "#e3e2d7",
+      "share": 0.1575
+     },
+     {
+      "hex": "#5b6067",
+      "share": 0.1546
+     },
+     {
+      "hex": "#3f2c28",
+      "share": 0.036
+     },
+     {
+      "hex": "#4b505a",
+      "share": 0.0356
+     },
+     {
+      "hex": "#475261",
+      "share": 0.022
+     },
+     {
+      "hex": "#c2c1b4",
+      "share": 0.0107
+     },
+     {
+      "hex": "#626e80",
+      "share": 0.0056
+     },
+     {
+      "hex": "#9eccc7",
+      "share": 0.004
+     },
+     {
+      "hex": "#54342d",
+      "share": 0.0038
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.0036
+     },
+     {
+      "hex": "#878684",
+      "share": 0.0033
+     },
+     {
+      "hex": "#c4972c",
+      "share": 0.0021
+     },
+     {
+      "hex": "other",
+      "share": 0.0073
+     }
+    ]
+   },
+   "file": "files/marver.glb",
+   "report": {
+    "file": "marver/marver.glb",
+    "what": "lot",
+    "kind": "marver",
+    "size_m": [
+     12.0,
+     8.5
+    ],
+    "plan_height_m": 10.56,
+    "seed": 72884,
+    "above_floor_m": [
+     [
+      -6.02,
+      -4.25
+     ],
+     [
+      6.07,
+      4.28
+     ]
+    ],
+    "height_m": 12.56,
+    "foundation_m": 1.8,
+    "tris": 5656,
+    "materials": {
+     "Body": 5577,
+     "GlowAmber": 11,
+     "Glow": 68
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9362,
+    "palette_wear_blend_share": 0.0638,
+    "budget_tris": 9000,
+    "doors": [
+     {
+      "at": [
+       -4.7,
+       -3.1,
+       1.36
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "1366e373c668a37f2316fe6fbce0571987e68a56c7587e2c822334c5e18997d3",
+    "ridge_m": 10.56,
+    "hatches": 3,
+    "household": "achterberg",
+    "keepsake": "a ship's figurehead over the door"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     12.107588768005371,
+     14.360000610351562,
+     8.548535346984863
+    ],
+    "triangles": 5656,
+    "vertices": 11392,
+    "meshes": 3,
+    "materials": [
+     "Body",
+     "GlowAmber",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "terrace",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/marver_terrace/marver_terrace.glb",
+   "sha256": "fffe6320d6ebb8ccaac34dca8af7b72ca94c3b1a4a39d6f38010d573140d47e3",
+   "stats": {
+    "file": "marver_terrace.glb",
+    "sha256": "fffe6320d6ebb8ccaac34dca8af7b72ca94c3b1a4a39d6f38010d573140d47e3",
+    "bytes": 141724,
+    "triangles": 1924,
+    "vertices": 4000,
+    "parts": {
+     "marver_terrace": 1924
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 8,
+    "palette": [
+     {
+      "hex": "#35363b",
+      "share": 0.4332
+     },
+     {
+      "hex": "#4c4e55",
+      "share": 0.4289
+     },
+     {
+      "hex": "#7f7a73",
+      "share": 0.0703
+     },
+     {
+      "hex": "#646157",
+      "share": 0.0206
+     },
+     {
+      "hex": "#673d29",
+      "share": 0.0193
+     },
+     {
+      "hex": "#6d6d64",
+      "share": 0.0103
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.0092
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.005
+     },
+     {
+      "hex": "#8e887a",
+      "share": 0.0013
+     },
+     {
+      "hex": "#d1c9b2",
+      "share": 0.0009
+     },
+     {
+      "hex": "#c57e28",
+      "share": 0.0007
+     },
+     {
+      "hex": "#a0d0cd",
+      "share": 0.0002
+     },
+     {
+      "hex": "#367154",
+      "share": 0.0001
+     }
+    ]
+   },
+   "file": "files/terrace.glb",
+   "report": {
+    "file": "marver_terrace/marver_terrace.glb",
+    "what": "fixture",
+    "kind": "marver_terrace",
+    "size_m": [
+     12,
+     6.5
+    ],
+    "plan_height_m": 2.6,
+    "seed": 40878,
+    "above_floor_m": [
+     [
+      -6.0,
+      -3.25
+     ],
+     [
+      6.0,
+      3.25
+     ]
+    ],
+    "height_m": 2.57,
+    "foundation_m": 0.002,
+    "tris": 1924,
+    "materials": {
+     "Body": 1916,
+     "Glow": 8
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7401,
+    "palette_wear_blend_share": 0.2599,
+    "budget_tris": 2500,
+    "doors": [],
+    "sha256": "fffe6320d6ebb8ccaac34dca8af7b72ca94c3b1a4a39d6f38010d573140d47e3",
+    "ridge_m": 2.6,
+    "seats": 6
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     12.0,
+     2.571376323699951,
+     6.5
+    ],
+    "triangles": 1924,
+    "vertices": 4000,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

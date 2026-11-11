@@ -263,6 +263,14 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     Ok("made a baby crying".into())
 }
 
+/// The shortest gap between two lines one speaker says (ms).
+pub const SPEAK_GAP_MS: u64 = 2_000;
+
+/// Whether `speaker` must still wait before its next line (the speaking limit in `speak`).
+pub fn too_soon_to_speak(ctx: &ReducerContext, speaker: u32, now: u64) -> bool {
+    ctx.db.mind_state().id().find(speaker).is_some_and(|st| now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS)
+}
+
 pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
@@ -272,7 +280,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
     let Some(me) = ctx.db.character().id().find(speaker) else { return Err("no speaker".into()) };
     let Some(b) = ctx.db.body().id().find(speaker) else { return Err("no body".into()) };
     if let Some(mut st) = ctx.db.mind_state().id().find(speaker) {
-        if now.saturating_sub(st.spoke_ms) < 2_000 {
+        if now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS {
             return Err("speaking too fast".into());
         }
         st.spoke_ms = now;
@@ -436,9 +444,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     {
         let w = common::world(ctx);
-        let life = common::life_of(&me.kind);
+        let life = common::life_of(ctx, &me.kind);
         let years = life.years_old(common::age_days(&me, &w, now), common::pace(&w));
-        you.insert("age".into(), json!(format!("{:.0} years ({})", years.floor(), common::stage_of(&me, &w, now).name())));
+        you.insert("age".into(), json!(format!("{:.0} years ({})", years.floor(), common::stage_of(ctx, &me, &w, now).name())));
     }
     // What one knows of one's own body and skill (inborn and practised).
     let body = living_rules::genes::notable(&common::genes_of(ctx, id));
@@ -685,7 +693,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut terrain = JMap::new();
     let (tx, ty) = (at.0.floor() as i32, at.1.floor() as i32);
     let ri = r as i32;
-    for kind in [living_rules::map::Terrain::Water, living_rules::map::Terrain::Forest, living_rules::map::Terrain::Rock, living_rules::map::Terrain::Road, living_rules::map::Terrain::Wall, living_rules::map::Terrain::Drop] {
+    use living_rules::map::Terrain;
+    for kind in [Terrain::Water, Terrain::Forest, Terrain::Rock, Terrain::Road, Terrain::Wall, Terrain::Drop, Terrain::Low] {
         let mut best: Option<(f32, (f32, f32))> = None;
         for dy in -ri..=ri {
             for dx in -ri..=ri {
@@ -699,7 +708,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
         }
         if let Some((d, p)) = best {
-            terrain.insert(kind.name().into(), json!(format!("{} {:.0}", direction(at, p), d)));
+            // A class whose name does not say what it does is told in words, with how it meets
+            // the foot and the eye ("south 5, a drop to ground at another level (...): you can
+            // see past it but not walk through it").
+            let said = match kind.words() {
+                Some(w) => format!("{} {:.0}, {w}: {}", direction(at, p), d, kind.passage()),
+                None => format!("{} {:.0}", direction(at, p), d),
+            };
+            terrain.insert(kind.name().into(), json!(said));
         }
     }
 

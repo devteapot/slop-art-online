@@ -55,11 +55,14 @@ pub struct Action {
     /// none): a move plays only its motion, timed to the rules' windup ([`timing`]).
     pub from: f32,
     pub cut: Option<f32>,
+    /// A whole-body clip that lets the gait go on stepping under it (a moving jump's take, so the
+    /// gait is in stride when the take fades at landing; `anim.rs`).
+    pub gait: bool,
 }
 
 impl Default for Action {
     fn default() -> Self {
-        Self { clip: "", rate: 1.0, start_ms: 0.0, hold: None, face: None, from: 0.0, cut: None }
+        Self { clip: "", rate: 1.0, start_ms: 0.0, hold: None, face: None, from: 0.0, cut: None, gait: false }
     }
 }
 
@@ -380,7 +383,7 @@ pub fn input(
     let (Some(conn), Some(me_id), Some(me3)) = (net.conn.as_ref(), net.my_id, target.0) else { return };
     let me = Vec2::new(me3.x, me3.z);
     let typing = input.chat_open || ui.keyboard;
-    let free_mouse = !ui.pointer && !ui.menu;
+    let free_mouse = !ui.over() && !ui.menu;
     let mut presses: Vec<(String, Option<Vec2>, Option<u32>)> = Vec::new();
     // A script's indicator (headless photographs).
     let mut scripted_aiming = None;

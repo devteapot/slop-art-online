@@ -301,7 +301,10 @@ impl Net {
     /// Record a reducer's refusal (the authority's error text) for the HUD.
     pub fn on_reply(&self, what: &'static str) -> impl FnOnce(&ReducerEventContext, Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) + Send + 'static {
         let errors = self.errors.clone();
-        move |_, r| {
+        move |ctx, r| {
+            if let Ok(o) = &r {
+                crate::record::reply(what, &ctx.event.reducer, o.clone(), ctx.event.timestamp.to_micros_since_unix_epoch());
+            }
             let msg = match r {
                 Ok(Ok(())) => return,
                 Ok(Err(e)) => format!("{what} refused: {e}"),
