@@ -1303,7 +1303,8 @@ def greet_case(run):
         row = max(aud, key=lambda r: r['at_ms'])
         hs = [h if isinstance(h, list) else [h['id'], h['d'], h['off']] for h in row['hearers']]
         # The rule's own reading of the row: the nearest, and the one within 6 m and 0.6 rad of the facing.
-        nearest = min(hs, key=lambda h: h[1])[0]
+        # The nearest of the hearers this service thinks for (other residents may stand nearer).
+        nearest = min((h for h in hs if h[0] in (a, b)), key=lambda h: h[1])[0]
         cone = [h for h in hs if h[1] <= 6.0 and h[2] <= 0.6]
         faced = min(cone, key=lambda h: (h[2], h[1]))[0] if cone else None
         results[arm] = {'answers_by': [t['actor'] for t in new], 'talk_requests': len(talks()) - heard, 'hearers': hs, 'nearest': nearest, 'faced': faced}
