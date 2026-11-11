@@ -294,6 +294,25 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
     - **Calibration:** the limits were set on the 2026-11-11 library, where 14 of the 32 Kimodo picks fail a check (listed in the script's header).
     - **First use (2026-11-11):** work, play, sit_ground_down, sit_ground and stand_up_ground were redone, then redone again after dev-box's in-game review asked for an upright, live seat. The seat is now its own pose entry, `sit_ground_pose`, keyed by all three, as `stand` is for standing. The entries' notes give the scores. The locomotion entries (assets-locomotion) were scored against the laptop's request and in-game verdicts (metres a cycle against the forward gait, seam angle), and the failing ones were retaken or re-picked.
     - **Posture and work metrics** (for `--expect`): `torso_pitch_deg` and `head_pitch_deg` (+ leans forward; standing −2 and 8), `shoulder_range_cm`, `seated_feet_min_cm` (the ankles' lowest height while seated; standing 7), `bench_busy_share` (both hands at bench height in front, one moving), `hops`, `cycle_ratio` (metres a cycle against walk_brisk or run_fast) and `loop_seam_deg`. Raw numbers differ from the baked ones: the bake picks its own loop cut and scales each rig, so the raw cycle ratio and seam angle read better than the laptop's bake.
+    - **Gait metrics (2026-11-11, speed takes):** `toe_slide_pct` is the laptop's no-slide line measured on the raw take: the slower toe within 5 cm of the floor, as a share of the body's speed (median after the skip; check it with `--expect 'toe_slide_pct<=5'`). The 2026-11-11 picks read 2.1–2.4 % (walk, walk_brisk), 4.5 and 3.2 % (run, run_fast), 7.4 % (run_back) and 8.5 and 8.1 % (strafe_run left and right), within a point or two of the shares the laptop measured in the game. `air_share` (both feet up) separates a walk from a jog, and `hips_bounce_cm` shows a bounding run (run#1: 8). An entry's `cadence_ref` names the forward take made for the same speed, in place of the family's forward gait. Raw speed for a game speed is the game speed over 0.955 on Vivi (Shino 0.985, own-man 0.93).
+    - **Kimodo's speed ceiling (measured 2026-11-11; do not ask it again):** a clean run above about 4 m/s raw is beyond the motion model. The forward run was pinned to a path at each speed and scored on the toe line, feet under the floor and contact slide:
+
+      | Path speed, raw m/s (on Vivi) | Takes | Hold the 5 % toe line | Also keep feet within 2 cm of the floor and contact slide within 10 cm/s | Median toe slide | Median hips bounce |
+      |---|---|---|---|---|---|
+      | 3.6 (3.44) | 16 | 5 | 2 | 5.4 % | 12 cm |
+      | 3.8 (3.63) | 84 | 13 | 7 | 7.4 % | 12 cm |
+      | 4.0 (3.82) | 40 | 1 | 0 | 12.2 % | 12 cm |
+      | 4.2 (4.01) | 24 | 0 | 0 | 14.4 % | 12 cm |
+      | 4.4 (4.20) | 16 | 0 | 0 | 20.7 % | 16 cm |
+      | 4.7 (4.49) | 16 | 0 | 0 | 39.7 % | 22 cm |
+      | 5.03 (4.80) | 74 | 0 | 0 | 21.4 % | 56 cm |
+
+      - At 5.03 m/s raw (the rules' 4.8 m/s run) the 74 takes covered 7 prompts, text and constraint guidance from 1 to 3.5, a ramped path and an 8 s take. The foot skims the floor at body speed for about three frames before it plants, and the hips bound 20–140 cm.
+      - Unpinned, "runs forward fast" levels off at 3.5–3.7 m/s raw (where `run_fast#1` was cut), and an unpinned 8 s "sprint" slows to 0.2–1.9 m/s.
+      - The best clean run is `run_v48` s0: 3.8 m/s raw, 3.63 m/s natural on Vivi, 2.80 m a cycle raw (2.68 on Vivi, `run_fast`'s), toe slide 4.3 %. Baked with `--target run_v48=4.8` it is time-scaled about 1.32. At 4.8 m/s it steps as often as `run_fast` does.
+      - Backward, sideways and back-diagonal runs are worse: no take of 132 held the toe line at any path speed from 2.6 to 3.8 m/s raw (best 5.6–8 %, medians 8–16 %), and slide rises sharply above 3.4.
+      - A faster run, or a 5.5 m/s road sprint, therefore needs another source: retiming a clean take (the bake's `--target`, or the game's phase rate), another motion generator, or hand keys.
+      - Evidence: `~/kimodo-locomotion-2026-11-12/` on the Spark (`lab/run_v48*/checks.json`, `exp*/`), and `extra/` in the handoff `speed-1-forward-2026-11-11.tar.gz`.
     - **Not covered:** it judges the raw take, not the retargeted VRoid clip. Skirts, grips, the game's foot IK and how a clip looks in the renderer are judged in the game.
   - **Loops:** idle, idle_look, walk, walk_brisk, run, run_fast, sneak, talk, talk_explain, listen and sit_idle are cut where pose and foot contacts match, and their seams are spread.
   - **One-shots:** wave, point, sit_down, stand_up, stand_up_ground, sword_slash, sword_overhead, sword_thrust, block, dodge, hit, death, cast and bow_shoot. Kimodo keyframes them to a shared neutral standing pose at the ends that should blend with idle. sit_idle and stand_up continue from sit_down.

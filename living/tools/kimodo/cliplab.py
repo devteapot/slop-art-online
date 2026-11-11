@@ -59,6 +59,17 @@ The winner is the eligible take with the lowest penalty (ties: the library take,
 seed). When no take passes, the one with the fewest failed checks, then the lowest penalty, is
 reported as the best of a failing set.
 
+Known limit of the motion model (measured 2026-11-11, speed takes): a clean run above about
+4 m/s raw is beyond Kimodo. With the forward run pinned to a path, 13 of 84 takes hold the 5 % toe
+line at 3.8 m/s raw (3.63 on Vivi), 1 of 40 at 4.0 (its toes 2.6 cm under the floor), and 0 of 130
+from 4.2 to 5.03 m/s raw, 74 of them at the 5.03 the rules' 4.8 m/s run needs (7 prompts, guidance
+1-3.5, a ramped path, an 8 s take: the foot skims the floor at body speed before it plants and the
+hips bound 20-140 cm). Unpinned, a fast run levels off at 3.5-3.7 m/s raw. Backward and sideways
+runs hold the line at no speed from 2.6 to 3.8 (0 of 132; best 5.6-8 %). The best clean run is
+run_v48 s0 (3.63 m/s natural on Vivi, run_fast's metres a cycle). A faster run needs another
+source: retiming (the bake's --target), another generator, or hand keys. Do not ask Kimodo again;
+the table is in docs/GAME_BRIEF.md (Clip lab, Kimodo's speed ceiling).
+
 Writes `<out>/<clip>/checks.json` (entry, limits, every take's metrics, checks and penalty, the
 winner and why), `<out>/<clip>/sheet.png` (every take: front and side poses, and the motion-energy
 curve with the active line), `<out>/<clip>/pick.png`, and appends a line to `<out>/report.md`.
