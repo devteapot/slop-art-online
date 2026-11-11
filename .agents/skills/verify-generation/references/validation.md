@@ -20,6 +20,16 @@ Branch `layout-1` (origin/main `6caebe20` merged: rates-2, lives-3, ground-1), o
 - Not rerun: every other seed, `authored`, `guards`.
 
 
+## 2026-11-11 rules-3: household stores owned, lots' own door structures (dev-box)
+
+Branch `rules-3` (from `93019a37`, origin/main `1d71e6c2` merged), own container `rules3-stdb` (2.14.1, port 3325), `scoped`, no minds. A maintain pass of the plans feature scoped to this change (`plan.rs` `StructureSpec.owner`, `LotSpec.structure`; `seed.rs` `plan_structures`, `authored_households`; `island.rs` door kinds; `floor.rs` households), not a source wave.
+
+- `generation-r3-200638` (`--feature worlds --seeds island,plan-test,cullet`): island 979 of 979, plan-test 79 of 79 (new: `its 1 household structures are placed and owned by their household's house owner`), cullet 318 of 319. The failure was the check, not the world: `authored structures and lot stores hold what the plan says` compared the 22 household stores exactly, and in the seconds the world ran before the snapshot (doctor) 17 households had already taken smoked fish from their own store (one baked roots with its peat, one stored ash), found through `like: "storage"`. Peat and roots were otherwise exact. The check now lets a household store hold less of the plan's items than placed (never more) and reports the use.
+- `generation-r3c-201236` (`--seeds cullet`, the corrected check): 319 of 319, including `2 lots have their own door structure (peat_barn, store)`, `its 22 household structures are placed and owned by their household's house owner` and `authored structures and lot stores hold what the plan says (17 household stores already used by their people)`; original seeds unchanged.
+- After merging origin/main `25c1fb92` (layout-1's plan, goods-2): `generation-r3m-210752` (`--seeds plan-test,cullet`): plan-test 79 of 79, cullet 319 of 319, the same household, door and store checks passing.
+- `seed::tests::a_plan_naming_kinds_the_world_lacks_is_refused` now also refuses an unknown door kind (`structure \`silo\``), a store owned by `household:nobody` (naming the 22 households) and any owned store on a seed with no residents.
+- Not rerun: realm, valley, authored-test, aske-coast, stage3-village, the megacity floors, cullet-laws, the guards and authored features (seeds without plans or owners; the parser and plan changes are covered by the rules and authority tests).
+
 ## 2026-11-11 rates-2: plan resources, structures and stores; unknown plan kinds refused (dev-box)
 
 Branch `rates-2` (from `f2d803fa`, origin/main `12fd78ef` merged, with the cast of Cullet), own container `rates2-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. A maintain pass of the plans feature scoped to this change: the map was read against the source it changed (`plan.rs`, `seed.rs` `plan_resources`/`plan_structures`/`put_authored`/`house_at`, `floor.rs` `plan_kinds`), not by a source wave.
