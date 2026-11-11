@@ -6,7 +6,10 @@
 //! - **Facing:** you face the cursor. The view only turns when you turn it (below); turning by
 //!   pointing toward a screen side is an option, off by default.
 //! - **Rotation:** hold `[` or `]`, or drag with the middle button; the view stays where you leave
-//!   it. Alt + mouse glances around and springs back.
+//!   it. Alt + mouse glances around and springs back. A turn or a zoom by hand leaves the cursor
+//!   where it is on the screen: what it points at, and so where you face, follows the view
+//!   (owner, Cullet walk 1, 2026-11-11; it used to stay on its ground point and ride off with the
+//!   view).
 //! - **Align (on request only):** tap the middle button, and the view turns until
 //!   the direction you face is straight ahead. The mouse cursor moves with the ground meanwhile,
 //!   so you keep facing the same spot (a fixed cursor would make the view keep turning).
@@ -125,9 +128,6 @@ pub struct Cam {
     /// Zoom: a factor on the view's distance (pinch or wheel, `pointer.rs`), and the one shown.
     pub zoom: f32,
     zoom_shown: f32,
-    /// The ground point the cursor stays on while the view is turned by hand, so where I face
-    /// doesn't change with the view.
-    turn_lock: Option<Vec3>,
     /// How far out the eye is (a share of the view's distance) while a building would hold it.
     pull: f32,
 }
@@ -304,9 +304,6 @@ pub fn follow(
     let window = windows.single().ok();
     let screen_size = window.as_ref().map_or(crate::capture::size().as_vec2(), |w| Vec2::new(w.width(), w.height()));
     let cursor = pointer.pos.map(|c| (c, screen_size));
-    // Last frame's cursor ground point, on the island's own ground where there is one
-    // (`live::ground_cursor` corrects the tile-ground ray below): what a turn keeps under the cursor.
-    let last_ground = cam.cursor_ground;
     cam.cursor_ground = cursor.and_then(|(c, _)| {
         let ray = camera.viewport_to_world(gtf, c).ok()?;
         scene.ray_ground(ray.origin, *ray.direction)
@@ -531,16 +528,11 @@ pub fn follow(
     tf.translation = eye;
     tf.look_at(cam.focus, Vec3::Y);
 
-    // While aligning, or turning the view by hand, keep the cursor on the same ground point, so
-    // your facing doesn't change (and an align ends with that point straight ahead).
+    // While aligning, keep the cursor on the same ground point, so your facing doesn't change and
+    // the align ends with that point straight ahead (a cursor fixed on the screen would keep the
+    // view turning after your facing). A turn or a zoom by hand (a pan, a drag, `[` `]`, a pinch,
+    // the wheel) leaves the cursor at its screen position, and what it points at follows the view.
     let place = |p: Vec3| camera.world_to_viewport(&GlobalTransform::from(*tf), p).ok().filter(|s| s.x >= 0.0 && s.y >= 0.0 && s.x < screen_size.x && s.y < screen_size.y);
-    let zooming = (cam.zoom - cam.zoom_shown).abs() > 0.002;
-    let turning = manual != 0.0 || d.abs() > 0.05 || zooming;
-    if (manual != 0.0 || zooming) && cam.turn_lock.is_none() {
-        cam.turn_lock = last_ground;
-    } else if !turning {
-        cam.turn_lock = None;
-    }
     if let Some((want, lock)) = cam.align {
         if let Some(screen) = lock.and_then(place) {
             pointer.place = Some(screen);
@@ -548,8 +540,6 @@ pub fn follow(
         if diff(want, cam.shown_yaw).abs() < 0.5 {
             cam.align = None;
         }
-    } else if let Some(screen) = cam.turn_lock.and_then(place) {
-        pointer.place = Some(screen);
     }
 
     // Draw out toward the horizon and fade it into the sky: by the environment's mood where

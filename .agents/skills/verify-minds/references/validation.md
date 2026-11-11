@@ -1,5 +1,23 @@
 # Internal mind validation
 
+## 2026-11-11 fov-1: hearing what one cannot see (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- After merging `origin/main` `accf27c8`: `fov` and `sight` pass (`minds-fov1-m`).
+- `fov` (new): `minds-fov1-h` passes on the final build before the merge (`minds-fov1-f` on the one before). `minds-fov1-g` failed the habit check: the turn was `broken off` once the sound came into view, because the branch is a continuous guard. The case now accepts a turn toward the sound, done or broken off. The scene and the prompt sent to the fake model list `you hear (out of sight)` as `{"what": "a person", "where": "behind you, to the east", "how far": "near"}`, with no id, and `you.facing` is west. The percept reads "You hear a person near, behind you, to the east." Given the person instinct, the resident turns to the sound (a `face` use aimed at the other's spot).
+- Earlier attempts found harness faults, now fixed in the case: the service prunes consumed experiences (read the percept first); a long `wait` is not evaluated (`{"wait": 1}`); hold both bodies before placing them (a resident walked into the near ring); the heading after the turn is not the test (the instinct walks on).
+- `sight` passes (`minds-fov1-a-sight`). Not run: the rest of the suite.
+## 2026-11-11 fix-stale-reasons (Spark)
+
+Branch `fix-stale-reasons` from `bade5c0`, worktree on the DGX Spark, trial container `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only.
+
+- `reasons` (new): on the fix, `minds-reasons-after-20261111-181723` passes: 5 deliberations, the one-off feeling in 1 (the first), the offer sent mid-call in 1 (the fourth), every `carried_before` 0, 3 later deliberations asked for by "I finished my plan.". With `clear_deliberation` temporarily put back to the old rule (same build otherwise), `minds-reasons-before-20261111-182024` fails as it should: the feeling in 5 of 5 (`carried_before` 0–4), the offer in 2, thoughts back to back every 9 s. An earlier form of the case (`minds-reasons-before-20261111-180628`, `minds-reasons-after-20261111-181201`) relied on the mind's plan finishing repeatedly; a plan finishes once (a desire), so the case now reinstalls a sequence root.
+- Full suite `minds-vreasons2-20261111-185031` (before merging main `6caebe2`; load average 25–47 from other work): roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, rethink, rethink-llm, dealings, parked, death-names and `reasons` pass; consolidation is its known XFAIL; `animals` fails at its last step ("nothing new: no call"), the known gap below; `jev` timed out waiting for a cached judgment, and fails the same way alone (`minds-vreasons-jev-*`, `minds-vreasons-jev2-*`) and on the branch's base `bade5c0` without the change (`minds-vbase-jev-20261111-193402`): the attacker's strike never reached the defender (no `attacked` experience, so no judge request), unrelated to reasons. The first suite attempt (`minds-vreasons-20261111-184156`) stopped at a load-flaky unit test, `llm::tests::a_failed_poll_keeps_the_batch_and_a_left_job_is_collected_after_a_restart`, which then passed 3 of 3 alone and in the full `cargo test -p living-mind` (83 passed).
+- verify-core `cargo_checks.py` (`core-reasons2-20261111-184820`): rules 161, authority 16 (infant cry routing and cadence among them), mind 83, viewer sync 5 pass. The scripted scenes were not run (the `infant` scene, which answers requests with `mind_skip`, takes about 2 hours).
+- `paid_safety.py` (`minds-duel-safety-vreasons-20261111-184156`): pass.
+- After merging main `6caebe2` (`b68cbe6`): bindings regenerate identical, `just living-check` passes, and `minds-vreasons3-20261111-194103` (reasons, roundtrip, lod, rethink, frame) passes; `reasons` again 5 deliberations, the feeling in 1, the offer in 1, every `carried_before` 0.
+
 ## 2026-11-11 the prompt frame (exp-player-frame, DGX Spark)
 
 Branch `exp-player-frame` in a worktree, against the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320`, published on `0.0.0.0`, which `verify.py` now accepts), private `CARGO_TARGET_DIR`, fake model only, beside a paid trial batch on the same service (untouched).

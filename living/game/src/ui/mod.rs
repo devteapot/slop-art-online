@@ -358,6 +358,8 @@ pub struct DumpExtra<'w, 's> {
     tip: Query<'w, 's, &'static Node, With<prim::Tooltip>>,
     tip_title: Query<'w, 's, &'static Text, (With<prim::TooltipTitle>, Without<prim::TooltipText>)>,
     tip_text: Query<'w, 's, &'static Text, (With<prim::TooltipText>, Without<prim::TooltipTitle>)>,
+    pointer: Res<'w, crate::pointer::Pointer>,
+    cam: Res<'w, crate::camera::Cam>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -365,7 +367,15 @@ impl DumpExtra<'_, '_> {
         // The bar's slots as drawn: what each is, why it is greyed, held, refused just now.
         let slots: serde_json::Map<_, _> = self.slots.0.iter().map(|(k, v)| (k.0.clone(), serde_json::json!({"label": v.label, "key": v.key, "off": v.off, "held": v.held, "refused": v.refused.is_some(), "count": v.count, "caption": v.caption}))).collect();
         let tip = self.tip.iter().any(|n| n.display != Display::None).then(|| serde_json::json!({"title": self.tip_title.iter().next().map(|t| t.0.clone()), "text": self.tip_text.iter().next().map(|t| t.0.clone())}));
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(), "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip})
+        // The game's cursor (logical px in the window, and fractions of the picture), the view's
+        // yaw and zoom, and the ground point under the cursor (x, height, y): what a view turn or
+        // a zoom keeps or changes.
+        let size = crate::capture::size().as_vec2();
+        let cursor = self.pointer.pos.map(|p| serde_json::json!({"x": p.x, "y": p.y, "fx": p.x / size.x, "fy": p.y / size.y}));
+        let ground = self.cam.cursor_ground.map(|g| serde_json::json!([g.x, g.y, g.z]));
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
+            "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
+            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground})
     }
 }
 

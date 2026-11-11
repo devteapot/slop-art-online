@@ -409,6 +409,18 @@ pub struct Laws {
     pub longing_after_min: f32,
     /// Food one must carry for that longing to be felt (0: it does not depend on food).
     pub longing_food: f32,
+    /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
+    /// read by the script).
+    pub fov_on: bool,
+    /// A sound heard but not seen is near within this, close within the next (metres), and
+    /// lingers this long after it was last heard (seconds).
+    pub heard_near_m: f32,
+    pub heard_close_m: f32,
+    pub heard_linger_s: f32,
+    /// A player's look (`human_face`): a change within this many degrees is the same look; walking,
+    /// the body turns toward the look at most this many degrees off its way.
+    pub look_slack_deg: f32,
+    pub look_walk_deg: f32,
 }
 
 /// How long after one's own birth, or one's youngest child's, a grown person waits before
@@ -459,17 +471,19 @@ impl Default for Laws {
             cry_prompts_carers: true,
             longing_after_min: 20.0,
             longing_food: 0.0,
+            fov_on: false,
+            heard_near_m: 5.0,
+            heard_close_m: 15.0,
+            heard_linger_s: 2.0,
+            look_slack_deg: 10.0,
+            look_walk_deg: 30.0,
         }
     }
 }
 
-/// What a creature senses now (`senses(a)`): how far it sees and hears, in tiles (a tile is
-/// one metre).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Senses {
-    pub sight: f32,
-    pub hearing: f32,
-}
+/// What a creature senses now (`senses(a)`): how far it sees and hears, and how its view
+/// narrows away from facing (the one sight rule, [`crate::sight`]).
+pub use crate::sight::{Field, Senses};
 
 /// The farthest anyone's senses reach (`reach` in `senses_law()`): by day and by night, and
 /// hearing; and `glow`, the farthest anyone is seen by a light on them (the `glow` law; 0 when
@@ -579,6 +593,9 @@ pub const REQUIRED_LAWS: &[&str] = &["senses", "motion", "items", "structures", 
 /// `name`, in the script's order. `items`, `structures`, `resources` and `know_how` are
 /// required; `recipes` is the world's own (none when the script has no `recipes()`).
 pub const TABLES: &[&str] = &["items", "structures", "resources", "know_how", "recipes"];
+/// An item's traits a client draws it by (data only: no rule reads them; docs/WORLD_RULES.md,
+/// "What a client shows").
+pub const ITEM_LOOK: [&str; 3] = ["icon", "label", "group"];
 
 /// The data tables as the rules read them through the engine's primitives: `entry_of(table,
 /// name)` (the entry's map, or `()`), `names_of(table)` (its names, in order) and
@@ -588,6 +605,9 @@ pub const TABLES: &[&str] = &["items", "structures", "resources", "know_how", "r
 #[derive(Clone, Debug, Default)]
 pub struct Tables {
     by: HashMap<String, (Vec<String>, HashMap<String, Map>)>,
+    /// The world constants in force (`laws()` with the world's own values over them, from the
+    /// script's `world_law_values()`), read by laws through `law(name)`.
+    laws: Map,
 }
 
 impl Tables {
@@ -629,6 +649,11 @@ fn register_tables(e: &mut Engine, t: &Rc<RefCell<Tables>>) {
     e.register_fn("names_of", move |table: &str| -> Array { t2.borrow().names(table).iter().map(|n| Dynamic::from(n.clone())).collect() });
     let t3 = t.clone();
     e.register_fn("having", move |table: &str, tr: &str| -> Array { t3.borrow().having(table, tr).into_iter().map(Dynamic::from).collect() });
+    // A world constant in force: the script's `laws()` value, or the world's own
+    // (`world_law_values()`, which `set_world_law` and a seed's `rules` write). Unit when no
+    // such law.
+    let t4 = t.clone();
+    e.register_fn("law", move |name: &str| -> Dynamic { t4.borrow().laws.get(name).cloned().unwrap_or(Dynamic::UNIT) });
 }
 
 /// Distinct states whose senses or moves are kept before the memo starts over.
@@ -798,6 +823,17 @@ pub struct StructureTraits {
     pub burns: Option<Burns>,
 }
 
+/// What a client shows of an item or of what a recipe makes (`Scripts::item_look_of`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ItemLook {
+    /// A short stable id the client draws it by (docs/WORLD_RULES.md lists them).
+    pub icon: String,
+    /// Its name for players, lower case as in a sentence.
+    pub label: String,
+    /// Where a pack or a recipe grid sorts it (empty: none).
+    pub group: String,
+}
+
 /// A fire that eats fuel (`burns: #{ fuel, rate, warmth, light, holds }`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Burns {
@@ -822,6 +858,18 @@ impl StructureTraits {
     /// How far it lights the dark when it burns (its `lights`, or its fire's `burns.light`).
     pub fn light(&self) -> f32 {
         self.lights.max(self.burns.as_ref().map_or(0.0, |b| b.light))
+    }
+
+    /// A structure of this kind as the rules' checks see it (`a.target.lit`, `a.target.fuel`):
+    /// a fire that burns fuel is lit while `lit_until_ms` (the `structure` row's) is ahead of
+    /// `now`, holding what is left at its rate on a day of `day_ms` (the `world` row's); a fire
+    /// that needs no feeding is always lit and holds none; anything else is neither. The
+    /// authority and a client computing the same facts call this.
+    pub fn fire_state(&self, lit_until_ms: u64, now: u64, day_ms: u64) -> (bool, f32) {
+        match &self.burns {
+            Some(b) => (crate::fire::lit(lit_until_ms, now), crate::fire::fuel_left(lit_until_ms, now, b.rate, day_ms)),
+            None => (self.fire(), 0.0),
+        }
     }
 }
 
@@ -857,8 +905,10 @@ pub struct Limits {
 /// together, so the world's data tables (`items()`, `resources()`, each a list of maps) set the
 /// array and map limits: Cullet's goods over the shipped ones hold about 110 map entries in
 /// `resources()` and 60 array entries (2026-11-11); the limits leave room for a world about
-/// four times that.
-pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 2_048, array: 256, map: 512 };
+/// four times that. Rhai counts the strings of a map together too: `laws_about(l)`, the words
+/// for every world constant, held 1,959 characters before the field of view's laws (`fov-1`,
+/// 2026-11-11) and 2,373 after, so the string limit is 4,096.
+pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 4_096, array: 256, map: 512 };
 
 fn engine(t: &Rc<RefCell<Tables>>) -> Engine {
     engine_with(LIMITS, t)
@@ -951,9 +1001,14 @@ impl Scripts {
         // A script from before a required law existed runs on the shipped script's functions,
         // with its own on top, until it is installed again.
         let borrowed: Vec<String> = REQUIRED_LAWS.iter().filter(|f| !ast.iter_functions().any(|d| d.name == **f)).map(|f| f.to_string()).collect();
+        // What each function reads, from its own source: the field analysis places statements by
+        // line and column, which two sources share, so a merged script is analysed source by
+        // source, the script's own functions over the shipped ones.
+        let mut fields = None;
         if !borrowed.is_empty() {
             const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
             let base = engine.compile(SHIPPED).map_err(|e| format!("shipped script compile: {e}"))?.clone_functions_only();
+            fields = Some(fields::Fields::analyze(&base).under(fields::Fields::analyze(&ast)));
             ast = base.merge(&ast);
         }
         // A floor's overlay keeps each base function it replaces as `base_NAME` (`floors::compose`):
@@ -963,7 +1018,7 @@ impl Scripts {
         let fns = ast.iter_functions().filter(|f| own(f.name)).map(|f| f.name.to_string()).collect();
         let unary = ast.iter_functions().filter(|f| own(f.name) && f.params.len() == 1).map(|f| f.name.to_string()).collect();
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
-        let fields = fields::Fields::analyze(&ast);
+        let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
         let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
@@ -974,6 +1029,9 @@ impl Scripts {
                 return Err(format!("script must define `{f}(a)`"));
             }
         }
+        // The world constants in force, for `law(name)`.
+        let laws = s.laws_map();
+        s.tables.borrow_mut().laws = laws;
         // The data tables first: specs and laws may read them (`names_of("recipes")`).
         s.read_tables()?;
         s.shapes = s.read_shapes()?;
@@ -1141,6 +1199,7 @@ impl Scripts {
             }
             t.by.insert(f.to_string(), (names, by));
         }
+        t.laws = std::mem::take(&mut self.tables.borrow_mut().laws);
         *self.tables.borrow_mut() = t;
         Ok(())
     }
@@ -1163,7 +1222,18 @@ impl Scripts {
     }
 
     /// The world's items and their traits (`items()`), read once.
+    /// An item's `icon`, `label` and `group` (what a client shows of it) must be texts.
     fn read_items(&self) -> Result<Vec<crate::catalog::ItemSpec>, String> {
+        let t = self.tables.borrow();
+        for n in t.names("items") {
+            let m = t.entry("items", n).expect("listed");
+            for k in ITEM_LOOK {
+                if m.get(k).is_some_and(|v| !v.is_string()) {
+                    return Err(format!("items: the {k} of `{n}` must be a text"));
+                }
+            }
+        }
+        drop(t);
         Ok(self.kinds_of("items").into_iter().map(|k| crate::catalog::ItemSpec { name: k.name, traits: k.traits }).collect())
     }
 
@@ -1252,6 +1322,18 @@ impl Scripts {
             return None;
         }
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok()?.into_string().ok()
+    }
+
+    /// How an item looks in a client (`item_look`), or what a recipe makes (`recipe_look`: its
+    /// product's look under the recipe's own `icon` and `label`). None when the script has no
+    /// such function or it fails (a script from before 2026-11-11's looks).
+    pub fn item_look_of(&self, f: &str, name: &str) -> Option<ItemLook> {
+        if !self.has(f) {
+            return None;
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (name.to_string(),)).ok()?.try_cast::<Map>()?;
+        let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
+        Some(ItemLook { icon: text("icon"), label: text("label"), group: text("group") })
     }
 
     /// A yes-or-no law of a context (`theft(a)`); false when the script has none or it fails.
@@ -1771,11 +1853,51 @@ impl Scripts {
         self.laws_map().keys().map(|k| k.to_string()).collect()
     }
 
+    /// `laws()`, with the world's own values over it (`world_law_values()`, the block
+    /// [`with_world_laws`] writes at the end of a world's script; a key that is not a law, or of
+    /// another kind, is left out).
     fn laws_map(&self) -> Map {
         if !self.has("laws") {
             return Map::new();
         }
-        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws", ()).ok().and_then(|d| d.try_cast::<Map>()).unwrap_or_default()
+        let mut m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws", ()).ok().and_then(|d| d.try_cast::<Map>()).unwrap_or_default();
+        if self.has(WORLD_LAW_VALUES) {
+            let over = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, WORLD_LAW_VALUES, ()).ok().and_then(|d| d.try_cast::<Map>()).unwrap_or_default();
+            for (k, v) in over {
+                let fits = m.get(&k).is_some_and(|cur| cur.is_bool() == v.is_bool() && (cur.is_bool() || number(&v).is_some()));
+                if fits {
+                    let v = if v.is_bool() { v } else { Dynamic::from(number(&v).unwrap_or(0.0)) };
+                    m.insert(k, v);
+                }
+            }
+        }
+        m
+    }
+
+    /// What a creature of `kind` sounds like to a listener who cannot see it (`heard_as(kind)`):
+    /// "person", "deer", "wolf", or "creature" where the rules cannot tell. Without the law,
+    /// those three kinds by name and "creature" for any other.
+    pub fn heard_as(&self, kind: &str) -> String {
+        if self.has("heard_as") {
+            if let Ok(d) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "heard_as", (kind.to_string(),)) {
+                if let Ok(s) = d.into_string() {
+                    if !s.is_empty() {
+                        return s;
+                    }
+                }
+            }
+        }
+        if matches!(kind, "person" | "deer" | "wolf") { kind.to_string() } else { "creature".to_string() }
+    }
+
+    /// The world constants in force, as the script's laws read them (`law(name)`).
+    pub fn law_value(&self, name: &str) -> Option<serde_json::Value> {
+        let t = self.tables.borrow();
+        let v = t.laws.get(name)?;
+        if let Ok(b) = v.as_bool() {
+            return Some(serde_json::Value::Bool(b));
+        }
+        number(v).and_then(serde_json::Number::from_f64).map(serde_json::Value::Number)
     }
 
     /// The world constants with a world's own values over the script's (a seed's `rules`: a
@@ -1839,6 +1961,12 @@ impl Scripts {
             cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
+            fov_on: flag("fov_on", l.fov_on),
+            heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
+            heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
+            heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),
+            look_slack_deg: g("look_slack_deg", l.look_slack_deg).clamp(0.0, 90.0),
+            look_walk_deg: g("look_walk_deg", l.look_walk_deg).clamp(0.0, 180.0),
         };
         Ok(l)
     }
@@ -1976,7 +2104,63 @@ fn decode_moves(d: Dynamic) -> Result<Moves, String> {
 fn decode_senses(d: Dynamic, reach: &Reach, dark: f32) -> Result<Senses, String> {
     let m = d.try_cast::<Map>().ok_or("senses must return a map of sight and hearing")?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("senses: `{k}` must be a number of metres"));
-    Ok(Senses { sight: g("sight")?.clamp(0.0, reach.sight(dark)), hearing: g("hearing")?.clamp(0.0, reach.hearing) })
+    let field = match m.get("field") {
+        None => None,
+        Some(f) if f.is_unit() => None,
+        Some(f) => {
+            let f = f.clone().try_cast::<Map>().ok_or("senses: `field` is a map of focal_deg, side_deg, side_share, near_m and margin_deg")?;
+            let n = |k: &str, lo: f32, hi: f32| f.get(k).and_then(number).map(|v| (v as f32).clamp(lo, hi)).ok_or_else(|| format!("senses: `field.{k}` must be a number"));
+            let focal_deg = n("focal_deg", 0.0, 180.0)?;
+            Some(Field { focal_deg, side_deg: n("side_deg", 0.0, 180.0)?.max(focal_deg), side_share: n("side_share", 0.0, 1.0)?, near_m: n("near_m", 0.0, 256.0)?, margin_deg: n("margin_deg", 0.0, 90.0)? })
+        }
+    };
+    Ok(Senses { sight: g("sight")?.clamp(0.0, reach.sight(dark)), hearing: g("hearing")?.clamp(0.0, reach.hearing), field })
+}
+
+/// The function a world's own law values are written as at the end of its script.
+pub const WORLD_LAW_VALUES: &str = "world_law_values";
+/// The line that starts that block.
+const WORLD_LAW_MARK: &str = "// ---- this world's own law values (written by the authority: a seed's `rules`, `set_world_law`) ----";
+
+/// A world's script with its own law values written at its end as `world_law_values()`, which
+/// the laws read through `law(name)` and the engine reads over `laws()`. Any earlier such block
+/// is replaced; no values leave the script without one. Every client that compiles the
+/// world's `script` row then has the values in force (docs/PERCEPTION.md, "Changing a law on a
+/// running world").
+pub fn with_world_laws(source: &str, values: &[(String, serde_json::Value)]) -> String {
+    let base = match source.find(WORLD_LAW_MARK) {
+        Some(i) => source[..i].trim_end_matches('\n'),
+        None => source,
+    };
+    if values.is_empty() {
+        return if base.len() == source.len() { source.to_string() } else { format!("{base}\n") };
+    }
+    let mut v: Vec<&(String, serde_json::Value)> = values.iter().collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0));
+    let body: Vec<String> = v
+        .iter()
+        .filter(|(k, _)| !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .map(|(k, val)| {
+            let val = match val {
+                serde_json::Value::Bool(b) => b.to_string(),
+                serde_json::Value::Number(n) => {
+                    let f = n.as_f64().unwrap_or(0.0);
+                    if f.fract() == 0.0 && f.abs() < 1e15 { format!("{f:.1}") } else { format!("{f}") }
+                }
+                _ => "()".to_string(),
+            };
+            format!("{k}: {val}")
+        })
+        .collect();
+    format!("{base}\n\n{WORLD_LAW_MARK}\nfn {WORLD_LAW_VALUES}() {{ #{{ {} }} }}\n", body.join(", "))
+}
+
+/// The script without a world's own law values (what was installed).
+pub fn without_world_laws(source: &str) -> &str {
+    match source.find(WORLD_LAW_MARK) {
+        Some(i) => source[..i].trim_end_matches('\n'),
+        None => source,
+    }
 }
 
 fn decode_glow(d: Dynamic, reach: &Reach) -> Result<f32, String> {
@@ -2386,6 +2570,56 @@ mod tests {
     /// as constants (11 m by day, 6 at night, 9 with a torch; hearing 9), shared by every
     /// creature in the same state and held to the law's reach.
     #[test]
+    fn sight_depends_on_facing_only_when_the_world_s_law_says() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let off = Scripts::new(src).unwrap();
+        // Off (the shipped script): no field in any state, and the law reads what it read before.
+        for (n, t) in [(false, false), (true, false), (true, true)] {
+            assert_eq!(off.senses(&creature(n, t)).unwrap().field, None);
+        }
+        assert_eq!(off.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()]);
+        assert_eq!(off.law_value("fov_on"), Some(serde_json::json!(false)));
+        assert!(!off.law_specs()["senses"].about.contains("degrees"));
+        assert!(!off.laws().fov_on);
+        // A world's own values (`set_world_law`, a seed's `rules`) written into its script.
+        let on_src = with_world_laws(src, &[("fov_on".into(), serde_json::json!(true))]);
+        let on = Scripts::new(&on_src).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().fov_on);
+        let day = on.senses(&creature(false, false)).unwrap();
+        assert_eq!(day.field, Some(crate::sight::Field { focal_deg: 70.0, side_deg: 110.0, side_share: 0.3333, near_m: 3.0, margin_deg: 10.0 }));
+        assert_eq!((day.sight, day.hearing), (11.0, 9.0));
+        assert_eq!(on.senses(&creature(true, false)).unwrap().field.unwrap().near_m, 2.0, "less all round in the dark");
+        assert_eq!(on.senses(&creature(true, true)).unwrap().field.unwrap().near_m, 3.0, "a torch lights the near ring");
+        assert!(on.law_specs()["senses"].about.contains("70 degrees"), "{}", on.law_specs()["senses"].about);
+        // Writing again replaces the block; no values give back the installed script.
+        let twice = with_world_laws(&on_src, &[("fov_on".into(), serde_json::json!(true)), ("fov_focal_deg".into(), serde_json::json!(60))]);
+        assert_eq!(twice.matches("fn world_law_values()").count(), 1);
+        assert_eq!(Scripts::new(&twice).unwrap().senses(&creature(false, false)).unwrap().field.unwrap().focal_deg, 60.0);
+        assert_eq!(without_world_laws(&twice).trim_end(), src.trim_end());
+        assert_eq!(with_world_laws(src, &[]), src);
+        // A value of the wrong kind, or a name that is no law, is not taken from the block.
+        let odd = Scripts::new(&with_world_laws(src, &[("fov_on".into(), serde_json::json!(2)), ("no_such".into(), serde_json::json!(1))])).unwrap();
+        assert!(!odd.laws().fov_on && odd.law_value("no_such").is_none());
+        // What a sound out of sight is told as.
+        assert_eq!((on.heard_as("person"), on.heard_as("wolf"), on.heard_as("hare")), ("person".into(), "wolf".into(), "creature".into()));
+    }
+
+    /// A script from before a required law runs with the shipped one merged under it. The two
+    /// sources share line numbers, so the field analysis must not attribute one's statements to
+    /// the other's functions: the borrowed law reads what it reads, every time.
+    #[test]
+    fn a_borrowed_law_reads_its_own_fields_every_time() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let old_src = src.replace("fn senses(a)", "fn senses_gone(a)");
+        for _ in 0..40 {
+            let old = Scripts::new(&old_src).unwrap();
+            assert_eq!(old.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()]);
+            assert_eq!(old.senses(&creature(true, false)).unwrap().sight, 6.0);
+        }
+    }
+
+    #[test]
     fn senses_are_a_law_per_creature() {
         let s = scripts();
         let got: Vec<(f32, f32)> = [(false, false), (true, false), (true, true), (false, true)].iter().map(|(n, t)| {
@@ -2742,7 +2976,7 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         assert!(go(&SkillCtx { actor: ActorFacts { knows: vec![], ..glass.actor.clone() }, ..glass.clone() }).unwrap_err().starts_with("you don't know how to make glass"));
         assert_eq!(s.text_of("source_of", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it (knowing glassmaking)");
         // Any alkali serves: a world's soda is used like ash, by the trait alone.
-        let overlay = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"glass\" },", "#{ name: \"glass\" }, #{ name: \"soda\", alkali: true },");
+        let overlay = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"sand\", icon: \"sand\", label: \"sand\", group: \"material\" },", "#{ name: \"sand\", icon: \"sand\", label: \"sand\", group: \"material\" }, #{ name: \"soda\", alkali: true },");
         let soda = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &overlay).unwrap()).unwrap();
         let c = at_fire("furnace", true, 3.0, &[("soda", 2), ("sand", 2)], &["glassmaking"], "make", "glass", 0);
         assert_eq!(soda.check("make", &c).and_then(|_| soda.done("make", &c)).unwrap()[0], Effect::Remove { item: "soda".into(), qty: 1 });
@@ -2760,6 +2994,91 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         let text = s.world_text(&[]);
         assert!(text.contains("a furnace burns 3 fuel a game hour (wood or peat)") && text.contains("glass: make it at a furnace"), "{text}");
         assert!(!shipped.world_text(&[]).contains("Fires that burn fuel"));
+    }
+
+    /// Every item says how a client shows it (`icon`, `label`, `group`), as data no rule reads;
+    /// what a recipe makes looks like its product unless the recipe says otherwise; a look that
+    /// is not text is refused at install.
+    #[test]
+    fn items_and_recipes_say_how_they_look() {
+        let look = |icon: &str, label: &str, group: &str| Some(ItemLook { icon: icon.into(), label: label.into(), group: group.into() });
+        for s in [scripts(), cullet()] {
+            let t = s.tables();
+            for n in t.names("items") {
+                let e = t.entry("items", n).unwrap();
+                for k in ITEM_LOOK {
+                    assert!(e.get(k).and_then(|v| v.clone().into_string().ok()).is_some_and(|v| !v.is_empty()), "item {n} has no {k}");
+                }
+                // Within the interface's vocabulary (`living_rules::ui`).
+                let text = |k: &str| e[k].clone().into_string().unwrap();
+                assert!(crate::ui::ITEM_ICONS.contains(&text("icon").as_str()), "item {n}: icon {} is not in ui::ITEM_ICONS", text("icon"));
+                assert!(crate::ui::ITEM_GROUPS.contains(&text("group").as_str()), "item {n}: group {} is not in ui::ITEM_GROUPS", text("group"));
+            }
+        }
+        let (shipped, s) = (scripts(), cullet());
+        assert_eq!(shipped.item_look_of("item_look", "cooked_fish"), look("cooked_fish", "cooked fish", "food"));
+        assert_eq!(s.item_look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
+        assert_eq!(s.item_look_of("item_look", "glass"), look("glass", "glass", "glass"));
+        // An item without looks (a world's own, from before): its name, spaced; no group.
+        assert_eq!(s.item_look_of("item_look", "glass_beads"), look("glass_beads", "glass beads", ""));
+        // A recipe looks like its product, a recipe that turns items like each product.
+        assert_eq!(s.item_look_of("recipe_look", "glass"), s.item_look_of("item_look", "glass"));
+        assert_eq!(s.item_look_of("recipe_look", "smoked_meat"), look("smoked_meat", "smoked meat", "food"));
+        let over = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"lamp_oil\", at: \"fire\",", "#{ name: \"lamp_oil\", label: \"rendered oil\", icon: \"oil_jar\", at: \"fire\",");
+        let over = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &over).unwrap()).unwrap();
+        assert_eq!(over.item_look_of("recipe_look", "lamp_oil"), look("oil_jar", "rendered oil", "fuel"));
+        assert_eq!(over.item_look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
+        let bad = include_str!("../../scripts/skills.rhai").replace("#{ name: \"berries\", icon: \"berries\",", "#{ name: \"berries\", icon: 3,");
+        assert_eq!(Scripts::new(&bad).err().unwrap(), "items: the icon of `berries` must be a text");
+    }
+
+    /// Teaching takes the world's know-how table, not only what experimenting can reveal, so
+    /// Cullet's glassmaking and the shipped fire_bolt and wound_tending can be taught. Every
+    /// technique the old list had answers as before; the minds are told every technique.
+    #[test]
+    fn teaching_takes_the_worlds_know_how() {
+        let (shipped, s) = (scripts(), cullet());
+        let teach = |s: &Scripts, item: &str, knows: &[&str], theirs: &[&str]| {
+            let mut c = ctx();
+            c.skill = "teach".into();
+            c.item = item.into();
+            c.actor.knows = knows.iter().map(|k| k.to_string()).collect();
+            c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), knows: theirs.iter().map(|k| k.to_string()).collect(), ..Default::default() };
+            s.check("teach", &c)
+        };
+        assert_eq!(teach(&s, "glassmaking", &["glassmaking"], &["fire"]), Ok(()));
+        assert_eq!(teach(&s, "glassmaking", &["glassmaking"], &[]).unwrap_err(), "they must first learn fire");
+        assert_eq!(teach(&s, "glassmaking", &[], &["fire"]).unwrap_err(), "you don't know glassmaking yourself");
+        assert_eq!(teach(&shipped, "glassmaking", &["glassmaking"], &["fire"]).unwrap_err().split(" (").next(), Some("there is no technique called glassmaking"));
+        for t in ["fire_bolt", "wound_tending"] {
+            assert_eq!(teach(&shipped, t, &[t], &[]), Ok(()));
+        }
+        assert!(teach(&s, "glass", &[], &[]).unwrap_err().contains("there is no technique called glass (the techniques are: fire, cooking"));
+        // The minds' world text names every technique of the table, with its brief.
+        let about = |s: &Scripts| s.law_specs()["know_how"].about.clone();
+        let (a, b) = (about(&shipped), about(&s));
+        assert!(a.starts_with("you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs), masonry (walls), carpentry (houses and gates; needs shelter), fishing,"), "{a}");
+        for t in s.skills().techniques.iter() {
+            assert!(b.contains(&t.name), "{} is not in {b}", t.name);
+        }
+        assert!(b.contains("toolmaking (axe, pick), glassmaking (glass from ash and sand at the furnace). Others may know"), "{b}");
+    }
+
+    /// Others see someone making at a workplace or feeding a fire, players and minds alike;
+    /// the authority and a client read a fire's state through one primitive.
+    #[test]
+    fn making_and_feeding_are_seen_and_a_fire_state_is_shared() {
+        let s = cullet();
+        for k in ["make", "feed"] {
+            assert_eq!(s.shows().get(k).map(|x| x.look.as_str()), Some("work"));
+        }
+        let day = 48 * 60_000;
+        let furnace = s.structure("furnace");
+        // 3 units a game hour on a 48-minute day: a unit lasts 40 s.
+        assert_eq!(furnace.fire_state(140_000, 100_000, day), (true, 1.0));
+        assert_eq!(furnace.fire_state(100_000, 100_000, day), (false, 0.0));
+        assert_eq!(s.structure("campfire").fire_state(0, 100_000, day), (true, 0.0));
+        assert_eq!(s.structure("house").fire_state(0, 100_000, day), (false, 0.0));
     }
 
     /// A skill added only in the script (its spec and rules) is one a graph, an act and a

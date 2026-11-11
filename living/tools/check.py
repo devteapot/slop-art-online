@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """`just living-check` with step stamps and a shared compile cache (docs/TOOLING.md).
 
-The check is the Justfile's five steps: the authority (wasm), the mind and the native
-viewer, the game in release, the browser viewer (wasm) and the rules tests. Each step's
+The check is the Justfile's six steps: the authority (wasm), the mind and the native
+viewer, the game in release, the browser viewer (wasm), the rules tests and the script fuel
+gate (living/tools/script_bench, its own cargo workspace and target folder). Each step's
 inputs are the files of the packages it builds (its path-dependency closure, from `cargo
-metadata`) and the shared inputs below, the toolchain, the step's command and the build
-environment. After a step passes, its stamp is written under that digest in a store shared
+metadata`), the shared inputs below and its own, the toolchain, the step's command and the
+build environment. After a step passes, its stamp is written under that digest in a store shared
 by every worktree on this machine. A later check whose step has the same digest skips it:
 that step has already passed, on this machine, on byte-identical inputs.
 
@@ -24,8 +25,8 @@ without the cache, and enters the step digest (a plain `sccache` does not).
 Every cargo runs in a process group of its own. A watchdog process, which the check alone
 holds a pipe to, stops those groups when the check ends in any way, a SIGKILL included.
 
-Steps in different cargo build directories run at once (three lanes: release, debug and
-wasm-dev), under one jobserver of CARGO_BUILD_JOBS (default: all cores) jobs; each step's
+Steps in different cargo build directories run at once (four lanes: release, debug,
+wasm-dev and script-bench), under one jobserver of CARGO_BUILD_JOBS (default: all cores) jobs; each step's
 output then goes to <target>/living-check/<step>.log, and a failing step's log is printed.
 
 Usage: check.py [--full] [--plan] [--serial] [--steps a,b] [--no-sccache] [--json PATH]
@@ -67,7 +68,10 @@ PINNED_SCCACHE = os.path.join(HOME, ".local/share/slop-tools/bin/sccache")
 # inputs are those packages' path-dependency closure. `lane`: steps in different lanes write
 # different cargo build directories (each locked by cargo), so lanes run at once, sharing
 # one jobserver; steps in a lane run in this order. `dirs`: the target sub-directories it
-# writes.
+# writes. A step may also have `cmd` as a list of cargo commands run in turn; `workspace`, the
+# cargo workspace its relative dep-info paths start from (default living); `target`, a target
+# sub-directory used as its CARGO_TARGET_DIR; `inputs`, files beyond its packages and the
+# shared ones; and `gate`, a script run after its builds, which must pass too.
 STEPS = [
     {"name": "authority", "lane": "release", "packages": ["living-authority"], "dirs": ["wasm32-unknown-unknown/release", "release"],
      "cmd": ["cargo", "build", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release"]},
@@ -80,7 +84,31 @@ STEPS = [
      "cmd": ["cargo", "build", "--manifest-path", "living/viewer/Cargo.toml", "--target", "wasm32-unknown-unknown", "--profile", "wasm-dev", "--bin", "living-viewer"]},
     {"name": "rules-tests", "lane": "debug", "packages": ["living-rules"], "dirs": ["debug"],
      "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-rules"]},
+    # The fuel budget gate (docs/LIVING_CORE.md, "Fuel budgets"): the Rhai bench module and
+    # sb-host, then gate.py over budgets.json. Its packages' closure is the bench and its
+    # fixtures (bench), the module, sb-host with wasmtime's configuration (host/src/main.rs)
+    # and the rules crate; the shared inputs hold the shipped script (living/scripts).
+    {"name": "script-gate", "lane": "script-bench", "packages": ["sb-module", "sb-host"], "dirs": ["script-bench"],
+     "workspace": "living/tools/script_bench", "target": "script-bench",
+     "inputs": ["living/tools/script_bench/Cargo.toml",  # the bench's profile; wasmtime's version (=39.0.1) is host/Cargo.toml's
+                "living/tools/script_bench/Cargo.lock",  # every crate's locked version, wasmtime's and rhai's included
+                "living/tools/script_bench/budgets.json", "living/tools/script_bench/gate.py"],
+     "cmd": [["cargo", "build", "--manifest-path", "living/tools/script_bench/Cargo.toml", "-p", "sb-module", "--target", "wasm32-unknown-unknown",
+              "--release", "--features", "rhai"],
+             # sb-host alone, without the native engines (Lua's C build, the wasmi guest)
+             ["cargo", "build", "--manifest-path", "living/tools/script_bench/Cargo.toml", "-p", "sb-host", "--bin", "sb-host", "--release",
+              "--no-default-features"]],
+     "gate": {"script": "living/tools/script_bench/gate.py", "host": "release/sb-host", "module": "wasm32-unknown-unknown/release/sb_module.wasm"}},
 ]
+
+# The cargo workspaces whose packages the steps build: the living core's, and the script
+# bench's (standalone, not a member of living/Cargo.toml).
+WORKSPACES = ["living/Cargo.toml", "living/tools/script_bench/Cargo.toml"]
+
+
+def cmds_of(step):
+    """A step's cargo commands, in order."""
+    return step["cmd"] if isinstance(step["cmd"][0], list) else [step["cmd"]]
 
 # Inputs of every step besides its packages' own directories: the workspace manifest and
 # lock, the seeds and scripts the crates include (include_str!, the authority's build
@@ -93,8 +121,10 @@ SHARED_INPUTS = [
 ]
 
 # Files a package compiles from outside its own directory besides the shared inputs (the
-# audit finds any that are missing here): the game's #[path] modules from the viewer.
-EXTRA_INPUTS = {"living-game": ["living/viewer/src/clock.rs", "living/viewer/src/sync.rs"]}
+# audit finds any that are missing here): the game's #[path] modules from the viewer, and the
+# script bench's Rust port of the laws.
+EXTRA_INPUTS = {"living-game": ["living/viewer/src/clock.rs", "living/viewer/src/sync.rs"],
+                "sb-bench": ["living/tools/script_bench/port.rs"]}
 
 # Environment that can change what a step builds or how its tests run: exact names and
 # prefixes. Variables that build scripts declare (rerun-if-env-changed) and crates read
@@ -137,11 +167,15 @@ def closures(root):
     dependency outside the workspace, a [patch] path, seen in Cargo.lock as a package
     without a source) is kept by its directory, absolute when outside the repository, so
     the steps that need it cannot be stamped until it is mapped."""
-    meta = json.loads(run(["cargo", "metadata", "--manifest-path", "living/Cargo.toml", "--no-deps", "--format-version", "1", "--offline"], root))
-    dirs, deps = {}, {}
-    for p in meta["packages"]:
-        dirs[p["name"]] = os.path.dirname(p["manifest_path"])
-        deps[p["name"]] = [(d["name"], d["path"]) for d in p["dependencies"] if d.get("path")]
+    dirs, deps, ws_of = {}, {}, {}
+    for manifest in WORKSPACES:
+        if not os.path.isfile(os.path.join(root, manifest)):
+            continue
+        meta = json.loads(run(["cargo", "metadata", "--manifest-path", manifest, "--no-deps", "--format-version", "1", "--offline"], root))
+        for p in meta["packages"]:
+            dirs[p["name"]] = os.path.dirname(p["manifest_path"])
+            deps[p["name"]] = [(d["name"], d["path"]) for d in p["dependencies"] if d.get("path")]
+            ws_of[p["name"]] = manifest
 
     def where(d):
         rel = os.path.relpath(d, root)
@@ -163,16 +197,18 @@ def closures(root):
                 else:
                     found.add(where(dp))  # a path dependency outside the workspace
         out[name] = sorted(found)
-    try:  # [patch] paths and other sourceless packages the members do not name
-        lock = open(os.path.join(root, "living", "Cargo.lock")).read()
-        blocks = lock.split("[[package]]")[1:]
-        strays = [re.search(r'name = "([^"]+)"', b).group(1) for b in blocks if "\nsource = " not in b]
-        strays = [n for n in strays if n not in dirs]
-    except (OSError, AttributeError):
-        strays = ["(Cargo.lock unreadable)"]
-    if strays:
-        for name in out:
-            out[name].append("/(unmapped path packages: " + ", ".join(strays) + ")")
+    for manifest in set(ws_of.values()):
+        try:  # [patch] paths and other sourceless packages no workspace's members name
+            lock = open(os.path.join(root, os.path.dirname(manifest), "Cargo.lock")).read()
+            blocks = lock.split("[[package]]")[1:]
+            strays = [re.search(r'name = "([^"]+)"', b).group(1) for b in blocks if "\nsource = " not in b]
+            strays = [n for n in strays if n not in dirs]
+        except (OSError, AttributeError):
+            strays = [f"({os.path.dirname(manifest)}/Cargo.lock unreadable)"]
+        if strays:
+            for name in out:
+                if ws_of[name] == manifest:
+                    out[name].append("/(unmapped path packages: " + ", ".join(strays) + ")")
     real = {os.path.realpath(d): n for n, d in dirs.items()}
     return out, real
 
@@ -360,12 +396,13 @@ def depinfo_of(path):
     return None
 
 
-def audit(root, messages, inputs_by_pkg, pkg_dirs, target, exempt):
+def audit(root, messages, inputs_by_pkg, pkg_dirs, target, exempt, workspace="living"):
     """Problems with the input map for the path packages this step built or found fresh
     (empty when sound), and the environment names the whole build depends on. `pkg_dirs`:
     real package directory -> package name; `exempt`: directories a workspace crate may read
     from without being an input (the target dir, Cargo's registry and git checkouts, the
-    toolchain's sysroot)."""
+    toolchain's sysroot); `workspace`: the cargo workspace the step built in, where rustc's
+    relative dep-info paths start."""
     problems, env_names, ignored_cache = [], set(), {}
     root_real = os.path.realpath(root)
 
@@ -386,7 +423,7 @@ def audit(root, messages, inputs_by_pkg, pkg_dirs, target, exempt):
     def check(pkg, f, origin):
         # rustc's dep-info is relative to the workspace root; a build script's rerun-if-changed
         # to its package
-        base = dir_of.get(pkg, os.path.join(root, "living")) if origin.startswith("build script") else os.path.join(root, "living")
+        base = dir_of.get(pkg, os.path.join(root, workspace)) if origin.startswith("build script") else os.path.join(root, workspace)
         path = os.path.realpath(os.path.normpath(f if os.path.isabs(f) else os.path.join(base, f)))
         if any(path == e or path.startswith(e + os.sep) for e in exempt):
             return  # generated into the target dir (OUT_DIR), registry sources, the toolchain
@@ -433,6 +470,7 @@ def audit(root, messages, inputs_by_pkg, pkg_dirs, target, exempt):
                             check(pkg, line[len(pre):], "build script")
     if units == 0:
         problems.append("no dep-info found for the workspace units (cannot audit)")
+    problems = list(dict.fromkeys(problems))  # each once, in the order found
     env_names = {n for n in env_names if n not in CARGO_SET_NAMES and not n.startswith(CARGO_SET)}
     return problems, env_names
 
@@ -551,13 +589,13 @@ def stop(p):
             continue
 
 
-def run_step(cmd, root, env, log=None):
-    """Run a cargo step; cargo's JSON messages are collected, everything else goes to the
-    terminal (serial) or to the step's log (parallel)."""
-    full = cmd[:2] + ["--message-format=json-render-diagnostics"] + cmd[2:]
+def run_step(cmd, root, env, log=None, cargo=True):
+    """Run a cargo step (or, cargo=False, another command); cargo's JSON messages are
+    collected, everything else goes to the terminal (serial) or to the step's log (parallel)."""
+    full = cmd[:2] + ["--message-format=json-render-diagnostics"] + cmd[2:] if cargo else cmd
     sink = log or sys.stdout
     # its own process group, so stopping the check stops rustc and test binaries too
-    p = subprocess.Popen(full, cwd=root, env=env, stdout=subprocess.PIPE, stderr=log or None, text=True, errors="replace", bufsize=1,
+    p = subprocess.Popen(full, cwd=root, env=env, stdout=subprocess.PIPE, stderr=log or (None if cargo else subprocess.STDOUT), text=True, errors="replace", bufsize=1,
                          start_new_session=True, preexec_fn=_die_with_parent if _PRCTL else None)
     if WATCHDOG:
         WATCHDOG.send(f"+{p.pid}")  # its own session: the group id is its pid
@@ -606,6 +644,29 @@ class Jobserver:
     def close(self):
         os.close(self.fd)
         shutil.rmtree(self.dir, ignore_errors=True)
+
+
+def run_gate(gate, root, env, step_target, log):
+    """Run a step's gate script on what its builds made: (exit code, its verdict or None).
+    The script's lines go where the step's output goes."""
+    out = os.path.join(step_target, "living-check-gate")
+    verdict_path = os.path.join(out, "gate.json")
+    if os.path.exists(verdict_path):
+        os.remove(verdict_path)  # never judge by an earlier run's verdict
+    cmd = [sys.executable, gate["script"], "--host", os.path.join(step_target, gate["host"]), "--module", os.path.join(step_target, gate["module"]),
+           "--out", out, "--json", verdict_path]
+    if log:
+        log.write("+ " + " ".join(cmd) + "\n")
+        log.flush()
+    code, _ = run_step(cmd, root, env, log, cargo=False)
+    try:
+        with open(verdict_path) as f:
+            verdict = json.load(f)
+    except (OSError, ValueError):
+        verdict = None
+    if code == 0 and not (verdict and verdict.get("ok")):
+        code = 1  # a gate that passes must say so
+    return code, verdict
 
 
 def wrapper_kind(w):
@@ -752,7 +813,7 @@ def main(argv):
 
     def step_key(step, names=None):
         """(digest or None when this step cannot be keyed, inputs, files)."""
-        inputs = sorted(set(SHARED_INPUTS).union(*(clos[p] for p in step["packages"])))
+        inputs = sorted(set(SHARED_INPUTS).union(*(clos[p] for p in step["packages"]), step.get("inputs", [])))
         outside = [i for i in inputs if os.path.isabs(i)]
         try:
             if outside:
@@ -776,6 +837,9 @@ def main(argv):
         else:
             say(f"{s['name']}: run{' (--full)' if full else ''} [{d[:12]}]")
     if plan_only:
+        if json_out:
+            write_json(json_out, {"plan": [{"name": s["name"], "digest": d, "skip": bool(st), "inputs": inputs, "why": None if d else files}
+                                           for s, d, inputs, files, st in plan]})
         return 0
 
     env_extra, exe, how = sccache_env(root) if use_sccache else ({}, None, "off (--no-sccache)")
@@ -799,20 +863,40 @@ def main(argv):
     def run_one(s, d, files, log):
         t0 = time.time()
         load0 = os.getloadavg()[0]
-        code, messages = run_step(s["cmd"], root, step_env, log)
+        env, step_target = step_env, target
+        if s.get("target"):
+            step_target = os.path.join(target, s["target"])
+            env = {**step_env, "CARGO_TARGET_DIR": step_target}
+        code, messages = 0, []
+        for cmd in cmds_of(s):
+            code, m = run_step(cmd, root, env, log)
+            messages += m
+            if code != 0:
+                break
+        verdict = None
+        if code == 0 and s.get("gate"):
+            code, verdict = run_gate(s["gate"], root, env, step_target, log)
         secs = time.time() - t0
         entry = {"name": s["name"], "skipped": False, "digest": d, "secs": round(secs, 1), "rc": code, "load0": load0,
                  "load1": os.getloadavg()[0], "units": len(messages), "fresh": sum(1 for m in messages if m.get("fresh"))}
+        if verdict:
+            entry["gate"] = verdict
         by_name[s["name"]] = entry
         if code != 0:
             with lock:
                 failed.append(s["name"])
                 say(f"{s['name']}: FAILED after {secs:.0f} s (exit {code})")
+                for v in (verdict or {}).get("laws", []):
+                    if not v["ok"]:
+                        say(f"  {v['law']} takes {v['fuel']:,.0f} fuel a call, over its budget of {v['budget']:,} ({s['gate']['script'].rsplit('/', 1)[0]}/budgets.json)"
+                            if v["budget"] is not None else f"  {v['law']} has no budget in budgets.json")
+                for law in (verdict or {}).get("missing", []):
+                    say(f"  {law} has a budget but was not measured")
                 if log:
                     log.flush()
                     show_log(log.name)
             return
-        problems, names = audit(root, messages, inputs_by_pkg, pkg_dirs, target, exempt)
+        problems, names = audit(root, messages, inputs_by_pkg, pkg_dirs, target, exempt, s.get("workspace", "living"))
         with lock:
             d2, _, files2 = step_key(s, learn_envdeps(s["name"], names))
             if d is None or d2 is None:
@@ -842,11 +926,11 @@ def main(argv):
                 if parallel:
                     path = os.path.join(logs, s["name"] + ".log")
                     with lock:
-                        say(f"{s['name']}: {' '.join(s['cmd'])}  (log {path})")
+                        say(f"{s['name']}: {' && '.join(' '.join(c) for c in cmds_of(s))}{' && gate' if s.get('gate') else ''}  (log {path})")
                     with open(path, "w") as log:
                         run_one(s, d, files, log)
                 else:
-                    say(f"{s['name']}: {' '.join(s['cmd'])}")
+                    say(f"{s['name']}: {' && '.join(' '.join(c) for c in cmds_of(s))}{' && gate' if s.get('gate') else ''}")
                     run_one(s, d, files, None)
             except BaseException as e:  # a crash in the check is a failed step, never a pass
                 with lock:

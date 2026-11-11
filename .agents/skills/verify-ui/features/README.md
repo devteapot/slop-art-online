@@ -12,6 +12,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | The cluster and skill bar: the rules' places and looks, sheathe and draw (X), greyed with a reason, the rules' refusals, the held guard, the tooltip | [bar.md](bar.md) | `check.py bar` |
 | Offers to me: a card per swap or proposal in the maker's window, Accept (the rules' skill on `offer`), refusals, Dismiss, a re-offer, terms | [offers.md](offers.md) | `check.py offers` |
 | The cursor pick: who is under the cursor when two overlap on screen (the one drawn in front; stacked exactly, the nearer the camera, every frame), the same for the nameplate, Enter, a tap and combat's target | [talking.md](talking.md) (`pick`) | `check.py pick` |
+| The cursor while the view turns or zooms: a two-finger pan, a pinch and a left drag keep the cursor at its screen position, and what it points at follows the view | [turns.md](turns.md) | `check.py turns` |
 
 ## Baseline preconditions
 

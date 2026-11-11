@@ -1,0 +1,91 @@
+{
+ "schema": 1,
+ "family": "place:cullet-ladder",
+ "id": "20261111-b56693b1-28ed4f",
+ "published": "2026-11-11T19:41:57+01:00",
+ "imported": "2026-11-11T19:41:57+01:00",
+ "track": "layout-1",
+ "maker": "Claude Fable 5.2",
+ "note": "layout pass 1: the town drawn in; balcony Rows with back courts, back lanes and plots; the hollow on the Tally Wynd (oven court, tofts, walled gardens); the Ladder as one block of seven terraces; 114 enclosures in the kit",
+ "source": {
+  "commit": "b56693b17b2b64913a130e0ae95581903afa8090",
+  "branch": "layout-1",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "3a54a71eeedff61fb0521257382f5a5455ba8e7109a377c0b25279fe9bedb536",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-ladder/20261111-b56693b1-28ed4f",
+ "members": [
+  {
+   "name": "ladder_low",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "96336fa565b9b7e84db030d84cf8f045956572023d008e2f8dd4a177b8b78e6d",
+   "shots": [
+    "day-0_35_50",
+    "day-90_28_22",
+    "day-default",
+    "dusk-0_35_50",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_mid",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "44d668b1974fdb19a102cf2ff1df855dc8ce1892ffeb9acaf8d755a1b660762e",
+   "shots": [
+    "day-0_10_7_60",
+    "day-0_35_50",
+    "day-90_28_22",
+    "day-default",
+    "dusk-0_10_7_60",
+    "dusk-0_35_50",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_high",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "68a5b53ee98dde328029e15c05dcf31bd5d55e3d9b8f7959445201e7cb0b3df5",
+   "shots": [
+    "day-0_35_50",
+    "day-180_28_40",
+    "day-default",
+    "dusk-0_35_50",
+    "dusk-180_28_40",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_top",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "19ef81f30128cf37640fa6522bdd720d15af83bd2825b9f7d67d5f8f8363c941",
+   "shots": [
+    "day-180_30_70",
+    "day-default",
+    "dusk-180_30_70",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

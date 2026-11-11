@@ -1,0 +1,78 @@
+{
+ "schema": 1,
+ "family": "place:cullet-crown-and-views",
+ "id": "20261111-b56693b1-75db32",
+ "published": "2026-11-11T19:42:02+01:00",
+ "imported": "2026-11-11T19:42:02+01:00",
+ "track": "layout-1",
+ "maker": "Claude Fable 5.2",
+ "note": "layout pass 1: the town drawn in; balcony Rows with back courts, back lanes and plots; the hollow on the Tally Wynd (oven court, tofts, walled gardens); the Ladder as one block of seven terraces; 114 enclosures in the kit",
+ "source": {
+  "commit": "b56693b17b2b64913a130e0ae95581903afa8090",
+  "branch": "layout-1",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "3a54a71eeedff61fb0521257382f5a5455ba8e7109a377c0b25279fe9bedb536",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-crown-and-views/20261111-b56693b1-75db32",
+ "members": [
+  {
+   "name": "upper",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "3f1cffb4c7dbb8578fad55f414b3cad126102eb321cf9a51562007b0bfec0d3c",
+   "shots": [
+    "day-180_28_22",
+    "day-90_28_22",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "crown",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "21568a8d7ff4cbf976dd75e6126f0c76ee7a6399b91ed7ecdd05ea53765142cd",
+   "shots": [
+    "day-180_12_10_60",
+    "day-180_30_90",
+    "day-default",
+    "dusk-180_12_10_60",
+    "dusk-180_30_90",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "overview",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "6149963f98fb9725277f17b0c18444916a077be35de4e6ac65ebeeb2f2b6933d",
+   "shots": [
+    "day-0_50_150_55",
+    "day-180_40_130_55",
+    "day-270_40_130_55",
+    "day-90_40_130_55",
+    "dusk-0_50_150_55",
+    "dusk-180_40_130_55",
+    "dusk-270_40_130_55",
+    "dusk-90_40_130_55"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
