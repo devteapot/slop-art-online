@@ -613,10 +613,10 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
 
 /// Where the cursor meets the island's ground (the camera's own ray uses the tile ground). The
 /// eye's height over the island's hills is the camera's own (`camera::follow`).
-fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, windows: Query<&Window>) {
+fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, pointer: Res<crate::pointer::Pointer>) {
     let Some(island) = island else { return };
     let Ok((camera, gtf)) = cams.single() else { return };
-    let Some(c) = windows.iter().next().and_then(|w| w.cursor_position()) else { return };
+    let Some(c) = pointer.pos else { return };
     let Ok(ray) = camera.viewport_to_world(gtf, c) else { return };
     let (o, d) = (ray.origin, *ray.direction);
     let below = |p: Vec3| p.y <= island.height(p.x, p.z);
@@ -702,7 +702,9 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   `hold:DEG[:run]` holds it and goes straight on to the next step (a skill or a gesture
 ///   while walking), until `stop`;
 /// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
-///   (a headless run has no cursor);
+///   (a headless run has no cursor); `cursor:X,Y` puts the game's cursor there (fractions of the
+///   picture; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
+///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
@@ -779,7 +781,7 @@ fn script(
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
     (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
-    (hud, loading): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>),
+    (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
     target: Option<Res<crate::capture::Target>>,
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     time: Res<Time>,
@@ -846,6 +848,18 @@ fn script(
         }
         "frame" => {
             cam.rig.frame = arg != "0";
+            true
+        }
+        "cursor" => {
+            pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
+            true
+        }
+        "pan" | "drag" => {
+            pointer.scripted_turn += arg.parse::<f32>().unwrap_or(0.0) * if verb == "pan" { 0.6 } else { 1.0 };
+            true
+        }
+        "pinch" => {
+            pointer.scripted_zoom *= 1.0 - arg.parse::<f32>().unwrap_or(0.0);
             true
         }
         "look" => {

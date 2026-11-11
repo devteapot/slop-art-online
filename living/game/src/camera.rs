@@ -122,6 +122,12 @@ pub struct Cam {
     pub align_request: bool,
     /// How far the eye is raised over rising ground behind it (m), eased ([`CLEARANCE`]).
     lift: f32,
+    /// Zoom: a factor on the view's distance (pinch or wheel, `pointer.rs`), and the one shown.
+    pub zoom: f32,
+    zoom_shown: f32,
+    /// The ground point the cursor stays on while the view is turned by hand, so where I face
+    /// doesn't change with the view.
+    turn_lock: Option<Vec3>,
 }
 
 /// The eye stays this far above the ground under it (m); it is lifted there smoothly, and
@@ -287,9 +293,9 @@ pub fn follow(
     sight: Res<crate::sight::Sight>,
     size: Res<crate::bodies::MySize>,
     mut q: Query<(&mut Transform, &mut Projection, &Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
-    mut windows: Query<&mut Window>,
+    windows: Query<&Window>,
     ui: Res<crate::hud::UiWants>,
-    (town, combat, island): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>),
+    (town, combat, island, mut pointer): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>, ResMut<crate::pointer::Pointer>),
     time: Res<Time>,
 ) {
     let Ok((mut tf, mut proj, camera, gtf, mut fog)) = q.single_mut() else { return };
@@ -298,9 +304,13 @@ pub fn follow(
     let r = cam.rig;
     let s = size.0;
 
-    // Where the cursor meets the ground, from the current camera.
+    // Where the cursor meets the ground, from the current camera (the game's cursor: `pointer.rs`).
     let window = windows.single().ok();
-    let cursor = window.as_ref().and_then(|w| w.cursor_position().map(|c| (c, Vec2::new(w.width(), w.height()))));
+    let screen_size = window.as_ref().map_or(crate::capture::size().as_vec2(), |w| Vec2::new(w.width(), w.height()));
+    let cursor = pointer.pos.map(|c| (c, screen_size));
+    // Last frame's cursor ground point, on the island's own ground where there is one
+    // (`live::ground_cursor` corrects the tile-ground ray below): what a turn keeps under the cursor.
+    let last_ground = cam.cursor_ground;
     cam.cursor_ground = cursor.and_then(|(c, _)| {
         let ray = camera.viewport_to_world(gtf, c).ok()?;
         scene.ray_ground(ray.origin, *ray.direction)
@@ -343,6 +353,20 @@ pub fn follow(
         manual += motion.delta.x * 0.3;
         cam.middle_moved += motion.delta.length();
     }
+    // A left drag or a two-finger pan (`pointer.rs`), at the middle drag's rate.
+    if !ui.pointer && !input.demo {
+        manual += pointer.turn_px * 0.3;
+    }
+    if pointer.align {
+        cam.align_request = true;
+    }
+    // Zoom by pinch or wheel, within a band round the view's own distance.
+    if cam.zoom == 0.0 {
+        cam.zoom = 1.0;
+        cam.zoom_shown = 1.0;
+    }
+    cam.zoom = (cam.zoom * pointer.zoom).clamp(crate::pointer::ZOOM_MIN, crate::pointer::ZOOM_MAX);
+    cam.zoom_shown += (cam.zoom - cam.zoom_shown) * ease(12.0);
     // Align on request: a middle-button tap (released having moved under 6 px). R is a skill key.
     let tapped = mouse.just_released(MouseButton::Middle) && cam.middle_moved < 6.0 && !ui.pointer;
     if tapped || std::mem::take(&mut cam.align_request) {
@@ -418,6 +442,7 @@ pub fn follow(
     };
     // The view, brought in along the tilt toward the ground when sight is short.
     let mut v = r.view;
+    v.distance *= cam.zoom_shown;
     if r.sight_bound {
         let allowed = (sight.radius * 2.0).max(r.close.distance);
         if allowed < r.view.distance {
@@ -490,20 +515,25 @@ pub fn follow(
     tf.translation = eye;
     tf.look_at(cam.focus, Vec3::Y);
 
-    // While aligning, keep the cursor on the same ground point, so your facing doesn't change
-    // and the turn ends with that point straight ahead.
+    // While aligning, or turning the view by hand, keep the cursor on the same ground point, so
+    // your facing doesn't change (and an align ends with that point straight ahead).
+    let place = |p: Vec3| camera.world_to_viewport(&GlobalTransform::from(*tf), p).ok().filter(|s| s.x >= 0.0 && s.y >= 0.0 && s.x < screen_size.x && s.y < screen_size.y);
+    let zooming = (cam.zoom - cam.zoom_shown).abs() > 0.002;
+    let turning = manual != 0.0 || d.abs() > 0.05 || zooming;
+    if (manual != 0.0 || zooming) && cam.turn_lock.is_none() {
+        cam.turn_lock = last_ground;
+    } else if !turning {
+        cam.turn_lock = None;
+    }
     if let Some((want, lock)) = cam.align {
-        if let (Some(p), Ok(mut w)) = (lock, windows.single_mut()) {
-            if let Ok(screen) = camera.world_to_viewport(&GlobalTransform::from(*tf), p) {
-                let size = Vec2::new(w.width(), w.height());
-                if screen.x >= 0.0 && screen.y >= 0.0 && screen.x < size.x && screen.y < size.y {
-                    w.set_cursor_position(Some(screen));
-                }
-            }
+        if let Some(screen) = lock.and_then(place) {
+            pointer.place = Some(screen);
         }
         if diff(want, cam.shown_yaw).abs() < 0.5 {
             cam.align = None;
         }
+    } else if let Some(screen) = cam.turn_lock.and_then(place) {
+        pointer.place = Some(screen);
     }
 
     // Draw out toward the horizon and fade it into the sky.
