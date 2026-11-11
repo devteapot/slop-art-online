@@ -158,6 +158,7 @@ pub enum SkillIcon {
     Shield,
     Dodge,
     Heal,
+    Jump,
     Empty,
 }
 
@@ -177,6 +178,11 @@ pub struct Skill {
     pub key: Key,
     pub icon: SkillIcon,
     pub state: SkillState,
+    /// The rules' skill on this place of the bar, its energy cost, and how many of what it
+    /// spends I carry (arrows), if it spends something.
+    pub name: String,
+    pub cost: f32,
+    pub count: Option<u32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

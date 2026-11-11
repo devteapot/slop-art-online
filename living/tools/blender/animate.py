@@ -437,10 +437,42 @@ class Skeleton:
         self.feet = {}
         for side in "LR":
             self.feet[side] = self.measure_foot(meshes, side)
+        self.body = self.measure_body(meshes)
         L = self.rest
         s = "L"
         self.l1 = (L[bone(s, "LowerLeg")] - L[bone(s, "UpperLeg")]).length
         self.l2 = (L[bone(s, "Foot")] - L[bone(s, "LowerLeg")]).length
+
+    def measure_body(self, meshes):
+        """For the limb guard's torso check: per torso bone (BODY_BONES), points on the mesh weighted
+        mostly to it and within BODY_REACH_M of it: the vertices furthest out along the cube's 26
+        face, edge and corner directions and an even sample of about BODY_POINTS, as offsets from
+        the bone in the rest frame (the glTF frame: rest rotations are identity)."""
+        dirs = [Vector((x, y, z)).normalized() for x in (-1, 0, 1) for y in (-1, 0, 1) for z in (-1, 0, 1) if (x, y, z) != (0, 0, 0)]
+        pts = {b: [] for b in BODY_BONES if b in self.rest}
+        for m in meshes:
+            groups = {g.index: g.name for g in m.vertex_groups}
+            mw = m.matrix_world
+            for v in m.data.vertices:
+                if not v.groups:
+                    continue
+                g = max(v.groups, key=lambda x: x.weight)
+                name = groups.get(g.group)
+                if g.weight > 0.5 and name in pts:
+                    pts[name].append(to_gltf(mw @ v.co))
+        out = {}
+        reach = BODY_REACH_M * self.unit
+        for b, ps in pts.items():
+            o = self.rest[b]
+            # The body itself, not what hangs from it (a coat's hem weighted to the hips).
+            ps = [p for p in ps if (p - o).length <= reach]
+            if not ps:
+                continue
+            keep = {id(p): p for p in (max(ps, key=lambda q: (q - o).dot(d)) for d in dirs)}
+            step = max(1, len(ps) // BODY_POINTS)
+            keep.update({id(p): p for p in ps[::step]})
+            out[b] = [p - o for p in keep.values()]
+        return out
 
     def measure_foot(self, meshes, side):
         ankle, toe = self.rest[bone(side, "Foot")], self.rest[bone(side, "ToeBase")]
@@ -1123,6 +1155,80 @@ def clean_contacts(c, cyclic, gap=2, short=1):
     return c
 
 
+# leg-pole-1: the knee's pole for `plant_feet`'s leg solve. The thigh's forward axis (rest −Z) is a
+# stable pole while the leg is nearly straight, but a folded knee (kneeling, squatting, a tuck) brings
+# it into line with the hip-to-ankle line, where the side the knee bends to is a sign that flips (a
+# 79° thigh snap in stand_up_ground on the VRoid bases). A bent knee has its own answer: where the
+# take's knee is. So the pole turns, about the hip-to-ankle line, from the thigh's axis toward the
+# take's knee by how bent the take's knee is: not at all while its knee is within LEG_POLE_STRAIGHT of
+# the line (of the thigh's length), fully from LEG_POLE_BENT.
+LEG_POLE_STRAIGHT = 0.05
+LEG_POLE_BENT = 0.25
+# A knee opposite the thigh's axis (180°) counts from this far along the way from straight to bent.
+LEG_POLE_FAR = 0.6
+
+
+def knee_turn(sk, pole, reach, pos0, side):
+    """How much (0–1, by how bent the take's knee is) and how far (radians, about the hip-to-ankle
+    line `reach`) `pole` (the thigh's axis) turns to reach the take's own knee (`pos0`: the
+    retargeted pose's positions)."""
+    hip0, knee0, ankle0 = (pos0[bone(side, n)] for n in ("UpperLeg", "LowerLeg", "Foot"))
+    line = (ankle0 - hip0).normalized()
+    knee = (knee0 - hip0) - (knee0 - hip0).dot(line) * line
+    x = (knee.length / sk.l1 - LEG_POLE_STRAIGHT) / (LEG_POLE_BENT - LEG_POLE_STRAIGHT)
+    if x <= 0.0:
+        return 0.0, 0.0
+    dh = reach.normalized()
+    # The take's knee itself, square to the line being solved (the planted foot's correction can
+    # swing a folded leg's short hip-to-ankle line far from the take's own).
+    kv = knee0 - hip0
+    k = kv - kv.dot(dh) * dh
+    across = pole - pole.dot(dh) * dh
+    if k.length < 1e-6 or across.length < 1e-6:
+        return 0.0, 0.0
+    a, k = across.normalized(), k.normalized()
+    theta = math.atan2(dh.dot(a.cross(k)), a.dot(k))
+    # A knee on the far side of the line from the thigh's axis turns the pole only when clearly bent:
+    # a nearly straight leg's knee a hair behind the line (a slight overextension) says nothing.
+    far = max(0.0, (abs(theta) - math.pi / 2) / (math.pi / 2)) * LEG_POLE_FAR
+    return smooth(min(1.0, max(0.0, (x - far) / (1.0 - far)))), theta
+
+
+def turned_pole(pole, reach, angle):
+    """`pole` turned by `angle` (radians) about the line `reach`, square to it."""
+    if angle == 0.0:
+        return pole
+    dh = reach.normalized()
+    across = pole - pole.dot(dh) * dh
+    if across.length < 1e-6:
+        return pole
+    return Quaternion(dh, angle) @ across.normalized()
+
+
+def knee_pole(sk, pole, reach, pos0, side, stats):
+    """The pole for `solve_leg` in one frame (the guards, on poses already solved): `pole` turned
+    toward the take's knee (`knee_turn`)."""
+    w, theta = knee_turn(sk, pole, reach, pos0, side)
+    angle = w * theta
+    if angle:
+        stats["leg_pole_frames"] = stats.get("leg_pole_frames", 0) + 1
+        stats["leg_pole_turn_deg"] = max(stats.get("leg_pole_turn_deg", 0.0), round(abs(math.degrees(angle)), 1))
+    return turned_pole(pole, reach, angle)
+
+
+def smooth_weights(v, r=3, cyclic=True):
+    """A cos²-weighted moving average, so a weight that ramps in one or two frames ramps over a
+    few. (The weight, not the angle: the angle flips by half a turn exactly where the thigh's axis
+    crosses the line, which the turned pole absorbs.)"""
+    n = len(v)
+    if n == 0:
+        return v
+    u = v
+    at = (lambda i: u[i % n]) if cyclic else (lambda i: u[min(max(i, 0), n - 1)])
+    w = [math.cos(k / (r + 1) * math.pi / 2) ** 2 for k in range(-r, r + 1)]
+    return [sum(at(i + k) * w[k + r] for k in range(-r, r + 1)) / sum(w) for i in range(n)]
+
+
 def plant_feet(sk, frames, contacts, belt_v, cyclic, stats, track=None, planted_out=None):
     """Lock planted feet to the floor in the game's world (the clip moves at `belt_v` file units
     per clip, or along `track`: the body's offset at each frame, file units), then solve the legs
@@ -1219,19 +1325,33 @@ def plant_feet(sk, frames, contacts, belt_v, cyclic, stats, track=None, planted_
     if any(extra):
         stats["hip_lowered"] = max(extra) / sk.unit
     out = []
+    # The knee bends the way the retargeted thigh faces (its rest forward, −Z): stable even when
+    # the leg is nearly straight and the knee's own offset says nothing; a bent knee turns it
+    # toward the take's knee (`knee_turn`), by a weight smoothed over a few frames.
+    poses, turn = [], {s: [] for s in "LR"}
     for k in range(count):
         q, off = frames[k]
         off = off - Vector((0, extra[k], 0))
-        q = dict(q)
         rot, pos = fk_pose(sk, q, off, legs["L"] + legs["R"])
+        poses.append((dict(q), off, rot, pos))
+        for side in "LR":
+            target = fk[k][1][bone(side, "Foot")] + shift[side][k]
+            turn[side].append(knee_turn(sk, rot[bone(side, "UpperLeg")] @ Vector((0, 0, -1)), target - pos[bone(side, "UpperLeg")], fk[k][1], side))
+    for side in "LR":
+        if any(w for w, _ in turn[side]):
+            ws = smooth_weights([w for w, _ in turn[side]], cyclic=cyclic)
+            turn[side] = [w * t for w, (_, t) in zip(ws, turn[side])]
+            stats["leg_pole_turn_deg"] = max(stats.get("leg_pole_turn_deg", 0.0), round(max(abs(math.degrees(x)) for x in turn[side]), 1))
+        else:
+            turn[side] = [0.0] * count
+    for k in range(count):
+        q, off, rot, pos = poses[k]
         hips_rot = rot[HIPS]
         for side in "LR":
             ft = bone(side, "Foot")
             hip = pos[bone(side, "UpperLeg")]
             target = fk[k][1][ft] + shift[side][k]  # where the foot was before the hips came down
-            # The knee bends the way the retargeted thigh faces (its rest forward, −Z): stable
-            # even when the leg is nearly straight and the knee's own offset says nothing.
-            pole = rot[bone(side, "UpperLeg")] @ Vector((0, 0, -1))
+            pole = turned_pole(rot[bone(side, "UpperLeg")] @ Vector((0, 0, -1)), target - hip, turn[side][k])
             q.update(solve_leg(sk, side, hip, hips_rot, target, rot[ft], rot[bone(side, "ToeBase")], stats, pole=pole))
         out.append((q, off))
     # What a viewer sees: how far a planted pivot still slides (game world) and how far it is
@@ -1323,8 +1443,8 @@ def floor_guard(sk, frames, cyclic, stats, planted=None):
                 continue
             rot, pos = fk[k]
             ft = bone(s, "Foot")
-            pole = rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1))
             target = pos[ft] + Vector((0.0, lift[k], 0.0))
+            pole = knee_pole(sk, rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1)), target - pos[bone(s, "UpperLeg")], pos, s, stats)
             out[k][0].update(solve_leg(sk, s, pos[bone(s, "UpperLeg")], rot[HIPS], target, rot[ft], rot[bone(s, "ToeBase")], stats, pole=pole))
         lifted = max(lifted, max(lift))
     stats["floor_lift_m"] = lifted / sk.unit
@@ -1480,6 +1600,18 @@ LIMB_EPS = 0.002
 # least angle that brings its heel, ball and toe tip to the floor, at most LIMB_PITCH_MAX degrees;
 # what is still under after that lifts the ankle again.
 LIMB_LOW_ANKLE = 0.6
+# The torso (BODY_BONES' mesh points, `Skeleton.measure_body`) stays out of the floor on low frames,
+# where the hips are under LIMB_LOW_HIPS of their standing height (lying, sitting, kneeling): the
+# hips rise by how far it is under, the legs solved so the feet stay where they were.
+BODY_BONES = [bone("C", b) for b in CENTRAL] + [bone(s, "Shoulder") for s in "LR"]
+LIMB_LOW_HIPS = 0.6
+# Torso points within this of their bone (game m): the body, not a coat's hem or a long sleeve.
+BODY_REACH_M = 0.2
+# Mesh points kept per torso bone (an even sample, besides the 26 furthest out).
+BODY_POINTS = 150
+# The torso's lift is smoothed over this many frames either side (a falling body meets the floor
+# within a frame or two; the hips rise over about half a second instead).
+BODY_SMOOTH = 8
 LIMB_PITCH_MAX = 70.0
 
 
@@ -1527,16 +1659,22 @@ def limb_guard(sk, frames, cyclic, stats):
     by a smooth curve never below how far short it is (`smooth_drop`), the arm (`solve_arm`) or the
     leg (`solve_leg`) solved to it with the hand or foot keeping its rotation; where an arm can't
     reach, the hips rise by what is left. A low foot (see LIMB_LOW_ANKLE) whose sole is still under
-    then turns toes up about its ankle, and what is left after that lifts it again. A clip where no
-    wrist, ankle or low sole goes under comes back unchanged (the same frames). Records `limb_wrist_lift_m`, `limb_ankle_lift_m`, `limb_hip_lift_m`
-    (game m), `limb_frames`, `limb_left_m` (the most still short), and for turned feet
+    then turns toes up about its ankle, and what is left after that lifts it again. On low frames
+    (LIMB_LOW_HIPS) a torso under the floor lifts the hips by its depth as well. A clip where no
+    wrist, ankle, low sole or low torso goes under comes back unchanged (the same frames). Records
+    `limb_wrist_lift_m`, `limb_ankle_lift_m`, `limb_hip_lift_m` (game m), `limb_frames`, `limb_left_m` (the most still short), and for turned feet
     `limb_toe_pitch_deg` and `limb_sole_left_m`; `limb_floor_left_m` is any sole point still
-    under, low or not."""
+    under, low or not; for a lifted torso `limb_body_lift_m` and `limb_body_left_m`."""
     n = len(frames) - 1
     count = n if cyclic else n + 1
-    names = [bone(s, x) for s in "LR" for x in LEG] + [bone(s, x) for s in "LR" for x in ("UpperArm", "LowerArm", "Hand")]
+    names = [bone(s, x) for s in "LR" for x in LEG] + [bone(s, x) for s in "LR" for x in ("UpperArm", "LowerArm", "Hand")] + list(sk.body)
     names = [b for b in names if b in sk.parent]
     hands = [bone(s, "Hand") for s in "LR" if bone(s, "Hand") in sk.parent]
+    hips_low = sk.floor + LIMB_LOW_HIPS * (sk.rest[HIPS].y - sk.floor)
+
+    def body_short(fk):
+        """How far the torso is under the floor on low frames (0 elsewhere)."""
+        return [max(0.0, sk.floor - min(pos[b].y + (rot[b] @ o).y for b, os in sk.body.items() for o in os)) if sk.body and pos[HIPS].y < hips_low else 0.0 for rot, pos in fk]
     eps = LIMB_EPS * sk.unit
     wclear = sk.floor + LIMB_WRIST_CLEAR * sk.unit
     aclear = {s: sk.floor + LIMB_ANKLE_FACTOR * min(sk.feet[s]["ankle"].y - sk.feet[s]["sole"], sk.feet[s]["half_width"]) for s in "LR"}
@@ -1563,7 +1701,8 @@ def limb_guard(sk, frames, cyclic, stats):
     w = {h: [x if x > eps else 0.0 for x in v] for h, v in w.items()}
     a = {s: [x if x > eps else 0.0 for x in v] for s, v in a.items()}
     t = {s: [x if x > eps else 0.0 for x in v] for s, v in sole_short(fk).items()}
-    if not any(any(v) for d in (w, a, t) for v in d.values()):
+    body = [x if x > eps else 0.0 for x in body_short(fk)]
+    if not any(any(v) for d in (w, a, t) for v in d.values()) and not any(body):
         return frames
     W = {h: smooth_drop(v, cyclic=cyclic) if any(v) else [0.0] * count for h, v in w.items()}
     A = {s: smooth_drop(v, cyclic=cyclic) if any(v) else [0.0] * count for s, v in a.items()}
@@ -1578,21 +1717,32 @@ def limb_guard(sk, frames, cyclic, stats):
             q, left = solve_arm(sk, side, rot, pos, pos[h] + Vector((0.0, W[h][k], 0.0)), stats)
             out[k][0].update(q)
             hip[k] = max(hip[k], left)
+    # The torso out of the floor: the hips rise by the depth too.
     hip = smooth_drop([x if x > eps else 0.0 for x in hip], cyclic=cyclic) if any(x > eps for x in hip) else [0.0] * count
+    # The torso's lift raises the whole body, legs and all: the arms' hips keep the feet where they
+    # were (below), the torso's carries them up with it (a body lying or sitting on the floor).
+    rise = [0.0] * count
+    if any(body):
+        rise = smooth_drop(body, r=BODY_SMOOTH, cyclic=cyclic)
+        rise = [max(0.0, r - h) for r, h in zip(rise, hip)]
+        stats["limb_body_lift_m"] = round(max(r + h for r, h in zip(rise, hip)) / sk.unit, 4)
     # The legs: each foot where it was, raised by its own lift, from hips that may have risen.
     for k in range(count):
+        if rise[k] > 0.0:
+            out[k] = (out[k][0], out[k][1] + Vector((0.0, rise[k], 0.0)))
         if hip[k] <= 0.0 and A["L"][k] <= 0.0 and A["R"][k] <= 0.0:
             continue
         q, off = out[k]
         if hip[k] > 0.0:
             off = off + Vector((0.0, hip[k], 0.0))
         rot0, pos0 = fk[k]
+        pos0 = {b: p + Vector((0.0, rise[k], 0.0)) for b, p in pos0.items()}
         rot, pos = fk_pose(sk, q, off, names)
         for s in "LR":
             if hip[k] <= 0.0 and A[s][k] <= 0.0:
                 continue
             ft = bone(s, "Foot")
-            pole = rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1))
+            pole = knee_pole(sk, rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1)), pos0[ft] + Vector((0.0, A[s][k], 0.0)) - pos[bone(s, "UpperLeg")], pos, s, stats)
             q.update(solve_leg(sk, s, pos[bone(s, "UpperLeg")], rot[HIPS], pos0[ft] + Vector((0.0, A[s][k], 0.0)), rot0[ft], rot0[bone(s, "ToeBase")], stats, pole=pole))
         out[k] = (q, off)
     # Low feet whose soles are still under: toes up about the ankle, then what is left lifts them.
@@ -1653,7 +1803,7 @@ def limb_guard(sk, frames, cyclic, stats):
                 q, off = out[k]
                 rot, pos = fk3[k]
                 ft = bone(s, "Foot")
-                pole = rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1))
+                pole = knee_pole(sk, rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1)), pos[ft] + Vector((0.0, lift[k], 0.0)) - pos[bone(s, "UpperLeg")], pos, s, stats)
                 q.update(solve_leg(sk, s, pos[bone(s, "UpperLeg")], rot[HIPS], pos[ft] + Vector((0.0, lift[k], 0.0)), rot[ft], rot[bone(s, "ToeBase")], stats, pole=pole))
                 A[s][k] += lift[k]
         stats["limb_sole_left_m"] = round(max(max(v) for v in sole_short([fk_pose(sk, q, off, names) for q, off in out]).values()) / sk.unit, 4)
@@ -1661,12 +1811,14 @@ def limb_guard(sk, frames, cyclic, stats):
     stats["limb_ankle_lift_m"] = max(max(v) for v in A.values()) / sk.unit
     if any(hip):
         stats["limb_hip_lift_m"] = max(hip) / sk.unit
-    stats["limb_frames"] = sum(1 for k in range(count) if any(v[k] for d in (w, a, t) for v in d.values()))
+    stats["limb_frames"] = sum(1 for k in range(count) if any(v[k] for d in (w, a, t) for v in d.values()) or body[k])
     fk_out = [fk_pose(sk, q, off, names) for q, off in out]
     w2, a2 = short(fk_out)
     # Every sole point still under the floor, low foot or not (the floor guard's own measure).
     stats["limb_floor_left_m"] = round(max(0.0, max(sk.feet[s]["sole"] - min(p.y for p in sole_pts(rot, pos, s)) for rot, pos in fk_out for s in "LR")) / sk.unit, 4)
     stats["limb_left_m"] = max([max(v) for v in w2.values()] + [max(v) for v in a2.values()]) / sk.unit
+    if any(body):
+        stats["limb_body_left_m"] = round(max(body_short(fk_out)) / sk.unit, 4)
     if cyclic:
         out.append(({b: v.copy() for b, v in out[0][0].items()}, out[0][1].copy()))
     return out

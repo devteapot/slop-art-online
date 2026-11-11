@@ -29,9 +29,11 @@ were added on `rhai-1` and run when named: `sb-host MODULE rhai --laws rates,rat
 
 Rhai's hashing keys are fixed in every module and binary of the bench (`sb_bench::fix_hashing`,
 key set 0, or the one `sb_seed` picks): unpinned, ahash draws them at random when it is
-compiled, and they move a law's fuel between builds of the same source. `sb-host --calls 64`
-makes every batch one pass over each fixture set, and `--seeds K` measures in K instances
-under key sets 0..K-1; the gate uses both (`--calls 64 --seeds 8`), so its fuel moves only with
+compiled, and they move a law's fuel between builds of the same source. Key set 0 is the rules'
+own seed (`living_rules::script::HASHING_SEED`, since `det-1`), the keys the game runs under.
+`sb-host --calls 64` makes every batch one pass over each fixture set, and `--seeds K` measures
+in K instances under key sets 0..K-1; the gate uses both (`--calls 64 --seeds 8`), judges key
+set 0 and prints the mean and range over the eight as a diagnostic, so its fuel moves only with
 the code and the fixtures. `--fuel-batches` prints each batch's fuel (with `--calls 1`, each
 fixture's).
 

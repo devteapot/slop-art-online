@@ -2,7 +2,7 @@
 
 The game's people are made by our own tool: a set of parameters goes in, a rigged, painted, animated character file comes out. This replaces VRoid Studio bases (decision 2 of [the small city](SMALL_CITY.md)). The owner's bar is VRoid's quality close up, from a parameterized tool of our own.
 
-**Status (2026-11-11, branch `char-4`, pass 3 of the track, its first step: crowd cost):**
+**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost, and step 2, types and rig as data):**
 
 - **The bar is the reference character:** the VRoid model the game has used so far (`lookdev/vroid-Sendagaya_Shino.glb`; the asset board's control `vroid=recipe:shino`), close up included. The owner accepted pass 1 as the base and said of it: "a step up … but still far away from the reference model we have been using so far. That is kind of what we want to get to".
 - **Pass 1 (`char-2`):** faces and the parameter model. A seed or a parameter file gives a repeatable person of any sex and age from 1 to about 80, with real eye openings, a mouth that opens, 15 expressions under VRoid's names, stubble and six beard styles, age lines and freckles. One command makes a household or a whole town and its check page.
@@ -19,7 +19,13 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - `town.py` reads Cullet's actual cast from the world seed;
   - a seed keeps its hair colour as it ages;
   - measured on the 64 residents: about 11 ms a frame where pass 2's files took about 20 ms, and about 8 ms for the far models, on a loaded machine ([crowd cost](#crowd-cost)). The client needs three changes to use all of it, listed there.
-- **What comes next changes how a person is made.** After the owner's verdict and two research reports ([the reference taken apart](CHARACTER_REFERENCE.md), [the survey](CHARACTER_RESEARCH.md)), identity moves onto bones over a few shared meshes for each type of face and body, and per-person baked meshes stop. See [what later passes need](#what-later-passes-need). The per-person pages and far models of this step are the stop-gap until then; the shared strand texture, the six meshes, the client's three changes and the measuring tools carry over.
+- **What comes next changes how a person is made.** After the owner's verdict and two research reports ([the reference taken apart](CHARACTER_REFERENCE.md), [the survey](CHARACTER_RESEARCH.md)), identity moves onto bones over a few shared meshes for each type of face and body, and per-person baked meshes stop. See [what later passes need](#what-later-passes-need). The per-person pages and far models of step 1 are the stop-gap until then; the shared strand texture, the six meshes, the client's three changes and the measuring tools carry over.
+- **Pass 3, step 2: types and rig, as data and diagrams, before any mesh** ([types and rig](#types-and-rig)). No generated file changes in this step.
+  - **The rig:** 25 new bones under the head carry identity through 38 values; 31 of pass 2's 34 values keep their names on them.
+  - **The types:** 21 designed face types (three for each sex and age band, three for children), set from the reference's measurements, with body types tied to them (`living/tools/characters/types.json`).
+  - **The parameter model:** a person is a type plus values bounded by their distance from it; families share a line and 0.7 of their values.
+  - **The client format:** a person is a recipe line (type id, values, colours, style ids) over shared type and style files.
+  - **No wall for bones.** No clip keys anything but `J_Bip_*` rotations and the hips' translation; a probe file in the game holds a posed face through four clips; about 105 joints of Bevy's 256; and bones leave about 0.3 mm of what pass 2's values do.
 - **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the head's form and structure, how the hair is finished, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
@@ -287,6 +293,226 @@ Counted on the woman preset at each style's usual length:
 
 The reference's hair is 16,400 triangles.
 
+## Types and rig
+
+Pass 3's second step (2026-11-11, branch `char-4`): the plan for how a person is made from here on, as data and diagrams, before any mesh is rebuilt. Nothing in this section is in the generated files yet; pass 2's baked people remain what the tools make until the cage head of step 3.
+
+**The decision** (the dev-box coordinator's, after the owner's verdict on pass 2 and the two research reports): identity in bones, on a few shared meshes for each type. Per-person baked meshes stop.
+
+- **A type** is a designed head: a complete set of skull and landmark values, built once by a cage script with its own designed normals, shadow map and line data. There are about three for each sex and age band, each with a body type tied to it.
+- **A person** is a type plus bounded bone values. Families share a type's line and part of their values.
+- **Why:** shadows and lines are designed once for a type and the bones carry them with the form; meshes, textures and clips are shared at the source; the far face is the same rig on a lower-detail mesh of the type.
+- **What it takes from Blue Protocol** (one of the owner's named art references; [the survey](CHARACTER_RESEARCH.md), §2 rules 6 and 7): choose one of three face types and vary within it; move the face's five parts (brows, eyes, nose, mouth, outline) by bones and not by blend shapes, so a face copies cheaply to a crowd; a body type tied to the face type; height changing the head's proportion and not only the scale; a far face that is shared.
+
+The data is [`living/tools/characters/types.json`](../living/tools/characters/types.json); the tool that makes, checks and draws it is `living/tools/characters/face_types.py`.
+
+```bash
+living/tools/characters/reference/run.sh .local/ref                         # the reference, measured (ref-1's tools; about a minute)
+python3 living/tools/characters/face_types.py measure .local/ref            # the anchors into types.json (also needs .local/ref/avg: pass 2's average heads)
+python3 living/tools/characters/face_types.py build                         # compose the 21 types
+python3 living/tools/characters/face_types.py check                         # every type, drawn people and value ends are valid heads
+python3 living/tools/characters/face_types.py draw OUT_DIR                  # the diagram sheets
+python3 living/tools/characters/face_types.py person --seed 12 --sex female --age 29 --family 7
+python3 living/tools/characters/bone_reach.py                               # can bones do what pass 2's 34 values do?
+python3 living/tools/characters/rig_probe.py IN.glb OUT.glb --pose          # five probe bones on a pass-2 file, to see it in the game
+```
+
+### The rig
+
+25 new bones carry identity, all under `J_Bip_C_Head`, named `J_Id_…`; the two eye bones the files already have (`J_Adj_L_FaceEye`, `J_Adj_R_FaceEye`) move under the orbits. A bone on the character's left has a mirrored twin on the right that takes the same values.
+
+- **A value runs from -1 to 1 and 0 is the type.** At -1 the bone is at `least`, at 1 at `most`; the two need not mirror each other, so each direction has its own designed reach (a small nose is not a large nose run backwards).
+- **Units follow the layer a bone sits on.** `move` is in thousandths of the head's height (‰H), in the frame of the bone's parent, so a child bone's value is scaled by its parents: the orbits ride the face block, and widening the face spreads the eyes before `eye_spacing` says anything.
+- **The parts** are Blue Protocol's five (brows, eyes, nose, mouth, outline) plus the skull above them and the ears.
+
+| Bone | Under | Part | Value | Does | Least to most | Was |
+|---|---|---|---|---|---|---|
+| `J_Id_Cranium` | `J_Bip_C_Head` | skull | `cranium_width` | scale x | ×0.94 to ×1.07 | new |
+|  |  |  | `cranium_depth` | scale y | ×0.95 to ×1.06 | new |
+|  |  |  | `cranium_height` | scale z | ×0.95 to ×1.07 | new |
+| `J_Id_Forehead` | `J_Id_Cranium` | skull | `forehead` | move y | -12 to 16 ‰H | pass 2's `forehead`: low and sloping to high and full |
+| `J_Id_Glabella` | `J_Id_Cranium` | brows | `brow_ridge` | move y | -4 to 12 ‰H | pass 2's `brow_ridge` |
+| `J_Id_Face` | `J_Bip_C_Head` | outline | `face_length` | scale z | ×0.92 to ×1.1 | pass 2's `face_length`: everything below the eyes |
+|  |  |  | `face_width` | scale x | ×0.94 to ×1.07 | pass 2's `face_width` |
+| `J_Id_Corner_L`, `J_Id_Corner_R` | `J_Id_Face` | outline | `front_breadth` | move x | -16 to 16 ‰H | new: how broad the front planes are |
+| `J_Id_Zygoma_L`, `J_Id_Zygoma_R` | `J_Id_Face` | outline | `cheekbones` | move x | -12 to 16 ‰H | pass 2's `cheekbones` |
+|  |  |  | `cheekbone_height` | move z | -12 to 12 ‰H | new |
+| `J_Id_Cheek_L`, `J_Id_Cheek_R` | `J_Id_Face` | outline | `cheeks` | move y | -12 to 20 ‰H | pass 2's `cheeks`: hollow to full; this bone is turned at rest to face out of the cheek, so its forward is the surface's normal |
+| `J_Id_Jaw` | `J_Id_Face` | outline | `jaw_width` | scale x | ×0.88 to ×1.14 | pass 2's `jaw_width` |
+|  |  |  | `jaw_angle` | turn x | -4 to 5 ° | new: a steeper or flatter jaw line |
+| `J_Id_Gonion_L`, `J_Id_Gonion_R` | `J_Id_Jaw` | outline | `jaw_square` | move x | -10 to 14 ‰H | pass 2's `jaw_square`: tapered to square |
+| `J_Id_Chin` | `J_Id_Jaw` | outline | `chin_length` | move z | -28 to 20 ‰H | pass 2's `chin_length` (down is longer) |
+|  |  |  | `chin_width` | scale x | ×0.7 to ×1.4 | pass 2's `chin_width`: pointed to broad |
+|  |  |  | `chin_forward` | move y | -16 to 20 ‰H | pass 2's `chin_forward` |
+| `J_Id_Orbit_L`, `J_Id_Orbit_R` | `J_Id_Face` | eyes | `eye_spacing` | move x | -12 to 14 ‰H | pass 2's `eye_spacing` |
+|  |  |  | `eye_height` | move z | -14 to 14 ‰H | pass 2's `eye_height` |
+|  |  |  | `socket_depth` | move y | -10 to 8 ‰H | new: the eye set deeper or shallower |
+|  |  |  | `eye_size` | scale xyz | ×0.88 to ×1.13 | pass 2's `eye_size` |
+|  |  |  | `eye_open` | scale z | ×0.82 to ×1.18 | pass 2's `eye_open` |
+|  |  |  | `eye_tilt` | turn y | -6 to 7 ° | pass 2's `eye_tilt`: outer corners down to up |
+| `J_Adj_L_FaceEye`, `J_Adj_R_FaceEye` | `J_Id_Orbit_L` | eyes | `iris_size` | scale xyz | ×0.9 to ×1.1 | pass 2's `iris_size` |
+| `J_Id_Brow_L`, `J_Id_Brow_R` | `J_Id_Face` | brows | `brow_height` | move z | -12 to 16 ‰H | pass 2's `brow_height` |
+|  |  |  | `brow_tilt` | turn y | -8 to 8 ° | pass 2's `brow_tilt` |
+|  |  |  | `brow_thickness` | scale z | ×0.7 to ×1.4 | pass 2's `brow_thickness` |
+|  |  |  | `brow_length` | scale x | ×0.9 to ×1.12 | pass 2's `brow_length` |
+| `J_Id_Nose` | `J_Id_Face` | nose | `nose_length` | scale z | ×0.85 to ×1.2 | pass 2's `nose_length` |
+|  |  |  | `nose_width` | scale x | ×0.8 to ×1.25 | pass 2's `nose_width` |
+|  |  |  | `nose_bridge` | scale y | ×0.8 to ×1.25 | pass 2's `nose_bridge`: how far the nose stands out |
+| `J_Id_NoseTip` | `J_Id_Nose` | nose | `nose_tip` | move z | -10 to 12 ‰H | pass 2's `nose_tip`: turned down to turned up |
+| `J_Id_Mouth` | `J_Id_Face` | mouth | `mouth_height` | move z | -12 to 12 ‰H | pass 2's `mouth_height` (down is lower) |
+|  |  |  | `mouth_width` | scale x | ×0.85 to ×1.18 | pass 2's `mouth_width` |
+|  |  |  | `lip_fullness` | scale z | ×0.7 to ×1.35 | pass 2's `lip_fullness` |
+| `J_Id_MouthCorner_L`, `J_Id_MouthCorner_R` | `J_Id_Mouth` | mouth | `mouth_curve` | move z | -6 to 6 ‰H | pass 2's `mouth_curve`: corners down to up |
+| `J_Id_Ear_L`, `J_Id_Ear_R` | `J_Bip_C_Head` | ears | `ear_size` | scale xyz | ×0.87 to ×1.2 | pass 2's `ear_size` |
+|  |  |  | `ear_out` | turn z | -8 to 18 ° | pass 2's `ear_out` |
+
+**Which bones the clips animate.** Every clip in the library keys rotations on 51 `J_Bip_*` bones and rotation and translation on `J_Bip_C_Hips`, and nothing else (`rig_probe.py --list` on a baked file: 29 clips, 52 bones keyed). The root, the eye bones and the hair's spring chains are never keyed. Identity therefore sits on bones no clip touches, and needs no step after animation: the client writes each identity bone's local transform once when it spawns the person, as `characters.rs` `shape` already does for a recipe's proportions.
+
+**Shown in the game** (`rig_probe.py`, on pass 2's woman, nothing in the client changed): five probe bones were added under the head with soft weights on the face and hair.
+
+- With the bones at rest the file photographs as it did: 0.02% to 0.19% of pixels differ over five shots, where spring-bone hair hangs differently.
+- With the bones posed in the file (a wider and taller cranium, a narrower jaw, a longer chin, larger eyes set further apart) the same mesh is a different face, and stays so through `idle`, `walk`, `run` and `sword_slash`. The expressions' morphs move with it, since morphs apply before skinning.
+- The weights there are plain distances on a mesh not built for bones, so the result is rough at the fringe and the neck. A type's cage is built with its weights.
+
+**Joints.** Bevy's limit is 256 joints a skin. A person today has 55 (the body's 52, the root and two eyes) and up to 79 with long hair's spring chains. Identity adds 25: about 105 at most. The VRoid control has 148.
+
+### How far bones reach
+
+`bone_reach.py` asks whether bones with soft weights can do what pass 2's 34 values do. It takes pass 2's head with every value at 0 as the shared mesh, each varied head as the target, and fits the rig's bones (25 of them carry skin) to carry one onto the other: 1,767 surface points have to land on the target's surface and 42 landmarks on the target's landmarks.
+
+- **Every value alone, at -1 and +1:** the most left after the bones is 0.46 mm (root mean square over the surface, for `face_width`, which moved 3.7 mm); the worst single landmark is 2.9 mm (`crown`, for `forehead`). Eyes, brows, nose and mouth are followed to 0.1 mm.
+- **40 people drawn as pass 2 draws them, every value at once:** the surface moved 2.6 mm and the landmarks 4.4 mm; after the bones 0.31 mm is left on the surface at the median and 0.64 mm at worst, and 0.28 mm on the landmarks (0.82 at worst, the worst single landmark 3.6 mm). A man's head gives the same (0.33 and 0.34 mm).
+- **What that does and does not say.** The fit gives each bone every move, scale and small turn, which is more than the 38 named values, and it is made on pass 2's loft, not on a cage. It says the bone layout has no hole: no part of what varies between pass 2's people is out of reach. It does not say the named values are enough; that is judged on the cage in step 3.
+- **Three of the 34 are shapes, not placements,** and a type fixes them: `eye_shape` (where the upper lid peaks), `eye_fold` and `brow_arch`. So does how sharp the planes' creases are.
+
+No wall was found for bones: not in the animation, not in the joint count, not in reach.
+
+### The types
+
+Twenty-one: three for each sex in the bands youth (12 to 17), adult (18 to 59) and elder (60 and over), and three for children of 2 to 11, whose faces differ little by sex. Each type's line has a letter that holds across the bands, so a family keeps its line as its people age: `a` round, `b` even, `c` long.
+
+**How they were set.** By measuring, and by drawing the result (the board's `character:face-types` sheets).
+
+1. **The anchors**, measured with ref-1's tools (`living/tools/characters/reference/`), in units of the head's height H from chin to crown: the reference and its sister file, and pass 2's average head (every face value at 0) for each sex and band. Only proportions are taken from the VRoid files; nothing of theirs is used.
+2. **A band's base** is the reference plus the difference pass 2 makes between that group's average and the adult woman's. Men, elders and children so keep the look the owner accepted, on the reference's structure: a man's eyes sit higher and are smaller, and his front is narrower than a woman's, but it is the reference's broad front and not pass 2's narrow one. Places are carried as differences and sizes as ratios.
+3. **The lines.** `a` moves 0.8 of the way from the reference toward its sister file, which is a wider, blunter lower face with taller eyes. `c` moves half as far the other way and is lengthened: the eyes and nose a little higher, the lower face narrower, the chin to a point on women and cut square on men, the cheek corner sharper.
+4. **Designed, not measured:** the skull above and behind the reference's mask (it has none), the ears, the brows, the jaw's angle, the creases' sharpness, the eye's depths (from ref-1: the iris 4 mm behind the lid, the white a bowl 15 mm deep), and the body types.
+
+| Head | Eyes: height, apart | Eye: width by height | Front at the eyes, within 0.15 / 0.30 H | Jaw (0.12 H), chin (0.04 H) | Nose tip |
+|---|---|---|---|---|---|
+| The reference (Shino) | 0.39, 0.39 | 0.16 by 0.12 | 0.64 / 0.72 | 0.42, 0.19 | 0.24 |
+| Its sister file (Vivi) | 0.37, 0.40 | 0.17 by 0.15 | 0.63 / 0.72 | 0.51, 0.26 | 0.27 |
+| Pass 2's average woman | 0.47, 0.28 | 0.18 by 0.14 | 0.56 / 0.65 | 0.44, 0.20 | 0.30 |
+| Pass 2's average man | 0.52, 0.26 | 0.14 by 0.09 | 0.52 / 0.59 | 0.44, 0.25 | 0.35 |
+| Pass 2's average old man | 0.52, 0.26 | 0.14 by 0.08 | 0.51 / 0.58 | 0.46, 0.26 | 0.33 |
+| Pass 2's average girl of 7 | 0.44, 0.29 | 0.18 by 0.15 | 0.57 / 0.66 | 0.48, 0.23 | 0.31 |
+
+| Type | Line | Eyes: height, apart, width by height | Front at the eyes, within 0.15 / 0.30 H | Jaw, chin | Nose tip | Cheek corner | Body: usual height, weight |
+|---|---|---|---|---|---|---|---|
+| `child-u-a` | round | 0.36, 0.40, 0.17 by 0.14 | 0.65 / 0.73 | 0.54, 0.27 | 0.26 | 0.40 | 1.20 m, +0.35 |
+| `child-u-b` | even | 0.37, 0.39, 0.16 by 0.12 | 0.65 / 0.73 | 0.46, 0.22 | 0.26 | 0.52 | 1.22 m, +0.00 |
+| `child-u-c` | long | 0.40, 0.38, 0.15 by 0.11 | 0.65 / 0.73 | 0.40, 0.18 | 0.25 | 0.66 | 1.25 m, -0.30 |
+| `youth-f-a` | round | 0.39, 0.40, 0.16 by 0.13 | 0.63 / 0.72 | 0.50, 0.24 | 0.25 | 0.60 | 1.58 m, +0.30 |
+| `youth-f-b` | even | 0.39, 0.39, 0.16 by 0.12 | 0.64 / 0.72 | 0.42, 0.19 | 0.24 | 0.72 | 1.60 m, -0.05 |
+| `youth-f-c` | long | 0.42, 0.38, 0.15 by 0.10 | 0.64 / 0.72 | 0.36, 0.13 | 0.24 | 0.86 | 1.63 m, -0.35 |
+| `youth-m-a` | round | 0.43, 0.38, 0.14 by 0.10 | 0.61 / 0.67 | 0.51, 0.29 | 0.29 | 0.68 | 1.64 m, +0.25 |
+| `youth-m-b` | even | 0.43, 0.37, 0.13 by 0.08 | 0.61 / 0.67 | 0.43, 0.24 | 0.28 | 0.80 | 1.66 m, -0.10 |
+| `youth-m-c` | long | 0.46, 0.36, 0.12 by 0.07 | 0.61 / 0.67 | 0.37, 0.24 | 0.28 | 0.94 | 1.69 m, -0.40 |
+| `adult-f-a` | round | 0.39, 0.40, 0.16 by 0.13 | 0.63 / 0.72 | 0.49, 0.24 | 0.25 | 0.60 | 1.62 m, +0.35 |
+| `adult-f-b` | even | 0.39, 0.39, 0.16 by 0.12 | 0.64 / 0.72 | 0.42, 0.19 | 0.24 | 0.72 | 1.64 m, +0.00 |
+| `adult-f-c` | long | 0.42, 0.38, 0.15 by 0.10 | 0.64 / 0.72 | 0.36, 0.13 | 0.24 | 0.86 | 1.67 m, -0.30 |
+| `adult-m-a` | round | 0.44, 0.38, 0.13 by 0.09 | 0.60 / 0.66 | 0.50, 0.29 | 0.30 | 0.68 | 1.75 m, +0.35 |
+| `adult-m-b` | even | 0.45, 0.36, 0.13 by 0.07 | 0.60 / 0.66 | 0.42, 0.24 | 0.29 | 0.80 | 1.77 m, +0.00 |
+| `adult-m-c` | long | 0.47, 0.36, 0.12 by 0.07 | 0.60 / 0.66 | 0.36, 0.24 | 0.29 | 0.94 | 1.80 m, -0.30 |
+| `elder-f-a` | round | 0.39, 0.40, 0.15 by 0.12 | 0.63 / 0.71 | 0.50, 0.26 | 0.24 | 0.65 | 1.59 m, +0.45 |
+| `elder-f-b` | even | 0.40, 0.38, 0.15 by 0.10 | 0.63 / 0.70 | 0.42, 0.20 | 0.23 | 0.77 | 1.61 m, +0.10 |
+| `elder-f-c` | long | 0.43, 0.38, 0.14 by 0.09 | 0.63 / 0.70 | 0.36, 0.15 | 0.23 | 0.91 | 1.64 m, -0.20 |
+| `elder-m-a` | round | 0.44, 0.38, 0.12 by 0.08 | 0.59 / 0.65 | 0.51, 0.30 | 0.28 | 0.73 | 1.72 m, +0.45 |
+| `elder-m-b` | even | 0.45, 0.36, 0.12 by 0.06 | 0.59 / 0.65 | 0.44, 0.25 | 0.28 | 0.85 | 1.74 m, +0.10 |
+| `elder-m-c` | long | 0.48, 0.36, 0.12 by 0.06 | 0.59 / 0.65 | 0.38, 0.25 | 0.28 | 0.99 | 1.77 m, -0.20 |
+
+A type's record holds, in H: the sections at nine heights (the face's full width within 0.15 H and 0.30 H of depth behind the bridge of the nose, the skull's side, the midline's profile, the front plane beside the nose and the surface 0.30 H off the midline), the eye (height, spacing, size, tilt, how far it sits behind the brow and the cheek, the iris's and the white's depths), brow, nose, mouth, jaw, ear, the creases' sharpness, and the body type (height as least, usual and most; weight; muscle).
+
+**The sections are step 3's acceptance.** The widths within 0.15 H and 0.30 H are the measure ref-1 set for the cage: `adult-f-b` is the reference's own, so the cage for it is accepted when its sections match these within the stated tolerance. One cell of ref-1's table differs from this file's (the reference at 0.64 H within 0.15 H: 0.70 there, 0.64 here), because the depth is taken from the bridge at eye height here; the other fourteen agree to 0.01.
+
+**Checked** (`face_types.py check`): every type is a valid head (the thirds in order, each width inside the next, the eyes on the front plane and clear of the nose and brow, the mouth inside the front, the nose between the eyes, the eye in its socket). Of 4,200 people drawn, 4,197 are valid as drawn, and every one is once pulled back toward its type. Of 60,648 cases of one or two values at their ends on every type, 60,539 are valid; the 109 that are not (nose base ×79; the eye's upper lid reaches the brow ×22; at 0.20 the front ×8) are ranges to trim on the cage.
+
+**Body types.** Each type carries one: the band's and sex's height (least, usual, most), and the line's lean: `a` a little shorter and heavier, `c` a little taller and leaner. A body's build stays what it is today, the recipe's proportions as bone scales (legs, arms, torso, neck, head, shoulders, hips, build, hands, feet), which the client already applies; weight's belly and muscle's chest, which pass 2 bakes into the mesh, become two more bones in step 3.
+
+### The parameter model
+
+**What a type fixes:** the skull and every landmark's place; the planes and how sharp their creases are; the sockets' form; the lid's shape, the fold and the brow's arch; the topology and UVs; the designed normals, shadow map and lines; the expressions' morphs; the body's mesh.
+
+**What a person varies:** the type itself (one of three), the 38 bone values, height and build, colours, and style ids (hair, beard, clothes, details).
+
+**The draw** (`face_types.draw_values`; the numbers are `DRAW` in `face_types.py`):
+
+1. Along four directions in which heads vary together, each a normal draw (width 0.42): `broad` (face, cranium and jaw width, cheekbones, the front's breadth, eye spacing), `long` (face, chin and nose length), `bony` (cheekbones and brow ridge up, cheeks down, a squarer jaw, shallower sockets) and `eyes` (size, opening, iris).
+2. Then value by value (width 0.22), each from its own random stream, so adding a value later does not reshuffle people.
+3. **Bounded by distance from the type, not per value:** when the root mean square of all the values passes 0.42, the whole set is scaled back to it. A person may have one or two strong features but not every feature strong at once.
+4. A head that still fails the checks is pulled back toward its type until it passes.
+
+**Families** share a type's line (eight in ten of a family's blood relatives take the family's line; the band and sex choose the type on that line) and 0.7 of their values, in place of pass 2's half of each value.
+
+**Age** changes the band, and so the type, at 12, 18 and 60. Within a band a person's values do not change with age yet; ageing inside a band (lines, lower lids) is to be an age direction on the same bones, set on the cage.
+
+**Height changes the head's proportion,** as Blue Protocol does, not only the scale: the recipe's head multiplier is (the type's usual height / the person's height) to the power 0.6, so a person 10% taller than usual has a head about 4% larger, not 10%.
+
+**How pass 2's 34 values map onto this:**
+
+- **31 carry over under the same name** as bone values: `forehead`, `brow_ridge`, `face_length`, `face_width`, `cheekbones`, `cheeks`, `jaw_width`, `jaw_square`, `chin_length`, `chin_width`, `chin_forward`, `eye_spacing`, `eye_height`, `eye_size`, `eye_open`, `eye_tilt`, `iris_size`, `brow_height`, `brow_tilt`, `brow_thickness`, `brow_length`, `nose_length`, `nose_width`, `nose_bridge`, `nose_tip`, `mouth_height`, `mouth_width`, `lip_fullness`, `mouth_curve`, `ear_size`, `ear_out`.
+- **3 become the type's:** `eye_shape`, `eye_fold`, `brow_arch`.
+- **7 are new:** `cranium_width`, `cranium_depth`, `cranium_height`, `front_breadth`, `cheekbone_height`, `jaw_angle`, `socket_depth`. How sharp the cheek corner is belongs to the type.
+- A value's meaning is now "from this type" and no longer "from the average for the sex and age", and `stylise`, the men's and elders' shares and `STYLE` go: how drawn a group is lives in its types.
+- **Existing seeds will give different faces.** That is accepted; it is recorded here.
+
+### The client format
+
+For the laptop coordinator. Nothing of this is built yet; the type files arrive with step 3.
+
+**A person becomes a recipe line**, with a type in place of a base file:
+
+```json
+{
+  "name": "tamsin-hollin",
+  "type": "adult-f-a",
+  "height": 1.62,
+  "proportions": { "head": 1.0, "shoulders": 0.895, "build": 0.973, "hands": 0.88, "feet": 0.9 },
+  "identity": {"cranium_width": -0.384, "cranium_height": -0.31, "brow_ridge": 0.271, "face_length": -0.499, "jaw_width": -0.292, "jaw_square": -0.518, "chin_length": -0.948, "chin_forward": -0.504, "socket_depth": 0.576, "eye_size": 0.387, "eye_open": -0.258, "iris_size": 0.257, "nose_length": -0.273, "mouth_height": -0.29, "mouth_width": -0.648},
+  "colors": { "skin": "#e6b89c", "hair": "#4a2a1a", "eyes": "#536f54", "outfit": { "coat": "#5d7f9a", "jersey": "#d8d2bd" } },
+  "styles": { "hair": "bob", "beard": "none", "outfit": { "coat": "smock", "headwear": "none" }, "details": { "lines": 0, "freckles": 0, "stubble": 0 } }
+}
+```
+
+- `type`: an id from `types.json`. `identity`: values from -1 to 1 by name; one left out is 0. `proportions` and `height` are as today. `colors` and `styles` replace what pass 2 paints and builds into each person's file.
+- Sixty-four residents are 64 such lines. No file is made for a person.
+
+**What the client loads:**
+
+| File | Holds | Shared by |
+|---|---|---|
+| `lookdev/types/<type>.glb` | The `J_Bip_*` skeleton, the 25 identity bones and the eye bones; the type's head (skin, eyes, lines, with the expressions' morphs) and its skin (neck, hands); the far head as `Far*` mesh nodes on the same skin | everyone of that type |
+| `lookdev/styles/hair/<style>.glb`, `…/outfit/<piece>.glb` | One mesh a style, skinned to the same bone names (hair to the cranium's bones and its own spring chains), with its far mesh | everyone wearing it |
+| `lookdev/anim/own-clips.glb` | Every clip, once | everyone: all types share the body's skeleton, as all generated people do today |
+| `characters/types.json` | The rig: each value's bone, what it does and its range | the client, to turn values into transforms |
+
+**How the client composes a person:**
+
+1. Spawn the type's scene, as it spawns a base today.
+2. **Identity,** once, in `shape`: for each value in the rig, set its bone's local transform from the bone's rest in the file. A `move` adds (the value's amount in ‰H × the type's head height) along the bone's axis to the rest translation, the axis turned by the bone's rest rotation (identity for all but the cheeks); a `scale` multiplies the axis; a `turn` rotates about the axis, after the rest rotation. The rig's x, y and z are the file's X, -Z and Y. A paired bone's x points away from the midline on both sides and its turns have the same sense on both, so the right bone takes the left's values with x reversed. No clip keys these bones, so nothing is done per frame.
+3. **Build,** as today: the recipe's proportions through the helper joints.
+4. **Styles:** hair, beard and clothes attach as outfit pieces do today (`characters/outfit.rs`): each primitive under the character's root with a `SkinnedMesh` whose joints are the character's own bones by name. Pieces must find the identity bones as well as `J_Bip_*`.
+5. **Colours:** through the mesh tag on shared materials, as recipes recolour today (`recolor`, mode 3): skin on the face and skin meshes, hair on the hair, the iris on the eyes, each garment on its piece. A tag carries one colour a mesh.
+6. **The far switch and clips once** are as written under [what the client needs](#what-the-client-needs): `Far*` nodes beyond about 10 m; clips from the shared file. Shared face shadow maps fall away: a type's map is one file beside its type file, shared by everyone of the type.
+
+**To settle with the laptop before step 3 writes files:**
+
+- **Details a person has and a type does not:** stubble and beards, age lines, freckles, lip tint. Pass 2 paints them into each person's atlas. The proposal is style ids for shared overlay meshes on the type (a beard shell, a lines layer), tinted by the mesh tag, with the count a person may wear kept small. The alternative is a second tag or a material value per person.
+- **One colour a mesh.** Mode 3 moves a texture's mean colour to the person's. Lips, blush and the lid's shade sit in the same skin texture and move with it; whether that holds across Cullet's skin tones is to be judged on the board in step 3.
+- **Bindless.** Whether per-person colour as a material value under bindless toon materials beats the mesh tag is the client's to measure ([the survey](CHARACTER_RESEARCH.md), §4).
+- **Spring chains** of a hair style hang under `J_Id_Cranium`, so a wider skull moves their roots; the collider spheres on the head should take the cranium's scale.
+- **Normals under a bone's scale.** A bone scaled unevenly skews the normals it carries a little (ranges are within ±15% for the skull and face). Designed normals ride through it; if it shows, the cure is in the ranges.
+
 ## Motions on generated people
 
 `animate.py` retargets the clip library onto a generated person unchanged, since the skeleton is VRoid's. Limb lengths are our own, so a take can behave differently on our people than on a VRoid base: our man's arms are longer, and a hand that clears the floor on Shino goes 8 cm into it on him.
@@ -314,7 +540,19 @@ What happened since (2026-11-11):
   - It has the floor guard's jerk protection: a clip whose largest frame-to-frame jerk would rise more than 6° is left alone (`limb_guard_skipped`, a marker_check warning).
   - Baked onto the 65 entries with the final town takes, it changed `sit_ground_down` and `sit_ground` on every body, `stand_up_ground` on `own-man`, and `death` on the VRoid bases (toes turned 1–10°). Every other clip bakes byte-identically: 61 of 65 on each VRoid base, 62 on `own-man`.
   - The crossed ankles went from 1–5 cm under the floor to 4.0–4.8 cm above it. The deepest sole point went from 11–20 cm under its standing height to 5–10.
-  - It skips `stand_up_ground` on the VRoid bases. Baked before either guard runs, that take already snaps the right thigh 79° in one frame at 0.53 s while kneeling (the knee flips over; not on `own-man`), and the guard would raise that to 90°. Hands: no wrist goes under 3 cm in any clip. Fingertips are not guarded (`death` 4–4.5 cm under on all three; `stand_up_ground` 2.4 cm on `own-man`).
+  - **The torso** (branch `body-guard-1`): on low frames (hips under 0.6 of their standing height) the torso stays out of the floor. That is the mesh of the hips, spine, chest, neck, head and shoulders within 20 cm of its bone, so a coat's hem or long hair doesn't count. Where it goes under, the whole body rises by the depth, smoothed over ±8 frames, legs and all (the legs re-solve only for an ankle's own lift, so no new jerk).
+    - Baked onto the 65 entries with `death` s1, it changed `death` on every rig (the body lifted 4.0–6.3 cm), plus `sit_ground_down`, `sit_ground` and `stand_up_ground` on `own-man` (3.9–4.4 cm: his hips sat in the floor).
+    - Everything else bakes byte-identically: 64 of 65 clips on each VRoid base, 61 on `own-man`. No clip's largest jerk moved by more than 0.5°.
+    - `death` s1's last frame: the torso went from 4–7 cm under to clear (the lowest body vertex left under is long hair weighted to the head, 1.6–2.3 cm), and the toes from 1.7–2.5 cm under to 1.4–3.7 cm above.
+  - Hands: no wrist goes under 3 cm in any clip. Fingertips are not guarded (`death` 4–4.5 cm under on all three; `stand_up_ground` 2.4 cm on `own-man`).
+- **The knee's pole** (`knee_turn` in `animate.py`, branch `leg-pole-1`), in `plant_feet`'s leg solve and in both guards.
+  - The leg solves bent the knee toward the thigh's forward axis. A folded knee (kneeling, a tuck) brings that axis into line with the hip-to-ankle line, and there the side the knee bends to flipped: `stand_up_ground` snapped the right thigh 79° in one frame on Vivi (30° on Shino), so both floor guards skipped it and its feet stayed 4–5 cm under the floor.
+  - Now the pole turns about the hip-to-ankle line toward where the take's own knee is, by how bent that knee is: not at all within 5% of the thigh's length of the line, fully from 25%. A knee on the far side of the line counts only when clearly bent (`LEG_POLE_FAR`). In `plant_feet` the weight is smoothed over a few frames.
+  - Baked onto the 65 entries on three rigs, no clip's largest frame-to-frame jerk rises by more than 1°. Falls: `stand_up_ground` 78 → 10° (Shino 30 → 9.5), `jump_forward` 50–55 → 24, `jump_back` 40–47 → 27, `sit_ground_down` 20–23 → 13–14, and `jump_right` on Shino 24 → 17.5.
+  - Both guards now run on `stand_up_ground` on the VRoid bases: the ankles sit 4.0–4.6 cm above the ground (were 4–5 cm under).
+  - Every clip's bytes change, since the knee now bends where the take bends it: the legs turn up to 20° in locomotion (`run_fast` on Vivi), 6° in the idle.
+  - The forward gaits' planted feet slid no more in the game's look-dev ramp (0–6 m/s on Vivi): walk 2.7 → 2.3%, `walk_brisk` 3.0 → 2.4%, run 4.4 → 3.8%, `run_fast` 3.2%. marker_check: 0 errors.
+  - `death` on Shino is still skipped by the floor guard (its hand jerks 93°).
 - **Hair on spring bones** changes nothing for `animate.py`: the chains hang under the head and the clips do not key them.
 - **Since pass 3 generated people are baked with main's `animate.py` again** (floor-guard-4, `25c1fb92`, which replaced the second and third guards: wrists and ankles are kept above the floor on every clip and body). The board's seven presets and the control were baked with it on the 29 entries this machine holds, and `living/tools/marker_check.py` on that bake reports no errors. On each of our people the guard changed 16 clips; the largest jerk rose by 0.4° at most (`run`, 17.8° to 18.2°, 6° allowed), and one warning stands (`sneak`: the right foot slides 4.5 cm while planted, 4 allowed). The 64 residents used for pass 3's crowd measurement were baked earlier with the first guard, as pass 2's were (`ANIMATE=<a copy from 93a4f3d6>`), so the two sets compared carry the same clips.
 
@@ -479,7 +717,7 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 **The decision: identity in bones, on a few shared meshes for each type.** For each sex and age band there are about three designed face types, with body types tied to them. A type is a complete set of skull and landmark values, built once by a cage script with its own designed normals, shadow map and line data. A person is a type plus bounded bone values; families share a type and part of their values. Meshes, textures and clips are then shared at the source, and the far face is the same rig on a lower-detail type mesh.
 
 1. **Crowd cost.** Done in pass 3's first step ([crowd cost](#crowd-cost)).
-2. **Types and rig, as data and a page before any mesh:** which bones, their ranges, what a type fixes and a person varies, and three face types for each band, set by measuring the reference and by drawing.
+2. **Types and rig, as data and a page before any mesh.** Done in pass 3's second step ([types and rig](#types-and-rig)): which bones, their ranges, what a type fixes and a person varies, three face types for each band, and the client's format. Left for the cage: trimming the value ranges that fail in pairs, the age direction inside a band, the belly and chest bones, and how details a person has (beard, lines, freckles) are carried.
 3. **The cage head for each type, with the rig in it,** accepted against the reference's measured sections ([CHARACTER_REFERENCE.md](CHARACTER_REFERENCE.md)), with its eye depths, and smoothed outline normals written in the same pass.
 4. **Designed shadows:** a planar proxy's normals, and a shadow map from script-drawn shapes at several light angles (the cheek triangle, the side of the nose, the eye socket, the underside of the jaw).
 5. **Lines where the form turns:** shell lines at the jaw, chin, mouth and ears; per-vertex line width needs a client outline shader, to be written up for the laptop.

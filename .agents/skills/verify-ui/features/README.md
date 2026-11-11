@@ -8,9 +8,13 @@ This directory is the maintained source for verifying interface D in the game cl
 | Talking: whom Enter addresses, the person window, Tab (another person, then everyone near), the log and people, introduce yourself, labels by looks, `heard_by` and `introduced` slots | [talking.md](talking.md) | `check.py talk` |
 | Items on people: the pack, an item's acts, carrying an item onto someone's window or onto them, hold F › Give › | [items.md](items.md) | `check.py items` |
 | What you stand on: a flight, a terrace, the quay's edge and a wall's top never fade under you; landmarks and far things are not faded for being in the way | [support.md](support.md) | `check.py support` on a Cullet world (`--seed cullet`) |
+| Facing sight (`fov_on`): off draws no field; F5 or Settings › Play switches it through the admin link (`law_change` rows); the readout of the five values; the authority's perceived set against the client's field at four looks (`human_face`); a walking look held at 30° and the releases; heard marks per `heard_sounds` row | [field.md](field.md) | `check.py field` |
 | Themes: Clear (default), Night, Linen, Walnut; F4 cycles, Settings › Play › Look sets, the settings file keeps; windows stay through a change | [themes.md](themes.md) | `check.py themes`; `LIVING_GAME_THEME=<t> check.py …` for each theme's stills |
-| The cursor pick: who is under the cursor when two overlap on screen (the one drawn in front), the same for the nameplate, Enter, a tap and combat's target | [talking.md](talking.md) (`pick`) | `check.py pick` |
+| The cluster and skill bar: the rules' places and looks, sheathe and draw (X), greyed with a reason, the rules' refusals, the held guard, the tooltip | [bar.md](bar.md) | `check.py bar` |
+| Offers to me: a card per swap or proposal in the maker's window, Accept (the rules' skill on `offer`), refusals, Dismiss, a re-offer, terms | [offers.md](offers.md) | `check.py offers` |
+| The cursor pick: who is under the cursor when two overlap on screen (the one drawn in front; stacked exactly, the nearer the camera, every frame), the same for the nameplate, Enter, a tap and combat's target | [talking.md](talking.md) (`pick`) | `check.py pick` |
 | The cursor while the view turns or zooms: a two-finger pan, a pinch and a left drag keep the cursor at its screen position, and what it points at follows the view | [turns.md](turns.md) | `check.py turns` |
+| Looking aside while walking: head, then chest, then the body on an eased curve; legs on the travel's takes; a sidestep only after a sudden turn; the three presets (Settings › Play › Looking aside) | [look-walk.md](look-walk.md) | `check.py look-walk` |
 
 ## Baseline preconditions
 
@@ -21,7 +25,7 @@ This directory is the maintained source for verifying interface D in the game cl
 ## Driving conventions
 
 - Click tagged nodes (`@win:Pack:close`), not coordinates; a tag is stable across layout changes.
-- Check state from `dump:` files, and what was sent from the client log and the authority's rows. A photograph alone is not the proof.
+- Check state from `dump:` files, and what was sent from the client log and the authority's rows. A photograph alone is not the proof. For every reducer call and its reply, give the drive `LIVING_GAME_ACTIONS=<file>` and read the JSON lines (docs/PLAY_REPORT.md, "The action log").
 - Wait 0.3–0.6 s after a click or key before a dump or a photograph: windows spawn and lay out at the end of a frame.
 
 ## Proof and skip reporting

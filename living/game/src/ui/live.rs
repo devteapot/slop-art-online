@@ -263,37 +263,46 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.bubbles = bubbles;
     model.actors = actors;
 
-    // Skills: live cooldowns, held guard, and what the rules require (costs from `skill_card`).
+    // Skills: every skill on the rules' bar, with live cooldowns, a held guard, what the rules
+    // require (costs from `skill_card`) and what it spends that I carry. The cluster puts them
+    // on their places (`ui/cluster.rs`, `combat::Roles`).
     model.skills = match (me, model.me.as_ref()) {
         (Some(id), Some(m)) => {
             let inv = |item: &str| conn.db.my_inventory().iter().filter(|r| r.owner == id as u64 && r.item == item).map(|r| r.qty).sum::<u32>();
             let knows = |t: &str| conn.db.my_know_how().iter().any(|k| k.actor == id && k.technique == t);
             let me_f = crate::net::find_fighter(conn, id);
             let energy = m.energy;
-            live_bar(&cards, |card| {
-                // A held guard: raised now (my fighter row says so) or my key is down.
-                if card.aim == "facing" && (combat.guarding || me_f.as_ref().is_some_and(|f| f.act == card.code && (now_ms as u64) < f.until_ms)) {
-                    return SkillState::Active;
-                }
-                if let Some((left, total)) = crate::combat::cooldown(conn, id, &card.skill, now_ms) {
-                    return SkillState::Cooldown { left, total };
-                }
-                let (items, techniques) = crate::combat::needs(card);
-                let mut items = items;
-                let mut techniques = techniques;
-                if let Some(item) = items.find(|i| inv(i) == 0) {
-                    return SkillState::Unavailable(missing(item));
-                }
-                if techniques.any(|t| !knows(t)) {
-                    return SkillState::Unavailable("Unknown".into());
-                }
-                if energy < card.cost {
-                    return SkillState::Unavailable("Too tired".into());
-                }
-                SkillState::Ready
-            })
+            let mut bar: Vec<&SkillCard> = cards.all.iter().filter(|c| c.slot != u8::MAX).collect();
+            bar.sort_by_key(|c| c.slot);
+            bar.into_iter()
+                .map(|card| {
+                    let state = (|| {
+                        // A held guard: raised now (my fighter row says so) or my key is down.
+                        if card.aim == "facing" && (combat.guarding || me_f.as_ref().is_some_and(|f| f.act == card.code && (now_ms as u64) < f.until_ms)) {
+                            return SkillState::Active;
+                        }
+                        if let Some((left, total)) = crate::combat::cooldown(conn, id, &card.skill, now_ms) {
+                            return SkillState::Cooldown { left, total };
+                        }
+                        let (mut items, mut techniques) = crate::combat::needs(card);
+                        if let Some(item) = items.find(|i| inv(i) == 0) {
+                            return SkillState::Unavailable(missing(item));
+                        }
+                        if techniques.any(|t| !knows(t)) {
+                            return SkillState::Unavailable("Unknown".into());
+                        }
+                        if energy < card.cost {
+                            return SkillState::Unavailable("Too tired".into());
+                        }
+                        SkillState::Ready
+                    })();
+                    // What it spends: the last item it needs (a bow and arrows: the arrows).
+                    let count = crate::combat::needs(card).0.last().map(inv).filter(|_| crate::combat::needs(card).0.count() > 1);
+                    Skill { key: Key::Lmb, icon: crate::combat::look(card).icon, state, name: card.skill.clone(), cost: card.cost, count }
+                })
+                .collect()
         }
-        _ => default_bar(|_| SkillState::Ready),
+        _ => Vec::new(),
     };
 
     // Floating numbers over whoever they happened to.
@@ -319,20 +328,6 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.map = MapInfo { me: here, facing: input.facing(), yaw: cam.shown_yaw, pois: places.iter().map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect(), place };
 }
 
-/// The keys of the bar, slot by slot (the rules' `skill_bar()` order).
-const KEYS: [Key; crate::combat::SLOTS] = [Key::Lmb, Key::Rmb, Key::Q, Key::E, Key::R, Key::Shift];
-
-/// The bar from the rules' combat skills: each slot's skill, its icon, its state.
-fn live_bar(cards: &crate::combat::Cards, state: impl Fn(&SkillCard) -> SkillState) -> Vec<Skill> {
-    KEYS.iter()
-        .enumerate()
-        .map(|(i, key)| match cards.slot(i) {
-            Some(card) => Skill { key: *key, icon: crate::combat::look(card).icon, state: state(card) },
-            None => Skill { key: *key, icon: SkillIcon::Empty, state: SkillState::Empty },
-        })
-        .collect()
-}
-
 /// What the bar says when an item a skill needs is not carried.
 fn missing(item: &str) -> String {
     // Ammunition is counted, so it reads in the plural.
@@ -342,17 +337,17 @@ fn missing(item: &str) -> String {
     }
 }
 
-/// The starter skills on their keys (docs/GAME_BRIEF.md, 2026-11-09), for the UI sample with
-/// no world connected; F interacts.
+/// Slots for the UI sample with no world connected: icons and states on keys, no skills (with
+/// no rules there is no bar to name; the cluster is drawn from the rules' bar, `combat::Roles`).
 pub fn default_bar(state: impl Fn(Key) -> SkillState) -> Vec<Skill> {
-    let slot = |key: Key, icon: SkillIcon| Skill { key, icon, state: if icon == SkillIcon::Empty { SkillState::Empty } else { state(key) } };
+    let slot = |key: Key, icon: SkillIcon, cost: f32, count: Option<u32>| Skill { key, icon, state: if icon == SkillIcon::Empty { SkillState::Empty } else { state(key) }, name: String::new(), cost, count };
     vec![
-        slot(Key::Lmb, SkillIcon::Sword),  // sword strike
-        slot(Key::Rmb, SkillIcon::Bow),    // bow shot
-        slot(Key::Q, SkillIcon::Fire),     // fire bolt
-        slot(Key::E, SkillIcon::Shield),   // block (held)
-        slot(Key::R, SkillIcon::Heal),     // heal
-        slot(Key::Shift, SkillIcon::Dodge), // dodge roll
+        slot(Key::Lmb, SkillIcon::Sword, 2.0, None),
+        slot(Key::Rmb, SkillIcon::Bow, 1.5, Some(28)),
+        slot(Key::Q, SkillIcon::Fire, 6.0, None),
+        slot(Key::E, SkillIcon::Shield, 1.0, None),
+        slot(Key::R, SkillIcon::Heal, 8.0, None),
+        slot(Key::Shift, SkillIcon::Dodge, 4.0, None),
     ]
 }
 

@@ -230,7 +230,7 @@ vocab! {
 }
 
 /// Named icons for skills and acts (`look.icon`). The client's theme maps each to an image.
-pub const ICONS: &[&str] = &["sword", "bow", "fire", "shield", "dodge", "heal", "sheath", "give", "trade", "talk", "wave", "eye", "book", "hammer", "pot", "hand"];
+pub const ICONS: &[&str] = &["sword", "bow", "fire", "shield", "dodge", "heal", "sheath", "give", "trade", "talk", "wave", "eye", "book", "hammer", "pot", "hand", "jump"];
 /// Named icons for items (an item's `icon` trait). Not checked at install. The goods' icon ids
 /// (goods-2, docs/WORLD_RULES.md "What a client shows") follow step 1's: one per item of the
 /// shipped script and Cullet's goods.
@@ -448,8 +448,11 @@ pub fn on_by_spec(src: &Source) -> Vec<On> {
         return on;
     }
     if spec.needs_target {
-        on.push(On::Person);
-        if src.checked {
+        // A spec's `target_class` says what it may be aimed at.
+        if spec.takes_class("creature") {
+            on.push(On::Person);
+        }
+        if src.checked && spec.takes_things() {
             on.push(On::Thing);
         }
     } else {
@@ -725,6 +728,13 @@ pub fn offered<'a>(skills: &'a Skills, body: Option<&crate::species::Species>) -
         .collect()
 }
 
+/// What is offered toward a target of `class` (one of `catalog::TARGET_CLASSES`): the skills
+/// `offered` gives the body that take a target of that class (a spec's `target_class`, any when
+/// it names none). The same filter for players' lists and any reader that knows what it aims at.
+pub fn offered_toward<'a>(skills: &'a Skills, body: Option<&crate::species::Species>, class: &str) -> Vec<&'a SkillSpec> {
+    offered(skills, body).into_iter().filter(|s| s.takes_class(class)).collect()
+}
+
 /// Whether a skill is ongoing or real-time behaviour (it belongs in a graph or on the bar, not
 /// in a one-off act), for players and minds alike: [`Shapes::real_time_in`].
 pub fn real_time(skills: &Skills, shapes: &Shapes, skill: &str) -> bool {
@@ -747,6 +757,9 @@ pub enum ActTarget {
     /// An incoming offer: toward its sender, naming the offer it answers (`"offer": id`; 0
     /// names none, and the rules take what stands from the sender).
     Offer { from: u32, offer: u64 },
+    /// A proposal of terms to me (an `agreement` record, `offered`): toward its proposer,
+    /// naming the record it answers (`"record": id`), so Accept takes exactly those terms.
+    Record { from: u32, record: u64 },
 }
 
 /// What the player chose for an act (an item's amount is 1 unless chosen, as today).
@@ -776,6 +789,10 @@ pub fn act_node(skill: &str, target: &ActTarget, picked: &Picked) -> serde_json:
             if *offer != 0 {
                 leaf["offer"] = json!(offer);
             }
+        }
+        ActTarget::Record { from, record } => {
+            leaf["target"] = json!({"id": from});
+            leaf["record"] = json!(record);
         }
         ActTarget::Thing { kind, .. } => leaf["target"] = json!({"nearest": kind}),
         ActTarget::At(p) => leaf["target"] = json!({"at": p}),

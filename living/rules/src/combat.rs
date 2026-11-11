@@ -267,6 +267,44 @@ pub fn band_words(band: u8) -> &'static str {
     }
 }
 
+/// Another creature's health as an observer perceives it (docs/PERCEPTION.md): its band, and
+/// its exact health and full health only where the `perceived_of` law grants them (oneself, or
+/// an `appraise` reveal in force for that observer).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HealthSeen {
+    pub band: u8,
+    pub exact: Option<(f32, f32)>,
+}
+
+impl HealthSeen {
+    /// What is perceived, in words: "70 of 100 health" when exact, else the band's words.
+    pub fn words(&self) -> String {
+        match self.exact {
+            Some((hp, max)) => format!("{:.0} of {:.0} health", hp.max(0.0).round(), max.round()),
+            None => band_words(self.band).to_string(),
+        }
+    }
+
+    /// The health fraction it reads as, in percent: exact when perceived exactly, else the
+    /// middle of the band (as a band is drawn).
+    pub fn percent(&self) -> f32 {
+        match self.exact {
+            Some((hp, max)) => hp / max.max(1.0) * 100.0,
+            None => band_fraction(self.band) * 100.0,
+        }
+    }
+}
+
+/// The end of a fight report: one's own health exactly, the other's as one perceives it
+/// (`None` when the law hides it).
+pub fn fight_health(own_hp: f32, theirs: Option<HealthSeen>) -> String {
+    match theirs {
+        Some(t) if t.exact.is_some() => format!("Your health {own_hp:.0}; they have {}.", t.words()),
+        Some(t) => format!("Your health {own_hp:.0}; they look {}.", t.words()),
+        None => format!("Your health {own_hp:.0}."),
+    }
+}
+
 /// A unit vector, if the input has a direction.
 pub fn unit(dx: f32, dy: f32) -> Option<(f32, f32)> {
     let n = (dx * dx + dy * dy).sqrt();
@@ -394,6 +432,25 @@ mod tests {
         assert_eq!(band(5.0, 0.0), 0);
         for b in 0..=4u8 {
             assert_eq!(band(band_fraction(b) * 100.0, 100.0), b);
+        }
+    }
+
+    #[test]
+    fn fight_reports_show_the_band_unless_appraised() {
+        // Seen as everyone sees it: the band's words, never a number.
+        let band_only = HealthSeen { band: band(70.0, 100.0), exact: None };
+        let line = fight_health(61.4, Some(band_only));
+        assert_eq!(line, "Your health 61; they look scratched.");
+        assert!(!line.contains("70") && !line.contains('%'), "{line}");
+        assert_eq!(band_only.percent(), 77.0);
+        // While an appraisal reveals it: exact.
+        let appraised = HealthSeen { band: band(70.2, 110.0), exact: Some((70.2, 110.0)) };
+        assert_eq!(fight_health(61.4, Some(appraised)), "Your health 61; they have 70 of 110 health.");
+        assert!((appraised.percent() - 63.8).abs() < 0.1);
+        // Hidden by the law: only one's own.
+        assert_eq!(fight_health(61.4, None), "Your health 61.");
+        for b in 0..=4u8 {
+            assert_eq!(HealthSeen { band: b, exact: None }.words(), band_words(b));
         }
     }
 

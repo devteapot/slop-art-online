@@ -11,6 +11,7 @@ mod clock;
 #[allow(dead_code)]
 mod sync;
 
+mod actions;
 mod anim;
 mod bodies;
 mod camera;
@@ -46,6 +47,8 @@ mod route;
 mod sight;
 mod sightedge;
 mod sightfield;
+mod facing;
+mod heardmark;
 mod sky;
 mod takes;
 mod talk;
@@ -57,6 +60,7 @@ mod verbs;
 mod vfx;
 mod view;
 mod water;
+mod weapon;
 mod weather;
 mod world;
 mod record;
@@ -124,7 +128,7 @@ fn main() {
     // Key bindings and the Play settings, from the viewer's settings file (`keys.rs`).
     {
         let (binds, prefs) = keys::load();
-        app.insert_resource(binds).insert_resource(prefs).init_resource::<keys::DoubleTap>().init_resource::<looks::Looks>();
+        app.insert_resource(binds).insert_resource(prefs).init_resource::<keys::DoubleTap>().init_resource::<looks::Looks>().init_resource::<weapon::Weapon>();
     }
     if view::enabled() {
         // Asset view: models through the game's renderer, no server and no panels.
@@ -165,6 +169,7 @@ fn main() {
             .add_systems(Update, net::pump.in_set(Phase::Net))
             .add_systems(Update, (bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles), looks::update).chain().in_set(Phase::Mirror))
             .add_systems(Update, (demo::run, controls::scheme, keys::double_tap, controls::movement).chain().in_set(Phase::Input))
+            .add_systems(Update, weapon::update.in_set(Phase::Input).after(crate::ui::UiInput).before(combat::input))
             .add_systems(Update, net::flush.in_set(Phase::Flush))
             .add_systems(Update, (camera::follow, world::fade_trees, sight::update, controls::gizmos).chain().in_set(Phase::Camera));
         // Land worlds (the island the authority hosts) draw through the island renderer.
@@ -183,8 +188,12 @@ fn main() {
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
         app.add_plugins(sightfield::SightFieldPlugin);
+        // Sight that depends on facing: its readout and switch, and what I hear but don't see.
+        app.add_plugins((facing::FacingPlugin, heardmark::HeardMarksPlugin));
         // A record of the session for the play report, when LIVING_GAME_RECORD names a directory.
         app.add_plugins(record::RecordPlugin);
+        // Every reducer call and its reply, when LIVING_GAME_ACTIONS names a file (actions.rs).
+        app.add_plugins(actions::ActionsPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }
