@@ -1245,6 +1245,8 @@ def laws(s):
     subprocess.run(["python3", *verify, "player", "--run", st["run"], "join", "Watcher"], check=False, capture_output=True)
     st = json.loads((s.out / "state.json").read_text())
     viewer = st["identity"]
+    # A call as the player hands back a character the world's minds took over meanwhile.
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
     me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{viewer}")), None))["id"]
     span = int(day) + 6
     line = open_ray(s, span)
@@ -1263,29 +1265,37 @@ def laws(s):
             s.call("place_at", f, x, y)
 
     def scene(label, seconds=3):
+        # A call as the player keeps its person present: after the `takeover_s` law (30 s)
+        # without one the world's minds take the character over and nobody is swept for it.
+        subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
         time.sleep(seconds)
         seen = {r["body"] for r in s.rows(f"SELECT body FROM perceived WHERE viewer = 0x{viewer}", f"perceived-{label}")}
         shown = {r["body"]: r for r in s.rows(f"SELECT body, name, label, band FROM projected WHERE viewer = 0x{viewer}", f"projected-{label}")}
         return seen, shown
 
-    # The talker says its name beside the player: the player knows it from then on.
-    place([3, mid, far, beyond])
-    s.graph(talker, {"seq": [{"say": f"I am {name}."}, {"wait": 300}]})
-    s.wait(lambda: s.rows(f"SELECT * FROM acquaintance WHERE observer = {me} AND known = {talker}"), seconds=20)
-    seen, shown = scene("day")
-    s.expect(f"by day figures are seen to {day:g} m", {talker, figures[1], figures[2]} <= seen and figures[3] not in seen,
-             {"seen": sorted(seen), "at": {figures[1]: mid, figures[2]: far, figures[3]: beyond}})
-    s.expect(f"a figure beyond {known:g} m is not known (no name, no health band)", shown.get(figures[1], {}).get("band") == 255 and not shown.get(figures[1], {}).get("name"), shown.get(figures[1]))
-    place([int(known) - 4, mid, far, beyond])
-    seen, shown = scene("known-near", 2)
-    s.expect(f"someone one knows is named within {known:g} m", shown.get(talker, {}).get("name") == name and shown.get(talker, {}).get("band", 255) != 255, shown.get(talker))
-    place([int(known) + 4, mid, far, beyond])
-    seen, shown = scene("known-far", 2)
-    s.expect(f"and only a figure beyond {known:g} m", talker in seen and shown.get(talker, {}).get("name") == "" and shown.get(talker, {}).get("label") != name, shown.get(talker))
-
-    # The night: fully dark an hour after dusk.
     def hour():
         return world_hour(s)[0]
+    dark_now = 21.0 <= hour() or hour() < 5.0
+    if dark_now:
+        # Started at night (a rerun): the day checks need the world's morning.
+        print("SKIP the day checks: it is night; launch afresh for them", flush=True)
+    else:
+        # The talker says its name beside the player: the player knows it from then on.
+        place([3, mid, far, beyond])
+        s.graph(talker, {"seq": [{"say": f"I am {name}."}, {"wait": 300}]})
+        s.wait(lambda: s.rows(f"SELECT * FROM acquaintance WHERE observer = {me} AND known = {talker}"), seconds=20)
+        seen, shown = scene("day")
+        s.expect(f"by day figures are seen to {day:g} m", {talker, figures[1], figures[2]} <= seen and figures[3] not in seen,
+                 {"seen": sorted(seen), "at": {figures[1]: mid, figures[2]: far, figures[3]: beyond}})
+        s.expect(f"a figure beyond {known:g} m is not known (no name, no health band)", shown.get(figures[1], {}).get("band") == 255 and not shown.get(figures[1], {}).get("name"), shown.get(figures[1]))
+        place([int(known) - 4, mid, far, beyond])
+        seen, shown = scene("known-near", 2)
+        s.expect(f"someone one knows is named within {known:g} m", shown.get(talker, {}).get("name") == name and shown.get(talker, {}).get("band", 255) != 255, shown.get(talker))
+        place([int(known) + 4, mid, far, beyond])
+        seen, shown = scene("known-far", 2)
+        s.expect(f"and only a figure beyond {known:g} m", talker in seen and shown.get(talker, {}).get("name") == "" and shown.get(talker, {}).get("label") != name, shown.get(talker))
+
+    # The night: fully dark an hour after dusk.
     print("Waiting for full dark (21:00 by the world's clock); no clock is changed.", flush=True)
     s.wait(lambda: 21.0 <= hour() or hour() < 5.0, seconds=int(16 * hour_ms / 1000) + 60, every=10)
     # The lamp and an open line of sight from it.

@@ -124,7 +124,7 @@ Not met, because not built: the shout (30 m), keen eyes, the spyglass, high grou
 - **Rates.** A temporary test compared the shipped script at `origin/main` with this branch's over 19,200 need states (3 kinds × 4 stages × 5 activities × 64 combinations of cloak, fire, shelter, night, winter and rain × 5 hunger and energy levels): every rate and every sleep duration is bit-identical on the 12-minute day.
 - **The world text.** The minds' text is unchanged: "One day lasts 12 real minutes; night is 20:00-06:00." and "hunger rises ~1.2/min … energy falls ~0.9/min" (`world_text_is_built_from_the_laws`).
 - **Night, sight, reach.** The shipped `daylight` is the old step, so `night` is the same at every minute (`dusk_and_dawn_take_an_hour_and_night_is_where_it_was` checks both scripts), and the graphs' `night` weight is the same 0 or 1. The shipped script has no `glow`, no `lights` and a `perceived_of` that does not read `p.dist`, so the gather radius, the sight rule, the projection cache and the perception sweep take the old paths (`cullet_s_sight_is_its_law_values` checks the island's 11 / 6 / 9 / 9 m).
-- `cargo test -p living-rules` passes (all 145 tests); the verify-core runs are listed in [verification](#verification).
+- `cargo test -p living-rules` passes (138 tests, 8 ignored printers and benches); the verify-core baseline on the default seed passes 45 of 45 scene checks ([verification](#verification)).
 
 ## Data paths
 
@@ -141,11 +141,27 @@ No whole-World scan was added. SpacetimeDB documentation consulted (2.0.0 pages;
 
 ## Costs
 
-PENDING
+**Perception at Cullet's sight**, measured cheaply as asked, on an existing kind of scratch world: the island seed (277 people, 33 animals, at rest by day, graph-driven, no minds, no players, no subscribers), on my own SpacetimeDB 2.14.1 container on the dev-box (`rules1-stdb`). One world; arm A is the shipped script, arm B the shipped script with Cullet's light-and-sight laws only (sight 48 / 14 / 20 m, `glow`, lamplight, names within 24 m, an eased dusk; not its needs), installed with `install_script`; arms alternated A B B A, 20 s settling after each install, 60 s profiled with `living/tools/bench.py`. Window 1 overlapped a short verify-core scene on another database of the same server. Evidence: `.local/rules1/evidence/bench/`.
+
+| Window | Arm | Tick p50 / p99 ms | Tick work ms/s | `tick.slots` (graph scenes) ms/s | `tick.wakes` ms/s | Experiences/s |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | shipped (11 m) | 1.74 / 3.95 | 78.4 | 40.0 | 15.2 | 14.8 |
+| 2 | Cullet's sight (48 m) | 2.97 / 6.67 | 127.2 | 77.1 | 22.1 | 17.7 |
+| 3 | Cullet's sight | 3.19 / 6.92 | 138.6 | 81.7 | 26.0 | 18.5 |
+| 4 | shipped | 1.42 / 3.36 | 63.7 | 34.5 | 12.1 | 21.1 |
+
+At 48 m every graph scene holds about 19 times the area, and on the island's crowded towns that doubles the graph work (`tick.slots` 35–40 → 77–82 ms a second) and the tick (p99 3.4–4.0 → 6.7–6.9 ms; no tick over 16.7 ms in any window). This is the island's density, not Cullet's: Cullet has 64 residents on a smaller, broken-up town. It says nothing about the 216-character gate except that sight this long is not free there. Not measured: a player's perceived set and the re-projection every sweep that `p.dist` adds (no players in these windows), lamplight's structure look per creature at night, and anything at 64 Cullet residents, which waits for Cullet's seed (as the task said).
 
 ## Verification
 
-PENDING
+All on my own server (`rules1-stdb`, 2.14.1, port 3312), scratch databases only, no mind service, no model calls. Evidence under `.local/living/verify/<run>/` and `.local/rules1/evidence/` on the dev-box (git-ignored).
+
+- **Rules.** `cargo test -p living-rules`: 138 pass. New: `cullet_check` (6 tests: install checks, survival targets, sight values, dusk and dawn, names by distance, the island unchanged). The bit-identical comparison of rates and sleep durations against `origin/main`'s script (19,200 states) was a temporary test, run once (`rates-bit-identical.txt`) and removed.
+- **`just living-check`**: passes (`living-check.txt`).
+- **verify-core**, baseline on the default seed (`core-rules1-base`): cargo checks (rules 138, authority 12, mind 82, viewer sync 5) and the scenes tick, needs, food, refusal, seize, sight, senses, moves: 45 of 45 checks pass. Not rerun: skirmish, dealings, town, lives, infant, lifecycle, wildlife, remains, flee, mechanics and steering (each tens of minutes; their rules are unchanged on the shipped script, and the shipped rates are bit-identical).
+- **verify-core `laws`** (new scene) on a `cullet-laws` world (`core-rules1-cullet`): the day is 48 minutes, the composed laws are installed, live rates are the per-hour law in real time; by day figures seen to 48 m and not at 52, a known figure named at 20 m and only "a stranger" with no health band at 28 and 30 m; at full dark 13 m seen and 19 m not, a torch carrier seen at 44 m, someone at the lamp seen from 21 m; an ordinary night outside costs no health. The first night attempt failed (the player had been taken over by the world's minds after 30 s without a call, so nobody was swept for it); the scene now keeps the player present, and the rerun passed. The mirrored dark spot was skipped (not open ground on that map).
+- **verify-generation** (`generation-rules1-135536`): `cullet-laws` compiled in (41 checks) and `cullet-laws-floor` given to a floor module by `create_floor` (46 checks, including the refusals of an unread laws file, broken laws and a zero day): all pass, seeds unchanged. Every other seed now also checks the 12-minute day and the shipped script; the other seeds were not rerun.
+- **Not run:** verify-player (what a player perceives changes only on a world whose laws use `glow` or `p.dist`; the `laws` scene drove a real player identity's perceived and projected rows as the owner, not its `seen_*` views), verify-minds and verify-llm (the perceive JSON and the prompts are the same shape; the mind compiles the rules for the world's day, and its tests pass), verify-client (no table, reducer, view or subscription changed), verify-knowledge (it hard-codes the shared server's port).
 
 ## Files
 
