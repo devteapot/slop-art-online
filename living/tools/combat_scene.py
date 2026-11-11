@@ -44,8 +44,11 @@ if a.wolves:
     print("placed near the pack", wp, flush=True)
     sys.exit(0)
 C.call(st, "place_at", [me, p[0], p[1]], "admin")
+p = C.body(st, me) or p  # where place_at actually put it: the nearest free walkable tile
 used = {me}
-def resident(at, graph):
+def resident(dx, dy, graph):
+    """A resident (dx, dy) from the player, on a tile `C.free_spots` knows is free, so the new
+    `place_at` (the nearest free walkable tile) keeps it in reach of a strike."""
     for r in C.sql(st, "SELECT id FROM character WHERE kind = 'person' AND alive = true"):
         if r["id"] in used:
             continue
@@ -53,13 +56,14 @@ def resident(at, graph):
         if h is None or h < 60:
             continue
         used.add(r["id"])
+        at = (C.free_spots(st, p, dx, dy, skip={r["id"]}) or [(p[0] + dx, p[1] + dy)])[0]
         C.call(st, "place_at", [r["id"], at[0], at[1]], "admin")
         C.call(st, "set_behavior", [r["id"], graph], "admin")
         return r["id"]
-east = resident((p[0] + 1.6, p[1]), '{"wait":60}')
-north = resident((p[0], p[1] - 8.0), '{"wait":60}')
+east = resident(1.6, 0.0, '{"wait":60}')
+north = resident(0.0, -8.0, '{"wait":60}')
 print("passive", east, north, flush=True)
 time.sleep(a.attack_after)
 g = json.dumps({"seq": [{"do": {"skill": "strike", "target": {"id": me}}}, {"wait": 2}]})
-west = resident((p[0] - 1.3, p[1]), g)
+west = resident(-1.3, 0.0, g)
 print("attacker", west, flush=True)
