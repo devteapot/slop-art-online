@@ -14,8 +14,15 @@ every file a workspace crate read must lie inside that package's declared inputs
 git-ignored. A step that fails the audit runs and passes as usual but writes no stamp, so an
 input map that has fallen behind the code costs time, never a false skip.
 
-When `sccache` is installed, rustc runs through `living/tools/sccache-rustc`, with its own
-cache directory and server port, so worktrees on one machine share compiled dependencies.
+When `sccache` is installed (the pinned copy from living/tools/install_sccache.sh; an
+sccache on PATH is never used), rustc runs through `living/tools/sccache-rustc`, with its
+own cache directory and server port, so worktrees on one machine share compiled
+dependencies. A RUSTC_WRAPPER already set to that wrapper (a link to it or a copy of it) is
+used as it is, with the cache settings and stats; any other pre-set wrapper is used as it is,
+without the cache, and enters the step digest (a plain `sccache` does not).
+
+Every cargo runs in a process group of its own. A watchdog process, which the check alone
+holds a pipe to, stops those groups when the check ends in any way, a SIGKILL included.
 
 Steps in different cargo build directories run at once (three lanes: release, debug and
 wasm-dev), under one jobserver of CARGO_BUILD_JOBS (default: all cores) jobs; each step's
@@ -51,6 +58,10 @@ TOOL_VERSION = 2
 HOME = os.path.expanduser("~")
 CACHE = os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache")
 STORE = os.environ.get("LIVING_CHECK_STORE") or os.path.join(CACHE, "slop-check")
+# The compile cache: our wrapper, and the sccache install_sccache.sh pins (never one on PATH).
+OUR_WRAPPER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sccache-rustc")
+WRAPPER_MARK = b"RUSTC_WRAPPER that runs rustc through sccache (living/tools/check.py"
+PINNED_SCCACHE = os.path.join(HOME, ".local/share/slop-tools/bin/sccache")
 
 # The steps of `just living-check`, in its order. `packages`: what the step builds; its
 # inputs are those packages' path-dependency closure. `lane`: steps in different lanes write
@@ -274,7 +285,7 @@ def build_env(extra_names):
         if k in ENV_NAMES or k in extra_names or k.startswith(ENV_PREFIXES):
             keep[k] = v
     w = os.environ.get("RUSTC_WRAPPER", "")
-    if w and os.path.basename(w) not in ("sccache", "sccache-rustc"):
+    if w and wrapper_kind(w) == "foreign":
         keep["RUSTC_WRAPPER"] = w  # a wrapper other than the cache may change outputs
     # Unset names matter too: record every name considered, with None for unset.
     for k in sorted(ENV_NAMES | extra_names):
@@ -443,6 +454,88 @@ def _die_with_parent():
 LIVE = set()  # running cargo processes, stopped if the check is interrupted
 STOPPING = threading.Event()
 
+# The watchdog: a process in a session of its own that reads a pipe only the check holds.
+# Lines "+<pgid>"/"-<pgid>" register and forget a cargo's process group, "d<path>" a
+# temporary folder. When the pipe closes, which the kernel does when the check exits in any
+# way (SIGKILL included, on Linux and macOS alike), it sends each group still registered
+# SIGTERM, then SIGKILL after 10 s, and removes the folders.
+WATCHDOG_SRC = r"""
+import os, shutil, signal, sys, time
+signal.signal(signal.SIGINT, signal.SIG_IGN)  # a Ctrl-C is the check's to handle
+fd, groups, dirs, buf = int(sys.argv[1]), set(), set(), b""
+while True:
+    try:
+        chunk = os.read(fd, 4096)
+    except InterruptedError:
+        continue
+    if not chunk:
+        break
+    buf += chunk
+    *lines, buf = buf.split(b"\n")
+    for l in lines:
+        kind, arg = l[:1], l[1:].decode(errors="surrogateescape")
+        if kind == b"+":
+            groups.add(int(arg))
+        elif kind == b"-":
+            groups.discard(int(arg))
+        elif kind == b"d":
+            dirs.add(arg)
+        elif kind == b"r":
+            dirs.discard(arg)
+
+def alive(g):
+    try:
+        os.killpg(g, 0)
+        return True
+    except OSError:
+        return False
+
+for sig in (signal.SIGTERM, signal.SIGKILL):
+    for g in list(groups):
+        try:
+            os.killpg(g, sig)
+        except OSError:
+            groups.discard(g)
+    end = time.time() + 10
+    while groups and time.time() < end:
+        groups = {g for g in groups if alive(g)}
+        time.sleep(0.2)
+    if not groups:
+        break
+for d in dirs:
+    shutil.rmtree(d, ignore_errors=True)
+"""
+
+
+class Watchdog:
+    def __init__(self):
+        r, self.w = os.pipe()  # not inherited: no cargo holds the pipe open
+        self.lock = threading.Lock()
+        self.p = subprocess.Popen([sys.executable, "-I", "-c", WATCHDOG_SRC, str(r)], pass_fds=(r,), start_new_session=True,
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.close(r)
+
+    def send(self, line):
+        with self.lock:
+            if self.w is not None:
+                try:
+                    os.write(self.w, (line + "\n").encode(errors="surrogateescape"))
+                except OSError:
+                    pass
+
+    def close(self):
+        with self.lock:
+            if self.w is not None:
+                os.close(self.w)
+                self.w = None
+        try:
+            self.p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+WATCHDOG = None
+
 
 def stop(p):
     """Stop a cargo and everything it started (its process group): TERM, then KILL."""
@@ -466,6 +559,8 @@ def run_step(cmd, root, env, log=None):
     # its own process group, so stopping the check stops rustc and test binaries too
     p = subprocess.Popen(full, cwd=root, env=env, stdout=subprocess.PIPE, stderr=log or None, text=True, errors="replace", bufsize=1,
                          start_new_session=True, preexec_fn=_die_with_parent if _PRCTL else None)
+    if WATCHDOG:
+        WATCHDOG.send(f"+{p.pid}")  # its own session: the group id is its pid
     LIVE.add(p)
     messages = []
     try:
@@ -487,6 +582,8 @@ def run_step(cmd, root, env, log=None):
         raise
     finally:
         LIVE.discard(p)
+        if WATCHDOG:
+            WATCHDOG.send(f"-{p.pid}")
     return rc, messages
 
 
@@ -502,6 +599,8 @@ class Jobserver:
         os.mkfifo(self.path, 0o600)
         self.fd = os.open(self.path, os.O_RDWR | os.O_NONBLOCK)
         os.write(self.fd, b"+" * max(jobs - lanes, 0))
+        if WATCHDOG:
+            WATCHDOG.send("d" + self.dir)  # removed even if the check is killed
         self.env = {"CARGO_MAKEFLAGS": f"-j{jobs} --jobserver-auth=fifo:{self.path}", "MAKEFLAGS": f"-j{jobs} --jobserver-auth=fifo:{self.path}"}
 
     def close(self):
@@ -509,29 +608,59 @@ class Jobserver:
         shutil.rmtree(self.dir, ignore_errors=True)
 
 
+def wrapper_kind(w):
+    """What a pre-set RUSTC_WRAPPER is: "ours" when it resolves (by PATH, links) to
+    living/tools/sccache-rustc or to a copy of it (any worktree's, any name), "sccache" for
+    a plain sccache, else "foreign"."""
+    path = w if os.sep in w else (shutil.which(w) or w)
+    rp = os.path.realpath(path)
+    if rp == os.path.realpath(OUR_WRAPPER):
+        return "ours"
+    try:
+        with open(rp, "rb") as f:
+            if WRAPPER_MARK in f.read(512):
+                return "ours"
+    except OSError:
+        pass
+    return "sccache" if os.path.basename(rp).split(".")[0] == "sccache" else "foreign"
+
+
 def sccache_env(root):
-    if os.environ.get("LIVING_SCCACHE", "1") == "0" or os.environ.get("RUSTC_WRAPPER"):
-        return {}, None
-    # living/tools/install_sccache.sh puts it here, off PATH; an sccache on PATH also works.
-    exe = next((p for p in (os.environ.get("SLOP_SCCACHE"), os.path.join(HOME, ".local/share/slop-tools/bin/sccache")) if p and os.access(p, os.X_OK)), None) or shutil.which("sccache")
+    """(environment to add, the sccache to ask for stats or None, what was decided)."""
+    preset = os.environ.get("RUSTC_WRAPPER")
+    if os.environ.get("LIVING_SCCACHE", "1") == "0":
+        return {}, None, "off (LIVING_SCCACHE=0)" + (f"; RUSTC_WRAPPER={preset} still applies" if preset else "")
+    kind = wrapper_kind(preset) if preset else None
+    if kind == "foreign":
+        return {}, None, (f"RUSTC_WRAPPER={preset} is set and is not living/tools/sccache-rustc: cargo uses it as it is, "
+                          "without this check's cache settings or stats, and it enters every step's digest")
+    if kind == "sccache":
+        return {}, None, f"RUSTC_WRAPPER={preset} is a plain sccache: cargo uses it as it is, with its own settings; no cache stats"
+    # the pinned copy (living/tools/install_sccache.sh), or SLOP_SCCACHE; never one on PATH
+    exe = next((p for p in (os.environ.get("SLOP_SCCACHE"), PINNED_SCCACHE) if p and os.access(p, os.X_OK)), None)
     if not exe:
-        return {}, None
-    env = {
-        "RUSTC_WRAPPER": os.path.join(os.path.dirname(os.path.abspath(__file__)), "sccache-rustc"),
-        "SLOP_SCCACHE": exe,
+        on_path = shutil.which("sccache")
+        return {}, None, (f"no pinned sccache in {PINNED_SCCACHE.replace(HOME, '~')} (living/tools/install_sccache.sh)"
+                          + (f"; {on_path} on PATH is not used" if on_path else "")
+                          + ("; the pre-set wrapper falls back to an sccache on PATH" if preset else "; compiling without a cache"))
+    ours = {
         "SCCACHE_DIR": os.environ.get("SLOP_SCCACHE_DIR") or os.path.join(CACHE, "slop-sccache"),
         "SCCACHE_CACHE_SIZE": os.environ.get("SLOP_SCCACHE_SIZE", "20G"),
         "SCCACHE_SERVER_PORT": os.environ.get("SLOP_SCCACHE_PORT", "4237"),
         "SCCACHE_IGNORE_SERVER_IO_ERROR": "1",  # a cache failure compiles locally, never fails the build
     }
+    if preset:  # what the caller set for its wrapper wins, so the stats ask the server it compiles through
+        ours.update({k: os.environ[k] for k in ours if os.environ.get(k)})
+    env = {"RUSTC_WRAPPER": preset or OUR_WRAPPER, "SLOP_SCCACHE": exe, **ours}
     full_env = {**os.environ, **env}
     probe = lambda: subprocess.run([exe, "--show-stats"], env=full_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
     if not probe():  # no server on the port yet (another check may start one at the same time)
         r = subprocess.run([exe, "--start-server"], env=full_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         if r.returncode != 0 and not probe():
-            say(f"sccache did not start ({r.stdout.strip()[:200]}); compiling without it")
-            return {}, None
-    return env, exe
+            if preset:
+                return {}, None, f"sccache did not start ({r.stdout.strip()[:200]}); the pre-set RUSTC_WRAPPER={preset} stays, no stats"
+            return {}, None, f"sccache did not start ({r.stdout.strip()[:200]}); compiling without it"
+    return env, exe, (f"the pre-set RUSTC_WRAPPER={preset}" if preset else "living/tools/sccache-rustc")
 
 
 def stats_delta(a, b):
@@ -553,8 +682,10 @@ def sccache_stats(exe, env):
             v = v.get("counts", v)
             return sum(x for x in v.values() if isinstance(x, int))
         return v if isinstance(v, int) else 0
+    # failed: compiles rustc ran and failed; on a passing check, build scripts' feature probes
+    # that are meant to fail on stable (anyhow, thiserror 1 and 2, proc-macro2; docs/TOOLING.md)
     return {"requests": total(s.get("compile_requests", 0)), "hits": total(s.get("cache_hits", {})), "misses": total(s.get("cache_misses", {})),
-            "not_cacheable": total(s.get("requests_not_cacheable", 0))}
+            "not_cacheable": total(s.get("requests_not_cacheable", 0)), "failed": total(s.get("compile_fails", 0))}
 
 
 def show_log(path):
@@ -647,16 +778,20 @@ def main(argv):
     if plan_only:
         return 0
 
-    env_extra, exe = sccache_env(root) if use_sccache else ({}, None)
+    env_extra, exe, how = sccache_env(root) if use_sccache else ({}, None, "off (--no-sccache)")
     env = {**os.environ, **env_extra}
     stats0 = None
     if exe:
-        say(f"compile cache: sccache {env_extra['SCCACHE_DIR']} (max {env_extra['SCCACHE_CACHE_SIZE']}, port {env_extra['SCCACHE_SERVER_PORT']})")
+        say(f"compile cache: sccache {env_extra['SCCACHE_DIR']} (max {env_extra['SCCACHE_CACHE_SIZE']}, port {env_extra['SCCACHE_SERVER_PORT']}, "
+            f"{exe.replace(HOME, '~')}) through {how}")
         stats0 = sccache_stats(exe, env_extra)  # the server is shared: record the difference
+    else:
+        say(f"compile cache: none: {how}")
     head = run(["git", "rev-parse", "HEAD"], root).strip()
     dirty = bool(run(["git", "--no-optional-locks", "status", "--porcelain", "--untracked-files=all", "--", "living"], root).strip())
     record = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "worktree": root, "commit": head, "dirty": dirty, "target": target,
-              "jobs": os.environ.get("CARGO_BUILD_JOBS"), "load": os.getloadavg()[0], "sccache": bool(exe), "steps": []}
+              "jobs": os.environ.get("CARGO_BUILD_JOBS"), "load": os.getloadavg()[0], "sccache": bool(exe), "sccache_how": how,
+              "rustc_wrapper": env.get("RUSTC_WRAPPER"), "steps": []}
     lock = threading.Lock()
     failed = []
     by_name = {}
@@ -736,6 +871,9 @@ def main(argv):
     except ValueError:
         jobs = cores
     parallel = serial is False and len(lanes) > 1 and jobs > len(lanes)
+    global WATCHDOG
+    if todo:
+        WATCHDOG = Watchdog()
     step_env = dict(env)
     js = None
     logs = os.path.join(target, "living-check")
@@ -760,6 +898,10 @@ def main(argv):
             stop(p)
         if js:
             js.close()
+            if WATCHDOG:
+                WATCHDOG.send("r" + js.dir)
+        if WATCHDOG:
+            WATCHDOG.close()
     for s in steps:  # every planned step must be accounted for: skipped, passed or failed
         e = by_name.get(s["name"])
         if e is None or (not e.get("skipped") and not e.get("not_run") and e.get("rc") != 0):
@@ -782,7 +924,9 @@ def main(argv):
     ran = [x for x in record["steps"] if not x["skipped"]]
     say(("FAILED" if rc else "ok") + f" in {record['secs']:.0f} s: " + ", ".join(
         f"{x['name']} {'skipped' if x['skipped'] else 'not run' if x.get('not_run') else 'FAILED' if x.get('rc') else str(round(x['secs'])) + ' s'}" for x in record["steps"])
-        + (f"; sccache {record['sccache_stats']}" if record["sccache_stats"] and ran else ""))
+        + (f"; sccache {record['sccache_stats']}" if record["sccache_stats"] and ran else "")
+        + ("; the failed compiles of a passing check are build scripts' feature probes (docs/TOOLING.md)"
+           if not rc and (record["sccache_stats"] or {}).get("failed") else ""))
     return rc
 
 

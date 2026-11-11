@@ -25,6 +25,13 @@
    "LIVING_LESSONS": "1"
   }
  },
+ "projects": {
+  "about": "Default with LIVING_PROJECTS=1: each person keeps a few self-chosen projects (self -PURSUES {progress, next_step}-> project:<slug>) that consolidation and the nightly reorganization add, revise and end, and every deliberation sees (at most 3) and may say it serves; the thought row records which.",
+  "models": {},
+  "env": {
+   "LIVING_PROJECTS": "1"
+  }
+ },
  "grounds": {
   "about": "Default with LIVING_GROUNDS=1.",
   "models": {},
