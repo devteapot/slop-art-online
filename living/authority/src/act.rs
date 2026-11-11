@@ -2132,6 +2132,8 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
         ctx.db.inventory().id().delete(r.id);
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
+        // Who shared the community knew the name at the moment of death and keeps it.
+        crate::perception::remember_member(ctx, id, m.community, now);
         ctx.db.membership().id().delete(m.id);
         crate::perception::knowledge_changed(None);
     }
