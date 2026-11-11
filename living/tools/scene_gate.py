@@ -28,7 +28,11 @@ Usage:
       --head REF  the tree under test; must be the checked-out HEAD (default HEAD)
       --force     run even when no behavioural path changed
   scene_gate.py touches --base A --head B   exit 0 when A..B touches behaviour, 1 when not
-  scene_gate.py reds [--reds PATH] [--json] [--owner CASE WHO]   the red-on-main list
+  scene_gate.py reds [--reds PATH] [--json] [--owner CASE WHO] [--drop CASE]
+                  [--add CASE --skill S --who OWNER --reason WHY [--main SHA] [--evidence PATH]]
+                  the red-on-main list (for the daily digest); --add lists a case known red
+  scene_gate.py recheck [--main REF]   run every listed case on main (origin/main): drop the
+                  green ones, renew the red ones; the gate's cases and any verify-minds case
   scene_gate.py settle --record JSON --main SHA   after a push: drop the red-on-main entries of
                   the cases that passed in that gate run (the pushed merge is now main)
 
@@ -137,14 +141,24 @@ def reds_lines(reds):
     out = [f"red on main: {len(reds)} case{'s' if len(reds) != 1 else ''}"]
     for case, e in sorted(reds.items(), key=lambda kv: kv[1].get("first_seen", "")):
         out.append(f"  {case} ({e.get('skill')}; owner {e.get('owner') or e.get('skill')}): red on main since {e.get('first_seen')} "
-                   f"(main {e.get('first_main', '?')[:10]}), last {e.get('last_seen')} (main {e.get('last_main', '?')[:10]}); evidence {e.get('last_evidence')}")
+                   f"(main {(e.get('first_main') or '?')[:10]}), last {e.get('last_seen')} (main {(e.get('last_main') or '?')[:10]}); "
+                   f"evidence {e.get('last_evidence') or '-'}" + (f"\n    why: {e['reason']}" if e.get("reason") else ""))
     return out
+
+
+def spec(case, skill=None):
+    """How the gate runs a case: one of its own, or any verify-minds case (its own world)."""
+    if case in CASES:
+        return CASES[case]
+    if (skill or "verify-minds") == "verify-minds":
+        return {"skill": "verify-minds", "group": "minds"}
+    return None
 
 
 def mark_red(reds_path, case, main_sha, evidence):
     with LOCK:
         reds = load_json(reds_path, {})
-        e = reds.get(case) or {"case": case, "skill": CASES[case]["skill"], "owner": None,
+        e = reds.get(case) or {"case": case, "skill": spec(case)["skill"], "owner": None, "reason": None,
                                "first_seen": now(), "first_main": main_sha}
         e.update(last_seen=now(), last_main=main_sha, last_evidence=evidence, times=e.get("times", 0) + 1)
         reds[case] = e
@@ -260,7 +274,7 @@ def run_cases(runner, root, cases, tag):
     """All `cases` at once, one task per world group; {case: (ok, evidence, seconds)}."""
     groups = {}
     for c in cases:
-        groups.setdefault(CASES[c]["group"], []).append(c)
+        groups.setdefault(spec(c)["group"], []).append(c)
     out = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
         futs = {ex.submit(runner.group, root, g, cs, f"{tag}-{g}"): g for g, cs in groups.items()}
@@ -474,6 +488,19 @@ def cmd_touches(a):
 
 def cmd_reds(a):
     reds = load_json(a.reds, {})
+    if a.add:
+        if not spec(a.add, a.skill):
+            raise SystemExit(f"the gate cannot run {a.add} of {a.skill}; `recheck` would never clear it (drop it by hand)")
+        e = reds.get(a.add) or {"case": a.add, "skill": a.skill or spec(a.add)["skill"], "first_seen": now(),
+                                "first_main": a.main, "last_seen": now(), "last_main": a.main, "times": 0}
+        e.update({k: v for k, v in (("owner", a.who), ("reason", a.reason), ("last_evidence", a.evidence)) if v})
+        e.setdefault("owner", None)
+        reds[a.add] = e
+        save_json(a.reds, reds)
+    if a.drop:
+        if reds.pop(a.drop, None) is None:
+            raise SystemExit(f"{a.drop} is not on the red-on-main list ({a.reds})")
+        save_json(a.reds, reds)
     if a.owner:
         case, who = a.owner
         if case not in reds:
@@ -485,6 +512,40 @@ def cmd_reds(a):
     else:
         print(f"{a.reds}:")
         print("\n".join(reds_lines(reds)))
+    return 0
+
+
+def cmd_recheck(a):
+    """Run every case on the red-on-main list on main (origin/main by default) in main's checkout:
+    a pass drops it, a failure renews it. For the daily digest, so a case nobody merges over still
+    turns green."""
+    repo = git("rev-parse", "--show-toplevel")
+    git("fetch", "-q", "origin", "main", cwd=repo)
+    base = git("rev-parse", a.main or "origin/main", cwd=repo)
+    reds = load_json(a.reds, {})
+    cases = [c for c in reds if spec(c, reds[c].get("skill"))]
+    for c in set(reds) - set(cases):
+        say(f"{c}: the gate cannot run it; drop it by hand when it is green (reds --drop {c})")
+    if cases:
+        root = main_checkout(repo, a.main_dir, base)
+        env = dict(os.environ, LIVING_STDB_CONTAINER=a.stdb_container, LIVING_STDB_URL=a.stdb_url, PYTHONDONTWRITEBYTECODE="1",
+                   CARGO_TARGET_DIR=f"{a.main_dir}-target")
+        stamp = time.strftime("%m%d%H%M%S")
+        out = Path(root) / ".local/living/verify" / f"gate-{stamp}"
+        out.mkdir(parents=True, exist_ok=True)
+        say(f"rechecking {', '.join(cases)} on main {base[:10]} (checkout {root}), databases verify-gate-{stamp}-*")
+        runner = Runner(stamp, env, out)
+        try:
+            got = retry_each(runner, root, cases, "recheck")
+        finally:
+            runner.sweep()
+        for c in cases:
+            if got[c][0]:
+                drop_red(a.reds, c, f"recheck on main {base[:10]}")
+            else:
+                mark_red(a.reds, c, base, got[c][1])
+    for line in reds_lines(load_json(a.reds, {})):
+        say(line)
     return 0
 
 
@@ -519,12 +580,25 @@ def main(argv):
     s = sub.add_parser("reds")
     s.add_argument("--json", dest="as_json", action="store_true")
     s.add_argument("--owner", nargs=2, metavar=("CASE", "WHO"))
+    s.add_argument("--add", metavar="CASE", help="list a case known red on main (with --skill, --who, --reason, --main, --evidence)")
+    s.add_argument("--skill")
+    s.add_argument("--who")
+    s.add_argument("--reason")
+    s.add_argument("--main")
+    s.add_argument("--evidence")
+    s.add_argument("--drop", metavar="CASE")
     s.set_defaults(f=cmd_reds)
+    rc = sub.add_parser("recheck")
+    rc.add_argument("--main", help="the commit to recheck on (default origin/main, fetched)")
+    rc.add_argument("--stdb-container", default=os.environ.get("LIVING_GATE_STDB_CONTAINER", "slop-trials-stdb"))
+    rc.add_argument("--stdb-url", default=os.environ.get("LIVING_GATE_STDB_URL", "http://127.0.0.1:3320"))
+    rc.add_argument("--main-dir", default=os.environ.get("LIVING_GATE_MAIN_DIR", str(STATE / "main")))
+    rc.set_defaults(f=cmd_recheck)
     st = sub.add_parser("settle")
     st.add_argument("--record", required=True)
     st.add_argument("--main", required=True)
     st.set_defaults(f=cmd_settle)
-    for p in (r, t, s, st):  # --reds is accepted after the command too
+    for p in (r, t, s, st, rc):  # --reds is accepted after the command too
         p.add_argument("--reds", default=argparse.SUPPRESS)
     a = ap.parse_args(argv or ["run"])
     if not getattr(a, "f", None):
