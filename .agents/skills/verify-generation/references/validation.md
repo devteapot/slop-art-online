@@ -6,6 +6,8 @@ Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slo
 
 After merging main `fd2030c` (rules-1), with the hamlet on Cullet's day (`day_minutes` 48) and laws (`laws_file` `worlds/cullet/laws.rhai`), `life_pace` 0.0357: `generation-hamlet-20261111-150942`, `hamlet` 61 of 61 and `authored-test` 42 of 42, original seeds unchanged.
 
+After merging main `7837320`: `generation-hamlet-20261111-160615`, `hamlet` 61 of 61, original seeds unchanged.
+
 ## 2026-11-11 plan-2: Cullet's plan, authored relief, plan resources (dev-box)
 
 Branch `plan-2` (from the plan-1 merge `bcbde99d`), own container `plan2-stdb` (2.14.1, port 3314, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. A maintain pass of this skill ran with it: a source reader each for [plans](../features/plans.md) and [seeded-world](../features/seeded-world.md) (the features the change touched; plan-1's pass earlier the same day covered the rest), then every feature driven live. Drift fixed: the `cullet` seed and the authored resources and relief in plans, seeded-world and SKILL.md; the seed-test count (seven); the people-less town's checks.

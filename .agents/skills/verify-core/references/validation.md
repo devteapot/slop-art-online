@@ -6,6 +6,8 @@ Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slo
 
 After merging main `fd2030c` (rules-1: a seed's day and laws; only the night call in `brain.rs` conflicted): `family_laws` 9 of 9 (`core-family-20261111-150942`), `lifecycle` 6 of 6 (`core-life-20261111-151946`), `just living-check` exits 0 (rules 145), authority lib tests 12 of 12.
 
+After merging main `7837320` (fix-death-labels, fix-perceived-moving, plan-2; only the verify skills conflicted): `family_laws` 9 of 9 (`core-family-20261111-155914`), `lifecycle` 6 of 6 (`core-life-20261111-160034`), `just living-check` exits 0.
+
 ## 2026-11-11 fix-death-labels (Spark)
 
 Branch `fix-death-labels` (rebased on main `6a905c3`, then on `a8d95fc`), the trials stack's container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; `verify.py` now accepts its `0.0.0.0` binding), private `CARGO_TARGET_DIR` and `--target-dir` per seed, no minds.
