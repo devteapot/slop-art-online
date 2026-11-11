@@ -228,7 +228,7 @@ pub fn update(
             set_text(&mut t, &s);
         }
         for mut t in &mut texts.p1() {
-            let s = if inv.limit > 0 { format!("{} / {}", inv.carried, inv.limit) } else { inv.carried.to_string() };
+            let s = if inv.limit > 0.0 { format!("{} / {}", amount(inv.carried), amount(inv.limit)) } else { amount(inv.carried) };
             set_text(&mut t, &s);
         }
     }
@@ -283,5 +283,29 @@ pub fn update(
         }
         let sel = k.selected;
         kit::light(&mut lit, |t| t.strip_prefix("skill:").map(|i| i.parse::<usize>().ok() == Some(sel)));
+    }
+}
+
+/// A carried amount as the pack's header shows it: whole numbers bare, others to one decimal
+/// ("8", "7.5"), never "8.0" or "7.4999".
+fn amount(v: f32) -> String {
+    let tenths = (v * 10.0).round();
+    if tenths % 10.0 == 0.0 {
+        format!("{}", (tenths / 10.0) as i64)
+    } else {
+        format!("{:.1}", tenths / 10.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn amounts_show_one_decimal_only_when_not_whole() {
+        assert_eq!(super::amount(8.0), "8");
+        assert_eq!(super::amount(7.5), "7.5");
+        assert_eq!(super::amount(7.4999), "7.5");
+        assert_eq!(super::amount(39.96), "40");
+        assert_eq!(super::amount(0.1 * 3.0), "0.3");
+        assert_eq!(super::amount(0.0), "0");
     }
 }

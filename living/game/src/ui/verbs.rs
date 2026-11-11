@@ -147,9 +147,9 @@ pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, n
                 r.2 = format!("food {food:.0}");
             }
         }
-        let carried = rows.iter().map(|r| r.1).sum();
+        let carried = rows.iter().map(|r| r.1 as f32).sum();
         let kind = conn.db.my_characters().id().find(&me).map_or("person".to_string(), |c| c.kind);
-        let limit = sc.map_or(0.0, |s| s.num_of("carry_limit", &kind, 0.0)) as u32;
+        let limit = sc.map_or(0.0, |s| s.num_of("carry_limit", &kind, 0.0)) as f32;
         InventoryView { rows, carried, limit }
     });
     model.verbs.know_how = ws.is_open(super::win::Win::Skills).then(|| {
