@@ -626,14 +626,14 @@ def field(run, c):
     body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy FROM body WHERE id = {{me}}"
     # By day (`{epoch_at:12}`, a scratch fixture): at night side vision is left out of the
     # comparison for the lights the client can't know, and a day lasts 12 minutes.
-    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on"
+    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on;sync:senses"
     for deg in FOV_LOOKS:
         plan += f";look:{deg};wait:2.5;sync:h{deg};dump:h{deg};shot:h{deg}"
     # Walking north with the look east (90° off): held at look_walk_deg; F3 (to "where you walk")
     # releases it while walking, then standing.
     plan += (";look:90;hold:0;wait:2;sync:walk;key:F3:tap;wait:1.5;sync:released;stop;wait:1.5;key:F3:tap;look:270;wait:2;sync:looked;key:F3:tap;wait:1.5;sync:stood;"
              "click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;shot:03_settings_on;dump:03;click:@settings:facing_sight;wait:2.5;shot:04_settings_off;dump:04;quit")
-    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", "senses=sql|SELECT * FROM character_senses WHERE id = {me}"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
     places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, FOV_PLACES)]
     env = {"LIVING_GAME_CONTROL": "cursor", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::controls=debug"}
     old = {k: os.environ.get(k) for k in list(env) + ["LIVING_SIGHT_FIELD_DUMP"]}
@@ -670,6 +670,11 @@ def field(run, c):
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     snaps = sc.get("snaps") or {}
+    # The client's senses are the authority's own (`my_senses`, owner SQL on `character_senses`).
+    row = ((snaps.get("senses") or [{}])[0].get("rows") or [None])[0]
+    keys = ["focal_deg", "side_deg", "side_share", "near_m", "margin_deg"]
+    same = row is not None and row.get("field") is True and on.get("source") == "Authority" and abs((on.get("sight") or -1) - row["sight"]) < 1e-3 and all(abs(fv.get(k, -1) - row[k]) < 1e-3 for k in keys)
+    c.check(s, "after F5 the client's sight and five values are my_senses' (the authority's row)", same, f"client {json.dumps(on)}; my_senses {json.dumps(row)}")
     results = {}
     for deg in FOV_LOOKS:
         r = compare_fov(snaps.get(f"h{deg}") or [], dumps, me) if snaps.get(f"h{deg}") else None
