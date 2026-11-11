@@ -43,6 +43,10 @@ death (a fall: body 22 cm, palms 5 cm under the floor); run and run_fast (loop v
 - turn: heading change against `turn_deg` (or -`end_yaw`; 0 for one-shots that end unkeyed);
   facing: drift of the chest's heading in gaits and in one-shots that travel without turning;
 - cadence: step period against the library's forward pick of the same gait (walk, run, sneak);
+  or of the entry's `cadence_ref` (the forward take made for the same speed; a forward take names
+  itself and is not checked);
+- toe slide (gaits; reported, check it with `--expect 'toe_slide_pct<=5'`): the slower toe near the
+  floor as a share of the body's speed (median), the laptop's no-slide line; air_share: flight;
 - air (`hop` or a name starting with jump): the longest stretch with both feet off the ground;
   hop: its overlap (intersection over union) with the entry's `hop` window.
 Reported, not checked: steps, head_turn_deg, hand_path_m, hips_drop_m, air_window_s and more.
@@ -127,6 +131,7 @@ LIMITS = {  # check: (metric, limit, "max" | "min")
     "hop": ("hop_iou", 0.7, "min"),  # the airborne stretch against the entry's `hop` [t0, t1]
 }
 SOFT = {"pop", "floor_fingers"}
+TOE_REST_M = 0.02  # the toe joint's height standing (stand#3)
 GAIT_SLIDE_CM_S = 10.0  # a gait's contacts include touchdown and toe-off frames; a turn's heels sweep about the ball
 
 
@@ -494,15 +499,34 @@ def measure(e, take, lib, dirs, refs):
             m["travel_err_m"] = round(abs(m["speed_m_s"] - x["speed"]) * (T - 1 - a) / FPS, 3)
             m["travel_expected_m"] = round(float(x["speed"]) * (T - 1 - a) / FPS, 3)
         fam = family(e)
+        if fam and dist > 0.2:
+            # the laptop's no-slide line (SPEEDS.md, 2026-11-11): the slower toe within 5 cm of the
+            # floor (above its standing height, 2 cm) moves at most 5 % of the body's speed (median).
+            # On the raw take this is the share at the take's own speed; the game plays a gait's
+            # phase at the body's speed, so the share holds at any driven speed
+            tw = np.zeros((T, 2))
+            for i, j in enumerate((LTOE, RTOE)):
+                tw[1:, i] = np.hypot(*(P[1:, j, [0, 2]] - P[:-1, j, [0, 2]]).T) * FPS
+            slow = np.where(P[:, [LTOE, RTOE], 1] < TOE_REST_M + 0.05, tw, np.inf).min(axis=1)[max(a, 1):]
+            slow = slow[np.isfinite(slow)]
+            if len(slow) and m["speed_m_s"] > 0:
+                m["toe_slide_pct"] = round(100 * float(np.median(slow)) / m["speed_m_s"], 1)
+                m["toe_slide_p75_pct"] = round(100 * float(np.percentile(slow, 75)) / m["speed_m_s"], 1)
+            m["air_share"] = round(float(air[a:].mean()), 2)  # both feet off the ground: a run's flight
+            m["hips_bounce_cm"] = round(100 * float(np.ptp(root[a:, 1])), 1)  # run#1: 8, run_fast#1: 9; a bounding take: 30+
+        # `cadence_ref`: the forward entry made for the same speed (a forward take names itself: its
+        # period and metres a cycle are reported, not checked). Default: the family's forward gait
+        ref_name = e.get("cadence_ref", fam)
         if fam and e["name"] != fam:
             u = tv / max(dist, 1e-9)
             k = period((P[a:, LFOOT, [0, 2]] - P[a:, RFOOT, [0, 2]]) @ u) if dist > 0.2 else None
-            ref = refs_period(fam, lib, dirs)
             m["period_s"] = round(k / FPS, 3) if k else None
             m["cycle_m"] = round(m["speed_m_s"] * k / FPS, 3) if k else None  # metres a gait cycle
+        if fam and e["name"] not in (fam, ref_name):
+            ref = refs_period(ref_name, lib, dirs)
             # against the forward gait the game plays at the rules' speed (walk 2.6, run 3.9 m/s):
             # the client steps a directional take only while it steps at most 1.6x as often
-            fast = refs_cycle(FAST.get(fam, fam), lib, dirs)
+            fast = refs_cycle(e.get("cadence_ref") or FAST.get(fam, fam), lib, dirs)
             if m["cycle_m"] and fast:
                 m["cycle_ratio"] = round(m["cycle_m"] / fast, 3)
             m["period_ref_s"] = ref
