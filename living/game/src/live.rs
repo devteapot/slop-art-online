@@ -589,6 +589,7 @@ fn bodies(
         motion.now_ms = scene.now_ms;
         motion.reverse = reverse;
         motion.twist = twist;
+        motion.freeze = motion.action.is_some_and(|a| a.clip == crate::jump::CLIP) && crate::jump::airborne(&motion) > 0.05;
         // On a road the rules speed a body up (`road_speed`, by the share of road ahead): the
         // gait is chosen at its own pace, so walking onto a road doesn't break into a run.
         motion.pace = match (person, heading) {

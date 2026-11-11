@@ -106,11 +106,14 @@ pub struct Motion {
     /// a road; 1 elsewhere). The gait is chosen at `speed / pace`, so a walk on a road stays a
     /// walk, and steps at the body's real speed, so its feet stay planted.
     pub pace: f32,
+    /// The gait holds its stride where it is (in a jump's flight: legs that kept cycling ran in
+    /// the air).
+    pub freeze: bool,
 }
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0 }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0, freeze: false }
     }
 }
 
@@ -574,7 +577,9 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
         a.settle = None;
         a.blend = b;
         a.rate = m.speed / (m.stride.max(0.05) * b.cycle_m.max(0.05));
-        a.phase += a.rate * dt;
+        if !m.freeze {
+            a.phase += a.rate * dt;
+        }
         1.0
     } else if a.moving > 0.0 {
         // Stopping: run on to the leading gait's next double support, then stand.

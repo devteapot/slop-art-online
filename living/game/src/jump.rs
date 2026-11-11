@@ -18,6 +18,8 @@ const CROUCH_S: f32 = 0.06;
 const AIR_S: f32 = 0.44;
 const LAND_S: f32 = 0.14;
 const HEIGHT: f32 = 0.45;
+/// The share of the flight over which the feet leave and meet the ground (foot IK eases).
+const EASE: f32 = 0.2;
 /// How far the hips dip at the crouch and the landing (m), and how far the legs draw up in the
 /// air (radians: the thigh forward, the shin back).
 const DIP: f32 = 0.07;
@@ -42,12 +44,15 @@ fn into(m: &Motion) -> Option<f32> {
 /// How far off the ground the feet are now (0–1), for foot IK.
 pub fn airborne(m: &Motion) -> f32 {
     into(m).map_or(0.0, |t| {
+        // Eased over the first and last fifth of the flight: letting go at once (it reached
+        // 0.6 within 5% of the flight) snapped the planted foot up to 17 cm in a frame at
+        // take-off and at landing.
         let u = ((t - CROUCH_S) / AIR_S).clamp(0.0, 1.0);
-        if u > 0.0 && u < 1.0 {
-            (std::f32::consts::PI * u).sin().powf(0.3)
-        } else {
-            0.0
-        }
+        let ease = |x: f32| {
+            let x = (x / EASE).clamp(0.0, 1.0);
+            x * x * (3.0 - 2.0 * x)
+        };
+        ease(u) * ease(1.0 - u)
     })
 }
 
