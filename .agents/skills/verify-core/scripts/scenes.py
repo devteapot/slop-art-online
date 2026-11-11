@@ -2324,6 +2324,14 @@ def outcomes(s):
     gone = s.wait(lambda: [r for r in own(a, "You failed to bowshot") if any(w in r["text"] for w in ("out of your sight", "hit nothing", "struck a wall"))], seconds=20)
     s.expect("an arrow that reaches no one is told as coming to nothing", bool(gone), [r["text"] for r in gone])
 
+    # Bounded to the maker: every outcome line in the world for these moves is the archer's or
+    # the striker's own, never a bystander's or the target's.
+    lines = [r for r in s.rows("SELECT observer, kind, text FROM experience", "outcome-lines")
+             if r["kind"] == "own" and any(r["text"].startswith(p) for p in ("You finished: bowshot", "You failed to bowshot", "You finished: strike", "You failed to strike"))]
+    s.expect("outcome lines reach the one who made the move only",
+             lines and all((r["observer"] == a) == ("bowshot" in r["text"]) and r["observer"] in (a, c) for r in lines),
+             sorted({(r["observer"], r["text"][:40]) for r in lines}))
+
     # The switch: with the law off, a hit is not told (the archer's lines stay as they were).
     set_law(s, "force_outcomes", False)
     before = len(own(a, "You finished: bowshot"))
