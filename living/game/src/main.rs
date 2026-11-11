@@ -39,6 +39,7 @@ mod lookdev;
 mod net;
 mod perf;
 mod phase;
+mod pick;
 mod post;
 mod probe;
 mod route;
@@ -168,6 +169,8 @@ fn main() {
             .add_systems(Update, (camera::follow, world::fade_trees, sight::update, controls::gizmos).chain().in_set(Phase::Camera));
         // Land worlds (the island the authority hosts) draw through the island renderer.
         app.add_plugins(live::LivePlugin);
+        // Who is under the cursor: one pick for the nameplates, Enter and combat's target.
+        app.add_plugins(pick::PickPlugin);
         // Combat: skill input, perceived events, clips and effects (docs/COMBAT.md).
         app.add_plugins((combat::CombatPlugin, vfx::VfxPlugin));
         // Town life: what residents are seen doing, my gestures, the authority's weather

@@ -1187,6 +1187,12 @@ fn seize_combat() { #{ aim: "creature", dares: true } }
 fn tend_combat() { #{ aim: "creature" } }
 // The player's skill bar, in order (the game binds LMB, RMB, Q, E, R, Shift, Space).
 fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"] }
+// How a skill is presented to a player: `<skill>_ui()`, read once when the script is installed
+// (docs/INTERFACE.md). It only shows: what a skill may do is its spec, shape and check. A skill
+// that declares nothing is presented by how the rules aim it; these three look otherwise.
+fn strike_ui() { #{ look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" } } }
+fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
+fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }

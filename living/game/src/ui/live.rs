@@ -51,7 +51,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, (talk, looks): (Option<Res<crate::talk::Talk>>, Res<crate::looks::Looks>), mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, (talk, looks, pick): (Option<Res<crate::talk::Talk>>, Res<crate::looks::Looks>, Res<crate::pick::Pick>), mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -190,7 +190,6 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             scene.at3(p.x, p.y) + Vec3::Y * lift
         }
     };
-    let cursor = cam.cursor_ground.map(|c| Vec2::new(c.x, c.z));
     let mut actors = Vec::new();
     for (id, (p, _)) in &scene.shown {
         let Some(c) = chars.get(id) else { continue };
@@ -202,14 +201,14 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         if distance > 40.0 {
             continue;
         }
-        let near_cursor = cursor.map_or(f32::MAX, |c| c.distance(*p));
         let hostile = hostile(*id);
         actors.push(Actor {
             id: *id as u64,
             name: name_of(*id),
             head: head(*id, *p, &c.kind),
             distance,
-            hovered: near_cursor < 1.2,
+            // The one under the cursor (`pick.rs`): the same pick Enter and combat's target use.
+            hovered: pick.under == Some(*id),
             targeted: false,
             talking: talking.contains(id),
             greeted: town.answered.contains_key(id),
@@ -220,7 +219,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             kind_person: c.kind == "person",
         });
     }
-    // Targeted skills go to the creature under or nearest the cursor (`combat.rs` picks it);
+    // Targeted skills go to the creature under the cursor, else nearest it (`combat.rs` picks it);
     // while the text box is open, the target shown is whom it speaks to (`talk.rs`).
     let speaking_to = talk.as_ref().filter(|_| input.chat_open).and_then(|t| t.to);
     let target_id = speaking_to.or(combat.target);

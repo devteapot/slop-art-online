@@ -20,6 +20,7 @@ use std::rc::Rc;
 mod check;
 pub mod context;
 pub mod fields;
+mod ui;
 pub use check::Report;
 
 #[derive(Clone, Debug, Default)]
@@ -801,6 +802,9 @@ pub struct Scripts {
     structures: HashMap<String, StructureTraits>,
     /// The data tables, shared with the engine's primitives.
     tables: Rc<RefCell<Tables>>,
+    /// How each skill is presented (`<name>_ui()` over its defaults), and what was wrong with
+    /// the declarations (an install refuses them; a client plays on with the defaults).
+    ui: ui::UiRead,
 }
 
 /// What a kind of structure does for those near it (its traits in `structures()`).
@@ -986,7 +990,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1013,6 +1017,9 @@ impl Scripts {
                 s.num_of(&f, &n, 0.0);
             }
         }
+        // Presentation last: it reads the skills, shapes, shows and tables, and never fails the
+        // compile (`ui_errors`).
+        s.ui = s.read_ui();
         Ok(s)
     }
 
