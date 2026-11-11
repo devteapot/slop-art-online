@@ -259,6 +259,7 @@ Against a fixture with a learnable pattern, within a single fight:
 - **Reaction against the rules' windows:** from a perceived windup's start to the answer's start, against the windup's length; how often an answer lands inside it.
 - **Cost and latency per fight:** calls, tokens and money by purpose and model; latency per layer, p50 and p95.
 - **Reads as a player:** the owner's ratings of short recordings (the reference), with the character's own account after the fight beside them. An automatic score only screens; the [feel-score caveats](TRIALS.md#owner-tuned-player-score) apply.
+- **A human-played condition, when the laptop can supply one.** The owner's own fights are the reference for "reads as a player". A recorded session of the owner's character fighting a fixture (the laptop's play-tests: the `skill_use` rows with source `player`, the `combat_seen` feed and the client recording) is scored with the same measures as the minds: Measure 1's exposures and fit, damage taken, reaction against the windows. The minds' numbers are then read against a person's on the same fixture, and the owner's ratings compare recordings of both, unlabelled. Until a session exists, this condition is empty, not estimated.
 
 ### 4.5 Which existing tools fit
 
@@ -313,8 +314,14 @@ Pinned: `spacetimedb = "=2.14.1"`; docs version 2.0.0.
 
 ## 8. Open questions for the owner
 
+Open: the owner has not decided these. Each carries the general coordinator's recommendation (2026-11-11), which is not a decision.
+
 1. **Fight length.** By today's numbers a 1v1 lasts seconds to tens of seconds, and the wolves' exchanges were one to a few blows. Revision between exchanges needs exchanges to be seconds apart. Stamina paces fights by breath; is a longer, breath-paced duel the feel you want, or should adaptation mostly show in the second fight?
+   - *Recommendation:* fights between equals last long enough for several exchanges, tens of seconds, not one blow. The way there is health, damage and stamina pacing as law values in the script, not modes: every blow still does its full damage (the "one damage rule" of 2026-11-09 stands).
 2. **The first fight against something new** is decided by reflexes and quick revisions, not preparation. Is that acceptable, with "much easier" expected from the second?
+   - *Recommendation:* yes. The first fight is decided by the reflexes the character already has and by quick revisions; "much easier" is expected from the second (Measure 2, §4.3).
 3. **How long fight lessons last.** Beliefs fade with a 40-minute effective confidence and stances relax unless reinforced. Should knowing how a wolf fights last longer, and if so as a rule for all lived lessons, not only combat?
+   - *Recommendation:* lessons from what happened to the character last longer, for every kind of lesson, not only combat, with their strength tied to how much the event mattered (its salience).
 4. **Watching.** A character that watches a fight in sight perceives it under the sight rules. Should it learn from that as it learns from its own fights (weaker, but lived)?
+   - *Recommendation:* yes: a character learns from a fight it watches, under the sight rules, more weakly than from fighting it and more strongly than from being told.
 5. **The fast lane's model.** DeepSeek without thinking is the fastest measured, and its compile quality without thinking was judged weak. Is a paid fidelity check (R4, about $2) acceptable before choosing?
