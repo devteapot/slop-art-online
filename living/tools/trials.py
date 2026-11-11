@@ -1056,6 +1056,12 @@ class Instance:
             shutil.copytree(self.journal, self.dir / "journal", dirs_exist_ok=True)
 
     # -- runaways: loops that cost calls without changing anything
+    def rate_limit(self):
+        limit = self.trial.get("budget", {}).get("runaway_calls_per_min")
+        if limit is not None:
+            return limit
+        return float("inf") if self.trial.get("minds", {}).get("only") == "all" else 60
+
     def runaway(self):
         """A retry storm or one failure repeated: recorded, and the run stopped, so that its
         cause is fixed rather than hidden behind a cap."""
@@ -1069,7 +1075,10 @@ class Instance:
             why = f"{len(errors)} failed model calls in 5 minutes"
         elif same and same[0][1] >= 15:
             why = f"the same failure {same[0][1]} times in 5 minutes ({same[0][0][0]}: {same[0][0][1]})"
-        elif last_min > 60:
+        # A call rate is a loop signal only when one mind thinks: with `minds.only: "all"` a whole
+        # island thinks (lives-2: hundreds of calls a minute is its normal), so only a trial's
+        # `budget.runaway_calls_per_min` limits it; failures and restarts above still apply.
+        elif last_min > self.rate_limit():
             why = f"{last_min} model calls in one minute"
         recent_starts = [t for t in self.starts if now - t <= 1800]
         if len(recent_starts) > 5:
