@@ -43,6 +43,8 @@ python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
 python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
+# Admin placement on free walkable tiles (features/steering.md#admin-placement); last: its bodies stay.
+python3 "$C/scenes.py" placement --run "$R" > "$E/placement.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
 # Speech (features/speech.md): each scene on its own launched run (they spawn people named
