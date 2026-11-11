@@ -1,5 +1,14 @@
 # Internal mind validation
 
+## 2026-11-12 stamina-1: a mind runs (Spark)
+
+Branch `stamina-1` with look-2 merged; trial service `slop-trials-stdb`. `minds-st1b --case run`: **pass**.
+
+- **The run.** The fake model's `{"do": "goto", ..., "run": true}` ran at 1.65 times the walk (the `run_share` law). The vitals row drained at -4 a second from its anchor.
+- **The prompt.** It documents `"run": true` and the `stamina` condition, and the scene's `you` has `stamina`.
+- **First attempt.** `minds-st1a` failed in the service's own `cargo test`: a mind test still used the pre-merge `Body.breath`. It now reads breath from the vitals row through `status_of`.
+
+
 ## 2026-11-11 greeting switches on by default (exp-greet after main 990ab80, Spark)
 
 Branch `exp-greet` with origin/main and `greet-result` merged. The defaults are now `LIVING_GREET=nearest`, `LIVING_PARK=concurrent` and the law `speech_audience` on. Trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, host load 24–32 from other batches.

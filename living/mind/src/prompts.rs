@@ -1065,12 +1065,17 @@ mod tests {
         assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, rested, unhurt");
         assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded, walking slower; you are growing weaker");
         assert_eq!(b(70.0, 10.0, 90.0, 0.4), "well fed, well rested, a little hurt; your wounds are mending");
-        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive; you are growing weaker");
+        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive, walking slower; you are growing weaker");
         assert!(!b(55.0, 60.0, 40.0, 0.0).chars().any(|c| c.is_ascii_digit()));
-        // Breath: out of breath below 20 (after a run or a fight), nothing said above.
-        let winded = |s: f32| felt_body(Body { hp: 100.0, max_hp: 100.0, hunger: 30.0, energy: 60.0, hp_rate: 0.0, breath: Some(s) });
-        assert_eq!(winded(5.0), "not hungry, out of breath, unhurt");
-        assert_eq!(winded(60.0), "not hungry, unhurt");
+        // Breath, from the vitals row as the service reads it: out of breath below 20 (after a
+        // run or a fight), the status law's words; nothing said above.
+        let winded = |s: f64| {
+            let row = vec![("hp".to_string(), 100.0), ("max_hp".to_string(), 100.0), ("hunger".to_string(), 30.0), ("energy".to_string(), 60.0), ("at_ms".to_string(), 1000.0),
+                           ("stamina".to_string(), s), ("stamina_max".to_string(), 100.0), ("stamina_rate".to_string(), 25.0), ("stamina_from_ms".to_string(), 5000.0)];
+            felt_body(&Body { hp: 100.0, max_hp: 100.0, hunger: 30.0, energy: 60.0, row, now_ms: 2000, kind: "person".into(), stage: "adult".into(), ..Default::default() })
+        };
+        assert!(winded(5.0).contains("out of breath"), "{}", winded(5.0));
+        assert!(!winded(60.0).contains("out of breath"), "{}", winded(60.0));
     }
 
     #[test]

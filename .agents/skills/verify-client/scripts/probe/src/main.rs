@@ -191,6 +191,8 @@ fn snapshot(c: &DbConnection) -> Value {
         // Breath and focus on my own row (docs/STAMINA.md), and each card's pool and cost.
         "my_vitals_rows": c.db.my_vitals().iter().map(|r| json!({"id":r.id,"at_ms":r.at_ms,"energy":r.energy,"stamina":r.stamina,"stamina_max":r.stamina_max,"stamina_rate":r.stamina_rate,"stamina_from_ms":r.stamina_from_ms,"focus":r.focus,"focus_max":r.focus_max,"focus_rate":r.focus_rate,"focus_from_ms":r.focus_from_ms})).collect::<Vec<_>>(),
         "skill_cards": c.db.skill_card().iter().map(|r| json!({"skill":r.skill,"cost":r.cost,"pool":r.pool})).collect::<Vec<_>>(),
+        // Whether each body runs, with its motion (docs/STAMINA.md: the gait a client draws).
+        "running": c.db.my_body().iter().chain(c.db.seen_bodies().iter()).map(|r| json!({"id":r.id,"running":r.running,"speed":r.speed})).collect::<Vec<_>>(),
         "my_experience": c.db.my_experience().iter().map(|r| json!({"observer":r.observer,"controller":r.controller.to_hex().to_string()})).collect::<Vec<_>>(),
         "my_places": ids(c.db.my_places().iter().map(|r| r.actor).collect()),
         "my_inventory": c.db.my_inventory().iter().map(|r| r.owner).collect::<Vec<_>>(),

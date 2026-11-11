@@ -46,6 +46,69 @@ The engine finishes the cap and the refill for each body's own energy (`living_r
 
 A guard lasts at most as long as its breath (`block_duration`): (breath − its cost) / `stamina_guard`. So it drops when breath runs out, without a per-tick check.
 
+### Measured (2026-11-12, branch head with look-2 merged)
+
+Graph-driven 1v1s (`scenes.py fights`, 5 of each) and chases (`scenes.py chase`, 4 of each) ran on fresh default-seed worlds on the Spark's trial server. A fight runs from the first blow to the first flight or a death. "Main" is a world built from main (4b76ef41) with the old values and no breath.
+
+**Fights** (length in seconds: median and range; exchanges are blows made by both sides, median):
+
+| | Main (old values) | Run 1.65, shipped | Run 1.85, comparison |
+|---|---|---|---|
+| Person v person, dodging | 8.4 s (6.6–11.5), 20 | 27.0 s (22.8–36.3), 33 | 25.2 s (20.7–35.4), 30 |
+| Person v person, trading blows | 5.4 s (1.9–6.6), 14 | 23.3 s (17.7–23.7), 32 | 22.1 s (14.4–90.2*), 30 |
+| Person v bold wolf | 5.9 s (3.2–7.2), 12 | 15.0 s (14.4–18.3), 20 | 16.3 s (15.2–17.7), 22 |
+
+\* One timed out at 90 s.
+
+How the fights ended:
+
+- **Person v person.** Every one ended in a flight, and most fleers were caught. None ended in a yield (the graphs have none).
+- **Person v wolf.** The person fled first in 9 of 10, and the wolf in 1 of 10.
+- **The facing limit.** The look-2 facing limit changed none of these beyond the run-to-run spread: before the merge, the same worlds at 1.85 measured 25.1 / 21.8 / 16.2 s.
+
+**A bold wolf charges a person 5 m away who goes straight off.** The table gives the time to close to the wolf's catch distance (3.2 m), and how many of the chases got there:
+
+| Fleeing person | Main (wolf walks 3.4) | Run 1.65 | Run 1.85 |
+|---|---|---|---|
+| Running | 2.75 s (2.2–3.4), 4/4 caught (main has no run: it walks) | 4.95 s (3.9–6.1), 4/4 | 10.0 s (3.6–12.0), 3/4 |
+| Walking | 4.7 s (2.1–8.0), 4/4 | 0.9 s (0.3–1.5), 4/4 | 1.35 s (0.6–1.9), 4/4 |
+
+The arithmetic above gives 2.2 s at 1.65 and 6.2 s at 1.85. The measured chases are slower: a pursuer slows within its slow radius of the target, and genes spread the speeds.
+
+- **At 1.65.** A running person lasts about 5 s from a 5 m start, five times longer than a walker (0.9 s) and close to the proposal's 6 s. The coordinator kept the wolf at 5.1 m/s: no one outruns a wolf, even on a road. So no wolf change is proposed.
+- **Pairing.** `wolf_run` 1.35 at 1.65 was also measured: 2 of 4 caught, 8.3 s median. It is there if the owner wants it.
+
+**Fake trials** (`trials.py run --fake`; no model calls):
+
+- **`wolves`** (4 × 8 min after the merge, 4 × 7 min on main):
+  - Every subject survived on both.
+  - **After:** the wolves attacked at 4.1–5.3 m/s (main: 3.5–3.7), and subjects fled at 3.2–4.5 m/s (main: 2.9–3.1). They took 0–1 blows (lowest health 88–100) and came within 0.6–2.1 m.
+- **`hamlet`** (4 × 12 min at run 1.85, before the merge):
+  - Residents ran in at most 0.3% of their moving samples; one resident ever ran (main: 0).
+  - No one runs everywhere: the shipped graphs and seeded ways never ask to run.
+
+## Whether a body runs: `body.running`
+
+A client should draw the gait the rules move, not infer it from speed. A Settings walk of 3.0 or 3.4 m/s (`walk_base`) would otherwise read as a run.
+
+- **`body.running` (bool).** True while a run is under way with breath, for every controller:
+  - a player's run key;
+  - a graph's or a mind's `run`;
+  - every flight;
+  - a wolf's charge.
+
+  It is false walking, out of breath, standing, dashing, and on a road walk however fast. The steering update sets it from the run's drain (`FLAG_DRAIN`). A halt, a glide to a stand, a stop and a placement clear it. It changes only where the motion row is written anyway.
+- **Where clients get it.** It is appended to `body` and to `motion_seen` (where look-2 appended the facing; `motion` keeps its stored type) and returned in `Moving`. So `seen_bodies` and `my_body` carry it as `running`.
+- **Schema.** `motion_seen.motion` is an embedded product type, and changing it in place would be a column type change, so it stays as it was. Both new columns are appended with `#[default(false)]`, the automatic migration's rule for an added column. A bool adds 1 byte to `body`.
+
+Proved in place on 2026-11-12:
+
+1. A world from the merged main (23771d59) was published fresh: 264 bodies, 182 people.
+2. It ticked, then this branch's module was published over it with its data kept (`verify.py launch --keep-data`).
+3. Every vitals row was kept, the new columns took their defaults, the world ticked on, `skill_card` had its pools, and `body.running` was set on 3 bodies within seconds.
+
+Evidence: `.local/living/verify/core-st1mig/`.
+
 ## What a player and a mind read: meters and statuses
 
 The meters law from `rules-senses-outcomes` describes the bars, and `status_of` gives the words for the screen and the minds (one set of thresholds):

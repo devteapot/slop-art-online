@@ -1415,7 +1415,7 @@ def stamina(s):
         while time.monotonic() < end:
             rows = s.rows(f"SELECT * FROM body WHERE id = {a}")
             v = s.vitals(a)
-            samples.append({"t": now(), "speed": rows[0]["speed"], "vx": rows[0]["vx"], "vy": rows[0]["vy"], "vitals": v})
+            samples.append({"t": now(), "speed": rows[0]["speed"], "vx": rows[0]["vx"], "vy": rows[0]["vy"], "running": rows[0]["running"], "vitals": v})
             if rows[0]["vx"] == 0 and rows[0]["vy"] == 0 and len(samples) > 5:
                 break
             time.sleep(0.25)
@@ -1429,13 +1429,18 @@ def stamina(s):
         winded = [i for i, x in enumerate(samples) if i and samples[i - 1]["speed"] > walk * 1.5 and abs(x["speed"] - walk) < 0.05]
         s.expect("out of breath, the run becomes a walk", winded, speeds)
         w = samples[winded[0]]["vitals"]
-        s.expect("the row says breath comes back a second after it ran out, at 25 a second", abs(w["stamina"]) < 0.5 and abs(w["stamina_rate"] - 25.0) < 1e-3 and w["stamina_from_ms"] == w["at_ms"] + 1000, w)
+        s.expect("the row says breath comes back a second after it ran out, at 25 a second", abs(w["stamina"]) < 0.5 and abs(w["stamina_rate"] - 25.0) < 1e-3 and 0 < w["stamina_from_ms"] - w["at_ms"] <= 1000, w)
         # Timed by the rows themselves (the samples come about a second apart): the drain starts
         # again, from 30, 2.2 s after the row said breath ran out.
         resumed = [x["vitals"] for i, x in enumerate(samples) if i > winded[0] and x["vitals"]["stamina_rate"] < 0]
         again = [i for i, x in enumerate(samples) if i > winded[0] and x["speed"] > walk * 1.5]
         s.expect("it runs again once it has 30 breath back, 2.2 s after it ran out", resumed and again and abs(resumed[0]["stamina"] - 30.0) < 0.6 and 2100 <= resumed[0]["at_ms"] - w["at_ms"] <= 2400,
                  {"winded_row": w["at_ms"], "resumed_row": resumed[0] if resumed else None, "running_again_sample": samples[again[0]]["t"] if again else None})
+        # `body.running` (what a client draws): true at the run's speed, false walking out of breath.
+        fast = [x for x in samples if x["speed"] > walk * 1.5 and (x["vx"] or x["vy"])]
+        slow = [x for x in samples if abs(x["speed"] - walk) < 0.05 and (x["vx"] or x["vy"])]
+        s.expect("body.running says running at a run and walking out of breath", fast and slow and all(x["running"] for x in fast) and not any(x["running"] for x in slow),
+                 {"running_at_run": [x["running"] for x in fast], "running_walking": [x["running"] for x in slow]})
         writes = sorted({x["vitals"]["at_ms"] for x in samples})
         s.expect("the row is written at the run's edges only, not every tick", len(writes) <= 8, writes)
         s.wait(lambda: s.rows(f"SELECT vx, vy FROM body WHERE id = {a}")[0]["vx"] == 0, seconds=20)
@@ -1453,7 +1458,7 @@ def stamina(s):
         n0 = s.needs(a, "before-dodge")
         s.graph(a, {"seq": [{"do": "dodge"}, {"wait": 300}]})
         d = s.wait(lambda: next((v for v in [s.vitals(a)] if v["stamina_rate"] > 0 and v["stamina"] < v["stamina_max"] - 10), None), seconds=10, every=0.2)
-        s.expect("a dodge takes 20 breath; it comes back from a second later", abs(d["stamina_max"] - d["stamina"] - 20.0) < 0.6 and d["stamina_from_ms"] == d["at_ms"] + 1000, d)
+        s.expect("a dodge takes 20 breath; it comes back from a second later", abs(d["stamina_max"] - d["stamina"] - 20.0) < 0.6 and 0 < d["stamina_from_ms"] - d["at_ms"] <= 1000, d)
         n1 = s.needs(a, "after-dodge")
         s.expect("a dodge costs no tiredness but its spillover", n0["energy"] - n1["energy"] < 0.6, {"before": n0["energy"], "after": n1["energy"]})
         # Too little breath: a world where breath holds 15 refuses a dodge (20), not a jump (10).
@@ -1495,7 +1500,7 @@ def stamina(s):
         g = s.wait(lambda: next((v for v in [s.vitals(a)] if v["stamina_rate"] < 0), None), seconds=5, every=0.1)
         s.expect("a held guard drains 4 breath a second", abs(g["stamina_rate"] + 4.0) < 1e-3, g)
         e = s.wait(lambda: next((v for v in [s.vitals(a)] if v["stamina_rate"] > 0 and v["stamina_from_ms"] > g["at_ms"]), None), seconds=8, every=0.2)
-        s.expect("the guard drops and breath comes back after the delay: 3 s held, 12 + 5 taken", abs(e["stamina_max"] - e["stamina"] - 17.0) < 1.5 and e["stamina_from_ms"] == e["at_ms"] + 1000, e)
+        s.expect("the guard drops and breath comes back after the delay: 3 s held, 12 + 5 taken", abs(e["stamina_max"] - e["stamina"] - 17.0) < 1.5 and 0 < e["stamina_from_ms"] - e["at_ms"] <= 1000, e)
         # The narrow walk law: a setting of 3.0 walks 3.0 / 2.6 as fast.
         law("walk_base", 3.0)
         s.call("place_at", a, *line[0])

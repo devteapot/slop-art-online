@@ -37,9 +37,14 @@ pub fn settle(v: &mut Vitals, p: &Pools, energy_now: f32, now: u64) -> f32 {
     v.focus_max = p.focus.cap(energy);
     v.stamina = v.stamina.min(v.stamina_max);
     v.focus = v.focus.min(v.focus_max);
-    // The refill at this tiredness (an exhausted body's comes back slower).
-    if v.stamina_rate > 0.0 {
+    // The refill at this tiredness (an exhausted body's comes back slower). A pool not draining
+    // always refills: a row that never spent (rate 0, the migration's default) and was cut by a
+    // lower cap comes back too, from its anchor.
+    if v.stamina_rate >= 0.0 {
         v.stamina_rate = p.stamina.regen(energy);
+    }
+    if v.focus_rate >= 0.0 {
+        v.focus_rate = p.focus.regen(energy);
     }
     energy
 }

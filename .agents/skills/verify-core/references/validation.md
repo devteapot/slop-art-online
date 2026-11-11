@@ -1,5 +1,23 @@
 # Core validation record
 
+## 2026-11-12 stamina-1: breath, focus, running, fight length (Spark)
+
+Branch `stamina-1`, with look-2 merged (304f90d7 and later). Trial service `slop-trials-stdb` (2.14.1, port 3320); `scoped`; no minds.
+
+- **`core-st1i`, `stamina`: 26 of 26.** The run is the `run_share` law times the walk. It drains from the row's anchor, walks out of breath, and runs again 2.2 s later at 30. `body.running` is true at the run and false walking out of breath. The other checks:
+  - the refill writes no row;
+  - a dodge takes 20, and "out of breath" refuses it;
+  - the tiredness cap gives 75;
+  - three or four bolts go, then "not enough mana";
+  - a guard drains 4 a second;
+  - `walk_base` 3.0 changes the walk;
+  - a wolf charges at 1.5 times its walk and a deer flees at a run.
+- **`core-st1i`, `moves`: pass.** A flight with `run: false` goes 1.15 times the walk; by default it runs at `run_share`.
+- **The stamina scene found a bug, now fixed.** `core-st1g` failed: its `stamina_max` 15 window left bodies at 15 breath with rate 0, and they never refilled (`breath::settle` now always gives a non-draining pool its refill). Its chase therefore had wolves standing out of breath. It was rerun on fresh worlds.
+- **Fights and chases.** `core-st1j` (run 1.65) and `core-st1h` (1.85) ran `chase` and `fights`; main's baseline ran on `core-st1b2` and `core-st1b-fights` from a worktree at 4b76ef41. The numbers are in docs/STAMINA.md ("Measured"). The facing limit (look-2) changed no fight or chase number beyond the run-to-run spread.
+- **In-place update.** `core-st1mig`: main 23771d59 was published fresh, then this branch's module was published with its data kept. The evidence is in that run's folder.
+
+
 ## 2026-11-11 who heard a line (exp-greet, Spark)
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`. New scene `audience` (`features/laws.md`), run `core-audience-150613`: all 8 checks pass. Law off: no row. Law on: one row, the two hearers within the shipped 9 m and not the one at 13 m, distances about 1 and 4 m, both ahead of the speaker. A line 61 s later deleted the first row. Only `speak` changed in the authority (`speech_audience`, off by default). The other scenes were not rerun.

@@ -83,7 +83,7 @@ PRIVATE = ['clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberat
            # How each player's acts and death came out, in codes; read through my_act_outcomes.
            'act_outcome']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
-SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
+SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
@@ -680,6 +680,9 @@ class Run:
         rows = {l: v['final']['perception'].get('my_vitals_rows', []) for l, v in own.items()}
         pooled = lambda r: (0 < r['stamina_max'] <= 120 and 0 <= r['stamina'] <= r['stamina_max'] + 1e-3 and 0 < r['focus_max'] and
                             0 <= r['focus'] <= r['focus_max'] + 1e-3 and isinstance(r['stamina_from_ms'], int) and isinstance(r['focus_from_ms'], int))
+        moving = [r for l, v in own.items() if l != 'anonymous' for r in v['final']['perception'].get('running', [])]
+        self.check('my_body and seen_bodies carry running (a bool, with the motion)', moving and all(isinstance(r['running'], bool) for r in moving), 'own-*.json',
+                   f"{len(moving)} rows, {sum(r['running'] for r in moving)} running")
         self.check('my_vitals carries breath and focus (stamina, stamina_max, stamina_rate, stamina_from_ms, the same for focus) for my character only',
                    all(rs and all(pooled(r) for r in rs) for l, rs in rows.items() if l != 'anonymous') and not rows['anonymous'], 'own-*.json',
                    {l: rs for l, rs in rows.items()})
