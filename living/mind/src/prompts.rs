@@ -356,15 +356,36 @@ Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 s
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
 \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
-\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering)}}",
-        world_rules()
+\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}}}",
+        world_rules(),
+        if crate::mind::projects::enabled() { THINK_PROJECTS } else { "" }
     ))
 }
 
-pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str) -> String {
+/// What a deliberation is told of projects (`LIVING_PROJECTS=1`), and the reply field naming
+/// the one a decision serves. Says what a project is, never what to want.
+const THINK_PROJECTS: &str = ", \"serves\": \"the key of the project under # Your projects that this decision works toward, or null\"";
+
+/// What consolidation is told of projects (`LIVING_PROJECTS=1`). Says what a project is and how
+/// to keep it, never what to want.
+const CONSOLIDATE_PROJECTS: &str = "\n\nPROJECTS (# Your projects): what the person has set out to achieve over days, in their own words. \
+They are the person's own, from who they are and what they have lived; nobody gives them one. When the person sets out on something, \
+take it up; as it moves, revise its progress and next step; when it is achieved or given up, end it. A person pursues a few at a time \
+(at most 3); one never taken up again fades. Optional reply field: \"projects\": [{\"key\": \"project:<slug>\", \"aim\": \"...\", \
+\"progress\": \"...\", \"next_step\": \"...\", \"because\": [experience ids]}, {\"key\": ..., \"ended\": \"done|dropped\", \"why\": \"...\"}].";
+
+/// The projects section of a prompt (empty with the switch off).
+fn projects_section(out: &mut Segments, projects: &str) {
+    if !projects.is_empty() {
+        out.push(Stability::Character, format!("\n# Your projects (what you have set out to achieve; key: aim)\n{projects}"));
+    }
+}
+
+pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, projects: &str) -> String {
     let mut out = Segments::default();
     common(c, &mut out);
     out.push(Stability::Character, format!("\n# Your habits (your body keeps to them)\n{habits}\n"));
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, format!("\n# Why you are thinking now\n{reason}\n\n"));
     out.push(Stability::Dynamic, "\n# Recent experiences (oldest first)\n");
     for e in &c.experiences {
@@ -415,7 +436,7 @@ History is kept automatically. Keep as memories only the \
 few experiences the person would still remember tomorrow (at most 3, often none), each with a gist in the person's own words{}. Identity (narrative, values, goals, traits 0-100, \
 mood) changes only when experiences genuinely warrant it; otherwise identity is null. When it changes, it follows the life the person has lived: goals and values \
 grow out of what they did, tried, met and went through, and name the people, places and things in that life they are about; a feeling that comes and goes \
-(restlessness, loneliness, a longing) is felt, and belongs to mood and memory until the person's life gives it someone or something to turn to.\n\n{}\n\n\
+(restlessness, loneliness, a longing) is felt, and belongs to mood and memory until the person's life gives it someone or something to turn to.{}\n\n{}\n\n\
 KEYS: anchors connect your mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \"kind:<wolf|deer|berry_bush|campfire|...>\", \
 \"know:<technique>\" (the technique itself, e.g. \"know:cooking\"). \
 Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\"). Reuse existing keys shown in your mind.\n\
@@ -436,6 +457,7 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
  \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
         if lessons() { LESSON } else { "" },
+        if crate::mind::projects::enabled() { CONSOLIDATE_PROJECTS } else { "" },
         world_rules()
     ))
 }
@@ -501,14 +523,19 @@ better connected mind that still contains everything the person cares about. Anc
 Reply with ONE JSON object: {{\"summary\": \"how the person's understanding settled (1-2 sentences)\", \
 \"merge\": [{{\"from\": key, \"into\": key}}], \"nodes\": [{{\"key\": ..., \"labels\": [...], \"name\": ..., \"props\": {{...}}}}], \
 \"edges\": [{{\"from\": key, \"rel\": \"...\", \"to\": key, \"confidence\": 0.0-1.0, \"because\": [experience ids from the edges you generalize]}}], \
-\"retract\": [{{\"from\": key, \"rel\": \"...\", \"to\": key}}], \"judgments\": [{{\"key\": ..., \"value\": 0.0-1.0, \"why\": ...}}]}}"
+\"retract\": [{{\"from\": key, \"rel\": \"...\", \"to\": key}}], \"judgments\": [{{\"key\": ..., \"value\": 0.0-1.0, \"why\": ...}}]{}}}",
+        if crate::mind::projects::enabled() { REORGANIZE_PROJECTS } else { "" }
     ))
 }
 
-pub fn reorganize_user(name: &str, persona: &str, concepts: &[String], edges: &[String]) -> String {
+/// The reorganization may revise, merge or end projects too (`LIVING_PROJECTS=1`).
+const REORGANIZE_PROJECTS: &str = ", \"projects\": [as # Your projects shows them, revised: {\"key\", \"aim\", \"progress\", \"next_step\"}, or ended: {\"key\", \"ended\": \"done|dropped\", \"why\"}] (optional; the person's own aims, kept, merged or ended as their life shows)";
+
+pub fn reorganize_user(name: &str, persona: &str, concepts: &[String], edges: &[String], projects: &str) -> String {
     let mut out = Segments::default();
     out.push(Stability::Shared, "Respond with the JSON object.\n\n");
     out.push(Stability::Character, format!("# Who you are\n{name}\n{persona}\n"));
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, "\n# Your concepts (key \"name\" [labels] {properties} — links)\n");
     for c in concepts {
         out.push(Stability::Dynamic, format!("- {c}\n"));
@@ -649,9 +676,10 @@ pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, re
     out
 }
 
-pub fn consolidate_user(c: &Ctx) -> String {
+pub fn consolidate_user(c: &Ctx, projects: &str) -> String {
     let mut out = Segments::default();
     common(c, &mut out);
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, "\n# New experiences to integrate (oldest first; [experience id] time text)\n");
     for e in &c.experiences {
         out.push(Stability::Dynamic, format!("- {e}\n"));
@@ -944,10 +972,10 @@ mod tests {
         });
         let c = context(name);
         match purpose {
-            "think" => (think_system(), think_user(&c, "dynamic-scene", "dynamic-plan", "dynamic-reason", "habit")),
+            "think" => (think_system(), think_user(&c, "dynamic-scene", "dynamic-plan", "dynamic-reason", "habit", "")),
             "deliberate" => (deliberate_system(), compile_user("dynamic-decision", deliberate_user(&c, "dynamic-scene", "dynamic-outline", "dynamic-plan", "dynamic-reason", "routine"))),
-            "consolidate" => (consolidate_system(), consolidate_user(&c)),
-            "reorganize" => (reorganize_system(), reorganize_user(name, &c.persona, &["dynamic-concept".into()], &["dynamic-edge".into()])),
+            "consolidate" => (consolidate_system(), consolidate_user(&c, "")),
+            "reorganize" => (reorganize_system(), reorganize_user(name, &c.persona, &["dynamic-concept".into()], &["dynamic-edge".into()], "")),
             "identity" => (identity_system(), identity_user(name, 42, &["fire".into()], &serde_json::json!({"town": "fixture"}), Some(&serde_json::json!({"caution": 40})))),
             "birth_identity" => (birth_identity_system(), birth_identity_user(name, 42, [("Parent A", 3, "kind"), ("Parent B", 4, "gentle")], Some(&serde_json::json!({"caution": 40})))),
             "talk" => (
@@ -982,7 +1010,7 @@ mod tests {
                             animal_compile_user(name, kind, "dynamic-impulse", "dynamic-feeling", "dynamic-scene", "dynamic-outline", "routine"),
                         )
                     }
-                    _ => (animal_consolidate_system(kind, &sp.nature), consolidate_user(&c)),
+                    _ => (animal_consolidate_system(kind, &sp.nature), consolidate_user(&c, "")),
                 }
             }
             _ => panic!("unknown purpose {purpose}"),
