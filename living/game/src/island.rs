@@ -363,6 +363,11 @@ impl Island {
         let es = spawn_item(commands, assets, &self.land, &it);
         if let Some(&root) = es.first() {
             commands.entity(root).insert(crate::envs::Solid);
+            // Low buildings too (market stalls, wells): a newcomer arrives among the stalls, and
+            // their awnings hid them (play-test 1). Taller ones are occluders already.
+            if it.height < 3.0 {
+                commands.entity(root).insert((crate::envs::Occluder { height: it.height.max(1.0) }, crate::fade::Fade::shown()));
+            }
         }
         es
     }
