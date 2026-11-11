@@ -2326,6 +2326,21 @@ def placement(s):
              {"request": deep, "exit": r.returncode, "error": out[-300:]})
 
 
+def clear_line(s):
+    """An open line more than 10 m from every person now in the world: scenes before this one
+    (`doing`, ...) leave their actors on the first open line, and these scenes count who is in
+    sight."""
+    people = {c["id"] for c in s.rows("SELECT id, kind FROM character WHERE alive = true") if c["kind"] == "person"}
+    return open_line(s, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT id, x, y FROM body") if b["id"] in people])
+
+
+def off_the_line(s, line, actors, dy=40):
+    """Move a scene's actors far off its open line (as `say` does), so that the scenes after it,
+    which find the same line, do not find them on it."""
+    for k, who in enumerate(actors):
+        s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + dy, check=False)
+
+
 def crowd_sight(s):
     """Everyone in sight is perceived (docs/STRANGERS.md, decision 3; `brain.rs` `noticed`): in a
     crowd (more than 6 people in sight) a person seen for the first time is still told, first
@@ -2334,8 +2349,15 @@ def crowd_sight(s):
     minded strangers within 4.5 m (a crowd of 9), then two more are brought in. Measures the
     first-sight lines (count, characters) for the before/after record; `--baseline` on a build
     from before the fix records them without asserting (there: none in a crowd)."""
-    line = open_line(s)
+    line = clear_line(s)
     obs, *crowd = s.people(9)
+    try:
+        crowd_sight_on(s, line, obs, crowd)
+    finally:
+        off_the_line(s, line, [obs, *crowd, *getattr(s, "crowd_new", [])], dy=44)
+
+
+def crowd_sight_on(s, line, obs, crowd):
     spots = [(dx, dy) for dx in (1, 2, 3, 4) for dy in (-1.0, 1.0)]
     s.call("place_at", obs, *line[0])
     for a, (dx, dy) in zip(crowd, spots):
@@ -2350,7 +2372,7 @@ def crowd_sight(s):
     m1 = {"lines": len(lines1), "chars": sum(len(r["text"]) for r in lines1), "people_named": parts1, "crowd_line": any("among a crowd" in r["text"] for r in exps), "texts": [r["text"] for r in lines1]}
     print("MEASURE crowd of 9 (8 new to O):", json.dumps(m1), flush=True)
     # Two more, brought in from wherever they were spawned (out of O's sight).
-    new = s.people(2)
+    new = s.crowd_new = s.people(2)
     t2 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
     s.call("place_at", new[0], line[5][0], line[5][1] - 1.0)
     s.call("place_at", new[1], line[5][0], line[5][1] + 1.0)
@@ -2379,7 +2401,7 @@ def stranger_filter(s):
     at the west end; A, of O's community and with no relation row, 2 m east; N, unknown to O but
     with a relation row O's mind wrote ("wary"), 5 m east. O's graph waves at the nearest
     stranger: off it waves at A, on at N. The law is set and reset with `set_world_law`."""
-    line = open_line(s)
+    line = clear_line(s)
     o, a, n = s.people(3)
     s.act(o, {"do": "found", "text": f"Verify Strand {o}"})
     s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {o}"))
@@ -2412,6 +2434,7 @@ def stranger_filter(s):
         s.expect("law on: the nearest stranger is N, whose name O does not know (its relation row does not count)", on == n, {"waved_at": on, "A": a, "N": n})
     finally:
         set_law(s, "stranger_by_name", False, check=False)
+        off_the_line(s, line, [o, a, n], dy=50)
 
 
 SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter}
