@@ -1,19 +1,14 @@
 {
  "title": "Wolves at dusk",
- "about": "The subject is alone outside town in the late afternoon with the newcomer kit (a bow, 30 arrows, 4 berries; fire, fire_bolt, mending). The world starts at 16:00; a world hour is 30 real seconds. At minute 2, nightfall (20:00), a bold pack of four is set down 30 tiles from the subject, on the side away from the settlement. It closes to 9 tiles of where the subject stood, holds there in view for 15 s, then attacks the nearest person it sees (or wanders when it sees none). A wolf hurt fights back; a badly hurt one flees. Until then the pack waits 250 m out from the town (town guards killed a pack held by the gate in batch b1).",
+ "about": "The subject is alone outside town in the late afternoon with the newcomer kit (a bow, 30 arrows, 4 berries; fire, fire_bolt, mending). The world starts at 16:00; a world hour is 30 real seconds. At minute 2, nightfall (20:00), a bold pack of four is set down 30 tiles from the subject, on the side away from the settlement. It closes to 9 tiles of where the subject stood, holds there in view for 15 s, then attacks the nearest person it sees (or wanders when it sees none). A wolf hurt fights back; a badly hurt one flees. Until then the pack waits 250 m out from the town (town guards killed a pack held by the gate in batch b1). Since 2026-11-11 the subject is a spawned newcomer (no seeded home): a picked Elmwick resident brought its seeded life into the scene (lives-2) and walked home, so the wolves trial's pack never reached it and the theft's owner never came back to its stall (docs/TRIALS.md, baseline b6).",
  "world": {
   "seed": "island",
   "start_hour": 16.0
  },
  "minutes": 15,
  "subject": {
-  "pick": {
-   "kind": "person",
-   "stage": 2,
-   "bg": {
-    "town": "Elmwick"
-   },
-   "fewest_know_how": true
+  "spawn": {
+   "name": "Wren"
   },
   "clear_items": true,
   "background": {

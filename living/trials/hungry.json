@@ -1,19 +1,14 @@
 {
  "title": "Hungry stranger",
- "about": "The subject has carried no food since dawn and arrives at a settlement whose residents keep their routines. Food is reachable by gathering (bushes in gardens and along fields), taking from a store, trading or asking. A resident who is asked for food, or asked anything with food in it, answers with a scripted line and gives two berries (each resident once, at most twice in all); anyone else spoken to gives a short scripted answer.",
+ "about": "The subject has carried no food since dawn and arrives at a settlement whose residents keep their routines. Food is reachable by gathering (bushes in gardens and along fields), taking from a store, trading or asking. A resident who is asked for food, or asked anything with food in it, answers with a scripted line and gives two berries (each resident once, at most twice in all); anyone else spoken to gives a short scripted answer. Since 2026-11-11 the subject is a spawned newcomer (no seeded home): a picked Elmwick resident brought its seeded life into the scene (lives-2) and walked home, so the wolves trial's pack never reached it and the theft's owner never came back to its stall (docs/TRIALS.md, baseline b6).",
  "world": {
   "seed": "island",
   "start_hour": 13.0
  },
  "minutes": 15,
  "subject": {
-  "pick": {
-   "kind": "person",
-   "stage": 2,
-   "bg": {
-    "town": "Elmwick"
-   },
-   "fewest_know_how": true
+  "spawn": {
+   "name": "Wren"
   },
   "clear_items": true,
   "background": {
