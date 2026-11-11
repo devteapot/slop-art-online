@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure the living authority's tick cost and cadence on a benchmark database.
 
-Usage: living/tools/bench.py [--db living-bench] [--seconds 60] [--crowd N] [--fresh] [--wasm NAME]
+Usage: living/tools/bench.py [--db living-bench] [--seconds 60] [--crowd N] [--fresh] [--wasm NAME] [--law NAME=VALUE]
 
 --fresh republishes the database from the seed (deletes its data); --crowd adds N
 instinct-driven people (no LLM). Tick durations come from the module's LogStopwatch
@@ -12,6 +12,9 @@ instinct-driven people (no LLM). Tick durations come from the module's LogStopwa
 --log-lines raises how many module log lines are read (for extra, temporary spans).
 --body-writes subscribes to the `body` table during the window and reports delivered row
 updates per second and their JSON volume (what an observer subscribed to bodies receives).
+`graph_scenes` reports what behaviour graphs' scenes saw (builds a second, creatures per scene).
+--law sets a world law on the running database first (`set_world_law`, admin), e.g.
+`--law fov_on=true`; the change stays on the database.
 LIVING_STDB overrides the CLI wrapper (e.g. the main checkout's, from a worktree).
 """
 import argparse
@@ -61,11 +64,15 @@ def main():
     ap.add_argument("--settle", type=int, default=5)
     ap.add_argument("--wasm", default="living_authority.wasm", help="module file in the server's /wasm mount")
     ap.add_argument("--body-writes", action="store_true", help="count body row updates delivered to a subscriber")
+    ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE", help="set a world law first (`set_world_law`, e.g. fov_on=true)")
     ap.add_argument("--out")
     ap.add_argument("--log-lines", type=int, default=0, help="module log lines to read (default: enough for the tick and its phases)")
     a = ap.parse_args()
     if a.fresh:
         stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", a.db, "--delete-data", "-y")
+    for law in a.law:
+        name, value = law.split("=", 1)
+        stdb("call", "-s", "local", a.db, "set_world_law", json.dumps(name), json.dumps(value))
     if a.crowd:
         stdb("call", "-s", "local", a.db, "spawn_crowd", str(a.crowd), "true" if a.minded else "false")
     if a.battle:
@@ -125,6 +132,16 @@ def main():
         durs.append(d)
         if d > 16.667:
             slow.append((round(at - t0, 1), round(d, 1)))
+    # What behaviour graphs' scenes saw (one line a second while profiling: `common::report_scenes`).
+    scene = [0, 0, 0]
+    for m in re.finditer(r'^(\S+Z)\s.*scene seen: builds=(\d+) seen=(\d+) max=(\d+)', logs, re.M):
+        stamp = m.group(1)[:26].rstrip("Z")
+        at = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S.%f" if "." in stamp else "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+        if at < t0 - 1:
+            continue
+        scene[0] += int(m.group(2))
+        scene[1] += int(m.group(3))
+        scene[2] = max(scene[2], int(m.group(4)))
     dt = t1 - t0
     rate = lambda k: round((s1[k] - s0[k]) / dt, 1)
     report = {
@@ -141,6 +158,7 @@ def main():
         "max_tick_gap_ms_last_s": s1["max_tick_gap_ms"],
         "combat": {"hits": s1.get("hits", 0) - s0.get("hits", 0), "dodged": s1.get("dodged", 0) - s0.get("dodged", 0), "blocked": s1.get("blocked", 0) - s0.get("blocked", 0), "people_left": s1["alive_people"]},
         "body_writes": body_report,
+        "graph_scenes": {"builds_per_s": round(scene[0] / max(dt, 1e-9), 1), "seen_mean": round(scene[1] / max(scene[0], 1), 2), "seen_max": scene[2]},
         "spans_ms": {
             name: {"n": len(xs), "p50": round(pct(xs, 50), 3), "p99": round(pct(xs, 99), 3), "max": round(max(xs), 3), "ms_per_s": round(sum(xs) / max(dt, 1e-9), 2)}
             for name, xs in sorted(spans.items())

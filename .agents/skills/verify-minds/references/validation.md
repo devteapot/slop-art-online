@@ -1,5 +1,14 @@
 # Internal mind validation
 
+## 2026-11-11 fov-1: hearing what one cannot see (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- After merging `origin/main` `accf27c8`: `fov` and `sight` pass (`minds-fov1-m`).
+- `fov` (new): `minds-fov1-h` passes on the final build before the merge (`minds-fov1-f` on the one before). `minds-fov1-g` failed the habit check: the turn was `broken off` once the sound came into view, because the branch is a continuous guard. The case now accepts a turn toward the sound, done or broken off. The scene and the prompt sent to the fake model list `you hear (out of sight)` as `{"what": "a person", "where": "behind you, to the east", "how far": "near"}`, with no id, and `you.facing` is west. The percept reads "You hear a person near, behind you, to the east." Given the person instinct, the resident turns to the sound (a `face` use aimed at the other's spot).
+- Earlier attempts found harness faults, now fixed in the case: the service prunes consumed experiences (read the percept first); a long `wait` is not evaluated (`{"wait": 1}`); hold both bodies before placing them (a resident walked into the near ring); the heading after the turn is not the test (the instinct walks on).
+- `sight` passes (`minds-fov1-a-sight`). Not run: the rest of the suite.
+
 ## 2026-11-11 the prompt frame (exp-player-frame, DGX Spark)
 
 Branch `exp-player-frame` in a worktree, against the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320`, published on `0.0.0.0`, which `verify.py` now accepts), private `CARGO_TARGET_DIR`, fake model only, beside a paid trial batch on the same service (untouched).

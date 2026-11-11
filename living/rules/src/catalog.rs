@@ -327,7 +327,8 @@ pub fn skill_line(s: &SkillSpec) -> String {
     line
 }
 
-/// Skill reference with each skill's inputs and outputs, for people.
+/// Skill reference with each skill's inputs and outputs, for people: the skills a person is
+/// offered (`ui::offered`, the filter the player's interface uses too).
 pub fn skills_help_of(skills: &Skills) -> String {
-    skills.iter().filter(|s| s.listed).map(skill_line).collect::<Vec<_>>().join("\n")
+    crate::ui::offered(skills, None).into_iter().map(skill_line).collect::<Vec<_>>().join("\n")
 }

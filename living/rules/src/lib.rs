@@ -11,6 +11,7 @@ pub mod height;
 pub mod host;
 pub mod land;
 pub mod settle;
+pub mod sight;
 pub mod map;
 pub mod nav;
 pub mod city;
@@ -31,6 +32,7 @@ pub mod script;
 pub mod social;
 pub mod species;
 pub mod steer;
+pub mod ui;
 pub mod ways;
 
 /// Real milliseconds per in-world day.

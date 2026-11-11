@@ -121,6 +121,17 @@ living-merge branch *args:
 living-disk-clean *args:
     python3 living/tools/disk_clean.py "$@"
 
+# The store (docs/STORE.md): what this machine holds (`manifest`), what would be published and
+# every redaction (`scrub --dry-run SRC`), `pack`, `fetch motion-library`, `fetch batch NAME`.
+# Publishing to Hugging Face needs --yes-publish AND publish_enabled in ~/.config/slop-store/config.json.
+[positional-arguments]
+living-store *args:
+    python3 living/tools/store.py "$@"
+
+# The store's self-test: planted secrets, owner lines, pack/fetch round trips, the publish gate.
+living-store-selftest:
+    python3 living/tools/store_selftest.py
+
 # Fuel budgets of the hot Rhai laws (rates, the strike path, perceived_of, a constant lookup) in
 # the module under SpacetimeDB's wasmtime config; fails over living/tools/script_bench/budgets.json
 # (docs/SCRIPT_ENGINES.md). Builds in its own target dir unless CARGO_TARGET_DIR is set.

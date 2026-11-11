@@ -1,5 +1,16 @@
 # Core validation record
 
+## 2026-11-11 fov-1: sight that depends on facing (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `core-fov1-m` (after merging `origin/main` `accf27c8`, eye-2's sight included): `fov` 18 of 18, `sight` 6, `senses` 7.
+- `core-fov1-j` (default seed, the final build before the merge: graph scenes see and hear from one gather, `perception::sensed`): `fov` 18 of 18; `tick` 6, `sight` 6, `senses` 7, `moves` 5, `death-names` 8 pass; `doing` fails as below.
+- `core-fov1-c` (the build before that): `fov` 18 of 18 (new: off as shipped; `set_world_law` refusals, the script block at a new revision, `law_change` and the chronicle row; facing east and west; the 3 m ring guarding a strike from 1 m behind; a 0.5 m ring: 1.5 m behind unseen, no guard, the blow lands; witnesses by facing; off again). Then `tick`, `sight`, `senses` and `moves` pass on the same world.
+- `doing` failed twice on that world (`doing.txt`, `doing-2.txt`): the admin CLI took 1 to 14 s a call on the loaded host, so the walkers finished before the observer's scene was written (`doing-actions.jsonl`). No field was on. It failed the same way on `origin/main` (`6288f599`, exported to `.local/fov1/main-src`, run `core-main-doing`), so it is an existing failure under load, not this change.
+- Earlier `fov` attempts (`core-fov1-a`, `-b`, `-d` to `-i`) found harness faults, now fixed in the scene. `say` lines are 2 s apart. The same graph does not restart, and waits are held to 120 s. The dark near ring (2 m) is a separate law. Onlookers stand on the open line, not off it. Witnesses are told only a fight's first blow (30 s), so duels are 31 s apart. A striker facing away cannot see its target with a 0.5 m ring, so it turns first; a strike cannot be a `mind_act`.
+- Not run on this change: needs, food, refusal, seize, death-names, skirmish, drop, low, dealings, town, lives, goods, laws, infant; mechanics.
+
 
 ## 2026-11-11 rates-2: spoiling, regrowth, traps and remains in game time; the decay scene (dev-box)
 

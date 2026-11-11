@@ -1,0 +1,54 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261111-27e84b1a-ea803c",
+ "published": "2026-11-11T19:45:55+01:00",
+ "imported": "2026-11-11T19:45:55+01:00",
+ "track": "char-3",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 2: the same stand-in cast for Cullet (22 households; 44 adults, 6 elders, 14 children) with this pass's hair styles drawn by sex and age, eyes, brows and lashes, and faces drawn toward the reference. 16 to a row in the town's order.",
+ "source": {
+  "commit": "27e84b1a247688c7a2cfd5778ee93dd7cac69a56",
+  "branch": "char-3",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "48a73b7b7e1c727dd17fbe8a6646fa5f10ec0ae75eadd63d30219bcb43956b60",
+  "generator_state": "committed",
+  "seed": "64",
+  "params": {
+   "cast": "living/tools/characters/town.py",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close (the take with the eyes open); game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261111-27e84b1a-ea803c",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "1cff3003ddbd60e6e4538bf0897e7429f91215f4a1906b82a8bdcb10c9773822",
+   "shots": [
+    "faces",
+    "faces-24",
+    "game",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/char-3-town/index.html",
+   "from": ".local/work/char-3-town"
+  }
+ ]
+}

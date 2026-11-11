@@ -214,8 +214,18 @@ fn world_laws(ctx: &ReducerContext, s: &Seed) {
     if s.rules.is_empty() {
         return;
     }
+    // Written into the installed script too (`world_law_values()`), so the laws that read them
+    // (`law(name)`) and every client that compiles the script have them; the seed check has
+    // already run them (`check`).
     let mut k = common::clock(ctx);
-    k.scripts_rev += 1;
+    if let Some(mut row) = ctx.db.script().name().find("skills".to_string()) {
+        row.source = living_rules::script::with_world_laws(living_rules::script::without_world_laws(&row.source), &crate::world_law_values(ctx));
+        row.revision = row.revision.max(k.scripts_rev) + 1;
+        k.scripts_rev = row.revision;
+        ctx.db.script().name().update(row);
+    } else {
+        k.scripts_rev += 1;
+    }
     ctx.db.clock().id().update(k);
     common::invalidate_scripts_rev();
 }
