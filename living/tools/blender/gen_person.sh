@@ -22,6 +22,8 @@
 #                       file, for a client or a tool that reads a file's own clips
 #   MORPHS=client       keep only the expressions the game drives (the blink and the open mouth);
 #                       the default keeps all fifteen
+#   SHADOWS=ellipsoid   keep face_normals.py's ellipsoid normals and shadow map on a typed head,
+#                       where the default is the type's designed shadows (face_shadow.py)
 #   IDENTITY=bake       build a person's identity values into the vertices (person.py --bake).
 #                       The default leaves the type's mesh as it is and moves the identity bones
 #                       in the file (compose.py), which is what the client does to a type's file
@@ -86,6 +88,12 @@ for p in "${people[@]}"; do
     # The strand texture is the same for everyone: every file names the one copy (share.py).
     [ -f "$src/strands.png" ] || cp "$dir/strands.png" "$src/strands.png"
     python3 living/tools/characters/share.py strands --shared "$src/strands.png" "$dir/anim/$name.glb" > /dev/null
+    # A face type's head takes its designed shadows: the planar proxy's normals and the type's
+    # drawn threshold map (face_shadow.py), in place of the ellipsoid's. SHADOWS=ellipsoid keeps
+    # face_normals.py's, to compare.
+    if [ "${SHADOWS:-designed}" = designed ]; then
+      python3 living/tools/characters/face_shadow.py --if-typed "$dir/anim/$name.glb" --png "$dir/anim/$name.face.png" > /dev/null
+    fi
     # One smoothed direction a point for the outline, written once here (outline_normals.py).
     python3 living/tools/characters/outline_normals.py "$dir/anim/$name.glb" > /dev/null
     # A person of a face type: the type's mesh with its identity bones moved, as the client
