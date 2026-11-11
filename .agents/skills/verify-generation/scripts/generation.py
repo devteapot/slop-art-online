@@ -245,6 +245,15 @@ def check_seed(seed, rows):
         # A seed's `packs` place animals of a kind on purpose, beside its `animals` (docs/COMBAT.md).
         packed = sum(p.get("count", 0) for p in seed.get("packs", []) if p.get("kind") == kind)
         equal(f"{kind} count including dead founders", sum(c["kind"] == kind for c in chars.values()), count + packed)
+    for pack in seed.get("packs", []):
+        # A pack placed near an animal kind starts where that kind lives: each member's start
+        # (`home_x`, `home_y`) within the pack's reach (`to_m`, plus the 4 m spread) of one.
+        near = pack.get("near", "arrival")
+        if near in seed["animals"] and pack.get("name"):
+            members = [c for c in chars.values() if c["kind"] == pack["kind"] and bgs.get(c["id"], {}).get("pack") == pack["name"]]
+            prey = [(c["home_x"], c["home_y"]) for c in chars.values() if c["kind"] == near]
+            far = [c["id"] for c in members if not any(math.dist((c["home_x"], c["home_y"]), q) <= pack.get("to_m", 100) + 8 for q in prey)]
+            present(f"pack {pack['name']} starts near {near}", len(members) == pack["count"] and not far, {"members": len(members), "too_far": far})
     present("resources generated", len(rows["resource_node"]) > 0)
     for structure in seed.get("structures", []):
         owner = by_name.get(structure.get("owner"), {}).get("id", 0)
@@ -295,6 +304,25 @@ def check_land(seed, rows, side, tiles):
         home = min(settlements, key=lambda s: math.dist(a, (s["x"], s["y"])))
         d = math.dist(a, (home["x"], home["y"]))
         present("arrival point inside a settlement, near its square", d <= 0.5 * home["radius_m"], {"settlement": home["id"], "kind": home["kind"], "style": home["style"], "from_its_square_m": round(d, 1), "radius_m": round(home["radius_m"], 1)})
+    if land:
+        # A pack with a `band` starts within it (from the arrival point), and one with
+        # `road_clear_m` that far from any road (members spread up to about 6 m from the centre).
+        a = (land[0]["arrive_x"], land[0]["arrive_y"])
+        bgs = {r["id"]: json.loads(r["text"]) for r in rows["background"] if r["text"].startswith("{")}
+        for pack in seed.get("packs", []):
+            band, clear = pack.get("band"), pack.get("road_clear_m", 0)
+            if not pack.get("name") or not (band or clear):
+                continue
+            members = [c for c in rows["character"] if c["kind"] == pack["kind"] and bgs.get(c["id"], {}).get("pack") == pack["name"]]
+            starts = [(c["home_x"], c["home_y"]) for c in members]
+            if band and band.get("of", "arrival") == "arrival":
+                off = [round(math.dist(q, a)) for q in starts if not band.get("from_m", 0) - 6 <= math.dist(q, a) <= band["to_m"] + 6]
+                present(f"pack {pack['name']} starts {band.get('from_m', 0)}-{band['to_m']} m from the arrival", bool(members) and not off, {"members": len(members), "from_arrival_m": sorted(round(math.dist(q, a)) for q in starts)})
+            if clear:
+                r = max(clear - 6, 0)
+                n = int(r) + 1
+                roads = [q for q in starts if any(dx * dx + dy * dy <= r * r and tile(q[0] + dx, q[1] + dy) == 6 for dy in range(-n, n + 1) for dx in range(-n, n + 1))]
+                present(f"pack {pack['name']} starts {clear} m clear of roads", bool(members) and not roads, {"members": len(members), "near_a_road": roads})
     communities = {r["name"]: r for r in rows["community"]}
     entries = seed.get("towns", []) + seed.get("villages", [])
     present("settlement rows", len(settlements) >= len(entries), {"rows": len(settlements), "seeded": len(entries)})

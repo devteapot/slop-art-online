@@ -443,6 +443,16 @@ pub struct Structure {
     pub built_ms: u64,
 }
 
+/// When a creature's remains (a `remains` structure) are gone: `due_ms` is its `built_ms` plus
+/// the `remains_s` law for the dead one's kind. Private; housekeeping reads only the rows due.
+#[spacetimedb::table(accessor = rot)]
+pub struct Rot {
+    #[primary_key]
+    pub structure: u64,
+    #[index(btree)]
+    pub due_ms: u64,
+}
+
 /// Installed behavior graph (cold).
 #[spacetimedb::table(accessor = brain)]
 pub struct Brain {

@@ -465,7 +465,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
                     Value::Object(f) => {
                         let f = strip_nulls(f.clone());
                         let mut out = Map::new();
-                        for k in ["kind", "relation", "mine"] {
+                        for k in ["kind", "relation", "mine", "holds"] {
                             if let Some(v) = f.get(k) {
                                 out.insert(k.into(), v.clone());
                             }
@@ -477,6 +477,11 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
                 let kind = f.as_str().or_else(|| f.get("kind").and_then(|k| k.as_str())).unwrap_or_default();
                 if catalog::kind_class(kind).is_none() {
                     return Err(format!("{path}: unknown kind `{kind}`"));
+                }
+                if let Some(item) = f.get("holds") {
+                    if !item.as_str().is_some_and(|i| catalog::item(i).is_some()) {
+                        return Err(format!("{path}: `holds` names no item: {item}"));
+                    }
                 }
                 Ok(f)
             };
@@ -851,6 +856,18 @@ mod tests {
         let a = crate::acts::parse(json!({"do": "threaten", "target": {"id": 4}}), None, &Default::default()).unwrap();
         assert_eq!(a.skill, "threaten");
         assert!(crate::acts::parse(json!({"do": "yield"}), None, &Default::default()).is_ok());
+    }
+
+    #[test]
+    fn a_structure_selector_may_ask_what_it_holds() {
+        let g = from_value(json!({"if": {"sees": {"nearest": {"kind": "remains", "holds": "meat"}}}, "then": {"do": "take", "target": {"nearest": {"kind": "remains", "holds": "meat"}}, "item": "meat"}})).unwrap();
+        let text = serde_json::to_string(&g.root).unwrap();
+        assert!(text.contains(r#""holds":"meat""#), "{text}");
+        let e = from_value(json!({"do": "take", "target": {"nearest": {"kind": "remains", "holds": "gold"}}, "item": "meat"})).unwrap_err();
+        assert!(e.contains("`holds` names no item"), "{e}");
+        // Without `holds` a selector serializes as before.
+        let plain = serde_json::to_string(&from_value(json!({"do": "take", "target": {"nearest": "remains"}, "item": "meat"})).unwrap().root).unwrap();
+        assert!(!plain.contains("holds"), "{plain}");
     }
 
     #[test]

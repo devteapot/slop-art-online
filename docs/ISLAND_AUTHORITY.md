@@ -174,7 +174,72 @@ Newcomers (a player's `join`, a trial's `spawn_newcomer`) arrive at the `land` r
 - **Where in it:** on its square, where its people gather, 6 m from the square's heart toward the town's first gate (at most half way to the square's edge). It is the walkable tile nearest that point among the tiles connected to the square, searched within the square's outline and 16 tiles round it. Where a building stands on the square's heart (the megacity core's arcology), the search starts from the walkable ground round it. A land without settlements arrives at the walkable tile nearest its middle.
 - **Deterministic and covered:** the point depends only on the seed, size and parameters, and it is folded into the layout digest. A client that regenerates the land derives the same point, and `verify-generation` compares the row with a native regeneration (`floor_preview` prints `arrival x y`).
 - **Why it moved:** from 2026-09 to 2026-11-09 the point was 4 m outside the first gate's wall. On the seeded-lives towns that put it 2–28 m outside the town's radius, and in the social trials the newcomer stayed outside on every island seed. On seed 7 over the first game day of `verify-arr-base`, the mean number of people within 20 m was 16.2 at the square's heart and 0.1–0.2 at points just inside or outside the first gate. Values per seed (2048 m): seed 7 (410.5, 258.5), 6.0 m from the square's heart; seed 11 (1795.5, 1739.5), 5.7 m; seed 13 (809.5, 298.5), 5.7 m; the megacity floor (seed 11 of `floor-megacity.json`) (980.5, 1022.5), on the core square's walkable edge, 43.5 m from its built-on heart (`host::tests::arrival_is_on_the_first_towns_square`).
-- **What reads it:** `join`, `spawn_newcomer`, the seed's packs placed `near: "arrival"`, the trial runner's `{"arrival": true}` anchor, `spawn_battle`/`spawn_skirmish` (20–30 m north of it), and `soak.py`/`gate.py`. Scripted trials anchored to the arrival now start on the square rather than on the road outside the gate. The island's bold pack moved to 370–520 m from the arrival, which keeps it as far from the town as the earlier 250–400 m from the gate-side point.
+- **What reads it:** `join`, `spawn_newcomer`, the seed's packs placed `near: "arrival"`, the trial runner's `{"arrival": true}` anchor, `spawn_battle`/`spawn_skirmish` (20–30 m north of it), and `soak.py`/`gate.py`. Scripted trials anchored to the arrival now start on the square rather than on the road outside the gate. The island's bold pack moved to 370–520 m from the arrival, which keeps it as far from the town as the earlier 250–400 m from the gate-side point. Since the wildlife placement below it starts near deer within 370–800 m of the arrival.
+
+### Wildlife placement (2026-11-10)
+
+The island's wolves starved because they did not find deer: herds and packs were placed independently, 100–1,100 m apart, while a wolf senses deer by sight (11 m) or scent. `wolves-1` changes where wolves start and how far they smell. It does not feed, move or override any animal; what they do after creation is their starting graphs and the rules.
+- **Packs near their prey.** A seed pack's `near` may name an animal kind: the pack starts `from_m`..`to_m` from one of that kind already placed. `band` (`{"of": "arrival", "from_m", "to_m"}`, or a settlement kind) also keeps the pack's centre within a distance band of a second point, and only animals from which the band can be reached are tried; when none can, the band alone places the pack (with a warning). `road_clear_m` keeps the centre that far from every road tile. All draws come from creation's seeded generator (`seed::rng` during `Creating`), so the same seed places the same packs; `init` logs `founding animals: N, starts digest X`.
+- **The island:** `animals.wolf` is 0. Its wild wolves are a pack of five near deer (40–120 m), and the bold pack is four near deer, 370–800 m from the arrival and 40 m clear of roads. On seed 7 at 20ca6edc the bold pack starts 111 m from deer and 721 m from the arrival; before the merge with main's seeded creation, 98 m from deer and 478 m from it.
+- **Scent:** wolves smell deer and wolves at 150 tiles (was 60), read at a cadence ([living core](LIVING_CORE.md), "Scent").
+- **Deer range when grazing fails:** above hunger 45, after `graze` and `sleep`, a deer wanders without waiting (`instincts.json` `deer`), as wolves do above hunger 50.
+
+**Three hours, no minds** (Mac, own 2.14.1 container, seeds 7 and 11 of the island, at f06979e2 without the scent cadence and before main's flee fix; `living/tools/eco_sample.py` every 10 s, `eco_report.py`; a meal is a rise in the meat a wolf carries, which is a kill):
+
+| | Seed 7 | Seed 11 |
+|---|---|---|
+| Wolves at start, end | 9, 5 | 9 (+3 pups), 4 |
+| Wolf deaths, hour 1 / 2 / 3 | 0 / 2 killed by people / 2 starved | 0 / 0 / 8 starved |
+| Deer at start, end | 24, 17 | 24, 20 |
+| Deer killed by wolves, hour 1 / 2 / 3 | 9 / 8 / 4 | 9 / 5 / 0 |
+| Deer births, hour 1 / 2 / 3 | 7 / 5 / 2 | 7 / 0 / 3 |
+| Meals per wolf, deer-meadows pack | 3, 3, 3, 3, 3 (minutes 17–18, 68–84, 118–147) | 1, 1, 1, 2, 2; all five starved (minutes 124–175) |
+| Meals per wolf, bold pack | 1, 1, 2, 2; two killed by people (84, 92), two starved (164, 170) | 1, 2, 2, 2; three starved (123–175) |
+
+Every wolf killed its own deer at minute 17–18, in both worlds: a kill feeds only its killer, five meat carried and eaten a piece at a time. On seed 7 the deer-meadows pack kept feeding past its second meal (all five had a third). On seed 11 nobody had a third, and no deer was killed after minute 80: from minute 60 to their deaths the starving wolves were 450–600 m (median) from the nearest deer, within 150 m in only 8–24% of samples, mostly wandering 3–9 m at a time and still sleeping at hunger 90 and above (the sleep rule comes before ranging). Deer did not collapse in either world.
+
+### Kills and remains (2026-11-11)
+
+Before this change a kill put the carcass's meat and hide straight into the killer's pack (`act.rs`), and remains were made only for people. A pack could not share a kill, though `attack_spec` and `source_of` told minds to take meat "from the remains". `wolves-1` makes the world keep the body. Nothing spawns, and no animal is fed or steered.
+- **Every death leaves remains:** a `remains` structure where the body fell, holding what it carried, what its body gives and its artifacts. What a body gives is the kind's `carcass` trait in `kinds()`, read by the `carcass(kind)` law (deer 5 meat and a hide, a wolf 2 meat and a hide, a person nothing beyond what they carried). A kill puts nothing in the killer's pack. The killer, its pack or anyone beside the remains `take`s from them. Wolves have `take` among their species skills.
+- **Remains expire:** each kind's `remains_s` trait (1800 s for deer and wolves, 3600 s for people). A private `rot` row (`structure`, `due_ms` with a btree index) is written with the remains. The minute housekeeping (`tick::expire_remains`, span `housekeeping.remains`) reads only the rows due and removes those remains with whatever is left in them. Remains still holding an artifact stay, as all remains did before.
+- **Finding what is left:** a structure selector may say what the structure must hold, as in `{"nearest": {"kind": "remains", "holds": "meat"}}`. The starting graphs take meat from remains in sight that still hold it: the wolf instincts (`wolf`, `wolf_bold`, `wolf_young`), the wolves' `hunt` routine, and both hunter routines (which also take hides). Without `holds`, a wolf beside remains it had emptied retried `take meat` and was refused every few seconds instead of hunting (the first 45 minutes of `wolves-r7`, before the selector existed).
+- **A search keeps its direction:** `wander` used to keep the body's heading only while it was moving, so a hungry search became a memoryless random walk after every wait. The per-creature `motion(a)` law now has `wander_turn` (1.2 rad) and `wander_keep_s` (60 s). A wander keeps within `wander_turn` of the body's heading while it moves or after it has stood less than `wander_keep_s`.
+- **Described for minds:** `remains_law()` (topic `food`) covers `carcass` and `remains_s`. `carcass` is among the laws the engine must see described (`check::ENGINE_LAWS`), and the motion law's text names the wander fields.
+
+SpacetimeDB documentation consulted (2026-11-11; pages labelled 2.0.0, service and crates pinned at 2.14.1): [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) (adding a table and adding an index are safe changes, so a running world can be updated in place), [indexes](https://spacetimedb.com/docs/tables/indexes/) (a `u64` btree supports range filters such as `due_ms().filter(..=now)`; `ScheduleAt` and `Timestamp` cannot be index keys) and [schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/). One scheduled row per remains was possible, but the minute housekeeping already runs and a due-time index keeps its read to the rows due.
+
+**Data paths:**
+- **`rot`** (private): one insert per death and one delete per expiry; read only through the due range. It adds no subscriptions.
+- **`structure`** (public): one row per death and one delete per expiry. Clients whose structure window holds the spot receive both.
+- **`inventory`:** what the remains hold (2–3 rows for an animal).
+- **Retained data:** bounded by deaths within each kind's `remains_s`. On the island at most 17 animal remains lay at once (minutes 110–120 below).
+- **Bindings:** regenerated with `spacetime generate --include-private` (2.14.1); `rot` is the only addition.
+
+**Three hours, no minds,** on seed 7 of the island. dev-box (32-thread AMD) in its own 2.14.1 container `wolves-stdb`, at **1064243b** (`wolves-1` on main 445db098, before `laws-2` and `lives-2`). Run `wolves-r7c` (`eco_sample.py` every 10 s, `eco_report.py`). Runs that did not count:
+- **`wolves-r7`:** stopped at minute 45 to add `holds`.
+- **`wolves-r7b`:** died at world minute 39 when dev-box's disk filled to 97% and the container exited.
+
+| | |
+|---|---|
+| Wolves alive at start / minute 120 / minute 180 | 9 / 8 / 5 |
+| Wolf deaths | 2 starved (minutes 105, 162), 2 killed by people (160, 173); no wolf births |
+| Deer at minute 0 / 60 / 120 / 180 | 24 / 28 / 17 / 19 (low 15 at minutes 140–160) |
+| Deer killed by wolves, hours 1 / 2 / 3 | 7 / 12 / 5; one deer starved (hour 3) |
+| Deer births, hours 1 / 2 / 3 | 11 / 1 / 8 |
+| Meat eaten per wolf, from falls in hunger (20 a piece) | deer-meadows pack 3, 7, 9, 11, 11; bold pack 9, 11, 12, 14 |
+| Animal remains (24 deer killed, 1 starved, 4 dead wolves) | 29. Wolves fed from 22 of them, and 7 fed 2 or more creatures (22 with one taker, 6 with two, 1 with three). A taker is a creature with a `take` aimed at the remains, or that ate within 8 m of them between two samples. That count includes 2 deer, a grazing artefact. |
+| Remains on the ground, every 10 minutes | 0, 0, 2, 5, 5, 5, 3, 8, 7, 10, 12, 17, 17, 16, 14, 13, 8, 6, 8 (meat in them 0–14) |
+
+The wolves that starved, and the third-hour starvation, are not attributed. The `remains` scene shows the parts work, but a three-hour run of one world does not show the ecology holds.
+
+**Confirmation on main cb5214b7** (`laws-2` and `lives-2`; d4483873; the same box and seed; 45 minutes, run `wolves-r7m`):
+- **Population:** all 9 wolves alive at the end; deer 24 to 15 (9 killed by wolves, no births yet).
+- **Feeding:** every wolf ate, 2 to 4 meat each. Wolves fed from 8 of the 9 animal remains, one taker each, so no kill was shared yet.
+- **Remains on the ground:** 5 at minute 20, then 9 at minutes 30 and 40.
+- **Checks:** verify-core needs, wildlife and `remains` (10 of 10), verify-generation (including the island's four pack checks) and `just living-check` all passed on this commit.
+
+**Main's flee fix alone** (Mac, seed 7, 95 minutes, at 20ca6edc: `wolves-1` on main 4b758124, before remains): deer escaped far more often. Wolves spent 16% of their samples attacking, against 1–2% before. Their first meals came at minutes 35–41 instead of 17–18. Two bold wolves never fed and starved at minutes 60–63.
 
 ## Measurements
 

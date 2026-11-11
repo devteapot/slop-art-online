@@ -46290,7 +46290,7 @@
   ],
   "animals": {
     "deer": 24,
-    "wolf": 6
+    "wolf": 0
   },
   "newcomer": {
     "items": {
@@ -46311,10 +46311,25 @@
   "packs": [
     {
       "kind": "wolf",
+      "count": 5,
+      "near": "deer",
+      "from_m": 40,
+      "to_m": 120,
+      "instinct": "wolf",
+      "name": "the wolves of the deer meadows"
+    },
+    {
+      "kind": "wolf",
       "count": 4,
-      "near": "arrival",
-      "from_m": 370,
-      "to_m": 520,
+      "near": "deer",
+      "from_m": 40,
+      "to_m": 120,
+      "band": {
+        "of": "arrival",
+        "from_m": 370,
+        "to_m": 800
+      },
+      "road_clear_m": 40,
       "bold": true,
       "instinct": "wolf_bold",
       "name": "the wolves of the low hills"

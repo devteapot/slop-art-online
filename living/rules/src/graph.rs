@@ -393,6 +393,10 @@ pub struct Filter {
     pub relation: Option<String>,
     /// For structures: only ones I built.
     pub mine: bool,
+    /// For structures: only ones holding at least one of this item (`remains` with meat left,
+    /// a `storage` with berries).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holds: Option<String>,
 }
 
 impl<'de> Deserialize<'de> for Filter {
@@ -407,11 +411,13 @@ impl<'de> Deserialize<'de> for Filter {
                 relation: Option<String>,
                 #[serde(default)]
                 mine: bool,
+                #[serde(default)]
+                holds: Option<String>,
             },
         }
         Ok(match Repr::deserialize(d)? {
-            Repr::Kind(kind) => Filter { kind, relation: None, mine: false },
-            Repr::Full { kind, relation, mine } => Filter { kind, relation, mine },
+            Repr::Kind(kind) => Filter { kind, relation: None, mine: false, holds: None },
+            Repr::Full { kind, relation, mine, holds } => Filter { kind, relation, mine, holds },
         })
     }
 }

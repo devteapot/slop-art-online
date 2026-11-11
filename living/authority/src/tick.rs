@@ -166,6 +166,28 @@ fn migration(ctx: &ReducerContext, alive: &[(String, u32)], now: u64) {
 /// The pass rolls through the inventory by owner over the minute's 60 housekeeping calls
 /// (an owner's stacks together), so each stack is still checked once a minute but no call
 /// walks the whole table; the minute's last call takes whatever is left.
+/// Remains whose time is up (`rot` rows due by now) are gone, with what is left in them. Remains
+/// holding an artifact stay, as before remains expired. Reads only the due rows.
+fn expire_remains(ctx: &ReducerContext, now: u64) {
+    let _timer = common::span("housekeeping.remains");
+    let due: Vec<Rot> = ctx.db.rot().due_ms().filter(..=now).collect();
+    if due.is_empty() {
+        return;
+    }
+    for r in due {
+        ctx.db.rot().structure().delete(r.structure);
+        let owner = STRUCTURE_BIT | r.structure;
+        if ctx.db.artifact().holder().filter(owner).next().is_some() {
+            continue;
+        }
+        for i in ctx.db.inventory().owner().filter(owner).map(|i| i.id).collect::<Vec<_>>() {
+            ctx.db.inventory().id().delete(i);
+        }
+        ctx.db.structure().id().delete(r.structure);
+    }
+    common::invalidate_structures(ctx);
+}
+
 fn spoil(ctx: &ReducerContext, now: u64) {
     let _timer = common::span("housekeeping.spoil");
     let (cursor, call, mut quota) = SPOIL.with(|c| c.get());
@@ -355,6 +377,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     }
 
     spoil(ctx, now);
+    expire_remains(ctx, now);
     crate::combat::housekeeping(ctx, now);
 
     // One pass over the characters: population counts for the stats row, and the living.
