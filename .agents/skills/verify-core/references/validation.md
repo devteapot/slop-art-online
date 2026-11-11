@@ -1,5 +1,24 @@
 # Core validation record
 
+## 2026-11-11 goods-2: item looks, make and feed shown, teaching a world's know-how (dev-box)
+
+Branch `goods-2` (from main `62d861f0`, merged with main four times, last with `94050f9a` at `6fefe997`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `goods` (goods fixture), before the `doing` check | `core-goods2-goods` | 22 of 22 |
+| `stock` | `core-goods2-goods` | 4 of 4 |
+| `goods` with the new checks (`act_card` holds `make` and `feed`; A's `doing` row with `make`'s code at the furnace while the glass is made) | `core-goods2-goods-b`; merged `core-goods2m-goods` | 24 of 24 each |
+| `stock` (merged) | `core-goods2m-goods` | 4 of 4 |
+| `laws` (cullet-laws), first merge | `core-goods2-laws` | 15 pass, the known SKIP (the mirrored dark spot) |
+| `laws` (cullet-laws), second merge | `core-goods2m-laws` | 15 pass, the same SKIP |
+| `goods`, `stock` (third merge: rates-2, ui-decl-1) | `core-goods2f-goods` | 24 of 24, 4 of 4 |
+| `goods`, `stock` (fourth merge: fov-1) | `core-goods2g-goods` | 24 of 24, 4 of 4 |
+
+Rules: `cargo test -p living-rules` all pass, with `items_and_recipes_say_how_they_look`, `teaching_takes_the_worlds_know_how` and `making_and_feeding_are_seen_and_a_fire_state_is_shared`. Fuel gate A/B against main, same session: at the second merge within 0.1 % on every law (rates-law 211,278 → 211,120, then over its 160,000 budget on main). At the third merge (main `6caebe20`, rates-2's re-based budgets) within 0.5 %: rates-law 203,095 → 203,516, strike 279,080 → 280,161, perceived 76,912 → 77,252, hook 441,073 → 441,175, senses-law 60,495 → 60,767, the rest equal. **`perceived` is over its 75,000 budget on main itself** (76,912), not from this branch. The laws scene was not rerun at the third merge. `just living-check` exit 0 after each merge.
+
+Maintained: the goods scene checks `make`'s `doing` row; features/goods.md (item looks, shows, what is not covered). The harness: main's `1b3b5dd8` (projects experiment) had put back an older `verify.py` and `verify/SKILL.md`, which installed the plain script over a seed's own laws and dropped the verify-ui rows; `b7328bc0` restored the HTTP install only. goods-2 restores goods-1's `seed_laws` skip, `call ... @FILE`, the longer install timeout and the SKILL.md text, keeping main's `[::]` port and own-server wording.
+
 ## 2026-11-11 fov-1: sight that depends on facing (dev-box)
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).

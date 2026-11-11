@@ -15,7 +15,7 @@ removes what the run started and keeps the evidence.
   verify.py player  --run R say TEXT [--to ID]
   verify.py sql     --run R QUERY [--as-player | --anonymous] [--save NAME]
                                             as the database owner unless told otherwise
-  verify.py call    --run R REDUCER ARGS_JSON [--as-player | --as-admin] [--expect-refusal TEXT]
+  verify.py call    --run R REDUCER ARGS_JSON|@FILE [--as-player | --as-admin] [--expect-refusal TEXT]
   verify.py observer --run R start|shot NAME|stop
   verify.py cleanup --run R [--keep-db]
 
@@ -98,7 +98,7 @@ def log(st, line, out=sys.stdout):
     print(line, file=out, flush=True)
 
 
-def http(path, body=None, token=None, raw=False):
+def http(path, body=None, token=None, raw=False, timeout=30):
     data = body.encode() if raw else (json.dumps(body).encode() if body is not None else b"")
     req = urllib.request.Request(URL + path, data=data, method="POST" if body is not None or path == "/v1/identity" else "GET")
     if not raw:
@@ -106,7 +106,7 @@ def http(path, body=None, token=None, raw=False):
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read().decode()
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()
@@ -180,34 +180,37 @@ def launch(a):
     keep = getattr(a, "keep_data", False)
     fresh = [] if keep else ["--delete-data"]
     stdb("publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y")
-    # The working tree's script, with the seed's own laws (`laws`/`laws_file`, e.g. Cullet's)
-    # composed over it exactly as the world composed them at creation: installing the bare
-    # script would drop them while the seeded state still reflects them. `none` (a floor module)
-    # gets the bare script; `create_floor` composes the laws of the seed it is given.
+    # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
+    # shipped script and installed when its world was created; installing the plain script now
+    # would drop them. Every other world gets the working tree's script, as before. `none` (a
+    # floor module) gets it too; `create_floor` composes the laws of the seed it is given.
+    # `seed_script` is the seed's script as the authority composes it (install_script.py, the one
+    # Python copy of `floors::compose`, shared with trials.py): the read-back below checks it.
     source, overlay = seed_script(a.seed)
-    sj = seed_json(a.seed) or {}
-    st["seed_laws"] = (sj.get("laws_file") or "laws") if overlay else None
+    st["seed_laws"] = bool(overlay)
     owner = admin_token()
-    if overlay and not keep:
-        # The world's own composition, from its creation, is the check on this one.
-        if not same_script(installed(st["db"], owner), source):
+    if st["seed_laws"]:
+        how = "the seed carries its own laws: kept as installed at creation (no install_script)"
+    else:
+        # Over HTTP: the script is past the 128 KiB a command-line argument may hold.
+        code, body = http(f"/v1/database/{st['db']}/call/install_script", [source], owner, timeout=180)
+        if code != 200:
             save(st)
-            sys.exit(f"the world created from seed {a.seed} runs a script other than its laws composed over living/scripts/skills.rhai; not installing over it (compare install_script.compose_laws with living_rules::floors::compose)")
-    # Over HTTP as the admin: the script no longer fits one command-line argument (133 KB
-    # against Linux's 128 KiB MAX_ARG_STRLEN, "Argument list too long" through the CLI).
-    code, body = http(f"/v1/database/{st['db']}/call/install_script", [source], owner)
-    if code != 200:
-        save(st)
-        sys.exit(f"install_script refused ({code}): {body[:300]}")
+            sys.exit(f"install_script failed: {code} {body.strip()[-4000:]}")
+        how = "installed skills.rhai"
+    # Read back what the world runs: the seed's laws composed over the working tree's script (or
+    # that script alone). A fresh world with laws that fails this composed them otherwise than
+    # install_script.compose_laws; a --keep-data world keeps the script of its creation, which an
+    # edit of skills.rhai or the laws since makes stale (install_script.py DB --seed SEED renews it).
     if not same_script(installed(st["db"], owner), source):
         save(st)
-        sys.exit("the installed script read back from the `script` row is not the one sent")
+        sys.exit(f"{st['db']} does not run seed {a.seed}'s script ({'its laws composed over ' if overlay else ''}living/scripts/skills.rhai) read back from its `script` row"
+                 + ("; with --keep-data run `python3 living/tools/install_script.py " + st["db"] + " --seed " + a.seed + "`" if overlay and keep else ""))
     st["script_sha256"] = hashlib.sha256(source.encode()).hexdigest()
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)
-    laws = f"seed laws {st['seed_laws']} composed over skills.rhai" if overlay else "skills.rhai"
-    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''}); installed {laws} (sha256 {st['script_sha256'][:12]})")
+    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''}); {how}; the `script` row read back is the seed's script (sha256 {st['script_sha256'][:12]})")
 
 
 def doctor(a):
@@ -337,12 +340,15 @@ def call(a):
     token = admin_token() if a.as_admin else st.get("token") if a.as_player else None
     if a.as_player and not token:
         sys.exit("no player yet: run `player join NAME` first")
-    args = json.loads(a.args)
+    # `@FILE` reads the arguments from a file (a script is past what one command-line argument
+    # may hold).
+    args = json.loads(Path(a.args[1:]).read_text() if a.args.startswith("@") else a.args)
     if not isinstance(args, list):
         sys.exit("ARGS_JSON must be a JSON array of the reducer's arguments")
     who = "admin" if a.as_admin else "player" if a.as_player else "anonymous"
-    code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token)
-    log(st, f"call {a.reducer}{json.dumps(args)} as {who} -> {code} {body.strip()}")
+    code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token, timeout=180)
+    shown = json.dumps(args)
+    log(st, f"call {a.reducer}{shown if len(shown) < 4000 else shown[:200] + f'... ({len(shown)} bytes)'} as {who} -> {code} {body.strip()}")
     if a.expect_refusal is not None:
         ok = code != 200 and a.expect_refusal in body
         log(st, f"expected refusal containing {a.expect_refusal!r}: {'yes' if ok else 'NO'}")
