@@ -1,6 +1,10 @@
 # Core validation record
 
 
+## 2026-11-11 exp-arrive after merging main 087be68 (Spark)
+
+`newcomers` 18 of 18 (`core-arrive-n8`, hamlet).
+
 ## 2026-11-11 exp-arrive after merging main accf27c (Spark)
 
 `newcomers` 18 of 18 (`core-arrive-n7`, hamlet, under lives-3's Cullet life law); launch kept the seed's laws and installed nothing over them.
