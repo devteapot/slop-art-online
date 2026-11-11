@@ -1,9 +1,10 @@
 //! The upper body turns toward where a person looks while the legs keep to their travel.
 //!
-//! A body that faces the cursor while it walks another way has no strafe clips: the legs walk
-//! the way the body goes (forward, or backward with the gaits reversed, `anim.rs`), and the
-//! spine, chest, neck and head turn the rest of the way ([`Motion::twist`], set by `live.rs`).
-//! Feet stay planted because the legs always step along their travel.
+//! A body that faces the cursor while it walks another way plays the file's directional takes
+//! where it has them (`gait::Gaits::blend_toward`: the legs face the look, no twist). Elsewhere
+//! the legs walk the way the body goes (forward, or backward with the gaits reversed, `anim.rs`),
+//! and the spine, chest, neck and head turn the rest of the way ([`Motion::twist`], set by
+//! `live.rs`). Feet stay planted because the legs always step along their travel.
 //!
 //! The turn is a rotation about each bone's own long axis (VRoid's spine bones point up their
 //! local +Y, rest rotations identity), applied after the clips are sampled and before transforms
@@ -13,8 +14,12 @@
 use crate::anim::{Anim, Motion};
 use bevy::prelude::*;
 
-/// The spine bones and their share of the turn (they add up to 1).
-const SHARE: [(&str, f32); 5] = [("J_Bip_C_Spine", 0.22), ("J_Bip_C_Chest", 0.26), ("J_Bip_C_UpperChest", 0.24), ("J_Bip_C_Neck", 0.14), ("J_Bip_C_Head", 0.14)];
+/// The spine bones and their share of the turn (they add up to 1): at a 90° strafe the spine
+/// turns 52° and the neck and head 38°. Before feel pass 5 the neck and head took 25° and the
+/// chest the rest, which looked wrung out; a person looking aside turns the head most. (A share
+/// on the pelvis, with the thighs turned back, moved the planted feet under foot IK: ±7 cm as
+/// the cursor swayed ±25°, so the hips stay with the legs.)
+const SHARE: [(&str, f32); 5] = [("J_Bip_C_Spine", 0.18), ("J_Bip_C_Chest", 0.18), ("J_Bip_C_UpperChest", 0.22), ("J_Bip_C_Neck", 0.20), ("J_Bip_C_Head", 0.22)];
 
 pub struct TwistPlugin;
 

@@ -1,0 +1,608 @@
+{
+  "Bram Calloway": {
+    "narrative": "I am a boatwright, and I have been building the Second Thought in the old dry dock for four years now. The hull is framed, but I need fourteen trees from the Hanger, and Marit Sedge will not let me have them. My wife Ysolde has told me at night that she does not want to sail, but I mean to cross the Combs all the same. By day I work the wood, and in the evenings I take a cup at the Marver and listen to the town.",
+    "values": [
+      "family",
+      "craftsmanship",
+      "exploration",
+      "perseverance"
+    ],
+    "goals": [
+      "Finish the Second Thought and cross the Combs.",
+      "Get fourteen trees from the Hanger, by Marit's leave or otherwise.",
+      "See my children safe and settled, even as I plan to leave."
+    ],
+    "pastimes": [
+      "Walking the mole at dusk, looking at the Combs and the Pale.",
+      "Playing counters at the Marver, though I am not much good.",
+      "Carving small boat models from offcuts for Kit and Neve."
+    ],
+    "calling": "To build a ship that will cross the Combs and see what lies beyond the Pale.",
+    "mood": "Determined, but weighed down by Ysolde's secret and the lack of timber.",
+    "traits": {
+      "caution": 40,
+      "sociability": 60,
+      "empathy": 55,
+      "curiosity": 80,
+      "ambition": 90,
+      "introspection": 50,
+      "temper": 45,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Ysolde Calloway",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She is my anchor, but she does not want to sail. I carry that alone."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 90,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She would come with me, and that frightens me as much as it gladdens me."
+      },
+      {
+        "name": "Kit Calloway",
+        "trust": 88,
+        "affinity": 70,
+        "label": "son",
+        "note": "My apprentice, but his heart is at the Cone, not the dry dock."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 30,
+        "affinity": 20,
+        "label": "warden",
+        "note": "She holds the trees I need, and she will not budge."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "helper",
+        "note": "He wants a place on the ship, and he works hard in the dock."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 40,
+        "affinity": 30,
+        "label": "Glassmaster",
+        "note": "She wants the Hanger's wood for the Cone, as I want it for the ship."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 50,
+        "affinity": 45,
+        "label": "peat cutter",
+        "note": "He sells peat to the town, but I have little to do with him."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 60,
+        "affinity": 55,
+        "label": "cook",
+        "note": "The Marver is where I hear the town's talk."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 55,
+        "affinity": 40,
+        "label": "tally keeper",
+        "note": "I keep my debts unwritten, but he knows my name."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 45,
+        "affinity": 40,
+        "label": "Kiln blower",
+        "note": "Kit watches him at the pipe like a gull at a net, and it is Imre I have to thank for that look in the boy's eye."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I first laid the keel of the Second Thought, four years ago, with Kit helping.",
+        "salience": 0.9,
+        "about": [
+          "Kit Calloway"
+        ]
+      },
+      {
+        "gist": "Ysolde telling me at night that she does not want to sail, and my promising to keep it from the children.",
+        "salience": 0.8,
+        "about": [
+          "Ysolde Calloway"
+        ]
+      },
+      {
+        "gist": "Marit Sedge refusing me the fourteen trees, saying the Hanger is not to be cut.",
+        "salience": 0.7,
+        "about": [
+          "Marit Sedge"
+        ]
+      },
+      {
+        "gist": "The storm of last autumn, which broke three glasshouses and took the end rail of the mole.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "The fever winter, six years ago, when we lost so many and I nearly lost Ysolde.",
+        "salience": 0.5,
+        "about": [
+          "Ysolde Calloway"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_combs_can_be_crossed",
+        "value": 0.9,
+        "why": "I have studied the reef and the Pale. A strong ship, well built, can find a way through."
+      },
+      {
+        "key": "the_hanger_is_not_mine_to_cut",
+        "value": 0.6,
+        "why": "I respect Marit's wardenry, but I need those trees. I will not steal them, but I will argue."
+      },
+      {
+        "key": "family_comes_first",
+        "value": 0.8,
+        "why": "Ysolde, Neve, and Kit are my world. I would not leave them behind."
+      },
+      {
+        "key": "a_ship_is_a_living_thing",
+        "value": 0.7,
+        "why": "Every plank and rib of the Second Thought is part of me. She will float."
+      }
+    ],
+    "secret": ""
+  },
+  "Ysolde Calloway": {
+    "narrative": "I fish the Weirs at dawn and I am home by noon. I have told Bram, at night, that I will not sail on his ship, but I will not say it in front of the children. I want my family on the island, alive and together. The wash-house wall is where I hear the town's talk, and I keep my own counsel.",
+    "values": [
+      "family",
+      "safety",
+      "honesty",
+      "home"
+    ],
+    "goals": [
+      "Keep Bram from sailing, or at least keep the children from going with him.",
+      "See Neve settled with Imre, if that is what she wants.",
+      "Keep the family fed and whole."
+    ],
+    "pastimes": [
+      "Sitting against the warm wash-house wall in the evenings, listening.",
+      "Mending nets by the fire.",
+      "Walking the Wrack Strand for sea-glass."
+    ],
+    "calling": "To keep my family alive and on the island.",
+    "mood": "Anxious and torn, hiding a heavy secret.",
+    "traits": {
+      "caution": 80,
+      "sociability": 50,
+      "empathy": 70,
+      "curiosity": 30,
+      "ambition": 20,
+      "introspection": 60,
+      "temper": 40,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Bram Calloway",
+        "trust": 70,
+        "affinity": 75,
+        "label": "husband",
+        "note": "I love him, but his dream could take him from me."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 85,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She would sail with him. I would rather she stayed for Imre."
+      },
+      {
+        "name": "Kit Calloway",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "He is my youngest, and his heart is at the Cone, not the sea."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 60,
+        "affinity": 65,
+        "label": "daughter's love",
+        "note": "He would never leave the Cone, and that might keep Neve here."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 50,
+        "affinity": 55,
+        "label": "wash-house keeper",
+        "note": "She hears everything, and I listen more than I speak."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "fish divider",
+        "note": "She divides the catch fairly, and I respect her."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 40,
+        "affinity": 45,
+        "label": "warden",
+        "note": "She will not give Bram the trees, and I am glad of it."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 50,
+        "affinity": 45,
+        "label": "cook",
+        "note": "Bram drinks at the Marver, and I hear of it."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 45,
+        "affinity": 40,
+        "label": "dry-dock hand",
+        "note": "He gives Bram his free afternoons and dreams of a place on the ship, and I cannot decide whether that is kindness or the same fever that has my husband."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Telling Bram at night that I will not sail, and making him promise not to tell the children.",
+        "salience": 0.9,
+        "about": [
+          "Bram Calloway"
+        ]
+      },
+      {
+        "gist": "The day Neve first brought Imre Sarro to the house, and I saw how she looked at him.",
+        "salience": 0.7,
+        "about": [
+          "Neve Calloway",
+          "Imre Sarro"
+        ]
+      },
+      {
+        "gist": "The fever winter, when I nursed Neve and Kit through and feared for us all.",
+        "salience": 0.8,
+        "about": [
+          "Neve Calloway",
+          "Kit Calloway"
+        ]
+      },
+      {
+        "gist": "A good catch at the Weirs last spring, when the traps were full and I brought home more than we could eat.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "Sitting at the wash-house wall and hearing Greta Dunmore talk of the peat running low.",
+        "salience": 0.4,
+        "about": [
+          "Greta Dunmore"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_island_is_home",
+        "value": 0.95,
+        "why": "Everything I love is here. The Pale is nothing but death."
+      },
+      {
+        "key": "family_must_stay_together",
+        "value": 0.9,
+        "why": "I will not lose my children to the sea as I lost my parents."
+      },
+      {
+        "key": "secrets_are_a_burden",
+        "value": 0.6,
+        "why": "I hate keeping this from Neve and Kit, but I promised Bram."
+      }
+    ],
+    "secret": "I do not want to sail. I have told Bram, at night. I will not say it in front of the children."
+  },
+  "Neve Calloway": {
+    "narrative": "I fish the Fish Steps at dawn and I love Imre Sarro, though he would never leave the Cone. My father is building a ship to cross the Combs, and I would sail with him if he asked. But I do not know if I could leave Imre, or if my mother would ever forgive me.",
+    "values": [
+      "love",
+      "adventure",
+      "family",
+      "loyalty"
+    ],
+    "goals": [
+      "Sail with her father on the Second Thought.",
+      "Keep Imre Sarro in her life, even if it means staying.",
+      "Find a way to have both without hurting anyone."
+    ],
+    "pastimes": [
+      "Sitting on the Crown bench at dusk, looking out at the Pale.",
+      "Playing counters at the Marver with Roos Achterberg.",
+      "Walking the Fish Steps with Imre when he finishes at the Cone."
+    ],
+    "calling": "To see what lies beyond the Combs, with the people she loves.",
+    "mood": "Hopeful and torn between two loves.",
+    "traits": {
+      "caution": 30,
+      "sociability": 70,
+      "empathy": 65,
+      "curiosity": 85,
+      "ambition": 60,
+      "introspection": 50,
+      "temper": 35,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Bram Calloway",
+        "trust": 90,
+        "affinity": 85,
+        "label": "father",
+        "note": "He is building a ship, and I would follow him anywhere."
+      },
+      {
+        "name": "Ysolde Calloway",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She does not want us to go, but she has not said so to me."
+      },
+      {
+        "name": "Kit Calloway",
+        "trust": 85,
+        "affinity": 70,
+        "label": "brother",
+        "note": "He wants to blow glass, not sail, and I do not understand him."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 95,
+        "affinity": 95,
+        "label": "love",
+        "note": "He has the better hands at the Cone, and my whole heart."
+      },
+      {
+        "name": "Ren Sato",
+        "trust": 60,
+        "affinity": 50,
+        "label": "fellow fisher",
+        "note": "We fish the Fish Steps together, and he talks of Sabine Quill."
+      },
+      {
+        "name": "Joss Tarn",
+        "trust": 55,
+        "affinity": 45,
+        "label": "fellow fisher",
+        "note": "A good man, but he talks of little but glasshouse shares."
+      },
+      {
+        "name": "Roos Achterberg",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "She runs the counters game, and she is good company."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 50,
+        "affinity": 40,
+        "label": "shipmate",
+        "note": "He wants a place on Father's ship, and he works hard for it."
+      },
+      {
+        "name": "Runa Sarro",
+        "trust": 70,
+        "affinity": 65,
+        "label": "his mother",
+        "note": "She keeps the lehr and keeps her peace, but she has never once looked at me as though I were the wrong sort for her son."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time Imre Sarro showed her a gather of molten glass at the Cone, and she knew she loved him.",
+        "salience": 0.9,
+        "about": [
+          "Imre Sarro"
+        ]
+      },
+      {
+        "gist": "Helping her father lay the keel of the Second Thought when she was eighteen.",
+        "salience": 0.8,
+        "about": [
+          "Bram Calloway"
+        ]
+      },
+      {
+        "gist": "The fever winter, when she was sixteen and lost friends and neighbours.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "A dawn on the Fish Steps with Ren Sato, when they caught more fish than they could carry.",
+        "salience": 0.5,
+        "about": [
+          "Ren Sato"
+        ]
+      },
+      {
+        "gist": "Sitting on the Crown bench with Imre, looking at the Pale and wondering what is out there.",
+        "salience": 0.6,
+        "about": [
+          "Imre Sarro"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_combs_can_be_crossed",
+        "value": 0.8,
+        "why": "My father believes it, and I believe in him."
+      },
+      {
+        "key": "love_is_worth_the_risk",
+        "value": 0.9,
+        "why": "Imre is worth any danger, and I will not give him up."
+      },
+      {
+        "key": "family_should_stay_together",
+        "value": 0.7,
+        "why": "I want to sail with Father, but I could not bear to leave Mother and Kit."
+      }
+    ],
+    "secret": ""
+  },
+  "Kit Calloway": {
+    "narrative": "I am my father's apprentice in the dry dock, but my heart is at the Cone. I want to blow glass, and I hang about the yard watching Imre Sarro work. Halvard Dunmore told me to my face that no Strand boy has ever worked the Cone, but I will not give up.",
+    "values": [
+      "craft",
+      "ambition",
+      "family",
+      "fairness"
+    ],
+    "goals": [
+      "Become a glassblower at the Cone.",
+      "Prove that a Strand boy can work glass as well as any Kiln man.",
+      "Finish his apprenticeship with his father, even as he longs for the Cone."
+    ],
+    "pastimes": [
+      "Watching the blowers at the Cone yard, especially Imre Sarro.",
+      "Practising with clay and a small fire in the boatshed.",
+      "Fishing from the Fish Steps with his sister."
+    ],
+    "calling": "To blow glass, though he is a boatwright's son.",
+    "mood": "Frustrated and determined.",
+    "traits": {
+      "caution": 50,
+      "sociability": 60,
+      "empathy": 50,
+      "curiosity": 85,
+      "ambition": 90,
+      "introspection": 40,
+      "temper": 55,
+      "nurture": 40
+    },
+    "relations": [
+      {
+        "name": "Bram Calloway",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father",
+        "note": "He is teaching me his trade, but I want a different one."
+      },
+      {
+        "name": "Ysolde Calloway",
+        "trust": 85,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She listens when I talk of glass, even if she does not understand."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 80,
+        "affinity": 65,
+        "label": "sister",
+        "note": "She loves a blower, so she knows my heart."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 70,
+        "affinity": 80,
+        "label": "idol",
+        "note": "He has the best hands at the Cone, and I watch him whenever I can."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 30,
+        "affinity": 20,
+        "label": "old blower",
+        "note": "He says no Strand boy works the Cone, but I will prove him wrong."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 50,
+        "affinity": 60,
+        "label": "Glassmaster",
+        "note": "She decides who works the Cone, and I must win her over."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 55,
+        "affinity": 45,
+        "label": "shipmate",
+        "note": "He works in the dock with me and wants a place on the ship."
+      },
+      {
+        "name": "Tobiah Dunmore",
+        "trust": 50,
+        "affinity": 40,
+        "label": "stoker",
+        "note": "He is a Kiln boy who stokes the Cone, and I envy him."
+      },
+      {
+        "name": "Roos Achterberg",
+        "trust": 45,
+        "affinity": 55,
+        "label": "counters player",
+        "note": "She runs the game under the arcade and never minds me watching, and she knows everyone at the Cone by name — I ask her about them more than I should."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time he saw molten glass at the Cone, when his sister took him to the yard.",
+        "salience": 0.9,
+        "about": [
+          "Neve Calloway",
+          "Imre Sarro"
+        ]
+      },
+      {
+        "gist": "Halvard Dunmore telling him to his face that no Strand boy has ever worked the Cone.",
+        "salience": 0.8,
+        "about": [
+          "Halvard Dunmore"
+        ]
+      },
+      {
+        "gist": "The day his father gave him his first chisel and called him apprentice.",
+        "salience": 0.7,
+        "about": [
+          "Bram Calloway"
+        ]
+      },
+      {
+        "gist": "The storm of last autumn, when he helped his father secure the dry dock.",
+        "salience": 0.5,
+        "about": [
+          "Bram Calloway"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "strand_boys_can_blow_glass",
+        "value": 0.9,
+        "why": "There is no written rule against it, and I will prove it."
+      },
+      {
+        "key": "the_cone_is_the_heart_of_the_town",
+        "value": 0.8,
+        "why": "Everything we use comes from glass, and I want to be part of it."
+      },
+      {
+        "key": "family_duty_comes_first",
+        "value": 0.7,
+        "why": "I will finish my apprenticeship with my father, even if my heart is elsewhere."
+      }
+    ],
+    "secret": ""
+  }
+}

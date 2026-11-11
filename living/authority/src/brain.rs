@@ -141,7 +141,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     if n.hp <= 0.0 {
         let cause = if n.hunger >= 100.0 {
             "starvation"
-        } else if common::night(w, now) && me.kind == "person" {
+        } else if common::night(ctx, w, now) && me.kind == "person" {
             "cold and exposure"
         } else {
             "exhaustion"
@@ -149,8 +149,13 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         act::die(ctx, me.id, cause, now, 0);
         return None;
     }
-    let night = common::night(w, now);
-    let (near_fire, near_shelter) = act::warmth(ctx, at);
+    let night = common::night(ctx, w, now);
+    // How dark it is matters to the key only when the rates law reads it (an eased dusk).
+    let dark = if common::scripts(ctx).reads("rates", "daylight") { common::dark(ctx, w, now) } else if night { 1.0 } else { 0.0 };
+    // A fire that goes out changes this on the next look (its `lit_until_ms` passes): nothing
+    // has to be told when it burns down.
+    let warm = act::warmth(ctx, at, now);
+    let (near_fire, near_shelter) = (warm.fire, warm.shelter);
     let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
     let season = common::season(ctx, now);
     let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
@@ -171,7 +176,8 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         | ((activity == "rest") as u32) << 9
         | (cloak as u32) << 10
         | ((season == "winter") as u32) << 11
-        | (crate::town::raining(ctx) as u32) << 12;
+        | (crate::town::raining(ctx) as u32) << 12
+        | ((dark * 20.0).round() as u32) << 13;
     if cuts.is_some() && key == v.rate_key {
         return Some(v);
     }
@@ -180,7 +186,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
     let hour = common::hour(w, now);
-    let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
+    let sctx = living_rules::script::SkillCtx { actor: facts, night, dark, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
     let law = sc.need_law(&sctx);
     let mut key = key;
@@ -203,6 +209,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
 impl<'a> Ev<'a> {
     fn scene(&mut self) -> &Scene {
         if self.scene.is_none() {
+            let _span = common::span("brain.scene");
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).
@@ -250,7 +257,9 @@ impl<'a> Ev<'a> {
         let hunger = (self.needs.hunger / 100.0).clamp(0.0, 1.0);
         let tired = ((100.0 - self.needs.energy) / 100.0).clamp(0.0, 1.0);
         let hurt = (1.0 - self.needs.hp / self.vit.max_hp.max(1.0)).clamp(0.0, 1.0);
-        let night = if common::night(&self.w, self.now) { 1.0 } else { 0.0 };
+        // Sleepiness follows the dark: 1 at night, 0 by day, and between them through an eased
+        // dusk or dawn (the `daylight` law), so it does not flip in the tick the light does.
+        let night = common::dark(self.ctx, &self.w, self.now);
         let me = self.me.id;
         let now = self.now;
         // The body's own day (its rhythm): its bedtime and its evening.
@@ -449,20 +458,31 @@ impl<'a> Ev<'a> {
             }
             Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
             Node::Say(s) => {
+                // Pacing: a say node speaks at most once per 45 s, so a looping graph does not
+                // chatter. The mark is set only when the line is actually spoken.
                 if self.mark_recent(id, 45_000) {
                     return St::Ok;
                 }
                 let to = match &s.to {
                     Some(t) => match self.resolve(t) {
                         Some(r) if r.class == 3 => r.id as u32,
-                        _ => return St::Fail,
+                        Some(_) => return self.say_failed(id, n, &format!("{} is not someone to speak to", graph::describe_target(t))),
+                        None => return self.say_failed(id, n, &format!("no {} in sight", graph::describe_target(t))),
                     },
                     None => 0,
                 };
-                self.set_mark(id);
+                // Within the speaking limit the line waits its turn (a second line right after
+                // the first, or a graph installed just after one spoke) instead of being lost.
+                if perceive::too_soon_to_speak(self.ctx, self.me.id, self.now) {
+                    self.status = format!("about to {}", graph::describe(n));
+                    return St::Run;
+                }
                 match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
-                    Ok(()) => St::Ok,
-                    Err(_) => St::Fail,
+                    Ok(()) => {
+                        self.set_mark(id);
+                        St::Ok
+                    }
+                    Err(why) => self.say_failed(id, n, &why),
                 }
             }
             Node::Think(reason) => {
@@ -476,6 +496,17 @@ impl<'a> Ev<'a> {
                 St::Ok
             }
         }
+    }
+
+    /// A say that cannot be spoken is a failure the body is told about, like a refused leaf
+    /// (once per repeat window for the same line and reason), not a silent skip.
+    fn say_failed(&mut self, id: u16, n: &Node, why: &str) -> St {
+        let desc = graph::describe(n);
+        if act::refused(self.ctx, self.me.id, id, self.st.revision, &desc, why, self.now) {
+            self.st.fails = self.st.fails.saturating_add(1);
+        }
+        self.last_fail = format!("say: {why}");
+        St::Fail
     }
 
     fn leaf_fail(&mut self, id: u16, why: &str) -> St {
@@ -775,7 +806,7 @@ impl<'a> Ev<'a> {
             }
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
             Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
-            Cond::Night(b) => common::night(&self.w, self.now) == *b,
+            Cond::Night(b) => common::night(self.ctx, &self.w, self.now) == *b,
             Cond::Bedtime(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).0 == *b,
             Cond::Evening(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).1 == *b,
             Cond::Raining(b) => crate::town::raining(self.ctx) == *b,
@@ -829,7 +860,7 @@ impl<'a> Ev<'a> {
         if !self.me.ai {
             return;
         }
-        let night = common::night(&self.w, self.now);
+        let night = common::night(self.ctx, &self.w, self.now);
         let facts_fire = self.vit.hp_rate < 0.0 && night && self.needs.hunger < 100.0;
         let checks: [(u32, bool, &str, f32); 5] = [
             (1, self.needs.hunger >= 80.0, "You are very hungry.", 0.5),
@@ -851,15 +882,19 @@ impl<'a> Ev<'a> {
         let restless_after = 60_000.0 * (12.0 - trait_of("curiosity") / 12.0);
         let lonely_after = 60_000.0 * (14.0 - trait_of("sociability") / 10.0);
         let alone_ms = self.now.saturating_sub(self.st.heard_ms.max(self.st.spoke_ms));
-        // Grown people long for a child of their own, sooner the more nurturing they were born.
-        let broody = self.me.kind == "person" && self.me.stage == 2 && calm && !common::night(&self.w, self.now) && {
+        // Grown people long for a child of their own, sooner the more nurturing they were born
+        // (the laws `longing_after_min` and `longing_food`: how long after one's own birth or
+        // one's youngest child's, and how much food one must carry for it to be felt).
+        let broody = self.me.kind == "person" && self.me.stage == 2 && calm && !common::night(self.ctx, &self.w, self.now) && {
             let me = self.me.id;
             let db = &self.ctx.db;
+            let laws = common::laws(self.ctx);
             let expecting = db.expecting().iter().any(|e| e.a == me || e.b == me);
             let rearing = db.rearing().id().find(me).map_or(false, |r| r.until_ms > self.now);
             let last = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).map(|c| c.born_ms).max().unwrap_or(self.me.born_ms);
-            let wait = 60_000.0 * (20.0 - trait_of("nurture") / 6.0);
-            !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait
+            let wait = living_rules::script::longing_wait_ms(laws.longing_after_min, trait_of("nurture"));
+            let provided = laws.longing_food <= 0.0 || common::food_count(self.ctx, me as u64) as f32 >= laws.longing_food;
+            !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait && provided
         };
         // Who one would have a child with, when there is someone: the other parent of one's youngest.
         let longing = if broody {
@@ -1055,7 +1090,7 @@ impl<'a> Ev<'a> {
         let wolf_arrived = wolf_near && self.st.alerts & WOLF_NEAR == 0;
         self.st.alerts = if wolf_near { self.st.alerts | WOLF_NEAR } else { self.st.alerts & !WOLF_NEAR };
         let mut announced = 0;
-        for c in cands {
+        for c in &cands {
             if announced >= 2 {
                 break;
             }
@@ -1069,7 +1104,7 @@ impl<'a> Ev<'a> {
             let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let Some(ch) = self.ctx.db.character().id().find(c.id) else { continue };
             let who = common::label_for(self.ctx, &self.me, c.id);
-            let doing = self.ctx.db.activity().id().find(c.id).map(|a| format!(", {}", a.label)).unwrap_or_default();
+            let doing = crate::perception::doing_of(self.ctx, c.id, (self.me.id, &me_kind, at), &cands, now).map(|d| format!(", {d}")).unwrap_or_default();
             let place = format!("{:.0} tiles {}{doing}", c.dist, direction(at, c.pos));
             let (text, sal) = match prev {
                 None if ch.kind == "person" || ch.kind == self.me.kind => (format!("For the first time you see {who}, {place}."), 0.45),

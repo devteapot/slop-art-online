@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- Idle hunger rises and energy falls, at the rules' pace: every person rate is scaled by `person_pace` (0.3 since iter-11: hunger 1.2 a minute), and the needs and infant scenes read the law and scale their thresholds and hunger waits by it.
+- Idle hunger rises and energy falls, at the rules' pace: every person rate is scaled by `person_pace` (0.3 since iter-11: hunger 1.2 a minute), and the needs and infant scenes read the law and scale their thresholds and hunger waits by it. Since `rules-1` the shipped rates are written per game hour (`per: "hour"`, the old per-minute numbers halved) and the engine doubles them on the 12-minute day, so the scenes' real-minute expectations (cold tiring 1.5 × `person_pace` a minute) are unchanged; `person_pace` now scales game-hour rates. A world with another day is [laws.md](laws.md).
 - Rest recovers energy over time.
 - Eating consumes food and lowers hunger.
 - "food" is whatever the rules give nutrition (`nutrition(item)` in `skills.rhai`): `has food`, and eat, give, store and take of `food`, all read it. `eat food` takes the most nourishing food held.
@@ -39,6 +39,6 @@ After feeding the adults to prevent unrelated starvation/injury requests, a cloa
 
 ## Since `laws-2` (2026-11-11)
 
-- Warmth by structure is the script's `structure_traits()` (`warms`, `roof`), at the laws' `fire_warmth` and `shelter_warmth`; the values and the result are unchanged (docs/WORLD_RULES.md, "Traits instead of lists").
+- Warmth by structure is the script's `structures()` traits (`warms`, `roof`; `structure_traits()` before 2026-11-11), at the laws' `fire_warmth` and `shelter_warmth`; the values and the result are unchanged (docs/WORLD_RULES.md, "Traits instead of lists"). A fire that eats fuel (`burns`) warms within its own radius only while lit (`structure.lit_until_ms`); the `goods` scene covers it ([goods.md](goods.md)).
 - The need-rate key compares hunger and energy with the thresholds the `rates` law last gave that body (`NeedLaw::cuts`), not copies of them in `brain.rs`: a world whose law moves `starving_at` or `fed_below` recomputes at its own levels. `scenes.py needs` and `food` drive the shipped values.
 - A new body's hunger and energy are the laws `spawn_hunger` (25) and `spawn_energy` (85). Food kept in a structure spoils at `kept_spoil(kind)` (1/3).

@@ -1,0 +1,7 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "kind": "character",
+ "title": "A seeded cast of 64",
+ "target": "The cast reads as one village at the game camera, with faces that differ person by person; each face to the VRoid control's quality close up (docs/SMALL_CITY.md decision 2)."
+}

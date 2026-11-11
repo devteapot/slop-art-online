@@ -5,7 +5,12 @@
 //!   intent changes (`input_hz`/`input_burst` laws).
 //! - The mouse buttons and Q/E/R/Shift are the skill bar (`combat.rs`); scripts can still walk
 //!   to a point with `goto`.
-//! - Enter opens proximity chat (`human_say`); only characters within earshot hear it.
+//! - Enter opens proximity chat (`human_say`); only characters within earshot hear it. It is
+//!   addressed to the person pointed at, or the nearest within earshot (`talk.rs`).
+//! - F3 switches the control scheme ([`Control`]): facing the cursor while you walk, or facing
+//!   where you walk and turning to the cursor only to aim, strike or guard.
+//!   `LIVING_GAME_CONTROL=cursor|travel` sets the starting one. A short note names the key and
+//!   the scheme on arrival (the first-time hints, `ui/tips.rs`) and at each switch.
 
 use crate::camera::Cam;
 use crate::net::Net;
@@ -23,6 +28,47 @@ const RESEND: (i32, i32, bool) = (i32::MIN, i32::MIN, false);
 /// After a refused move (the authority's input bucket is empty, `input_hz`), wait this long (s)
 /// before sending the held intent again: about one token at 30 Hz.
 const RETRY_S: f64 = 0.04;
+
+/// How my character faces while it moves (F3, `LIVING_GAME_CONTROL`). Presentation and aim only:
+/// the authority has no look (`human_move` carries a direction and a gait), so either way the
+/// rules see the body's heading as its travel and each move's aim as the point it was sent with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Control {
+    /// Facing the cursor: WASD moves and the body looks where the mouse points.
+    Cursor,
+    /// Facing where you walk; the body turns to the cursor while aiming, striking or guarding
+    /// (the skill bar's held and aimed moves) and back to its travel after.
+    #[default]
+    Travel,
+}
+
+impl Control {
+    pub fn from_env() -> Option<Self> {
+        match std::env::var("LIVING_GAME_CONTROL").ok()?.trim() {
+            "cursor" => Some(Self::Cursor),
+            "travel" => Some(Self::Travel),
+            other => {
+                warn!("LIVING_GAME_CONTROL={other}: wants cursor or travel");
+                None
+            }
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Cursor => Self::Travel,
+            Self::Travel => Self::Cursor,
+        }
+    }
+
+    /// The note naming the key and this scheme.
+    pub fn hint(self) -> &'static str {
+        match self {
+            Self::Cursor => "F3: controls (facing the cursor)",
+            Self::Travel => "F3: controls (facing where you walk)",
+        }
+    }
+}
 
 #[derive(Resource, Default)]
 pub struct Input {
@@ -48,6 +94,8 @@ pub struct Input {
     /// ("write tablet"), and the words once entered.
     pub compose: Option<String>,
     pub composed: Option<String>,
+    /// Keep the words already in the box when it opens ("Introduce yourself" puts a line in).
+    pub keep_words: bool,
     /// When the last movement intent was sent (input → drawn, `bodies.rs`).
     pub moved_at: Option<std::time::Instant>,
     /// Whether a movement direction is held (the camera keeps the keys' frame meanwhile).
@@ -69,12 +117,79 @@ pub struct Input {
     /// Scripted manual rotation (demo), degrees per second.
     pub scripted_turn: Option<f32>,
     pub demo: bool,
+    /// The control scheme (F3).
+    pub control: Control,
+    /// Where my character's upper body faces as drawn (sim direction; `live.rs`).
+    pub face: Option<Vec2>,
+    /// The scheme's note was shown on arrival.
+    hinted: bool,
+    /// The look last given to [`look`] (`Some(None)`: released).
+    pub look_sent: Option<Option<Vec2>>,
 }
 
 impl Input {
     /// You face the cursor by default (mouse look); a demo scripts its own look and cursor.
     pub fn new(demo: bool) -> Self {
-        Self { mouse_look: !demo, demo, ..Default::default() }
+        Self { mouse_look: !demo, demo, control: Control::from_env().unwrap_or_default(), ..Default::default() }
+    }
+
+    /// Whether my body faces the cursor now: always in [`Control::Cursor`]; in
+    /// [`Control::Travel`] only while a move is aimed (`aiming`: a skill key held or a guard up;
+    /// a move under way faces its own aim, `live.rs`).
+    pub fn faces_cursor(&self, aiming: bool) -> bool {
+        self.control == Control::Cursor || aiming
+    }
+
+    /// Where I face as the screen shows it: the cursor, or the body as drawn (the compass, the
+    /// view's align, a dodge or jump with no direction held).
+    pub fn facing(&self) -> Option<Vec2> {
+        match self.control {
+            Control::Cursor => self.look.or(self.face),
+            Control::Travel => self.face.or(self.look),
+        }
+    }
+}
+
+/// F3 switches the control scheme. The note naming the key and the scheme shows on arrival on
+/// the line of first-time hints (`ui/tips.rs`, with the edge of sight's and the talk hint), and
+/// at each switch among the verbs' notes, as F2's does.
+pub fn scheme(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut input: ResMut<Input>,
+    net: NonSend<Net>,
+    scene: NonSend<Scene>,
+    loading: Option<Res<crate::loading::Loading>>,
+    verbs: Option<ResMut<crate::verbs::Verbs>>,
+    tips: Option<ResMut<crate::ui::tips::Tips>>,
+    (time, prefs): (Res<Time>, Option<ResMut<crate::keys::Prefs>>),
+) {
+    let switched = keys.just_pressed(KeyCode::F3) && !input.chat_open;
+    if switched {
+        // Settings › Play shows the scheme; the settings file keeps it.
+        if let Some(mut p) = prefs {
+            p.control = input.control.next();
+            p.dirty = true;
+        }
+    }
+    if switched {
+        input.control = input.control.next();
+        info!("controls: {:?}", input.control);
+    }
+    let text = input.control.hint();
+    let now = time.elapsed_secs_f64();
+    if switched {
+        input.hinted = true;
+        if let Some(mut v) = verbs {
+            info!("controls: note \"{text}\"");
+            v.toasts.retain(|t| !t.text.starts_with("F3: "));
+            v.toasts.push(crate::verbs::Toast { text: text.into(), ok: None, at: now });
+        }
+    } else if !input.hinted && net.my_id.is_some_and(|id| scene.shown.contains_key(&id)) && crate::loading::Loading::clear(loading.as_deref()) {
+        if let Some(mut t) = tips {
+            input.hinted = true;
+            info!("controls: arrival note \"{text}\"");
+            t.once(text, now);
+        }
     }
 }
 
@@ -169,16 +284,50 @@ pub fn movement(
         net.report("move", r);
         input.moved_at = Some(std::time::Instant::now());
     }
+    // My look, to the authority once it takes one (`look`, a no-op today): the cursor's
+    // direction facing the cursor; facing where I walk, none (the body faces its travel).
+    let dir = match input.control {
+        Control::Cursor => input.look,
+        Control::Travel => None,
+    };
+    let mut last = input.look_sent;
+    look(&net, dir, &mut last);
+    input.look_sent = last;
     // A move the authority held back while I was rooted is re-sent by the authority itself
     // (`combat::resume_move`); RMB is the bow shot (combat.rs), so there is no click-to-move.
     let _ = (&mouse, &ui, &time);
 }
 
-/// Send a chat line to whoever is in earshot. Returns whether it was sent.
-pub fn say(net: &Net, text: &str) -> bool {
+/// Where my character looks, toward the authority: the one place the client's look direction
+/// goes (interface D, agreed 2026-11-11). The reducer is `human_face(dx, dy)` (dev-box's fov-1
+/// is building it): rate-limited by the authority, a change under about 10° writes nothing, and
+/// `None` is sent as `human_face(0, 0)`, which releases the look (the body faces its travel).
+///
+/// **A no-op until `human_face` is on main and the bindings are regenerated with
+/// `just living-generate`.** Then this sends it as it is called now: "cursor" with the
+/// cursor's direction, "travel" with `None` (an aimed move reaches the authority with its own
+/// aim point).
+pub fn look(net: &Net, dir: Option<Vec2>, last: &mut Option<Option<Vec2>>) {
+    // Unchanged (within the authority's ~10°): nothing to send.
+    let same = match (*last, dir) {
+        (Some(None), None) => true,
+        (Some(Some(a)), Some(b)) => a.normalize_or_zero().dot(b.normalize_or_zero()) > 10f32.to_radians().cos(),
+        _ => false,
+    };
+    if same || net.conn.is_none() {
+        return;
+    }
+    *last = Some(dir);
+    // No `human_face` in the bindings yet: nothing is sent.
+}
+
+/// Send a chat line to whoever is in earshot, addressed to `to` (0: no one in particular).
+/// Returns whether it was sent.
+pub fn say(net: &Net, text: &str, to: u32) -> bool {
     let text = text.trim();
     let Some(conn) = net.conn.as_ref().filter(|_| !text.is_empty()) else { return false };
-    let r = conn.reducers.human_say_then(text.to_string(), 0, net.on_reply("say"));
+    info!("say: \"{text}\" to {}", if to == 0 { "no one in particular".to_string() } else { format!("#{to}") });
+    let r = conn.reducers.human_say_then(text.to_string(), to, net.on_reply("say"));
     let ok = r.is_ok();
     net.report("say", r);
     ok

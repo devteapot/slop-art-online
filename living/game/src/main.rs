@@ -26,8 +26,11 @@ mod ik;
 mod twist;
 mod fade;
 mod pointer;
+mod heard;
 mod jump;
 mod hud;
+mod keys;
+mod looks;
 mod island;
 mod live;
 mod loading;
@@ -39,7 +42,11 @@ mod post;
 mod probe;
 mod route;
 mod sight;
+mod sightedge;
+mod sightfield;
 mod sky;
+mod takes;
+mod talk;
 mod style;
 mod terrain;
 mod town;
@@ -50,6 +57,7 @@ mod view;
 mod water;
 mod weather;
 mod world;
+mod record;
 
 use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
@@ -110,6 +118,11 @@ fn main() {
         .insert_resource(controls::Input::new(std::env::var("LIVING_GAME_DEMO").is_ok()))
         .init_resource::<hud::Hud>()
         .init_resource::<hud::UiWants>();
+    // Key bindings and the Play settings, from the viewer's settings file (`keys.rs`).
+    {
+        let (binds, prefs) = keys::load();
+        app.insert_resource(binds).insert_resource(prefs).init_resource::<keys::DoubleTap>().init_resource::<looks::Looks>();
+    }
     if view::enabled() {
         // Asset view: models through the game's renderer, no server and no panels.
         if !headless {
@@ -135,7 +148,7 @@ fn main() {
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup, lookdev::setup, envs::setup).chain())
             .add_systems(
                 Update,
-                (envs::hdr, envs::keys, envs::switch, island::stream, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway).chain(),
+                (envs::hdr, envs::keys, envs::switch, island::stream, island::grey_boxes, island::report, lookdev::convert, lookdev::fit, lookdev::rig, envs::walk, lookdev::clips, lookdev::animate, lookdev::sun, lookdev::demo, envs::tour, camera::follow, world::fade_trees, envs::cutaway, envs::reach).chain(),
             );
     } else {
         // A frame's order (phase.rs): net, mirror, input, flush, present, camera.
@@ -143,8 +156,8 @@ fn main() {
         use phase::Phase;
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
             .add_systems(Update, net::pump.in_set(Phase::Net))
-            .add_systems(Update, (bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles)).chain().in_set(Phase::Mirror))
-            .add_systems(Update, (demo::run, controls::movement).chain().in_set(Phase::Input))
+            .add_systems(Update, (bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles), looks::update).chain().in_set(Phase::Mirror))
+            .add_systems(Update, (demo::run, controls::scheme, keys::double_tap, controls::movement).chain().in_set(Phase::Input))
             .add_systems(Update, net::flush.in_set(Phase::Flush))
             .add_systems(Update, (camera::follow, world::fade_trees, sight::update, controls::gizmos).chain().in_set(Phase::Camera));
         // Land worlds (the island the authority hosts) draw through the island renderer.
@@ -156,6 +169,13 @@ fn main() {
         app.add_plugins(town::TownPlugin);
         // Verbs: acts on what is in front of me and on myself, offered from the world's rules.
         app.add_plugins(verbs::VerbsPlugin);
+        // Whom the text box speaks to: the person pointed at or the nearest within earshot.
+        app.add_plugins(talk::TalkPlugin);
+        // How the edge of my sight is shown: fade, not seen now, limited view (F2).
+        app.add_plugins(sightedge::SightEdgePlugin);
+        app.add_plugins(sightfield::SightFieldPlugin);
+        // A record of the session for the play report, when LIVING_GAME_RECORD names a directory.
+        app.add_plugins(record::RecordPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }

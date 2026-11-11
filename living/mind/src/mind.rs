@@ -26,6 +26,7 @@ mod dealings;
 mod judge;
 mod lived;
 pub mod lod;
+pub mod projects;
 mod recall;
 pub mod rethink;
 mod sleep;
@@ -1177,6 +1178,9 @@ impl Minds {
 
     /// Keep the skills' takes and gives in prompts in step with the world's rule script.
     fn refresh_rules(&self) {
+        if let Some(w) = self.conn.db.world().id().find(&0) {
+            prompts::set_day_ms(w.day_ms);
+        }
         if let Some(s) = self.conn.db.script().iter().find(|s| s.name == "skills") {
             prompts::set_rules(s.revision, &s.source);
         }
@@ -1545,6 +1549,24 @@ impl Minds {
         self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]", p.name, p.x, p.y)).collect()
     }
 
+    /// A person's open projects (strongest first, at most `projects::SHOWN`) and how many are
+    /// open, with `LIVING_PROJECTS=1` and a store; `None` otherwise (no section is shown).
+    async fn open_projects(&self, actor: u32) -> Option<(Vec<memory::Project>, usize)> {
+        let store = self.store.as_ref().filter(|_| projects::enabled())?;
+        match store.projects(actor, projects::SHOWN).await {
+            Ok(p) => Some(p),
+            Err(e) => {
+                log::warn!("{}: projects not read: {e:#}", self.name(actor));
+                Some((Vec::new(), 0))
+            }
+        }
+    }
+
+    /// The projects section's text ("" when there is none to show).
+    fn projects_text(&self, open: &Option<(Vec<memory::Project>, usize)>) -> String {
+        open.as_ref().map(|(p, total)| projects::lines(p, *total, &self.fmt_time())).unwrap_or_default()
+    }
+
     // ---- deliberation ------------------------------------------------------------
 
     async fn deliberate(&self, d: &Deliberation) -> Result<()> {
@@ -1613,9 +1635,10 @@ impl Minds {
         let repertoire = self.repertoire_text(actor);
         // Think first, as the person and without the grammar; then compile the decision.
         let habits: String = self.conn.db.routine().iter().filter(|r| r.actor == actor).map(|r| r.name).collect::<Vec<_>>().join(", ");
+        let open = self.open_projects(actor).await;
         let think_msgs = vec![
             Msg { role: "system", content: prompts::think_system() },
-            Msg { role: "user", content: prompts::think_user(&ctx, &d.scene, &plan, &reason, &habits) },
+            Msg { role: "user", content: prompts::think_user(&ctx, &d.scene, &plan, &reason, &habits, &self.projects_text(&open)) },
         ];
         let mut decision = Value::Null;
         let (mut think_latency, mut think_tokens) = (0u32, 0u32);
@@ -1630,6 +1653,11 @@ impl Minds {
             }
         }
         let intend: Vec<String> = decision["intend"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+        // Which open project the decision says it serves (recorded on the thought row; served
+        // projects are reinforced once the decision is carried out).
+        let served = open.as_ref().and_then(|(p, _)| projects::serves(&decision["serves"], p));
+        let project_detail = open.as_ref().map(|(p, _)| projects::detail(p, &decision["serves"], served.as_deref())).unwrap_or(Value::Null);
+        let serves_note = served.as_ref().map(|k| format!(" [serves {k}]")).unwrap_or_default();
         let decided = format!(
             "{}\nIntentions (in order): {}",
             decision["thought"].as_str().unwrap_or_default(),
@@ -1647,8 +1675,10 @@ impl Minds {
             match llm::parse_json(raw) {
                 Ok(mut v) => {
                     if decision.is_object() {
-                        for k in ["thought", "say", "judgments", "places"] {
-                            v[k] = decision[k].clone();
+                        for k in ["thought", "say", "judgments", "places", "serves"] {
+                            if k != "serves" || !decision[k].is_null() {
+                                v[k] = decision[k].clone();
+                            }
                         }
                         if v["plan"].as_str().map_or(true, |p| p.is_empty()) && !intend.is_empty() {
                             v["plan"] = json!(intend.join("; "));
@@ -1706,11 +1736,11 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!(
-                            "{thought} → (carries on){}{}",
+                            "{thought} → (carries on){}{}{serves_note}",
                             if acts.is_empty() { String::new() } else { format!(" and acts: {}", acts_text(&acts)) },
                             if say.is_empty() { String::new() } else { format!(" and says “{say}”") }
                         ),
-                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1}).to_string(),
+                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "projects": project_detail}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
                         model: reply.model.clone(),
@@ -1723,6 +1753,7 @@ impl Minds {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
+                    self.served_project(actor, served.as_deref(), "(carries on)", &thought_ref).await;
                     return self.act(actor, acts, "deliberate").await;
                 }
             }
@@ -1753,8 +1784,8 @@ impl Minds {
                     let acts = acts_of(&v);
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
-                        summary: format!("{thought} → {plan}{}", if acts.is_empty() { String::new() } else { format!(" (acts: {})", acts_text(&acts)) }),
-                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
+                        summary: format!("{thought} → {plan}{}{serves_note}", if acts.is_empty() { String::new() } else { format!(" (acts: {})", acts_text(&acts)) }),
+                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "pruned": pruned, "projects": project_detail}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
                         model: reply.model.clone(),
@@ -1762,7 +1793,8 @@ impl Minds {
                     };
                     log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
-                    self.install(actor, g.to_json(), plan, say, to, d.updated_ms, t).await?;
+                    self.install(actor, g.to_json(), plan.clone(), say, to, d.updated_ms, t).await?;
+                    self.served_project(actor, served.as_deref(), &plan, &thought_ref).await;
                     return self.act(actor, acts, "deliberate").await;
                 }
                 Err(e) => {
@@ -1790,6 +1822,14 @@ impl Minds {
             reference: thought_ref,
         };
         self.skip(actor, d.updated_ms, t).await
+    }
+
+    /// A decision carried out in the service of an open project reinforces it (`Store::serve_project`).
+    async fn served_project(&self, actor: u32, key: Option<&str>, plan: &str, thought_ref: &str) {
+        let (Some(store), Some(key)) = (&self.store, key) else { return };
+        if let Err(e) = store.serve_project(actor, key, plan, thought_ref, llm::now_ms()).await {
+            log::warn!("{}: project {key} not reinforced: {e:#}", self.name(actor));
+        }
     }
 
     /// Animals: a small model feels an impulse; a competent model compiles it into a graph
@@ -1938,7 +1978,8 @@ impl Minds {
             Some(sp) => prompts::animal_consolidate_system(&c.kind, &sp.nature),
             None => prompts::consolidate_system(),
         };
-        let user = prompts::consolidate_user(&ctx);
+        let open = if animal { None } else { self.open_projects(actor).await };
+        let user = prompts::consolidate_user(&ctx, &self.projects_text(&open));
         let remember = if animal { self.llm.species_profile(&c.kind, "remember").unwrap_or(profile.clone()) } else { profile.clone() };
         let at = self.attention(actor, None);
         let _slow = self.slow.acquire().await?;
@@ -1961,6 +2002,9 @@ impl Minds {
         let lookup = |id: u64| batch.iter().find(|e| e.id == id).map(|e| (e.at_ms, e.salience as f64, self.anchors(e)));
         let (mut patch, mut notes) = memory::patch_from(&v, &known, &lookup);
         memory::sugar_into(&v, &mut patch, &known);
+        if open.is_some() {
+            memory::projects_into(&v, &mut patch, &known, &mut notes);
+        }
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
         let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
@@ -2001,12 +2045,13 @@ impl Minds {
         let summary = v["summary"].as_str().unwrap_or_default().to_string();
         let changed = identity.as_ref().map(|p| format!(" Identity changed: {}", p["why"].as_str().unwrap_or_default())).unwrap_or_default();
         log::info!(
-            "{} integrated {} experiences (+{} edges, -{} retracted, {} memories): {summary}{changed}",
+            "{} integrated {} experiences (+{} edges, -{} retracted, {} memories{}): {summary}{changed}",
             c.name,
             meaningful.len(),
             patch.edges.len(),
             patch.retract.len(),
-            patch.remember.len()
+            patch.remember.len(),
+            if open.is_some() { format!(", {} projects, {} ended", patch.edges.iter().filter(|e| e.rel == "PURSUES").count(), patch.ended.len()) } else { String::new() }
         );
         let persona = identity.map(|p| PersonaIn {
             narrative: p["narrative"].as_str().unwrap_or_default().into(),

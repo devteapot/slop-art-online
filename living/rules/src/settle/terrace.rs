@@ -9,8 +9,9 @@
 //!
 //! Streets crossing a drop become ramps (their graded profiles average over it), lanes stop
 //! short of it, and the planner puts stairs (sloped pads) and retaining walls (props) on it.
-//! [`paint_drops`] turns tiles beside any drop steeper than a step can climb into `Wall`, so
-//! walking agrees with the ground: only roads, ramps and stairs join the levels.
+//! [`paint_drops`] turns tiles beside any drop steeper than a step can climb into `Drop`, so
+//! walking agrees with the ground: only roads, ramps and stairs join the levels. A drop is open
+//! air: people on either level see each other across it (and missiles fly over it).
 
 use super::*;
 
@@ -297,7 +298,7 @@ fn iso_lines(f: &[f32], m: usize, pt: impl Fn(usize, usize) -> V2) -> Vec<Vec<V2
 pub(crate) fn terraces(land: &Land, p: &SettleParams) -> Vec<Terrace> {
     let mut out = Vec::new();
     for (si, site) in land.sites.iter().enumerate() {
-        if site.kind == SiteKind::Cave {
+        if site.kind == SiteKind::Cave || site.plan.is_some() {
             continue;
         }
         let Some(st) = p.style_for_site(site) else { continue };
@@ -315,20 +316,24 @@ pub(crate) fn terraces(land: &Land, p: &SettleParams) -> Vec<Terrace> {
     out
 }
 
-/// Inside terrace zones, turn tiles beside a drop no one can step up into `Wall`: of two
+/// Inside terrace zones, turn tiles beside a drop no one can step up into `Drop` (unwalkable,
+/// see-through): of two
 /// neighbouring tiles whose ground differs by more than `CLIMB_M`, the upper one (where a
 /// retaining wall's top stands), or the lower one when the upper is a road, a stair, water,
 /// under a building (which blocks anyway) or under a lamp post. Roads, stairs (painted as road) and water are never
-/// walled. Returns the tiles walled.
-pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settlement], p: &SettleParams) -> u32 {
-    let zones = land.mods.terr.clone();
+/// walled. Planned settlements' drops are walled the same way within `planned` (centre, radius).
+/// Sealed pockets closed inside a zone become `Drop` as well: ground no one can reach, but no
+/// obstacle to the eye. Returns the tiles closed.
+pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settlement], p: &SettleParams, planned: &[(V2, f32)]) -> u32 {
+    // (centre, outer radius, climb, planned) of every terrace zone, then of every plan.
+    let zones: Vec<(V2, f32, f32, bool)> = land.mods.terr.iter().map(|z| (z.c, z.r_out, CLIMB_M * (z.drop_m / 0.8), false)).chain(planned.iter().map(|&(c, r)| (c, r, CLIMB_M, true))).collect();
     let w = land.size as i32;
     let mut built = std::collections::HashSet::new();
     // Buildings keep their footprint (the tiles `host::hosted_map` walls: the lot less its
     // style's margin), and lamp posts their ground.
-    for l in lots.iter().filter(|l| (l.kind.padded() || l.kind == LotKind::Lamp) && zones.iter().any(|z| dist(z.c, l.centre) < z.r_out + 30.0)) {
+    for l in lots.iter().filter(|l| (l.kind.padded() || l.kind == LotKind::Lamp) && zones.iter().any(|z| dist(z.0, l.centre) < z.1 + 30.0)) {
         let set = &settlements[l.settlement as usize];
-        let m = if l.kind == LotKind::Lamp { 0.0 } else { p.style_for(set.kind, &set.style).map_or(0.0, |st| st.margin_m) };
+        let m = if l.kind == LotKind::Lamp || set.planned { 0.0 } else { p.style_for(set.kind, &set.style).map_or(0.0, |st| st.margin_m) };
         let r = Rect { hw: (l.width_m * 0.5 - m).max(0.25), hd: (l.depth_m * 0.5 - m).max(0.25), ..l.rect() };
         let (lo, hi) = r.bbox(0.0);
         for y in lo.1.floor() as i32..=hi.1.ceil() as i32 {
@@ -340,11 +345,10 @@ pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settleme
         }
     }
     let mut mark: Vec<usize> = Vec::new();
-    for z in &zones {
-        let climb = CLIMB_M * (z.drop_m / 0.8);
-        let r = z.r_out.ceil() as i32 + 1;
-        let (x0, y0) = ((z.c.0 as i32 - r).max(0), (z.c.1 as i32 - r).max(0));
-        let (x1, y1) = ((z.c.0 as i32 + r).min(w - 1), (z.c.1 as i32 + r).min(w - 1));
+    for &(c, r_out, climb, plan) in &zones {
+        let r = r_out.ceil() as i32 + 1;
+        let (x0, y0) = ((c.0 as i32 - r).max(0), (c.1 as i32 - r).max(0));
+        let (x1, y1) = ((c.0 as i32 + r).min(w - 1), (c.1 as i32 + r).min(w - 1));
         let (nw, nh) = ((x1 - x0 + 1) as usize, (y1 - y0 + 1) as usize);
         let hs: Vec<f32> = (0..nw * nh).map(|k| land.height((x0 + (k % nw) as i32) as f32 + 0.5, (y0 + (k / nw) as i32) as f32 + 0.5)).collect();
         let tile = |i: usize, j: usize| (y0 as usize + j) * w as usize + x0 as usize + i;
@@ -361,6 +365,10 @@ pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settleme
                         continue;
                     }
                     let (a, b) = (tile(i, j), tile(i2, j2));
+                    // A planned quay or bank meets the water as it stands: the water blocks.
+                    if plan && (land.map.tiles[a] == Terrain::Water as u8 || land.map.tiles[b] == Terrain::Water as u8) {
+                        continue;
+                    }
                     let (up, down) = if ha > hb { (a, b) } else { (b, a) };
                     if open(up) {
                         mark.push(up);
@@ -374,17 +382,17 @@ pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settleme
     let mut n = 0;
     for k in mark {
         if Terrain::from_u8(land.map.tiles[k]).walkable() {
-            land.map.tiles[k] = Terrain::Wall as u8;
+            land.map.tiles[k] = Terrain::Drop as u8;
             n += 1;
         }
     }
     // Walls along drops can seal off a sliver of ground between them, water and rock. Like
     // the land's own small pockets, a sealed pocket inside a zone (not reaching its edge) is
     // closed; one larger than `POCKET_TILES` is left for the tests to find.
-    for z in &zones {
-        let r = z.r_out.ceil() as i32 + 2;
-        let (x0, y0) = ((z.c.0 as i32 - r).max(0), (z.c.1 as i32 - r).max(0));
-        let (x1, y1) = ((z.c.0 as i32 + r).min(w - 1), (z.c.1 as i32 + r).min(w - 1));
+    for &(c, r_out, _, _) in &zones {
+        let r = r_out.ceil() as i32 + 2;
+        let (x0, y0) = ((c.0 as i32 - r).max(0), (c.1 as i32 - r).max(0));
+        let (x1, y1) = ((c.0 as i32 + r).min(w - 1), (c.1 as i32 + r).min(w - 1));
         let (nw, nh) = ((x1 - x0 + 1) as usize, (y1 - y0 + 1) as usize);
         let tile = |i: usize, j: usize| (y0 as usize + j) * w as usize + x0 as usize + i;
         let mut seen = vec![false; nw * nh];
@@ -412,7 +420,7 @@ pub(crate) fn paint_drops(land: &mut Land, lots: &[Lot], settlements: &[Settleme
             }
             if !edge && cells.len() < POCKET_TILES {
                 for c in cells {
-                    land.map.tiles[tile(c % nw, c / nw)] = Terrain::Wall as u8;
+                    land.map.tiles[tile(c % nw, c / nw)] = Terrain::Drop as u8;
                     n += 1;
                 }
             }

@@ -1,0 +1,316 @@
+{
+  "Anselm Faro": {
+    "narrative": "I have kept the Watchglass forty years, and I have lit it every night of them. My brother's girl Livia I raised here in the lamp house after her parents were gone, and she renders the oil by day while I sleep. People think the light is for the ships, or for the dead, or for nothing; I do not need to know what it is for. At dawn I play counters with Pieter and then I sleep, and at dusk I climb the glass and light it again.",
+    "values": [
+      "the keepers' vow",
+      "a light that does not fail",
+      "quiet company",
+      "the truth told plainly"
+    ],
+    "goals": [
+      "Keep the Watchglass burning every night without a miss",
+      "See Livia settled and provided for, whether or not I am here",
+      "Understand what the light is truly for, without breaking the vow",
+      "Beat Pieter at dawn counters more often than he beats me"
+    ],
+    "pastimes": [
+      "counters with Pieter Achterberg at dawn",
+      "walking the mole in the last of the daylight",
+      "mending the lamp's brass and glass with my own hands"
+    ],
+    "calling": "To keep a light burning that no one can say is needed and no one dares let go out.",
+    "mood": "steady, a little tired, quietly stubborn",
+    "traits": {
+      "caution": 62,
+      "sociability": 45,
+      "empathy": 58,
+      "curiosity": 55,
+      "ambition": 30,
+      "introspection": 70,
+      "temper": 25,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Livia Faro",
+        "trust": 90,
+        "affinity": 80,
+        "label": "niece",
+        "note": "I raised her in this house; she is the only kin I have and she renders the oil I burn."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 70,
+        "affinity": 40,
+        "label": "tally keeper",
+        "note": "He pays me for the oil every year without a word of fuss, and that is worth more than warmth."
+      },
+      {
+        "name": "Pieter Achterberg",
+        "trust": 75,
+        "affinity": 65,
+        "label": "counters partner",
+        "note": "We meet at dawn, both of us finished with our nights, and he is honest about a loss."
+      },
+      {
+        "name": "Rafe Dunlin",
+        "trust": 80,
+        "affinity": 55,
+        "label": "night neighbour",
+        "note": "He fishes by my light and keeps me company on the mole; a quiet man who does not ask me what the light is for."
+      },
+      {
+        "name": "Lark Morrow",
+        "trust": 40,
+        "affinity": 35,
+        "label": "the girl who saw a sail",
+        "note": "She comes to the mole at dusk. I do not know whether she saw what she says, but I will not mock her for it."
+      },
+      {
+        "name": "Ingrid Morrow",
+        "trust": 45,
+        "affinity": 20,
+        "label": "sceptic",
+        "note": "She thinks my lamp fills her granddaughter's head with ships. Perhaps it does. The light is not mine to put out."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 50,
+        "affinity": 30,
+        "label": "Glassmaster",
+        "note": "She has never asked me a thing about the lamp, which I take as respect."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 55,
+        "affinity": 40,
+        "label": "fish seller",
+        "note": "The oil comes from her catch; she sells to Livia fairly and I have never had cause to complain."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 60,
+        "affinity": 45,
+        "label": "the reader",
+        "note": "He sits by the Lintel of an afternoon and I stand by the lamp of a night, and neither of us has ever been able to say what our post is for. I like him for that, and for not pretending otherwise."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night I swore the vow at the Watchglass, forty years ago, my hands shaking on the lamp.",
+        "salience": 0.95,
+        "about": []
+      },
+      {
+        "gist": "The night my brother and his wife were lost and I carried Livia, small and asleep, up the lamp house stair.",
+        "salience": 0.9,
+        "about": [
+          "Livia Faro"
+        ]
+      },
+      {
+        "gist": "A winter night the oil ran so low the flame guttered; I fed it the last measure and sat up till dawn with my hand on the glass.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "Lark Morrow, at dusk, saying she saw a sail beyond the Combs, and the way the words sat in the air after.",
+        "salience": 0.7,
+        "about": [
+          "Lark Morrow"
+        ]
+      },
+      {
+        "gist": "The morning Pieter first beat me at counters, and laughing about it over cold roots.",
+        "salience": 0.5,
+        "about": [
+          "Pieter Achterberg"
+        ]
+      },
+      {
+        "gist": "My father's story of the lean years, when they kept the light with fish oil so thin it smoked, and still lit it.",
+        "salience": 0.6,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_lamp_must_burn",
+        "value": 1.0,
+        "why": "I swore it forty years ago and I have never missed a night; the vow is the whole of what I am."
+      },
+      {
+        "key": "the_vow_is_not_for_asking_why",
+        "value": 0.7,
+        "why": "A keeper does not need to know what the light is for to keep it. That is the point of a vow."
+      },
+      {
+        "key": "a_promise_kept_is_the_only_wealth",
+        "value": 0.75,
+        "why": "There is little enough on this rock that lasts; a word kept is one of the few things that does."
+      },
+      {
+        "key": "lark_may_have_seen_it",
+        "value": 0.55,
+        "why": "I have watched the Pale forty years and never seen a thing in it, but I will not call the girl a liar."
+      },
+      {
+        "key": "livia_must_be_provided_for",
+        "value": 0.8,
+        "why": "She has no parents but me, and the lamp will not keep her when I am gone."
+      }
+    ],
+    "secret": ""
+  },
+  "Livia Faro": {
+    "narrative": "I was born in the lamp house and I have never lived anywhere else. By day I render fish into lamp oil over the fire, and by night my uncle Anselm burns it in the Watchglass, as he has every night for forty years. I buy the fish from Magda's catch and I keep the accounts of oil in my head. Lately I have begun to count what the light costs, and to wonder who it is for, and I have not yet found an answer that satisfies me.",
+    "values": [
+      "the lamp and its vow",
+      "honest work",
+      "Anselm's good opinion",
+      "answers to fair questions"
+    ],
+    "goals": [
+      "Learn, without shaming Anselm, who the light is truly kept for",
+      "Keep the lamp house supplied with oil through the lean weeks",
+      "Make a life of my own that is more than the fire and the fish",
+      "See whether Lark's sail was real, since she is the only one who says so"
+    ],
+    "pastimes": [
+      "sitting on the mole at dusk while Anselm lights the lamp",
+      "walking down to the Fish Steps to choose the oil fish",
+      "keeping a tally of oil measures and fish on a slate of my own"
+    ],
+    "calling": "To turn fish into light, and to know what the light is for.",
+    "mood": "curious, restless, careful of her uncle",
+    "traits": {
+      "caution": 55,
+      "sociability": 60,
+      "empathy": 65,
+      "curiosity": 80,
+      "ambition": 50,
+      "introspection": 70,
+      "temper": 30,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Anselm Faro",
+        "trust": 85,
+        "affinity": 75,
+        "label": "uncle",
+        "note": "He raised me and he is the steadiest man I know; I would not hurt him for the world, which is why I have not asked him outright."
+      },
+      {
+        "name": "Lark Morrow",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "She talks to me at the mole at dusk, and she is the only one who wonders about the light the way I do."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 60,
+        "affinity": 45,
+        "label": "fish seller",
+        "note": "I buy the oil fish from her catch; she is fair, and she does not ask what I do with them."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 55,
+        "affinity": 35,
+        "label": "the ledger",
+        "note": "He pays for the oil out of the Counting House and writes it down; I have never spoken to him beyond that."
+      },
+      {
+        "name": "Ingrid Morrow",
+        "trust": 40,
+        "affinity": 30,
+        "label": "Lark's grandmother",
+        "note": "She thinks the lamp fills Lark's head with ships. I think Lark's head was full before the lamp."
+      },
+      {
+        "name": "Rafe Dunlin",
+        "trust": 55,
+        "affinity": 40,
+        "label": "night fisher",
+        "note": "He fishes by our light and is kind to Anselm; I bring him a measure of oil for his lantern when the nights are long."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 50,
+        "affinity": 35,
+        "label": "smoker",
+        "note": "When the fresh fish run short I buy smoked from her smokehouse, and she is firm about the price."
+      },
+      {
+        "name": "Pieter Achterberg",
+        "trust": 50,
+        "affinity": 40,
+        "label": "dawn friend",
+        "note": "He comes at dawn to play counters with Anselm, and he always asks after me first."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night Anselm carried me up the lamp house stair as a small child, and the light turning above us.",
+        "salience": 0.85,
+        "about": [
+          "Anselm Faro"
+        ]
+      },
+      {
+        "gist": "The first winter I rendered oil alone, and burned my wrist on the pan, and told no one for a week.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Lark Morrow at dusk, saying she saw a sail, and the two of us standing on the mole looking at the Pale until the light came on.",
+        "salience": 0.8,
+        "about": [
+          "Lark Morrow"
+        ]
+      },
+      {
+        "gist": "A night the oil ran short and Anselm fed the lamp the last measure and sat up with his hand on the glass; I watched him from the stair.",
+        "salience": 0.7,
+        "about": [
+          "Anselm Faro"
+        ]
+      },
+      {
+        "gist": "Counting the oil measures against the fish one week and finding the light burned more than I had thought.",
+        "salience": 0.65,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_lamp_must_burn",
+        "value": 0.9,
+        "why": "It is the vow of this house and the work of my days; I would not be the one to let it go out."
+      },
+      {
+        "key": "a_fair_question_deserves_an_answer",
+        "value": 0.75,
+        "why": "I have asked who the light is for and been given only the vow; that is not an answer, and I mean to find one."
+      },
+      {
+        "key": "lark_is_not_a_liar",
+        "value": 0.65,
+        "why": "She is not a fool and she does not invent things; if she says she saw a sail, she saw something."
+      },
+      {
+        "key": "the_counting_house_owes_the_lamp",
+        "value": 0.55,
+        "why": "The ledger has paid for the oil every year since the Last Sail; that is a debt, not a kindness."
+      },
+      {
+        "key": "work_is_the_answer_to_worry",
+        "value": 0.6,
+        "why": "When I cannot settle a question I render another measure and think while the fire does its work."
+      }
+    ],
+    "secret": ""
+  }
+}

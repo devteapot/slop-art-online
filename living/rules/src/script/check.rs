@@ -93,7 +93,7 @@ fn describe(c: &SkillCtx) -> String {
 /// The functions the engine calls with a context: `<skill>_check`, `_duration`, `_done`, `_hit`,
 /// `_missile`, and the need laws.
 pub const SKILL_PARTS: [&str; 5] = ["_check", "_duration", "_done", "_hit", "_missile"];
-pub const CTX_LAWS: [&str; 6] = ["rates", "body_state", "move_speed", "senses", "motion", "theft"];
+pub const CTX_LAWS: [&str; 7] = ["rates", "body_state", "move_speed", "senses", "motion", "theft", "glow"];
 
 pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     if let Some(f) = s.borrowed.first() {
@@ -104,7 +104,7 @@ pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 7] = ["perceived_of", "record_text", "items", "structure_traits", "occupation_knows", "source_of", "carcass"];
+pub const ENGINE_LAWS: [&str; 12] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -141,7 +141,8 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
         Plan::of(&f, s.fields.of(&f, 1).and_then(|u| u.first()), true).map_err(|e| format!("install refused: {e}"))?;
     }
     let count = Rc::new(Cell::new(0u64));
-    let mut engine = super::engine_with(limits);
+    let mut engine = super::engine_with(limits, &s.tables);
+    super::register_day(&mut engine, s.hour_ms);
     let c2 = count.clone();
     engine.on_progress(move |n| {
         c2.set(n);
@@ -156,6 +157,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     described(s)?;
     record_texts(&mut p)?;
     regard(&mut p)?;
+    daylight(&mut p)?;
     Ok(p.report)
 }
 
@@ -219,10 +221,10 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             if warm {
                 (a.near_fire, a.near_shelter) = (true, true);
             }
-            let c = SkillCtx { actor: a, night, raining, season: season.into(), hour: if night { 23.0 } else { 12.0 }, ..Default::default() };
+            let c = SkillCtx { actor: a, night, dark: if night { 1.0 } else { 0.0 }, raining, season: season.into(), hour: if night { 23.0 } else { 12.0 }, ..Default::default() };
             if s.has("rates") {
                 let d = p.ctx("rates", &c)?;
-                super::NeedLaw::from_dynamic(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                super::NeedLaw::from_dynamic(d, s.hour_ms).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
             }
             if s.has("body_state") {
                 let d = p.ctx("body_state", &c)?;
@@ -234,17 +236,29 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             }
             let d = p.ctx("motion", &c)?;
             super::decode_moves(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
-            // Senses, with and without a torch in the pack: within the law's own reach.
-            for torch in [false, true] {
+            // Senses and glow, with and without a torch in the pack, in lamplight or not, and in
+            // twilight: within the law's own reach.
+            for (torch, lit, twilight) in [(false, false, false), (true, false, false), (false, true, false), (false, false, true), (true, true, true)] {
                 let mut c = c.clone();
                 if torch {
                     c.actor.inv.push(("torch".into(), 1));
                 }
+                c.actor.lit = lit;
+                if twilight {
+                    c.dark = 0.5;
+                }
                 let d = p.ctx("senses", &c)?;
                 let reach = s.reach();
-                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX }, c.night).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
-                if wide.sight > reach.sight(c.night) || wide.hearing > reach.hearing {
-                    return Err(format!("install refused: senses gives sight {} and hearing {} {}, beyond senses_law's reach ({} by {}, hearing {}): raise the reach with the law", wide.sight, wide.hearing, describe(&c), reach.sight(c.night), if c.night { "night" } else { "day" }, reach.hearing));
+                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX, glow: f32::MAX }, c.dark).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                if wide.sight > reach.sight(c.dark) || wide.hearing > reach.hearing {
+                    return Err(format!("install refused: senses gives sight {} and hearing {} {}, beyond senses_law's reach ({} by {}, hearing {}): raise the reach with the law", wide.sight, wide.hearing, describe(&c), reach.sight(c.dark), if c.dark >= 1.0 { "night" } else if c.dark <= 0.0 { "day" } else { "twilight" }, reach.hearing));
+                }
+                if s.has("glow") {
+                    let d = p.ctx("glow", &c)?;
+                    let g = super::decode_glow(d, &super::Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: f32::MAX }).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                    if g > reach.glow {
+                        return Err(format!("install refused: glow gives {g} m {}, beyond senses_law's reach.glow ({} m): raise the reach with the law", describe(&c), reach.glow));
+                    }
                 }
             }
         }
@@ -263,7 +277,7 @@ fn skills(p: &mut Probe) -> Result<(), String> {
     let targets = targets();
     let items = items();
     // Where an item is used: on nothing, a place, a person, and the structures items go into.
-    let item_targets: Vec<&TargetFacts> = targets.iter().filter(|t| matches!(t.class.as_str(), "none" | "place") || t.id == 9 || ["storage", "campfire", "remains"].contains(&t.kind.as_str())).collect();
+    let item_targets: Vec<&TargetFacts> = targets.iter().filter(|t| matches!(t.class.as_str(), "none" | "place") || t.id == 9 || ["storage", "campfire", "remains"].contains(&t.kind.as_str()) || (t.class == "structure" && s.structure(&t.kind).fire())).collect();
     for skill in &names {
         let takes_item = s.skills.get(skill).is_none_or(|k| k.needs_item) || ["build", "craft"].contains(&skill.as_str());
         let mut samples: Vec<SkillCtx> = Vec::new();
@@ -400,9 +414,26 @@ fn regard(p: &mut Probe) -> Result<(), String> {
     }
     for (observer, target) in [("person", "person"), ("wolf", "wolf"), ("wolf", "person"), ("person", "deer")] {
         for (known, revealed, own, night) in [(false, false, false, false), (true, false, false, true), (false, true, false, false), (true, true, true, false)] {
-            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "wound_tending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night };
+            let dist = if night { 30 } else { 4 };
+            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "wound_tending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night, dist };
             let d = p.raw("perceived_of", (super::regard_map(&r),), &|| format!("for a {observer} looking at a {target}"))?;
             super::decode_regard(d, &r).map_err(|e| format!("install refused: {e} (a {observer} looking at a {target})"))?;
+        }
+    }
+    Ok(())
+}
+
+/// How light it is, at every half hour of the day: a number from 0 to 1.
+fn daylight(p: &mut Probe) -> Result<(), String> {
+    if !p.s.has("daylight") {
+        return Ok(());
+    }
+    for half in 0..48 {
+        let h = half as f64 / 2.0;
+        let d = p.raw("daylight", (h,), &|| format!("at hour {h}"))?;
+        match super::number(&d) {
+            Some(v) if (0.0..=1.0).contains(&v) => {},
+            _ => return Err(format!("install refused: `daylight({h})` must return a number from 0 (night) to 1 (day), got {d}")),
         }
     }
     Ok(())
@@ -435,7 +466,7 @@ fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx 
 /// People of each age and both animals, in the states the engine hands the laws.
 pub fn actors() -> Vec<ActorFacts> {
     let all_items: Vec<(String, u32)> = catalog::item_names().into_iter().map(|i| (i, 3)).collect();
-    let all_known: Vec<String> = catalog::TECHNIQUES.iter().map(|t| t.name.to_string()).collect();
+    let all_known: Vec<String> = catalog::technique_names();
     let base = ActorFacts { id: 1, kind: "person".into(), hp: 70.0, hunger: 40.0, energy: 80.0, terrain: "grass".into(), age: 20.0, stage: "adult".into(), life: 0.3, kin_near: 2, pasture: 5.0, room: 25, ..Default::default() };
     vec![
         ActorFacts { inv: all_items, knows: all_known, practice: [("strike".to_string(), 30)].into(), community: crate::records::COMMUNITY | 2, home: "10,10".into(), ..base.clone() },
@@ -463,23 +494,25 @@ pub fn targets() -> Vec<TargetFacts> {
         creature("deer", 13, 40.0, 40.0),
         TargetFacts { alive: false, hp: 0.0, ..creature("person", 14, 0.0, 100.0) },
     ];
-    for (kind, _) in catalog::RESOURCES {
+    for kind in catalog::resource_names() {
         v.push(TargetFacts { class: "resource".into(), id: 20, kind: kind.to_string(), amount: 5.0, dist: 1.0, ..Default::default() });
     }
-    for kind in catalog::STRUCTURES {
+    for kind in catalog::structure_names() {
         v.push(TargetFacts { class: "structure".into(), id: 30, kind: kind.to_string(), dist: 1.0, inv: vec![("berries".into(), 5), ("meat".into(), 2), ("wood".into(), 3)], ..Default::default() });
         // Someone's household store.
-        if *kind == "storage" {
+        if kind == "storage" {
             v.push(TargetFacts { class: "structure".into(), id: 31, kind: kind.to_string(), dist: 1.0, owner: 9, home: "40,12".into(), ..Default::default() });
         }
+        // A fire burning with some fuel left (the samples above are out, with none).
+        v.push(TargetFacts { class: "structure".into(), id: 32, kind: kind.to_string(), dist: 1.0, lit: true, fuel: 3.0, ..Default::default() });
     }
     v
 }
 
 /// Every item and technique, and the words the engine passes as items.
 pub fn items() -> Vec<String> {
-    let mut v: Vec<String> = catalog::item_names().into_iter().chain(catalog::TECHNIQUES.iter().map(|t| t.name.to_string())).collect();
-    v.extend(catalog::STRUCTURES.iter().chain(catalog::TERRAIN_BUILDS).map(|s| s.to_string()));
+    let mut v: Vec<String> = catalog::item_names().into_iter().chain(catalog::technique_names()).collect();
+    v.extend(catalog::structure_names().into_iter().chain(catalog::TERRAIN_BUILDS.iter().map(|s| s.to_string())));
     v.extend(["food", "top level", "retire", "tablet", "sign", "alarm"].map(String::from));
     v.sort();
     v.dedup();
@@ -575,7 +608,7 @@ mod tests {
         for (f, n) in &v {
             println!("  {f:24} {n}");
         }
-        let passes = |l: Limits| Scripts::new(SKILLS).ok().filter(|_| super::super::engine_with(l).compile(SKILLS).is_ok()).is_some_and(|s| validate(&s, l).is_ok());
+        let passes = |l: Limits| Scripts::new(SKILLS).ok().filter(|_| super::super::engine_with(l, &Default::default()).compile(SKILLS).is_ok()).is_some_and(|s| validate(&s, l).is_ok());
         let least = |set: &dyn Fn(usize) -> Limits, hi: usize| {
             let (mut lo, mut hi) = (1usize, hi);
             while lo < hi {

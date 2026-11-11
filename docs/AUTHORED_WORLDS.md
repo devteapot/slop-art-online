@@ -2,6 +2,8 @@
 
 Status: **implemented, not yet run in a lab** (2026-09-28). Unit tests cover seed parsing, ages, birth order, sheet resolution, model groups and recall of authored memories (against Neo4j). The seeding reducer path compiles but has not been executed against a published module.
 
+Its places can be authored too: a land seed may lay a settlement out by hand, levels, streets, stairs and lots ([authored plans](AUTHORED_PLANS.md)), and bind households to its lots.
+
 A seeded town normally gets its people from occupation counts: generated names, a one-line background, and a model call that invents each identity ([LIVING_CORE.md](LIVING_CORE.md#worlds-of-any-size-towns-and-bands-checkpoint-3)). An authored world names its people instead. Each resident has a sheet (identity, relationships, memories, stances) that the mind installs as written, with no model call. From then on it is ordinary identity: consolidation, fading and revision treat it like anything else the character holds.
 
 ## Residents
@@ -103,3 +105,12 @@ The first authored world, set up at the user's request on 2026-09-28: a develope
 ## The island (`island`), planned rather than cast by hand
 
 Since 2026-11-10 the island's 277 residents are authored too. `author_world.py island` plans them from `living/seeds/worlds/island/` (`bible.md`, `world.json` with anchor people, routes and stores, `ways.json`): households and situations per settlement, sheets per household with the situations each member is in, ties made mutual, a review pass by a second model, and checks against the rules' catalog. The result is merged into `living/seeds/island.json`. Residents may also carry `places` (another town's market with the stages of the road to it, or a spot on a road). See [seeded lives](SEEDED_LIVES.md).
+
+## Cullet (`cullet`), cast by hand with anchors
+
+The small city's 64 residents ([small city](SMALL_CITY.md) §3) are cast by hand in `living/seeds/worlds/cullet/cast.json`, in the Aske Coast's shape with more per person, and their sheets are drafted from it. Written 2026-11-11 (branch `bible-1`); the sheets are not drafted yet.
+
+- **Cast fields beyond the Aske Coast's.** `plan` (the world's plan file) and a household `lot`, which the compile writes as `SeedTown.homes`. Per member: `trade` (Cullet's words) beside `occupation`; `wants` and `going_on`, the anchors a sheet must agree with; `kin` (each relative and what they are to this person); `rhythm` (`wakes`, `sleep_h`, `works` as hour ranges, `work_at` and `evening` as `lot:<id>` places or resource kinds); `secret`. Top level: `counts`, `prompt` (the world's words for the sheet prompt), `secrets` (who knows each, and marker words), `situations` (every side's view, as in the island's planned casts) and `tensions`.
+- **`--check`** checks the cast without a model: the counts; each household against its plan lot (household, people, family); kin both ways with words that fit the relative's sex, siblings through shared parents, grandparents through parents, and parents at least 14 years older; know-how, items and resource kinds against the shipped script and the world's laws; rhythms within waking hours and places that are lots of the plan; each secret on its knowers' entries, and its marker words nowhere else, not in a public role or tie and not in the bible; each situation's sides; each tension's carriers in its situations. It also reports what the rules will do differently from the cast: life stages from `species.json`, occupations with no starting ways, and the authority's clamps on a seeded rhythm.
+- **`--dry-run [--out DIR]`** also builds every prompt the drafting would send (written to `DIR/prompts/`), estimates the calls, tokens and euros from the island's journal and `MODEL_COST.md` prices, and writes a preview of the compiled residents. It calls no model and reads no key.
+- **Drafting** a cast with `prompt` goes through `logged_call` (spend in `authoring-log.jsonl`, `--effort` sent only when given) with the household's situations and secrets, and checks the cast first. A household's output cap is 2,500 tokens a member (8,000 to 24,000). **Compiling** with `into` merges the residents (with `rhythm` and `places`) and `homes` into the named town of `living/seeds/<into>.json` and keeps everything else, since Cullet's seed is written by `cullet_plan.py`.

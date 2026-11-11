@@ -46,7 +46,7 @@ Findings move from the lab to the game when a core version is released and the g
 | Death | Permanent, as agreed. The player sees how they died and who saw it, then arrives as a new stranger with nothing inherited | Follows [world vision](WORLD_VISION.md) mortality. In the spike (2026-11-08) a test character starved, and the client quietly joined again as a new character: the death and rejoin screen is missing |
 | World pace | Slower than labs (labs run about 5 game days per real hour); set per seed with `life_pace` and `year_days` | To decide by play-testing |
 | Camera details | **Default chosen** (user, 2026-11-08): spike preset 5, "Default (mid)". Skills, passives or other capabilities may change how it behaves. Rotation: see "Turning the view" below. Earlier status: not fixed yet (user, 2026-11-08). Leading candidate: zoom-tilt (spike preset 4). The view should show only what the character perceives, and how much a character can see could be a capability (below) | The user liked presets 1–3 and found a purely high view less immersive. Fully zoomed in feels most immersive, but it is unclear how that plays with many players, since much of the area is not visible. The camera research found the zoom-tilt blend in Baldur's Gate 3, Manor Lords and Diablo IV |
-| Movement | WASD relative to the camera, plus click-to-move (`goto` to a point) | Matches the chosen genre |
+| Movement | WASD relative to the camera, plus click-to-move (`goto` to a point). Since 2026-11-09 right click is the bow shot and there is no click-to-move; scripts still walk to a point with `goto` | Matches the chosen genre |
 
 ## The view as perception (idea, 2026-11-08)
 
@@ -285,6 +285,15 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
 - **Text-to-motion (2026-11-08):** NVIDIA Kimodo SOMA-RP v1.2 runs on the DGX Spark (`~/kimodo-test`, venv, PyTorch 2.11 for CUDA 13 on aarch64; setup notes in `.local/kimodo/README.md`). A 4 s motion takes about 25 s per prompt, mostly loading the Llama 3 8B text encoder (gated: the user's Hugging Face account has access), and peaks at 15 GB of GPU memory. `animate.py --kimodo NAME=motion.npz` retargets a SOMA motion onto VRoid J_Bip: both rest in a T-pose with identity rest rotations, so each bone takes its mapped joint's global rotation turned half round Y, relative to its nearest mapped ancestor; the hips keep sway and bob but not travel. First prompts (walk, idle, talking with gestures, an overhead sword swing) read naturally on Vivi; the walk and the talk look more alive than the hand-keyed ones. Not yet done: looping (the clips are 4 s takes), foot-contact cleanup after removing travel, and prompts that start and end in a matching pose. Licences: Kimodo models under the NVIDIA Open Model License (commercial use; the notice must ship with distributed copies); the text encoder under the Llama 3 licence (attribution "Built with Meta Llama 3").
 - **Animation library (2026-11-09):** 27 clips per VRoid character, listed with prompts, seeds and parameters in `living/tools/blender/clips.json`.
   - **Generation:** `living/tools/kimodo/spark.sh` generates the Kimodo takes on the Spark in one process: about 16 s to load, then 3–4 s per motion. `gen_anim.sh` (`animate.py --library`) makes them game-ready for both characters into `assets/lookdev/anim/` and writes `<character>.clips.json` with each clip's length, loop flag, speeds and source.
+  - **Clip lab (2026-11-11):** `living/tools/kimodo/cliplab.py`, run on the Spark with the Kimodo venv's python, regenerates and judges one library entry at a time.
+    - **What it does:** it generates takes for one or more prompt variants under new seed numbers, through `batch.py` into `~/cliplab/<clip>/takes`. Before the GPU it waits for a machine lock, for no other `batch.py` to be running, and for 40 GB of RAM to stay free. It then scores the new takes and the entry's current library takes on the raw SOMA-77 motion.
+    - **Scores:** floor penetration of hands, feet and the rest of the body; slide and drift of planted feet; active share and frozen stretches; loop closure; keyframe match; path, travel and travel direction; turn, facing drift and cadence against the forward walk or run; air time and hop window; steps and first foot.
+    - **Pick rule:** a take that fails no check is eligible, and the lowest penalty wins. The penalty is the sum over checks of measured/limit, capped at 3 per check. When nothing passes, the take with the fewest failures wins and is reported as failing.
+    - **Output:** `checks.json` (every take's scores and why the winner won), a contact sheet with a motion-energy strip, and a markdown line.
+    - **Modes:** `--score-only` scores existing takes. `--expect METRIC>=X` adds a clip-specific check, such as `both_hands_active_share>=0.5` for work or `steps<=2` for a quarter turn. `--write` adopts the last run's winner: it copies its takes into the raw library without overwriting and sets its entry in `clips.json`, refusing when other entries are keyed to a take it would drop, unless they are re-keyed and `--rekey` is given. `--handoff GROUP` packs the chosen raw takes, entries and checks into `~/clip-handoff/GROUP-<date>.tar.gz` with a sha256.
+    - **Calibration:** the limits were set on the 2026-11-11 library, where 14 of the 32 Kimodo picks fail a check (listed in the script's header).
+    - **First use (2026-11-11):** work, play, sit_ground_down, sit_ground and stand_up_ground were redone; their entries' notes give the before and after scores. sit_ground still fails: Kimodo barely moves a seated body in 68 takes. The locomotion entries (assets-locomotion) were scored and the failing ones retaken or re-picked.
+    - **Not covered:** it judges the raw take, not the retargeted VRoid clip. Skirts, grips, the game's foot IK and how a clip looks in the renderer are judged in the game.
   - **Loops:** idle, idle_look, walk, walk_brisk, run, run_fast, sneak, talk, talk_explain, listen and sit_idle are cut where pose and foot contacts match, and their seams are spread.
   - **One-shots:** wave, point, sit_down, stand_up, stand_up_ground, sword_slash, sword_overhead, sword_thrust, block, dodge, hit, death, cast and bow_shoot. Kimodo keyframes them to a shared neutral standing pose at the ends that should blend with idle. sit_idle and stand_up continue from sit_down.
   - **Feet:** planted feet are pinned with the leg IK.
@@ -840,6 +849,275 @@ Branch `feel-4`. Evidence is in `.local/living/feel-4/` (git-ignored). Client on
   - Air, median foot motion: 8.8 → 1.0 cm a frame.
   - Landing peak: 46 → 24 cm.
   - Take-off peak: 48 → 32 cm.
+
+## Edge of sight (2026-11-11)
+
+Branches `sight-edge` and `sight-2`. Evidence, with contact sheets, is in `.local/living/sight-edge/` and `.local/living/sight-2/` (git-ignored). Client only: no authority, rules or bindings changes. The client now also subscribes to the public `gate` table.
+
+The screen drew ground and buildings to about 180 m, while people came and went at the rules' sight. **F2** cycles three ways of showing where your character's sight ends. A note names the new mode and the key ("Edge of sight: not seen now · F2 changes how it is shown"). The same note shows for about 6 s on arrival, so the key can be found: since talk-1 it is on the line of first-time hints under the target frame, with the talk hint (`ui/tips.rs`). After that it shows only when the mode changes, over the skill bar. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting mode, for headless captures.
+
+- **Not seen now** (the default since `sight-2`): what your character doesn't see now is drawn greyer, flatter (toward the fog's colour, so night stays dark), dimmer and a little cooler. That covers:
+  - ground, buildings and scenery beyond your sight, over a soft band from 1.5 m inside the radius to 3 m beyond it;
+  - what lies behind something that blocks your sight lines (a building, a market stall, a well, rock, a shut gate), with a soft edge about half a tile wide.
+
+  The things that block are drawn normally when any face of them is in sight: you see the stall, not what stands behind it. Everything stays drawn, because it is public; the sky is left alone. People whose sight line breaks fade out as it breaks.
+- **Fade:** people fade in and out at the edge of sight (`fade.rs`). Nothing else changes.
+- **Limited view:** as "not seen now" for people. The view also fogs from your sight radius to 1.3 × of it, in the fog's colour, and the camera's far plane stops just past that. What lies behind something within your sight fogs 80% of the way. The camera's angle, distance and controls are unchanged.
+
+**Why "not seen now" is the default.** It shows the sight lines and leaves the town readable. Limited view hides most of the town by day behind stalls and houses, which makes it hard to find your way. Fade shows nothing of why people vanish. The owner had not found F2 in play-test 2, so the modes were never compared; the arrival note is there for the next play-test.
+
+**What the rules do** (`sight-2`, read from the authority and rules source; details in the evidence README):
+- **No facing.** Sight is a radius and a clear line, the same all round. No path has a cone or a facing term: not players' perceived sets, minds' scenes, behaviour graphs, witnessed events or the combat feed (`perception::in_sight`, `perception::visible`). Facing matters only to a raised guard (`Aim::Facing`) and to the social `turn`. The only cone in the code is `living/game/src/sight.rs`, a client-only mock for tile worlds that is off by default and not the rules.
+- **What blocks a line:** `Map::sight_clear` walks every tile the segment crosses between the two exact positions, each end's own tile excepted. A tile blocks if it is `Wall` or `Rock`, or is a shut gate (`Map::blocked`). The hosted map turns into `Wall` the footprints of buildings, towers, **wells** and **market stalls**, and of fountains, market crosses, carts, kiosks, food stalls, vending machines, containers and salvage (`host::hosted_map`). Water, forest, trees, benches, lamps, crops, fences, barrels and crates do not block.
+- **No hysteresis on the line.** The sweep runs every 200 ms. Its one-tile hold (`keep_seen_m`) widens only the distance for someone already seen. A broken line drops them at the next sweep.
+- **So people vanish behind stalls and wells.** By the rules these are as opaque as a house, though the camera sees over them. In the captures, 36 of the 64 people within reach were inside 48 m by day but behind something. One stood 3.5 m away, behind the stall next to the player.
+
+How it works (`sightfield.rs`, `sightedge.rs`, `edges.wesl`, `post.rs`):
+- **The radius is the rules'.** The client asks the world's installed script (`senses(a)`, the law the authority's perception sweep uses) for your character, in one place (`sightedge::my_sight`). Night and how dark it is come from the world's `daylight` law at the displayed hour (since `rules-1`), and a torch from your inventory. The radius eases to a new answer over about a second.
+- **The sight field is the authority's test on the same tiles.** The client keeps the tiles as the authority hosts them:
+  - the land regenerated through `host::hosted_map`, with its digests checked;
+  - the window's `terrain_chunk` rows where they differ from it;
+  - the shut gates from `gate`.
+
+  It runs `Map::sight_clear` from your drawn position to the centre of every half-metre texel within your sight plus 4 m, in a 256 × 256 texture (±64 m). Blocking tiles joined to a seen one are marked seen too. The field is worked out again on the async compute pool when you move 0.25 m, your sight changes or the tiles do. The finishing pass samples it, filtered, at each pixel's ground position.
+- **People leaving sight.** In "not seen now" and limited view, someone drawn whose exact line from you breaks (`Map::sight_clear`, from your drawn position to theirs) fades out at once. The authority's next sweep and its delivery then stop sending them; in the captures that came 17–181 ms later. Nobody is drawn who isn't sent.
+- **The fog** is round you rather than Bevy's distance fog from the camera: the eye is about 22 m from you, so a camera fog at a 14 m night sight would hide your own character. Shell outlines are drawn outside the finishing pass, so in limited view they stop halfway into the fog band.
+
+**Checked against the authority.** The checks used `verify-sight2-1`, a scratch world from the play-test 2 module: Brackenford, no mind service. It had the scene's sight (48 m by day, 20 m with a torch, 14 m at night). Each check compared the client's dumped field with the authority's `perceived` rows and every body's position (owner SQL), at three spots by day and three at night.
+- 63 of 64 bodies within reach agreed. The one miss stood on the shadow's edge (field 0.51).
+- After merging `rules-1`, the check was repeated on a world built from it (`verify-sight2-2`, same scene; the new script with the scene's distances): 47 of 49 agreed. Both misses were at the half-metre resolution of the ground mark: one person walking on a shadow's edge, and one seen through a gap between stalls narrower than a texel. The one in the gap was drawn, since people follow the exact test, but the ground under them was drawn dimmed.
+- Over 270 client-side checks of people drawn, 2 had a broken line: people mid-departure, within the sweep's 200 ms.
+
+**Cost** (laptop, with other agents' builds running):
+- One field recompute at 48 m tests about 34,000 texels: mean 1.3 ms, max 2.7 ms on a quieter machine (1.2–1.9 ms under load). At 14 m it tests about 4,000: 0.3 ms. It runs on the async compute pool, off the frame. Walking, it runs about 7 times a second (every 0.25 m).
+- Each recompute uploads a 64 kB texture.
+- The pass adds one filtered texture sample per pixel.
+- Frame time showed no cost. Each build ran one uncapped headless window at 1280×720, among the stalls by day, 20 s per mode, under a load average of 13–17 from other work. The previous build's medians were 5.9–6.6 ms; this one's were 5.8–6.4 ms in every mode.
+
+**Not done:**
+- **Lit people are not marked.** Since `rules-1`, a world's `glow` law can show someone beyond your sight: Cullet's laws do this for a carried torch at 48 m and lamplight at 28 m, at night. The authority still needs a clear line to them. The client draws whoever it is sent. Such a person stands in the band dimmed by distance, and the field doesn't reach that far, so the screen doesn't mark them as lit. The fade on a broken line uses the exact test, so it holds for them.
+- The two-distance rule (see at 48 m, know at 24 m).
+- Weather shortening sight. That waits on rules that do it.
+- Terrain edits are known only within the client's `terrain_chunk` window: 7 × 7 chunks, re-centred as you walk, so at least about 24 m round you. Edits made since world creation farther out, within a 48 m sight, are not in the field.
+- No settings menu; that comes with the interface redesign.
+
+## Talking and tapping (2026-11-11)
+
+Branch `talk-1`, after play-test 2. In that session the residents answered every line within 3–28 s, yet the owner found them "not interactive". Evidence is in `.local/living/talk-1/` (git-ignored). Client only: no table, reducer, view, subscription, rule or mind change. The client calls the existing `human_say(text, to)` with `to` set, and reads `silence` rows from the existing `my_experience` view. No SpacetimeDB feature is used in a new way, so no new documentation was consulted.
+
+- **Addressed speech** (`talk.rs`, `ui/chat.rs`):
+  - Enter opens the text box addressed to the person under the cursor, if they are within earshot, else to the nearest person within earshot.
+  - Earshot is the rules': the world's `senses` law, asked per person perceived. The play-test scene gives 12 m.
+  - The box reads "Say to a stranger" (or a name the rules give: the projection's `label` from `seen_characters`), and the one addressed is the HUD's target while it is open. Tab goes to the next person within earshot, nearest first.
+  - With nobody in earshot it reads "Say — nobody in earshot" and the line goes to no one (`to = 0`), as before. If the addressee is no longer perceived, the box falls back to the nearest person in earshot.
+  - **What the authority accepts:** any `to`. Everyone within their own hearing hears the line. The one addressed hears it as said to them (salience 0.9, a conversation turn for their mind), whatever the 6 m `address_m` rule for unaddressed speech. If the addressee is out of earshot, they hear nothing and the speaker gets "No answer from …" (a `silence` row). The client shows that as a red note, and shows "speaking too fast" (a line within 2 s of the last) the same way.
+  - Before, every line was `to = 0`: with two or more people within 6 m, nobody was addressed, and a stranger's unaddressed line draws no turn from minds that do not care about them.
+- **The tap rule** (provisional; the owner is being asked what they expected): *a left tap on a person who is not hostile to you (has not hurt you in the last 15 s and has no move aimed at you) turns you to them and opens the text box to them; striking them takes a held press (0.22 s).*
+  - Animals, and people hostile to you, are struck by a tap as before.
+  - With the box open, a tap on a peaceful person addresses them instead.
+  - `combat::hostile_to_me` is the HUD's hostile stance, now shared.
+- **First-time hint** (`ui/tips.rs`): "Enter — talk to the person you point at", under the target frame, for 6 s once the first load lifts, and again the first time someone speaks to you. `Tips::once` is a shared line: sight-2's F2 arrival note moved onto it at the merge, and others (F3) can stack there.
+- **F1 controls line:** it said "right click: walk to" and "R: turn to where you face". It now lists the skill bar's keys.
+- **F at remains offered "take wound tending"** and the authority refused it three times. The client checks `take` as if the remains held whatever is asked, because their contents are not perceived, and its candidates included the techniques the player knows.
+  - Techniques are now candidates only toward a person (teach) or oneself.
+  - A refused act is no longer the one a tap repeats.
+  - Still open, for the interface redesign: what remains or a store hold is not perceived, so `take ›` can still offer an item that is not there.
+
+Measured on scratch worlds from the play-test 2 scene's module and script (`verify-talk1-*`; no mind service, no model calls):
+- In the crowd case (three people within 6 m), the line went out with `to = 7`. Osric's row reads "A stranger said to you" (0.9); the two others' read "A stranger said to Osric Abbot" (0.45).
+- A tap on a peaceful resident sent `face` and no strike. A held press struck them (hit for 10). A tap on a resident who had just struck the player struck back (hit for 7).
+- At the remains, `take wound_tending` is not offered; `take berries` is.
+
+Not covered: the "No answer" note and the "(out of earshot)" label on screen. The authority's `silence` row was shown by verify-player. Also not covered: a real trackpad (captures are headless), and whether minds answer an addressed line (no mind service ran).
+
+## Feel pass 5 (2026-11-11)
+
+Branch `feel-5`, after play-test 2 (`.local/living/playtest-2/FEEDBACK.md`). Evidence is in `.local/living/feel-5/` (git-ignored): a README, the inventory (`INVENTORY.md`), the clips wanted (`CLIPS_WANTED.md`) and a contact sheet (`index.html`). Captures were headless runs of the real client on the scratch island world `verify-feel5-a`. Client only: no authority, rules, bindings or seed changes.
+
+**The jump's facing flip** (`live.rs`):
+- The owner: "When you jump while moving in one direction, the animation flips and plays in the default way, and then you flip back."
+- **Cause:** a jump's `fighter` aim is the authority's dash direction, which is the travel. `live.rs` took any move's aim as the body's facing, so a body walking sideways or backward while facing the cursor turned to its travel for the hop: forward gaits, no twist. It turned back after.
+- **Fix:** the jump's aim no longer sets the facing; the jump is drawn over whatever the body plays (`jump.rs`). A dodge's roll is a forward take, so it still faces its dash.
+- **Measured** over eight moving jumps (walk and run; sideways, backward and diagonally) while looking north:
+  - the upper body's facing moved by 45–180° during the jump before, and by 0° after;
+  - backward legs flipped by 180° and back before; after, the reversed gait holds through take-off, air and landing.
+
+**Two control schemes** (`controls.rs`, `live.rs`, `combat.rs`):
+- **F3** switches between them.
+- `LIVING_GAME_CONTROL=cursor|travel` sets the one to start in.
+- A note in the HUD's existing styles names the key and the scheme: "F3: controls (facing where you walk)" or "F3: controls (facing the cursor)".
+  - It shows on arrival, once the first-load cover lifts, on the line of first-time hints (`ui/tips.rs`, `talk-1`), with the edge of sight's F2 note and the talk hint, for about 6 s.
+  - After that it shows for 4.5 s among the verbs' notes, only when the scheme changes, as F2's note does.
+- **"Travel"** (facing where you walk): the body faces its travel, and standing, its last heading.
+  - It turns to the cursor only while a move is aimed there, and back to its travel after. That means a skill key held on a skill aimed at a creature or a point, a guard up, or a move under way that faces its aim (`combat::aims_at_cursor`).
+  - A dodge or jump with no direction held goes from the facing drawn: a dodge back from it, a jump toward it. In the cursor scheme it goes from the cursor, as before.
+  - The compass and the view's align use the facing drawn too (`Input::facing`).
+- **"Cursor"** (facing the cursor): the body faces the cursor while you move with WASD, as on main, with two changes:
+  - **Standing,** the upper body turns first. The legs turn only once the look is 55° from them, and then all the way (to within 6°). On main every cursor move turned the whole body. In a sway of ±25°, the toes travelled 279 cm over seven swings on main and 5 cm now.
+  - **The twist** over the spine gives more to the neck and head: at a 90° strafe, 52° in the spine and 38° in the neck and head, against 65° and 25° before.
+  - A share on the pelvis (with the thighs turned back) was tried and dropped: under foot IK it moved the planted feet ±7 cm as the cursor swayed.
+- **The default is "travel".** Reasons:
+  - **What the screen shows is what the rules see.** The client sends no facing to the authority: only `human_move(dx, dy, run)`, each skill's aim point and target, and the `face` gesture through `human_act`. The authority, and the residents who perceive you, take your facing from your movement heading (the body's `heading`; `bearing` and `face_slack` in the act rules). In "travel" the screen and the rules agree, except while aiming, which reaches the authority through the skill's aim. In "cursor" they disagree whenever you look away from where you walk.
+  - **It plays the real clips.** Every direction of travel plays the forward clip. In "cursor", every direction but forward is the forward clip turned or played backward (inventory below).
+  - **It answers the owner's main complaint:** "the player faces the cursor but moves in the other direction".
+  - Facing the cursor stays one key away. A look-direction input to the authority may come later (the Spark's coordinator); the cursor scheme would then send it.
+
+**Locomotion inventory** (`INVENTORY.md`):
+- **Clips:** five forward loops (`sneak`, `walk`, `walk_brisk`, `run`, `run_fast`). There is no backward, sideways, diagonal, turning, starting, stopping or jumping take.
+- **In scheme "cursor":**
+  - forward: the real clip;
+  - diagonal forward (±45°) and sideways (±90°): the forward clip along the travel, with the upper body twisted 45° or 90°;
+  - diagonal back (±135°) and backward: the forward clip reversed, twisted 45° or not at all;
+  - between 80° and 110°: either, with hysteresis;
+  - turning, starting, stopping and the jump: procedural.
+- **Foot slide** stays at 2–5% of the body's speed walking and 4–9% running in every direction and both schemes (feel pass 2's legs-to-travel rule), on a paved square at 2.3 and 3.5 m/s.
+- **How it looks:**
+  - sideways reads as walking sideways from the chest;
+  - backward reads as a walk played in reverse, and at a run as a moonwalk;
+  - the legs spin round when they swap between forward and backward.
+
+**Clips wanted** (`CLIPS_WANTED.md`, for the Spark's text-to-motion; none generated here):
+- **For "cursor", in priority order:** `walk_back` and `run_back` (backward, loops); `strafe_walk_left`, `strafe_walk_right`, `strafe_run_left` and `strafe_run_right` (90° to the side, facing ahead, loops). Diagonal takes (45° and 135°, walk and run, loops) are optional: blends of the cardinal takes with a 45° warp usually suffice.
+- **For both schemes:** `turn_left_90`, `turn_right_90`, `turn_left_180` and `turn_right_180` (standing, one-shots); `walk_start`, `walk_stop`, `run_start` and `run_stop` (forward, one-shots); `jump_stand` and `jump_forward`, plus for "cursor" `jump_back`, `jump_left` and `jump_right` (one-shots at the rules' 1.6 tiles at 3.6 tiles/s).
+- **Pipeline:** `animate.py --library` measures travel forward only. Sideways and backward takes need a travel direction per entry, with Kimodo's `path` constraint pinning the hips' line.
+
+**Not done:**
+- No strafe or backward clips: the cursor scheme still shows the procedural blend above.
+- Turning on the spot beyond 55° still swivels the legs in about 0.13 s and steps both feet.
+- The settings menu belongs to the interface redesign.
+- The strike was not captured turning to its aim: the scratch square had no one in reach, so the rules refused it ("no one there to strike").
+
+## Locomotion clips (2026-11-11)
+
+Branch `clips-2`: the laptop half of the clip lab for the Spark's 29 new takes (`assets-locomotion` at `4a1713b`, merged here; tarballs `locomotion-A`, `-B`, `-C` and `-B-diagonals`). Evidence is in `.local/living/clips-2/` (git-ignored): the contact sheet (`index.html`), `verdicts.json`, the bake's tables, the captures and the tools. Captures were headless runs of the real client on the scratch island world `verify-clips2-a`. Client and `animate.py` only: no authority, rules, bindings or seed changes.
+
+**`animate.py`:**
+- `travel_deg` (optional, locomotion loops): the take is faced ahead with its travel turned that far (the game's sense: -90 left, 90 right, 180 back), so its cycle and speed are measured along its own direction. The sidecar gets `travel_deg`, `locomotion`, `facing_deg` and `cycle_m`.
+- `turn_deg` (a turn on the spot): after the feet are planted, the turn is taken out of the clip (`unturn`: the hips turned back about the vertical by the hips' heading so far), so it ends facing ahead in the neutral pose. The sidecar gets `turn_deg` (measured), `turn_planned_deg` and `turn_curve`; the game turns the body along the curve.
+- A `travel: path` one-shot that hops, has `travel_deg` or starts or ends in a gait's frame gets `path_m` (the body's own track) and `hop`; a start or end in a gait baked in the same run gets `start_gait`/`end_gait` ({clip, phase}).
+- **Existing entries bake byte-identically** (dev-box's condition): the 34 existing entries on Vivi, before (`origin/main`'s `animate.py`) and after, give the same GLB (sha256 `3f3fab94…`) and sidecar (`a8cd88ce…`); gen_person's 13 entries on `own-man.glb` likewise (`4e76d9d4…`, `ebf46cb8…`). The turn handling touches the hips, so every new take was also baked onto `own-man.glb` (`gen_person.sh man`) and photographed in the asset view.
+
+**Verdicts** (sent to the Spark as `clips-2-verdicts-2026-11-11.tar.gz`; per clip in `verdicts.json` and on the contact sheet): 17 accepted, 8 retakes, 4 a fix on our side.
+- **Accepted:** the four turns; `jump_stand`, `jump_left`, `jump_right`; `walk_back`, `strafe_walk_cross_left` and `_right`; `walk_diag_fl`, `_fr`, `_br`; `run_diag_fl`, `_fr`, `_bl`, `_br`.
+- **Retakes:** `run_back` (a planted foot slides 16–19 cm in the baked take on all three rigs); `strafe_run_left` (a 15.5° seam that pops); `strafe_run_right` (1.18 m a cycle); the step-touch `strafe_walk_left` and `_right` (0.6 m a cycle); `walk_diag_bl` (a toe 6–8 cm low at its seam); `jump_back` (through the floor, as the lab found); `jump_forward` (it lands into a 1.9 m/s walk: in the game the landing slid 0.5–3 m/s, against 0.03–0.9 for the arc).
+- **Our side:** `walk_start`, `run_start`, `walk_stop`, `run_stop`. The takes are clean, but the authority starts a body at full speed and stops it where it is. Drawn along the start's own track, the body fell 0.6–0.9 m behind the authority's, and its catch-up slid the feet 24% of the body's speed (6% with the fade-in). A stop would carry the body 0.8–1.6 m past where it stopped.
+- **Stride against the rules' speeds.** People walk at 2.6 m/s and run at 3.9 (times the speed gene; 1.4 times that on a road). The sideways and backward takes cover 0.4–0.8 of the forward gaits' metres a cycle, so with planted feet they step 1.5–2.3 times as often, up to 9 steps a second. The verdicts ask for takes at the rules' speeds.
+
+**Wired** (`takes.rs`, `gait.rs`, `live.rs`, `anim.rs`, `combat::Action::gait`; `LIVING_GAME_TAKES=off` turns it all off, for comparisons):
+- **Both schemes, turns on the spot:** standing, when the legs would swivel more than 55° (to the cursor, a standing body's own heading or its activity), the 90° take plays (up to 135°, else the 180°) at 1.3×. The body turns along its curve, and the upper body still leads toward the cursor. In the capture, 90° and 180° looks turned the legs exactly 90° and 180°, stepping 63 and 121 cm of toe path (the swivel before: 66–69 and 118 cm).
+- **Both schemes, jumps:** standing, `jump_stand`; sideways (scheme cursor, with the legs facing the cursor), `jump_left` or `jump_right`. Each starts just before take-off, timed so that its flight, when both feet are up, takes the rules' 0.44 s. The gait steps on under a moving jump (`Action::gait`) and takes over as the take fades, just before touchdown. A standing jump's landing slid 0.05 m/s, against 0.24 for the arc. Jumps forward while moving, backward hops and files without takes keep `jump.rs`'s arc.
+- **Scheme cursor, directional loops:** the legs face the cursor, and the takes either side of the travel blend by angle, each its walk and run by speed (`Gaits::blend_toward`, up to four gaits at the shared phase). A direction plays only while it steps at most 1.6 times as often as the forward gait would (`CADENCE_MAX`), and only while its mirror does too. A swap to or from the forward gaits waits 0.3 s, since the travel's heading swings round as a walk starts. Elsewhere today's blend stays: the forward gaits along the travel, reversed backward, with the upper body turned.
+  - At the rules' 2.6 m/s walk on plain ground, this plays the forward diagonals and, through the backward jogs, the back diagonals. Sideways and straight back fall back, except for slower bodies (children, elders, the tired). Running, only the forward diagonals play.
+  - Capture (the same character before and after, on a paved square at 3.6 m/s walking and 5.4 running): the diagonals played their takes, and the supporting foot slid 4–8% of the body's speed on them, against 1–6% before with the forward gaits turned. Every other direction fell back and matched before (1–7%). Their metres a cycle set their cadence at 1.1–1.5 times the forward gait's.
+- **Not wired:** the starts and stops (above), and the retakes. The asset view now turns and moves a model by its take (`view.rs`: the turn curve, the path, a loop's belt), so a contact sheet shows planted feet as the game will.
+
+## View distance and the grey city (2026-11-11)
+
+Branch `view-1`, for the owner's walk through Cullet's grey city ([small city](SMALL_CITY.md) §5 and §6, [authored plans](AUTHORED_PLANS.md#the-game-client)). Evidence is in `.local/living/view-1/` and the walk's stills in `.local/walk/runs/` (both git-ignored, in the main checkout). Captures were headless runs of the real client on scratch Cullet worlds (`verify-view1-*`, no residents, no mind service), and offline look-dev. Client only: no authority, rules, bindings or seed changes, and no SpacetimeDB feature used in a new way.
+
+- **The fog follows the mood** (`camera.rs`, `world::Draw`):
+  - The camera fogged from its own draw radius on every world: 50 to 105 m for an adult. Since `plan-1` the land picks its mood (`envs/<id>.json` whose `world` names the land's seed and size), and the camera now fogs by that mood's `fog_start` and `fog_end`, scaled by the character's size. The atmosphere still scales it after (night and fog close it in, `daylight::apply`).
+  - The island's mood is 70 to 160 m; the town square looks as before, a little clearer at the far end. Cullet's is 180 to 600 m. Tile worlds and the character line-up keep the old fog.
+  - The sight edge's limited view still wins: it fogs from your sight and brings the far plane in (`sightedge::far`).
+- **Landmarks drawn far** (`live.rs` `lots`, `island.rs` `stream`):
+  - Lots with `landmark: true` in the regenerated land (Cullet's Cone, Counting House, Heron, Watchglass and Lintel) are drawn out to the mood's `fog_end` (600 m on Cullet). The `lot` window reaches only ±184 m, so a landmark beyond it is drawn from the regenerated land (the land's lot indices are the rows' ids). Ordinary lots stay at 190 m.
+  - Past the detailed ground (170 m) and out to `fog_end`, the ground and the sea are drawn coarse: a vertex every 4 m, no scatter or props. Four sea quads round the map end a long view over the water in fog, not at the map's edge.
+  - Ordinary things (lots, chunk props, scatter) fade out, dithered, over the last 25 m of their draw distance (`envs::Reach`), because Cullet's fog no longer hides that edge.
+  - The far plane stays past the landmark reach (1000 m by default; at least 1.1 × the reach + 50 m). Bevy 0.20's perspective is infinite reverse-Z on a 32-bit float depth buffer, so the far plane only culls: at 600 m one depth step is about 0.04 mm.
+- **Lots without a model** (`island.rs` `lot_item`):
+  - **Cause of the bare ground:** building lots were already grey boxes. The bare lots were Cullet's 23 open lots of no height: the Fish Steps, the slip, the Cone yard, the Marver's terrace and the graveyard are `lamp` lots of height 0, which `spawn_lot` skipped, and the 18 root plots are `garden` lots, which have no model kind. So the Fish Steps' notch was a grass tongue. (The other open lots have a height and were boxes: the dry dock 8 m, the cistern 2.6 m, the thorn 4.5 m, the Crown bench 0.5 m.) `envs::assets_for` returned nothing from another environment (`shared/` has no building kinds), and no connected path was skipped.
+  - A planned settlement's lot now draws its own model when it is on disk, else a grey box of its footprint and height, else, for an open lot of no height (the 23 above), a slab 2.5 cm high of its footprint in a darker, muted stone (sRGB 132, 128, 120 against the boxes' 168, 168, 172), casting no shadow. It never borrows another model of its kind, so an empty or missing `envs/cullet/` gives the grey city cleanly. Generated towns still sample their kind's models.
+  - Connected and look-dev use the same rule. Grey boxes now carry their box as `lookdev::Fitted`: the camera's keep-out query needs it, so connected boxes, though `Solid`, could hold the eye inside them. Look-dev's lot boxes and models are `Solid` too.
+- **The quay face** (`island.rs` `face_share`):
+  - **Cause:** no relief stamp covers the quay, so its tiles are the level's grass. A quay stands out of the sea within half a metre (`settle::plan::Ground`), from +2 m to the 6 m deep bed. The 1 m ground mesh's smoothed normals round that step into a slope that the shader's slope test (rock below N.y 0.72) left as grass.
+  - The ground mesh now moves a vertex's layers to rock, and its colour to stone, by its steepest step to a neighbour (from 0.9 to 1.6 m per metre). Stairs climb 0.55 m per metre and are untouched. Steep generated slopes on the island get the same stone, as the shader already intended.
+  - **Not in the rules' data:** the quay's top surface. Levels carry no surface for clients (streets have `surface`, the square `paved`), and a stamp's `ground` of `rock` would make the tiles block walking. The Strand street covers the quay to its edge, so only the face showed; a paved quay beyond its streets would need a client field such as `levels[].surface`.
+
+**Frame cost** on Cullet by day (`verify-view1-c`, built from `f2d803fa` with this branch; no residents). One binary, with and without the long view (`LIVING_GAME_PERF=nofar`: no coarse ring, no landmarks past 190 m), two interleaved runs each, 24 s at each spot, one headless 1600×900 window, under a load average of 15 to 20 from other agents' builds. Median of 2 s windows:
+
+| Spot | Without | With | Drawn with |
+|---|---:|---:|---|
+| The Ladder's west end, looking east over the town | 18.3, 18.3 ms | 20.1, 22.6 ms | 38 detailed and 176 coarse chunks, 969 meshes (651 without) |
+| The Crown, looking south over the town | 18.3, 18.9 ms | 19.1, 18.7 ms | 39 + 201, 1,073 meshes (695) |
+| The arrival point, looking east along the quay | 18.4, 18.6 ms | 18.2, 18.3 ms | 40 + 173, 1,039 meshes (729) |
+
+The long view costs about 2 to 4 ms where most of the screen is far ground (the Ladder's view east covers about 600 m of land), and nothing measurable elsewhere. Headless frames here do not go below about 18 ms, so a real window may show the difference differently. If it costs too much in play, the first thing to try is a cheaper material for the coarse chunks (they are drawn with the painted ground shader).
+
+**Not done:**
+- The coarse ring meets the detailed ground with T-junctions (a crack of a few centimetres at 170 m is possible, not seen in the captures).
+- People beyond sight are still not drawn (that is the rules' sight, 48 m by day on Cullet).
+- Coarse chunks draw no props, so the Lintel stands alone on its headland.
+
+## Interface D (2026-11-11)
+
+Branch `ui-1`: the owner's choice of interface (design D: B's amount on screen in A's walnut, brass and parchment, A's floating windows; `.local/living/ui-designs/DECISION.md`, pictures `png/d-*.png`). It replaces the old HUD and menus rather than patching them. Client only: no table, reducer, view, subscription, rule or binding changed. Evidence, with a contact sheet of each built state beside its mock-up, is in `.local/living/ui-1/` (git-ignored). Verified by the new `verify-ui` skill (the real client headless on `verify-ui-*` worlds) and `verify-player`.
+
+Built in steps; steps 1–3 are on main, 4–5 follow, and step 6 (the character window, the skills and know-how window, the fight target plate, a look pass) waits for the owner's go-ahead.
+
+**The look is a theme** (`ui/wood.rs`; play-test 4, 2026-11-11: the owner liked the windows' behaviour but not their look or density, "I'd prefer a much cleaner interface"). Every visual value of the D widgets comes from one `Theme`: colours by role (text, edge, surface, accent, field, line), edge width, corner radius, ornament (a frame's inner line, a second body edge), title face and size, shadows, and density (key chips beside titles and buttons, the title bar's grip, help lines shown always or once). Four themes:
+- **Clear** (the default): light neutral, flat panels with a 1 px edge and a soft shadow, Nunito only at two weights, no ornament.
+- **Night:** the same, dark and translucent.
+- **Linen:** warm and flat, a hint of the game's palette.
+- **Walnut:** design D as first built (walnut, brass, parchment, Marcellus titles, key chips).
+
+Settings › Play › Look chooses it, F4 cycles it (a note names it: "Theme: Night · F4 changes it"), the settings file keeps it, and `LIVING_GAME_THEME` sets it for captures. A change rebuilds the UI's trees and reopens the open windows where they were. The sizes are the mock-up's pixels: the UI scale is the window's height over 900 (1600×900 is 1:1; never under 0.9). The drawn cursor is the ring and dot of 90f6fac1 again (the owner preferred it to D's arrow).
+
+**Density** (what a player does not need in the moment went, or went behind a click):
+- **Windows:** no grip, no key chips beside ✕ (the keys are in the Menu list and Settings), a smaller ✕; titles on one line (a long label is shortened with "…").
+- **A person's window:** no second line repeating the title (it shows only a named person's clothes); "First seen 3 min ago · not in sight" on one line; the acts are Give ›, Wave, Look over and More… (Trade…, Introduce yourself and every act the rules allow are behind More…); the box reads "Enter to talk", its "to" chip is shortened, no Enter chip; the line explaining Tab shows until the first line is said.
+- **Log and people:** the box's help line shows until the first line is said.
+- **The list of acts:** toward a person Talk, Their window, Give ›, Offer ›, Wave and Appraise, then More… (Introduce yourself, Threaten, Tend, Accept, Demand, Host, Conceive, Teach, Nod, Face, Goto, Follow, Flee, Join and the rest); toward a thing, the first four and More…; the title on one line; no "hold F" note.
+- **The pack:** no single "Items" tab; only as many rows of cells as it needs (one free row); "Click an item to use it; drag it onto someone to give it." on one line, until an item is clicked or carried.
+- **The F prompt:** "F Talk", with "hold F · more" only the first two times a list is opened that way.
+- **Hints at the top** (F2, F3, Enter) are drawn in the theme, and still show once a session.
+
+**On screen while playing:** the compass (top right; the needle follows the view; the place's name under it is the nearest place my character knows within 90 m, from `my_places`, and none shows otherwise) and two labelled buttons, Pack (I) and Menu (Esc). The cluster at the bottom (step 4) is still the old bars and skill bar until then. Only while they matter: nameplates, the F prompt beside the person or thing F acts on ("F Talk · hold F · more"), bubbles, notes over the cluster (parchment, marked green when done and red when refused, in the authority's words), and the first-time tip ("New here", bottom left; "Got it" or "All tips"; once a session, and off in Settings).
+
+**Windows** (`ui/win.rs`; behaviour as play-tested and accepted):
+- Two anchors at 1600×900: the left (26, 26) holds a person, the log and people (and later the character); the right (under the buttons, 26 from the edge, top 252) holds the pack. One window per anchor, so at most two narrow windows (426 wide) are open and the middle stays clear. Opening a window takes its home anchor and replaces what holds it. Skills and know-how, and Settings, are wide (1076), in the centre left of the compass column, and close the others. Heights stop short of the screen's edge (the wide ones above the cluster).
+- Hold the click on a title bar and slide (a three-finger drag is the same press and move): the window follows, both anchors are outlined, and letting go snaps it to the nearer one. If another window holds it, the two change places; a wide window goes back to the centre.
+- Close with ✕, the window's own key (I, L, K) or Esc. A click in a window raises it.
+- **Esc, in order:** the list of acts (its sub-list first), the Menu list, the words being typed (with their window), the top window. With nothing open it opens Menu and gives the system cursor back; a click on the world captures it again. `pointer.rs` no longer frees the cursor on its own.
+- **Menu:** Character (until step 6, the list of acts on oneself, as C), Skills and know-how (K), Log and people (L), Settings, and Leave the world (asked twice; the character stays in the world and its mind takes it over after the takeover delay).
+- **The pointer for the UI** (`ui/hit.rs`): every window, button and row takes clicks from the game's own cursor through the nodes' layout rectangles (topmost by the UI stack), so the system cursor, the drawn one while captured (macOS reports a frozen position then, which Bevy's picking cannot use) and headless scripts take one path. Over a window, or while a press or drag that began on one is under way, the world does not take the pointer: no strike, no view turn. Over a window, two-finger swipes scroll it.
+
+**Talking** (`ui/say.rs`, `ui/people.rs`, `talk.rs`, `looks.rs`, `heard.rs`):
+- **The owner's rule (2026-11-11):** "if your cursor is not on someone and you press enter, you go into general chat. If you are hovering someone and press enter, you enter chat with that person specifically. But that conversation should still be kind of public, unless you whisper." So Enter with nobody under the cursor speaks to the room (`to = 0`; talk-1's "else the nearest in earshot" is gone), and the box is in Log and people, reading "To the room". Enter while hovering someone speaks to them (`to = id`) and opens their window with the box in it ("To a stranger in orange"); everyone in earshot still hears it (the rules' `perceive::speak`). Tab goes to the next person within earshot, nearest first, then back to the room. Enter says it and the window stays with the conversation; Esc closes the box and its window. A click in a window's box types to whom it names, even someone out of sight (the authority then answers "No answer from …").
+- **When the room does not answer, the client says so.** Minds give a line to the room no turn yet (until the Spark's greeting experiments are on). About 10 s after a line to the room that nobody took up, a note says "Heard by 4 — no one took it up. Point at someone and press Enter to speak to them." (or "No one in earshot heard you."). Who heard it is the people perceived within the hearing law's earshot as I spoke, until `heard_by` lands; someone among them speaking since counts as taking it up.
+- **The box's ways of speaking come from a table** (`talk::MODES`): today a person and the room. Whisper (close, or through skills such as telepathy) and skill channels belong to the Spark coordinator's `docs/COMMUNICATION.md`; the box keeps a greyed "whisper" chip as their place, with nothing behind it.
+- F tapped on a peaceful person talks to them (the box in their window); held, it lists every act toward them, starting with Talk and Their window. A tap on them does the same as before (talk-1's rule, until sheathe and draw in step 4).
+- **A window per person,** keyed by character id: how I name them and how they look, when I first saw them, the acts toward them (Give ›, Trade…, Wave G, Look over V, Introduce yourself), our conversation (my `said` lines to them and their `speech` lines I heard, marked "to you"), and the box. It opens by talking to them, from the list of acts, or from Log › People. "Introduce yourself" puts "I'm <name>." in the box, editable; whether they learn it is the rules' affair (`perception::introduce`).
+- **Log and people** (L): Heard (every line heard and said this session), People (everyone met, most recent first, "here now" when perceived; a click opens their window) and Events (act outcomes, records, no answers, introductions). Its box speaks to everyone near (`to = 0`).
+- **Names only from the rules.** A name shows only where the projection's `name` is set (`seen_characters`). A stranger is named by looks: the projection's label ("a stranger", "a child", "an old stranger") with the colour of their clothes as this client draws them (`live::recipe_for`: seeded by the land and their id, in the projection's folk and dress), "a child in red"; a second colour when two read alike ("a stranger in green and dark grey"). No role and no place. Nameplates, bubbles, the log, the box, the target frame and the lists all use it (`Looks::of`).
+- **Waiting on the authority, isolated in `heard.rs`:** `heard_by` on the speaker's `said` row (who heard my line, among the people I could see) and an `introduced` row ("They told you their name"). Until they exist, nothing shows under my line and no window says how a name was learned. `introduced` is read by its kind, so it shows as soon as the authority writes it; `heard_by` needs the regenerated binding and one function. A `silence` row already shows under my line: "… did not hear you: out of earshot".
+
+**Items on people** (`ui/pack.rs`, `ui/verbs.rs`, `verbs.rs`):
+- The pack window: one cell per item with its count, and carried over the rules' `carry_limit`. A click on an item lists what I can do with it myself, beside the cell (the rules' acts with that item).
+- Hold the click on an item and slide it onto a person in the world (the one hovered, else the nearest head within 70 px) or onto their window: a ghost of the item says "Give berries to a stranger in orange", and letting go sends the rules' choice toward them with that item and nothing asked back (today `give`), checked by the rules' own `_check` as the list does.
+- **The list of acts** (hold F, C, an item): beside its target's head or its pack cell, in the D frame; a skill with many items (Give ›, Offer ›) opens its items beside it ("from your pack", with counts). Their window's Give › lists the same.
+
+**Settings** (wide, from Menu): Play holds the control scheme (facing where you walk, or the cursor; F3 too), the edge of sight (not seen now, limited view, fade; F2 too), the weapon drawing itself (used from step 4), and key hints and first-time tips with "Show tips again". Controls (step 5) holds the bindings. Everything is saved at once to a small local file, a per-viewer convenience: `LIVING_GAME_SETTINGS`, else `~/.config/slop-art-online/game.json`; F2 and F3 save there too, and `LIVING_GAME_CONTROL` and `LIVING_SIGHT_EDGE` still override at start.
+
+**Keys as built at the first merge** (all through `keys.rs`, rebindable in step 5): WASD move, Shift held runs (and still dodges until step 4), Space jumps; F acts (held: more acts), Enter talks, Tab changes whom; G wave, B nod, V look over; I pack, L log and people, K skills and know-how, C acts on yourself; Esc as above; ⌥ held glances with the camera; F1 developer panels, F2 edge of sight, F3 control scheme. The skill bar keys are talk-1's until step 4 (LMB strike, RMB bow shot, Q fire bolt, E block, R heal).
+
+**Fixed from talk-1:**
+- Health read "111 / 110" (here "110 / 109"). The authority's row was hp = max_hp = 109.48 (owner SQL on `verify-ui-a`; no row of the 311 in that world exceeds its max): the client rounded hp up and max to nearest. Both now round alike (`ui::hp_text`).
+- The missing glyph was "▸" (U+25B8) in the old F hint ("Mercy ▸"); neither Nunito nor Marcellus has it, nor "→" (the act feedback's "teach medicine → person"). "›" was fine in both. Text from the rules goes through `wood::readable`, which maps them to "›". ✕, ▾ and ⌥ are drawn as glyphs.
+- The target frame's label is capitalised.
+
+**Frame cost** (`LIVING_GAME_PERF=ui` times the UI's own work: its input, the live source and widgets, and Bevy's UI layout of every node; 10-s windows). The 90f6fac1 client got the same timing (a worktree with only that patch). Both ran headless and uncapped on `verify-ui-b`, interleaved, on a laptop where other agents' builds kept the load average at 12–21. Whole-frame comparisons on that machine were swamped by the load: repeats of one binary differed sevenfold. Taking each run's best 10-s window, in µs per frame:
+
+| State | 90f6fac1 | ui-1 |
+| --- | --- | --- |
+| Nothing open | 984–1,981 (514 UI nodes) | 1,084–1,777 (639 nodes) |
+| Two panels or windows open | 1,123–2,070 | 1,421–2,018; one run 4,198 (992 nodes) |
+| Settings › Controls open | – | 2,935 (930 nodes) |
+
+After the themes and density pass (Clear against the play-tested `92e667c5`, interleaved, load average 26–29): nothing open 1.69–2.75 ms against 1.85–2.30; a person window and the pack open 2.3–2.4 ms against 3.4–3.6. Unchanged or lower, within the noise. No regression shows with nothing open. With two windows open it may cost about 0.3 ms more, within the noise; Settings is the heaviest, and only while it is open. Hit-testing on the game's cursor adds about 60–100 µs to input (10–30 before). Per-frame work was trimmed on the way: controls repaint only when lit or hovered changes, labels by looks refresh four times a second, and the scripts' tag map is built only in scripted runs. Evidence: `.local/living/verify/ui-b/ui/ab*`, `uiperf-*` and `baseperf-*` (client logs, `ui perf:` lines).
+
+**Look direction** (`controls::look`): the client's look goes through one function, toward the authority's `human_face(dx, dy)` (being built on dev-box, fov-1: rate-limited, changes under about 10° write nothing, and `human_face(0, 0)` releases the look). It is a no-op until the reducer is on main and the bindings are regenerated. Facing the cursor it is given the cursor's direction; facing where you walk, none. Settings › Play keeps a place for a read-only "facing sight" line (on or off, with the field's focal, side, side share, near and margin), not built yet.
+
+**The live script** gained the steps `verify-ui` drives: `click:@TAG` (tagged nodes, `ui/hit.rs` `Tag`), `slide:A>B[:SECS]`, `scroll:PX`, `dodge:W|A|S|D`, `dump:NAME` (the UI's state as JSON), and `key:` takes any key by its `KeyCode` name.
 
 ## World look and camera research (2026-11-08)
 

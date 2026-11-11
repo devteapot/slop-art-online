@@ -301,7 +301,10 @@ impl Net {
     /// Record a reducer's refusal (the authority's error text) for the HUD.
     pub fn on_reply(&self, what: &'static str) -> impl FnOnce(&ReducerEventContext, Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) + Send + 'static {
         let errors = self.errors.clone();
-        move |_, r| {
+        move |ctx, r| {
+            if let Ok(o) = &r {
+                crate::record::reply(what, &ctx.event.reducer, o.clone(), ctx.event.timestamp.to_micros_since_unix_epoch());
+            }
             let msg = match r {
                 Ok(Ok(())) => return,
                 Ok(Err(e)) => format!("{what} refused: {e}"),
@@ -377,6 +380,10 @@ impl Net {
         let mut queries: Vec<&str> = PERCEIVED.to_vec();
         if self.mode == Mode::Tiles {
             queries.push("SELECT * FROM terrain_chunk");
+        } else {
+            // Gates shut and opened (about a hundred rows on a town, changed rarely): a shut gate
+            // blocks sight, which the edge of sight draws (`sightfield.rs`).
+            queries.push("SELECT * FROM gate");
         }
         info!("world kind: {:?}", self.mode);
         let (ok, err) = (self.inbox.clone(), self.inbox.clone());

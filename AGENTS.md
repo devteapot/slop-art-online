@@ -10,6 +10,7 @@ Slop Art Online is a persistent living-world game built with Rust, SpacetimeDB a
 - [Current state](docs/CURRENT_STATE.md), [world roadmap](docs/WORLD_ROADMAP.md) and [work queue](docs/TODO.md): implementation evidence and remaining work; the legacy sections are historical.
 - [Performance contract](docs/PERFORMANCE_CONTRACT.md): locked gameplay, latency, population and resource targets; benchmark acceptance rules.
 - [Audit and experiments](docs/AUDIT_AND_EXPERIMENTS.md): causal evidence and acceptance requirements.
+- [Characters](docs/CHARACTERS.md): the character generator that replaces VRoid bases, its parameters and commands.
 
 The seven-stage roadmap has completed a bounded implementation pass. That does not establish autonomous ascension, sustainable large populations or performance acceptance. The locked target is 60 Hz active movement/combat, stable 60 FPS with higher refresh-rate support, and 2,000 active characters including a 200-character local battle for 8 hours within the performance contract's latency/resource limits. The immediate gate is 216 characters for 30 minutes at the same quality limits. Existing whole-World processing and finite actor limits are prototype constraints to address, not patterns to extend. Historical 20 Hz checkpoints, ADRs and old current-state sections do not override newer evidence or agreed design.
 
@@ -32,6 +33,7 @@ Spatial subscriptions are not permission boundaries by themselves: enforce perce
 - Preserve exact causal evidence, actual model exchanges, scoped privacy and original failed outcomes. A seed does not make fresh inference deterministic. Reported model explanations are not hidden chain-of-thought or proof of causation.
 - Keep rules authoritative in the living authority and expressed in its shared rules and skill scripts; Bevy handles presentation/input. External inference belongs in the mind service (`living/mind`), never in reducers. Do not create a second approximate simulator for experiments.
 - Retain shared logic when replacing storage boundaries. Generated bindings in `living/bindings` are regenerated via `just living-generate`, not hand-edited.
+- Build tools we own. When a capability matters to the game, such as characters, animation, models, textures or measurement, start from the best existing tool or asset, then bring it inside: our own scripts and parameters, judged in the game's renderer, so results can be regenerated and varied. The clip library and the Blender generators were made this way. Do not leave an outside application or a manual step on the path of routine work.
 
 ## Validation and resource discipline
 
@@ -45,6 +47,7 @@ Use the [Justfile](Justfile) and the [living core](docs/LIVING_CORE.md). The leg
 
 ```bash
 just living-check     # authority wasm + mind + both observers + game client + rules tests; run before every commit
+just living-merge <branch> -m "Merge <branch>: …"  # coordinators: --no-ff merge, check, push, retry when main moved (docs/TOOLING.md)
 just living-game-assets # regenerate the game client's git-ignored assets (needs Blender; Kimodo cache for clips)
 just living-test      # rules tests
 just living-up        # SpacetimeDB + Neo4j containers
@@ -68,6 +71,7 @@ All agent work on this project runs on Claude.
 
 - **Coordinators:** each machine has one coordinator thread on Claude Opus 5.5 (`claude-opus-5-5`) at high reasoning effort.
 - **Subagents:** Claude Opus 5.5 at high reasoning effort by default.
+- **Ultracode:** off for coordinators and subagents. Turn it on only when the owner asks for it for a named piece of work, and only for that work.
 - **Fable exceptions:** use Claude Fable 5.2 (`claude-fable-5-2`) at high reasoning effort for asset generation, such as 3D models and textures, and for a task that Opus has attempted and could not solve. Say in the report when a task was moved to Fable and why.
 - A model or provider the owner asks for by name overrides these defaults for that task.
 - A model named inside a skill does not override this section. This section does not switch the model of a thread the owner started.
@@ -91,8 +95,9 @@ The living core is verified surface by surface, so a failure can be traced to th
 - `verify-minds`: the mind service.
 - `verify-llm`: model integration.
 - `verify-knowledge`: know-how and memory.
+- `verify-ui`: the game client's interface (interface D), clicked through headless.
 
-The browser observer has no skill; it is a simple developer client that the proper game UI will replace. When that UI is integrated, add a UI skill that clicks through it. When the external-agent connector is implemented, add `verify-agent-external` with a scripted tier and a real-agent tier.
+The browser observer has no skill; it is a simple developer client that the game UI replaces. When the external-agent connector is implemented, add `verify-agent-external` with a scripted tier and a real-agent tier.
 
 - Before reporting a living-core change as working, run the skill of every surface it touches. Report what was driven, the evidence paths and what was not covered.
 - To locate a failure, step down the layers: screen → client → player, or minds → llm and knowledge → core and generation. Name the lowest layer that reproduces it.

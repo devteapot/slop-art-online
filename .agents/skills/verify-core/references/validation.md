@@ -1,6 +1,86 @@
 # Core validation record
 
 
+
+## 2026-11-11 eye-2: things open at eye height are see-through (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `sight` (default world) | `core-eye2v` | 6 of 6 |
+| `senses` (default world) | `core-eye2v` | 6 of 6 |
+| `low` (island; 9,153 low tiles since eye-2) | `core-eye2v-skirmish` | 5 of 5; the run crossed low tiles at (437, 174)–(437, 175) (`low-spots.json`), no longer only a cart's |
+| `drop` (plan-test) | `core-eye2v-drop` | 5 of 5 |
+| Rules | `cargo test -p living-rules` (in `just living-check`) | 154 passed, including `host::tests::a_well_and_an_open_stall_are_seen_through_but_a_closed_building_is_not`, `sight_is_blocked_only_above_eye_height`, `eye_cells_decode`, `pinned_digests_hold`, `map::tests::drops_and_low_things_are_told_in_words` |
+
+Maintained in the same change: sight.md (low things since eye-2, the rules tests, the night-sight gotcha of `drop`/`low`), SKILL.md, features/README.md and `scenes.py`'s docstring no longer say a low thing is a cart.
+
+## 2026-11-11 drop-1: drops and low things are see-through (dev-box)
+
+Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `core-drop1-20261111-153740` (default seed): cargo checks (rules 148, authority 12, mind 82, viewer sync 5), `sight` 6 of 6, `senses` 7 of 7, `moves` 5 of 5. Its steering run failed to publish (the module copy's name has underscores for hyphens: `living_authority_verify_<run with _>.wasm`); rerun in `core-drop1b-20261111-154703-steering`: 5 of 5.
+- `core-drop1-20261111-153740-island`: `sight` 6 of 6 on the island.
+- First `drop` (plan-test) and `low` (island) runs in `core-drop1-20261111-153740-drop`/`-island`: sight across both passed; the walk check failed on a harness defect, not a rule: it compared CLI samples about 2 s apart (a 2.8 m "jump" was a walk round the drop's end), and the geometry picked the obstacle's very end. The check now walks the route the authority keeps (`body.path`) and the geometry keeps away from the ends.
+- `core-drop1b-20261111-154703-drop` (plan-test): `drop` 5 of 5. `core-drop1b-20261111-154703-island`: `low` 5 of 5 (a cart's tiles; the watcher across it waves and witnesses; the walker's route never crosses it).
+- Not run on this change: tick, needs, food, refusal, seize, skirmish, dealings, town, lives, laws, infant; mechanics.
+## 2026-11-11 the laws of starting a family and of the longing for a child (exp-hamlet-births, Spark)
+
+Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`. New scene `family_laws` (`core-family-20261111-142152`, stage1-acts): 9 of 9. Its first attempt (`core-hamlet-20261111-141837-family-laws`) passed the conceive checks and then failed for two scene bugs. One was a `str.format` on the script. The other came after it was fixed (`core-family-20261111-141949`): the empty-handed adult dropped its food only after the law was installed, so it had felt the longing for a moment with food in hand. The scene now empties hands first. `lifecycle` 6 of 6 (`core-hamlet-20261111-141837-lifecycle`). Baseline `core-hamlet-20261111-141837`: tick, needs, food, refusal, seize, sight, senses and moves pass (42 checks). `cargo_checks.py`: rules (the new `laws_with` longing values, `longing_wait_ms` equal to the old `20 − nurture/6`, and the `deathline` values `births_report.py` ports), authority 12, mind 82 and viewer sync 5 pass. `just living-check` exits 0. Not run: skirmish, dealings, town, lives, infant (about 2 h; cry routing is untouched), mechanics, steering, wildlife.
+
+After merging main `fd2030c` (rules-1: a seed's day and laws; only the night call in `brain.rs` conflicted): `family_laws` 9 of 9 (`core-family-20261111-150942`), `lifecycle` 6 of 6 (`core-life-20261111-151946`), `just living-check` exits 0 (rules 145), authority lib tests 12 of 12.
+
+After merging main `7837320` (fix-death-labels, fix-perceived-moving, plan-2; only the verify skills conflicted): `family_laws` 9 of 9 (`core-family-20261111-155914`), `lifecycle` 6 of 6 (`core-life-20261111-160034`), `just living-check` exits 0.
+
+## 2026-11-11 fix-death-labels (Spark)
+
+Branch `fix-death-labels` (rebased on main `6a905c3`, then on `a8d95fc`), the trials stack's container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`; `verify.py` now accepts its `0.0.0.0` binding), private `CARGO_TARGET_DIR` and `--target-dir` per seed, no minds.
+
+- **Reproduced before the fix** (`core-deathnames-before`, main `4df9a89`, new scene `death-names`): the member who saw it read "A stranger was killed by a stranger" and "the remains of a stranger"; the killer read "A stranger was killed by Walker3" (his own name). 2 of 6 checks passed.
+- After the fix: `death-names` 8 of 8 on `4df9a89` + change (`core-deathnames-after`, with and without the victim yielding) and on the rebased `2cd7fa0` (`core-deathnames-rebased`): member "Walker1 was killed by a stranger after yielding" and "the remains of Walker1", killer "A stranger was killed by you after yielding", bystander strangers; one `acquaintance` row (the member's).
+- `cargo_checks.py` pass (rules 145, authority 13 with `the_one_an_event_was_done_to_reads_it_as_done_to_them`, mind 82, viewer-sync 5); tick, needs, food, refusal, seize, sight, senses, moves pass; `skirmish` 8/8 (island).
+- `remains` (stage1-acts): `core-deathnames-rb-remains` failed "a wander keeps its heading between waits" (4 of 6 turns within 1.6 rad; fatal, so the expiry check did not run); a fresh world `core-deathnames-rb-remains2` passed 10/10, as did the pre-rebase `core-deathnames-remains`. Wander is not touched by this change; six turns is a small sample.
+- `laws` (cullet-laws, `core-deathnames-rb-laws`): all pass, including names only within 24 m; one SKIP (the mirrored dark spot is not open ground, a fixture limit).
+- `just living-check` exit 0.
+- On `a8d95fc` + this change (`core-deathnames-head`, `core-deathnames-head-laws`): `cargo_checks.py` pass (rules 145, authority 15, mind 82, viewer-sync 5); death-names 8/8 with the same texts; doing, tick, needs, food, refusal, seize, sight, senses, moves pass; `laws` pass (the same SKIP); `just living-check` exit 0. `remains` and `skirmish` were not rerun on this base (last run on `6a905c3`).
+- Not run: town, lives, infant, lifecycle, wildlife, mechanics, steering, dealings.
+## 2026-11-11, branch fix-graph-say-id (a graph's say: the speaking limit, feedback)
+
+Spark, the trial stack's server (`slop-trials-stdb`, v2.14.1, :3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), worktree on `origin/main` 7a75f6b, private `CARGO_TARGET_DIR`, no minds. Report checked: "a resident's `say` to `{"id": N}` silently fails while `strike` to the same id works".
+
+- Before the change (`core-sayid-i`, island, world hour 7.6, speaker and listener 3 m apart in the open): all 24 combinations of four written forms, three target spellings (`{"id": N}`, `N`, `{"nearest": …}`) and two install paths (`set_behavior`, `mind_install`) spoke to the listener; `do` wave and strike to the same id acted. What failed: the second of two lines within the 2 s speaking limit (two installs back to back, or two says in one `seq`) was never spoken, and a say to someone out of sight left no experience (`say-prefix.txt`, `say-back-to-back.json`, `say-two-lines.json`, `say-out-of-sight-feedback.json`). Cause: the say node set its 45 s pacing mark before `speak`, so a line refused as "speaking too fast" was skipped as done on the next look; a missing listener failed with no feedback.
+- After (`core-sayid-j`, island): the new `scenes.py say` passed 34/34; the second lines came 2.15–2.25 s after the first; the out-of-sight line gave one `own` experience ("You failed to say "…": no #313 in sight").
+- Baseline on the default seed (`core-sayid-d`, say placed after refusal): tick 6, needs 7, food 4, refusal 4, say 34, seize 6, sight 6, senses 7, moves 5 passed; `doing` failed, as it did twice in `core-sayid-b`. All three failures read the observer's scene at night (`time.night`, sight 6 m, world hour 1.2–4.8), with the walkers and follower 8–10 m away; the passes (`core-sayid-c` say then doing, and the `origin/main` control `core-sayid-main` senses then doing, without the change) ran by day (sight 11 m). So `doing` depends on the world's hour, not on the change: a baseline long enough to reach the default seed's night fails it. An earlier reading here (the say scene's actors crowding the scene) was wrong; the say scene still moves its actors off the line, and now runs last in the baseline so it does not push `doing` toward dusk. The `doing` scene should hold its cast within night sight or wait for day; not changed here.
+- Cargo (`cargo_checks.py`, `core-sayid-c`): rules 145, authority 14, mind 82, viewer sync 5. `just living-check` passed. Skirmish 8/8 (`core-sayid-j`), mechanics 23/23, steering 5/5 (published from the run's own module with `--wasm`).
+- On the pushed head b9f9662: `just living-check` passed (a first attempt failed in `living-authority`'s build script, compiled for the removed control worktree with its seed path; `cargo clean -p living-authority` on the shared target dir fixed it: `core-sayid-head/living-check-attempt1-stale-build-script.txt`). `core-sayid-head` (default seed, documented order, say last): cargo 4/4, tick 6, needs 7, food 4, refusal 4, seize 6, sight 6, senses 7, moves 5, say 34 passed; `doing` failed at world hour 1.4 (night, sight 6 m) before say had run. The control `core-sayid-main2` (`origin/main` 7a75f6b, senses then doing) passed both by day (hour 10.4). `core-sayid-headi` (island, hour 7.7): say 34/34 (second lines 2.25 s after the first), skirmish 8/8.
+- Not run: dealings, town, lives, laws, infant, lifecycle, wildlife (no shipped instinct or seed graph has a say node; only mind-written graphs do), and verify-minds (the mind protocol is unchanged).
+
+## 2026-11-11 rules-1: a world's own day and laws (dev-box)
+
+Branch `rules-1`, own container `rules1-stdb` (2.14.1, port 3312), private `CARGO_TARGET_DIR`, no minds. Baseline `core-rules1-base` (default seed): cargo checks (rules 138, authority 12, mind 82, viewer sync 5) and tick, needs, food, refusal, seize, sight, senses, moves: 45 of 45. New `laws` scene on `cullet-laws` (`core-rules1-cullet`): day and rates, 48 m by day, names within 24 m pass; the first night attempt saw nothing (`laws-attempt3.txt`: the HTTP player had been taken over by the world's minds after `takeover_s`), fixed by a player call before each snapshot; the night rerun passed (14 m, a torch at 44 m, lamplight at 21 m, no cold harm). Two earlier attempts failed on the scene itself (a regex for `sight_in`'s `_` arm; no 54-tile east-west line on the 96 m map, replaced by `open_ray`).
+
+## 2026-11-11 plan-1 (dev-box)
+
+Branch `plan-1` (hand-authored plans, docs/AUTHORED_PLANS.md; it adds `lot:<id>` place kinds in `town::seat` and seed `homes`, unused by the island), own container `plan1-stdb` (2.14.1, port 3311), private `CARGO_TARGET_DIR`. `town.py` `core-plan1-town-20261111-135920` on the island: 22 of 23; the failure is the recorded flake "a resident faces someone who comes up behind them" (Cuth Marrow, player stopped 1.6 tiles away). Not run: the baseline scenes, skirmish, dealings, lives, infant, lifecycle, wildlife.
+
+
+## 2026-11-11 goods-1: goods as data, fires that eat fuel (dev-box)
+
+Branch `goods-1` (origin/main `4df9a895` merged), own container `goods1-stdb` (2.14.1, port 3313, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence in the worktree's `.local/living/verify/`.
+
+- `cargo_checks.py` (`core-g1-11111404`): rules 136, authority 12, mind 82, viewer sync 5 pass. `just living-check` exits 0.
+- Baseline `core-g1-11111404` (default seed): tick, food, refusal, seize, sight, senses, moves pass. Its doctor failed only "module newer than sources" (the shipped campfire's `light` was removed after the build). `needs` failed on a harness race, not the rules: after the cloak the scene waited for `rate_key` to change and caught the reset (0) the new rest writes, so it read an awake rate (`needs-cloaked.json`, key 0). The scene now waits for the key holding the cloak, rest and night bits. `codes.py` failed its two refusal checks because the test skill `zap` had no `zap_spec()`, which installs have required since 2026-11-10; it now declares one.
+- Rerun on the final build `core-g2-11111431`: doctor clean; `needs` and `codes.py` pass.
+- Mechanics 23 of 23 (`core-g1-11111404-mechanics`), steering 5 of 5 (`-steering`), `skirmish` and `dealings` on island worlds pass.
+- New: `goods` 20 of 20 and `stock` 4 of 4 on the goods fixture (`core-g1-11111404-goods`). An earlier attempt (`core-goods-135558`) passed the 20 fire and recipe checks and failed the shared-stock check because the valley also grows wild fishing spots; the stock check moved to its own scene, which selects pooled nodes.
+- Harness: `install_script` goes over HTTP (the script passed 128 KiB, past one command-line argument): `verify.py launch` and `call @FILE`, `Scene.call` for large arguments, `codes.py`.
+- **After merging origin/main `6a905c31` (rules-1, plan-1)**, on the merged build: `cargo_checks.py` (`core-g3-11111501`) rules 149, authority 12, mind 82, viewer sync 5; tick 6, needs 7, food 4, refusal 4, seize 6, sight 6, senses 7, moves 5, `codes.py` 14, all pass; mechanics 23, steering 5, skirmish 8, dealings 16 pass; `goods` 22 (the fixture now names Cullet's laws: the seeded hearth lit for its fuel's burn and a seeded kelp bed, then the same chain) and `stock` 4 pass; rules-1's `laws` on `cullet-laws` (`core-g3-laws-11111501`, its lamp now burning seeded oil) 15 pass. `set -o pipefail; just living-check` exits 0.
+- **After merging origin/main `90f6fac1` (feel-5, talk-1, sight-2)**: `just living-check` exits 0; `cargo_checks.py` (`core-g4-11111539`) rules 149, authority 14, mind 82, viewer sync 5; tick, food, sight, senses, moves, mechanics 23, `goods` 22 and `stock` 4 pass; verify-client `client-g4-11111552` 31 of 31.
+- **After merging origin/main `3f2f3443` (cullet.json with its laws; plan resources)**: `just living-check` exits 0 (rules 152); authority tests 15 (with `the_cullet_seed_is_hosted`); verify-generation `generation-g5-11111604` island 977, cullet 64, cullet-laws 41, plan-test 71 checks pass; `goods` 22 and `stock` 4 pass (`core-g5-11111607-goods`).
+- Not run: `town.py`, `lives.py`, `infant`, lifecycle, wildlife, remains, flee (long scenes; the rules they read did not change except warmth, which the goods scene and `needs` cover).
+
+
 ## 2026-11-11 lives-2 after merging laws-2 (dev-box)
 
 Branch `lives-2` at `2c1fb5a` (main `8e6bae4` merged), own container `lives2-stdb` (2.14.1, port 3461), private `CARGO_TARGET_DIR`. The script installs (every law described, `minds` gone). `core-laws-053424`: tick, needs, food, refusal pass. `town.py` `core-laws-town-054630`: 21 of 23; own hours, one new day each and evenings out pass; "faces someone who comes up behind" (recorded flake) and "faces someone who speaks" failed, and both passed on a fresh world (`core-laws-speak-*`: speak, approach, speak), so a timing flake. Also verify-minds `resident` and verify-client 30 of 30 on the same build; `just living-check` exits 0; rules tests 130, mind tests 82.
@@ -293,3 +373,7 @@ Shared container, laptop, island seed. `dealings` passed all 15 checks in `core-
 ## 2026-11-11, branch iter-11 (person needs paced to real time)
 
 Shared container, laptop. `needs` passed all 7 checks in `core-pace-095608`, with its thresholds scaled by `person_pace` (0.3), and `food` all 4. `infant` passed all 18 checks in `core-pacei2-100737-infant`, with its hunger waits divided by the pace (about 2 hours in all). The first `infant` attempt (`core-pacei-095616-infant`) failed its setup check "warm anchor lies outside crying hearing" at 15.6 m: the witness and anchor come from `spawn_crowd` at random spots, so that check can fail by chance; it passed on the rerun and on plain e6b7e698 (`core-maini2-095803-infant`, all 18). Rules: all 132 tests pass, the five that pinned the old person rates now expect them times the pace (animals still bit-exact).
+
+## 2026-11-11, branch fix-perceived-moving (activity derived from the body)
+
+Spark, the trial stack's own server (`slop-trials-stdb`, v2.14.1, :3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), worktree on `origin/main` 6a905c3 plus the change. Default seed, `core-fixperc-1`: launch and doctor passed. Cargo passed: rules 145, authority 14 (including `perception::doing_tests`), mind 82, viewer-sync 5. `tick` 6/6, `sight` 6/6, `senses` 7/7 and `moves` 5/5 passed. The new `doing` scene timed out there: a `think` leaf asks only when the last deliberation is over 45 s old, and the scene's people were newcomers. Fixed in the scene, which now waits 47 s after spawning, and walks W2 in from 10 m. Then `doing` passed 7/7 twice in `core-fixperc-4`: O's scene read `goto → person`, `goto → (10,10)`, `follow → person` and `wait`, each equal to its activity label, and no AI body had `steer.goal` 3. Evidence: `core-fixperc-1/` and `core-fixperc-4/` (`doing-scene-1.json`, `doing-2.txt`, `doing-activities.json`, `doing-steer.json`). Not run: `needs`, `food`, `refusal`, `seize`, and the island, infant, town, lives and laws runs. The change does not touch them; it touches the perception of activity only.

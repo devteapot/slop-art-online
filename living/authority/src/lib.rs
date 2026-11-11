@@ -79,9 +79,8 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     // one call); a floor module waits for `create_floor` (floor.rs).
     if !seed::VALLEY.is_empty() {
         let s: seed::Seed = serde_json::from_str(seed::VALLEY).map_err(|e| format!("seed: {e}"))?;
-        let over: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-        sc.laws_with(&over).map_err(|e| format!("seed rules: {e}"))?;
-        floor::begin(ctx, &s, now);
+        let laws = floor::check(&s)?;
+        floor::begin(ctx, &s, laws, now)?;
     }
     Ok(())
 }
@@ -116,9 +115,15 @@ pub fn set_paused(ctx: &ReducerContext, paused: bool) -> Result<(), String> {
 #[spacetimedb::reducer]
 pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String> {
     require_admin(ctx)?;
+    install_source(ctx, source)
+}
+
+/// Install a skill script: compiled and validated on the world's day, then written with a new
+/// revision. `install_script` (the admin) and a seed's laws overlay (`floor::begin`) go through it.
+pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(), String> {
     let mut sc = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
-        living_rules::script::Scripts::new(&source)?
+        living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
     };
     // Installs are rare: always timed.
     let checked = {
@@ -323,7 +328,31 @@ pub fn place_structure(ctx: &ReducerContext, near: u32, kind: String) -> Result<
     let b = ctx.db.body().id().find(near).ok_or("no such body")?;
     let p = common::pos(&b, now);
     common::invalidate_structures(ctx);
-    ctx.db.structure().insert(Structure { id: 0, kind, x: p.0 + 0.8, y: p.1, chunk: living_rules::map::chunk_of(p.0 + 0.8, p.1), owner: near, built_ms: now });
+    ctx.db.structure().insert(Structure { id: 0, kind, x: p.0 + 0.8, y: p.1, chunk: living_rules::map::chunk_of(p.0 + 0.8, p.1), owner: near, built_ms: now, lit_until_ms: 0 });
+    Ok(())
+}
+
+/// Test support: place a resource node of a kind the world's script has (`resources()`) beside
+/// a character, `dx` tiles east and `dy` south of it, holding `max` (0: the kind's own `max`).
+/// `pool` names the node whose stock it shares (0: its own).
+#[spacetimedb::reducer]
+pub fn place_resource(ctx: &ReducerContext, near: u32, kind: String, dx: f32, dy: f32, max: f32, pool: u64) -> Result<(), String> {
+    require_admin(ctx)?;
+    if !living_rules::catalog::is_resource(&kind) {
+        return Err(format!("no resource kind {kind}"));
+    }
+    if pool != 0 && ctx.db.resource_node().id().find(pool).is_none() {
+        return Err(format!("no resource node {pool}"));
+    }
+    let now = common::now_ms(ctx);
+    let b = ctx.db.body().id().find(near).ok_or("no such body")?;
+    let p = common::pos(&b, now);
+    let (x, y) = (p.0 + dx, p.1 + dy);
+    let sc = common::scripts(ctx);
+    let max = if max > 0.0 { max } else { sc.tables().number("resources", &kind, "max").unwrap_or(5.0) as f32 };
+    let regen = sc.num_of("regrow", &kind, 0.5) as f32;
+    common::invalidate_resources(ctx, None);
+    ctx.db.resource_node().insert(ResourceNode { id: 0, kind, x, y, chunk: living_rules::map::chunk_of(x, y), amount: max, max, regen, at_ms: now, pool });
     Ok(())
 }
 

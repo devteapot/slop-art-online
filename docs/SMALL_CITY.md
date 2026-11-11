@@ -1,6 +1,6 @@
 # The small city: Cullet
 
-Started 2026-11-11, after the owner's first real play-test. This is a design target, not an implementation report. Nothing here is built. It replaces the island as the game's test world; the island seed stays for the labs.
+Started 2026-11-11, after the owner's first real play-test. This is a design target, not an implementation report. The owner answered the decisions on 2026-11-11 ([answers](#the-owners-answers-2026-11-11)), and phases 2 and 4 are being built. It replaces the island as the game's test world; the island seed stays for the labs.
 
 **The owner's verdict.** The world feels bad. The city has no character and looks slopped together. The NPCs feel like NPCs, not like players run by AI. Survival dominates everything.
 
@@ -211,6 +211,8 @@ The owner's rule: resources come from the world, and nothing spawns by magic. So
 
 - **Goods.** The catalog has berries, fish and meat. Cullet needs kelp, ash, sand, glass, roots, greens, peat and lamp oil, with their recipes. The owner's "traits, not lists" decision suggests goods should become data with properties, so that food is anything with nutrition and fuel is anything that burns.
 - **Fire that eats fuel.** A furnace or hearth is lit only while it is fed.
+
+  *Built 2026-11-11 on `goods-1`:* goods, fires that eat fuel, recipes and shared fishing stocks, with Cullet's goods as data in its laws file, `living/seeds/worlds/cullet/laws.rhai` ([world rules](WORLD_RULES.md#goods-recipes-and-fuel)). Placing Cullet's nodes and fires is the authored plan's.
 - **Decay and upkeep.** Panes break and need glass. The owner has asked for this, as Rhai laws.
 - **Fish as a stock.** Today a fishing spot regrows. The owner wants fish to be animals eventually. For this test, regrowing spots with a shared limit are enough.
 - **Tide** (optional, recommended). A law that gives the water's state from the clock, shifting about 50 minutes later each day. It gates the Weirs and the wrack. It changes no terrain.
@@ -708,6 +710,14 @@ Each phase ends with something the owner can look at. "Touches" names what chang
 
 **Order and overlap.** Phase 1 can start today. Phases 2 and 4 do not depend on each other. Phase 3 needs phases 1 and 2. Phase 5's bible can be written during phase 3. The client-feel work runs alongside all of it and is not in this plan.
 
+**Phase 2, engine part (2026-11-11, branch `plan-1`).** A land seed can now carry hand-authored plans (`map.params.plans`): levels at exact heights, streets, stairs, a square, a harbour and lots with explicit models and heights, drawn as grey boxes until the kit exists. Households bind to lots (`homes`). See [authored plans](AUTHORED_PLANS.md). The full plan followed in phase 2's second part (below).
+
+**Phase 2, the grey city (2026-11-11, branch `plan-2`).** The plan of all 65 buildings (93 lots), the Wrack's land and the grey boxes, walkable in the real client: [Cullet's plan](AUTHORED_PLANS.md#cullets-plan). The generator could not make this island from its parameters (its coast follows a random range, its sand is a strip at the water's edge, and resources could not be put at named points), so three general seed fields were added: an authored coastline and relief stamps (height, region kind, ground) in `map.params.relief`, and `resources` in a plan. Measured: the quay end to end in 58 s, the Fish Steps to the Crown in about 80 s (not the 2 minutes of §2), the Lintel in about 4 minutes. From the game camera's height the five landmarks are seen from 75 to 99% of the town's streets; the rules' own sight, blocked by the terrace drops, sees them from 2 to 19%.
+
+**Phase 3, the kit, pass 1 (2026-11-11, branch `kit-1`, Fable 5.2 per decision 12).** [Cullet's kit](CULLET_KIT.md): `living/tools/blender/cullet.py` builds a model for each lot and fixture of the plan (261 models, about 338,000 triangles): the Cone, the Counting House, the Watchglass and the mole; the 24 row houses as six terraces, the Marver and its terrace; the 14 glasshouses in their three states; the six net lofts; the quay's wall, the Fish Steps, every retaining wall and flight, the plot walls and the Strand's dressing. The 22 lots without a model yet (the Heron and the P1 buildings) stay grey boxes. Glow strengths were set in the game at 21:30 against 13:00. Ground textures, nature, the characters and the P1 and P2 lists are not in this pass.
+
+**Phase 5, the bible and the cast (2026-11-11, branch `bible-1`).** [`bible.md`](../living/seeds/worlds/cullet/bible.md) and [`cast.json`](../living/seeds/worlds/cullet/cast.json): the 64 residents of §3 in 22 households, each household on its plan lot, each person with §3's want and what is going on as anchors, kin both ways, ties, a starting rhythm, and the secrets on their knowers' entries only; 20 situations with every side's view, and the 11 tensions. `author_world.py cullet --check` checks them without a model, and `--dry-run` builds the 22 prompts and estimates the paid run (53 calls with DeepSeek V4.1 Flash, about €0.16 to €0.39); no sheets are drafted yet ([authored worlds](AUTHORED_WORLDS.md#cullet-cullet-cast-by-hand-with-anchors)). To fill kin, the bible adds the fever winter six years ago and a few family links that §3 does not give; the owner reviews them before the run.
+
 **What could stop it:**
 
 - **The authored plan** (phase 2) is the largest unknown. The planner generates settlements, and nothing today reads a hand-made layout. `SeedTown.buildings` is the nearest existing hook.
@@ -734,3 +744,17 @@ Each phase ends with something the owner can look at. "Touches" names what chang
 | 12 | The A/B: is the brief right, and will the owner score it blind? | Run it as written |
 | 13 | Fog of war: which option to try first | A (soft edge), then B as a slider |
 | 14 | Does Cullet replace the island as the game's test world? | Yes. The island stays for the labs. |
+
+### The owner's answers (2026-11-11)
+
+Given through the general coordinator. The owner's words on the recommendations: "I kind of agree with the recommendations". So they are accepted, and anything that turns out wrong in practice is raised again.
+
+| # | Answer |
+|---|---|
+| 1, 3, 4, 5, 7, 8, 9, 10, 11, 14 | Accepted as recommended. For 9: goods and fuel now, decay and tide later. For 11: each paid run is authorised when its phase is reached, through the general coordinator. |
+| 2 | **Decided after the spike (2026-11-11): replace VRoid with our own generator.** The spike's `living/tools/blender/person.py` built an adult man, a woman, an elder and children, all with no VRoid base. The owner's words: "It's a solid start, but we can and should do much better. I would like to get to a point where we can generate and parameterize characters that are similar quality to what we currently have." So the bar is VRoid's quality close up, not only at the game camera, from a parameterized tool of our own: age, build, sex, face, hair and outfit, with a seed giving a repeatable person. This follows AGENTS.md's "Build tools we own". The work runs as its own track on Fable 5.2, in passes the owner judges by looking, ours beside a VRoid control. The order is faces (quality and variety), then hair, then women's silhouettes and outfits, then cloth and hands. Spring bones, outfit slots, level of detail and crowd frame cost come later; crowd cost is measured before Cullet's 64 are built with it. Pass 1 (faces and the parameter model) is done on `char-2`: [Characters](CHARACTERS.md) has the generator's parameters, commands and what is still weak. |
+| 6 | Accepted with a requirement. The distances stand as Cullet's law values: 48 m by day, 14 m in the dark, 28 m in lamplight, names at 24 m. What the screen shows of the ground and what it shows of people must agree; today you see the whole place clearly while people pop in and out. Sight stays as law values, so it can change without code. Longer sight wakes more minds, so it is measured at 64 residents before the values are called settled. |
+| 12 | Fable 5.2 builds the asset kit, starting from the Fable arm (branch `ab-arm1`). The owner liked Fable's results more in general. That is a general preference; no sheet-by-sheet scores were given. The Opus arm (`ab-arm2`) is kept for the record. |
+| 13 | Replaced. How the view shows the edge of sight is being prototyped in the client for the owner's next play-test. What the owner picks there replaces options A to D. |
+
+**Decisions 4 and 5 against the current rules.** Section 4's "Now" column was written before the change that paces people's needs to real time (`person_pace` 0.3 in `skills.rhai`, on the island's 12-minute day). With that law, hunger already rises about 1.2 a real minute, not 5. Phase 4 derives Cullet's law values again from the current script, for a 48-minute day, and keeps the outcomes in the targets table. Where the two differ, it records which it chose. Done on `rules-1`: [Cullet's rules](CULLET_RULES.md) has the law table, the outcomes computed from the script, and the choices.

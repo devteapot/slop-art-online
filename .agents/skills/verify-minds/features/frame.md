@@ -13,6 +13,7 @@ Offline (`cargo test -p living-mind --bin living-mind prompts::`, run by the sui
 - `frame_parses`: unset, empty and `character` are the character frame; `player` the player frame; anything else (`Player`, `npc`) an error.
 - `character_frame_is_the_default_and_unchanged`: without `LIVING_FRAME` the production prompts equal the character frame's; each of the four opens with its old first sentence and carries nothing of the player frame.
 - `player_frame_changes_only_the_opening`: under `player` each of the four opens with `PLAYER_FRAME`; replacing the opening with the old sentence gives the character frame's prompt byte for byte; user messages are identical.
+- `player_frame_and_projects_compose`: with `LIVING_PROJECTS` on too, the frame replaces only the opening (both-on minus the frame opening is projects alone) and the projects text, `serves` and `# Your projects` stay (both-on minus the projects text is the frame alone); prefixes still shared.
 - `player_frame_is_short_and_prescribes_nothing`: at most 80 words, no goals, activities, advice or survival ranking; it states who plays, what is real, the free choice and in-character speech.
 - `*_shares_prefix` run the four framed prompts under both frames: the system prompt and shared user head stay identical across characters (provider caching).
 - `export_prompt_fixtures` writes `<purpose>-person-<name>-player.json` beside the character fixtures. Byte identity of the character frame with the prompts before the switch was shown by exporting all 26 fixtures before and after the change (2026-11-11).

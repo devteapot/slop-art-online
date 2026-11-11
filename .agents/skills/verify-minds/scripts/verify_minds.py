@@ -20,12 +20,18 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
-         'frame')
+         'takeover', 'sight', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
+         'death-names', 'frame')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
-OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain)
-UNWALKABLE = {2, 4, 7}      # water, rock, wall
+OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
+UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
+DROP, LOW = 8, 9
+# How a scene tells a mind of a drop and of a low thing (living_rules::map::Terrain::words and
+# ::passage, written by the authority's perceive::scene_json under `terrain_near`).
+TERRAIN_WORDS = {DROP: 'a drop to ground at another level (stairs, ramps and roads join the levels)',
+                 LOW: 'something low or open in the way, such as a cart, a low wall or an open stall'}
+SEE_PAST = 'you can see past it but not walk through it'
 
 
 class Run(shared.Run):
@@ -104,6 +110,74 @@ def wall_spots(run):
     raise RuntimeError('no wall geometry on this map')
 
 
+def across_spots(info, between):
+    """Two walkable tiles 2 to 5 apart on one axis with only tiles of class `between` between them
+    (within even night sight, 6 tiles)."""
+    w, h, tiles = info
+    at = lambda x, y: tiles[y * w + x] if 0 <= x < w and 0 <= y < h else 4
+    walk = lambda x, y: at(x, y) not in UNWALKABLE
+    for y in range(5, h - 5):
+        for x in range(5, w - 5):
+            if not walk(x, y):
+                continue
+            for dx, dy in [(1, 0), (0, 1)]:
+                for gap in (1, 2, 3, 4):
+                    bx, by = x + (gap + 1) * dx, y + (gap + 1) * dy
+                    if walk(bx, by) and all(at(x + i * dx, y + i * dy) == between for i in range(1, gap + 1)):
+                        return {'eye': (x + .5, y + .5), 'across': (bx + .5, by + .5), 'gap': gap}
+    raise RuntimeError(f'no walkable ground on both sides of tiles of class {between}')
+
+
+def scene_sent(sent):
+    """The scene in a prompt the model was sent (one line of JSON under its heading)."""
+    m = re.search(r'# (?:What you perceive right now|Around you now)\n(\{.*\})\n', sent)
+    return json.loads(m.group(1)) if m else None
+
+
+def drop_case(run):
+    """A mind is told of a drop and of a low thing in words that say what they are and that
+    one sees past them but cannot walk through them (`terrain_near`), and sees the creature on
+    the other side, on the island (terraced towns' drops, carts and other low things)."""
+    target = ROOT / '.local/living/target-resident-island'
+    run.harness('launch', '--seed', 'island', '--target-dir', str(target))
+    run.harness('doctor')
+    world = run.sql('SELECT * FROM world', 'world')[0]
+    people = [p['id'] for p in sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id'])
+              if p['ai'] and p['alive'] and p['stage'] == 2 and p['controller'] == world['admin']][:3]
+    assert len(people) == 3, people
+    eye, across, past_low = people
+    info = terrain(run)
+    spots = {'drop': across_spots(info, DROP), 'low': across_spots(info, LOW)}
+    (run.directory / 'spots.json').write_text(json.dumps(spots, indent=2))
+    for who in people:
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    run.start(models, [eye], seed='island')
+    told = {}
+    for n, (name, cls, other) in enumerate((('drop', DROP, across), ('low', LOW, past_low))):
+        run.admin('place_at', eye, *spots[name]['eye'])
+        run.admin('place_at', other, *spots[name]['across'])
+        time.sleep(1.0)
+        run.admin('set_behavior', eye, json.dumps({'think': 'I finished my plan. verify ' + name}))
+        request = run.wait(lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl')
+                                    if e['purpose'] in ('think', 'deliberate') and ('verify ' + name) in json.dumps(e['body'])],
+                           f'the {name} scene sent to the model', 60)[0]
+        sent = '\n'.join(str(m.get('content', '')) for m in request['body'].get('messages', []))
+        (run.directory / f'sent-prompt-{name}.txt').write_text(sent)
+        scene = scene_sent(sent)
+        assert scene, f'no scene in the {name} prompt'
+        (run.directory / f'scene-{name}.json').write_text(json.dumps(scene, indent=2))
+        near = scene.get('terrain_near', {}).get(name)
+        assert near and TERRAIN_WORDS[cls] in near and SEE_PAST in near, (name, scene.get('terrain_near'))
+        ids = [c['id'] for c in scene.get('creatures', [])]
+        assert other in ids, (f'the one across the {name} is seen', ids)
+        told[name] = {'terrain_near': near, 'seen_across': other, 'gap_tiles': spots[name]['gap']}
+        # Let the mind's answer install before the next scene.
+        time.sleep(3.0)
+    return {'status': 'pass', 'told': told}
+
+
 def run_case(run, case):
     if case in ('animals', 'night', 'jev'):
         return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
@@ -115,6 +189,10 @@ def run_case(run, case):
         return dealings_case(run)
     if case == 'sight':
         return sight_case(run)
+    if case == 'drop':
+        return drop_case(run)
+    if case == 'death-names':
+        return death_names_case(run)
     if case == 'resident':
         return resident_case(run)
     if case == 'parked':
@@ -538,6 +616,92 @@ def sight_case(run):
     assert any(e['subject'] == third for e in deaths) and not any(e['subject'] == other for e in deaths), deaths
     return {'status': 'pass', 'scene_ids': ids, 'witnessed': [e['text'] for e in deaths],
             'hidden': names.get(other), 'open': names.get(third)}
+
+
+def death_names_case(run):
+    """A community member killed in view of a mind's character, who shares the community and
+    feels something for them: the experience the authority gives that mind names the dead, and
+    the next prompt the model is sent names them in what happened and in the relations, not as
+    "a stranger" (`die` keeps the community's names as acquaintances, `perception::remember_member`;
+    the mind's `known_as` reads them). The killer's experience reads "killed by you"; a bystander
+    who knew neither reads strangers."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 4, True)
+    made = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    assert len(made) == 4, made
+    victim, member, killer, bystander = made
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    vname = names[victim]
+    for who in made:
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    act = lambda who, node: run.admin('mind_act', who, [json.dumps(node)], 'verify-minds')
+    run.admin('place_near', member, victim)
+    act(victim, {'do': 'found', 'text': f'Verify Hollow {victim}'})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {victim}', 'victim-membership'), 'community founded', 20)
+    act(member, {'do': 'join', 'target': {'id': victim}})
+    run.wait(lambda: run.sql(f'SELECT * FROM join_request WHERE asker = {member}', 'join-request'), 'join request', 20)
+    act(victim, {'do': 'welcome', 'target': {'id': member}})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {member}', 'member-membership'), 'member welcomed', 20)
+    assert not run.sql(f'SELECT * FROM membership WHERE member = {killer} OR member = {bystander}', 'outsiders-membership')
+    # The member feels something for the victim (an authored relation), so the relations the
+    # prompt lists include the victim, named as the member knows them (`known_as`).
+    run.admin('set_background', member, json.dumps({'sheet': {'narrative': 'I keep the hollow with my neighbour.',
+        'values': ['care'], 'goals': ['keep the hollow'], 'mood': 'settled',
+        'relations': [{'id': victim, 'trust': 40, 'affinity': 50, 'label': 'neighbour'}]}}))
+    for who in (killer, bystander):
+        run.admin('place_near', who, victim)
+    time.sleep(1.0)
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    run.start(models, [member])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    asked = lambda marker: [sent_text(e) for e in requests() if f'verify {marker}' in sent_text(e)]
+    run.admin('set_behavior', member, json.dumps({'think': 'I finished my plan. verify alive'}))
+    alive_prompt = run.wait(lambda: asked('alive'), 'prompt while the victim lives', 60)[0]
+    (run.directory / 'prompt-alive.txt').write_text(alive_prompt)
+    accepted(run, member)
+    run.wait(lambda: run.sql(f'SELECT * FROM relation WHERE actor = {member} AND other = {victim}', 'relation-before'), 'authored relation', 20)
+    deliberated = time.monotonic()
+    # The victim gives in and the blows go on to death (as verify-core's death-names scene).
+    run.admin('grant_items', killer, 'spear', 1)
+    run.admin('set_behavior', victim, json.dumps({'seq': [{'do': 'yield', 'target': {'id': killer}}, {'wait': 120}]}))
+    run.wait(lambda: run.sql(f"SELECT * FROM chronicle WHERE kind = 'yield' AND a = {victim}", 'yield'), 'victim yields', 30)
+    run.admin('set_behavior', killer, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': victim}}}, {'wait': 1}]}))
+    run.wait(lambda: not run.sql(f'SELECT alive FROM character WHERE id = {victim}', 'victim-alive')[0]['alive'], 'victim dead', 90)
+    run.admin('set_behavior', killer, json.dumps({'wait': 120}))
+    dead = run.sql(f'SELECT * FROM character WHERE id = {victim}', 'killed')[0]
+    known = run.private(f'SELECT * FROM acquaintance WHERE known = {victim}', 'acquaintance-after')
+    deaths = {w: run.wait(lambda w=w: [e['text'] for e in run.private(f'SELECT * FROM experience WHERE observer = {w}', f'experiences-{w}')
+                                       if e['kind'] == 'death' and e['subject'] == victim], f'death witnessed by #{w}', 20)
+              for w in (member, killer, bystander)}
+    # A person's mind is asked again only after its think_min_s (20 s) unless urgent.
+    time.sleep(max(0.0, 21 - (time.monotonic() - deliberated)))
+    run.admin('set_behavior', member, json.dumps({'think': 'I finished my plan. verify after-death'}))
+    after_prompt = run.wait(lambda: asked('after-death'), 'prompt after the death', 60)[0]
+    (run.directory / 'prompt-after-death.txt').write_text(after_prompt)
+    lines = lambda text, words: [l for l in text.split('\n') if words in l]
+    texts = {'victim': vname, 'killer': names[killer], 'cause': dead['cause'],
+             'acquaintance_observers': sorted(r['observer'] for r in known),
+             'death': {'member': deaths[member], 'killer': deaths[killer], 'bystander': deaths[bystander]},
+             'prompt_alive': {'relation': lines(alive_prompt, f'(#{victim})')},
+             'prompt_after_death': {'relation': lines(after_prompt, f'(#{victim})'), 'death': lines(after_prompt, 'was killed by')}}
+    (run.directory / 'death-names.json').write_text(json.dumps(texts, indent=2))
+    checks = {
+        'member_keeps_name': sorted(r['observer'] for r in known) == [member],
+        'member_death_names_victim': any(t.startswith(f'{vname} was killed by') for t in deaths[member]),
+        'killer_reads_you': any('was killed by you' in t for t in deaths[killer]) and not any(names[killer] in t for t in deaths[killer]),
+        'bystander_reads_strangers': any(t.startswith('A stranger was killed by a stranger') for t in deaths[bystander]),
+        'prompt_alive_names_relation': f'{vname} (#{victim})' in alive_prompt,
+        'prompt_after_names_relation': f'{vname} (#{victim})' in after_prompt and f'a stranger (#{victim})' not in after_prompt,
+        'prompt_after_names_death': any(f'{vname} was killed by' in l and f'{vname}=#{victim}' in l for l in lines(after_prompt, 'was killed by')),
+    }
+    texts['checks'] = checks
+    (run.directory / 'death-names.json').write_text(json.dumps(texts, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **texts}
 
 
 def animals_case(run):

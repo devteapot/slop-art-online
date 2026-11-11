@@ -51,7 +51,7 @@ pub struct Last {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, mut last: Local<Last>) {
+pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSendMut<Net>, scene: NonSend<Scene>, cam: Res<Cam>, mut input: ResMut<Input>, target: Res<Target>, size: Res<crate::bodies::MySize>, sight: Res<crate::sight::Sight>, island: Option<Res<crate::island::Island>>, live: Res<crate::live::Live>, combat: Res<crate::combat::Combat>, cards: Res<crate::combat::Cards>, town: Res<crate::town::Town>, (talk, looks): (Option<Res<crate::talk::Talk>>, Res<crate::looks::Looks>), mut last: Local<Last>) {
     let now_ms = scene.now_ms;
     let now = now_ms / 1000.0;
     model.shown = true;
@@ -59,8 +59,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.hint = None;
 
     // Requests from the UI.
-    for line in out.say.drain(..) {
-        if controls::say(&net, &line) {
+    for (line, to) in out.say.drain(..) {
+        if controls::say(&net, &line, to) {
             input.said.push((now_ms as u64, line.trim().to_string()));
         }
     }
@@ -148,8 +148,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         let name = mine.get(&id).map_or(net.name.clone(), |c| c.name.clone());
         Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, statuses, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
     });
-    let hostile_id = vit.as_ref().filter(|v| v.hurt_by != 0 && (now_ms - v.hurt_ms as f64) < 15_000.0).map(|v| v.hurt_by);
-    let hostile = |id: u32| hostile_id == Some(id) || me.is_some_and(|m| crate::combat::hostile(conn, id, m));
+    let hostile = |id: u32| me.is_some_and(|m| crate::combat::hostile_to_me(conn, id, m, now_ms));
     // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
     // Exact where I perceive it exactly (my look at them, an appraisal), else the band.
     let band = |id: u32| match chars.get(&id).filter(|c| c.hp >= 0.0 && c.max_hp > 0.0) {
@@ -169,7 +168,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     let mut heard: Vec<Experience> = last.heard.values().cloned().collect();
     heard.sort_by_key(|e| e.at_ms);
     let talking: Vec<u32> = heard.iter().filter(|e| now_ms - (e.at_ms as f64) < 8_000.0).map(|e| e.subject).collect();
-    let name_of = |id: u32| chars.get(&id).map_or_else(|| "Someone".to_string(), |c| c.label.clone());
+    // How I name them: the rules' name, else their looks (`looks.rs`).
+    let name_of = |id: u32| looks.of(id).map(String::from).or_else(|| chars.get(&id).map(|c| c.label.clone())).unwrap_or_else(|| "Someone".to_string());
     let mut log: Vec<LogLine> = heard
         .iter()
         .map(|e| LogLine { at: e.at_ms as f64 / 1000.0, who: name_of(e.subject), text: quoted(&e.text).to_string(), kind: if e.text.contains(" said to you:") { LogKind::ToMe } else { LogKind::Heard } })
@@ -206,7 +206,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         let hostile = hostile(*id);
         actors.push(Actor {
             id: *id as u64,
-            name: c.label.clone(),
+            name: name_of(*id),
             head: head(*id, *p, &c.kind),
             distance,
             hovered: near_cursor < 1.2,
@@ -217,10 +217,13 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             hp: band(*id),
             // The projection carries exact health for others only while an appraisal holds.
             exact: (c.hp >= 0.0 && c.max_hp > 0.0).then_some((c.hp, c.max_hp)),
+            kind_person: c.kind == "person",
         });
     }
-    // Targeted skills go to the creature under or nearest the cursor (`combat.rs` picks it).
-    let target_id = combat.target;
+    // Targeted skills go to the creature under or nearest the cursor (`combat.rs` picks it);
+    // while the text box is open, the target shown is whom it speaks to (`talk.rs`).
+    let speaking_to = talk.as_ref().filter(|_| input.chat_open).and_then(|t| t.to);
+    let target_id = speaking_to.or(combat.target);
     for a in &mut actors {
         a.targeted = Some(a.id as u32) == target_id;
     }
@@ -234,7 +237,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         } else {
             None
         };
-        let name = if c.kind != "person" && !c.name.is_empty() { format!("{} the {}", c.name, c.kind) } else { c.label.clone() };
+        // Capitalised, as everywhere a label starts a line (talk-1 left the target's lower case).
+        let name = super::label(&if c.kind != "person" && !c.name.is_empty() { format!("{} the {}", c.name, c.kind) } else { name_of(id) });
         Some(TargetInfo { name, doing, hp: band(id), stance: a.stance, distance: a.distance })
     });
 
@@ -309,13 +313,11 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         })
         .collect();
 
-    // Compass: my known places.
-    model.map = MapInfo {
-        me: my_pos.map(|p| Vec2::new(p.x, p.z)),
-        facing: input.look,
-        yaw: cam.shown_yaw,
-        pois: me.map(|id| conn.db.my_places().iter().filter(|p| p.actor == id).map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect()).unwrap_or_default(),
-    };
+    // Compass: my known places, and the nearest of them names where I am (`ui/top.rs`).
+    let places: Vec<Place> = me.map(|id| conn.db.my_places().iter().filter(|p| p.actor == id).collect()).unwrap_or_default();
+    let here = my_pos.map(|p| Vec2::new(p.x, p.z));
+    let place = here.and_then(|h| places.iter().map(|p| (p, Vec2::new(p.x, p.y).distance(h))).filter(|(p, d)| *d <= super::top::PLACE_M && !p.name.trim().is_empty()).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(p, _)| super::label(&super::wood::readable(p.name.trim()))));
+    model.map = MapInfo { me: here, facing: input.facing(), yaw: cam.shown_yaw, pois: places.iter().map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect(), place };
 }
 
 /// The keys of the bar, slot by slot (the rules' `skill_bar()` order).

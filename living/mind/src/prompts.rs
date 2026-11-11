@@ -138,7 +138,7 @@ fn compiled() -> Option<Arc<living_rules::script::Scripts>> {
                 return Some(s.clone());
             }
         }
-        let s = Arc::new(living_rules::script::Scripts::new(&src).ok()?);
+        let s = Arc::new(living_rules::script::Scripts::with_day(&src, day_ms()).ok()?);
         *c.borrow_mut() = Some((rev, s.clone()));
         Some(s)
     })
@@ -160,6 +160,19 @@ pub fn talk_acts() -> String {
     living_rules::catalog::skills().iter().filter(|s| s.talk && !TALK_SHOWN.contains(&s.name.as_str())).map(living_rules::catalog::skill_line).collect::<Vec<_>>().join("\n")
 }
 
+/// The world's day in real milliseconds (its `world` row; the shipped 12 minutes until read).
+/// The rules read it for laws written per game hour and for the calendar's words. It is set when
+/// the world is created and never changes after, so a rules revision's text holds it.
+static DAY_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(living_rules::DEFAULT_DAY_MS);
+
+pub fn set_day_ms(day_ms: u64) {
+    DAY_MS.store(day_ms.max(1), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn day_ms() -> u64 {
+    DAY_MS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// What each combat skill is under the world's rule script (`<skill>_combat()`): which skills
 /// are real-time behavior rather than acts.
 static SHAPES: std::sync::RwLock<Option<Arc<living_rules::combat::Shapes>>> = std::sync::RwLock::new(None);
@@ -170,7 +183,7 @@ pub fn set_rules(revision: u32, source: &str) {
     if *RULES_REV.read().unwrap() == Some(revision) {
         return;
     }
-    match living_rules::script::Scripts::new(source) {
+    match living_rules::script::Scripts::with_day(source, day_ms()) {
         Ok(s) => {
             log::info!("rules revision {revision}: {} skills", s.skills().len());
             living_rules::catalog::set_skills(s.skills().clone());
@@ -405,10 +418,11 @@ pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2],
 /// the choices of a life: in replays of real moments, 2 in 12 minds acted on a longing for a
 /// child with the grammar in view, 11 in 12 without it).
 pub fn think_system() -> String {
-    think_system_in(frame())
+    think_system_in(frame(), crate::mind::projects::enabled())
 }
 
-fn think_system_in(frame: Frame) -> String {
+/// The think system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
+fn think_system_in(frame: Frame, projects: bool) -> String {
     shared(format!(
         "{} Stay in character: your personality, values, relationships and memories are yours, \
 and they may change through what you live. Start from why you are thinking now: that is what this moment of thought is about. \
@@ -422,16 +436,37 @@ Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 s
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
 \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
-\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering)}}",
+\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}}}",
         opening(frame, THINK_OPENING),
-        world_rules()
+        world_rules(),
+        if projects { THINK_PROJECTS } else { "" }
     ))
 }
 
-pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str) -> String {
+/// What a deliberation is told of projects (`LIVING_PROJECTS=1`), and the reply field naming
+/// the one a decision serves. Says what a project is, never what to want.
+const THINK_PROJECTS: &str = ", \"serves\": \"the key of the project under # Your projects that this decision works toward, or null\"";
+
+/// What consolidation is told of projects (`LIVING_PROJECTS=1`). Says what a project is and how
+/// to keep it, never what to want.
+const CONSOLIDATE_PROJECTS: &str = "\n\nPROJECTS (# Your projects): what the person has set out to achieve over days, in their own words. \
+They are the person's own, from who they are and what they have lived; nobody gives them one. When the person sets out on something, \
+take it up; as it moves, revise its progress and next step; when it is achieved or given up, end it. A person pursues a few at a time \
+(at most 3); one never taken up again fades. Optional reply field: \"projects\": [{\"key\": \"project:<slug>\", \"aim\": \"...\", \
+\"progress\": \"...\", \"next_step\": \"...\", \"because\": [experience ids]}, {\"key\": ..., \"ended\": \"done|dropped\", \"why\": \"...\"}].";
+
+/// The projects section of a prompt (empty with the switch off).
+fn projects_section(out: &mut Segments, projects: &str) {
+    if !projects.is_empty() {
+        out.push(Stability::Character, format!("\n# Your projects (what you have set out to achieve; key: aim)\n{projects}"));
+    }
+}
+
+pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, projects: &str) -> String {
     let mut out = Segments::default();
     common(c, &mut out);
     out.push(Stability::Character, format!("\n# Your habits (your body keeps to them)\n{habits}\n"));
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, format!("\n# Why you are thinking now\n{reason}\n\n"));
     out.push(Stability::Dynamic, "\n# Recent experiences (oldest first)\n");
     for e in &c.experiences {
@@ -473,10 +508,11 @@ or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to 
 }
 
 pub fn consolidate_system() -> String {
-    consolidate_system_in(frame())
+    consolidate_system_in(frame(), crate::mind::projects::enabled())
 }
 
-fn consolidate_system_in(frame: Frame) -> String {
+/// The consolidation system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
+fn consolidate_system_in(frame: Frame, projects: bool) -> String {
     shared(format!(
         "{} \
 You keep the person's mind as a graph that you shape freely: concepts (people, places, things, ideas, plans, fears, customs, promises...) \
@@ -491,7 +527,7 @@ History is kept automatically. Keep as memories only the \
 few experiences the person would still remember tomorrow (at most 3, often none), each with a gist in the person's own words{}. Identity (narrative, values, goals, traits 0-100, \
 mood) changes only when experiences genuinely warrant it; otherwise identity is null. When it changes, it follows the life the person has lived: goals and values \
 grow out of what they did, tried, met and went through, and name the people, places and things in that life they are about; a feeling that comes and goes \
-(restlessness, loneliness, a longing) is felt, and belongs to mood and memory until the person's life gives it someone or something to turn to.\n\n{}\n\n\
+(restlessness, loneliness, a longing) is felt, and belongs to mood and memory until the person's life gives it someone or something to turn to.{}\n\n{}\n\n\
 KEYS: anchors connect your mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \"kind:<wolf|deer|berry_bush|campfire|...>\", \
 \"know:<technique>\" (the technique itself, e.g. \"know:cooking\"). \
 Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\"). Reuse existing keys shown in your mind.\n\
@@ -513,6 +549,7 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
         opening(frame, CONSOLIDATE_OPENING),
         if lessons() { LESSON } else { "" },
+        if projects { CONSOLIDATE_PROJECTS } else { "" },
         world_rules()
     ))
 }
@@ -578,14 +615,19 @@ better connected mind that still contains everything the person cares about. Anc
 Reply with ONE JSON object: {{\"summary\": \"how the person's understanding settled (1-2 sentences)\", \
 \"merge\": [{{\"from\": key, \"into\": key}}], \"nodes\": [{{\"key\": ..., \"labels\": [...], \"name\": ..., \"props\": {{...}}}}], \
 \"edges\": [{{\"from\": key, \"rel\": \"...\", \"to\": key, \"confidence\": 0.0-1.0, \"because\": [experience ids from the edges you generalize]}}], \
-\"retract\": [{{\"from\": key, \"rel\": \"...\", \"to\": key}}], \"judgments\": [{{\"key\": ..., \"value\": 0.0-1.0, \"why\": ...}}]}}"
+\"retract\": [{{\"from\": key, \"rel\": \"...\", \"to\": key}}], \"judgments\": [{{\"key\": ..., \"value\": 0.0-1.0, \"why\": ...}}]{}}}",
+        if crate::mind::projects::enabled() { REORGANIZE_PROJECTS } else { "" }
     ))
 }
 
-pub fn reorganize_user(name: &str, persona: &str, concepts: &[String], edges: &[String]) -> String {
+/// The reorganization may revise, merge or end projects too (`LIVING_PROJECTS=1`).
+const REORGANIZE_PROJECTS: &str = ", \"projects\": [as # Your projects shows them, revised: {\"key\", \"aim\", \"progress\", \"next_step\"}, or ended: {\"key\", \"ended\": \"done|dropped\", \"why\"}] (optional; the person's own aims, kept, merged or ended as their life shows)";
+
+pub fn reorganize_user(name: &str, persona: &str, concepts: &[String], edges: &[String], projects: &str) -> String {
     let mut out = Segments::default();
     out.push(Stability::Shared, "Respond with the JSON object.\n\n");
     out.push(Stability::Character, format!("# Who you are\n{name}\n{persona}\n"));
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, "\n# Your concepts (key \"name\" [labels] {properties} — links)\n");
     for c in concepts {
         out.push(Stability::Dynamic, format!("- {c}\n"));
@@ -726,9 +768,10 @@ pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, re
     out
 }
 
-pub fn consolidate_user(c: &Ctx) -> String {
+pub fn consolidate_user(c: &Ctx, projects: &str) -> String {
     let mut out = Segments::default();
     common(c, &mut out);
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, "\n# New experiences to integrate (oldest first; [experience id] time text)\n");
     for e in &c.experiences {
         out.push(Stability::Dynamic, format!("- {e}\n"));
@@ -1013,6 +1056,13 @@ mod tests {
     }
 
     fn fixture_in(purpose: &str, name: &str, kind: &str, frame: Frame) -> (String, String) {
+        fixture_with(purpose, name, kind, frame, false)
+    }
+
+    /// A fixture under a frame, with projects (`LIVING_PROJECTS`) on or off: on, the think and
+    /// consolidation system prompts carry the projects text and their user messages a project.
+    fn fixture_with(purpose: &str, name: &str, kind: &str, frame: Frame, projects: bool) -> (String, String) {
+        let project_lines = if projects { "project:river_camp: a camp by the river (begun day 2)\n" } else { "" };
         static WORLD: std::sync::Once = std::sync::Once::new();
         WORLD.call_once(|| {
             let seed: serde_json::Value = serde_json::from_str(include_str!("../../seeds/world.json")).unwrap();
@@ -1030,10 +1080,10 @@ mod tests {
         });
         let c = context(name);
         match purpose {
-            "think" => (think_system_in(frame), think_user(&c, "dynamic-scene", "dynamic-plan", "dynamic-reason", "habit")),
+            "think" => (think_system_in(frame, projects), think_user(&c, "dynamic-scene", "dynamic-plan", "dynamic-reason", "habit", project_lines)),
             "deliberate" => (deliberate_system_in(frame), compile_user("dynamic-decision", deliberate_user(&c, "dynamic-scene", "dynamic-outline", "dynamic-plan", "dynamic-reason", "routine"))),
-            "consolidate" => (consolidate_system_in(frame), consolidate_user(&c)),
-            "reorganize" => (reorganize_system(), reorganize_user(name, &c.persona, &["dynamic-concept".into()], &["dynamic-edge".into()])),
+            "consolidate" => (consolidate_system_in(frame, projects), consolidate_user(&c, project_lines)),
+            "reorganize" => (reorganize_system(), reorganize_user(name, &c.persona, &["dynamic-concept".into()], &["dynamic-edge".into()], "")),
             "identity" => (identity_system(), identity_user(name, 42, &["fire".into()], &serde_json::json!({"town": "fixture"}), Some(&serde_json::json!({"caution": 40})))),
             "birth_identity" => (birth_identity_system(), birth_identity_user(name, 42, [("Parent A", 3, "kind"), ("Parent B", 4, "gentle")], Some(&serde_json::json!({"caution": 40})))),
             "talk" => (
@@ -1068,7 +1118,7 @@ mod tests {
                             animal_compile_user(name, kind, "dynamic-impulse", "dynamic-feeling", "dynamic-scene", "dynamic-outline", "routine"),
                         )
                     }
-                    _ => (animal_consolidate_system(kind, &sp.nature), consolidate_user(&c)),
+                    _ => (animal_consolidate_system(kind, &sp.nature), consolidate_user(&c, "")),
                 }
             }
             _ => panic!("unknown purpose {purpose}"),
@@ -1086,8 +1136,12 @@ mod tests {
     const FRAMED: [&str; 4] = ["think", "deliberate", "consolidate", "talk"];
 
     fn assert_prefix_in(purpose: &str, kind: &str, frame: Frame) {
-        let (system_a, user_a) = fixture_in(purpose, "Aria", kind, frame);
-        let (system_b, user_b) = fixture_in(purpose, "Zora", kind, frame);
+        assert_prefix_with(purpose, kind, frame, false)
+    }
+
+    fn assert_prefix_with(purpose: &str, kind: &str, frame: Frame, projects: bool) {
+        let (system_a, user_a) = fixture_with(purpose, "Aria", kind, frame, projects);
+        let (system_b, user_b) = fixture_with(purpose, "Zora", kind, frame, projects);
         assert_eq!(system_a.as_bytes(), system_b.as_bytes());
         assert!(!system_a.contains("Aria") && !system_a.contains("Zora"));
         let a = format!("{system_a}\n{user_a}");
@@ -1177,12 +1231,12 @@ mod tests {
     /// checked by exporting every fixture before and after, `export_prompt_fixtures`.)
     #[test]
     fn character_frame_is_the_default_and_unchanged() {
-        if std::env::var_os("LIVING_FRAME").is_none() {
+        if std::env::var_os("LIVING_FRAME").is_none() && std::env::var_os("LIVING_PROJECTS").is_none() {
             assert_eq!(frame(), Frame::Character);
             fixture("think", "Aria", "person");
-            assert_eq!(think_system(), think_system_in(Frame::Character));
+            assert_eq!(think_system(), think_system_in(Frame::Character, false));
             assert_eq!(deliberate_system(), deliberate_system_in(Frame::Character));
-            assert_eq!(consolidate_system(), consolidate_system_in(Frame::Character));
+            assert_eq!(consolidate_system(), consolidate_system_in(Frame::Character, false));
             assert_eq!(talk_system(), talk_system_in(Frame::Character));
         }
         for (purpose, first) in [
@@ -1212,6 +1266,41 @@ mod tests {
             assert_eq!(pu, cu, "{purpose}: the user message changed");
             assert_eq!(ps.replacen(&opening(Frame::Player, character_opening), character_opening, 1), cs, "{purpose}");
             assert!(ps.contains("never speak out of character"), "{purpose}");
+        }
+    }
+
+    /// `LIVING_FRAME=player` and `LIVING_PROJECTS=1` together: each does exactly what it does
+    /// alone. The frame replaces only the opening sentence; the projects text, the `serves`
+    /// field and the projects section stay as projects alone has them.
+    #[test]
+    fn player_frame_and_projects_compose() {
+        for (purpose, character_opening, projects_text) in [
+            ("think", THINK_OPENING, THINK_PROJECTS),
+            ("deliberate", THINK_OPENING, ""),
+            ("consolidate", CONSOLIDATE_OPENING, CONSOLIDATE_PROJECTS),
+            ("talk", TALK_OPENING, ""),
+        ] {
+            let (both_s, both_u) = fixture_with(purpose, "Aria", "person", Frame::Player, true);
+            let (proj_s, proj_u) = fixture_with(purpose, "Aria", "person", Frame::Character, true);
+            let (frame_s, frame_u) = fixture_with(purpose, "Aria", "person", Frame::Player, false);
+            assert!(both_s.starts_with(PLAYER_FRAME), "{purpose}");
+            // Without its frame opening, both-on is projects alone.
+            assert_eq!(both_s.replacen(&opening(Frame::Player, character_opening), character_opening, 1), proj_s, "{purpose}");
+            assert_eq!(both_u, proj_u, "{purpose}: the frame changed a user message");
+            // Without the projects text, both-on is the frame alone.
+            if !projects_text.is_empty() {
+                assert!(both_s.contains(projects_text), "{purpose}: projects text missing");
+                assert_eq!(both_s.replacen(projects_text, "", 1), frame_s, "{purpose}");
+                assert!(both_u.contains("# Your projects") && both_u.contains("project:river_camp"), "{purpose}");
+                assert!(!frame_u.contains("# Your projects"), "{purpose}");
+            } else {
+                assert_eq!(both_s, frame_s, "{purpose}");
+                assert_eq!(both_u, frame_u, "{purpose}");
+            }
+        }
+        assert!(THINK_PROJECTS.contains("\"serves\""));
+        for purpose in FRAMED {
+            assert_prefix_with(purpose, "person", Frame::Player, true);
         }
     }
 

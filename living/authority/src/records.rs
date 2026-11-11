@@ -335,7 +335,7 @@ pub fn housekeeping(ctx: &ReducerContext, now: u64) {
             // The rules are asked as its maker, or else its first character party.
             let actor = Some(r.by).filter(|b| *b != 0 && ctx.db.character().id().find(*b).is_some()).or_else(|| ps.iter().map(|(_, p)| *p).find(|p| *p < COMMUNITY).map(|p| p as u32)).unwrap_or(0);
             let other = ps.iter().map(|(_, p)| *p).find(|p| *p < COMMUNITY && *p != actor as u64).unwrap_or(0) as u32;
-            let mut c = SkillCtx { actor: crate::act::facts(ctx, actor, now), night: common::night(&common::world(ctx), now), hour: common::hour(&common::world(ctx), now), ..Default::default() };
+            let mut c = SkillCtx { actor: crate::act::facts(ctx, actor, now), night: common::night(ctx, &common::world(ctx), now), dark: common::dark(ctx, &common::world(ctx), now), hour: common::hour(&common::world(ctx), now), ..Default::default() };
             c.actor.community = community_party(ctx, actor);
             c.records = of(ctx, actor, now);
             c.record = one(ctx, r.id, actor, now);

@@ -1,0 +1,15 @@
+{
+ "extends": "hamlet",
+ "title": "The hamlet, a family needs a roof and food put by",
+ "about": "`hamlet` with two laws of `conceive_check` in skills.rhai changed (skills_patch): `conceive_food` 8 (the two partners carry at least 8 portions of food between them) and `conceive_roof` true (one stands under a shelter or in a house). The shipped values (0, false) ask neither. What one carries is what one gathered or took: the more mouths share the bushes and the fishing spots, the harder a surplus is to put by.",
+ "skills_patch": {
+  "conceive_food": [
+   "fn conceive_food() { 0 }",
+   "fn conceive_food() { 8 }"
+  ],
+  "conceive_roof": [
+   "fn conceive_roof() { false }",
+   "fn conceive_roof() { true }"
+  ]
+ }
+}

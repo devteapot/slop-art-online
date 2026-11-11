@@ -78,7 +78,7 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
     let r = crate::perception::widest_sight(ctx, &w, now);
     for (c, d) in minds_near(ctx, at, r, now, exclude) {
         let Some(eye) = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)) else { continue };
-        if !crate::perception::in_sight(&map, eye, at, d, common::sight_for(ctx, c.id, &w, now)) {
+        if !crate::perception::in_sight(&map, eye, at, d, common::sight_to(ctx, common::sight_for(ctx, c.id, &w, now), subject, &w, now)) {
             continue;
         }
         // How this onlooker refers to the two (each projected once; the template's first `{a}`
@@ -87,12 +87,20 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
         let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
         let a = named.next().unwrap_or_default();
         let b = named.next().unwrap_or_default();
-        let first = if template.starts_with("{a}") { common::capitalized(&a) } else { a.clone() };
-        let text = template.replacen("{a}", &first, 1).replace("{a}", &a).replace("{b}", &b);
+        let text = rendered(template, &a, &b, object != 0 && c.id == object);
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);
     }
+}
+
+/// A witnessed event's words for one onlooker: `{a}` and `{b}` become `a` and `b` (the first
+/// `{a}` capitalized when it begins the sentence). The one it was done to reads it as done to
+/// them: "was killed by you", "from your storage", not their own name in the third person.
+fn rendered(template: &str, a: &str, b: &str, to_object: bool) -> String {
+    let t = if to_object { template.replace("{b}'s", "your").replace("{b}", "you") } else { template.to_string() };
+    let first = if t.starts_with("{a}") { common::capitalized(a) } else { a.to_string() };
+    t.replacen("{a}", &first, 1).replace("{a}", a).replace("{b}", b)
 }
 
 /// A species signal: heard by every mind within the signal's range.
@@ -255,6 +263,14 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     Ok("made a baby crying".into())
 }
 
+/// The shortest gap between two lines one speaker says (ms).
+pub const SPEAK_GAP_MS: u64 = 2_000;
+
+/// Whether `speaker` must still wait before its next line (the speaking limit in `speak`).
+pub fn too_soon_to_speak(ctx: &ReducerContext, speaker: u32, now: u64) -> bool {
+    ctx.db.mind_state().id().find(speaker).is_some_and(|st| now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS)
+}
+
 pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
@@ -264,7 +280,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, now: u64) 
     let Some(me) = ctx.db.character().id().find(speaker) else { return Err("no speaker".into()) };
     let Some(b) = ctx.db.body().id().find(speaker) else { return Err("no body".into()) };
     if let Some(mut st) = ctx.db.mind_state().id().find(speaker) {
-        if now.saturating_sub(st.spoke_ms) < 2_000 {
+        if now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS {
             return Err("speaking too fast".into());
         }
         st.spoke_ms = now;
@@ -515,12 +531,13 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let hour = common::hour(&w, now);
     let r = common::sight_for(ctx, id, &w, now);
-    let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": living_rules::is_night(hour), "season": common::season(ctx, now), "sight": r});
+    let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": common::scripts(ctx).is_night(hour), "season": common::season(ctx, now), "sight": r});
 
     let mut creatures = Vec::new();
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
-    for c in crate::perception::visible(ctx, id, at, r, now) {
+    let in_sight = crate::perception::visible(ctx, id, at, r, now);
+    for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
         let seen = crate::perception::project(ctx, &me, &ch, now);
         let mut o = JMap::new();
@@ -555,8 +572,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
         o.insert("dist".into(), json!(round(c.dist)));
         o.insert("dir".into(), json!(direction(at, c.pos)));
-        if let Some(a) = ctx.db.activity().id().find(c.id) {
-            o.insert("doing".into(), json!(a.label));
+        if let Some(doing) = crate::perception::doing_of(ctx, c.id, (id, &me.kind, at), &in_sight, now) {
+            o.insert("doing".into(), json!(doing));
         }
         if ch.kind == "person" {
             if let Some(s) = gave_in(c.id) {
@@ -620,7 +637,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
 
     let mut groups: Vec<(String, u32, Value)> = Vec::new();
     for (n, d) in common::resources_near(ctx, at, r) {
-        let amount = common::amount_now(ctx, &n, now).floor();
+        let amount = common::amount_now(ctx, &common::stock_of(ctx, &n), now).floor();
         if let Some(g) = groups.iter_mut().find(|g| g.0 == n.kind) {
             g.1 += 1;
             continue;
@@ -635,7 +652,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         if s.owner != 0 {
             o["by"] = json!(common::label_for(ctx, &me, s.owner));
         }
-        if s.kind == "campfire" {
+        // A fire that needs no feeding burns; one that burns fuel burns while it has fuel (what
+        // anyone near it sees: the flames, and roughly how much is left on it).
+        let sc = common::scripts(ctx);
+        let t = sc.structure(&s.kind);
+        if let Some(b) = &t.burns {
+            let (lit, fuel) = crate::act::fire_state(ctx, &s, now);
+            o["state"] = json!(if lit { format!("burning, about {:.0} hours of {} left on it", (fuel / b.rate).max(0.5), b.fuel) } else { "out".to_string() });
+        } else if t.fire() {
             o["state"] = json!("burning");
         }
         if s.kind == "sign" {
@@ -669,7 +693,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut terrain = JMap::new();
     let (tx, ty) = (at.0.floor() as i32, at.1.floor() as i32);
     let ri = r as i32;
-    for kind in [living_rules::map::Terrain::Water, living_rules::map::Terrain::Forest, living_rules::map::Terrain::Rock, living_rules::map::Terrain::Road, living_rules::map::Terrain::Wall] {
+    use living_rules::map::Terrain;
+    for kind in [Terrain::Water, Terrain::Forest, Terrain::Rock, Terrain::Road, Terrain::Wall, Terrain::Drop, Terrain::Low] {
         let mut best: Option<(f32, (f32, f32))> = None;
         for dy in -ri..=ri {
             for dx in -ri..=ri {
@@ -683,7 +708,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
         }
         if let Some((d, p)) = best {
-            terrain.insert(kind.name().into(), json!(format!("{} {:.0}", direction(at, p), d)));
+            // A class whose name does not say what it does is told in words, with how it meets
+            // the foot and the eye ("south 5, a drop to ground at another level (...): you can
+            // see past it but not walk through it").
+            let said = match kind.words() {
+                Some(w) => format!("{} {:.0}, {w}: {}", direction(at, p), d, kind.passage()),
+                None => format!("{} {:.0}", direction(at, p), d),
+            };
+            terrain.insert(kind.name().into(), json!(said));
         }
     }
 
@@ -762,5 +794,18 @@ mod tests {
         assert!(!cry_prompt_due(&cry, 2, 130_000, true));
         assert!(!cry_prompt_due(&cry, 2, 250_000, true));
         assert!(cry_prompt_due(&cry, 2, 130_000, false));
+    }
+
+    #[test]
+    fn the_one_an_event_was_done_to_reads_it_as_done_to_them() {
+        let death = "{a} was killed by {b} after yielding";
+        assert_eq!(rendered(death, "a stranger", "Bram", false), "A stranger was killed by Bram after yielding");
+        assert_eq!(rendered(death, "Edda", "a stranger", false), "Edda was killed by a stranger after yielding");
+        assert_eq!(rendered(death, "a stranger", "Bram", true), "A stranger was killed by you after yielding");
+        assert_eq!(rendered("{a} was killed by {b}", "Edda", "Bram", true), "Edda was killed by you");
+        let took = "{a} took 4 berries from {b}'s storage";
+        assert_eq!(rendered(took, "a stranger", "Bortha", false), "A stranger took 4 berries from Bortha's storage");
+        assert_eq!(rendered(took, "a stranger", "Bortha", true), "A stranger took 4 berries from your storage");
+        assert_eq!(rendered("{a} gives in, guard down and hands raised", "a child", "", false), "A child gives in, guard down and hands raised");
     }
 }

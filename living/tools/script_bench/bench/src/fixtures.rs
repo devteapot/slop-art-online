@@ -151,6 +151,7 @@ fn actor(r: &mut Rng, id: u32) -> ActorFacts {
         room: r.n(8, 25),
         community: 0,
         home: String::new(),
+        lit: false,
     }
 }
 
@@ -185,6 +186,8 @@ fn target(r: &mut Rng, actor_id: u32) -> TargetFacts {
         owner: 0,
         home: String::new(),
         hosts: false,
+        lit: false,
+        fuel: 0.0,
     }
 }
 
@@ -230,6 +233,7 @@ pub fn build() -> Fixtures {
             revealed: if r.chance(0.3) { vec!["health".into()] } else { vec![] },
             own: i == 5,
             night: r.chance(0.4),
+            dist: 0,
         });
     }
     let mut hooks = Vec::new();

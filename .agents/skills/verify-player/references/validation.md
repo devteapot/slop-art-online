@@ -1,5 +1,22 @@
 # Validation record (player)
 
+
+
+## 2026-11-11 eye-2: across a drop, unchanged (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. `drop.py` on plan-test (`player-eye2v-drop`): 6 of 6 (both see each other across one drop tile, the walk stops at the edge, the route never crosses, the arrow over the drop strikes). Plan-test's lots name no measured model, so eye-2 changes none of its tiles. Maintained: drop.md (the script reads plan-test's plan whatever the seed; the search's full conditions), comments in `combat.py` and `gesture.py` (open stalls and wells no longer hide).
+
+## 2026-11-11 drop-1: across a drop (dev-box)
+
+Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container `drop1-stdb` (2.14.1, port 3315, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no minds. Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- `player-drop1b-20261111-155119` (plan-test): `drop.py` 6 of 6: the players above (the row, 6.5 m) and below (the quay, 2.5 m), 2 m apart across one drop tile, see each other in `seen_bodies` and `seen_characters`; the one above walking straight at the drop slides 2.65 m along its edge and never stands on it or on the quay; told to go below, it walks 20.3 m by the stair and its route never crosses the drop; its arrow over the drop strikes ("struck Below: hit for 16").
+- An earlier run (`player-drop1-20261111-154955`) failed only "stops at its edge": the check wanted the player inside the row's polygon, and steering had slid it past the plan's west end into the skirt (neither level). The check is now "never on a blocked tile and never on the lower level".
+
+## 2026-11-11 goods-1 (dev-box)
+
+Own container `goods1-stdb` (port 3313), merged build (rules-1, plan-1). `player-g3-11111531`: `new_skill.py` 6 of 6 (it installs the script, now over HTTP through the harness) and `told.py` 12 of 12 pass. The player path did not change; `feed` and `make` are skills from the script like `whittle`, and are not offered in the shipped world (no fires that burn fuel, no recipes).
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
@@ -168,6 +185,10 @@ Shared container (v2.14.1), Mac checkout at `6de2bad` plus the uncommitted verbs
 Pack `game2`: start arrow 30, berries 4, bow 1; end arrow 30, berries 4 (+2 −1 −1), bow 1, spear 1, tablet 1, wood 1 (4 − 2 − 1), know-how + spear, writing. Photographs of the hint, both lists, the refusal note, the text box and both panels in `game2/shots` and `game3/shots`.
 
 Genericity: scratch authority with a throwaway `polish` (catalog line and `polish_check`/`_duration`/`_done` plus a `skill_io` entry, `throwaway-skill.diff`, never committed) on `verify-client-verbs-gen-1110-004303`; the same client binary (SHA-1 `87fefd9a…`) logged `defined only by the script: ["polish"]`, offered it on a boulder, showed it in K with its takes and gives, and the authority answered "You did what you had decided: polish → boulder (+1 stone)."
+
+## 2026-11-11, branch fix-perceived-moving (a walking player is perceived walking)
+
+Spark, the trial stack's own server (`slop-trials-stdb`, v2.14.1, :3320), worktree on `origin/main` 6a905c3 plus the change (docs/PERCEPTION.md "Activity derived from the body"). New script `approach.py`. Before the change, on island worlds built from `origin/main` (`fixperc-pre2` at 4df9a89, `fixperc-pre3` at 6a905c3 with the three authority files reverted), `--expect-wait` passed: the resident R's scene had the walking player as `"doing": "wait"`, its first sight was "For the first time you see a stranger, 11 tiles west, wait.", and the AI walking the same line read `goto → person`. After the change, on fresh island worlds (`fixperc-post4`, and `player-fixperc-1`), all 6 checks passed: the walking player read `walk → person`, R's first sight was "For the first time you see a stranger, 11 tiles west, walk → person.", the player standing read `wait`, and the AI read `goto → person`. A bystander player's `seen_bodies` held both bodies moving and its `seen_doing` no row for either. In the same `player-fixperc-1` world, `appraise.py` passed 10/10 and `gesture.py` 10/10. Earlier attempts (`fixperc-post`, `-post2`, `-post3`) show the fixture problems the script now handles: a resident on a house tile with a campfire east of it, a side with no sight line, a just-published world's late `think`, and a crowd in which strangers are not announced. Evidence: `.local/living/verify/{fixperc-pre2,fixperc-pre3,fixperc-post4,player-fixperc-1}/approach.json`.
 
 ## Not verified
 
