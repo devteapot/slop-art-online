@@ -17,11 +17,10 @@
 //! - **Jumps.** The rules' jump is a hop of `jump_dist` tiles at `jump_speed` (a person: 1.6 at
 //!   3.6 a second, about 0.44 s, [`crate::jump::AIR_S`]) the way the body moves or faces. The take
 //!   for that way plays, timed so its flight (the path's `hop`, else the longest time both feet
-//!   are up) is the hop's, from just before take-off: standing, `jump_stand`; sideways (scheme
-//!   "cursor"), `jump_left` or `jump_right`. A jump while moving along the legs keeps the
-//!   procedural jump (`jump.rs`) over the gait: `jump_forward` lands into a 1.9 m/s walk, and at
-//!   the rules' 3.6–5.7 m/s its landing slid 0.5–3 m/s, against 0.03–0.9 for the arc (a retake).
-//!   So does a backward one (`jump_back` is a retake).
+//!   are up) is the hop's, from just before take-off: standing, `jump_stand_hop` (else
+//!   `jump_stand`); sideways (scheme "cursor"), `jump_left` or `jump_right`. Jumps forward while
+//!   moving and backward hops keep the procedural jump: clips 3's `jump_forward_run` s2 landed
+//!   sliding 1.1–3.4 m/s running (the arc 0.2–0.6), and `jump_back` s49's toes went 4.2 cm under.
 //!
 //! `LIVING_GAME_TAKES=off` plays none of these, nor the directional loops (`gait.rs`): the client
 //! as it was before them, for comparisons.
@@ -43,10 +42,17 @@ const TURNS: [(&str, f32); 4] = [("turn_left_90", -90.0), ("turn_right_90", 90.0
 /// Turns play this much faster than the take (its 90° takes 1.47 s, its 180° 2 s; the cursor's
 /// upper body leads, so the legs may take their time, but not that long).
 pub const TURN_RATE: f32 = 1.3;
-/// The jump takes the clip lab's verdicts accepted: standing, left and right. `jump_forward`
-/// (its landing) and `jump_back` (through the floor) are retakes.
-const JUMP_STAND: &str = "jump_stand";
+/// The jump takes the clip lab's verdicts accepted (clips 3): standing, the small hop
+/// `jump_stand_hop` s4 (the tuck jump `jump_stand` s25 throws the arms out and draws the feet up
+/// 91 cm), else `jump_stand`; left `jump_left` s17 and right `jump_right` s25 (toes within 1.3 cm
+/// of the ground in the game). Forward while moving and backward, the procedural jump: in the
+/// game `jump_forward_run` s2's landing slid 1.1–3.4 m/s running and 0.4–0.9 walking (the arc
+/// 0.2–0.6), and `jump_back` s49's toes stayed 4.2 cm under the ground for 0.45 s (a retake, s42).
+const JUMP_STAND: [&str; 2] = ["jump_stand_hop", "jump_stand"];
 const JUMP_SIDES: [(&str, f32); 2] = [("jump_left", -90.0), ("jump_right", 90.0)];
+/// The walking stop take, and how far past its first step the gait may be for it to join (cycles).
+const STOP: &str = "walk_stop";
+pub const STOP_JOIN: f32 = 0.3;
 /// A take's flight plays at most this much faster or slower than the take.
 const RATE: (f32, f32) = (0.6, 1.6);
 /// After landing, a jump plays this long (take seconds) before it fades out: standing, into the
@@ -102,6 +108,31 @@ pub fn turned(g: &Gaits, p: &Playing, now_ms: f64) -> (f32, bool) {
     (info.turned(t / len), t >= len)
 }
 
+/// The stop take a walking body plays when the authority stops it (clips 3: `walk_stop` s14 stops
+/// within 0.26 m; `run_stop` s13 runs on 0.41 m past the stop and is left out), and its rate and
+/// where in it to start: only when the gait is at most [`STOP_JOIN`] of a cycle past the take's
+/// own first step (`start_gait`, the right heel coming down), so its first stride continues the
+/// gait's; else the gait runs on to double support and the idle fades in, as before (`anim.rs`).
+/// The rate brings the take's starting speed to the body's (m/s), within [`RATE`].
+pub fn stop_for(g: &Gaits, phase: f32, pace_speed: f32, speed: f32) -> Option<(&'static str, f32, f32)> {
+    if pace_speed > crate::gait::WALK_MAX - crate::gait::CROSS_BAND {
+        return None;
+    }
+    let info = g.info(STOP)?;
+    let (gait, start) = info.start_gait.as_ref()?;
+    let past = (phase - start).rem_euclid(1.0);
+    if past > STOP_JOIN || info.path.len() < 3 {
+        return None;
+    }
+    let cycle_s = g.gaits().iter().find(|x| x.clip == gait.as_str()).and_then(|x| x.seconds)?;
+    let from = past * cycle_s;
+    let at = (from * 30.0) as usize;
+    let p = &info.path;
+    let k = at.min(p.len() - 2);
+    let v = (p[k + 1].1 - p[k].1) * 30.0;
+    (v > 0.2).then(|| (STOP, (speed / v).clamp(RATE.0, RATE.1), from))
+}
+
 /// The jump take for a hop `rel` radians from where the legs face (the game's sense), standing or
 /// moving, timed to the rules' hop: its rate, where in the take it starts (s) and where it starts
 /// fading out (s). None: no take for it (the procedural jump plays).
@@ -111,9 +142,9 @@ pub fn jump_for(g: &Gaits, moving: bool, rel: f32) -> Option<(&'static str, f32,
         if moving {
             return None;
         }
-        JUMP_STAND
+        JUMP_STAND.into_iter().find(|c| g.info(c).is_some())?
     } else {
-        JUMP_SIDES.iter().find(|(_, d)| (deg - d).abs() < 40.0).map(|(c, _)| *c)?
+        JUMP_SIDES.iter().find(|(_, d)| ((deg - d + 540.0).rem_euclid(360.0) - 180.0).abs() < 40.0).map(|(c, _)| *c)?
     };
     let info = g.info(clip)?;
     let len = info.seconds;
@@ -153,6 +184,19 @@ mod tests {
     }
 
     #[test]
+    fn a_stop_joins_the_gait_only_near_its_first_step() {
+        let mut j = crate::gait::tests::takes_json();
+        let path: Vec<[f32; 2]> = (0..45).map(|f| [0.0, (f as f32 / 30.0 * 1.4).min(0.26 + f as f32 * 0.001)]).collect();
+        j["walk_stop"] = serde_json::json!({"seconds": 1.467, "loop": false, "start_gait": {"clip": "walk", "phase": 0.0}, "path_m": path});
+        let g = Gaits::parse(&j);
+        let (clip, rate, from) = stop_for(&g, 0.1, 1.4, 1.4).unwrap();
+        assert_eq!(clip, "walk_stop");
+        assert!((from - 0.1 * 1.033).abs() < 1e-3 && rate > 0.6, "{rate} {from}");
+        assert_eq!(stop_for(&g, 0.6, 1.4, 1.4), None, "half a cycle on: the gait settles as before");
+        assert_eq!(stop_for(&g, 0.1, 3.5, 3.5), None, "running: no take");
+    }
+
+    #[test]
     fn a_jump_takes_off_with_the_rules_hop_and_lasts_as_long() {
         let g = gaits();
         let (clip, rate, from, cut) = jump_for(&g, false, 0.1).unwrap();
@@ -162,8 +206,14 @@ mod tests {
         let flight = (0.65 - 0.37) * 1.7;
         assert!((rate - flight / crate::jump::AIR_S).abs() < 0.02, "rate {rate}");
         assert!((from - (0.37 * 1.7 - crate::jump::CROUCH_S * rate)).abs() < 0.02 && (cut - (0.65 * 1.7 + 0.3)).abs() < 0.02, "{from} {cut}");
-        assert_eq!(jump_for(&g, true, 0.0), None, "moving forward: the procedural jump");
+        assert_eq!(jump_for(&g, true, 0.0), None, "moving forward: the procedural jump (the forward takes' landings slid)");
         assert_eq!(jump_for(&g, true, 1.6).map(|j| j.0), Some("jump_right"));
-        assert_eq!(jump_for(&g, true, PI), None, "no backward take: the procedural jump");
+        assert_eq!(jump_for(&g, true, PI), None, "no backward take in this file: the procedural jump");
+        let mut j = crate::gait::tests::takes_json();
+        j["jump_back"] = serde_json::json!({"seconds": 1.7, "loop": false, "hop": [0.6, 1.044], "travel_deg": 180});
+        let with_back = Gaits::parse(&j);
+        for rel in [PI, -PI + 0.2, PI - 0.3] {
+            assert_eq!(jump_for(&with_back, true, rel), None, "at {rel}: jump_back is a retake, the procedural jump");
+        }
     }
 }

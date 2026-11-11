@@ -205,8 +205,11 @@ def draw(given=None):
     dark = tone > 0.55
     p["eyes"] = dict(colour=rnd(src if rnd(seed, "eyes.own").random() < 0.6 else seed, "eyes.colour").choices(list(EYE_COLOURS), weights=(1, 1, 1, 1, 0.5, 5, 6) if dark else (5, 3, 3, 3, 1, 4, 2))[0])
     # Hair.
+    # The weights do not depend on age: a seed keeps its hair colour as it grows up. (Until pass
+    # 3 a child's draw gave blond twice the weight, which moved every colour's share, so the same
+    # seed could change hair colour on turning 16.)
     natural = rnd(src if rnd(seed, "hair.own").random() < 0.7 else seed, "hair.colour").choices(
-        ("black", "dark_brown", "brown", "chestnut", "auburn", "sandy", "blond"), weights=(6, 5, 2, 1, 0.3, 0.1, 0.05) if dark else (2, 5, 5, 3, 2, 3, 2 if not child else 4))[0]
+        ("black", "dark_brown", "brown", "chestnut", "auburn", "sandy", "blond"), weights=(6, 5, 2, 1, 0.3, 0.1, 0.05) if dark else (2, 5, 5, 3, 2, 3, 2))[0]
     grey = clip(smooth((age - 36) / 34) + rnd(seed, "hair.grey").gauss(0, 0.16) * smooth((age - 30) / 15), 0, 1)
     recede = clip(u("hair.recede", 0.0, 1.0) ** 1.5 * smooth((age - 24) / 40) * 1.3 if male else 0.0, 0, 1)
     if child:

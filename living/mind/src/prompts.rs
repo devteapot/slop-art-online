@@ -250,11 +250,8 @@ pub fn set_world(setting: &str, w: u32, h: u32, year_days: f32, pace: f32, life:
     let _ = SIZE.set((w, h));
     let _ = LIFE.set((year_days, pace, life));
     let season_days = year_days / 4.0;
-    let seasons = format!(
-        "a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
-        year_days.round(),
-        living_rules::describe_days(season_days)
-    );
+    // What winter does to the land is the rules' (`Scripts::seasons_words`), added per revision.
+    let seasons = format!("a year is {} days — spring, summer, autumn, winter ({} each).", year_days.round(), living_rules::describe_days(season_days));
     let world = format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}; a tile is a metre).");
     let _ = WORLD_PARTS.set((world, seasons, life_line(year_days, pace, life)));
 }
@@ -295,7 +292,7 @@ pub fn world_rules() -> Arc<str> {
             life = life_line(*year_days, *pace, s.life("person", *base));
         }
     }
-    let text = rules.map(|s| s.world_text(&[("seasons", seasons), ("life", life)])).unwrap_or_default();
+    let text = rules.map(|s| s.world_text(&[("seasons", if seasons.is_empty() { seasons.clone() } else { format!("{seasons} {}", s.seasons_words()) }), ("life", life)])).unwrap_or_default();
     let full: Arc<str> = if world.is_empty() { text.into() } else { format!("{world}\n{text}").into() };
     *RULES_TEXT.write().unwrap() = Some((rev, full.clone()));
     full

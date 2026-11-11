@@ -12,7 +12,7 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 
 ## The check
 
-`just living-check` runs the five cargo commands of before and, since `tool-8`, the script fuel gate, in [`check.py`](../living/tools/check.py):
+`just living-check` runs the five cargo commands of before and, since `tool-8`, the script fuel gate, and since `fix-laws` the seed-laws test, in [`check.py`](../living/tools/check.py):
 
 | Step | Command | Lane |
 | --- | --- | --- |
@@ -21,6 +21,7 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 | `game` | `cargo build --release -p living-game` | release |
 | `viewer-wasm` | `cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer` | wasm-dev |
 | `rules-tests` | `cargo test -p living-rules` | debug |
+| `seed-laws` | `cargo test -p living-authority --lib seed::tests::a_seeds_laws_are_in_force_after_init`: every seed with its own laws has them in force after `init` | debug |
 | `script-gate` | `cargo build --manifest-path living/tools/script_bench/Cargo.toml -p sb-module --target wasm32-unknown-unknown --release --features rhai`, then `-p sb-host --bin sb-host --release --no-default-features`, then [`gate.py`](../living/tools/script_bench/gate.py) ([below](#the-script-fuel-gate)) | script-bench |
 
 Three things are new:
