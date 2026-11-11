@@ -110,6 +110,8 @@ A pass is also published through the asset board, the record of which version th
 
 - Pass 3's third step (the cage head) is their versions `20261111-26c98cc2-…`: the six presets on their types' heads beside step 1's and the control, `cast-64` with identity in bones, and `character:face-types` with every type as a bare head, three people drawn from each close up and at the game camera, one person composed against baked, the skin-tone sheet and the children's heads beside the adults' at one scale, with the VRoid and Blue Protocol rows.
 
+- Pass 3's fourth step (designed shadows) is their versions `20261112-1fa6fc0f-…`: the six presets and `cast-64` under the board's fixed light beside step 3's, and `character:face-types` with the drawn shapes at every angle, the light sweeping across four faces close up and at the game camera, before and after, and the reference under the same sweep.
+
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
 `gen_person.sh` needs Blender and, for clips, the Kimodo library's takes (`KIMODO_DIR`, default `.local/kimodo/outputs/library`); it bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes the entries whose takes are all there, for a machine whose copy of the library is behind `clips.json` (on 2026-11-11 the dev-box had 30 of 67: the takes of the re-made town motions and of the new locomotion clips had not reached it). The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
@@ -881,7 +883,7 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
-**After pass 3's fourth step (designed shadows)**, judged on the board's step-4 versions with the reference beside ours, ordered by how much it shows:
+**After pass 3's fourth step (designed shadows)**, judged on the board's `20261112-1fa6fc0f-…` versions with the reference beside ours, ordered by how much it shows:
 
 1. **The eyes' drawing:** thin lash lines and a plainer iris against the reference's heavy upper lash and two-tone iris. Step 6.
 2. **How the hair is finished** (unchanged), and how it sits on the new head at the temple.
