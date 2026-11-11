@@ -71,13 +71,48 @@ pub struct PlanSpec {
     /// for their kinds.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ResourceSpec>,
+    /// Structures the authority places when the world is created (a furnace at a mouth, lamps
+    /// along a quay, a store), at a point in the plan's frame or at a lot's door or spot, with
+    /// the fuel a fire starts burning and the items it holds ([`StructureSpec`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub structures: Vec<StructureSpec>,
 }
 
-/// A resource at a point ([`PlanSpec::resources`]).
+/// A resource at a point ([`PlanSpec::resources`]), with what it holds and regrows when the
+/// author says so (else its kind's `max` and `regrow_per_h` in the script). Resources that name
+/// the same `pool` draw on one stock, held by the first of them (a fishing ground's spots).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceSpec {
     pub kind: String,
     pub at: [f32; 2],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f32>,
+    /// Units it regrows a game hour of growing time (the world's day turns it into real time).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regrow_per_h: Option<f32>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pool: String,
+}
+
+/// A structure the plan places ([`PlanSpec::structures`]): `at` a point in the plan's frame, or
+/// at a `lot`'s door, or at one of its named `spot`s. A kind the rules do not know is left out
+/// and logged when the world is created.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StructureSpec {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lot: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spot: Option<String>,
+    /// For a fire that burns fuel (its kind `burns`): the units it starts burning with (0: out),
+    /// as a seed's `structures[].fuel`.
+    #[serde(default)]
+    pub fuel: f32,
+    /// Items it holds at the start.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub contents: std::collections::BTreeMap<String, u32>,
 }
 
 /// A ground level: a polygon at an exact height.
@@ -165,6 +200,10 @@ pub struct LotSpec {
     /// right of its front's middle as one faces out, and forward from its centre toward the front.
     #[serde(default)]
     pub spots: Vec<SpotSpec>,
+    /// Items the structure at its door holds at the start (a store's stock); a lot of a kind
+    /// with no structure has nowhere to keep them, and they are left out and logged.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub contents: std::collections::BTreeMap<String, u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -284,7 +323,8 @@ pub(crate) struct Resolved {
     pub(crate) paved: bool,
     pub(crate) sea: Vec<V2>,
     pub(crate) lots: Vec<PlanLot>,
-    pub(crate) resources: Vec<(String, V2)>,
+    pub(crate) resources: Vec<LaidResource>,
+    pub(crate) structures: Vec<LaidStructure>,
     pub(crate) drop: f32,
     pub(crate) skirt: f32,
     pub(crate) blend: f32,
@@ -482,7 +522,37 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         if rs.kind.is_empty() || !finite(&[rs.at]) {
             return Err(format!("plan {id}: resources[{i}] needs a kind and a place"));
         }
-        resources.push((rs.kind.clone(), f.pt(rs.at)));
+        let ok = |v: Option<f32>| v.map_or(true, |v| v.is_finite() && v >= 0.0);
+        if !ok(rs.max) || !ok(rs.regrow_per_h) {
+            return Err(format!("plan {id}: resources[{i}] ({}) has a max or regrow_per_h that is not a number of at least 0", rs.kind));
+        }
+        resources.push(LaidResource { kind: rs.kind.clone(), at: f.pt(rs.at), max: rs.max, regrow_per_h: rs.regrow_per_h, pool: rs.pool.clone() });
+    }
+    // Structures at a point, a lot's door or a lot's spot; then each lot's own store.
+    let door = |l: &PlanLot| add(l.rect.c, mul(l.rect.f, l.rect.hd + 0.5));
+    let mut structures = Vec::new();
+    for (i, st) in s.structures.iter().enumerate() {
+        let name = format!("structures[{i}] ({})", st.kind);
+        if st.kind.is_empty() || !(st.fuel.is_finite() && st.fuel >= 0.0) {
+            return Err(format!("plan {id}: structures[{i}] needs a kind, and fuel of at least 0"));
+        }
+        let at = match (&st.at, &st.lot) {
+            (Some(q), None) if st.spot.is_none() && finite(&[*q]) => f.pt(*q),
+            (None, Some(lid)) => {
+                let l = lots.iter().find(|l: &&PlanLot| l.id == *lid).ok_or_else(|| format!("plan {id}: {name} is at lot {lid}, which the plan does not have"))?;
+                match &st.spot {
+                    None => door(l),
+                    Some(sp) => l.spots.iter().find(|(n, _)| n == sp).map(|(_, q)| *q).ok_or_else(|| format!("plan {id}: {name}: lot {lid} has no spot {sp:?}"))?,
+                }
+            }
+            _ => return Err(format!("plan {id}: {name} needs either `at` or a `lot` (with an optional `spot`)")),
+        };
+        structures.push(LaidStructure { kind: st.kind.clone(), lot: String::new(), at, fuel: st.fuel, contents: st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect() });
+    }
+    for (l, spec) in lots.iter().zip(&s.lots) {
+        if !spec.contents.is_empty() {
+            structures.push(LaidStructure { kind: String::new(), lot: l.id.clone(), at: door(l), fuel: 0.0, contents: spec.contents.iter().map(|(k, v)| (k.clone(), *v)).collect() });
+        }
     }
     let n = square.len() as f32;
     let centre = square.iter().fold((0.0, 0.0), |a, q| add(a, mul(*q, 1.0 / n)));
@@ -507,6 +577,7 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         sea,
         lots,
         resources,
+        structures,
         drop: s.drop_m,
         skirt: s.skirt_m,
         blend: s.blend_m,
@@ -593,7 +664,10 @@ pub fn validate(s: &PlanSpec, size: u32) -> Result<(), String> {
     }
     off("the square".into(), &r.square)?;
     for (i, q) in r.resources.iter().enumerate() {
-        off(format!("resources[{i}] ({})", q.0), &[q.1])?;
+        off(format!("resources[{i}] ({})", q.kind), &[q.at])?;
+    }
+    for (i, q) in r.structures.iter().enumerate() {
+        off(format!("structures[{i}] ({})", if q.kind.is_empty() { &q.lot } else { &q.kind }), &[q.at])?;
     }
     off("the sea".into(), &r.sea)?;
     for l in &r.lots {
@@ -789,8 +863,32 @@ pub struct Laid {
     pub lots: Vec<LaidLot>,
     /// Road ids of its streets and their paving.
     pub streets: Vec<(u32, Option<String>)>,
-    /// Its authored resources: kind and point on the land ([`PlanSpec::resources`]).
-    pub resources: Vec<(String, V2)>,
+    /// Its authored resources on the land ([`PlanSpec::resources`]).
+    pub resources: Vec<LaidResource>,
+    /// Its authored structures and its lots' stores, on the land ([`PlanSpec::structures`],
+    /// [`LotSpec::contents`]).
+    pub structures: Vec<LaidStructure>,
+}
+
+/// An authored resource on the land.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct LaidResource {
+    pub kind: String,
+    pub at: V2,
+    pub max: Option<f32>,
+    pub regrow_per_h: Option<f32>,
+    pub pool: String,
+}
+
+/// An authored structure on the land: a structure of `kind` to place at `at`, or (an empty
+/// kind) what the structure at lot `lot`'s door holds.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct LaidStructure {
+    pub kind: String,
+    pub lot: String,
+    pub at: V2,
+    pub fuel: f32,
+    pub contents: Vec<(String, u32)>,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -848,7 +946,7 @@ pub(crate) fn build(land: &Land, r: Resolved, idx: u16, site: u16, first_road: u
     let sq = &r.square;
     let near_square = |q: V2| poly_outside(sq, q) < 1.0;
     let mut roads = Vec::new();
-    let mut laid = Laid { id: r.id.clone(), settlement: idx, resources: r.resources.clone(), ..Laid::default() };
+    let mut laid = Laid { id: r.id.clone(), settlement: idx, resources: r.resources.clone(), structures: r.structures.clone(), ..Laid::default() };
     for (i, st) in r.streets.iter().enumerate() {
         // Points at most 2 m apart, each at the ground's height: the street lies on the plan.
         let pts = dedup(resample(&st.points, 2.0));
@@ -1129,15 +1227,58 @@ mod tests {
         let f = Frame::of(&s);
         let laid = &l.plans[0];
         assert_eq!(laid.resources.len(), s.resources.len());
-        for (rs, (kind, at)) in s.resources.iter().zip(&laid.resources) {
-            assert_eq!(&rs.kind, kind);
-            assert!(dist(f.pt(rs.at), *at) < 1e-4, "{kind} at {at:?}");
+        for (rs, q) in s.resources.iter().zip(&laid.resources) {
+            assert_eq!(rs.kind, q.kind);
+            assert!(dist(f.pt(rs.at), q.at) < 1e-4, "{} at {:?}", q.kind, q.at);
         }
         let mut bad = s.clone();
         bad.resources[0].at = [0.0, 2000.0];
         assert!(validate(&bad, 1024).unwrap_err().contains("resources[0]"));
         bad.resources[0].kind.clear();
         assert!(validate(&bad, 1024).unwrap_err().contains("needs a kind"));
+    }
+
+    /// Authored structures stand at their point, at a lot's door or at a lot's spot, with their
+    /// fuel and contents; a lot's own `contents` go to the structure at its door; one at a lot or
+    /// spot the plan does not have, or with both a point and a lot, is refused.
+    #[test]
+    fn a_plans_structures_and_stores_are_kept_on_the_land() {
+        let mut s = spec();
+        let f = Frame::of(&s);
+        let spot = |id: &str, n: usize| s.lots.iter().find(|l| l.id == id).unwrap().spots[n].name.clone();
+        let st = |kind: &str| StructureSpec { kind: kind.into(), at: None, lot: None, spot: None, fuel: 0.0, contents: Default::default() };
+        let (inn_seat, hall_door) = (spot("inn", 0), "hall".to_string());
+        s.structures = vec![
+            StructureSpec { at: Some([1.0, 2.0]), fuel: 4.0, ..st("lamp") },
+            StructureSpec { lot: Some(hall_door.clone()), fuel: 6.0, ..st("hearth") },
+            StructureSpec { lot: Some("inn".into()), spot: Some(inn_seat.clone()), contents: [("peat".to_string(), 9)].into(), ..st("storage") },
+        ];
+        for l in &mut s.lots {
+            l.contents.clear();
+        }
+        s.lots.iter_mut().find(|l| l.id == "store").unwrap().contents = [("fish".to_string(), 3)].into();
+        let r = resolve(&s).unwrap();
+        let lot = |id: &str| r.lots.iter().find(|l| l.id == id).unwrap().clone();
+        let door = |l: &PlanLot| add(l.rect.c, mul(l.rect.f, l.rect.hd + 0.5));
+        assert_eq!(r.structures.len(), 4);
+        assert!(dist(r.structures[0].at, f.pt([1.0, 2.0])) < 1e-4 && r.structures[0].fuel == 4.0);
+        assert!(dist(r.structures[1].at, door(&lot("hall"))) < 1e-4 && r.structures[1].kind == "hearth");
+        let seat = lot("inn").spots.iter().find(|(n, _)| *n == inn_seat).unwrap().1;
+        assert!(dist(r.structures[2].at, seat) < 1e-4 && r.structures[2].contents == vec![("peat".to_string(), 9)]);
+        assert!(r.structures[3].kind.is_empty() && r.structures[3].lot == "store" && dist(r.structures[3].at, door(&lot("store"))) < 1e-4);
+        assert!(validate(&s, 1024).is_ok());
+        let refused = |change: &dyn Fn(&mut PlanSpec), words: &str| {
+            let mut b = s.clone();
+            change(&mut b);
+            let e = validate(&b, 1024).unwrap_err();
+            assert!(e.contains(words), "{e}");
+        };
+        refused(&|b| b.structures[1].lot = Some("nowhere".into()), "which the plan does not have");
+        refused(&|b| b.structures[2].spot = Some("nowhere".into()), "has no spot");
+        refused(&|b| b.structures[0].lot = Some("hall".into()), "needs either `at` or a `lot`");
+        refused(&|b| b.structures[0].fuel = -1.0, "fuel of at least 0");
+        refused(&|b| b.structures[0].at = Some([0.0, 5000.0]), "structures[0]");
+        refused(&|b| b.resources[0].regrow_per_h = Some(f32::NAN), "regrow_per_h");
     }
 
     /// The test plan stands as written: its site and id, lots on their levels at exact

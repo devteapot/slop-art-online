@@ -875,7 +875,7 @@ pub struct SeedStructure {
 }
 
 /// A resource node the author places: its kind (one of the script's `resources()`), where, and
-/// what it holds and regrows a minute (the kind's `max` and `regrow` when not given). Nodes
+/// what it holds and regrows (the kind's `max` and `regrow_per_h` when not given). Nodes
 /// that name the same `pool` share one stock, held by the first of them: a fishing ground's
 /// spots, each fished from but all drawing on the same fish.
 #[derive(Deserialize)]
@@ -884,6 +884,10 @@ pub struct SeedNode {
     pub at: [f32; 2],
     #[serde(default)]
     pub max: Option<f32>,
+    /// Units it regrows a game hour of growing time, turned into real time for the world's day.
+    #[serde(default)]
+    pub regrow_per_h: Option<f32>,
+    /// The same per real minute, as goods-1 wrote it; `regrow_per_h` wins when both are given.
     #[serde(default)]
     pub regrow: Option<f32>,
     #[serde(default)]
@@ -1016,6 +1020,7 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
     }
     if let Some(h) = hosted {
         plan_resources(ctx, map, &h.resources, now);
+        plan_structures(ctx, map, h, now);
     }
     for (t, layout) in &settlements {
         settlement_resources(ctx, &map, t, layout.center, now);
@@ -1031,16 +1036,10 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
         crate::perceive::request_deliberation(ctx, id, "You are taking in your surroundings.", now);
     }
     for st in &s.structures {
-        let at = map.nearest_walkable(st.at[0], st.at[1]).unwrap_or((48.0, 48.0));
         let owner = ctx.db.character().iter().find(|c| c.name == st.owner).map(|c| c.id).unwrap_or(0);
-        common::invalidate_structures(ctx);
+        let contents: Vec<(String, u32)> = st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect();
         // A fire the seed gives fuel starts lit, burning it down from now.
-        let burns = common::scripts(ctx).structure(&st.kind).burns.clone();
-        let lit_until_ms = burns.filter(|_| st.fuel > 0.0).and_then(|b| living_rules::fire::fed(0, now, st.fuel, b.rate, common::world(ctx).day_ms, None)).unwrap_or(0);
-        let row = ctx.db.structure().insert(Structure { id: 0, kind: st.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms });
-        for (item, q) in &st.contents {
-            common::inv_add(ctx, STRUCTURE_BIT | row.id, item, *q);
-        }
+        put_authored(ctx, map, &st.kind, (st.at[0], st.at[1]), owner, &contents, st.fuel, now);
     }
     place_nodes(ctx, &s.resource_nodes, now);
     for a in &s.artifacts {
@@ -1348,24 +1347,82 @@ fn resource_max(sc: &living_rules::script::Scripts, kind: &str) -> f32 {
 }
 
 /// A planned settlement's authored resources (`PlanSpec::resources`), at the nearest walkable
-/// tile to each point. Kinds the rules do not know yet are left for when they exist, and logged.
-fn plan_resources(ctx: &ReducerContext, map: &living_rules::map::Map, at: &[(String, (f32, f32))], now: u64) {
+/// tile to each point, with the author's `max` and `regrow_per_h` (else the kind's), those naming
+/// one `pool` sharing the first one's stock. A kind the world does not have was refused by
+/// `floor::check`; one that slips past is left out and logged.
+fn plan_resources(ctx: &ReducerContext, map: &living_rules::map::Map, at: &[living_rules::settle::LaidResource], now: u64) {
     let sc = common::scripts(ctx);
-    let mut waiting: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
+    let mut unknown: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
+    let mut pools: std::collections::BTreeMap<&str, u64> = Default::default();
     let mut placed = 0;
-    for (kind, p) in at {
+    for r in at {
+        let kind = &r.kind;
         if living_rules::catalog::kind_class(kind) != Some(living_rules::catalog::KindClass::Resource) {
-            *waiting.entry(kind.as_str()).or_default() += 1;
+            *unknown.entry(kind.as_str()).or_default() += 1;
             continue;
         }
-        let Some(q) = map.nearest_walkable(p.0, p.1) else { continue };
-        let max = resource_max(&sc, kind);
+        let Some(q) = map.nearest_walkable(r.at.0, r.at.1) else { continue };
+        let max = r.max.unwrap_or_else(|| resource_max(&sc, kind));
+        let regen = r.regrow_per_h.map_or_else(|| sc.regrow_per_min(kind, 0.5), |v| v as f64 * sc.per_minute()) as f32;
+        let pool = if r.pool.is_empty() { 0 } else { pools.get(r.pool.as_str()).copied().unwrap_or(0) };
         common::invalidate_resources(ctx, None);
-        ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: q.0, y: q.1, chunk: chunk_of(q.0, q.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now, pool: 0 });
+        let row = ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: q.0, y: q.1, chunk: chunk_of(q.0, q.1), amount: max, max, regen, at_ms: now, pool });
+        if !r.pool.is_empty() && pool == 0 {
+            pools.insert(&r.pool, row.id);
+            let mut head = row;
+            head.pool = head.id;
+            ctx.db.resource_node().id().update(head);
+        }
         placed += 1;
     }
-    if placed > 0 || !waiting.is_empty() {
-        log::info!("plan resources: {placed} placed; waiting for their kinds: {waiting:?}");
+    if !unknown.is_empty() {
+        log::warn!("plan resources of kinds this world does not have, left out: {unknown:?}");
+    }
+    if placed > 0 {
+        log::info!("plan resources: {placed} placed");
+    }
+}
+
+/// A structure an author places (a seed's `structures`, a plan's): at the nearest walkable tile,
+/// with its contents, and, for a fire that burns fuel, lit with `fuel` units burning down from
+/// now.
+#[allow(clippy::too_many_arguments)]
+fn put_authored(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), owner: u32, contents: &[(String, u32)], fuel: f32, now: u64) -> u64 {
+    let at = map.nearest_walkable(at.0, at.1).unwrap_or((48.0, 48.0));
+    common::invalidate_structures(ctx);
+    let burns = common::scripts(ctx).structure(kind).burns.clone();
+    let lit_until_ms = burns.filter(|_| fuel > 0.0).and_then(|b| living_rules::fire::fed(0, now, fuel, b.rate, common::world(ctx).day_ms, None)).unwrap_or(0);
+    let row = ctx.db.structure().insert(Structure { id: 0, kind: kind.to_string(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms });
+    for (item, q) in contents {
+        common::inv_add(ctx, STRUCTURE_BIT | row.id, item, *q);
+    }
+    row.id
+}
+
+/// A planned settlement's authored structures (`PlanSpec::structures`) and its lots' stores
+/// (`LotSpec::contents`, into the structure at the lot's door, which `island::build` placed).
+fn plan_structures(ctx: &ReducerContext, map: &living_rules::map::Map, h: &crate::island::Hosted, now: u64) {
+    let (mut placed, mut stocked) = (0, 0);
+    for st in &h.structures {
+        if st.kind.is_empty() {
+            let own = h.lots.iter().position(|l| l.key == st.lot).and_then(|i| ctx.db.lot().id().find(i as u32)).map_or(0, |l| l.structure);
+            if own == 0 {
+                log::warn!("plan: lot {} has no structure at its door to hold its contents; left out", st.lot);
+                continue;
+            }
+            for (item, q) in &st.contents {
+                common::inv_add(ctx, STRUCTURE_BIT | own, item, *q);
+            }
+            stocked += 1;
+        } else if living_rules::catalog::is_structure(&st.kind) {
+            put_authored(ctx, map, &st.kind, st.at, 0, &st.contents, st.fuel, now);
+            placed += 1;
+        } else {
+            log::warn!("plan: structure of a kind this world does not have, `{}`, left out", st.kind);
+        }
+    }
+    if placed > 0 || stocked > 0 {
+        log::info!("plan structures: {placed} placed, {stocked} lot stores filled");
     }
 }
 
@@ -1416,7 +1473,7 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
                     }
                     common::invalidate_resources(ctx, None);
                     let max = max_of(kind);
-                    ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now, pool: 0 });
+                    ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.regrow_per_min(kind, 0.5) as f32, at_ms: now, pool: 0 });
                     spots.push(p);
                     have += 1;
                 }
@@ -1438,7 +1495,7 @@ fn place_nodes(ctx: &ReducerContext, nodes: &[SeedNode], now: u64) {
             continue;
         }
         let max = n.max.unwrap_or_else(|| resource_number(&sc, &n.kind, "max", 5.0));
-        let regen = n.regrow.unwrap_or_else(|| sc.num_of("regrow", &n.kind, 0.5) as f32);
+        let regen = n.regrow_per_h.map(|r| (r as f64 * sc.per_minute()) as f32).or(n.regrow).unwrap_or_else(|| sc.regrow_per_min(&n.kind, 0.5) as f32);
         let pool = if n.pool.is_empty() { 0 } else { pools.get(n.pool.as_str()).copied().unwrap_or(0) };
         common::invalidate_resources(ctx, None);
         let row = ctx.db.resource_node().insert(ResourceNode { id: 0, kind: n.kind.clone(), x: n.at[0], y: n.at[1], chunk: chunk_of(n.at[0], n.at[1]), amount: max, max, regen, at_ms: now, pool });
@@ -1504,7 +1561,7 @@ fn spawn_resources_in(ctx: &ReducerContext, map: &living_rules::map::Map, rows: 
             chunk: chunk_of(p.0, p.1),
             amount: max,
             max,
-            regen: sc.num_of("regrow", kind, 0.5) as f32,
+            regen: sc.regrow_per_min(kind, 0.5) as f32,
             at_ms: now,
             pool: 0,
         });
@@ -1636,7 +1693,12 @@ fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), o
 /// over its inn or in its hall owns that building, with no second house beside it.
 fn house_at(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64, any_kind: bool) -> u64 {
     let at = walkable_near(map, home);
-    let standing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75);
+    let here: Vec<Structure> = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).filter(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75).collect();
+    // Other things may stand at a lot's door (a plan's hearth or lamp, docs/AUTHORED_PLANS.md):
+    // the building is the structure a lot row names; only then anything else standing there.
+    // Once per household at creation, over the lot rows.
+    let building = |s: &&Structure| ctx.db.lot().iter().any(|l| l.structure == s.id);
+    let standing = here.iter().find(building).or_else(|| here.iter().find(|s| s.kind == "house")).or_else(|| here.first()).cloned();
     match standing {
         Some(mut s) => {
             let id = s.id;
@@ -1762,7 +1824,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
             chunk: chunk_of(p.0, p.1),
             amount: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
             max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
-            regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
+            regen: sc.regrow_per_min("berry_bush", 1.0) as f32,
             at_ms: now,
             pool: 0,
         });
@@ -2265,6 +2327,31 @@ mod tests {
         if let Err(e) = crate::island::generate(s.seed, m) {
             panic!("cullet: {e}");
         }
+    }
+
+    /// Cullet's plan names only kinds its laws' tables have, so its seed passes `floor::check`
+    /// with its laws; the same plan with a name that matches nothing (the plan-2 names `kelp`,
+    /// `peat`) or a structure kind the world lacks is refused, not left out.
+    #[test]
+    fn a_plan_naming_kinds_the_world_lacks_is_refused() {
+        let text = include_str!("../../seeds/cullet.json");
+        let laws = include_str!("../../seeds/worlds/cullet/laws.rhai");
+        let with = |change: &dyn Fn(&mut serde_json::Value)| {
+            let mut v: serde_json::Value = serde_json::from_str(text).unwrap();
+            change(&mut v);
+            let mut s: Seed = serde_json::from_value(v).unwrap();
+            s.laws = laws.to_string();
+            crate::floor::check(&s)
+        };
+        with(&|_| {}).expect("Cullet's seed passes the checks with its laws");
+        let plan_test: Seed = serde_json::from_str(include_str!("../../seeds/plan-test.json")).unwrap();
+        crate::floor::check(&plan_test).expect("plan-test names only the shipped script's kinds");
+        let e = with(&|v| v["map"]["params"]["plans"][0]["resources"][0]["kind"] = "kelp".into()).unwrap_err();
+        assert!(e.contains("names kinds this world's tables do not have") && e.contains("resource `kelp`"), "{e}");
+        let e = with(&|v| v["map"]["params"]["plans"][0]["structures"][0]["kind"] = "kiln".into()).unwrap_err();
+        assert!(e.contains("structure `kiln`"), "{e}");
+        let e = with(&|v| v["map"]["params"]["plans"][0]["lots"][0]["contents"] = serde_json::json!({"gold": 1})).unwrap_err();
+        assert!(e.contains("item `gold`"), "{e}");
     }
 
     #[test]

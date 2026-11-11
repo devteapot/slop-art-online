@@ -25,11 +25,13 @@ pub mod normalize;
 pub mod floors;
 #[cfg(feature = "scripting")]
 pub mod cullet_check;
+mod rates_check;
 #[cfg(feature = "scripting")]
 pub mod script;
 pub mod social;
 pub mod species;
 pub mod steer;
+pub mod ui;
 pub mod ways;
 
 /// Real milliseconds per in-world day.
