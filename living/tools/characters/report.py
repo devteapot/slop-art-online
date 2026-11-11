@@ -10,6 +10,7 @@ same publish side by side, shot by shot. Everything else is in the notes file, a
 
     title, sub, verdict (HTML)
     families: [{family, member, label, before, after, control}]   version ids; control a member name
+    tags:     [before, after]   what the two versions are called on the pictures (e.g. "Pass 2", "Pass 3")
     closeups: [shot, …]   the shots shown for every family, in rows of before / after / reference
     figures:  [shot, …]   the same, for whole-figure shots
     clips:    [name, …]   board clips shown for the first families (ours beside the control)
@@ -121,13 +122,14 @@ def main():
             for shot in shots:
                 cells = []
                 if f.get("before"):
-                    cells.append(fig(f"board:{slug}/{f['before']}/{f['member']}/{shot}", f'<span class="tag before">Pass 1</span>{names.get(shot, shot)}'))
-                cells.append(fig(f"board:{slug}/{f['after']}/{f['member']}/{shot}", f'<span class="tag after">Pass 2</span>{names.get(shot, shot)}'))
+                    cells.append(fig(f"board:{slug}/{f['before']}/{f['member']}/{shot}", f'<span class="tag before">{html.escape(tags[0])}</span>{names.get(shot, shot)}'))
+                cells.append(fig(f"board:{slug}/{f['after']}/{f['member']}/{shot}", f'<span class="tag after">{html.escape(tags[1])}</span>{names.get(shot, shot)}'))
                 cells.append(fig(f"board:{slug}/{f['after']}/{f.get('control', 'vroid')}/{shot}", f'<span class="tag ref">Reference</span>{names.get(shot, shot)}'))
                 out.append(f'<div class="grid g{len(cells)}">{"".join(cells)}</div>')
         return "".join(out)
 
     names = notes.get("shot_names", {})
+    tags = notes.get("tags", ["Before", "This pass"])  # what the accepted version and this pass's are called
     body = [f"<h1>{notes['title']}</h1>", f'<p class="sub">{notes["sub"]}</p>', f'<div class="verdict">{notes["verdict"]}</div>']
     sections = notes["sections"]
     at = notes.get("after_closeups", 0)
