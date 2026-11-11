@@ -7,9 +7,12 @@ Reads only the BLIND excerpts file written by feel_excerpts.py (never the key) a
 self-contained HTML page: the excerpts in their shuffled order, and per excerpt one question,
 "Does this feel like a player living their own life?", on a 1-5 scale with an optional one-line
 reason. Published as a claude.ai Artifact with `capabilities: {db: {}, user: {}, downloads: true}`,
-each rating is saved server-side as the document `ratings/<excerpt id>`:
-`{"score": 1-5, "reason": "...", "at": "<iso>", "rater": "<opaque viewer id>"}`, read back with
-the ArtifactData tool (`list` of collection `ratings`) and fed to `feel_tune.py fit --ratings`.
+each rating is saved server-side as the document `owner_ratings/<excerpt id>`:
+`{"score": 1-5, "reason": "...", "at": "<iso>", "rater": "<opaque viewer id>", "source": "page"}`, read
+back with the ArtifactData tool (`list` of collection `owner_ratings`) and fed to `feel_tune.py fit
+--ratings`. The page never reads or writes the `ratings` collection, where proxy ratings (raters
+"proxy:...", someone rating on the owner's behalf) are kept, and it ignores any `proxy:` document it
+meets, so the owner always rates blind and never overwrites a proxy rating.
 Without the database (a saved copy opened from disk) the page keeps ratings in the browser and
 offers "Copy ratings" and "Download ratings.json", which write the same shape feel_tune.py reads.
 The page refuses to build if the excerpts file carries anything but ids, titles, intros and lines.
@@ -112,7 +115,8 @@ const EXCERPTS = __DATA__;
 const N = EXCERPTS.length;
 const state = {};          // id -> {score, reason, at}
 let db = null, uid = null, saving = {}, uploaded = false;
-const LS = "player-feel-ratings";
+const COLL = "owner_ratings";            // never "ratings": the proxy's ratings live there
+const LS = "player-feel-owner-ratings";  // a new key, so nothing stored by an earlier version shows as rated
 function lsLoad() { try { return JSON.parse(localStorage.getItem(LS) || "{}"); } catch (e) { return {}; } }
 function lsSave() { try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {} }
 Object.assign(state, lsLoad());
@@ -185,15 +189,15 @@ async function push(id) {
     do {
       dirty[id] = false;
       const cur = state[id];
-      const body = {score: cur.score, reason: cur.reason || "", at: cur.at};
+      const body = {score: cur.score, reason: cur.reason || "", at: cur.at, source: "page"};
       if (uid) body.rater = uid;
       try {
-        await db.collection("ratings").doc(id).set(body);
+        await db.collection(COLL).doc(id).set(body);
         status("Saved with this page");
       } catch (e) {
         if (e && e.code === "unavailable") {
           await new Promise(r => setTimeout(r, 600 + Math.random() * 600));
-          try { await db.collection("ratings").doc(id).set(body); status("Saved with this page"); }
+          try { await db.collection(COLL).doc(id).set(body); status("Saved with this page"); }
           catch (e2) { status("Could not save just now; your choice is kept in this browser. Use Copy ratings at the bottom.", true); }
         } else {
           status("Saving is not available to you here; your choices stay in this browser. Use Copy ratings at the bottom.", true);
@@ -207,7 +211,7 @@ async function push(id) {
 function exportJson() {
   const ratings = {};
   EXCERPTS.forEach((x) => { const r = state[x.id]; if (r && Number.isInteger(r.score)) ratings[x.id] = {score: r.score, reason: r.reason || "", at: r.at}; });
-  return JSON.stringify({synthetic: false, rater: "owner", page: "player-feel ratings", ratings: ratings}, null, 1);
+  return JSON.stringify({synthetic: false, rater: "owner (rating page)", page: "player-feel ratings", ratings: ratings}, null, 1);
 }
 document.getElementById("copy").addEventListener("click", () => {
   const t = exportJson(); const d = document.getElementById("dump");
@@ -231,12 +235,13 @@ paint();
   if (u) { try { uid = await u.id(); } catch (e) {} }
   if (!d) { clearTimeout(timer); status("Saving with the page is unavailable here; choices stay in this browser", true); return; }
   db = d;
-  db.collection("ratings").onSnapshot((snap) => {
+  db.collection(COLL).onSnapshot((snap) => {
     clearTimeout(timer);
     if (!db) return; // saving was refused earlier in this visit: keep the warning
     snap.docs.forEach((doc) => {
       const v = doc.data() || {};
       if (!EXCERPTS.some((x) => x.id === doc.id) || !Number.isInteger(v.score)) return;
+      if (String(v.rater || "").startsWith("proxy:") || v.proxy_for) return; // someone rating for the owner: never shown
       const mine = state[doc.id];
       if (!mine || !mine.at || (v.at && v.at >= mine.at)) state[doc.id] = {score: v.score, reason: v.reason || "", at: v.at};
     });

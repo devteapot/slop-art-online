@@ -13,9 +13,10 @@ rating on the owner's behalf. Without --proxy, fit and judge refuse such documen
 and use only the owner's; with --proxy they use only proxy documents, every output carries "PROXY
 RATINGS (general coordinator, rating for the owner); not the owner's judgement", reports say
 "proxy" where they would say "owner", and files get a _proxy suffix (tune_report_proxy.md, ...).
-Nothing in proxy mode reports agreement with the owner. When the owner rates on the page, the owner's
-document replaces the proxy's for that id in the store, so keep a copy of the proxy dump taken
-before (an ArtifactData list with out_dir) and run `compare --owner <new dump> --proxy <old dump>`:
+Nothing in proxy mode reports agreement with the owner. The rating page (feel_page.py) writes the
+owner's ratings to the collection `owner_ratings` and never touches `ratings`, where proxy ratings
+are kept; dump both with an ArtifactData list (out_dir) and run `compare --owner <owner_ratings dump>
+--proxy <ratings dump, or the saved copy>`:
 Spearman, exact, within-one and mean difference on the excerpts both rated, and every excerpt with
 both scores and both reasons.
 
@@ -23,7 +24,7 @@ Inputs (written by feel_excerpts.py): the KEY (default .local/living/feel/excerp
 source, run, window and life_feel columns per excerpt id), the EXCERPTS (default
 .local/living/feel/excerpts.json; the blind text the rating page shows) and the RATINGS: a file
 {"synthetic"?, "rater", "ratings": {eid: {"score": 1..5, "reason", "at"}}} or a dump of the rating
-page's "ratings" collection (a list, or {"documents"|"docs"|"items": [...]}, of {"id", "data"},
+page's "owner_ratings" collection, or of "ratings" for proxy ratings (a list, or {"documents"|"docs"|"items": [...]}, of {"id", "data"},
 {"path": "ratings/<eid>", "data"} or flat {"id", "score", "reason"} documents), or the directory an
 ArtifactData list with out_dir writes (one <eid>.json per document, searched recursively). Documents whose id is
 not an excerpt of the key (a "meta" document) are counted and printed, never joined; a score that is
