@@ -756,6 +756,8 @@ pub struct Scripts {
     moves: RefCell<HashMap<Vec<u8>, Moves>>,
     /// `glow(a)` the same way.
     glows: RefCell<HashMap<Vec<u8>, f32>>,
+    /// Life tables under the `life_years` law, by species.
+    lives: RefCell<HashMap<String, crate::life::Life>>,
     /// The world's game hour in real milliseconds (its day length over 24).
     hour_ms: f64,
     /// `daylight(hour)` by game minute of the day (NaN: not asked yet).
@@ -955,7 +957,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields::Fields::analyze(&ast);
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1458,6 +1460,70 @@ impl Scripts {
         }
         t[minute] = v;
         v
+    }
+
+    /// A species' life table under the world's rules: the `life_years(t)` law, given the
+    /// species' table in years (`kind`, `lifespan`, and the ages `infant`, `child`, `elder` and
+    /// `old_age` where those stages end or begin, `gestation`, `interbirth`), returns it with any
+    /// of them changed. An age it leaves alone keeps its years under a new lifespan. A script
+    /// without the law (the shipped one) has the species' table exactly as `species.json` gives
+    /// it. Read once per species and kept for the script revision; a table the law gets wrong
+    /// (an install refuses it: `life_law`) leaves the species' own.
+    pub fn life(&self, kind: &str, base: crate::life::Life) -> crate::life::Life {
+        if !self.has("life_years") {
+            return base;
+        }
+        if let Some(l) = self.lives.borrow().get(kind) {
+            return *l;
+        }
+        let l = self.life_law(kind, base).unwrap_or(base);
+        self.lives.borrow_mut().insert(kind.to_string(), l);
+        l
+    }
+
+    /// The `life_years` law's table for a species, or what is wrong with it.
+    pub fn life_law(&self, kind: &str, base: crate::life::Life) -> Result<crate::life::Life, String> {
+        if !self.has("life_years") {
+            return Ok(base);
+        }
+        let y = base.years as f64;
+        let ages = [("infant", base.infant), ("child", base.child), ("elder", base.elder), ("old_age", base.old_age), ("gestation", base.gestation), ("interbirth", base.interbirth)];
+        let mut t = rhai::Map::new();
+        t.insert("kind".into(), Dynamic::from(kind.to_string()));
+        t.insert("lifespan".into(), Dynamic::from_float(y));
+        for (k, f) in ages {
+            t.insert(k.into(), Dynamic::from_float(f as f64 * y));
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "life_years", (t.clone(),)).map_err(|e| format!("life_years: {e}"))?;
+        let out = out.try_cast::<rhai::Map>().ok_or("life_years must return the table it is given (a map)")?;
+        let get = |k: &str| -> Result<f64, String> { out.get(k).map(|d| number(d).ok_or(format!("life_years: {k} must be a number of years"))).unwrap_or_else(|| Ok(number(&t[k]).unwrap_or(0.0))) };
+        let span = get("lifespan")?;
+        if !(span > 0.0) {
+            return Err(format!("life_years: {kind}'s lifespan must be more than 0 years, not {span}"));
+        }
+        let mut l = base;
+        l.years = span as f32;
+        let mut last = 0.0;
+        for (k, f) in ages {
+            let given = get(k)?;
+            // An age left as it was keeps its fraction when the lifespan is the same (no rounding).
+            let frac = if given == f as f64 * y && span == y { f } else { (given / span) as f32 };
+            match k {
+                "infant" => l.infant = frac,
+                "child" => l.child = frac,
+                "elder" => l.elder = frac,
+                "old_age" => l.old_age = frac,
+                "gestation" => l.gestation = frac,
+                _ => l.interbirth = frac,
+            }
+            if matches!(k, "infant" | "child" | "elder" | "old_age") {
+                if given < last || given > span {
+                    return Err(format!("life_years: {kind}'s ages must run infant <= child <= elder <= old_age <= lifespan ({span}); {k} is {given}"));
+                }
+                last = given;
+            }
+        }
+        Ok(l)
     }
 
     /// How dark it is at `hour`, in the steps laws see it (`SkillCtx::dark`).

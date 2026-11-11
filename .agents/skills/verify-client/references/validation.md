@@ -1,5 +1,9 @@
 # Client protocol validation
 
+## 2026-11-11 lives-3: four `rhythm` columns (dev-box)
+
+Branch `lives-3` (four columns appended with defaults to the private `rhythm` table; bindings regenerated), own container `lives3-stdb` (2.14.1, port 3321), scoped build. `client-l3-180756`: private table visibility passes (70 tables; `rhythm` refused to an anonymous subscription and to SQL), the reducer matrix 214 calls with no mismatch; "combat feed scoped to its viewer" failed (player-2 received no row) while two other island scenes and builds loaded the machine. `client-l3b-182752` on a quiet machine: that check passed, and "presence counts each open connection of the person" failed (`1 → 2 → 0`); 30 checks pass. Neither failing check touches this change (combat feed and presence timing); each passed in the other run. Not rerun further.
+
 
 ## 2026-11-11 eye-2: tile classes a client receives; presence timing (dev-box)
 

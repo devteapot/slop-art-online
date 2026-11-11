@@ -856,13 +856,33 @@ def world_tables(wd):
     rep = json.loads((ROOT / "living/seeds/repertoire.json").read_text())
     for k in ("occupations", "makers"):
         t["occupations"] |= set(rep.get(k, {}).keys())
+    # The world's own starting ways (`ways.json` beside the cast, merged into its seed).
+    ways_f = wd / "ways.json"
+    t["ways"] = json.loads(ways_f.read_text()) if ways_f.exists() else {}
+    t["occupations"] |= set(t["ways"].get("occupations", {}))
     return t
 
 
-def person_life():
+def person_life(wd=None):
+    """A person's life in years: `species.json`'s table, as the world's `life_years` law changes
+    it. This tool cannot run Rhai: it reads the law's `person_years()` map, the form Cullet's
+    laws give it in (each key an age in years that replaces the table's; docs/CULLET_RULES.md),
+    and says when a world's law has another form."""
     life = json.loads((ROOT / "living/seeds/species.json").read_text())["person"]["life"]
     y = life["years"]
-    return {"child_until": life["child"] * y, "elder_from": life["elder"] * y, "old_age_from": life["old_age"] * y, "years": y}
+    out = {"child_until": life["child"] * y, "elder_from": life["elder"] * y, "old_age_from": life["old_age"] * y, "years": y, "from": "species.json"}
+    laws_f = wd / "laws.rhai" if wd else None
+    if laws_f and laws_f.exists() and re.search(r"\nfn life_years\(", "\n" + laws_f.read_text()):
+        m = re.search(r"\nfn person_years\(\)\s*\{\s*#\{(.*?)\}\s*\}", "\n" + laws_f.read_text(), re.S)
+        if not m:
+            raise SystemExit(f"{laws_f}: a life_years law without a person_years() map; this check cannot read it")
+        given = {k: float(v) for k, v in re.findall(r"(\w+):\s*([0-9.]+)", m.group(1))}
+        keys = {"lifespan": "years", "child": "child_until", "elder": "elder_from", "old_age": "old_age_from"}
+        for k, v in given.items():
+            if k in keys:
+                out[keys[k]] = v
+        out["from"] = f"{laws_f.relative_to(ROOT)} life_years"
+    return out
 
 
 def hour_text(h):
@@ -881,7 +901,8 @@ def rhythm_text(r, lots):
     work = "; ".join(f"{hour_text(a)}-{hour_text(b)}" for a, b in r.get("works", [])) or "no set hours"
     at = " or ".join(place_text(p, lots) for p in r.get("work_at", []))
     eve = " or ".join(place_text(p, lots) for p in r.get("evening", []))
-    return f"wakes about {hour_text(r['wakes'])}, to bed about {hour_text(bed)} ({r['sleep_h']:g} hours' sleep); works {work}{' at ' + at if at else ''}; evenings at {eve or 'home'}"
+    nap = f", and sleeps again {hour_text(r['second_sleep'][0])}-{hour_text(r['second_sleep'][1])}" if r.get("second_sleep") else ""
+    return f"wakes about {hour_text(r['wakes'])}, to bed about {hour_text(bed)} ({r['sleep_h']:g} hours' sleep{nap}); works {work}{' at ' + at if at else ''}; evenings at {eve or 'home'}"
 
 
 def plan_of(wd, cast):
@@ -944,18 +965,34 @@ def household_prompt(wd, cast, bible, s, h):
 Write one sheet for each of: {', '.join(names)}."""
 
 
+def work_span(works):
+    """One working span for the seed (`works: [from, to]`) from a cast's spans: from the first
+    start to the last end when that is at most 12 hours, else the longest span."""
+    if not works:
+        return None
+    a, b = min(x for x, _ in works), max(y for _, y in works)
+    if b - a <= 12:
+        return [a, b]
+    return list(max(works, key=lambda w: w[1] - w[0]))
+
+
 def seed_rhythm(r, notes, name):
-    """The seed's `rhythm` (rises, sleeps, evening_hours) from a cast rhythm, and what the
-    authority's clamps (seed.rs: rise 0-12 h, bed 8-22 h after rising, evening 0-8 h) change."""
+    """The seed's `rhythm` (rises, sleeps, evening_hours, works, second_sleep; seed.rs
+    `SeedRhythm`) from a cast rhythm, and what the authority's limits (living_rules::rhythm:
+    any rising hour, bed 8-22 h after rising, evening 0-8 h) change."""
     rises, sleeps = r["wakes"], r["wakes"] + 24 - r["sleep_h"]
     ends = [b for _, b in r.get("works", [])]
     last = max(ends) if ends else rises + 8
     evening = round(max(0.0, min(4.5, sleeps - last)), 2)
-    if rises > 12:
-        notes.append(f"{name}: wakes at {hour_text(rises)}, but the seed clamps a rising hour to 0-12 (seed.rs), so it would rise at 12:00")
     if not (8 <= sleeps - rises <= 22):
         notes.append(f"{name}: {sleeps - rises:g} hours awake is outside the seed's 8-22")
-    return {"rises": rises, "sleeps": round(sleeps, 2), "evening_hours": evening}
+    out = {"rises": rises, "sleeps": round(sleeps, 2), "evening_hours": evening}
+    span = work_span(r.get("works", []))
+    if span:
+        out["works"] = span
+    if r.get("second_sleep"):
+        out["second_sleep"] = list(r["second_sleep"])
+    return out
 
 
 def resident_places(r, lots):
@@ -1006,7 +1043,7 @@ def check_cast_file(wd, cast):
     if len(keys) != len(set(keys)):
         errors.append("household key used twice")
     t = world_tables(wd)
-    life = person_life()
+    life = person_life(wd)
     plan = plan_of(wd, cast)
     lots = {l["id"]: l for l in plan["lots"]} if plan else {}
     plan_kinds = {r["kind"] for r in plan.get("resources", [])} if plan else set()
@@ -1023,7 +1060,7 @@ def check_cast_file(wd, cast):
     stage = {"child": [], "adult": [], "elder": []}
     for _, _, m in people:
         stage["child" if m["age"] < life["child_until"] else "elder" if m["age"] >= life["elder_from"] else "adult"].append(m["name"])
-    rep["rule_stages"] = {k: len(v) for k, v in stage.items()} | {"person_life": {k: round(v, 1) for k, v in life.items()}}
+    rep["rule_stages"] = {k: len(v) for k, v in stage.items()} | {"person_life": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in life.items()}}
     young_adults = [f"{m['name']} ({m['age']:g})" for _, _, m in people if adult_from <= m["age"] < life["child_until"]]
     if young_adults:
         warn.append(f"the rules' person life puts the child stage before {life['child_until']:.1f} years, so these cast adults start as children: {', '.join(young_adults)}")
@@ -1127,6 +1164,12 @@ def check_cast_file(wd, cast):
         for a, b in r.get("works", []):
             if not (a < b and (r["wakes"] <= a and b <= awake_to + 0.01 or r["wakes"] <= a + 24 and b + 24 <= awake_to + 24.01)):
                 errors.append(f"{n}: works {a}-{b} is not within waking hours {hour_text(r['wakes'])}-{hour_text(awake_to)}")
+        if r.get("second_sleep"):
+            a, b = r["second_sleep"]
+            if not (0 <= a < 24 and 0 < (b - a) % 24 <= 8):
+                errors.append(f"{n}: second sleep {a}-{b} is not 0-8 hours starting within the day")
+            elif any((x - a) % 24 < (b - a) % 24 for x, _ in r.get("works", [])):
+                errors.append(f"{n}: second sleep {a}-{b} begins after work starts")
         if not 1 <= len(r.get("evening", [])) <= 2:
             errors.append(f"{n}: one or two evening places, not {len(r.get('evening', []))}")
         for p in r.get("work_at", []) + r.get("evening", []):
@@ -1208,7 +1251,7 @@ def print_checks(errors, warn, rep):
     c = rep["counts"]
     print("counts: " + ", ".join(f"{k} {v['got']}" + (f" (want {v['want']})" if v["want"] is not None else "") for k, v in c.items()))
     rs = rep["rule_stages"]
-    print(f"rule life stages (species.json person: child < {rs['person_life']['child_until']} y, elder from {rs['person_life']['elder_from']} y, old-age deaths from {rs['person_life']['old_age_from']} y): child {rs['child']}, adult {rs['adult']}, elder {rs['elder']}")
+    print(f"rule life stages ({rs['person_life']['from']}, person: child < {rs['person_life']['child_until']} y, elder from {rs['person_life']['elder_from']} y, old-age deaths from {rs['person_life']['old_age_from']} y): child {rs['child']}, adult {rs['adult']}, elder {rs['elder']}")
     print(f"kin links {rep['kin_links']} (each checked both ways); ties naming residents {rep['ties_naming_residents']}; household pairs tied across houses {rep['cross_household_pairs_tied']}; one-sided cross-household ties {len(rep['one_sided_cross_household_ties'])}")
     print(f"situations {rep['situations']}, tensions {rep['tensions']}, secrets {len(rep['secrets'])}: " + "; ".join(f"{k} known to {', '.join(v)}" for k, v in rep["secrets"].items()))
     for town, homes in rep["homes"].items():
