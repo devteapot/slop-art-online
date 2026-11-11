@@ -1,0 +1,8 @@
+{
+ "extends": "strangers-pre",
+ "title": "strangers-pre, with only Aldous Quill thinking (stage 1)",
+ "about": "As the trial it extends, but the mind service thinks only for the followed resident, Aldous Quill (`LIVING_ONLY`); everyone else lives by their graphs (docs/STRANGERS.md, stage 1).",
+ "minds": {
+  "only": "subject"
+ }
+}

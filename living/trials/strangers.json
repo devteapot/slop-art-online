@@ -1,0 +1,56 @@
+{
+ "title": "Strangers: a silent newcomer in Cullet, noticed by personality and duty",
+ "about": "docs/STRANGERS.md section 6 and its decisions of 2026-11-12. Cullet's own seed and laws (64 residents; main's sheets, with the two lives of dc2ecfc8: Aldous Quill's stance that arrivals are written, Ingrid Morrow who sees the quay and tells Magda Tarn first). The world starts at 07:00 (every world does; no reducer sets the clock, and 06:30 would cost a 47-minute wait) and its minds live 2.5 game hours. At 09:30 game time (5 real minutes) a scripted newcomer (`newcomer`, the real player reducers with its own non-admin identity) joins at the arrival point, the Counting House yard, and stands silent 5 minutes there; then it walks to the densest group of residents and stands silent 5 minutes; then it stays where it is to the end (20 minutes). It never speaks, gestures or names itself. No arrival laws (rejected). Main's mind defaults (LIVING_GREET=nearest, LIVING_PARK=concurrent). Every line, talk turn, experience row, thought, gesture and position is recorded for arrive_report.py and arrive_spread.py. Followed resident (`subject`, samples and final rows): Aldous Quill.",
+ "gradient": "Who notices a stranger and what each does about it, by personality and duty (asks, approaches silently, notices inwardly, unaware; tells others), and how soon the first heard line comes.",
+ "world": {
+  "seed": "cullet"
+ },
+ "minutes": 20,
+ "subject": {
+  "pick": {
+   "name": "Aldous Quill"
+  },
+  "clear_items": false,
+  "clear_routines": false
+ },
+ "newcomer": {
+  "name": "Arlen",
+  "at_hour": 9.5
+ },
+ "minds": {
+  "only": "all"
+ },
+ "human": {
+  "script": "arrive",
+  "minutes": 20,
+  "walk_s": 150,
+  "within_m": 5,
+  "stands": [
+   {
+    "at": "arrival",
+    "s": 300
+   },
+   {
+    "at": "group",
+    "s": 300
+   }
+  ]
+ },
+ "record": {
+  "speech": true,
+  "talk": true,
+  "audience": true,
+  "experiences": true,
+  "gestures": true,
+  "positions": true,
+  "thoughts": true
+ },
+ "census_s": 30,
+ "cast": {},
+ "timeline": [],
+ "probes": [],
+ "variants": [
+  "strangers-control",
+  "strangers-filter"
+ ]
+}

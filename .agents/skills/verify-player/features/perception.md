@@ -30,7 +30,7 @@ What others perceive of a walking player:
 .agents/skills/verify-player/scripts/approach.py --run "$R" --expect-wait  # the pre-fix authority: wait
 ```
 
-On a fresh island run, about 20 s after launch (a world just published is busy with every resident's first deliberation, and the resident's `think` can land after the walk). It joins two identities, holds a resident R and a second resident W with `set_behavior`, chooses a side of R where the bystander, put 8 m out, sees R (towns differ per world), and reads R's `deliberation` scene after a `think` leaf (admin `set_behavior`; speech no longer requests a deliberation). Step 0, R's first sight of the player walking in from 14 m, runs once per world and is logged `NOT OBSERVED` when R gives no line (a crowd: strangers are not announced there). Evidence: `approach.json`, `actions.log`.
+On a fresh island run, about 20 s after launch (a world just published is busy with every resident's first deliberation, and the resident's `think` can land after the walk). It joins two identities, holds a resident R and a second resident W with `set_behavior`, chooses a side of R where the bystander, put 8 m out, sees R (towns differ per world), and reads R's `deliberation` scene after a `think` leaf (admin `set_behavior`; speech no longer requests a deliberation). Step 0, R's first sight of the player walking in from 14 m, runs once per world and is logged `NOT OBSERVED` when R gives no line (the way in blocked; before strangers-1 also a crowd, where strangers were not announced). Since strangers-1 first sights of one look share one line, the player its subject or object; each part of the line is checked on its own. Evidence: `approach.json`, `actions.log`.
 
 ## Gotchas
 

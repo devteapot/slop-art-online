@@ -238,32 +238,35 @@ def mind_concurrency(trial):
     return 64 if m.get("only") == "all" or m.get("max") else 4
 
 
-def patch_people(seed, patch):
-    """A seed with some residents' authored lives changed (`world.people_patch`, name -> changes):
-    `narrative_append` adds words to the sheet's first-person narrative, `goals_add` adds goals,
-    `values_add` values. For trying a life before the seed's owner writes it (docs/STRANGERS.md
-    "lives"); every patched resident must exist."""
-    found = set()
+def residents_from(seed, spec):
+    """A seed with some residents' authored entries (sheet, rhythm, places, kit: the whole
+    resident) taken from another commit's version of the same seed (`world.residents_from`:
+    `ref`, a git revision, and `names`). For arms that must differ only in some lives: the
+    strangers trial's C and S run the Quill, Morrow and Sato entries from before the lives were
+    written (dc2ecfc8^), L and LS main's (docs/STRANGERS.md). Every name must exist in both; the
+    resolved commit goes in the seed's `trial_residents_from` (read by trials, not the authority)."""
+    ref, names = spec["ref"], list(spec["names"])
+    sha = sh("git", "-C", ROOT, "rev-parse", "--short", ref).stdout.strip()
+    old = json.loads(sh("git", "-C", ROOT, "show", f"{sha}:living/seeds/{spec.get('seed', seed['run'])}.json").stdout)
 
-    def walk(x):
+    def residents(x, acc):
         if isinstance(x, dict):
-            if x.get("name") in patch and isinstance(x.get("sheet"), dict):
-                ch, sh_ = patch[x["name"]], x["sheet"]
-                if ch.get("narrative_append"):
-                    sh_["narrative"] = (sh_.get("narrative", "").rstrip() + " " + ch["narrative_append"].strip()).strip()
-                for key in ("goals", "values"):
-                    if ch.get(f"{key}_add"):
-                        sh_[key] = list(sh_.get(key) or []) + list(ch[f"{key}_add"])
-                found.add(x["name"])
+            if "sheet" in x and "name" in x:
+                acc[x["name"]] = x
             for v in x.values():
-                walk(v)
+                residents(v, acc)
         elif isinstance(x, list):
             for v in x:
-                walk(v)
-    walk(seed)
-    missing = set(patch) - found
+                residents(v, acc)
+        return acc
+    then, now = residents(old, {}), residents(seed, {})
+    missing = [n for n in names if n not in then or n not in now]
     if missing:
-        raise RuntimeError(f"people_patch: no resident named {sorted(missing)} in the seed")
+        raise RuntimeError(f"residents_from {ref}: {missing} not in both seeds")
+    for n in names:
+        now[n].clear()
+        now[n].update(json.loads(json.dumps(then[n])))
+    seed["trial_residents_from"] = {"ref": ref, "commit": sha, "names": names}
     return seed
 
 
@@ -287,8 +290,8 @@ def world_seed(world):
     mind both read (LIVING_SEED is resolved under living/seeds/, so a relative path works)."""
     base = json.loads((ROOT / "living/seeds" / f"{world['seed']}.json").read_text())
     merged = deep_merge(base, {"rules": world.get("rules", {}), **world.get("overrides", {})})
-    if world.get("people_patch"):
-        merged = patch_people(merged, world["people_patch"])
+    if world.get("residents_from"):
+        merged = residents_from(merged, world["residents_from"])
     text = json.dumps(merged, indent=1)
     name = f"trial-{world['seed']}-{hashlib.sha256(text.encode()).hexdigest()[:8]}"
     path = OUT / "seeds" / f"{name}.json"

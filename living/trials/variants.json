@@ -164,5 +164,18 @@
   "env": {
    "LIVING_FRAME": "player"
   }
+ },
+ "strangers-control": {
+  "about": "The strangers trial's control: main's defaults, the `stranger_by_name` law off (a graph's \"stranger\" is someone with no relation row).",
+  "models": {},
+  "env": {}
+ },
+ "strangers-filter": {
+  "about": "The strangers trial's filter arm: `stranger_by_name` on (set_world_law after the laws guard): a graph's \"stranger\" is someone whose name one does not know (docs/STRANGERS.md, section 3).",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "stranger_by_name": true
+  }
  }
 }
