@@ -1094,6 +1094,9 @@ def handoff(group, names, a, clips_path, lib):
             for img in ("pick.png", "sheet.png"):
                 if os.path.exists(os.path.join(a.out, name, img)):
                     tar.add(os.path.join(a.out, name, img), arcname=f"sheets/{name}_{img}")
+        for x in a.extra:  # notes and evidence beside the takes (e.g. the scores of takes set aside)
+            src, _, arc = x.partition("=")
+            tar.add(src, arcname="extra/" + (arc or os.path.basename(src)))
         add_bytes("clips_entries.json", ("[\n" + ",\n".join("  " + json.dumps(x) for x in entries) + "\n]\n").encode())
         add_bytes("scores.md", table.encode())
     sha = hashlib.sha256(open(tmp, "rb").read()).hexdigest()
@@ -1121,6 +1124,7 @@ def main():
     ap.add_argument("--rekey", action="store_true", help="with --write: adopt although other entries are keyed to a take it drops")
     ap.add_argument("--handoff", metavar="GROUP", help="write ~/clip-handoff/GROUP-<date>.tar.gz for --clip")
     ap.add_argument("--handoff-dir", default=os.path.expanduser("~/clip-handoff"))
+    ap.add_argument("--extra", action="append", default=[], metavar="FILE[=NAME]", help="with --handoff: a file to add under extra/ (repeatable)")
     ap.add_argument("--changed", help="with --handoff: the clips retaken (default: all); the rest keep their pick")
     ap.add_argument("--clips", default=os.path.join(REPO, "living/tools/blender/clips.json"))
     ap.add_argument("--lib", default=DEFAULT_LIB, help="the raw library (read; --write adds files)")
