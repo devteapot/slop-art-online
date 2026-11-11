@@ -38,6 +38,15 @@ struct Edges {
     bank_color: vec4<f32>,
     // x: amount, y: slant, z: brightness, w: drift z.
     rain: vec4<f32>,
+    // xy: where my character stands (world x, z), z: sight radius (m), w: mode (0 none,
+    // 1 not seen now, 2 limited view).
+    sight: vec4<f32>,
+    // x, y: soft band inside and beyond the radius (m), z: dimming, w: desaturation.
+    sight_look: vec4<f32>,
+    // rgb: fog colour (linear), a: flattening toward it (not seen now).
+    sight_fog: vec4<f32>,
+    // x: fully fogged at this multiple of the radius (limited view).
+    sight_far: vec4<f32>,
 }
 
 @group(0) @binding(4) var<uniform> edges: Edges;
@@ -145,8 +154,35 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         color = color + edges.rim.rgb * edges.fade.w * rf;
     }
 
-    // Fog banks: march from the camera to what this pixel sees (or the march distance).
     let raw_depth = textureLoad(depth_texture, clamp(px, vec2(0), vec2<i32>(edges.screen.xy) - vec2(1)), 0);
+
+    // The edge of my character's sight (sightedge.rs), a radius round me on the ground plane.
+    // Not seen now: beyond it, dimmer, greyer, flatter and a little cooler (the sky is left
+    // alone). Limited view: beyond it, into the fog's colour by sight_far × the radius; nothing
+    // is drawn past that, so the sky and what was not drawn are fog too.
+    if (edges.sight.w > 0.5) {
+        var reach = 1e9;
+        if (raw_depth > 1e-7) {
+            let p = unproject(in.uv, raw_depth);
+            reach = length(p.xz - edges.sight.xy);
+        }
+        let r = edges.sight.z;
+        if (edges.sight.w < 1.5) {
+            let t = smoothstep(r - edges.sight_look.x, r + edges.sight_look.y, reach) * step(1e-7, raw_depth);
+            let l = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
+            // Greyer; flatter toward the fog's colour (it follows the light, so night stays
+            // dark); dimmer and a little cooler.
+            var g = mix(color, vec3<f32>(l), edges.sight_look.w);
+            g = mix(g, edges.sight_fog.rgb, edges.sight_fog.a);
+            g = g * (1.0 - edges.sight_look.z) * vec3<f32>(0.95, 0.98, 1.05);
+            color = mix(color, g, t);
+        } else {
+            let t = smoothstep(r, r * edges.sight_far.x, reach);
+            color = mix(color, edges.sight_fog.rgb, t);
+        }
+    }
+
+    // Fog banks: march from the camera to what this pixel sees (or the march distance).
     if (edges.bank.x > 0.005) {
         let eye = edges.eye.xyz;
         let far_p = unproject(in.uv, max(raw_depth, 1e-6));

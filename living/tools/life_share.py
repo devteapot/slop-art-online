@@ -83,7 +83,8 @@ def run(d):
     classes = Counter(act_class(a) for a in acts)
     other_acts = Counter(a["do"] for a in acts if act_class(a) == "other")
     chron = jl(d / "chronicle.jsonl")
-    learned = [c["text"] for c in chron if c.get("kind") == "learn" and c.get("a") == S]
+    # A learn row's a is the teacher and b the learner (0 when one worked it out alone).
+    learned = [c["text"] for c in chron if c.get("kind") == "learn" and ((c.get("a") == S and not c.get("b")) or c.get("b") == S)]
     built = s.get("built") or {}
     sk = s.get("skills") or {}
     cost = sum(trials.cost(m, b["prompt"], b["completion"], b["cached"]) or 0 for m, b in (s.get("by_model") or {}).items())
