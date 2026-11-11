@@ -34,6 +34,8 @@ thread_local! {
 /// Alert bits for ongoing situations (bits 1..8 are bodily alarms).
 const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
+/// Something heard near and out of sight (only while sight has a field).
+const SOUND_NEAR: u32 = 1 << 10;
 const FAMILIAR_LIMIT: usize = 256;
 /// Marks at 0xC000 | node: when a desire last began to act.
 const DESIRE_MARK: u16 = 0xC000;
@@ -46,6 +48,8 @@ const HAILED_MS: u64 = 6_000;
 
 struct Scene {
     creatures: Vec<NearCreature>,
+    /// Heard and not seen (only while sight depends on facing), nearest first.
+    heard: Vec<NearCreature>,
     resources: Vec<(ResourceNode, f32)>,
     structures: Vec<(Structure, f32)>,
 }
@@ -213,10 +217,11 @@ impl<'a> Ev<'a> {
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).
-            let creatures = crate::perception::visible(self.ctx, self.me.id, self.at, r, self.now);
+            let (creatures, heard) = crate::perception::sensed(self.ctx, self.me.id, self.at, r, self.now);
+            common::note_scene(creatures.len());
             let resources = common::resources_near(self.ctx, self.at, r);
             let structures = common::structures_near(self.ctx, self.at, r);
-            self.scene = Some(Scene { creatures, resources, structures });
+            self.scene = Some(Scene { creatures, heard, resources, structures });
         }
         self.scene.as_ref().unwrap()
     }
@@ -621,7 +626,15 @@ impl<'a> Ev<'a> {
             }
             Target::Speaker => {
                 if self.st.speaker != 0 && now.saturating_sub(self.st.heard_ms) < 60_000 {
-                    self.visible_creature(self.st.speaker)
+                    let sp = self.st.speaker;
+                    // Unseen but heard (sight has a field): for a target the body acts on (turning
+                    // to it), toward where the voice is.
+                    self.visible_creature(sp).or_else(|| {
+                        if !self.smell {
+                            return None;
+                        }
+                        self.scene().heard.iter().find(|c| c.id == sp).map(|c| Resolved::point(c.pos))
+                    })
                 } else {
                     None
                 }
@@ -657,6 +670,8 @@ impl<'a> Ev<'a> {
                     None
                 }
             }
+            // Toward the nearest thing heard and not seen (a point: the body does not know who).
+            Target::Sound => self.scene().heard.first().map(|c| Resolved::point(c.pos)),
             Target::Commotion => {
                 let sight = common::sight_for(self.ctx, self.me.id, &self.w, now);
                 crate::town::commotion(self.ctx, self.at, sight, now).map(Resolved::point)
@@ -822,8 +837,15 @@ impl<'a> Ev<'a> {
                 let me = self.me.id;
                 let now = self.now;
                 // Only a hostile move (its `<skill>_combat()` says so) names a victim.
-                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now);
-                coming == *b
+                let coming: Vec<u32> = self.ctx.db.activity().victim().filter(me).filter(|a| a.phase == 1 && a.ends_ms > now).map(|a| a.id).collect();
+                // While sight depends on facing (the `fov_on` law), a windup is a threat only when
+                // its maker is seen: one from behind is not seen coming (docs/COMBAT.md). Without a
+                // field, as before: any windup aimed at me.
+                let seen = coming.is_empty() || common::senses_of(self.ctx, me, &self.w, now).field.is_none() || {
+                    let sc = self.scene();
+                    coming.iter().any(|id| sc.creatures.iter().any(|c| c.id == *id))
+                };
+                (!coming.is_empty() && seen) == *b
             }
             Cond::Believes(b) => self
                 .ctx
@@ -1120,6 +1142,18 @@ impl<'a> Ev<'a> {
             announced += 1;
             percept(self.ctx, &self.me, now, "saw", c.id, 0, c.pos, text, sal);
         }
+
+        // Sounds out of sight (only while sight depends on facing): someone or something heard
+        // near is noticed when it begins, as a person would ("You hear a person near, behind
+        // you, to the south-west."), never who it is. Its percept names no one and is placed
+        // where the listener stands.
+        let near = self.scene().heard.iter().find(|c| c.dist <= laws.heard_near_m).cloned();
+        if let Some(c) = near.as_ref().filter(|_| self.st.alerts & SOUND_NEAR == 0) {
+            let heading = self.ctx.db.body().id().find(self.me.id).map_or(0.0, |b| common::heading_at(&b, now));
+            let (what, wh, far) = living_rules::sight::heard_words(&crate::perception::heard_kind(self.ctx, &c.kind), at, heading, c.pos, 0);
+            percept(self.ctx, &self.me, now, "signal", 0, 0, at, format!("You hear {what} {far}, {wh}."), 0.3);
+        }
+        self.st.alerts = if near.is_some() { self.st.alerts | SOUND_NEAR } else { self.st.alerts & !SOUND_NEAR };
 
         // Structures. One made of several tiles (a town gate is a block of gate tiles) is noticed
         // once: new tiles touching others of the same kind and owner are one thing, and nothing
