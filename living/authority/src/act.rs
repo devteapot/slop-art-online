@@ -1523,10 +1523,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 notes.push(format!("traded with {}: {deal}", seen_as(from)));
             }
             Effect::Decline { offer } => {
-                // The rules tell its maker and onlookers (`tell`, `witness`); this only ends it.
+                // This only ends it: the rules word the outcome and tell its maker and onlookers
+                // (`tell`, `witness`).
                 let o = answered_offer(ctx, me, a.target.id as u32, offer, now)?;
                 ctx.db.trade_offer().id().delete(o.id);
-                notes.push(format!("declined {}'s offer of {} {} for {} {}", seen_as(o.from), o.give_qty, o.give_item, o.want_qty, o.want_item));
             }
             Effect::Found => {
                 if ctx.db.membership().member().find(me).is_some() {

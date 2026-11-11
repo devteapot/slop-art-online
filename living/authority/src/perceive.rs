@@ -509,7 +509,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let laws = common::laws(ctx);
     let join_ms = (laws.join_window_s * 1000.0) as u64;
     for o in ctx.db.trade_offer().to().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
-        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange, or decline; \"offer\": {} names this one)", o.give_qty, o.give_item, o.want_qty, o.want_item, o.id), "offer": o.id, "when": ago(o.at_ms)}));
+        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange, or decline)", o.give_qty, o.give_item, o.want_qty, o.want_item), "offer": o.id, "when": ago(o.at_ms)}));
     }
     if let Some(m) = ctx.db.membership().member().find(id) {
         for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= join_ms) {
