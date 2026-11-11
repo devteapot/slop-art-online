@@ -38,7 +38,7 @@ pub fn prop_tiles(prop: &Prop) -> Vec<(i32, i32)> {
     rect_tiles(prop.centre, prop.front, (prop.width_m * 0.5).max(0.25), (prop.depth_m * 0.5).max(0.25))
 }
 
-fn rect_tiles(centre: (f32, f32), front: (f32, f32), hw: f32, hd: f32) -> Vec<(i32, i32)> {
+pub(crate) fn rect_tiles(centre: (f32, f32), front: (f32, f32), hw: f32, hd: f32) -> Vec<(i32, i32)> {
     let (fx, fy) = front;
     let (ux, uy) = (-fy, fx);
     let r = (hw * hw + hd * hd).sqrt().ceil() as i32 + 1;
@@ -118,12 +118,23 @@ pub fn hiding_tiles(sight: &crate::land::Sight, kind: &str, height_m: f32, model
     tiles.iter().map(|t| solid.contains(t)).collect()
 }
 
+/// Whether a plan's blocking fixture hides what is behind it, by the land's
+/// [`Sight`](crate::land::Sight): by its kind's `hides_m` when the seed names it; else never
+/// when it rises no higher than the eye; else, when the plan gives the share of the view it
+/// blocks at eye height (`eye_solid`: a paling fence, a net rack), when that reaches
+/// `sight.solid`; else (a wall) it does.
+pub fn fixture_hides(sight: &crate::land::Sight, fx: &crate::settle::LaidFixture) -> bool {
+    sight.hides(&fx.kind, fx.height_m) && (!sight.by_cells(&fx.kind) || fx.eye_solid.map_or(true, |v| v >= sight.solid))
+}
+
 /// The land's tiles as the authority hosts them: building footprints block like walls, `Wall`
 /// where the model hides what is behind it at eye height and `Low` where it does not
 /// ([`hiding_tiles`], `LandParams::sight`). Water under a footprint is left alone, and so are roads, except under what
 /// stands in a paved plaza by design: wells, market stalls and a landmark (a clock tower). Props that stand in the way
 /// ([`crate::settle::PropKind::blocks`]: fountains, market crosses, carts, kiosks, food stalls)
 /// block every walkable tile under them, in the same way; the planner keeps them off streets and door paths.
+/// A plan's blocking fixtures (its walls and fences, `PlanSpec::fixtures`) block the tiles they
+/// stand on ([`fixture_hides`]).
 /// (Terrace drops, as `Drop`, and stair tiles are already in the land's own tiles; a drop
 /// under a footprint or a blocking prop becomes `Wall` where it hides.) Also marks the main
 /// walkable area, found from the first settlement's plaza.
@@ -148,6 +159,18 @@ pub fn hosted_map(land: &Land, p: &LandParams) -> (Map, Hosted) {
         let tiles = prop_tiles(prop);
         let hide = hiding_tiles(&p.sight, prop.kind.id(), prop.height_m, model(&prop.model_file), prop.centre, prop.front, &tiles);
         for (&(x, y), &tall) in tiles.iter().zip(&hide) {
+            if let Some(b) = blocking(map.get(x, y), tall, true) {
+                map.set(x, y, b);
+                h.blocked_tiles += 1;
+            }
+        }
+    }
+    // A plan's fixtures that block (walls, fences, stacks: `PlanSpec::fixtures`): every walkable
+    // tile under them, a street's too (the plan's author put the wall there), `Wall` where the
+    // fixture hides and `Low` where it is seen over or through.
+    for fx in land.plans.iter().flat_map(|p| p.fixtures.iter()) {
+        let tall = fixture_hides(&p.sight, fx);
+        for &(x, y) in &fx.tiles {
             if let Some(b) = blocking(map.get(x, y), tall, true) {
                 map.set(x, y, b);
                 h.blocked_tiles += 1;

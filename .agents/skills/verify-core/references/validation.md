@@ -8,6 +8,36 @@ Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d6098
 - After merging origin/main (`core-look2-m`): `sight` 6, `fov` 18, `moves` 5, `doing` 7; mechanics 23, 22 ("tending wounds") and 23 of 23 on three fresh worlds; steering 4 (the follower ended 3.55 m behind against 3.5, slow walkers at 1.04 m/s), 5 and 5 of 5. Bodies with no held look keep a zero facing offset, so their sight and steering read what they read before.
 - `just living-check` passes before the merge commit and after it.
 
+## 2026-11-11 fix-health-leak: another's health as perceived in fight reports and `health_of` (Spark)
+
+Branch `fix-health-leak` (from `e3f0527f`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (combat.md, the README row, SKILL.md's baseline), not a source wave.
+
+- `just living-check` passes with pipefail (rules 226 passed, 10 ignored; new `combat::tests::fight_reports_show_the_band_unless_appraised`).
+- `scenes.py health_seen` (new) on `core-hleak-220618`: 13 of 13. Before an appraisal both fighters' reports end "they look scratched." / "they look hurt."; inside C's reveal C's ends "they have 52 of 85 health." (D's max) and D's "they look hurt."; after the reveal C's is banded again; `health_of` with B at 43.9 % and `below` 48.0 said "above" (band middle 52) without an appraisal and "below" during one. The first two attempts on the same world: one pair fought three times and B died before the `health_of` probe, and a person's non-urgent think is dropped within `think_min_s` of the last skip (the probe now waits it out once and leaves the request pending).
+- Not run on this change: the rest of the baseline and the other scenes.
+
+## 2026-11-11 rules-senses-outcomes: the body's meters and statuses (Spark)
+
+Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change: `scenes.py alarms` new; needs.md and the feature map gain the body law.
+
+- `core-sso-214854` (default seed): `tick` 6, `alarms` 6, `refusal` 4, `food` 4, `senses` 7, `death-names` 8, all passing. `alarms`: an overlay's alarm told once over 6 s, the request "Your body: …", told again after the shipped script ended the episode, a `stamina` meter refused at install ("not a my_vitals field").
+- Cargo: `living-rules` 235 passed, 10 ignored (`script::body` 7, `ui::` 30 with `appraise_is_offered_toward_creatures_not_things` and `a_target_class_must_be_a_class_and_needs_a_target`, `outcome` 2); `living-mind` 93.
+- Cost: `living/tools/bench.py` on `verify-bench-status` (264 characters): `brain.status` 124 a second, p50 0.007 ms, p99 0.14 ms, 2.27 ms a second (`bench-status/rest.json`; docs/WORLD_RULES.md "The body: meters and statuses").
+- Not run: `needs` (waits for a real night), `fov`, `skirmish`, the island and Cullet scenes.
+## 2026-11-11 layout-2: Cullet's trades at the places of the plan's open lots (dev-box)
+
+Branch `layout-2` merged with main (`e301aa9f`, kit-2 and rules-3 in), own container `layout2-stdb` (2.14.1, port 3329, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `--target-dir` the branch's private build folder, `scoped`, no minds, no model calls. Both scratch databases answered 404 after cleanup. Only the `rhythm` scene was run; the plan's walls now block (`plans[].fixtures`), so every walk in it went round walls and through gates.
+
+| Scene | Run | Result |
+| --- | --- | --- |
+| `rhythm` (before the merge; thirteen residents) | `core-layout2-213412-rhythm` | 25 of 26 |
+| `rhythm` (merged) | `core-layout2m-215141-rhythm` | 25 of 26 |
+
+- The checks added for layout-2 pass in both runs: everyone knows the six named places of the plan's open lots; Otto Brandt is at the clay pit (5 of 5 samples in 09:12–09:57, 2.7 and 4.2 m from his spot); Benedikt Orme teaches in the Readers' yard (18 of 18, then 13 of 15); Greta Dunmore is on the Bleach before 13:00 (3 of 3, 4 of 4); Bram Calloway is in the boatyard in the afternoon (6 of 6 in both). The older 20 checks pass in both.
+- **The one failure in each run is the child's check as first written, and it was the check.** Edda Hollin (12) follows her father to the Cone before 09:00 and walks about 230 m of wynds from there: three of this scene's 30-second hours. A share of the lesson hours cannot hold on a 12-minute day (run 1: there for 2 of 7 samples of 10:54–11:54; run 2, with the window moved to 11:33–11:58: 18.8 m short at 11:50, in the yard at 12:25). The check is now `child_at_lessons`: within 25 m when lessons end and standing in the yard by 12:45. Evaluated on both runs' recorded samples (`rhythm-samples.jsonl`) it passes: 6.3 m at noon and 2.7 m after in run 1, 18.8 m and 3.7 m in run 2. **It has not been driven live in that form.** On Cullet's own 48-minute day the same walk is three quarters of a game hour.
+- Not run: every other scene, the Cargo checks of this skill (the rules tests ran under `living-check`).
+
+
 ## 2026-11-11 rules-3: store capacity by kind, regrowth by season (dev-box)
 
 Branch `rules-3` (from `93019a37`, origin/main `1d71e6c2` merged), own container `rules3-stdb` (2.14.1, port 3325), one private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (goods, decay and the new winter feature), read against `script.rs`, `skills.rhai`, Cullet's laws, `common::amount_now` and `brain.rs`'s selector, not a source wave over every feature.

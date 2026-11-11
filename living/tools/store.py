@@ -540,6 +540,34 @@ class Identity:
 # Scrubber
 # --------------------------------------------------------------------------------------------
 
+NAME_KEYS = {"known_name", "known_as", "introduced_as", "nickname", "calls_self", "self_name", "name",
+             "given_name", "told_name"}
+NOT_NAMES = {"new", "here", "fine", "good", "ok", "okay", "lost", "sorry", "back", "home", "hungry", "tired",
+             "ready", "done", "friend", "stranger", "traveller", "traveler", "newcomer", "someone", "nobody",
+             "player", "person", "happy", "sad", "well", "alive", "dead", "busy", "free", "glad", "late", "early",
+             "cold", "hot", "afraid", "scared", "sure", "safe", "alone", "armed", "unarmed", "wounded", "hurt",
+             "looking", "trying", "going", "leaving", "staying", "waiting", "coming", "just", "only", "still",
+             "not", "no", "yes", "null", "none", "unknown", "you", "me", "him", "her", "them", "child", "adult",
+             "later", "soon", "tomorrow", "again", "sometime", "anytime", "anything", "whatever", "maybe",
+             "please", "sir", "madam", "maam", "mate", "buddy", "pal", "boss", "anyone", "everyone", "nothing"}
+SELF_NAME_RULES = (
+    re.compile(r"(?i)\b(?:call me|my name(?:'s| is)|name'?s|they call me|i go by|people call me)\s+"
+               r"[«“\"'‘]?([A-Za-z][A-Za-z'-]{1,30})"),
+    re.compile(r"(?i)^\W*(?:(?:hi|hello|hey|greetings|evening|morning)\W+)?(?:i'?m|i am|im|it'?s|this is)\s+"
+               r"[«“\"'‘]?([A-Za-z][A-Za-z'-]{1,30})[»”\"'’]?\W*$"),
+)
+ISO_STAMP = re.compile(r"\b\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)")
+
+
+def _iso_ms(t):
+    try:
+        return int(_dt.datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp() * 1000)
+    except ValueError:
+        return None
+
+
+IDENTITY_CATS = {"owner-first-name", "owner-name", "owner-identity", "login", "owner-line", "owner-echo",
+                 "hostname", "dropped-entry", "dropped-row", "dropped-line", "kept-row"}
 SECRET_CATS = {"known-secret", "hf-token", "github-token", "api-key", "aws-key", "jwt", "bearer",
                "secret-assignment", "secret-field", "url-credentials", "slack-token", "google-key"}
 DECISIONS = {
@@ -584,12 +612,13 @@ def mask(value, cat):
                 return f"{pre}…[{n} chars]"
         return f"…[{n} chars]"
     if cat in ("email", "owner-email"):
-        local, _, dom = value.partition("@")
-        return f"{local[:1]}…@{dom[:1]}…"
+        return f"…@…[{n} chars]"
     if cat == "private-ip":
         return ".".join(value.split(".")[:2]) + ".x.x"
     if cat == "home-path":
-        return re.sub(r"(/(?:home|Users)/|\\Users\\)([^/\\]+)", lambda m: m.group(1) + m.group(2)[:1] + "…", value)
+        return re.sub(r"(/(?:home|Users)/|\\Users\\)([^/\\]+)", lambda m: m.group(1) + "…", value)
+    if cat in IDENTITY_CATS:
+        return f"[{n} chars]"   # no letters: a first and last letter can be enough to recognise
     if n <= 2:
         return value[:1] + "…"
     return f"{value[:1]}…{value[-1:]}[{n}]"
@@ -622,13 +651,17 @@ class Findings:
         return {c: {"count": self.counts[c], "examples": self.examples.get(c, [])} for c in sorted(self.counts)}
 
 
-def _alternation(words, flags=0, boundary=True):
+def _alternation(words, flags=0, boundary=True, hyphen_joins=True):
     words = sorted({w for w in words if w}, key=len, reverse=True)
     if not words:
         return None
     body = "|".join(re.escape(w) for w in words)
-    # "_" separates ("experience_name.txt"); letters, digits and "-" join
-    return re.compile(rf"(?<![A-Za-z0-9-])(?:{body})(?![A-Za-z0-9-])" if boundary else f"(?:{body})", flags)
+    if not boundary:
+        return re.compile(f"(?:{body})", flags)
+    # "_" separates ("experience_name.txt"). For host names "-" joins ("spark-2b4e"); for names
+    # and logins it separates ("login-sessions", "experience-name").
+    j = "A-Za-z0-9-" if hyphen_joins else "A-Za-z0-9"
+    return re.compile(rf"(?<![{j}])(?:{body})(?![{j}])", flags)
 
 
 PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----")
@@ -679,9 +712,27 @@ SPEECH_VERBS = {"said", "says", "saying", "typed", "types", "babbled", "babbles"
 COMMON_SHORT = {"hi", "hey", "helo", "yes", "no", "ok", "okay", "yeah", "thanks", "bye", "sup", "yo", "what",
                 "why", "huh", "oh", "ah", "wow", "please", "sory", "god", "nice", "cool", "here", "there"}
 WORD = re.compile(r"[A-Za-z0-9]+(?:'[A-Za-z]+)?")
+# Words too common to make a fuzzy echo on their own ("can see it" is not anyone's line).
+STOPWORDS = set("""a an the and or but if then so of to in on at by for from with without into onto over under
+up down out off about as is are was were be been being am do does did done have has had having i me my mine
+we us our you your yours he him his she her hers it its they them their this that these those there here
+what which who whom whose when where why how not no yes can could will would shall should may might must
+just very too also only even still yet now then than all any some each every both few more most much many
+one two get got go goes going went come came see saw seen look looked know knew think thought say said tell
+told want wanted like make made let take took give gave well oh ah ok okay hi hey hello sure right good""".split())
 QUOTE_CHARS = "\"'“”‘’«»`"
 LINE_OPEN = r"(“|‘|«|\"|'|`|\\\"|&quot;|&#34;|&ldquo;|&#8220;|&lsquo;|&#8216;|&#39;|&apos;)"
 LINE_CLOSE = r"(”|’|»|\"|'|`|\\\"|&quot;|&#34;|&rdquo;|&#8221;|&rsquo;|&#8217;|&#39;|&apos;)"
+
+
+def _line_core(line):
+    """A line without its leading or trailing whitespace and punctuation ("where am i ?" -> "where am i")."""
+    return re.sub(r"^[\s.!?,…;:¿¡\-]+|[\s.!?,…;:\-]+$", "", line or "")
+
+
+def _core_pattern(core):
+    """Its regex: internal whitespace of any width."""
+    return r"\s+".join(re.escape(w) for w in core.split())
 
 
 def _collapse(w):
@@ -713,7 +764,16 @@ class EchoMatcher:
             toks = [t for t in toks if t]
             if not toks:
                 continue
-            (self.short if len(toks) <= 2 else self.long).append((line, toks))
+            if len(toks) <= 2:
+                self.short.append((line, toks))
+            elif len(self._distinctive(toks)) >= 2:
+                # a longer line echoes fuzzily only through its distinctive words; one made of
+                # common words ("I can see it") is caught only when repeated exactly
+                self.long.append((line, toks))
+
+    @staticmethod
+    def _distinctive(toks):
+        return {t for t in toks if t not in STOPWORDS and _collapse(t) not in STOPWORDS and len(t) >= 3}
 
     def __bool__(self):
         return bool(self.short or self.long)
@@ -747,10 +807,14 @@ class EchoMatcher:
         for line, toks in self.long:
             n = len(toks)
             want = set(toks)
+            rare = self._distinctive(toks)
             joined = " ".join(toks)
             for i in range(0, max(0, len(words) - n + 1)):
                 win = [w[2] for w in words[i:i + n]]
                 ws = set(win)
+                shared_rare = rare & ws
+                if len(shared_rare) < 2 or sum(len(t) for t in shared_rare) < 8:
+                    continue
                 inter = len(want & ws)
                 if (inter >= 3 and inter / len(want | ws) >= 0.6) or \
                         self._difflib.SequenceMatcher(None, " ".join(win), joined).ratio() >= 0.8:
@@ -782,6 +846,52 @@ OWNER_WORDS = re.compile(r"(?i)\b(owner|owner's|you|your|you're|yourself|feedbac
                          r"intention|wants? to|wishes|liked|disliked|felt)\b")
 
 
+# Files we wrote, not the owner: an owner line can reach them only by substitution, in quotes.
+TEMPLATE_PATTERNS = ("journal/system/*.txt", "*/journal/system/*.txt", "*.rhai", "*/run/installed_script.txt",
+                     "run/installed_script.txt", "*/installed_source*", "installed_source*")
+# A session's review files: scrubbed for review in the same pass, never published without approval.
+SESSION_REVIEW_NAMES = ("report.json", "commands.jsonl")
+COMMAND_FILES = ("commands.jsonl", "events.jsonl")
+SAY_WORDS = {"say", "said", "speak", "human_say", "human_speak", "line", "sent", "chat"}
+
+
+# Credential files: refused by name before anything is read, and listed as held.
+SECRET_NAME_PATTERNS = (".env", ".env.*", "*.env", "*.token", "*.tokens", "*.key", "*.pem", "*.p12", "*.pfx",
+                        "*.jks", "*.keystore", "*.kdbx", "*.secret", "*.secrets", "secrets.*", "id_rsa*",
+                        "id_dsa*", "id_ecdsa*", "id_ed25519*", "credentials*", ".netrc", ".git-credentials",
+                        ".pgpass", ".npmrc", ".pypirc", "cli.toml", "hf_token", "token", "*.credentials")
+SECRET_DIRS = {"tokens", "token", "secrets", "secret", ".ssh", ".gnupg", "credentials", ".aws", "slop-store"}
+
+
+def is_secret_path(relpath):
+    """Whether a path names a credential: its file name or any folder of it."""
+    parts = relpath.replace("\\", "/").replace("!", "/").split("/")
+    name = parts[-1]
+    if any(fnmatch.fnmatch(name, pat) for pat in SECRET_NAME_PATTERNS):
+        return True
+    return any(p in SECRET_DIRS for p in parts[:-1])
+
+
+def _never_read():
+    raise Refused("a secret path must not be read")
+
+
+def is_template(relpath):
+    p = relpath.replace("\\", "/").split("!")[-1]
+    return any(fnmatch.fnmatchcase(p, pat) for pat in TEMPLATE_PATTERNS)
+
+
+def is_command_row(relpath, obj):
+    """A row of a command history (the client's commands or events): kept when it says a line."""
+    if os.path.basename(relpath.split("!")[-1]) in COMMAND_FILES:
+        return True
+    if isinstance(obj, dict):
+        for k in ("cmd", "command", "reducer", "kind", "type", "ev", "event"):
+            if str(obj.get(k, "")).lower() in SAY_WORDS:
+                return True
+    return False
+
+
 def session_rel(relpath):
     """The path inside the session folder ("session/journal/x.jsonl" -> "journal/x.jsonl"), or None."""
     parts = relpath.replace("\\", "/").split("/")
@@ -805,8 +915,12 @@ class Scrubber:
     """Redacts what must not be public from text, refuses whole files that cannot be made safe,
     and holds back files in categories the owner has not decided."""
 
-    def __init__(self, identity, decisions=None, cfg=None, machine=None, player_ids=(), kind=None):
+    def __init__(self, identity, decisions=None, cfg=None, machine=None, player_ids=(), kind=None,
+                 player_names=()):
         self.id = identity
+        self.extra_names = {n.strip() for n in player_names if n and n.strip()}   # --player-name
+        self.self_names = set()      # names the player gave themself, learned from the run
+        self.session_span = None     # (first, last) unix ms of the client log: the played span
         self.decisions = dict((cfg or {}).get("decisions") or {})
         self.decisions.update(decisions or {})
         self.decisions = {k: v for k, v in self.decisions.items() if not k.startswith("_")}
@@ -822,6 +936,8 @@ class Scrubber:
         self.logins_seen = set()
         self.profile_dirs = set()
         self.dropped = []       # what the session echo pass dropped: {file, where, why}
+        self.review_data = {}   # scrubbed copies of review-only files (report.json, commands.jsonl)
+        self._template = False  # inside a prompt template or installed script: exact quoted lines only
         self.echo = None
         self._build()
 
@@ -829,12 +945,10 @@ class Scrubber:
         idn = self.id
         self.known_secret = _alternation(idn.secrets, boundary=False)
         self.owner_email = _alternation(idn.emails, re.I, boundary=False)
-        self.owner_name = _alternation(idn.names, re.I)
-        self.surname = _alternation(idn.surnames)
+        self.owner_name = _alternation(idn.names, re.I, hyphen_joins=False)
+        self.surname = _alternation(idn.surnames, re.I, hyphen_joins=False)
         # names: any case, and "_" counts as a separator ("experience_diego.txt")
-        self.first_name = (re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(n) for n in
-                                      sorted(idn.first_names, key=len, reverse=True)) + r")(?![A-Za-z0-9])", re.I)
-                           if idn.first_names else None)
+        self._names()
         self.hostnames = _alternation(idn.hostnames, re.I)
         # binary scans: literals without word boundaries (strings in binaries run into bytes)
         self.bin_literals = _alternation(idn.emails | idn.hostnames | idn.names | idn.surnames, re.I,
@@ -842,29 +956,63 @@ class Scrubber:
         self._logins()
         self._lines()
 
+    def _names(self):
+        """The player's names, replaced by "Player": the owner's first name, names the player gave
+        themself in the run, and --player-name. Any case; "_" and "-" separate."""
+        names = set(self.id.first_names) | self.extra_names | self.self_names
+        self.player_names = names
+        self.first_name = (re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(n) for n in
+                                      sorted(names, key=len, reverse=True)) + r")(?![A-Za-z0-9])", re.I)
+                           if names else None)
+
+    def learn_self_name(self, name):
+        """A name the player gave themself. Single words only; not a common word or a state."""
+        n = (name or "").strip().strip("«»“”\"'‘’.,!?;:()[]")
+        if (not n or " " in n or len(n) < 2 or len(n) > 30 or not re.fullmatch(r"[A-Za-z][A-Za-z'-]*", n)
+                or n.lower() in STOPWORDS or n.lower() in NOT_NAMES):
+            return
+        self.self_names.add(n)
+
     def _logins(self):
-        self.login = _alternation(self.id.logins | self.logins_seen)
+        self.login = _alternation(self.id.logins | self.logins_seen, hyphen_joins=False)
 
     def _lines(self):
         lines = sorted(self.owner_lines, key=len, reverse=True)
-        if lines:
-            body = "|".join(re.escape(l) for l in lines)
-            # any quote, typographic, single, escaped or as an HTML entity; any case
-            self.line_re = re.compile(LINE_OPEN + rf"\s*({body})([.!?,…]*)\s*" + LINE_CLOSE, re.I)
+        cores = sorted({_line_core(l) for l in lines if _line_core(l)}, key=len, reverse=True)
+        if cores:
+            body = "|".join(_core_pattern(c) for c in cores)
+            # any quote, typographic, single, escaped or as an HTML entity; any case; the line's
+            # whitespace and leading or trailing punctuation are not required ("where am i ?")
+            self.line_re = re.compile(LINE_OPEN + rf"[\s.!?,…¿¡]*({body})([\s.!?,…]*)" + LINE_CLOSE, re.I)
         else:
             self.line_re = None
         self.line_norms = {_norm_line(l) for l in lines}
         self.echo = EchoMatcher(lines) if lines else None
         # Lines of 6+ characters are also caught unquoted (a model repeating them in a reply);
         # shorter ones ("hi") only in quotes, or every "hi" in the world would go.
-        longer = [l for l in lines if len(l) >= 6]
-        self.line_bare = (re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(l) for l in longer) + r")(?![A-Za-z0-9])", re.I)
-                          if longer else None)
+        longer = [c for c in cores if len(c) >= 6]
+        self.line_bare = (re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(_core_pattern(c) for c in longer) +
+                                     r")(?![A-Za-z0-9])", re.I) if longer else None)
 
     # -- pass 1: learn the session's player and the owner's lines --------------------------------
     def learn_player(self, text):
-        for m in PLAYER_LOG.finditer(ANSI.sub("", text)):
+        clean = ANSI.sub("", text)
+        for m in PLAYER_LOG.finditer(clean):
             self.player_ids.add(int(m.group(1)))
+        stamps = [_iso_ms(m.group(0)) for m in ISO_STAMP.finditer(clean)]
+        stamps = [x for x in stamps if x]
+        if stamps and PLAYER_LOG.search(clean):
+            lo, hi = min(stamps), max(stamps)
+            if self.session_span:
+                lo, hi = min(lo, self.session_span[0]), max(hi, self.session_span[1])
+            self.session_span = (lo, hi)
+
+    def in_span(self, at_ms):
+        """Whether a row's time lies in the played span (unknown span or time: yes). A "You said"
+        row after the client quit is the character's AI mind speaking, not the owner."""
+        if not self.session_span or not isinstance(at_ms, int):
+            return True
+        return self.session_span[0] - 1000 <= at_ms <= self.session_span[1] + 5000
 
     def learn_logins(self, text):
         before = len(self.logins_seen)
@@ -888,7 +1036,23 @@ class Scrubber:
                 self.owner_lines.add(m.group(1))
         for m in re.finditer(r"(?m)^\s*\d+\s*\|\s*(\d+)\s*\|.*?You said(?: to [^:“\n]{1,80})?: “([^”\n]{1,800})”", s):
             if int(m.group(1)) in pids:
-                self.owner_lines.add(m.group(2))
+                cols = [c.strip() for c in m.group(0).split("|")]
+                at = int(cols[3]) if len(cols) > 3 and cols[3].isdigit() and len(cols[3]) >= 12 else None
+                if self.in_span(at):
+                    self.owner_lines.add(m.group(2))
+        # names residents know the player by: tags ({X=#26}), labels ("X (#26)", "X (person:26)"),
+        # and introductions ("… introduced themself as «X» {someone=#26}")
+        for m in re.finditer(r"([^=,{}\n]{1,40})=#(\d+)", s):
+            if int(m.group(2)) in pids:
+                self.learn_self_name(m.group(1).strip())
+        for m in re.finditer(r"(?<![\w'-])([A-Z][A-Za-z'-]{1,30}) \((?:#|person:)(\d+)\)", s):
+            if int(m.group(2)) in pids:
+                self.learn_self_name(m.group(1))
+        for m in re.finditer(r"(?:introduced|introduces|called|calls|named|names) (?:him|her|them)sel(?:f|ves) "
+                             r"(?:as )?[«“\"'‘]?([A-Za-z][A-Za-z'-]{1,30})[»”\"'’]?[^\n{]{0,80}\{([^}]*)\}", s):
+            first = re.search(r"=#(\d+)", m.group(2))
+            if first and int(first.group(1)) in pids:
+                self.learn_self_name(m.group(1))
         # "<speaker> said[ to <x>]: “…” {<speaker>=#n, …}": the tags follow the order of mention,
         # so the first is the speaker, except in "You said to …", where the tags start after "You".
         for m in re.finditer(r"(?:^|\n|\] |\d\d:\d\d )([^:“\n\]]{1,80}?) [a-z]+(?: to [^:“\n]{1,80})?: "
@@ -926,12 +1090,14 @@ class Scrubber:
                                                          (said and os.path.basename(name) == "events.jsonl")):
                     self.owner_lines.add(v)
             subj = obj.get("subject")
-            if isinstance(subj, int) and subj in self.player_ids:
+            if isinstance(subj, int) and subj in self.player_ids and self.in_span(obj.get("at_ms")):
                 for v in obj.values():
                     if isinstance(v, str):
                         m = re.match(r"\s*You said(?: to [^:“\n]{1,80})?: “([^”\n]{1,800})”", v)
                         if m:
                             self.owner_lines.add(m.group(1))
+            if self._about_player(obj):
+                self._learn_graph_names(obj)
             for v in obj.values():
                 self.learn_json(v, name)
         elif isinstance(obj, list):
@@ -939,9 +1105,39 @@ class Scrubber:
                 self.learn_json(v, name)
         elif isinstance(obj, str):
             self.learn_lines(obj)
+            t = obj.strip()
+            if t[:1] in "{[" and t[-1:] in "}]" and len(t) < 2_000_000:
+                try:
+                    self.learn_json(json.loads(t), name)   # a model reply is JSON text
+                except ValueError:
+                    pass
+
+    def _about_player(self, d):
+        """A dict about the player: an id key holding the player's id, or "person:<id>"/"#<id>"."""
+        for k, v in d.items():
+            if k in ("id", "person", "who", "about", "target", "of", "key", "node", "character") and (
+                    (isinstance(v, int) and v in self.player_ids) or
+                    (isinstance(v, str) and any(v in (f"person:{p}", f"#{p}", str(p)) for p in self.player_ids))):
+                return True
+        return False
+
+    def _learn_graph_names(self, d):
+        """known_name and the like, in a memory graph node or relation about the player."""
+        for k, v in d.items():
+            if isinstance(v, str) and k in NAME_KEYS:
+                self.learn_self_name(v)
+            elif isinstance(v, dict):
+                self._learn_graph_names(v)
 
     def finish_learning(self):
         self.owner_lines = {l for l in self.owner_lines if l.strip()}
+        # a name the player gave themself in a typed line: "I'm X", "call me X", "my name is X"
+        for line in self.owner_lines:
+            for rx in SELF_NAME_RULES:
+                m = rx.search(line)
+                if m:
+                    self.learn_self_name(m.group(1))
+        self._names()
         self._lines()
 
     # -- pass 2: redact -------------------------------------------------------------------------
@@ -976,7 +1172,8 @@ class Scrubber:
                 acc.add("owner-line", m.group(2))
                 return m.group(1) + "[owner line]" + m.group(4)
             s = self.line_re.sub(lf, s)
-            s = self._sub(self.line_bare, s, "owner-line", acc, "[owner line]")
+            if not self._template:
+                s = self._sub(self.line_bare, s, "owner-line", acc, "[owner line]")
         s = self._sub(self.owner_email, s, "owner-email", acc, "[owner-email]")
 
         def ef(m):
@@ -1015,6 +1212,13 @@ class Scrubber:
         return s
 
     def scrub_obj(self, obj, acc):
+        if isinstance(obj, dict) and obj.get("role") == "system" and not self._template:
+            # a system prompt is our template: an owner line can reach it only by substitution
+            self._template = True
+            try:
+                return self.scrub_obj(obj, acc)
+            finally:
+                self._template = False
         if isinstance(obj, dict):
             out = {}
             for k, v in obj.items():
@@ -1048,6 +1252,44 @@ class Scrubber:
                 pub = pub[:a] + "owner-line" + pub[b:]
         return pub
 
+    def _replace_lines(self, obj, acc):
+        """Every string that holds or echoes an owner line becomes "[owner line]"; numbers (the
+        row's time) and other strings stay."""
+        if isinstance(obj, dict):
+            return {k: self._replace_lines(v, acc) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self._replace_lines(v, acc) for v in obj]
+        if isinstance(obj, str) and ("[owner line]" in obj or self.echo.find(obj)):
+            acc.add("owner-line", obj)
+            return "[owner line]"
+        return obj
+
+    def safe_text(self, text):
+        """What review output may say: the published redaction, plus echoes of owner lines."""
+        out = self.scrub_text(str(text), Findings())
+        if self.echo is not None and bool(self.echo) and self.decisions.get("owner_lines") != "include":
+            for a, b, line in reversed(self.echo.find(out)):
+                out = out[:a] + "[owner line]" + out[b:]
+        return out
+
+    def safe(self, obj, path_keys=("path", "published_as", "file", "files")):
+        """A report object made safe for review files: paths as published, every string redacted."""
+        if isinstance(obj, dict):
+            return {self.safe_text(k): (self._safe_path(v) if k in path_keys else self.safe(v, path_keys))
+                    for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self.safe(v, path_keys) for v in obj]
+        if isinstance(obj, str):
+            return self.safe_text(obj)
+        return obj
+
+    def _safe_path(self, v):
+        if isinstance(v, list):
+            return [self._safe_path(x) for x in v]
+        if isinstance(v, str):
+            return self.safe_text(self.publish_path(v))
+        return v
+
     # -- session echo pass: drop what quotes or repeats an owner line ------------------------------
     def _echo_on(self):
         return (self._session() and self.decisions.get("owner_lines") != "include"
@@ -1063,6 +1305,8 @@ class Scrubber:
 
     def _redact_echo(self, obj, acc):
         if isinstance(obj, dict):
+            if obj.get("role") == "system":
+                return obj      # templates: exact quoted lines only, already redacted
             return {k: self._redact_echo(v, acc) for k, v in obj.items()}
         if isinstance(obj, list):
             return [self._redact_echo(v, acc) for v in obj]
@@ -1076,7 +1320,10 @@ class Scrubber:
 
     def _echo_pass(self, relpath, name, new, acc):
         """In a play session: drop journal entries whose reply, and world rows or text lines that,
-        quote or echo an owner line; redact echoes inside prompts and JSON files."""
+        quote or echo an owner line; redact echoes inside prompts and JSON files. Command-history
+        rows (a say) are kept, with their text replaced. Templates are left to the exact pass."""
+        if is_template(relpath):
+            return new
         if name.endswith(".jsonl"):
             out = []
             for i, line in enumerate(new.splitlines()):
@@ -1094,8 +1341,17 @@ class Scrubber:
                     out.append(json.dumps(self._redact_echo(obj, acc), ensure_ascii=False, separators=(",", ":")))
                     continue
                 hits = self._echoes(line) if line.strip() else []
+                if hits and isinstance(obj, (dict, list)) and is_command_row(relpath, obj):
+                    # a command history keeps its row and timestamp; only the words go
+                    obj = self._replace_lines(obj, acc)
+                    self.dropped.append({"file": relpath, "where": f"row {i}", "why": "; ".join(hits),
+                                         "action": "kept, text replaced by [owner line]"})
+                    acc.add("kept-row", str(i))
+                    out.append(json.dumps(obj, ensure_ascii=False, separators=(",", ":")))
+                    continue
                 if hits:
-                    self.dropped.append({"file": relpath, "where": f"row {i}", "why": "; ".join(hits)})
+                    self.dropped.append({"file": relpath, "where": f"row {i}", "why": "; ".join(hits),
+                                         "action": "dropped"})
                     acc.add("dropped-row", str(i))
                     continue
                 out.append(line)
@@ -1131,14 +1387,17 @@ class Scrubber:
         for d in self.profile_dirs:
             if d == "." or norm.startswith(d + "/"):
                 return "refused", f"browser profile ({d}/: cookies, logins, history)"
-        if any(fnmatch.fnmatch(name, p) for p in SECRET_FILE_PATTERNS) or name in ("token",):
-            return "refused", "secrets file"
+        if is_secret_path(relpath) or any(fnmatch.fnmatch(name, p) for p in SECRET_FILE_PATTERNS):
+            return "refused", "secret path, not read"
         for p in parts[:-1]:
             if p in BUILD_DIRS or p.startswith(BUILD_DIR_PREFIXES):
                 return "skipped", f"build output or cache ({p}/)"
         if name.endswith(BUILD_EXT):
             return "skipped", "build output"
         if self._session():
+            if name in SESSION_REVIEW_NAMES:
+                return "review", ("held: scrubbed for review only (review/); not published without the "
+                                  "general coordinator's approval")
             allowed, why = session_allowed(relpath)
             if not allowed:
                 return "excluded", why
@@ -1167,6 +1426,12 @@ class Scrubber:
 
     def scrub_bytes(self, relpath, data):
         """(status, reason, scrubbed bytes or None, Findings). Status ok means publishable."""
+        if is_template(relpath) and not self._template:
+            self._template = True
+            try:
+                return self.scrub_bytes(relpath, data)
+            finally:
+                self._template = False
         acc = Findings()
         name = os.path.basename(relpath)
         if name.endswith(".gz") and not name.endswith(ARCHIVE_EXT):
@@ -1281,12 +1546,18 @@ def iter_source(src):
 
 
 def _iter_file(rel, path):
+    if is_secret_path(rel):
+        yield rel, path, _never_read                              # listed, never opened
+        return
     if path.endswith(ARCHIVE_EXT) and tarfile.is_tarfile(path):
         yield rel, path, None  # the archive itself (listed, not uploaded as-is)
         try:
             with tarfile.open(path) as tf:
                 for m in tf:
                     if not m.isfile():
+                        continue
+                    if is_secret_path(m.name):
+                        yield f"{rel}!{m.name}", None, _never_read   # listed, never extracted
                         continue
                     data = tf.extractfile(m).read()
                     yield f"{rel}!{m.name}", None, (lambda d=data: d)
@@ -1354,8 +1625,10 @@ def scrub_source(src, scrubber, keep_data=False):
             raw = load()
         if raw is not None:
             st2, why2, out, acc = scrubber.scrub_bytes(inner, raw)
-            if st2 in ("refused", "excluded") and st != "excluded":
+            if st2 in ("refused", "excluded") and st not in ("excluded", "review"):
                 st, why = st2, why2
+            if st == "review" and st2 == "ok":
+                scrubber.review_data[rel] = out
             elif st == "ok":
                 why = why or why2
             totals.merge(acc)
@@ -1406,6 +1679,8 @@ def decision_report(src, scrubber, rows, totals):
                           "examples": [mask(l, "owner-line") for l in sorted(scrubber.owner_lines)[:5]],
                           "about": DECISIONS["owner_lines"]}
     out["owner_first_name"] = {"decision": scrubber.decisions.get("owner_first_name"),
+                               "self_given_names": [mask(n, "owner-first-name") for n in sorted(scrubber.self_names)],
+                               "extra_names": len(scrubber.extra_names),
                                "occurrences": totals.counts.get("owner-first-name", 0),
                                "examples": totals.examples.get("owner-first-name", []),
                                "about": DECISIONS["owner_first_name"]}
@@ -1424,17 +1699,18 @@ def dry_run_markdown(src, kind, rows, totals, decisions, scrubber):
         s = by.setdefault(r["status"], [0, 0])
         s[0] += 1
         s[1] += r["bytes"] or 0
-    lines = [f"# Store dry run: `{tilde(src)}`", "",
+    lines = [f"# Store dry run: `{src}`", "",
              f"Kind: {kind}. Nothing was uploaded; nothing was written outside this report.", "",
              "## Files by status", "", "| Status | Files | Bytes |", "| --- | ---: | ---: |"]
-    for st in ("ok", "held", "excluded", "refused", "skipped", "archive"):
+    for st in ("ok", "review", "held", "excluded", "refused", "skipped", "archive"):
         if st in by:
             lines.append(f"| {st} | {by[st][0]} | {fmt_bytes(by[st][1])} |")
     lines += ["", "## Redactions (all files read, masked)", "", "| Category | Count | Examples (masked) |",
               "| --- | ---: | --- |"]
-    for c, v in totals.as_dict().items():
+    tot = totals if isinstance(totals, dict) else totals.as_dict()
+    for c, v in tot.items():
         lines.append(f"| {c} | {v['count']} | {', '.join('`' + e + '`' for e in v['examples'])} |")
-    if not totals.counts:
+    if not tot:
         lines.append("| (none) | 0 | |")
     lines += ["", "## For the owner to decide", ""]
     for cat, d in decisions.items():
@@ -1451,9 +1727,8 @@ def dry_run_markdown(src, kind, rows, totals, decisions, scrubber):
         lines.append("")
     lines += ["## Per file", "", "| Path | Bytes | Status | Reason | Redactions |", "| --- | ---: | --- | --- | --- |"]
     for r in rows:
-        red = ", ".join(f"{c} {v['count']}" for c, v in r["findings"].items())
-        pa = f" → `{r['published_as']}`" if r.get("published_as") else ""
-        lines.append(f"| `{r['path']}`{pa} | {r['bytes'] if r['bytes'] is not None else ''} | {r['status']} | "
+        red = ", ".join(f"{c} {n}" for c, n in (r.get("redactions") or {}).items())
+        lines.append(f"| `{r['path']}` | {r['bytes'] if r['bytes'] is not None else ''} | {r['status']} | "
                      f"{r['reason'] or ''} | {red} |")
     return "\n".join(lines) + "\n"
 
@@ -1554,9 +1829,10 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
                       "redactions": {c: v["count"] for c, v in r["findings"].items()}} for r in rows],
            "models": _model_counts(calls),
            "held": [{"path": scrubber.publish_path(r["path"]), "reason": r["reason"]}
-                    for r in rows if r["status"] in ("excluded", "held")],
+                    for r in rows if r["status"] in ("excluded", "held", "review", "refused")],
            "dropped": [{"file": scrubber.publish_path(d["file"]), "where": d["where"],
-                        "why": "quotes an owner line" if d["why"].startswith("quotes") else "repeats an owner line"}
+                        "why": "quotes an owner line" if d["why"].startswith("quotes") else "repeats an owner line",
+                        "action": d.get("action", "dropped")}
                        for d in scrubber.dropped
                        if d["file"] in {r["path"].split("!")[-1] for r in rows if r["status"] == "ok"}],
            "counts": {"instances": len(instances), "calls": len(calls), "rows": len(streams),
@@ -2072,7 +2348,7 @@ def _dryrun_dir():
     return os.path.expanduser(f"~/store-dryrun-{_dt.date.today().isoformat()}")
 
 
-def _scrubber_for(src, cfg, machine, kind=None, player=None, decide=()):
+def _scrubber_for(src, cfg, machine, kind=None, player=None, decide=(), player_names=()):
     kind = kind or detect_kind(src)
     decisions = {}
     for d in decide or ():
@@ -2081,7 +2357,7 @@ def _scrubber_for(src, cfg, machine, kind=None, player=None, decide=()):
             raise Refused(f"--decide {d}: expected one of {', '.join(DECISIONS)} = include|exclude|redact|undecided")
         decisions[k] = v
     return Scrubber(Identity.from_runtime(cfg, machine), decisions=decisions, cfg=cfg, machine=machine,
-                    player_ids=[player] if player else (), kind=kind), kind
+                    player_ids=[player] if player else (), kind=kind, player_names=player_names or ()), kind
 
 
 def cmd_manifest(a, cfg, machine):
@@ -2099,24 +2375,37 @@ def cmd_manifest(a, cfg, machine):
         sys.stdout.write(md)
 
 
-def write_scrubbed(src, scrubber, out):
-    """The scrubbed tree as it would be published, for review, under its published paths."""
+def write_scrubbed(src, scrubber, out, review_out=None):
+    """The scrubbed tree as it would be published, for review, under its published paths; and
+    the session's review-only files (report.json, commands.jsonl), scrubbed, under review_out."""
     rows, totals, data = scrub_source(src, scrubber, keep_data=True)
-    for rel, body in data.items():
-        pub = scrubber.publish_path(rel.replace("!", "/"))
-        p = _safe_join(out, pub)
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "wb") as f:
-            f.write(body)
+    for target, files in ((out, data), (review_out, scrubber.review_data)):
+        if target is None:
+            continue
+        for rel, body in files.items():
+            pub = scrubber.publish_path(rel.replace("!", "/"))
+            p = _safe_join(target, pub)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as f:
+                f.write(body)
     return rows, totals
+
+
+def source_label(src, scrubber):
+    """How a report names its source: home-relative, or the last two parts of a path outside
+    home; redacted like everything else."""
+    t = tilde(src)
+    if not t.startswith("~"):
+        t = "…/" + "/".join(os.path.abspath(src).rstrip("/").split("/")[-2:])
+    return scrubber.safe_text(t)
 
 
 def dropped_markdown(dropped):
     lines = ["# Dropped by the owner-line echo pass", "",
-             f"{len(dropped)} item(s). Owner lines and echoes are masked.", "",
-             "| File | Where | Why |", "| --- | --- | --- |"]
+             f"{len(dropped)} item(s). Owner lines and echoes appear only as their length.", "",
+             "| File | Where | Action | Why |", "| --- | --- | --- | --- |"]
     for d in dropped:
-        lines.append(f"| `{d['file']}` | {d['where']} | {d['why']} |")
+        lines.append(f"| `{d['file']}` | {d['where']} | {d.get('action', 'dropped')} | {d['why']} |")
     return "\n".join(lines) + "\n"
 
 
@@ -2127,36 +2416,47 @@ def cmd_scrub(a, cfg, machine):
     nt = is_never_touch(src, cfg, machine)
     if nt:
         raise Refused(f"{tilde(src)} is in a never-touch folder ({tilde(nt)})")
-    sc, kind = _scrubber_for(src, cfg, machine, a.kind, a.player, a.decide)
+    sc, kind = _scrubber_for(src, cfg, machine, a.kind, a.player, a.decide, a.player_name)
     if a.write:
         if os.path.exists(a.write) and os.listdir(a.write):
             raise Refused(f"{a.write} is not empty")
-        rows, totals = write_scrubbed(src, sc, os.path.join(a.write, "tree"))
+        rows, totals = write_scrubbed(src, sc, os.path.join(a.write, "tree"), os.path.join(a.write, "review"))
     else:
         rows, totals, _ = scrub_source(src, sc)
-    okp = {r["path"].split("!")[-1] for r in rows if r["status"] == "ok"}
-    dropped = [d for d in sc.dropped if d["file"] in okp]
+    keep = {r["path"].split("!")[-1] for r in rows if r["status"] in ("ok", "review")}
+    dropped = [d for d in sc.dropped if d["file"] in keep]
     dec = decision_report(src, sc, rows, totals)
-    md = dry_run_markdown(src, kind, rows, totals, dec, sc)
-    out = a.write or a.report or os.path.join(_dryrun_dir(), re.sub(r"[^\w.-]+", "_", tilde(src).strip("~/")))
+    label = source_label(src, sc)
+    # Everything a review file says goes through the published redaction: paths as published,
+    # every other string redacted (owner names, logins, lines and their echoes).
+    rows_s = sc.safe([{k: r.get(k) for k in ("path", "bytes", "status", "reason")} |
+                      {"redactions": {c: v["count"] for c, v in r["findings"].items()}} for r in rows])
+    dec_s, dropped_s, totals_s = sc.safe(dec), sc.safe(dropped), sc.safe(totals.as_dict())
+    md = sc.safe_text(dry_run_markdown(label, kind, rows_s, totals_s, dec_s, sc))
+    out = a.write or a.report or os.path.join(_dryrun_dir(), re.sub(r"[^\w.-]+", "_", label.strip("~/…")))
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "report.md"), "w") as f:
         f.write(md)
     with open(os.path.join(out, "dropped.md"), "w") as f:
-        f.write(dropped_markdown(dropped))
+        f.write(sc.safe_text(dropped_markdown(dropped_s)))
     with open(os.path.join(out, "report.json"), "w") as f:
-        json.dump({"src": tilde(src), "kind": kind, "rows": rows, "redactions": totals.as_dict(),
-                   "decisions": dec, "dropped": dropped}, f, ensure_ascii=False, indent=1)
-    print(f"  dropped by the echo pass: {len(dropped)}")
+        json.dump({"src": label, "kind": kind, "rows": rows_s, "redactions": totals_s,
+                   "decisions": dec_s, "dropped": dropped_s,
+                   "review": sorted(sc.safe_text(sc.publish_path(r.replace("!", "/"))) for r in sc.review_data)},
+                  f, ensure_ascii=False, indent=1)
     by = {}
     for r in rows:
         by[r["status"]] = by.get(r["status"], 0) + 1
-    print(f"dry run of {tilde(src)} ({kind}): " + ", ".join(f"{k} {v}" for k, v in sorted(by.items())))
-    for c, v in totals.as_dict().items():
-        print(f"  {c}: {v['count']}  e.g. {', '.join(v['examples'])}")
-    for c, d in dec.items():
-        print(f"  decide {c} (now {d['decision']})")
-    print(os.path.join(out, "report.md"))
+    say = lambda t: print(sc.safe_text(t))  # noqa: E731
+    say(f"dry run of {label} ({kind}): " + ", ".join(f"{k} {v}" for k, v in sorted(by.items())))
+    say(f"  dropped or replaced by the echo pass: {len(dropped)}")
+    for c, v in totals_s.items():
+        say(f"  {c}: {v['count']}  e.g. {', '.join(v['examples'])}")
+    for c, d in dec_s.items():
+        say(f"  decide {c} (now {d['decision']})")
+    if sc.review_data:
+        say(f"  review only (held from publishing): {len(sc.review_data)} file(s) in {tilde(os.path.join(out, 'review'))}")
+    print(tilde(os.path.join(out, "report.md")))
 
 
 def _pack(kind, src, out, sc, machine):
@@ -2173,7 +2473,8 @@ def cmd_pack(a, cfg, machine):
     src = os.path.abspath(os.path.expanduser(a.src))
     if is_never_touch(src, cfg, machine):
         raise Refused(f"{tilde(src)} is in a never-touch folder")
-    sc, _ = _scrubber_for(src, cfg, machine, {"session": "play-session"}.get(a.kind, a.kind), a.player, a.decide)
+    sc, _ = _scrubber_for(src, cfg, machine, {"session": "play-session"}.get(a.kind, a.kind), a.player, a.decide,
+                          a.player_name)
     man = _pack(a.kind, src, a.out, sc, machine)
     print(json.dumps({k: man.get(k) for k in ("unit", "name", "counts")}, indent=1))
     print(a.out)
@@ -2198,7 +2499,8 @@ def cmd_publish(a, cfg, machine):
         man = verify_pack(a.packed, src, cfg, machine)
         print(backend.publish("runs", a.packed, unit_path("batch", name, machine), f"batch {name} from {machine}"))
         return
-    sc, _ = _scrubber_for(src, cfg, machine, {"session": "play-session"}.get(a.kind, a.kind), a.player)
+    sc, _ = _scrubber_for(src, cfg, machine, {"session": "play-session"}.get(a.kind, a.kind), a.player,
+                          player_names=a.player_name)
     stage = tempfile.mkdtemp(prefix="store-stage-")
     try:
         name = a.name or os.path.basename(src.rstrip("/"))
@@ -2331,6 +2633,9 @@ def main(argv=None):
     s.add_argument("--kind", choices=["trial-batch", "play-session", "motion", "generic"])
     s.add_argument("--player", type=int)
     s.add_argument("--decide", action="append", help="what-if: CATEGORY=include|exclude|redact (not saved)")
+    s.add_argument("--player-name", action="append", default=[],
+                   help="an extra name of the player for this run (repeatable); names the player gave "
+                        "themself are found automatically")
     s.add_argument("--write", help="write the scrubbed tree (DIR/tree) and the reports into DIR, for review")
     c = sub.add_parser("card")
     c.add_argument("repo", choices=["runs", "assets"])
@@ -2342,6 +2647,7 @@ def main(argv=None):
         q.add_argument("kind", choices=["batch", "session", "motion"])
         q.add_argument("src")
         q.add_argument("--player", type=int)
+        q.add_argument("--player-name", action="append", default=[], help="an extra name of the player (repeatable)")
         q.add_argument("--name")
         if name == "pack":
             q.add_argument("--out", required=True)

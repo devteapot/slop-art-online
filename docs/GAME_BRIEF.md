@@ -1008,7 +1008,7 @@ Branch `clips-2`: the laptop half of the clip lab for the Spark's 29 new takes (
 **Wired** (`takes.rs`, `gait.rs`, `live.rs`, `anim.rs`, `combat::Action::gait`; `LIVING_GAME_TAKES=off` turns it all off, for comparisons):
 - **Both schemes, turns on the spot:** standing, when the legs would swivel more than 55° (to the cursor, a standing body's own heading or its activity), the 90° take plays (up to 135°, else the 180°) at 1.3×. The body turns along its curve, and the upper body still leads toward the cursor. In the capture, 90° and 180° looks turned the legs exactly 90° and 180°, stepping 63 and 121 cm of toe path (the swivel before: 66–69 and 118 cm).
 - **Both schemes, jumps:** standing, `jump_stand`; sideways (scheme cursor, with the legs facing the cursor), `jump_left` or `jump_right`. Each starts just before take-off, timed so that its flight, when both feet are up, takes the rules' 0.44 s. The gait steps on under a moving jump (`Action::gait`) and takes over as the take fades, just before touchdown. A standing jump's landing slid 0.05 m/s, against 0.24 for the arc. Jumps forward while moving, backward hops and files without takes keep `jump.rs`'s arc.
-- **Scheme cursor, directional loops:** the legs face the cursor, and the takes either side of the travel blend by angle, each its walk and run by speed (`Gaits::blend_toward`, up to four gaits at the shared phase). A direction plays only while it steps at most 1.6 times as often as the forward gait would (`CADENCE_MAX`), and only while its mirror does too. A swap to or from the forward gaits waits 0.3 s, since the travel's heading swings round as a walk starts. Elsewhere today's blend stays: the forward gaits along the travel, reversed backward, with the upper body turned.
+- **Scheme cursor, directional loops** (since look-walk the legs no longer face the cursor; see [Looking aside while walking](#looking-aside-while-walking-2026-11-11)): the legs face the cursor, and the takes either side of the travel blend by angle, each its walk and run by speed (`Gaits::blend_toward`, up to four gaits at the shared phase). A direction plays only while it steps at most 1.6 times as often as the forward gait would (`CADENCE_MAX`), and only while its mirror does too. A swap to or from the forward gaits waits 0.3 s, since the travel's heading swings round as a walk starts. Elsewhere today's blend stays: the forward gaits along the travel, reversed backward, with the upper body turned.
   - At the rules' 2.6 m/s walk on plain ground, this plays the forward diagonals and, through the backward jogs, the back diagonals. Sideways and straight back fall back, except for slower bodies (children, elders, the tired). Running, only the forward diagonals play.
   - Capture (the same character before and after, on a paved square at 3.6 m/s walking and 5.4 running): the diagonals played their takes, and the supporting foot slid 4–8% of the body's speed on them, against 1–6% before with the forward gaits turned. Every other direction fell back and matched before (1–7%). Their metres a cycle set their cadence at 1.1–1.5 times the forward gait's.
 - **Not wired:** the starts and stops (above), and the retakes. The asset view now turns and moves a model by its take (`view.rs`: the turn curve, the path, a loop's belt), so a contact sheet shows planted feet as the game will.
@@ -1054,6 +1054,47 @@ The checks:
   - In the captures (road walk 3.8 m/s, run 5.6), the front diagonals' supporting foot slid 3–5% of the body's speed, against 5–8% for the forward gaits turned. The back diagonals slid 2–6%, against 1–2% for the forward gaits reversed; they stay wired as in clips 2, and faster back-diagonal takes are in `SPEEDS.md`'s list.
   - In the leg report, the 20–50 cm "pop" on diagonal takes is a low swing foot over a slow frame, not an IK snap.
 - **Speeds:** `SPEEDS.md` lists each locomotion clip's natural speed per rig against the speeds the rules drive it at, for the walk and run speed proposals. The rules drive every gait past its take: a road run plays `run_fast` at 1.6× its 3.5 m/s.
+
+## Looking aside while walking (2026-11-11)
+
+Branch `look-walk`, from play-test 5's item 2. The owner: "When I walk and I'm watching in another direction … you get slower because you start to cross your legs … rotating the head with that movement, and only when you get past some degrees start to rotate the body … like an exponential curve to reach the angle of the pointer." Then, on crossing: brief and deliberate after a sudden turn of the travel, never the steady state of a glance aside. Evidence is in the main checkout's `.local/living/look-walk/` (git-ignored). Client only.
+
+**Where the slowdown came from.**
+- **Ours.** In the cursor scheme the legs faced the cursor whenever the file had a directional take for the travel from it (clips 2). At 90° that take is `strafe_walk_cross_*`, a crossover sidestep covering 1.32 m a cycle against `walk_brisk`'s 2.03. It plays up to 1.6× the forward cadence (`CADENCE_MAX`), and only at slower paces. The owner's energy fell from 85 to 0 in the 6-minute session (before iter-11's real-time needs), so they walked at the rules' ×0.6, where the crossover passes the cadence limit. Glancing aside crossed the legs and stepped faster for as long as the glance lasted.
+- **Not the rules, in play-test 5.** Build 72f565e1 predates fov-1. The client sent no look, so the authority's heading was the keys' travel and the speed was unchanged.
+- **The rules, from fov-1 on, once a look is sent while walking.** `motion.rs` bends the travel itself toward the look by up to `look_walk_deg` (30°). On a scratch world, as a player, `body.heading` sat at exactly 30.0° for looks of 45–180° off the keys. That is 0.87× along the keys, drifting sideways, at an unchanged speed. dev-box's look-2 decouples the facing from the velocity. Until then fov-client sends `human_face` only while standing.
+
+**What it does now** (`twist.rs` `LookWalk`, `live.rs`, `anim.rs` `Motion::neck`/`eyes`/`aim`):
+- **The legs** ease toward a goal. The goal is the travel, turned toward the look by whatever the head and chest can't take, at most 45° (the diagonal takes); past the back limit, the travel's reverse turned the same way (clips 3's back-diagonal walks). The approach is `1 − exp(−dt / body_s)` a frame, capped at `body_dps`. The legs are drawn on the authority's travel, the segment heading, which is the velocity.
+- **The gait** is always the directional takes for the travel as seen from where the legs face now (`Gaits::blend_toward`), else the forward gaits.
+  - Steady, that is the forward or backward walk or a diagonal, whose feet don't cross.
+  - Right after a sudden turn of the travel with the look held, the legs still face the old way, so the crossover sidestep plays until they have come round.
+  - Setting off, the legs already follow this curve while the drawn speed is still under a walk: standing, they turned at the yaw rate, 35° a frame.
+- **The upper body**, head first: the neck and head up to `head`, then the spine and chest up to `chest`, then the eyes up to 12–15°. Holding a look, the head chain loses the clip's own turn about its axis. The diagonal takes turn the head about 30° by themselves, which put the drawn head 32° past the look.
+- **Presets** (Settings › Play › "Looking aside"; `LIVING_GAME_LOOK_WALK=<preset>[,head=…,chest=…,body=…,body_s=…,body_dps=…,back=…,eyes=…]`; the live script's `lookwalk:`):
+
+| Preset | Head | Chest | Body | `body_s` | Cap | Backwards past |
+| --- | --- | --- | --- | --- | --- | --- |
+| `head` "Head to 60°" | 60° | 0° | 45° | 0.22 s | 540°/s | 130° |
+| `chest` "Head and chest to 90°" (default) | 50° | 40° | 45° | 0.35 s | 450°/s | 135° |
+| `loose` | 60° | 55° | 45° | 0.6 s | 300°/s | 155° |
+
+**Measured** on `verify-ui-lw2-1111-2145`, open grass at the island's (300, 330), my character at the authority's 2.92 m/s, the cursor scheme. The scenario is verify-ui's `look-walk`: 69 of 69 checks.
+
+| Look off the travel | Before (601d1f68): legs, cadence | `chest`: legs off the travel, twist, cadence | `head` | `loose` |
+| --- | --- | --- | --- | --- |
+| 0° | forward, 1.41 cycles/s | 0°, 0°, 1.41 | 0°, 1.41 | 0°, 1.41 |
+| 45° | on the look, `run_diag_fl`, 1.77 (+26%) | 0°, 45°, 1.41 | 0°, 1.41 | 0°, 1.41 |
+| 90° | forward, upper body turned 90°, 1.41 | 0°, 90°, 1.41 | 30°, 1.63 | 0°, 1.41 |
+| 135° | on the look, `run_diag_bl`, 2.11 (+50%) | 45°, 90°, 1.77 | backwards, 45° twist, 1.41 | 20°, 115°, 1.55 |
+
+- **Crossing.** No steady segment crossed under any preset. After a sudden 90° turn of the travel with the look held, the crossover played for at most 0.13 s (`chest`), 0 (`head`) and 0.35 s (`loose`). After a 180° turn, 0.31, 0.34 and 0.62 s.
+- **Speed.** The authority's ground speed was 2.918 m/s in every segment of every preset. The drawn speed stayed within 1% of straight.
+- **The head and chest**, as drawn, matched what was asked within 8° (median).
+- **The legs** settled where each preset puts them (±8°). No frame turned them more than 15°, or faster than 720°/s over a long frame.
+- **Before**, at this pace a 90° look fell back to the forward gait, because the crossover would step too often. Slower walkers (energy under 10, children, elders) played it: the owner's case, not driven here (no admin call sets energy).
+
+**Owner's choice for play-test 6:** `chest` is the default, `head` and `loose` are one click away. Not covered: a real mouse, a look sent to the authority while walking (look-2), and others' bodies, which follow a move's aim the same way but aren't logged.
 
 ## View distance and the grey city (2026-11-11)
 

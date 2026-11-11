@@ -61,6 +61,9 @@ pub const BAND_MS: u64 = 1_000;
 pub const LINES_SHOWN: usize = 64;
 /// Lines are released at most this often per character (ms).
 pub const LINES_MS: u64 = 100;
+/// A player's senses (`my_senses`) are asked again at most this often (ms): a change shows
+/// within this of nightfall or of picking up a torch.
+pub const SENSES_MS: u64 = 250;
 
 /// The key of a viewer's `motion_seen` row of a creature.
 pub fn key(viewer: u32, body: u32) -> u64 {
@@ -85,11 +88,14 @@ struct Viewer {
     events: Vec<(Seen, f32)>,
     /// This viewer's feed rows by expiry (ms, row id).
     feed: VecDeque<(u64, u64)>,
+    /// When its senses were last asked, and the row last written (`None`: read it first).
+    senses_ms: u64,
+    senses: Option<CharacterSenses>,
 }
 
 impl Viewer {
     fn new(who: Identity) -> Self {
-        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new() }
+        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None }
     }
 }
 
@@ -305,7 +311,32 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
         v.lines_ms = now;
         release_lines(ctx, id);
     }
+    if now.saturating_sub(v.senses_ms) >= SENSES_MS {
+        v.senses_ms = now;
+        show_senses(ctx, id, v, now);
+    }
     v.last_ms = now;
+}
+
+/// Bring a player's `character_senses` row up to date with the `senses` law (kept per moment
+/// and per state by `common::senses_of`): written only when a value changed.
+fn show_senses(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
+    let w = common::world(ctx);
+    let new = CharacterSenses::of(id, &common::senses_of(ctx, id, &w, now));
+    if v.senses.is_none() {
+        v.senses = ctx.db.character_senses().id().find(id);
+    }
+    match v.senses.as_ref() {
+        Some(old) if old.same(&new) => {}
+        Some(_) => {
+            let row = CharacterSenses { at_ms: now, ..new };
+            v.senses = Some(ctx.db.character_senses().id().update(row));
+        }
+        None => {
+            let row = CharacterSenses { at_ms: now, ..new };
+            v.senses = Some(ctx.db.character_senses().insert(row));
+        }
+    }
 }
 
 fn show_motion(ctx: &ReducerContext, viewer: u32, body: u32) {
@@ -406,6 +437,7 @@ fn release_lines(ctx: &ReducerContext, id: u32) {
         shown.sort_unstable();
         for old in &shown[..shown.len() - LINES_SHOWN] {
             ctx.db.line_seen().id().delete(*old);
+            crate::outcomes::dropped(ctx, *old);
         }
     }
 }

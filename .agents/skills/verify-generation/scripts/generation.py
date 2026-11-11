@@ -656,6 +656,17 @@ def check_plans(seed, rows, plans, tile):
             q = spots[lid][spot]
             return (c[0] + f[1] * q[0] + f[0] * q[1], c[1] - f[0] * q[0] + f[1] * q[1])
 
+        def spot_pt(spec, sp):
+            """A lot's spot on the land, from the plan itself (`settle::plan::resolve`): metres
+            along the lot's front and out toward it. (`lot_pt` reads the front off the row's
+            door, which is exact only for a lot whose door is where its front is.)"""
+            fc = spec["facing"]
+            b = math.radians({"north": 0.0, "n": 0.0, "east": 90.0, "e": 90.0, "south": 180.0, "s": 180.0, "west": 270.0, "w": 270.0}[fc] if isinstance(fc, str) else fc)
+            fx, fy = math.sin(b), math.cos(b)
+            f = (e[0] * fx + nv[0] * fy, e[1] * fx + nv[1] * fy)
+            c = land_pt(spec["at"])
+            return (c[0] + f[1] * sp["at"][0] + f[0] * sp["at"][1], c[1] - f[0] * sp["at"][0] + f[1] * sp["at"][1])
+
         laws_src = seed.get("laws") or ((ROOT / "living/seeds" / seed["laws_file"]).read_text() if seed.get("laws_file") else "")
         rate = {m.group(1): float(m.group(2)) for m in re.finditer(r'name:\s*"(\w+)"[^\n]*?burns:\s*#\{[^}]*?rate:\s*([\d.]+)', laws_src)}
         held = {}
@@ -725,6 +736,52 @@ def check_plans(seed, rows, plans, tile):
         if plan.get("structures") or any(spec.get("contents") for spec in want):
             present(f"plan {pid}: authored structures and lot stores hold what the plan says" + (f" ({len(used)} household stores already used by their people)" if used else ""), not unstocked, {"wrong": unstocked[:10], "used": used})
         present(f"plan {pid}: doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in rows_of if l["structure"]), [l["id"] for l in rows_of if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE])
+        # Fixtures that block (`plans[].fixtures`, since layout-2): every point along a blocking
+        # line (outside its gaps) or inside a blocking rectangle is a tile no one walks on, a
+        # wall that rises above the eye (1.6 m) is `Wall` (7) wherever it is not a drop's edge,
+        # and a gap's middle is left open. Every spot of every lot is ground one can stand on.
+        blocking = [fx for fx in plan.get("fixtures", []) if fx.get("blocks")]
+        if blocking:
+            walked, seen_over, shut, lines = [], [], [], 0
+            for k, fx in enumerate(blocking):
+                name = fx.get("id") or f"fixtures[{k}] ({fx.get('kind', '')})"
+                tall = fx.get("height_m", 0.0) > 1.6 and fx.get("eye_solid", 1.0) >= 0.8
+                pts = []
+                if fx.get("points"):
+                    lines += 1
+                    q, along = fx["points"], 0.0
+                    for a, b in zip(q, q[1:]):
+                        ln = math.dist(a, b)
+                        n = max(1, int(ln / 0.25))
+                        for i in range(n + 1):
+                            s_ = along + ln * i / n
+                            if not any(g[0] - 0.75 <= s_ <= g[1] + 0.75 for g in fx.get("gaps", [])):
+                                pts.append((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n))
+                        for g in fx.get("gaps", []):
+                            m = (g[0] + g[1]) / 2
+                            if along <= m <= along + ln:
+                                gp = land_pt((a[0] + (b[0] - a[0]) * (m - along) / ln, a[1] + (b[1] - a[1]) * (m - along) / ln))
+                                if tile(*gp) not in WALKABLE:
+                                    shut.append({"fixture": name, "gap": g, "tile": tile(*gp)})
+                        along += ln
+                else:
+                    pts.append(tuple(fx["at"]))
+                for q in pts:
+                    t = tile(*land_pt(q))
+                    if t in WALKABLE:
+                        walked.append({"fixture": name, "at": [round(q[0], 2), round(q[1], 2)], "tile": t})
+                    elif tall and t == 9:
+                        seen_over.append({"fixture": name, "at": [round(q[0], 2), round(q[1], 2)]})
+            present(f"plan {pid}: its {len(blocking)} blocking fixtures ({lines} lines) stand on tiles no one walks on", not walked, walked[:10])
+            present(f"plan {pid}: a blocking fixture above the eye hides (Wall tiles), a lower one is seen over", not seen_over, seen_over[:10])
+            present(f"plan {pid}: every gap in a blocking line is open at its middle", not shut, shut[:10])
+        off = []
+        for spec in want:
+            for sp in spec.get("spots", []):
+                q = spot_pt(spec, sp)
+                if tile(*q) not in WALKABLE:
+                    off.append({"lot": spec["id"], "spot": sp["name"], "tile": tile(*q)})
+        present(f"plan {pid}: every one of its lots' {sum(len(spec.get('spots', [])) for spec in want)} spots is ground one can stand on", not off, off[:10])
         key = {spec["id"]: row for spec, row in zip(want, rows_of)}
         if not town:
             continue
@@ -755,10 +812,14 @@ def check_plans(seed, rows, plans, tile):
                 continue
             spec = next(x for x in want if x["id"] == lk)
             row = key[lk]
-            # Spots are in the lot's frame; a place stands near the lot's front either way.
-            far = [i for i in residents if name in places.get(i, {}) and math.dist(places[i][name], (row["door_x"], row["door_y"])) > max(6.0, max(spec["size"]) * 0.5 + 1.0)]
+            # A place by lot stands at one of the lot's spots (in the lot's frame: along its front,
+            # then out toward it), else at its door. Since layout-2 a spot may lie anywhere on an
+            # open lot (a court's washing line, a yard's far corner), so each resident's place is
+            # held to a spot, not to the door's neighbourhood.
+            stands = [spot_pt(spec, sp) for sp in spec.get("spots", [])] or [(row["door_x"], row["door_y"])]
+            far = [i for i in residents if name in places.get(i, {}) and min(math.dist(places[i][name], q) for q in stands) > 1.0]
             known = [i for i in residents if name in places.get(i, {})]
-            present(f"plan {pid}: place {name!r} is at lot {lk}", known and not far, {"residents": len(known), "far": far})
+            present(f"plan {pid}: place {name!r} is at lot {lk}, on one of its {len(spec.get('spots', []))} spots", known and not far, {"residents": len(known), "far": far})
         present(f"plan {pid}: its town's community stands on it", communities.get(town["name"]) == mine[0]["community"], {"community": mine[0]["community"]})
     return checks
 

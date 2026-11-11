@@ -7,6 +7,13 @@ Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d6098
 - `seen_bodies` and `my_body` return `Moving` (the facing fields added) and `motion_seen` gains three columns; bindings regenerated. `run.py` `client-look2-m` (merged build, `scoped`): 39 of 39. `LIVING_PERCEPTION=open` `client-look2-open`: 39 of 39.
 - Migration: `origin/main`'s module published on a scratch world with a player joined, then this module over it without deleting data: accepted in place, rows kept; the server reported that all clients are disconnected (the views' row type changed).
 
+## 2026-11-11 rules-senses-outcomes: my_senses, my_act_outcomes (Spark)
+
+Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change (perception and visibility; the inventories and own-state check), without the per-feature reader fan-out.
+
+- `run.py` `client-sso-214657`: every check passes (39). `my_senses` gives each player one row, its own (sight 11, hearing 9), anonymous none; `my_act_outcomes` only the caller's character's rows (the reducer matrix's `human_act` calls left `act`/`unreadable` rows); `character_senses` and `act_outcome` refused to subscribers (`visibility.json`).
+- In-place update (`client-migrate-214519`): origin/main `7c6a92b6`'s module published fresh, a player joined and acted, then this branch's module published with `--keep-data`: 265 characters kept, the player's character kept and ticking, `my_senses` and `my_act_outcomes` rows written after it (`before-*.json`, `after-*.json`).
+
 ## 2026-11-11 speech-2 (Spark)
 
 Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.

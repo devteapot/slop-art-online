@@ -17,6 +17,7 @@ Each skill in [`skills.rhai`](../living/scripts/skills.rhai) has a `<skill>_spec
 | Trait | Meaning |
 | --- | --- |
 | `target` | It is aimed at something. |
+| `target_class` | What its target may be, when not anything: a target class or a list of them (`creature`, `resource`, `structure`, `place`, as `a.target.class` reads). Players' lists offer it only toward those (`ui::offered_toward`, and the default `on`: a creature skill is not offered on a thing); its `_check` still refuses whatever reaches it. Needs `target: true`. Since 2026-11-11: `appraise` is `creature`. |
 | `item` | It takes an item: `true`, or a word for what the item names (`"technique"`, `"signal name"`). |
 | `items` | The item words it is given (`build`: campfire, shelter...). These are choices for clients and prompts. They are accepted for the skill even when they are not items, structures or techniques (`lodging`). |
 | `args` | Further arguments it reads, for prompts (`qty`, `want`, `text`, `graph`...). |
@@ -162,6 +163,55 @@ Two couplings that let a law and the engine disagree are fixed:
 - Table design: one row per law a world sets (none on the island), primary key the name, read in full once per script revision; never written after creation. No subscription; private ([tables](https://spacetimedb.com/docs/tables/)). Adding a table is an automatic migration ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations)); a world created before this change has no rows, and its laws are the script's (`minds` true), not its seed's `minds: false`. Recreate such a world, or insert its rows as the owner.
 
 **Old scripts.** A script installed before a required law existed (`REQUIRED_LAWS`: `senses`, `motion`) runs with the shipped script's functions underneath its own until its next install, and `install_script` refuses a script without it. An old `laws()` with `sight_day`, `run_speed`, `turn_rate` and the rest is ignored: those keys are no longer read.
+
+### The body: meters and statuses
+
+**Status:** on main since 2026-11-11 (merge `61b7b2eb`, branch `rules-senses-outcomes`) ([interface, "What was agreed" 5](INTERFACE.md#what-was-agreed)). Before, four places held their own thresholds for how a body is: the authority's bodily alarms (`brain.rs`: very hungry 80, starving 97, badly hurt below 40 health, exhausted below 12), the mind service's body words (`prompts::felt_body`: hungry above 55, …), the rethink gate's levels (`rethink.rs`: hungry from 50, very tired from 25, …) and the game client's pills (`ui/live.rs`: tired below 35). Now one law in the script says it, and all of them read it.
+
+**`meters()`** (compile): the bars a body has, each naming fields of its `my_vitals` row.
+
+```rhai
+fn meters() {
+    [
+        #{ name: "health", value: "hp", max: "max_hp", order: 0 },
+        #{ name: "energy", value: "energy", max: 100.0, order: 1 },
+        #{ name: "hunger", value: "hunger", max: 100.0, order: 2, shown: false },
+    ]
+}
+```
+
+`value` is the field shown, `max` a field or a number above 0, `order` its place, `label` its words (default: the name, capitalised), `shown: false` a meter off the screen that still bounds its value and feeds the statuses. Nothing in the engine lists the vitals: a world (or the stamina proposal on `design-stamina`) that adds a vital adds a column at the end of `vitals` with a `#[default]` and its `<field>_rate`, one meters row, and the column's line in `Vitals::FIELDS` and `Vitals::fields` (`tables.rs`; SpacetimeDB 2.14.1 gives a module no generic field names for its own rows). The mind service and a client read their `vitals`/`my_vitals` row generically (`living_rules::script::body::fields_of_json` over the row's JSON), so they need no change. The install refuses a meter that names a field the row does not have ("meters: `stamina` shows 'stamina', which is not a my_vitals field"), an unknown key, a `max` that is not a field or a positive number, and a name declared twice. A script with no `meters()` has health and energy.
+
+**`status_of(a)`** (event): how a body is, a list of statuses. `a` is the body, not a skill's context: every numeric field of the vitals row by name as it stands now (moved along its `<field>_rate` since `at_ms`, held within its meter, rounded to whole numbers; rates to a hundredth), each `<x>_ms` time as `<x>_ago_s` (whole seconds, at most 120; -1 never), `share` (each meter's value over its max, by meter name), `kind`, `stage` and `night`. Ids (`id`, `*_by`), the anchor `at_ms` and `rate_key` are left out. Each status is `#{ name, tone, text }`, tone `good`, `warn`, `bad` or `plain` (append-only, `body::TONES`), `text` short words for a screen, and optionally:
+
+| Key | Meaning |
+| --- | --- |
+| `meter` | the meter it speaks of (one status per meter in the shipped law) |
+| `felt` | a mind's words for it: the body line in prompts joins the metered ones with commas and the others after a semicolon ("very hungry, exhausted, badly wounded; you are growing weaker") |
+| `alarm` | words told to the body's mind once each time the status begins (a `body` percept); two statuses with the same words are one episode (badly hurt and barely alive) |
+| `salience` | the alarm's (default 0.5) |
+| `think` | `always`, `no_food` (only when carrying no food) or `never` (default): whether the alarm asks the mind to think |
+| `routine` | the want whose routine is quoted when it does ("food": what one's hunger runs, so a way of eating that cannot feed can be seen) |
+
+The shipped thresholds, one set:
+
+| Meter | Statuses (name: from) |
+| --- | --- |
+| hunger | `fed` ≤ 15 (good), `not_hungry`, `peckish` > 40, `hungry` > 55 (warn), `very_hungry` ≥ 80 (warn, alarm, think without food), `starving` ≥ 97 (bad, alarm, think, routine food) |
+| energy | `well_rested` ≥ 85 (good), `rested`, `a_little_tired` < 50, `tired` < 30 (warn), `exhausted` < 12 (bad, alarm), `spent` ≤ 0 (bad, alarm) |
+| health (share of full) | `unhurt` ≥ 0.9, `a_little_hurt` < 0.9, `hurt` < 0.6 (warn), `badly_hurt` < 0.35 and `barely_alive` < 0.15 (bad, alarm "You are badly hurt.", think) |
+| none | `freezing` (a person losing health at night, not starving: alarm, think), `in_combat` (hurt within 15 s), `wasting` (health falling) or `recovering` (rising, not full) |
+
+What moved against the old copies: the badly-hurt alarm now starts below 35% of full health (was below 40 health points); the rethink gate's levels are the law's words (energy 20 reads "tired", was "very tired"; health is a share of full, was points); the body line gains an energy word between 50 and 85 ("rested"); the client's pills (once the laptop reads the law) start "Tired" below 30 (was 35) and show "Hungry" from 55 (was 80, which is now "Very hungry"). `body_state` (the rules' own hungry, starving and wound for rates and onlookers) is unchanged: it is the rules' input, not the body's words. The general coordinator kept the new levels (2026-11-11): a share of full health is the better rule, and one law read by client and minds is the point. Because the rethink gate now reads energy 20 as "tired", the next hamlet batch reports deliberations per person-hour against the batches before `61b7b2eb`, so a change in how often minds reconsider can be traced here.
+
+**Who reads it.**
+- **The authority's alarms** (`brain.rs` `alerts`, for bodies the minds hold): `BodyFacts::of` over the `vitals` row, then the statuses' alarms; each alarm's episode is a bit among the top 16 of `mind_state.alerts`, by its words (`alarm_bit`). The old bits (1, 2, 4, 8, 64) are cleared on a body's first evaluation under this change, so a body already hungry is told once more.
+- **The mind service** (`prompts::felt_body`, `felt_by_meter`): from the `vitals` row it subscribes to, every column by name, with the world's script compiled per thread; the rethink gate's `body` from the scene's numbers.
+- **The game client**: `Scripts::meters()` and `Scripts::status_of` over `my_vitals` when the row changes (the laptop's change).
+
+**A world's own.** A floor overlay replaces either function as any law (`floors::compose`: the shipped one stays callable as `base_meters`, `base_status_of`). Cullet keeps the shipped ones (its `tired_below` of 35 is its walking pace, not a word); test `cullet_composes_with_the_body_law`. Test `a_world_adds_a_vital_with_a_meters_row` adds `stamina` with a meters row and a status, and nothing else.
+
+**Cost** (Spark, SpacetimeDB 2.14.1 in `slop-trials-stdb`, host load average 38 at the start, shared with other work): `living/tools/bench.py --fresh --seconds 90 --settle 15` on the default seed (264 characters: 182 people and 82 animals, no players or minds). The span `brain.status` (`BodyFacts::of` and `status_of`, kept per state: whole numbers, so bodies in one state share an answer, at most 4,096 states before the memo starts over): 124 a second, p50 0.007 ms, p99 0.14 ms (max 8.4 ms, one call under that load), 2.27 ms of work a second; the tick p50 1.41 ms, p99 5.05 ms, none over 16.7 ms. Evidence `.local/living/verify/bench-status/rest.json`. The install calls `status_of` on 189 sample bodies (every meter in twentieths, three bodies, three states).
 
 ### Traits instead of lists
 
