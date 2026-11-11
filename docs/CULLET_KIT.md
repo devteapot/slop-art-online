@@ -97,7 +97,7 @@ Seen in the game's renderer on 2026-11-11:
 - **Jory's fruit tree and Cora's flowers** (glasshouses 9 and 4) are in the plan's notes and not in the models.
 - **Smoke** from the Cone and the stacks is an effect the client does not have.
 
-Client behaviour met, not changed: tall models between the camera and the figure fade (the Watchglass from the mole, the Cone from its yard); the contact sheet was shot before the asset view could show night (`LIVING_GAME_VIEW_ATMO`, the asset board's, merged from main afterwards), so glow was judged in the city stills. The first stills were taken while the camera's fog closed about 90 to 110 m out; the final ones follow the laptop's `view-1` (fog by the mood, 180 to 600 m), so the Cone, the Counting House and the Rows are seen from the mole and from over the harbour. The long view also shows how bare the slope still is: lawn between the Rows, long dark walls, 22 grey boxes.
+Client behaviour met, not changed: tall models between the camera and the figure fade (the Watchglass from the mole, the Cone from its yard); the kit's own contact sheet was shot before the asset view could show night, so glow was judged in the city stills; the asset board's shots (below) have night. The first stills were taken while the camera's fog closed about 90 to 110 m out; the final ones follow the laptop's `view-1` (fog by the mood, 180 to 600 m), so the Cone, the Counting House and the Rows are seen from the mole and from over the harbour. The long view also shows how bare the slope still is: lawn between the Rows, long dark walls, 22 grey boxes.
 
 ## Pass 2
 
@@ -112,7 +112,22 @@ In this order:
 7. **The Ladder**: plants seen through gaps, Jory's tree, cold frames; then nature (the thorn, heather, kelp).
 8. **Seats**: benches, stoops and the Fish Steps as the plan's spots, once the client seats people.
 
-**The asset board** ([asset board](ASSET_BOARD.md)) landed on main while this pass was finishing. Its families `building:cone`, `building:glasshouse`, `building:row-low` and `prop:strand` hold the A/B arm as their accepted versions. Publishing this kit's models there as new versions is the next step for the owner's review; it was not done in this pass. A terrace needs a family of its own, since its houses are now one model each.
+**On the asset board** ([asset board](ASSET_BOARD.md); `living/assets/board/`, track `kit-1`, published 2026-11-11 from commit `368e2af4`). This pass is the latest version of the four families the A/B arm started, beside their accepted versions, and starts seven more:
+
+| Family | Members |
+|---|---|
+| `building:cone` | `cone` |
+| `building:glasshouse` | `glasshouse` (a patched one, as the accepted version was), `glasshouse_sound`, `glasshouse_broken` |
+| `building:row-low` | `row`: Low Row's east terrace, five houses joined into one model for the board only (`gen_cullet.sh --join "Low Row east"`); the game draws each house as its own model |
+| `prop:strand` | the eight props, the first of each on the Strand |
+| `building:counting-house`, `building:watchglass` (new) | one model each |
+| `building:mole` (new) | `root`, `arm`, `tip` |
+| `building:row-houses` (new) | `tarn`, `pontil`, `greave`, `morrow`, `empty`, `shell`: single houses as the game draws them |
+| `building:net-loft` (new) | `loft_end`, `loft_mid` |
+| `building:marver` (new) | `marver`, `terrace` |
+| `prop:ground` (new) | `quay`, `fish_steps`, `wall`, `stairs`, `plot_wall` |
+
+The board's night shots are the asset view's first of this kit. The sound glasshouse glows over nearly all its panes there, which may be too much; the owner has not decided on any of these versions.
 
 Open questions for the owner's walk: whether the retaining walls' 0.4 m coping should be a 1 m parapet; whether lit windows should be this many (every lived-in house shows one to three).
 
