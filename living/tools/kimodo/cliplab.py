@@ -45,6 +45,10 @@ death (a fall: body 22 cm, palms 5 cm under the floor); run and run_fast (loop v
 - cadence: step period against the library's forward pick of the same gait (walk, run, sneak);
   or of the entry's `cadence_ref` (the forward take made for the same speed; a forward take names
   itself and is not checked);
+- plants (gaits; reported, check with `--expect 'plant_frames_min>=4'`): the bake's foot-down markers
+  emulated on the raw take driven at the entry's `game_speed` (game m/s on Vivi; default the take's
+  own speed): the shortest and median plant in game frames, how many each foot has, and the farthest
+  a planted ball moves (plant_slide_cm). A take scaled past its own speed loses its short plants;
 - toe slide (gaits; reported, check it with `--expect 'toe_slide_pct<=5'`): the slower toe near the
   floor as a share of the body's speed (median), the laptop's no-slide line; air_share: flight;
 - air (`hop` or a name starting with jump): the longest stretch with both feet off the ground;
@@ -143,6 +147,8 @@ LIMITS = {  # check: (metric, limit, "max" | "min")
 }
 SOFT = {"pop", "floor_fingers"}
 TOE_REST_M = 0.02  # the toe joint's height standing (stand#3)
+HEEL_REST_M = 0.0705  # the ankle joint's height standing
+K_GAME = 0.955  # game metres per SOMA metre on Vivi (a path-pinned take's baked natural speed over its raw speed; Shino 0.985, own-man 0.93)
 GAIT_SLIDE_CM_S = 10.0  # a gait's contacts include touchdown and toe-off frames; a turn's heels sweep about the ball
 
 
@@ -525,6 +531,38 @@ def measure(e, take, lib, dirs, refs):
                 m["toe_slide_p75_pct"] = round(100 * float(np.percentile(slow, 75)) / m["speed_m_s"], 1)
             m["air_share"] = round(float(air[a:].mean()), 2)  # both feet off the ground: a run's flight
             m["hips_bounce_cm"] = round(100 * float(np.ptp(root[a:, 1])), 1)  # run#1: 8, run_fast#1: 9; a bounding take: 30+
+        if fam and dist > 0.2:
+            # the bake's foot-down markers (animate.py foot_markers), emulated on the raw take driven
+            # at the entry's `game_speed` (game m/s on Vivi; default: the take's own speed): a foot is
+            # down while its heel or ball is within 3 cm (game) of its standing height and moves at
+            # most 0.3 game m/s in the game's world. Time-scaling by s shortens a plant to 1/s of its
+            # frames and makes it s times faster, so short plants vanish. The laptop's rule
+            # (2026-11-12): every plant holds at least 4 frames at the game speed
+            nat = m["speed_m_s"] * K_GAME
+            sc = float(e["game_speed"]) / nat if e.get("game_speed") and nat > 0 else 1.0
+            lens, slides, counts = [], [], {}
+            for side, pts in (("L", (LFOOT, LTOE)), ("R", (RFOOT, RTOE))):
+                dn = np.zeros(T, bool)
+                for j, rest in zip(pts, (HEEL_REST_M, TOE_REST_M)):
+                    pv = np.zeros(T)
+                    pv[:-1] = np.hypot(*(P[1:, j, [0, 2]] - P[:-1, j, [0, 2]]).T) * FPS
+                    pv[-1] = pv[-2]
+                    dn |= ((P[:, j, 1] - rest) * K_GAME <= 0.03) & (pv * K_GAME * sc <= 0.3)
+                merged = []
+                for x, y in runs(dn):  # animate.py's clean_contacts: gaps of up to 2 game frames filled
+                    if merged and x - merged[-1][1] - 1 <= max(1, round(2 * sc)):
+                        merged[-1][1] = y
+                    else:
+                        merged.append([x, y])
+                wins = [(x, y) for x, y in merged if (y - x + 1) / sc > 2 and x >= a and y < T - 1]  # and plants of up to 2 dropped
+                counts[side] = len(wins)
+                lens += [(y - x + 1) / sc for x, y in wins]
+                slides += [float(np.hypot(*(P[y, pts[1], [0, 2]] - P[x, pts[1], [0, 2]]))) * K_GAME for x, y in wins]
+            m["time_scale"] = round(sc, 3)
+            m["plants"] = f"L{counts['L']} R{counts['R']}"
+            m["plant_frames_min"] = round(min(lens), 1) if lens and min(counts.values()) else 0.0
+            m["plant_frames_med"] = round(float(np.median(lens)), 1) if lens else 0.0
+            m["plant_slide_cm"] = round(100 * max(slides), 1) if slides else None
         # `cadence_ref`: the forward entry made for the same speed (a forward take names itself: its
         # period and metres a cycle are reported, not checked). Default: the family's forward gait
         ref_name = e.get("cadence_ref", fam)
