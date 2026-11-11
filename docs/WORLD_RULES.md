@@ -17,6 +17,7 @@ Each skill in [`skills.rhai`](../living/scripts/skills.rhai) has a `<skill>_spec
 | Trait | Meaning |
 | --- | --- |
 | `target` | It is aimed at something. |
+| `target_class` | What its target may be, when not anything: a target class or a list of them (`creature`, `resource`, `structure`, `place`, as `a.target.class` reads). Players' lists offer it only toward those (`ui::offered_toward`, and the default `on`: a creature skill is not offered on a thing); its `_check` still refuses whatever reaches it. Needs `target: true`. Since 2026-11-11: `appraise` is `creature`. |
 | `item` | It takes an item: `true`, or a word for what the item names (`"technique"`, `"signal name"`). |
 | `items` | The item words it is given (`build`: campfire, shelter...). These are choices for clients and prompts. They are accepted for the skill even when they are not items, structures or techniques (`lodging`). |
 | `args` | Further arguments it reads, for prompts (`qty`, `want`, `text`, `graph`...). |

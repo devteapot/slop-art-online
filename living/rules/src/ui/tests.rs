@@ -157,6 +157,15 @@ fn plan_offers(s: &Scripts, skill: &str, aimed: Aimed) -> bool {
     if !checked && (aimed == Aimed::Thing || (wants_target && aimed != Aimed::OwnKind)) {
         return false;
     }
+    // Since rules-senses-outcomes a spec may say what its target is (`target_class`): today's
+    // client offered such a skill everywhere and had the rules refuse it.
+    if wants_target && !spec.target_class.is_empty() {
+        let creature = spec.target_class.iter().any(|c| c == "creature");
+        let thing = spec.target_class.iter().any(|c| c != "creature");
+        if (aimed == Aimed::Thing && !thing) || (aimed != Aimed::Thing && !creature) {
+            return false;
+        }
+    }
     !spec.args.iter().any(|a| a == "graph")
 }
 
@@ -990,6 +999,36 @@ fn a_bar_press_is_the_leaf_use_skill_resolves() {
             assert_eq!(leaf, want, "{aim:?} target {t:?} aim {at:?}");
         }
     }
+}
+
+#[test]
+fn appraise_is_offered_toward_creatures_not_things() {
+    // The laptop's finding: `appraise_check` refused every thing ("no one there") while the
+    // client offered "Look over" on things. Its spec now says its target is a creature.
+    let sp = species();
+    for (world, s) in worlds() {
+        let names = |class: &str| offered_toward(s.skills(), sp.get("person"), class).into_iter().map(|k| k.name.clone()).collect::<Vec<_>>();
+        assert!(names("creature").contains(&"appraise".to_string()), "{world}");
+        for class in ["resource", "structure", "place"] {
+            assert!(!names(class).contains(&"appraise".to_string()), "{world}: {class}");
+        }
+        let u = s.ui("appraise").unwrap();
+        assert!(u.is_on(On::Person) && !u.is_on(On::Thing), "{world}: {:?}", u.on);
+        // A skill that names no class is still offered toward both (give is checked).
+        assert!(names("creature").contains(&"give".to_string()) && names("structure").contains(&"give".to_string()), "{world}");
+        // Its own check still refuses anything that reaches it.
+        assert!(s.has("appraise_check"));
+    }
+}
+
+#[test]
+fn a_target_class_must_be_a_class_and_needs_a_target() {
+    let src = include_str!("../../../scripts/skills.rhai");
+    let bad = src.replace(r#"fn appraise_spec() { #{ target: true, target_class: "creature","#, r#"fn appraise_spec() { #{ target: true, target_class: "ghost","#);
+    assert_ne!(bad, src);
+    assert!(Scripts::new(&bad).err().unwrap().contains("'ghost' is not a target class"));
+    let bad = src.replace(r#"fn appraise_spec() { #{ target: true, target_class: "creature","#, r#"fn appraise_spec() { #{ target_class: "creature","#);
+    assert!(Scripts::new(&bad).err().unwrap().contains("needs `target: true`"));
 }
 
 #[test]

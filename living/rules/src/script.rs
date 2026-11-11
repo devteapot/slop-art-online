@@ -2213,7 +2213,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 /// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
@@ -2256,6 +2256,19 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         return Err(format!("{f}: `about` describes the skill for a mind: what it does, when it is useful, what it is not"));
     }
     let reach = m.get("reach").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `reach` must be a number")))?;
+    // What the target may be: a class or a list of them.
+    let target_class = match m.get("target_class") {
+        None => Vec::new(),
+        Some(v) if v.is_string() => vec![v.clone().into_string().unwrap_or_default()],
+        Some(_) => list("target_class")?,
+    };
+    let classes = crate::catalog::TARGET_CLASSES;
+    if let Some(c) = target_class.iter().find(|c| !classes.contains(&c.as_str())) {
+        return Err(format!("{f}: `target_class` '{c}' is not a target class ({})", classes.join(", ")));
+    }
+    if !target_class.is_empty() && !flag("target", false)? {
+        return Err(format!("{f}: `target_class` needs `target: true`"));
+    }
     Ok(crate::catalog::SkillSpec {
         name: skill.to_string(),
         needs_target: flag("target", false)?,
@@ -2274,6 +2287,7 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         moving: flag("moving", false)?,
         moment: flag("moment", false)?,
         reflex: flag("reflex", false)?,
+        target_class,
     })
 }
 
