@@ -39,6 +39,7 @@ mod post;
 mod probe;
 mod route;
 mod sight;
+mod sightedge;
 mod sky;
 mod style;
 mod terrain;
@@ -156,6 +157,8 @@ fn main() {
         app.add_plugins(town::TownPlugin);
         // Verbs: acts on what is in front of me and on myself, offered from the world's rules.
         app.add_plugins(verbs::VerbsPlugin);
+        // How the edge of my sight is shown: fade, not seen now, limited view (F2).
+        app.add_plugins(sightedge::SightEdgePlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }
