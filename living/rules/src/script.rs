@@ -20,6 +20,7 @@ use std::rc::Rc;
 mod check;
 pub mod context;
 pub mod fields;
+pub mod speech;
 mod ui;
 pub use ui::UiWork;
 pub use check::Report;
@@ -790,6 +791,8 @@ pub struct Scripts {
     shows: crate::social::Shows,
     /// Every skill the script declares (`<skill>_spec()`).
     skills: std::sync::Arc<crate::catalog::Skills>,
+    /// The ways of speaking (`<way>_speech()`), in their order.
+    ways: Vec<speech::WaySpec>,
     /// Functions of no parameter.
     nullary: HashSet<String>,
     /// What each function reads of its parameters.
@@ -1046,7 +1049,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1068,6 +1071,7 @@ impl Scripts {
         skills.structures = s.kinds_of("structures");
         skills.techniques = s.read_know_how()?;
         s.skills = std::sync::Arc::new(skills);
+        s.ways = s.read_ways()?;
         s.structures = s.read_structures()?;
         s.laws = s.read_laws()?;
         s.reach = s.read_reach()?;
@@ -1194,6 +1198,49 @@ impl Scripts {
         }
         list.sort_by_key(|k: &crate::catalog::SkillSpec| (declared(&k.name), k.name.clone()));
         Ok(crate::catalog::Skills::new(list))
+    }
+
+    /// The ways of speaking (`<way>_speech()`), read once here, in their `order` (then the
+    /// source's). A script that declares none speaks by the shipped `say` (today's speech), so a
+    /// world installed before ways were declared keeps speaking until its next install.
+    fn read_ways(&self) -> Result<Vec<speech::WaySpec>, String> {
+        let mut ways = Vec::new();
+        for f in self.nullary.iter().filter(|f| f.ends_with("_speech")) {
+            let way = f.trim_end_matches("_speech");
+            if way.is_empty() {
+                continue;
+            }
+            if !way.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                return Err(format!("{f}: a way's name is lowercase letters and _"));
+            }
+            if self.skills.get(way).is_some() || self.shapes.get(way).is_some() {
+                return Err(format!("{f}: `{way}` is a skill already; a way of speaking needs a name of its own"));
+            }
+            let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+            let w = speech::way_of(way, &m)?;
+            if !w.needs.is_empty() && !self.skills.techniques.iter().any(|t| t.name == w.needs) {
+                return Err(format!("{f}: `needs` names a technique of `know_how()`, not `{}`", w.needs));
+            }
+            ways.push(w);
+        }
+        if ways.is_empty() {
+            ways.push(speech::WaySpec::say());
+        }
+        if !ways.iter().any(|w| w.name == speech::SAY) {
+            return Err("the script's ways of speaking need `say_speech()` (every line said without a way is said by it)".into());
+        }
+        ways.sort_by_key(|w| (w.order, self.source_at(&format!("fn {}_speech(", w.name)), w.name.clone()));
+        Ok(ways)
+    }
+
+    /// The ways of speaking, in their order.
+    pub fn ways(&self) -> &[speech::WaySpec] {
+        &self.ways
+    }
+
+    /// A way of speaking by name.
+    pub fn way(&self, name: &str) -> Option<&speech::WaySpec> {
+        self.ways.iter().find(|w| w.name == name)
     }
 
     /// Every skill the script declares.
@@ -1465,6 +1512,10 @@ impl Scripts {
             let mut parts: Vec<String> = laws.iter().filter(|l| &l.topic == topic).map(|l| l.about.trim().to_string()).collect();
             if let Some((_, t)) = world.iter().find(|(k, _)| k == topic) {
                 parts.push(t.trim().to_string());
+            }
+            // The ways of speaking, each in its own words, in their order.
+            if topic == "speech" {
+                parts.extend(self.ways.iter().map(|w| format!("{} = {}", w.name, w.about.trim())));
             }
             if parts.is_empty() {
                 continue;
@@ -2506,11 +2557,90 @@ mod tests {
     /// orders, with the world's own sections (seasons, life) where they belong; every law the
     /// engine asks and every world constant must be described, or an install is refused.
     #[test]
+    fn ways_of_speaking_are_read_from_the_script() {
+        let s = scripts();
+        let names: Vec<&str> = s.ways().iter().map(|w| w.name.as_str()).collect();
+        assert_eq!(names, ["say", "whisper", "call"]);
+        let whisper = s.way("whisper").unwrap();
+        assert_eq!((whisper.carry, whisper.only_to, whisper.reach, whisper.kind.as_str(), whisper.names, whisper.animals.as_str()), (speech::Carry::Within(1.5), true, 1.5, "whisper", false, ""));
+        let noticed = whisper.noticed.as_ref().unwrap();
+        assert_eq!((noticed.within_m, noticed.seen, noticed.kind.as_str(), noticed.text.as_str()), (6.0, true, "whispered", "{a} whispers something to {b}."));
+        let call = s.way("call").unwrap();
+        assert_eq!((call.carry_for(9.0), call.max_chars, call.gap_s, call.animals.as_str(), call.public()), (22.5, 80, 6.0, "a person shouting", true));
+        assert!(call.about.contains("within 22.5 m"), "{}", call.about);
+        // The shipped `say` is today's speech, field for field (the regression baseline).
+        let mut say = s.way("say").unwrap().clone();
+        assert_eq!(say.about, speech::WaySpec::say().about);
+        say.about = speech::WaySpec::say().about;
+        assert_eq!(say, speech::WaySpec::say());
+        assert!(s.world_text(&[]).contains("SPEAKING: say = Speak aloud."));
+        let src = include_str!("../../scripts/skills.rhai");
+        let with = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap());
+        // A way the engine cannot keep is refused, naming the key.
+        let e = with("fn shout_speech() { #{ about: \"x\", cost: #{ energy: 2.0 } } }").err().unwrap();
+        assert!(e.contains("unknown trait `cost`"), "{e}");
+        let e = with("fn hush_speech() { #{ about: \"x\", words: #{ within_m: 1.5, only_to: true } } }").err().unwrap();
+        assert!(e.contains("need `to: \"required\"`"), "{e}");
+        let e = with("fn wave_speech() { #{ about: \"x\" } }").err().unwrap();
+        assert!(e.contains("is a skill already"), "{e}");
+        let e = with("fn say_speech() { #{ about: \"x\", needs: \"telepathy\" } }").err().unwrap();
+        assert!(e.contains("names a technique"), "{e}");
+        // A second way comes in its order, and its words for one ear reach no animal.
+        let two = with("fn hush_speech() { #{ about: \"Hush.\", order: 1, to: \"required\", words: #{ within_m: 1.5, only_to: true }, heard_to_you: \"{a} hushes to you\" } }").unwrap();
+        let w = two.way("hush").unwrap();
+        assert_eq!(two.ways().iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["say", "whisper", "hush", "call"]);
+        assert_eq!((w.carry, w.only_to, w.animals.as_str(), w.label.as_str()), (speech::Carry::Within(1.5), true, "", "Hush"));
+        assert_eq!((w.carry_for(9.0), w.widest(9.0)), (1.5, 1.5));
+        assert!(two.world_text(&[]).contains("say = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper = Whisper to someone beside you (within 1.5 m)."));
+        // A script with no ways at all speaks by today's `say`.
+        let none = Scripts::new(&src.replace("_speech()", "_speech_old()")).unwrap();
+        assert_eq!(none.way("say"), Some(&speech::WaySpec::say()));
+    }
+
+    #[test]
+    fn ways_refuse_in_their_checks_words() {
+        use speech::check_way;
+        let s = scripts();
+        let me = ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), ..Default::default() };
+        let them = |dist: f32, alive: bool| Some(TargetFacts { class: "creature".into(), id: 2, kind: "person".into(), alive, dist, ..Default::default() });
+        let check = |way: &str, to, since| check_way(&s, way, me.clone(), to, "hello", since);
+        // The words a client shows before sending are the reducer's (both call `check_way`).
+        assert_eq!(check("whisper", None, None), Err("a whisper needs someone to whisper to".into()));
+        assert_eq!(check("whisper", them(3.0, true), None), Err("too far to whisper: step closer".into()));
+        assert_eq!(check("whisper", them(1.0, false), None), Err("too far to whisper: step closer".into()), "absent or dead reads as too far: ids cannot be probed");
+        assert_eq!(check("whisper", them(1.0, true), None), Ok(()));
+        assert_eq!(check("call", None, Some(3_000)), Err("too soon to call out again: wait a few seconds".into()));
+        assert_eq!(check("call", None, Some(6_000)), Ok(()));
+        assert_eq!(check("call", None, None), Ok(()));
+        assert_eq!(check("say", them(30.0, true), Some(0)), Ok(()), "say has no check of its own");
+        assert_eq!(check("", None, None), Ok(()), "no way named is say");
+        assert_eq!(check("shout", None, None), Err("no way of speaking called `shout`".into()), "the engine's own refusal, in the reducer's words");
+        // A way whose spec requires something must refuse it in its check, or the install is refused.
+        let src = include_str!("../../scripts/skills.rhai");
+        let install = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap()).and_then(|s| s.validate().map(|_| ()));
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }").unwrap_err();
+        assert!(e.contains("has no `hush_check(a)`"), "{e}");
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }\nfn hush_check(a) { if a.target.class == \"none\" { return \"hush to whom?\"; } \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to someone 1.5 m away"), "{e}");
+        let e = install("fn whisper_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to no one"), "{e}");
+        let e = install("fn call_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("a second line 5000 ms after the first"), "{e}");
+        let e = install("fn say_check(a) { \"no\" }").unwrap_err();
+        assert!(e.contains("refuses a line that breaks nothing"), "{e}");
+        // A check reads only what `check_way` gives, which a client can give too.
+        let e = install("fn say_check(a) { if a.hour > 30.0 { return \"never\"; } \"\" }").unwrap_err();
+        assert!(e.contains("`say_check` reads `a.hour`"), "{e}");
+        let e = Scripts::new(&crate::floors::compose(src, "fn sign_speech() { #{ about: \"Sign.\", needs_sight: true } }").unwrap()).err().unwrap();
+        assert!(e.contains("`needs_sight` is not built yet"), "{e}");
+    }
+
+    #[test]
     fn world_text_is_built_from_the_laws() {
         let s = scripts();
         let t = s.world_text(&[("seasons", "a year is 8 days.".into()), ("life", "a person lives about 70 years.".into())]);
         let heads: Vec<&str> = t.lines().map(|l| l.split(':').next().unwrap_or("")).collect();
-        assert_eq!(heads[1..].join(" "), "SENSES MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
+        assert_eq!(heads[1..].join(" "), "SENSES SPEAKING MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
         assert!(t.starts_with("One day lasts 12 real minutes; night is 20:00-06:00.\nSENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m; at night 6 m, or 9 m carrying a torch."), "{t}");
         assert!(t.contains("FOOD: berries 12, fish 16, meat 20, cooked_fish 34, cooked_meat 42, smoked_fish 24, smoked_meat 30 (hunger points). Cook raw fish or meat at a campfire"), "{t}");
         assert!(t.contains("BODY: hunger rises ~1.2/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");

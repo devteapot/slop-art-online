@@ -45,6 +45,17 @@ python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
+# Speech (features/speech.md): each scene on its own launched run (they spawn people named
+# Walker1..4, and a second spawn would repeat the names).
+for S in regress ways channels crowd; do
+  P=$R-$S; mkdir -p ".local/living/verify/$P"
+  python3 "$V" launch --run "$P" > ".local/living/verify/$P/launch.txt" 2>&1
+  python3 "$C/speech.py" $S --run "$P" > ".local/living/verify/$P/speech-$S.txt" 2>&1
+  python3 "$V" cleanup --run "$P" > ".local/living/verify/$P/cleanup.txt" 2>&1
+done
+# The regression proof: `regress --baseline` (and `crowd --baseline`) from a worktree at the
+# base commit, then `speech.py diff <base-run> $R-regress`.
+
 # The starter combat skills under graphs use the island seed (its newcomer kit, pack and
 # skill cards); see features/combat.md.
 K=$R-skirmish

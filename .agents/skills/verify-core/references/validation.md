@@ -1,5 +1,32 @@
 # Core validation record
 
+## 2026-11-11 speech-2: whisper, call, truthful silence, overheard names, refusals in the script (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `just living-check` passes (rules 157 tests).
+- `speech.py regress` (`core-speech4-regress`) against `core-speech-base` (a107fdf): identical except the `introduced` rows. `core-speech2-regress` was identical too. `core-speech4-regress` first differed only in the repeat row's "11 s ago" against "17 s ago" (the scene's pacing under load); `diff` now ignores that number.
+- `speech.py channels`: `core-speech4-channels` 22 of 22. `core-speech2-channels` failed only the unseen-silence check, on the scene's own 2 s limit (a second line too soon); `-channels2`/`-3` passed after the fix and before the refusal refactor.
+- `speech.py ways`: `core-speech4-ways` 21 of 21, with the three cards.
+- `speech.py crowd` with `--way` (30 people in a 30 m square, 60 lines at one every 0.5 s): `core-speech2-crowd-say` and `-call`; the whisper run records that a crowd of room lines does not drive a way that needs someone. Numbers in docs/COMMUNICATION.md §14.
+- Not run: the rest of the baseline.
+- After merging origin/main (`93019a3`) into `speech-2`: `just living-check` passes; `core-speech6-regress` is identical to the base except the `introduced` rows; `core-speech6-channels` 22 of 22.
+- After merging origin/main again (`b004e6e`, the rules' UI declarations): `just living-check` passes; `core-speech8-regress` is identical to the base except the `introduced` rows; `core-speech8-channels` 22 of 22; verify-player `player-speak8` 15 of 15. The UI test `a_way_of_speaking_is_presented_in_the_box` declared its own `whisper_speech()` over the shipped script; it now presents the shipped whisper (its assertions unchanged).
+- After merging origin/main (`48cd022`, with fov-1): my table `heard` is now `line_heard` (fov-1's heard-not-seen sounds took `heard`), and the hearer list, noticing, overheard names and the truthful silence see by fov-1's `perception::in_sight` (facing, when the world's law gives a field). `just living-check` passes; `core-speech9-regress` is identical to the base except the `introduced` rows; `core-speech9-ways` 21 of 21; `core-speech9-channels` 22 of 22. verify-player `player-speak9` 15 of 15.
+- After merging origin/main (`b11855e`): `just living-check` passes (with the script fuel gate); bindings unchanged; `core-speech10-regress` identical to the base except the `introduced` rows; `core-speech10-channels` 22 of 22; verify-player `player-speak10` 15 of 15. The minds, privacy and client suites were last run at `48cd022` (above); nothing they drive changed since.
+- `speech::check_way` (the one call for a way's refusal) and origin/main `601d1f6` merged: `just living-check` passes (pipefail); bindings unchanged; `core-speech11-regress` identical to the base except the `introduced` rows; `core-speech11-channels` 22 of 22.
+
+## 2026-11-11 speech-1: ways of speaking (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `just living-check` passes (rules 156 tests, 0 failed; mind, viewer, game, observer built).
+- `speech.py regress`: on `a107fdf` (`core-speech-base`, `--baseline`, built in a worktree at the base commit) and on the change (`core-speech-regress`, 8 of 8). `speech.py diff`: identical except the new `introduced` rows: 65 speech-kind experience rows, `line_seen`, 11 chronicle lines, 10 acquaintances, `mind_state` marks, the calls' results.
+- The first branch launch (`core-speech-regress-failed-launch`) linked the base worktree's `living-rules` from the shared target dir. Cargo hashes path dependencies without their path, so a base build in the same target dir overwrites the branch's artifact. Build the base in its own target dir (`--target-dir`).
+- `speech.py ways`: `core-speech-ways` 20 of 21 (the one failure was the check's own: two hearers equally near, in either order). Fixed, then `core-speech-ways2` 21 of 21. `scenes.py say` on the same run: 34 PASS.
+- `speech.py crowd` (20 people, 10 m square, 120 lines/min, 60 lines): `core-speech-crowd` on the change, `core-speech-crowdbase` on `a107fdf` (`--baseline`). Numbers in docs/COMMUNICATION.md §13. `-crowd-try1`/`-try2` were the metric parser's own fixes.
+- Not run on this change: tick, needs, food, refusal, seize, sight, senses, doing, moves, death-names, skirmish, dealings, town, lives, laws, goods, infant; mechanics.
+
 ## 2026-11-11 rules-offers-2: accept and decline by id; decline (Spark)
 
 Branch `rules-offers-2` (from `rules-offers` `de0faea`, origin/main merged at `37ce159` and `5f7ba5b`), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. A maintain pass scoped to dealings (features/dealings.md, README, SKILL.md): read against the changed source, not a source wave.
