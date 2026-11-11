@@ -6,6 +6,7 @@ Enter talks to the person under the cursor (the owner's rule, 2026-11-11), and w
 
 - `room`: Enter with nobody under the cursor: to the room, in Log and people; the line goes out with `to = 0`; the room note after 10 s.
 - `address`: Enter while hovering someone: to them, in their window; the line goes out with `to`.
+- `pick`: who is under the cursor is one pick (`living/game/src/pick.rs`) for the nameplate (hover), Enter, a tap and combat's target: the body whose outline on screen holds the cursor, the one drawn in front where two overlap; with no outline under it, the body within 1.2 m of the cursor's ground point. Before 2026-11-11 each asked its own way, and with two people overlapping Enter spoke to the one behind.
 - `tab`: Tab cycles people in earshot, then the room.
 - `modes`: the box's modes from `talk::MODES` (a person, the room; whisper greyed, not built).
 - `person-window`: opened by talking, by a tap on them, by F, from the list of acts (Their window) or from Log › People.
@@ -31,9 +32,11 @@ Preconditions: baseline; two residents placed 2 m from the player with `--place 
 - **Log › People.** `key:KeyL:tap;click:@log:tab:1;click:@log:person:0` → a `Person<ID>` window.
 - **Introduce yourself.** `click:@person:intro` → `typing.words` "I'm Verifier.", `typing.to` = ID.
 - Scenario: `check.py --run $R talk`.
+- **Two overlapping (`pick`).** The view faces north (`frame:0;yaw:0`); A at `-3.0:-1.0`, B at `-3.0:-2.5` (1.5 m behind A along the view, where the ray through A's chest meets the ground). `point:A:1.3` (A's chest) → the dump's `under` and `hovered` are A only; `key:Enter:tap` → `typing.to == A` in `Person<A>`, `targeted == A`; the line goes to #A (log and `said` row); `tap` on the same spot also opens the box to A. Scenario: `check.py --run $R pick`.
 
 ## Gotchas
 
 - Someone behind a stall or a house is not perceived (sight is a rule), so Enter skips them; place people in the open.
+- `point:ID` puts the cursor 0.3 m above their feet. Someone standing in front of them on screen can cover that spot, and then the pick is rightly the one in front; the dump's `seen` shows where each body was.
 - A run's character keeps its old experience rows: "First seen 12 min ago" can predate the run.
 - No mind runs: nobody answers. Their lines appear only with `verify-minds` or a play-test.

@@ -1,6 +1,7 @@
 //! Measurement switches (`LIVING_GAME_PERF=<flag>,…`) that turn one rendering cost off at a time,
 //! to find where frame time goes. They are for measurement only:
 //! - `noedges`: the finishing pass's edge lines and rim;
+//! - `slivers`: crease lines on every step, however small (the old rule, `Style::crease_step` 0);
 //! - `nooutlines`: shell outlines (characters);
 //! - `noshadows`: the sun's shadow maps;
 //! - `noprepass`: depth and normal prepasses (also disables edges, which need them);
@@ -73,6 +74,9 @@ pub fn apply(
     }
     if (has("noedges") || has("noprepass")) && style.edges {
         style.edges = false;
+    }
+    if has("slivers") && style.crease_step != 0.0 {
+        style.crease_step = 0.0;
     }
     if has("nooutlines") && style.outlines {
         style.outlines = false;

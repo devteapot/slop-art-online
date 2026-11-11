@@ -20,7 +20,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
+         'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
          'death-names', 'frame')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
@@ -189,6 +189,8 @@ def run_case(run, case):
         return dealings_case(run)
     if case == 'sight':
         return sight_case(run)
+    if case == 'fov':
+        return fov_case(run)
     if case == 'drop':
         return drop_case(run)
     if case == 'death-names':
@@ -618,6 +620,77 @@ def sight_case(run):
             'hidden': names.get(other), 'open': names.get(third)}
 
 
+def fov_case(run):
+    """Sight that depends on facing (docs/PERCEPTION.md, "Heard, not seen"), on by the admin's
+    `set_world_law fov_on`: a resident faces away from another standing 4.5 m behind it. The
+    scene its mind is sent lists the other not among the creatures but under "you hear (out of
+    sight)", in a person's words (what it sounds like, where from the way it faces and by the
+    compass, how far) and with no id; its own facing is in `you`. Its body notices the sound
+    ("You hear a person near, behind you, ..."). Given the shipped person instinct
+    (`instincts.json`), whose "turn to a sound" branch the character owns, it turns to face the
+    sound."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    spots = wall_spots(run)
+    e = spots['open']
+    # The eye on open ground facing west, the other 4.5 m east of it (behind).
+    # Both held still first (a resident's own graph would walk it to company meanwhile).
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 4.5, e[1])
+    run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] - 4.0, e[1]]}}}, {'wait': 300}]}))
+    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['outcome']], 'the eye turned away', 20)
+    time.sleep(1.0)
+    # Then short waits, so its graph is evaluated (and what it notices taken in) every second;
+    # a body in a long wait is looked at again only when the wait ends.
+    run.admin('set_behavior', eye, json.dumps({'wait': 1}))
+    run.admin('set_world_law', 'fov_on', 'true')
+    try:
+        # Its body notices the sound (read before the mind connects: the service prunes the
+        # experiences it has taken in).
+        told = run.wait(lambda: [x for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'experience-eye') if x['kind'] == 'signal' and x['text'].startswith('You hear a person near, behind you')], 'the sound noticed', 20)
+        assert all(x['subject'] == 0 for x in told), told
+        script = {'replies': {'think': {'thought': 'Something behind me.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        models = model(run, script)
+        pending = run.request(eye, 'fov')
+        run.start(models, [eye])
+        request = run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] in ('think', 'deliberate')], 'scene sent to the model', 40)[0]
+        sent = '\n'.join(str(m.get('content', '')) for m in request['body'].get('messages', []))
+        (run.directory / 'sent-prompt.txt').write_text(sent)
+        scene = json.loads(pending[0]['scene']) if pending else {}
+        (run.directory / 'scene.json').write_text(json.dumps(scene, indent=2))
+        heard = scene.get('you hear (out of sight)', [])
+        ids = [c['id'] for c in scene.get('creatures', [])]
+        assert other not in ids, ids
+        assert any(h.get('what') == 'a person' and h.get('where', '').startswith('behind you') and h.get('how far') == 'near' for h in heard), heard
+        assert all(set(h) == {'what', 'where', 'how far'} for h in heard), heard
+        assert scene.get('you', {}).get('facing') == 'west', scene.get('you')
+        assert 'you hear (out of sight)' in sent and 'behind you, to the east' in sent, 'the model is sent what is heard in words'
+        assert re.search(r'"id":\s*%d\b' % other, sent) is None, 'the model is not sent the heard one\'s id'
+        # The starting habit (`instincts.json`, a person's instinct graph, which the character
+        # owns): standing with a sound within 5 m, it turns to face it. The eye is put back facing
+        # away and given the shipped person instinct.
+        instinct = json.loads((ROOT / 'living/seeds/instincts.json').read_text())['person']
+        habit = 'turn to a sound' in json.dumps(instinct) and '"sound"' in json.dumps(instinct)
+        assert habit, 'the person instinct carries the habit'
+        run.admin('place_at', eye, *e)
+        run.admin('place_at', other, e[0] + 4.5, e[1])
+        run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] - 4.0, e[1]]}}}, {'wait': 2}]}))
+        time.sleep(3.0)
+        since = max([u['at_ms'] for u in run.private('SELECT * FROM skill_use', 'uses-before')] + [0])
+        run.admin('set_behavior', eye, json.dumps(instinct))
+        # The branch is a continuous guard: once the sound is in view it is no longer heard and the
+        # turn may stop there ("broken off"), the other already seen.
+        turned = run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-after') if u['actor'] == eye and u['skill'] == 'face' and u['at_ms'] > since and u['outcome'] in ('done', 'broken off')], 'the habit turns the body to the sound', 30)
+        # Toward the sound: the turn's aim is where the other stands (the eye may walk on after,
+        # its instinct's next branch, so its heading later is not the test).
+        aim = (turned[0]['aim_x'] - e[0], turned[0]['aim_y'] - e[1])
+        facing = math.atan2(aim[1], aim[0])
+        assert abs(facing) < 0.6 and math.hypot(*aim) > 3.0, f'the turn is toward the sound to the east: {aim}'
+    finally:
+        run.admin('set_world_law', 'fov_on', 'false')
+    return {'status': 'pass', 'heard': heard, 'facing': scene.get('you', {}).get('facing'), 'noticed': [x['text'] for x in told], 'habit_turned': turned[:1], 'facing_after': round(facing, 2)}
 def death_names_case(run):
     """A community member killed in view of a mind's character, who shares the community and
     feels something for them: the experience the authority gives that mind names the dead, and
