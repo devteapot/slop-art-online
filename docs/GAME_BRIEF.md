@@ -1013,6 +1013,48 @@ Branch `clips-2`: the laptop half of the clip lab for the Spark's 29 new takes (
   - Capture (the same character before and after, on a paved square at 3.6 m/s walking and 5.4 running): the diagonals played their takes, and the supporting foot slid 4–8% of the body's speed on them, against 1–6% before with the forward gaits turned. Every other direction fell back and matched before (1–7%). Their metres a cycle set their cadence at 1.1–1.5 times the forward gait's.
 - **Not wired:** the starts and stops (above), and the retakes. The asset view now turns and moves a model by its take (`view.rs`: the turn curve, the path, a loop's belt), so a contact sheet shows planted feet as the game will.
 
+### Clips 3: the r2 and town takes (2026-11-11)
+
+Branch `clips-3`. The takes are the clip lab's `locomotion-r2` (31 entries) and its final `town` set. The bake is main's `animate.py`: floor guard 3, then the limb guard. Evidence is in the main checkout's `.local/living/clips-3/` (git-ignored):
+- `verdicts.json`, sent to the Spark;
+- `SPEEDS.md`, natural speeds against driven speeds;
+- the contact sheets and montages.
+
+The checks:
+- **Look-dev:** the game with foot IK, measuring how far each one-shot goes under the ground.
+- **Live captures:** one scratch island world, deleted after (`verify-clips3n-a`, `verify-clips3f-a`), on a paved square. Every travel direction at walk and run, with the takes on and off; jumps in both control schemes; stops.
+
+**Verdicts:** 26 accepted, 8 retakes, 3 a fix on our side.
+- **Retakes:**
+  - `run_back` s3: driven at twice its own 1.9 m/s, its supporting foot slid 7–11% of the body's speed, against 2–4% for the forward run reversed.
+  - `run_stop` s13: 0.41 m past its first frame.
+  - `jump_forward` s26 and `jump_forward_run` s2: the landing slid 1.1–3.4 m/s running, against 0.2–0.6 for the arc.
+  - `jump_back` s49: with foot IK the toes stay 4.2 cm under for 0.45 s. The floor-safer s42 is asked for.
+  - `strafe_run_right` s15: the seam closes 17°.
+  - The step-touch strafes.
+- **Accepted:**
+  - `strafe_run_left` s17: in this bake its seam is clean (5.3°). It stays unwired while its mirror is a retake.
+  - `jump_stand` s25: a tuck jump, a fallback only.
+  - The town clips `work` s22, `play` s21, `sit_ground_down` s100 and `sit_ground` s144.
+- **Our side:**
+  - `walk_start` and `run_start`: an entry gap. `end_offset` is taken at 1.5/1.4 s, but the last frame is at 1.467/1.367 s, so the hips surge 5–9 cm into the gait.
+  - `stand_up_ground` s109 on the VRoid bases: our leg IK snaps the right thigh 79° while kneeling, so both floor guards skip the clip. The fix is the knee's pole in `plant_feet` (`leg-pole-1`).
+- **Town floor:** dev-box's "feet 7–9 cm into the floor" held under floor guard 3 alone (own-man kept 8.5–9.9 cm of sole under). The limb guard lifts the crossed ankles to 4.0–4.8 cm above the ground.
+
+**Wired** (`takes.rs`, `gait.rs`, `live.rs`):
+- **Standing jump:** `jump_stand_hop` s4, else `jump_stand`. Both feet are up 0.42 s (the rules' 0.44) and clear 31 cm; the landing slid 0.07–0.12 m/s, against 0.29 for the arc.
+- **Sideways jumps:** `jump_left` s17 and `jump_right` s25, deepest 0.5 and 1.3 cm under with foot IK. Forward jumps while moving, and backward hops, keep the arc.
+- **The walking stop** (`takes::stop_for`), when a walking body stops (not backward or directional).
+  - Conditions: the gait is within 0.3 of a cycle past `walk_stop`'s first step (its sidecar's `start_gait`), and the body walks rather than runs.
+  - `walk_stop` s14 then joins at that phase, played at the body's speed (rate 0.6–1.6).
+  - The drawn body is held along the take's own path from where it stopped, and rests where the path ends. A new segment or an action ends the hold.
+  - In the captures, on every real stop the drawn body moved 0.01–0.14 m until still, and the supporting toe slid 0.01–0.03 m/s (median).
+  - On a road at the rules' walk the gait is a run, so it doesn't play there.
+- **Directional loops:** the back diagonals' walks are added, `walk_diag_bl` s17 with `walk_diag_br`; `run_diag_fr` is now s4. `run_back` is not wired.
+  - In the captures (road walk 3.8 m/s, run 5.6), the front diagonals' supporting foot slid 3–5% of the body's speed, against 5–8% for the forward gaits turned. The back diagonals slid 2–6%, against 1–2% for the forward gaits reversed; they stay wired as in clips 2, and faster back-diagonal takes are in `SPEEDS.md`'s list.
+  - In the leg report, the 20–50 cm "pop" on diagonal takes is a low swing foot over a slow frame, not an IK snap.
+- **Speeds:** `SPEEDS.md` lists each locomotion clip's natural speed per rig against the speeds the rules drive it at, for the walk and run speed proposals. The rules drive every gait past its take: a road run plays `run_fast` at 1.6× its 3.5 m/s.
+
 ## View distance and the grey city (2026-11-11)
 
 Branch `view-1`, for the owner's walk through Cullet's grey city ([small city](SMALL_CITY.md) §5 and §6, [authored plans](AUTHORED_PLANS.md#the-game-client)). Evidence is in `.local/living/view-1/` and the walk's stills in `.local/walk/runs/` (both git-ignored, in the main checkout). Captures were headless runs of the real client on scratch Cullet worlds (`verify-view1-*`, no residents, no mind service), and offline look-dev. Client only: no authority, rules, bindings or seed changes, and no SpacetimeDB feature used in a new way.

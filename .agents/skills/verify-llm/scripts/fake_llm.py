@@ -161,6 +161,9 @@ class Script:
                     if rule.get('times', 1) > 0:
                         rule['times'] = rule.get('times', 1) - 1
                     break
+            if action.get('capacity'):
+                action.setdefault('status', 429)
+                action.setdefault('raw_http_body', CAPACITY_BODY)
             reply = action.get('reply', self.data.get('replies', {}).get(purpose, valid_reply(purpose, body)))
             if action.get('cite'):
                 reply = cite(reply, body)
@@ -179,6 +182,12 @@ class Script:
             with self.log.open('a') as stream:
                 stream.write(json.dumps(record) + '\n')
         return action, content
+
+
+# Mistral's answer when the model has no capacity (seen on zai-glm-5-3-flash, play-test 5 and
+# the Spark's ar1 trials): a 429 that is not a rate limit on the caller.
+CAPACITY_BODY = json.dumps({'object': 'error', 'message': 'Not enough capacity available for this request, please retry later.',
+                            'type': 'backend_out_of_capacity', 'param': None, 'code': '3505', 'raw_status_code': 429})
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -354,10 +363,10 @@ def main():
     parser.add_argument('--port', type=int, required=True)
     parser.add_argument('--log', type=Path, required=True)
     parser.add_argument('--script', type=Path)
-    parser.add_argument('--scenario', choices=['valid', '429', '500', 'malformed', 'repair', 'delay', 'timeout', 'outage'], default='valid')
+    parser.add_argument('--scenario', choices=['valid', '429', 'capacity', '500', 'malformed', 'repair', 'delay', 'timeout', 'outage'], default='valid')
     parser.add_argument('--delay-s', type=float, default=1)
     args = parser.parse_args()
-    scenarios = {'valid': {}, '429': {'status': 429}, '500': {'status': 500},
+    scenarios = {'valid': {}, '429': {'status': 429}, 'capacity': {'capacity': True}, '500': {'status': 500},
                  'malformed': {'content': 'not JSON'}, 'repair': {'repair': True},
                  'delay': {'delay_s': args.delay_s}, 'timeout': {'delay_s': 185},
                  'outage': {'close_port': True}}
