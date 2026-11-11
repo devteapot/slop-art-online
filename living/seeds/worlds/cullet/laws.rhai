@@ -103,7 +103,11 @@ fn carried_light_seen() { 48.0 }
 fn senses(a) {
     let eye = sight_in("night") + (sight_in("day") - sight_in("night")) * a.daylight;
     let torch = if inv(a, "torch") > 0 { sight_in("torch") } else { 0.0 };
-    #{ sight: if torch > eye { torch } else { eye }, hearing: hearing_of_people() }
+    let s = #{ sight: if torch > eye { torch } else { eye }, hearing: hearing_of_people() };
+    // Sight that depends on facing, when the world's `fov_on` law turns it on (the shipped
+    // field and its laws).
+    if law("fov_on") { s.field = sight_field(a); }
+    s
 }
 
 // A light on someone shows them farther than the onlooker's own sight in the dark: a carried
@@ -121,7 +125,7 @@ fn senses_law() {
         topic: "senses",
         covers: ["glow"],
         reach: #{ day: sight_in("day"), night: sight_in("torch"), hearing: hearing_of_people(), glow: carried_light_seen() },
-        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are a figure. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.`,
+        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are a figure. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`,
     }
 }
 

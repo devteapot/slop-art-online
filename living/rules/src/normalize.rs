@@ -450,7 +450,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             let l = s.trim().to_lowercase();
             match l.as_str() {
                 "self" | "me" | "myself" => json!("self"),
-                "attacker" | "speaker" | "home" | "wander" | "parent" | "suitor" | "partner" | "hailer" | "commotion" => json!(l),
+                "attacker" | "speaker" | "home" | "wander" | "parent" | "suitor" | "partner" | "hailer" | "commotion" | "sound" => json!(l),
                 "greeter" => json!("hailer"),
                 _ if catalog::kind_class(&l).is_some() => json!({"nearest": l}),
                 _ => json!({"named": s.trim()}),
@@ -506,7 +506,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             if let (Some(x), Some(y)) = (o.get("x"), o.get("y")) {
                 return Ok(json!({"at": [x, y]}));
             }
-            return Err(format!("{path}: unknown target {:?}; use \"self\", \"attacker\", \"speaker\", \"suitor\", \"partner\", \"hailer\", \"commotion\", \"home\", {{\"nearest\": kind}}, {{\"id\": n}}, {{\"named\": name}}, {{\"place\": name}} or {{\"at\": [x, y]}}", o.keys().collect::<Vec<_>>()));
+            return Err(format!("{path}: unknown target {:?}; use \"self\", \"attacker\", \"speaker\", \"suitor\", \"partner\", \"hailer\", \"commotion\", \"sound\", \"home\", {{\"nearest\": kind}}, {{\"id\": n}}, {{\"named\": name}}, {{\"place\": name}} or {{\"at\": [x, y]}}", o.keys().collect::<Vec<_>>()));
         }
         other => return Err(format!("{path}: invalid target {other}")),
     })
