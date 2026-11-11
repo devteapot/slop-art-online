@@ -92,6 +92,13 @@
         "affinity": 10,
         "label": "the girl's father",
         "note": "He looks at my son as if he were a bad debt. I keep my peace about it."
+      },
+      {
+        "name": "Sabine Quill",
+        "trust": 45,
+        "affinity": 40,
+        "label": "my son's girl",
+        "note": "Reads the old script better than anyone but Benedikt, and my Ren can barely write his name. She is clever and she is kind to him, whatever her father thinks."
       }
     ],
     "memories": [
