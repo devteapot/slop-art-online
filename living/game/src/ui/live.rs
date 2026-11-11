@@ -312,7 +312,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     // Compass: my known places.
     model.map = MapInfo {
         me: my_pos.map(|p| Vec2::new(p.x, p.z)),
-        facing: input.look,
+        facing: input.facing(),
         yaw: cam.shown_yaw,
         pois: me.map(|id| conn.db.my_places().iter().filter(|p| p.actor == id).map(|p| Poi { kind: PoiKind::Place, at: Vec2::new(p.x, p.y) }).collect()).unwrap_or_default(),
     };

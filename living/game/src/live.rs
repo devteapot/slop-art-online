@@ -348,7 +348,7 @@ fn bodies(
     mut meshes: ResMut<Assets<Mesh>>,
     palette: Res<crate::world::Palette>,
     style: Res<crate::style::Style>,
-    input: Res<Input>,
+    mut input: ResMut<Input>,
     combat: Res<crate::combat::Combat>,
     town: Res<crate::town::Town>,
     rules: NonSend<crate::verbs::Rules>,
@@ -419,12 +419,14 @@ fn bodies(
         }
         live.heights.remove(&id);
     }
+    let mut my_face = None;
     for (&id, &(p, heading)) in &scene.shown {
         let ground = island.height(p.x, p.y);
         let at = Vec3::new(p.x, ground, p.y);
         let mine = Some(id) == me;
-        // My character turns toward where I look (shown locally; the authority has no look).
-        let look = input.look.filter(|_| mine).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
+        // My character turns toward where I look (shown locally; the authority has no look): always
+        // facing the cursor, or facing where I walk and only while aiming (`controls::Control`).
+        let look = input.look.filter(|_| mine && input.faces_cursor(combat.aims)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
         // During a move a body faces where the move goes; a gesture or settling down plays when
         // no move does.
         let show = town.shows.get(&id).copied().unwrap_or_default();
@@ -559,6 +561,9 @@ fn bodies(
             s.face = living_rules::steer::wrap(s.face + living_rules::steer::wrap(f - s.face) * k);
         }
         let twist = if s.person { living_rules::steer::wrap(s.face - s.yaw).clamp(-TWIST_MAX, TWIST_MAX) } else { 0.0 };
+        if mine {
+            my_face = Some(Vec2::new(s.face.cos(), s.face.sin()));
+        }
         let reverse = s.back;
         let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
         let rising = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(t, _)| t);
@@ -623,6 +628,7 @@ fn bodies(
             _ => 1.0,
         };
     }
+    input.face = my_face;
 }
 
 /// Follow my displayed body: the camera's target, the island's streaming centre and the
@@ -782,6 +788,7 @@ fn key_code(name: &str) -> Option<KeyCode> {
         "ShiftLeft" => KeyCode::ShiftLeft,
         "Space" => KeyCode::Space,
         "F2" => KeyCode::F2,
+        "F3" => KeyCode::F3,
         _ => return None,
     })
 }
