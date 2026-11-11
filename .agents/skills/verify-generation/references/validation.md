@@ -1,5 +1,10 @@
 # Validation record (generation)
 
+
+## 2026-11-11 every person a mind (lives-2, dev-box)
+
+Branch `lives-2` at the units 2-4 tree (efcd489's content), own container `lives2-stdb` (2.14.1, port 3461), private `CARGO_TARGET_DIR`. `generation-l2b-022738`: 25 of 25 summary checks pass (the eight seeded worlds, the two megacity floors, authored compilation, repeatability, malformed seeds, original seeds unchanged). The island seed no longer carries `rules.minds`; a seed that does is refused at build. Rhythms and constitution genes are drawn from each person's id, so the world's random stream, and with it every digest, is unchanged.
+
 ## 2026-11-10 fix-rules-small (dev-box)
 
 Own container `rules-small-stdb` (2.14.1). `generation.py --feature worlds` (`generation-rs-final`, head `9115e59`): all nine worlds pass, with the native digests, and repeatability passes every comparison, now required for resources, names, ages, genes and animal positions too (compared without ids). The 4096 m floor: three bad sizes refused, `resume_genesis` refused before creation, while a step is scheduled and once made, `stop_genesis` stalled the chain for 8 s, `resume_genesis` finished it (142 steps, no restarts). Owner SQL cannot stop the chain: 2.14.1 refuses "SQL writes to scheduled tables" (`generation-rs-floor1`).

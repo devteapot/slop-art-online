@@ -131,8 +131,20 @@ def pos(b, now):
 
 
 SURVIVAL_ROUTINES = ("find food", "eat", "keep warm", "get out of the rain", "stay safe", "flee", "shelter", "warm")
-SOCIAL_SKILLS = {"wave", "nod", "face", "step_aside", "play", "teach", "give", "offer", "accept", "host", "talk", "say", "welcome", "join", "tend", "heal", "conceive", "follow"}
+SOCIAL_SKILLS = {"wave", "nod", "face", "step_aside", "play", "teach", "give", "offer", "accept", "host", "talk", "say", "welcome", "join", "tend", "heal", "conceive"}
 WORK_SKILLS = {"keep", "craft", "build", "cook", "smoke", "store", "pave", "clear", "write", "read", "plant", "experiment", "take", "gather", "carry", "trade"}
+WALK_SKILLS = {"goto", "wander", "follow"}
+REST_SKILLS = {"rest", "wait"}
+# What a mind's plan (a deliberate thought's summary) is about, by its words; a plan may be
+# about several things.
+PLAN_WORDS = {
+    "food": r"\b(eat|ate|food|berr|meal|hungry|hunger|fish to eat|bread|feed)",
+    "warmth or shelter": r"\b(shelter|warm|fire|cold|rain|roof|freez)",
+    "work": r"\b(work|field|plot|garden|forge|build|carpent|stall|trade|cook|bake|fish|net|gather|ledger|gate|flock|herd|tend|mend|carry|store|load|hunt|quarry|stone|wood|craft|dairy|harvest|sow)",
+    "people": r"\b(talk|speak|visit|friend|greet|ask|tell|meet|with \w+|inn|square|neighbou|family|mother|father|son|daughter|wife|husband|children|child|grandm|sister|brother|word with|news)",
+    "learning or making": r"\b(learn|teach|letters|read|write|practi|carv|weav|spin|song|sing|story|stories|dice|game|play)",
+    "rest": r"\b(rest|sleep|bed|home for the night|nap)",
+}
 
 
 def classify(act, food_items):
@@ -148,6 +160,10 @@ def classify(act, food_items):
         return "social"
     if skill in WORK_SKILLS or "work" in label or "tend the" in label:
         return "work"
+    if skill in WALK_SKILLS:
+        return "walking"
+    if skill in REST_SKILLS:
+        return "resting"
     return "other"
 
 
@@ -164,7 +180,8 @@ def analyze(a):
     d = Path(a.dir)
     world = json.loads((d / "world.json").read_text())
     S = load_samples(d)
-    final = json.loads((d / "final.json").read_text())
+    # A sampler stopped early writes no final rows: deaths and timelines then come from samples.
+    final = json.loads((d / "final.json").read_text()) if (d / "final.json").exists() else {}
     chars = {}
     for s in S:
         for c in s.get("characters", []):
@@ -263,6 +280,17 @@ def analyze(a):
     rep["chronicle_kinds"] = dict(Counter(c["kind"] for c in in_window).most_common(25))
     speech = [c for c in in_window if c["kind"] == "speech"]
     rep["speech_lines_per_person_game_day"] = round(len(speech) / max(1, len(first_alive)) / max(0.01, rep["game_days"]), 2)
+    rep["speakers"] = len({c.get("a") for c in speech})
+    # What minds planned: each deliberate thought's summary, by its words.
+    th = [t for t in (final.get("thought") if isinstance(final.get("thought"), list) else []) if t.get("kind") == "deliberate" and t0 <= t["at_ms"] <= t1 and t.get("actor") in persons]
+    if th:
+        about = Counter()
+        for t in th:
+            for k, rx in PLAN_WORDS.items():
+                if re.search(rx, (t.get("summary") or "").lower()):
+                    about[k] += 1
+        rep["plans"] = {"count": len(th), "people_planning": len({t["actor"] for t in th}), "share_mentioning": {k: round(v / len(th), 3) for k, v in about.most_common()},
+                        "only_food_or_warmth": round(sum(1 for t in th if re.search(PLAN_WORDS["food"] + "|" + PLAN_WORDS["warmth or shelter"], (t.get("summary") or "").lower()) and not any(re.search(PLAN_WORDS[k], (t.get("summary") or "").lower()) for k in ("work", "people", "learning or making"))) / len(th), 3)}
 
     # Minds: calls and cost from the journal.
     if a.journal:
@@ -354,7 +382,7 @@ def analyze(a):
     md = [f"# {d.name}", "", f"{rep['samples']} samples over {rep['real_minutes']} real minutes, {rep['game_days']} game days ({rep['from']} to {rep['to']}); {rep['people_at_start']} people at the start.", ""]
     md += [f"- Deaths: {rep['deaths']} (starvation {rep['deaths_starvation']}, cold {rep['deaths_cold']}); births {rep['births']}.",
            f"- In step: {rep['in_step']}", f"- Time use (all samples): {rep['time_use_share']}", f"- Awake: {rep['awake_share']}",
-           f"- Speech lines per person per game day: {rep['speech_lines_per_person_game_day']}", ""]
+           f"- Speech lines per person per game day: {rep['speech_lines_per_person_game_day']} ({rep['speakers']} speakers)", f"- Plans: {rep.get('plans')}", ""]
     md += ["## Shelter entry from 16:00", "", "| day | entered | sheltered at 16:00 | p10 | median | p90 | IQR h | sd h | most in one 30 min |", "|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     md += [f"| {x['day']} | {x['entered']} | {x['already_sheltered_at_16']} | {x['p10_h']} | {x['median_h']} | {x['p90_h']} | {x['iqr_h']} | {x['sd_h']} | {x['max_30min_share']} |" for x in rep["shelter_entry"]]
     if "minds" in rep:

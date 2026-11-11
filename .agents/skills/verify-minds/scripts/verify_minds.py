@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -545,10 +546,10 @@ def animals_case(run):
     models = model(run, {})
     run.start(models, deer, extra_env={'LIVING_ANIMAL_MINDS': 'salient,choose,pack', 'LIVING_ANIMAL_PACK_S': '120'})
     detail = lambda t: json.loads(t['detail']) if t['detail'] else {}
-    # Installing a graph counts as having just thought, and within its species' think_min_s
-    # (240 s) the authority asks an animal only for urgent reasons; dawn is one, and it is not
-    # news to the animal's salience check.
-    ask = lambda d, marker: run.admin('set_behavior', d, json.dumps({'think': f'Dawn of day 2. verify {marker}'}))
+    # A mind's install counts as having just thought: within its species' think_min_s (240 s)
+    # the authority asks an animal only for urgent reasons, and every urgent reason is news to
+    # its salience check. A fresh deer has not thought, so the first asks go through.
+    ask = lambda d, marker: run.admin('set_behavior', d, json.dumps({'think': f'A quiet moment. verify {marker}'}))
     lead, *rest = deer
     ask(lead, 'animal-lead')
     first = run.wait(lambda: [t for t in run.thoughts(lead, 'lead-thoughts') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'choose'], 'a chosen option', 60)[0]
@@ -563,6 +564,15 @@ def animals_case(run):
     chosen = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']
     compiled = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
     assert len(chosen) == 1 and not compiled, (len(chosen), len(compiled))
+    # The lead asked again with nothing new, once its thinking throttle (240 s after its chosen
+    # option) has passed (since 2026-11-11 no dawn broadcast skips it). Wolves that would come
+    # into view meanwhile are news; the scene removes those that range near the herd.
+    wolves = [w['id'] for w in run.sql("SELECT * FROM character WHERE kind = 'wolf'", 'wolves') if w['alive']]
+    for w in wolves:
+        b = run.sql(f'SELECT x, y FROM body WHERE id = {w}', f'wolf-{w}')
+        if b and math.hypot(b[0]['x'] - at['x'], b[0]['y'] - at['y']) < 120:
+            run.admin('kill', w, 'verify: kept away from the herd')
+    time.sleep(max(0.0, (first['at_ms'] + 245_000) / 1000 - time.time()))
     ask(lead, 'animal-again')
     run.wait(lambda: any(t['kind'] == 'instinct' for t in run.thoughts(lead, 'lead-again')), 'a request answered by instinct', 60)
     assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 1, 'nothing new: no call'

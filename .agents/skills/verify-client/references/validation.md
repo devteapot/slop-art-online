@@ -1,5 +1,11 @@
 # Client protocol validation
 
+## 2026-11-11 every person a mind (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- `run.py` (`client-l2c4-031533`, scoped build): 30 of 30. Private table visibility: 63 tables, `rhythm` refused to anonymous clients and to the player; `woken`, `prior` and `prior_head` are gone. The reducer matrix first failed 10 `mind_update` calls (`client-l2c3-030713`): the driver's `PersonaIn` lacked `pastimes` and `calling`; fixed in `drive.py`.
+
 ## 2026-11-10 client feel (Mac)
 
 Branch `fix-client-feel` (from `6c8d1002`; client-only changes, authority, rules and scripts identical to `origin/main`), shared container (2.14.1), `scoped`: 30 PASS, exit 0 (`client-feel-1110-231833/`, archived under `.local/living/fix-client-feel/`). The game client was driven headless and windowed on scratch island world `verify-feel-1` with the new `key:`, `mouse:` and `chat:` script steps and a TCP proxy that cuts the connection (features/game-client.md): no bodies are drawn while offline, a notice shows, and the client resubscribes and sends the held intent again after reconnecting.

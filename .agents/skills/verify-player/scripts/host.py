@@ -40,10 +40,9 @@ def dist(a, b):
 
 
 def took_lines(p, since):
-    """Onlookers' perceptions of someone taking from a store that is not theirs (rings of
-    instinct-only residents, experiences of minds)."""
-    rows = [r for r in p.sql("SELECT text, at_ms FROM prior") if r["at_ms"] >= since]
-    rows += [r for r in p.sql("SELECT text, at_ms FROM experience") if r["at_ms"] >= since]
+    """Onlookers' perceptions of someone taking from a store that is not theirs (every
+    resident has a mind, so they are its experiences)."""
+    rows = [r for r in p.sql("SELECT text, at_ms FROM experience") if r["at_ms"] >= since]
     return [r["text"] for r in rows if "'s storage" in r["text"] and " took " in r["text"]]
 
 

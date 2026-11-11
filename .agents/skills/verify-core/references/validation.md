@@ -1,5 +1,13 @@
 # Core validation record
 
+## 2026-11-11 every person a mind, survival secondary, no lockstep (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- Unit 1 baseline `core-l2u1-015035`: tick, needs, food, refusal, seize, sight pass.
+- Units 2-4 `core-l2b-022738`: needs, food, refusal, seize, sight pass; tick missed 60 Hz at load 44 (49.7 Hz); `core-l2c-030713-tick` passes at load 34. Reruns `core-l2c-030713`: needs (the new cold law: a cloak removes the cold's tiring, an ordinary night does not hurt), food, refusal pass; infant passes (a summer night's cold does not hurt the exposed infant).
+- `town.py` `core-l2c-030713-town`: 21 of 23. New checks pass: each keeps their own hours (277 rhythms, rising 4.0-8.0 h sd 0.75, bed 19.5-25.4 h sd 1.22), each person's new day begins once (268 people, at most 1 each), the square and the inn fill with those whose evening is out. The two failures are recorded flakes: step-aside (three approaches, no step) and facing someone who comes up behind. `core-l2b-022738-town` failed the evening check before it counted only evenings out (people whose evening place is their work were "at their evening place" at midday).
+
 ## 2026-11-10 fix-rules-small (dev-box)
 
 Own container `rules-small-stdb` (2.14.1, port 3417), private `CARGO_TARGET_DIR`, head `9115e59` for the sweep. `cargo_checks.py` pass; `scenes.py` tick 6/6, food 4/4 (new), refusal 4/4 (new), seize, sight, needs pass (`core-rs-final`); flee 4/4 (new) and grazing 3/3 with its new `doing` check (`core-rs-final-stage`, stage1-acts); steering 5/5; mechanics 23/23; skirmish and dealings pass; `town.py` 20 of 21, failing "a resident faces someone who comes up behind them", the scene's recorded flake (above, on base worlds too). Not run: lives, infant, lifecycle, wildlife (its 20-minute migration).

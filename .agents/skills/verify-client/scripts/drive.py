@@ -118,7 +118,7 @@ def mind_args(name, actor, marker):
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
         'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],
         'mind_update': [actor, {'persona': {'some': {'narrative': marker, 'values': [],
-                         'goals': [], 'traits': '{}', 'mood': 'probe'}},
+                         'goals': [], 'traits': '{}', 'mood': 'probe', 'pastimes': [], 'calling': ''}},
                          'relations': [], 'beliefs': {'none': []}, 'judgments': [],
                          'places': [], 'thought': {'some': t}, 'replace': False}],
     }[name]

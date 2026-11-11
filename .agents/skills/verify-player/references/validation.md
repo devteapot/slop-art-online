@@ -1,5 +1,11 @@
 # Validation record (player)
 
+## 2026-11-11 every person a mind (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- `waking.md` and `wake.py` removed with the woken mechanism. On an island run (`player-l2c-025353`): `command.py`, `told.py`, `gesture.py` pass; `host.py` read the removed `prior` ring for the onlookers' theft line and now reads their experiences: passes (`player-l2c-host2-030713`). Combat, appraise, deal and new_skill were not run.
+
 ## 2026-11-11 player-told (dev-box): a failed command told to the player
 
 Branch `player-told` (from `4b75812`), the worker's own container `player-told-stdb` (2.14.1, port 3447), default seed, `scoped`. `act::tell` tells a played character's failed graph action as an AI's is told.
