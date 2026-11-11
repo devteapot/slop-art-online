@@ -24,7 +24,7 @@ Preconditions: baseline; a resident placed beside the player; berries in the pac
 - **Item acts.** `click:@pack:berries` → dump `acts.rows` hold the rules' acts with berries.
 - **Carry onto the window.** `slide:@pack:berries>@win:Person<ID>:head:0.8` → log `verbs: berries let go on #<ID>: give berries`; a note "Give berries › person (gave 1 berries …)".
 - **Hold F › Give ›.** `menu:f@id:<ID>;click:@acts:0:give;click:@acts:1:berries` → a second `{"do":"give","item":"berries",…,"target":{"id":<ID>}}` in the log.
-- **The authority.** Owner SQL `SELECT item, qty FROM inventory WHERE owner = <ID>`: two more berries.
+- **The authority.** Owner SQL `SELECT at_ms, text FROM experience WHERE observer = <me> AND kind = 'act'`: two outcomes "You did what you had decided: give berries → person (gave 1 berries to a stranger)" since the drive began; `… WHERE observer = <ID> AND kind = 'gift'`: two "A stranger gave you 1 berries". The scenario waits up to 10 s for both (the authority goes on after the client quits).
 - Scenario: `check.py --run $R items`.
 
 ## Gotchas
@@ -32,3 +32,4 @@ Preconditions: baseline; a resident placed beside the player; berries in the pac
 - `menu:f@id:N` refuses quietly when N is not perceived (behind a stall): place them in the open.
 - The carried ghost shows only while the button is held and the cursor has moved more than 5 px.
 - What a store or remains hold is not perceived, so `take ›` may offer an item that is not there; the authority refuses it.
+- Don't prove a give by the receiver's berries: a resident is free until `sync:scene` holds it, and eats, gathers and gives berries meanwhile (43 of an island's residents changed their berries within 45 s), so a count taken before the drive is no baseline. Before 2026-11-11 the check did, and read 2 → 3 for two gives that both landed.

@@ -76,6 +76,8 @@ PRIVATE = ['clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberat
            # Heard, not seen (fov-1): who each player hears, its secret salt, and every change of a
            # world law on a running world (`set_world_law`).
            'heard', 'hear_salt', 'law_change',
+           # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
+           'line_heard',
            # What each player's character senses (the `senses` law), read through my_senses.
            'character_senses',
            # How each player's acts and death came out, in codes; read through my_act_outcomes.
@@ -86,11 +88,11 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'my_senses', 'my_act_outcomes', 'heard_sounds']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_act_outcomes']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_senses', 'my_act_outcomes']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_act_outcomes']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -135,7 +137,7 @@ def mind_args(name, actor, marker):
     return {
         'mind_routines': [actor, [{'name': 'client probe', 'graph': '{"wait":30}'}]],
         'mind_install': [actor, '{"wait":30}', marker, '', 0, 0, t],
-        'mind_say': [actor, '', 0, 0, t],
+        'mind_say': [actor, '', 0, '', 0, t],
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
         'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],
@@ -368,7 +370,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'tick', 'housekeeping', 'genesis_step'}
+        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
@@ -424,6 +426,9 @@ class Run:
             self.call(label, token, 'human_move', [0, 0, False])
             self.call(label, token, 'human_act', ['{"wait":30}'])
             self.call(label, token, 'human_say', ['VERIFY_CLIENT_SPEECH_' + label, 0])
+            time.sleep(2.1)
+            self.call(label, token, 'human_speak', ['VERIFY_CLIENT_SPOKEN_' + label, 0, 'say'])
+            self.call(label, token, 'human_speak', ['probe', 0, 'no_such_way'], 'no way of speaking called `no_such_way`')
             for reducer, args in PLAYER.items():
                 self.call(label, token, reducer, args)
         for reducer, args in ADMIN.items():
@@ -433,7 +438,7 @@ class Run:
         for reducer in ['tick', 'housekeeping']:
             self.call('anonymous-http-no-token', None, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                       'No such procedure', expected_status=404)
-        for reducer, args in [('human_move', [0, 0, False]), ('human_act', ['{"wait":30}']), ('human_say', ['probe', 0])] + list(PLAYER.items()):
+        for reducer, args in [('human_move', [0, 0, False]), ('human_act', ['{"wait":30}']), ('human_say', ['probe', 0]), ('human_speak', ['probe', 0, 'say'])] + list(PLAYER.items()):
             self.call('anonymous-http-no-token', None, reducer, args, 'you have no living character')
         self.call('anonymous-http-no-token', None, 'join', ['AnonHttp'])
         self.check('reducer permission matrix', all(row['pass'] for row in self.matrix), 'reducers.json',
@@ -557,6 +562,9 @@ class Run:
         self.check('act_card and weather are public' + ('' if scoped else ', and doing (open build)'), town['status'] == 'applied' and
                    town['final']['counts']['act_card'] >= 5 and town['final']['counts']['weather'] == 1, 'town-public.json',
                    f"act_card {town['final']['counts']['act_card']}, doing {town['final']['counts']['doing']}, weather {town['final']['counts']['weather']}")
+        speech = self.probe('speech-card-public', ['SELECT * FROM speech_card'])
+        self.check('speech_card is public (the ways of speaking)', speech['status'] == 'applied' and speech['final']['counts']['speech_card'] >= 1,
+                   'speech-card-public.json', f"speech_card {speech['final']['counts']['speech_card']}")
         public = self.probe('combat-public', ['SELECT * FROM skill_card'] + ([] if scoped else ['SELECT * FROM fighter']))
         self.check('skill_card is public' + ('' if scoped else ', and fighter (open build)'), public['status'] == 'applied' and
                    public['final']['counts']['skill_card'] >= 6, 'combat-public.json',
@@ -654,11 +662,16 @@ class Run:
                     and set(p['my_places']) <= mine and set(p['my_inventory']) <= mine and set(p['my_know_how']) <= mine
                     # Offers to or from my character; incoming exactly when addressed to me.
                     and all((o['to'] in mine) == o['incoming'] and (o['from'] in mine or o['to'] in mine) for o in p['my_offers'])
+                    # Who heard my lines: only my own lines (docs/COMMUNICATION.md §6).
+                    and {h['speaker'] for h in p['my_heard']} <= mine
                     # My senses: exactly one row, my character's, with the law's sight and hearing.
                     and [s['id'] for s in p['my_senses']] == sorted(mine) and all(s['sight'] > 0 and s['hearing'] > 0 for s in p['my_senses'])
                     # My outcomes: only my character's, each keyed by a line of my_experience.
                     and {o['observer'] for o in p['my_act_outcomes']} <= mine)
         anonymous = own['anonymous']['final']['perception']
+        spoke = {l: v['final']['perception']['my_heard'] for l, v in own.items() if l != 'anonymous'}
+        self.check('my_heard holds each player\'s own lines, and none for an anonymous client', all(spoke.values()) and not anonymous['my_heard'], 'own-*.json',
+                   ', '.join(f"{l}: {len(v)} lines" for l, v in spoke.items()))
         self.check('own-state views return only my characters\' rows', all(scoped_to_self(l, v) for l, v in own.items() if l != 'anonymous') and
                    own['anonymous']['status'] == 'applied' and not any(anonymous[k] for k in OWN + SEEN), 'own-*.json',
                    ', '.join(f"{l}: {len(v['final']['perception']['my_experience'])} experiences, {len(v['final']['perception']['my_inventory'])} items"

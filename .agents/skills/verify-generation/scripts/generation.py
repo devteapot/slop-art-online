@@ -434,7 +434,15 @@ def check_land(seed, rows, side, tiles):
     lots = rows.get("lot", [])
     structures = {s["id"]: s for s in rows["structure"]}
     present("lot ids are 0..n", sorted(l["id"] for l in lots) == list(range(len(lots))), len(lots))
-    bad_door = [l["id"] for l in lots if l["kind"] in DOOR_KINDS and not (l["structure"] in structures and structures[l["structure"]]["kind"] == DOOR_KINDS[l["kind"]] and abs(structures[l["structure"]]["x"] - l["door_x"]) < 0.01 and abs(structures[l["structure"]]["y"] - l["door_y"]) < 0.01)]
+    # A planned lot may name its own door structure (`lots[].structure`, a world's own kind of
+    # store); the plan checks match each to its lot.
+    own_door = {}
+    for p in plans.values():
+        for spec in p.get("lots", []):
+            if spec.get("structure"):
+                own_door.setdefault(spec["kind"], set()).add(spec["structure"])
+    door_ok = lambda l: structures[l["structure"]]["kind"] == DOOR_KINDS[l["kind"]] or structures[l["structure"]]["kind"] in own_door.get(l["kind"], set())
+    bad_door = [l["id"] for l in lots if l["kind"] in DOOR_KINDS and not (l["structure"] in structures and door_ok(l) and abs(structures[l["structure"]]["x"] - l["door_x"]) < 0.01 and abs(structures[l["structure"]]["y"] - l["door_y"]) < 0.01)]
     present("every building lot has its structure at its door", not bad_door, bad_door[:20])
     present("no structure on open lots", all(l["structure"] == 0 for l in lots if l["kind"] not in DOOR_KINDS))
     present("doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in lots if l["structure"]), [l["id"] for l in lots if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE][:20])
@@ -657,8 +665,8 @@ def check_plans(seed, rows, plans, tile):
         by_kind = {}
         for st in rows["structure"]:
             by_kind.setdefault(st["kind"], []).append(st)
-        absent, unlit, unstocked, taken = [], [], [], set()
-        for st in plan.get("structures", []):
+        absent, unlit, unstocked, taken, placed, used = [], [], [], set(), {}, []
+        for i, st in enumerate(plan.get("structures", [])):
             at = land_pt(st["at"]) if "at" in st else lot_pt(st["lot"], st.get("spot"))
             near = [x for x in by_kind.get(st["kind"], []) if x["id"] not in taken and math.dist(at, (x["x"], x["y"])) < 2.5]
             if not near:
@@ -666,23 +674,56 @@ def check_plans(seed, rows, plans, tile):
                 continue
             x = min(near, key=lambda x: math.dist(at, (x["x"], x["y"])))
             taken.add(x["id"])
+            placed[i] = x
             fuel = st.get("fuel", 0.0)
             want_ms = fuel / rate[st["kind"]] * hour_ms if fuel > 0 and st["kind"] in rate else 0.0
             if abs((x["lit_until_ms"] - x["built_ms"] if x["lit_until_ms"] else 0) - want_ms) > 2.0:
                 unlit.append({"kind": st["kind"], "lot": st.get("lot"), "fuel": fuel, "lit_ms": x["lit_until_ms"] - x["built_ms"] if x["lit_until_ms"] else 0, "want_ms": want_ms})
-            if held.get(x["id"], {}) != st.get("contents", {}):
-                unstocked.append({"kind": st["kind"], "holds": held.get(x["id"], {}), "plan": st.get("contents", {})})
+            h, c = held.get(x["id"], {}), st.get("contents", {})
+            if st.get("owner"):
+                # A household's own store is its people's from the first tick: in the seconds the
+                # world runs before the snapshot (doctor), they may take from it or store in it.
+                # It holds no more of the plan's items than the plan gives, and what is gone is
+                # reported.
+                gone = {k: c[k] - h.get(k, 0) for k in c if h.get(k, 0) != c[k]}
+                if any(h.get(k, 0) > c[k] for k in c):
+                    unstocked.append({"kind": st["kind"], "owner": st["owner"], "holds": h, "plan": c})
+                elif gone or set(h) - set(c):
+                    used.append({"owner": st["owner"], "taken": gone, "added": {k: v for k, v in h.items() if k not in c}})
+            elif h != c:
+                unstocked.append({"kind": st["kind"], "holds": h, "plan": c})
         for spec in want:
             if spec.get("contents"):
                 row = lot_of[spec["id"]]
                 if held.get(row["structure"], {}) != spec["contents"]:
                     unstocked.append({"lot": spec["id"], "holds": held.get(row["structure"], {}), "plan": spec["contents"]})
+        # A lot's own door structure (`lots[].structure`): that kind stands at its door.
+        own = [spec for spec in want if spec.get("structure")]
+        if own:
+            wrong_door = [{"lot": spec["id"], "plan": spec["structure"], "row": structures.get(lot_of[spec["id"]]["structure"], {}).get("kind")} for spec in own if structures.get(lot_of[spec["id"]]["structure"], {}).get("kind") != spec["structure"]]
+            present(f"plan {pid}: {len(own)} lots have their own door structure ({', '.join(sorted({spec['structure'] for spec in own}))})", not wrong_door, wrong_door)
+        # Structures a household owns (`owner: "household:<key>"`): the owner of the household's
+        # house (the one on its `homes` lot), a resident of that household.
+        owned = [(st, placed[i]) for i, st in enumerate(plan.get("structures", [])) if st.get("owner") and placed.get(i)]
+        if any(st.get("owner") for st in plan.get("structures", [])):
+            members_of = {}
+            for r in (town or {}).get("residents", []):
+                members_of.setdefault(r.get("household") or r["name"], set()).add(by_name.get(r["name"], {}).get("id"))
+            home_lot = (town or {}).get("homes", {})
+            badly = []
+            for st, x in owned:
+                hh = st["owner"].removeprefix("household:")
+                house = structures.get(lot_of[home_lot[hh]]["structure"], {}) if hh in home_lot else {}
+                if not x["owner"] or x["owner"] != house.get("owner") or x["owner"] not in members_of.get(hh, set()):
+                    badly.append({"kind": st["kind"], "household": hh, "owner": x["owner"], "house_owner": house.get("owner")})
+            n = sum(1 for st in plan.get("structures", []) if st.get("owner"))
+            present(f"plan {pid}: its {n} household structures are placed and owned by their household's house owner", len(owned) == n and not badly, {"placed": len(owned), "wrong": badly[:10]})
         if plan.get("structures"):
             kinds = Counter(st["kind"] for st in plan["structures"])
             present(f"plan {pid}: its {len(plan['structures'])} authored structures stand where written ({dict(kinds)})", not absent, absent[:10])
             present(f"plan {pid}: authored fires are lit for as long as their fuel lasts at their burning rate", not unlit, unlit[:10])
         if plan.get("structures") or any(spec.get("contents") for spec in want):
-            present(f"plan {pid}: authored structures and lot stores hold what the plan says", not unstocked, unstocked[:10])
+            present(f"plan {pid}: authored structures and lot stores hold what the plan says" + (f" ({len(used)} household stores already used by their people)" if used else ""), not unstocked, {"wrong": unstocked[:10], "used": used})
         present(f"plan {pid}: doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in rows_of if l["structure"]), [l["id"] for l in rows_of if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE])
         key = {spec["id"]: row for spec, row in zip(want, rows_of)}
         if not town:

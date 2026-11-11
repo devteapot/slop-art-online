@@ -320,6 +320,21 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
     f
 }
 
+/// What a way of speaking's check is given about the speaker (the fields its plan reads) and
+/// the addressee (0: the room), for `living_rules::script::speech::check_way`, the check a client
+/// runs too.
+pub fn way_facts(ctx: &ReducerContext, id: u32, way: &str, to: u32, now: u64) -> (living_rules::script::ActorFacts, Option<living_rules::script::TargetFacts>) {
+    let w = common::world(ctx);
+    let plan = common::scripts(ctx).law_plan(&format!("{way}_check"));
+    let mut actor = law_ctx(ctx, id, &w, now, &plan).actor;
+    actor.id = id;
+    let addressee = (to != 0).then(|| {
+        let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+        target_facts(ctx, &TargetRef { class: 3, id: to as u64, x: 0.0, y: 0.0 }, from, now)
+    });
+    (actor, addressee)
+}
+
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {
     let w = common::world(ctx);
     let mut actor = facts(ctx, id, now);
@@ -2001,6 +2016,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
     ctx.db.character_senses().id().delete(id);
     ctx.db.experience().observer().delete(id);
+    ctx.db.line_heard().speaker().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
     ctx.db.judged().actor().delete(id);

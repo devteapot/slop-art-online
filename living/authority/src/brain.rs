@@ -499,11 +499,12 @@ impl<'a> Ev<'a> {
                 };
                 // Within the speaking limit the line waits its turn (a second line right after
                 // the first, or a graph installed just after one spoke) instead of being lost.
-                if perceive::too_soon_to_speak(self.ctx, self.me.id, self.now) {
+                let way = s.way.as_deref().unwrap_or("say");
+                if crate::speech::too_soon_to_speak(self.ctx, self.me.id, way, self.now) {
                     self.status = format!("about to {}", graph::describe(n));
                     return St::Run;
                 }
-                match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
+                match crate::speech::speak(self.ctx, self.me.id, &s.text, to, way, self.now) {
                     Ok(()) => {
                         self.set_mark(id);
                         St::Ok
@@ -783,10 +784,12 @@ impl<'a> Ev<'a> {
             living_rules::catalog::KindClass::Structure => {
                 let (me, ctx) = (self.me.id, self.ctx);
                 let holds = |id: u64| f.holds.as_deref().map_or(true, |item| common::inv_count(ctx, STRUCTURE_BIT | id, item) >= 1);
+                // A kind `like` the one asked for counts as it (a world's `store` is a storage).
+                let sc = common::scripts(ctx);
                 self.scene()
                     .structures
                     .iter()
-                    .find(|(s, _)| s.kind == f.kind && (!f.mine || s.owner == me) && holds(s.id))
+                    .find(|(s, _)| sc.is_kind(&s.kind, &f.kind) && (!f.mine || s.owner == me) && holds(s.id))
                     .map(|(s, _)| Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() })
             }
         }

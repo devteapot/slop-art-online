@@ -2,7 +2,8 @@
 """A town's people from the character generator, and the page to check them by.
 
     python3 living/tools/characters/town.py OUT_DIR [--town FILE.json] [--only NAME,...] [--household ID]
-                                            [--jobs 6] [--skip-build] [--skip-shots] [--write-town FILE.json]
+                                            [--jobs 6] [--lod near,far] [--no-pages] [--models-only]
+                                            [--skip-build] [--skip-shots] [--write-town FILE.json]
 
 One command generates a household or the whole town: every person's model (gen_person.sh:
 person.py, then the clips, merged primitives and the face's shading data), a photograph of each
@@ -14,13 +15,18 @@ through the game's renderer, and OUT_DIR/index.html with the sheets:
 - `town.json`: each person's full parameters and game recipe (height, proportions).
 
 A town file is `{"people": [{"name": …, "household": …, <person parameters>}, …]}`; anything a
-person leaves out is drawn from their seed (docs/CHARACTERS.md). Without --town this draws a
-stand-in for Cullet (docs/SMALL_CITY.md §3: 64 residents in 22 households, 44 adults, 6 elders,
-14 children, Kiln and Strand families); the residents' sheets replace it when they exist.
---write-town saves that stand-in as a file to edit.
+person leaves out is drawn from their seed (docs/CHARACTERS.md). A world seed works too
+(`--town living/seeds/cullet.json`): its town's residents give each person's name, age and
+household, and the world's cast (`worlds/<run>/cast.json` beside the seed) their sex and kin
+(`from_seed`). Without --town this draws a stand-in for Cullet (docs/SMALL_CITY.md §3: 64
+residents in 22 households). --write-town saves the people as a town file to edit.
 
-The models are lookdev/own-<name>.glb and lookdev/anim/own-<name>.glb (git-ignored). Recipes
-`town-<name>` are added to recipes.json only while the photographs are taken.
+The models are lookdev/own-<name>.glb and lookdev/anim/own-<name>.glb (git-ignored), and with
+`far` in --lod (the default) each person's far model, lookdev/far/own-<name>.glb and
+lookdev/far/anim/…. The town's faces then go onto shared pages (share.py: lookdev/pages/<town>-<n>.png
+for the full models, 16 people a page; <town>-far-<n>.png for the far models, 64 a page), so the
+town is a handful of materials; --no-pages leaves every person's own atlas in their file.
+Recipes `town-<name>` are added to recipes.json only while the photographs are taken.
 """
 
 import argparse
@@ -29,13 +35,18 @@ import json
 import math
 import os
 import random
+import re
 import subprocess
 import sys
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "blender"))
+import person_params  # noqa: E402
+import share  # noqa: E402
 from faces import TAKES, eyes_open  # noqa: E402
 
 REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
@@ -94,6 +105,63 @@ def cullet():
     return dict(name="cullet (stand-in)", people=people)
 
 
+BLOOD_UP = ("mother", "father")
+BLOOD_SIDE = ("brother", "sister", "twin")
+
+
+def from_seed(seed, path):
+    """A world seed's town as people: each resident's name, age and household from the seed,
+    sex and kin from the world's cast (`worlds/<run>/cast.json` beside the seed).
+
+    - The file name is the person's name in lower case with dashes; the seed is drawn from it.
+    - `family` (shared face, eye and hair draws) goes down the blood line: a child takes a
+      parent's, a brother or sister takes the other's, and whoever married in has their own.
+    - Skin tone: a founder's is drawn for their line (Kiln families have been here for
+      generations, Strand families came from everywhere); a child's lies between its parents'.
+    """
+    town = next(t for t in seed["towns"] if t.get("residents"))
+    cast_path = os.path.join(os.path.dirname(os.path.abspath(path)), "worlds", seed["run"], "cast.json")
+    cast, line = {}, {}
+    if os.path.exists(cast_path):
+        for st in json.load(open(cast_path)).get("settlements", []):
+            for h in st.get("households", []):
+                for m in h["members"]:
+                    cast[m["name"]] = m
+                    line[m["name"]] = h.get("family", "")
+    else:
+        print(f"town: no cast at {cast_path}; sexes are drawn from the seeds", file=sys.stderr)
+    slug = lambda n: re.sub(r"[^a-z0-9]+", "-", n.lower()).strip("-")
+    people, by_name = [], {}
+    for r in sorted(town["residents"], key=lambda r: -r["age"]):
+        name = r["name"]
+        c = cast.get(name, {})
+        p = dict(name=slug(name), full_name=name, household=r.get("household", ""), seed=zlib.crc32(name.encode()) % 100000, age=float(r["age"]))
+        if c.get("sex") in ("m", "f"):
+            p["sex"] = "male" if c["sex"] == "m" else "female"
+        kin = c.get("kin") or {}
+        parents = [by_name[n] for n in list(r.get("parents") or []) + [n for n, rel in kin.items() if rel in BLOOD_UP] if n in by_name]
+        sibs = [by_name[n] for n, rel in kin.items() if rel in BLOOD_SIDE and n in by_name]
+        rng = random.Random(f"town/{name}")
+        if parents:
+            p["family"] = parents[0]["family"]
+            tones = [q["skin"]["tone"] for q in parents[:2]]
+            p["skin"] = dict(tone=round(min(max(sum(tones) / len(tones) + rng.uniform(-0.03, 0.03), 0), 1), 2))
+        elif sibs:
+            p["family"] = sibs[0]["family"]
+            p["skin"] = dict(tone=round(min(max(sibs[0]["skin"]["tone"] + rng.uniform(-0.03, 0.03), 0), 1), 2))
+        else:
+            p["family"] = zlib.crc32(("family/" + name).encode()) % 100000
+            fr = random.Random(f"line/{p['family']}")
+            tone = fr.uniform(0.05, 0.30) if line.get(name) == "kiln" else fr.choice([fr.uniform(0.05, 0.40), fr.uniform(0.35, 0.95)])
+            p["skin"] = dict(tone=round(tone, 2))
+        by_name[name] = p
+        people.append(p)
+    # Households stand together, in the seed's order.
+    order = {r["name"]: i for i, r in enumerate(town["residents"])}
+    people.sort(key=lambda p: order[p["full_name"]])
+    return dict(name=seed.get("run") or town["name"].lower(), people=people)
+
+
 def run(cmd, env=None):
     r = subprocess.run(cmd, cwd=REPO, env={**os.environ, **(env or {})}, capture_output=True, text=True)
     if r.returncode != 0:
@@ -115,10 +183,15 @@ def main():
     ap.add_argument("--household", help="one household's id")
     ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--clips", default="idle,walk", help="library clips each person gets (gen_person.sh ONLY)")
+    ap.add_argument("--lod", default="near,far", help="the models each person gets (gen_person.sh LOD): `near`, `far`, or both (the default)")
+    ap.add_argument("--no-pages", action="store_true", help="leave every person's atlas in their own file (no shared pages)")
+    ap.add_argument("--models-only", action="store_true", help="make the models, the pages and town.json, and stop before the photographs")
     ap.add_argument("--skip-build", action="store_true")
     ap.add_argument("--skip-shots", action="store_true", help="only put the sheets and the page together again")
     a = ap.parse_args()
     town = json.load(open(a.town)) if a.town else cullet()
+    if "people" not in town:
+        town = from_seed(town, a.town)
     if a.write_town:
         with open(a.write_town, "w") as f:
             json.dump(town, f, indent=1)
@@ -136,19 +209,33 @@ def main():
     for p in people:
         p["file"] = os.path.join(out, "people", p["name"] + ".json")
         with open(p["file"], "w") as f:
-            json.dump({k: v for k, v in p.items() if k not in ("name", "household", "file")}, f, indent=1)
+            json.dump({k: v for k, v in p.items() if k not in ("name", "full_name", "household", "file")}, f, indent=1)
+    lods = a.lod.split(",")
     if not a.skip_build:
         def build(p):
-            run(["living/tools/blender/gen_person.sh", f"{p['name']}={p['file']}"], {"ONLY": a.clips})
+            run(["living/tools/blender/gen_person.sh", f"{p['name']}={p['file']}"], {"ONLY": a.clips, "LOD": a.lod})
 
         with ThreadPoolExecutor(a.jobs) as ex:
             list(ex.map(build, people))
-        print(f"built {len(people)} people")
+        print(f"built {len(people)} people ({a.lod})")
+        if not a.no_pages:
+            # The town's faces on shared pages: 16 full atlases a page, 64 far pictures a page.
+            tag = re.sub(r"[^a-z0-9]+", "-", (town.get("name") or "town").lower()).strip("-") + ("" if len(people) == len(town["people"]) else "-part")
+            for lod, sub, suffix, tile, page in (("near", "", "", 1024, 4096), ("far", "far/", "-far", 256, 2048)):
+                if lod in lods:
+                    r = share.pages([os.path.join(LOOKDEV, sub + "anim", f"own-{p['name']}.glb") for p in people], tag + suffix, os.path.join(LOOKDEV, "pages"), tile, page)
+                    print(f"{lod} models: {len(r['people'])} people on {len(r['pages'])} page(s)")
     # What the generator made of each: full parameters and the recipe.
     for p in people:
-        made = json.load(open(os.path.join(LOOKDEV, f"own-{p['name']}.params.json")))
+        # Beside the full model, or beside the far one when only that was made.
+        made = json.load(open(next(f for f in (os.path.join(LOOKDEV, sub, f"own-{p['name']}.params.json") for sub in ("", "far", "lod")) if os.path.exists(f))))
         p["params"], p["recipe"] = made["params"], made["recipe"]
         p["recipe_name"] = "town-" + p["name"]
+    if a.models_only:
+        with open(os.path.join(out, "town.json"), "w") as f:
+            json.dump(dict(name=town.get("name", ""), lod=lods, people=[{k: v for k, v in p.items() if k != "file"} for p in people]), f, indent=1)
+        print(f"wrote {os.path.join(out, 'town.json')}: {len(people)} people (models only)")
+        return
     original = open(RECIPES).read()
     radius = lambda h, arms: math.sqrt(2 * (h * arms) ** 2 + h * h) / 2
     dist = radius(H_REF, 1.0) / math.tan(math.radians(FOV / 2)) * 1.05
@@ -223,7 +310,7 @@ def main():
         big.paste(crops[i], ((j % 6) * side, (j // 6) * side))
     big.save(os.path.join(out, "faces-24.jpg"), quality=90)
     with open(os.path.join(out, "town.json"), "w") as f:
-        json.dump(dict(name=town.get("name", ""), people=[{k: v for k, v in p.items() if k != "file"} for p in people]), f, indent=1)
+        json.dump(dict(name=town.get("name", ""), lod=lods, people=[{k: v for k, v in p.items() if k != "file"} for p in people]), f, indent=1)
     # The page.
     esc = html.escape
     trs = []
@@ -231,7 +318,7 @@ def main():
         q = p["params"]
         strong = sorted(q["face"].items(), key=lambda kv: -abs(kv[1]))[:4]
         trs.append(
-            f"<tr><td class=n>{i + 1}</td><td>{esc(p['name'])}</td><td>{kind_of(q)}</td><td class=n>{q['age']:.0f}</td><td class=n>{p['recipe']['height']:.2f}</td>"
+            f"<tr><td class=n>{i + 1}</td><td>{esc(p.get('full_name') or p['name'])}</td><td>{kind_of(q)}</td><td class=n>{q['age']:.0f}</td><td class=n>{p['recipe']['height']:.2f}</td>"
             f"<td>{q['skin']['tone']:.2f}</td><td>{esc(str(q['hair']['colour']))}, {esc(q['hair']['style'])}{', grey ' + format(q['hair']['grey'], '.1f') if q['hair']['grey'] > 0.15 else ''}</td>"
             f"<td>{esc(q['beard']['style']) if q['beard']['style'] != 'none' else ''}</td><td>{esc(str(q['eyes']['colour']))}</td><td>{', '.join(f'{k} {v:+.1f}' for k, v in strong)}</td><td class=n>{q['seed']}</td></tr>")
     page = f"""<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width, initial-scale=1"><title>Town check: {esc(town.get('name', ''))}</title>

@@ -183,11 +183,11 @@ Built on branch `rates-2`, 2026-11-11. The rates rules-1 left in real time are w
 
 ### Cullet's values
 
-In its laws file: raw fish 2.5% a game hour (§4's 1.25% a real minute), cooked fish 0.6%, smoked fish 0.1% (as the island per game day); roots 0.2%, baked roots 1%, greens 3%. No trap catches anything (there is no small game on the Wrack). A person's remains lie two game days. A storage holds up to 1,000 things (`storage_holds`; the shipped 120 is a crate's): the Store's 509 foods and the Cone's 824 peat are placed in storages, and at 120 nobody could store anything in them until they were nearly empty. It applies to every storage in Cullet, a person's own too. A capacity per kind of store would be the better rule; none exists yet. Its resource kinds regrow per game hour as computed from §2 ([placed below](#cullets-goods-placed-rates-2)). The outcomes are in the [goods table above](#the-outcomes-computed-from-the-script).
+In its laws file: raw fish 2.5% a game hour (§4's 1.25% a real minute), cooked fish 0.6%, smoked fish 0.1% (as the island per game day); roots 0.2%, baked roots 1%, greens 3%. No trap catches anything (there is no small game on the Wrack). A person's remains lie two game days. A storage holds up to 1,000 things (`storage_holds`; the shipped 120 is a crate's): the Store's 509 foods and the Cone's 824 peat are placed in storages, and at 120 nobody could store anything in them until they were nearly empty. It applies to every storage in Cullet, a person's own too. A capacity per kind of store would be the better rule; none exists yet. *Since `rules-3` it does: each store kind holds its own amount and the global 1,000 is gone ([below](#1-storage-capacity-is-a-value-on-the-structure-kind)).* Its resource kinds regrow per game hour as computed from §2 ([placed below](#cullets-goods-placed-rates-2)). The outcomes are in the [goods table above](#the-outcomes-computed-from-the-script).
 
 ## Cullet's goods, placed (rates-2)
 
-All through [`living/tools/cullet_plan.py`](../living/tools/cullet_plan.py), which writes `plan.json` and `cullet.json`; amounts and regrowth are computed there from SMALL_CITY §2's sustainability targets, as starting values for the soak (not tuned). The assumptions are written beside them: 64 residents and 10 players eat 48 a game day; the land gives 1.3 times that; fish 55% counted as eaten smoked (24), roots 30% counted baked (30), greens 15% raw (10); the Cone makes about 12 glass a day; nodes hold about two days of regrowth. Every node regrows only in growing time (no regrowth in winter, for every kind).
+All through [`living/tools/cullet_plan.py`](../living/tools/cullet_plan.py), which writes `plan.json` and `cullet.json`; amounts and regrowth are computed there from SMALL_CITY §2's sustainability targets, as starting values for the soak (not tuned). The assumptions are written beside them: 64 residents and 10 players eat 48 a game day; the land gives 1.3 times that; fish 55% counted as eaten smoked (24), roots 30% counted baked (30), greens 15% raw (10); the Cone makes about 12 glass a day; nodes hold about two days of regrowth. Every node regrows only in growing time (no regrowth in winter, for every kind). *Since `rules-3` each kind has its own winter share ([below](#3-regrowth-by-season-by-kind)).*
 
 **Resources** (`plans[].resources`, the laws' kind names):
 
@@ -217,12 +217,128 @@ The root plots are open lots now, not `garden` lots: a garden is planted with be
 | 2 smokehouses | their doors | 8 each (full) | 16 game hours |
 | 7 lamps | the top of the Fish Steps, the quay by the net lofts, the quay by the Store, the Counting House yard, the Marver's door, the mole by the lamp house, the Watchglass | 8 oil each (full) | 32 game hours: about three nights |
 
-**Stores.** The Store (its storage at the door, `lots[].contents`) holds 212 smoked fish and 297 roots: three of §2's six days for 64 residents (the fish share smoked, the roots' and greens' share as roots, counted raw at 14, since greens do not keep). The other three days belong in the households: the plan's `household_stores` note gives them per household (4 smoked fish and 5 roots a person), with peat for each hearth beyond its first fill. They are not placed. The cast landed on main (`13dac1c2`, merged here), but a household's store must be the household's own (the theft law reads a store's owner), and a plan's `structures[]` has no owner field yet; a general `owner` naming a household would place them.
+**Stores.** The Store (its storage at the door, `lots[].contents`) holds 212 smoked fish and 297 roots: three of §2's six days for 64 residents (the fish share smoked, the roots' and greens' share as roots, counted raw at 14, since greens do not keep). The other three days belong in the households: the plan's `household_stores` note gives them per household (4 smoked fish and 5 roots a person), with peat for each hearth beyond its first fill. They are not placed. The cast landed on main (`13dac1c2`, merged here), but a household's store must be the household's own (the theft law reads a store's owner), and a plan's `structures[]` has no owner field yet; a general `owner` naming a household would place them. *Placed since `rules-3` ([below](#2-household-stores)).*
 
 **The checks.** `floor::check` refuses a plan that names a resource or structure kind, or a stored item, the world's tables do not have, before anything is written (bible-1 found the plan-2 names `kelp`, `peat`, `roots`, `greens` and `sand` silently left out). verify-generation checks that every planned resource stands where written with its max, regrowth and pool, every planned structure stands at its point, lot door or spot, lit for as long as its fuel lasts at its kind's rate, and every store holds what the plan says.
 
+## Storage, household stores and winter (rules-3)
+
+Built on branch `rules-3`, 2026-11-11, at the coordinator's three decisions. Each is a general rule for every world; Cullet only chooses values, in its laws file. The island and the labs are bit-identical ([below](#the-labs-are-unchanged)); the rules are summarised in [world rules](WORLD_RULES.md#storage-by-kind-household-stores-regrowth-by-season-rules-3).
+
+### 1. Storage capacity is a value on the structure kind
+
+- **The rule.** A structure kind with `holds` in `structures()` is a store; it holds that many things in all (`store_check`), and one may take from it (`take_check`). The one global law `storage_holds` is gone. A kind may count as another wherever a kind is asked for by name (`like: "storage"`): a graph's `nearest storage` (Cullet's ways use it 47 times) finds Cullet's own stores, and a mind is shown their contents. No number is in Rust; the engine reads the traits (`StructureTraits.holds`, `.like`, `Scripts::is_kind`).
+- **The shipped kind** is `#{ name: "storage", holds: 120 }`, today's value, so the refusal ("the storage is full (it holds 100 of 120 things)") and the skill's words ("a storage holds 120 things in all") are what they were.
+- **Cullet's stores** (`store_kinds()` in its laws), each `like: "storage"`:
+
+| Kind | Where | Holds | Starts with | Why |
+| --- | --- | ---: | --- | --- |
+| `store` | the Store on the quay (its lot's door, `lots[].structure`) | 1,200 | 212 smoked fish, 297 roots | room for all six of §2's days of food for 64 (1,018) and a margin |
+| `peat_barn` | the peat barn (its lot's door) | 1,000 | nothing | about four days of the 22 homes' hearths (264 peat a day) as the cutters bring it in |
+| `yard_store` | the Cone yard | 900 | 784 peat | the Cone's 12 days of full firing (864 with the furnace's 40) and a margin |
+| `house_store` | each household's home lot | 150 | three days of its people's food and 24 hearth peat (the largest, 7 people: 81) | room for six days' food of seven (114) and its peat |
+| `storage` | a crate anyone builds | 120 | | the shipped value; rates-2's 1,000 for every storage is gone |
+
+### 2. Household stores
+
+- **The rule.** A plan structure may say `owner: "household:<key>"`. It is placed after the residents and given to the owner of that household's house (its first member, who owns the house; `seed::authored_households` records them by key). `floor::check` refuses a household the seed's residents do not have, naming the households it has; the plan's validation refuses any other form of owner. A plan lot may name its door's structure kind (`lots[].structure`), which is how the Store and the peat barn are Cullet's own kinds.
+- **Cullet's** (`living/tools/cullet_plan.py`, from the plan's `household_stores` note): 22 `house_store`s, one at the door of each household's home, `owner: "household:<key>"`, holding three days of food for its people (4 smoked fish and 5 roots a person, rounded up per household: 221 smoked fish and 306 roots in all) and 24 peat (a hearth's three days, 36, beyond its first fill of 12). With the Store's 212 and 297 that is 433 smoked fish and 603 roots: the six days of §2 for 64 residents (422 and 593 needed). The theft law already reads a store's owner: a resident of Cullet takes from any of them (one community), a player not of the town takes from someone's house store as theft.
+- `verify-core`'s `rhythm.py` builds a Cullet seed with 8 of the cast; it now keeps only those households' stores (a seed naming a household with nobody in it is refused).
+
+### 3. Regrowth by season, by kind
+
+- **The rule.** A resource kind may carry `regrow_by_season: #{ spring, summer, autumn, winter }`, shares of its `regrow_per_h` in each season; a season it leaves out, and every kind without it, keeps the shipped shares (full, and none in winter). A node's amount is computed as before, its `regen` (per real minute) times the growing time since it was written, the growing time now weighted by season (`living_rules::regrowth_ms` over `season_ms`, on the same quarters of the year as `growing_ms`; with the shipped shares it is `growing_ms` exactly).
+- **What minds are told** follows the table: the mind service's SEASONS line was a fixed "In winter nothing regrows"; it is now the calendar followed by the rules' `seasons_text()`. On the island it is word for word the old sentence. On Cullet: "In winter kelp_bed and sand_bank regrow as in the other seasons or more, fishing_spot, greens_bed and weir more slowly, and berry_bush, tree, boulder, reeds, clay_bank, peat_bank and root_plot not at all. Nights are colder: store food before it."
+- **Cullet's values** (`winter_regrowth()` in its laws; spring, summer and autumn stay at the full rate):
+
+| Kind | Winter share | Why |
+| --- | ---: | --- |
+| `fishing_spot` (the Fish Steps, the quay, the mole), `weir` | 0.75 | The sea does not freeze. Storms that keep the boats in are weather and minds' choices, not regrowth. |
+| `kelp_bed` | 1.25 | Winter storms throw up more wrack on the strand. |
+| `greens_bed` | 0.5 | Under glass, slowly. |
+| `root_plot` | 0 | The plots rest; the stores carry roots. |
+| `sand_bank` | 1.0 | The sea's, whatever the season. I read the coordinator's "unchanged" as unchanged by the season, unlike peat's "as now"; if it meant the old rule, the value is 0 and nothing else changes (sand is no food). |
+| `peat_bank` | 0 | As now. |
+
+### 4. What winter does to the town
+
+Worked through before any soak by [`living/tools/cullet_winter.py`](../living/tools/cullet_winter.py), which reads the plan's nodes (max, regrowth, pools), the stores, and Cullet's laws (yields, winter shares, hunger, nutrition, spoiling, store sizes): `python3 living/tools/cullet_winter.py`. The town is one pantry, counted hour by hour from 07:00 on day 1: every node regrows at its kind's share in the season, up to its max; 64 residents and 10 players eat 48 hunger points a game day each, from the land first (greens, then fish, then roots), then from the stores, which spoil at a third of the carried rate. Food is counted as it is eaten, as the plan counted the land: fish smoked (24), roots baked (30), greens raw (10). Not modelled: how fast people gather, carrying, who eats where, players who keep no stores, and fuel for baking and smoking. Its output:
+
+#### Inputs
+
+- Eaters: 74 (64 residents, 10 players), 48 hunger points a game day each (hunger 2.4 a game hour awake, half asleep, 16 hours awake): 3,552 a day.
+- Year: 8 game days, winter the last 2. Food counted as eaten: fish smoked 24, roots baked 30, greens 10.
+- Stores at the start: 433 smoked fish and 603 roots (28,482 points; 8.0 days of the 74). Room for food in the stores: 4,972 things.
+- Stored food spoils at a third of the carried rate: smoked fish 0.033%, roots 0.067% a game hour.
+
+| Food | Nodes (stocks) | A growing day gives | Held when full | Winter share (new) | A winter day gives (new) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| fish (fishing_spot, weir) | 4 | 2,540 | 5,081 | 0.75, 0.75 | 1,905 |
+| roots (root_plot) | 18 | 1,385 | 3,240 | 0 | 0 |
+| greens (greens_bed) | 11 | 693 | 1,386 | 0.5 | 346 |
+| all | | 4,618 (1.30 times what is eaten) | 9,707 | | 2,251 (0.63 times) |
+
+- A year's land, old rule: 27,707 points against 28,416 eaten, 0.975 times; -709 a year to lay by, before spoiling.
+- A year's land, new rule: 32,209 points against 28,416 eaten, 1.133 times; 3,793 a year to lay by, before spoiling.
+
+#### A year, eating from the land (points a game day)
+
+| Day | Season | In, old | In, new | Out | Land at day's end, old / new | Stores at day's end, old / new | Hungry, old / new |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | spring | 428 | 428 | 2,516 | 7,619 / 7,619 | 28,219 / 28,219 | 0 / 0 |
+| 2 | spring | 1,899 | 1,899 | 3,552 | 5,966 / 5,966 | 27,853 / 27,853 | 0 / 0 |
+| 3 | summer | 2,670 | 2,670 | 3,552 | 5,084 / 5,084 | 27,492 / 27,492 | 0 / 0 |
+| 4 | summer | 3,232 | 3,232 | 3,552 | 4,764 / 4,764 | 27,136 / 27,136 | 0 / 0 |
+| 5 | autumn | 3,232 | 3,232 | 3,552 | 4,445 / 4,445 | 26,785 / 26,785 | 0 / 0 |
+| 6 | autumn | 3,232 | 3,232 | 3,552 | 4,125 / 4,125 | 26,439 / 26,439 | 0 / 0 |
+| 7 | winter | 0 | 2,251 | 3,552 | 573 / 2,824 | 26,097 / 26,097 | 0 / 0 |
+| 8 | winter | 0 | 2,251 | 3,552 | 0 / 1,524 | 22,793 / 25,761 | 0 / 0 |
+| 9 | spring | 4,618 | 4,002 | 3,552 | 1,066 / 1,974 | 22,484 / 25,429 | 0 / 0 |
+
+(Day 1 starts at 07:00, so it has 17 hours; out is what was eaten, in what the land grew.)
+
+#### Each winter, by scenario (points)
+
+| Scenario | Rule | Winter | Land when winter comes | Stores when winter comes | Eaten from stores in winter | Hungry in winter | Lowest stores in 12 years |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| eat from the land | old | 1 | 4,125 | 26,439 | 3,646 | 0 | 0 |
+| eat from the land | old | 2 | 2,520 | 21,010 | 5,121 | 0 | 0 |
+| eat from the land | new | 1 | 4,125 | 26,439 | 678 | 0 | 8,072 |
+| eat from the land | new | 2 | 2,520 | 23,839 | 688 | 0 | 8,072 |
+| lay by in autumn | old | 1 | 0 | 33,118 | 7,911 | 0 | 0 |
+| lay by in autumn | old | 2 | 0 | 27,580 | 7,841 | 0 | 0 |
+| lay by in autumn | new | 1 | 0 | 33,118 | 3,446 | 0 | 18,135 |
+| lay by in autumn | new | 2 | 0 | 31,836 | 3,455 | 0 | 18,135 |
+| bare land | old | 1 | 0 (emptied) | 26,439 | 7,724 | 0 | 0 |
+| bare land | old | 2 | 0 (emptied) | 17,123 | 7,522 | 0 | 0 |
+| bare land | new | 1 | 0 (emptied) | 26,439 | 3,258 | 0 | 0 |
+| bare land | new | 2 | 0 (emptied) | 21,379 | 3,147 | 0 | 0 |
+
+#### Over 12 years
+
+| Scenario | Rule | Stores fall a year (years 2 to 3) | First winter with hunger | Hungry that winter | Hungry over all winters |
+| --- | --- | ---: | ---: | ---: | ---: |
+| eat from the land | old | 6,354 | 5 | 1,150 (0.3 days of eating) | 33,241 |
+| eat from the land | new | 2,336 | none | - | 0 |
+| lay by in autumn | old | 5,009 | 8 | 2,623 (0.7 days of eating) | 13,235 |
+| lay by in autumn | new | 1,317 | none | - | 0 |
+| bare land | old | 8,143 | 4 | 5,783 (1.6 days of eating) | 62,615 |
+| bare land | new | 4,530 | 7 | 284 (0.1 days of eating) | 13,293 |
+
+#### The stores alone
+
+- old: a winter on bare land needs 7,104 points from the stores (2.00 days of eating); the starting stores (28,482) carry 4.0 such winters if nobody ever lays anything by.
+- new: a winter on bare land needs 2,602 points from the stores (0.73 days of eating); the starting stores (28,482) carry 10.9 such winters if nobody ever lays anything by.
+
+**What this says.**
+
+- **Under the old rule the town did not go hungry in the first winters, but it was slowly starving.** A year's land gave 0.975 of what the town eats: 1.3 times while growing, but nothing for a quarter of the year. The six days of stores and the land standing full when winter came carried the first four winters; with nobody laying anything by, the first hungry winter is the 5th (1,150 points short, a third of a day's eating), and the 4th if the land is bare when winter comes (1.6 days short). Even laying by everything the autumn gives only delays it to the 8th. No behaviour could make it last: there was less food in a year than eating.
+- **Under Cullet's winter shares the town does not go hungry.** A winter gives 0.63 of what is eaten (fish 1,905 points a day, greens 346, roots none), so a winter costs 2,602 points from the stores and the standing land instead of 7,104. A year's land gives 1.13 times what is eaten: 3,793 points a year to lay by. Eating from the land and laying nothing by, no winter in 12 years is hungry; the stores fall by spoiling and by winter about 2,300 points a year. Laying by in autumn, they fall about 1,300 a year and never below 18,000. Only the worst case, every winter coming to bare land and nobody ever restocking, is hungry, in the 7th winter, by 284 points (a tenth of a day).
+- **No value was changed after this.** What would close the last gap is behaviour, not regrowth: smoking fish and storing roots in autumn (and the summer's surplus, which is lost when a node is full), which the stores have room for (4,972 things of food). Laying by is the people's choice; it is not a rule here.
+
 ## The labs are unchanged
 
+- **Storage by kind, regrowth by season, rules-3.** `rules3_check::rules3_is_bit_identical` (`living/rules/src/rules3_check.rs`, ignored: it reads main's `93019a37` script from `LIVING_OLD_SKILLS`) compares 63,753 states (63,754 after merging main `25c1fb92`, compared then against that main's script, which still has `storage_holds`): the store and take checks' answers for every structure kind (and a creature, and an unknown kind) at 12 fills round 120, storing 1 to 25 and taking 1 to 3, with and without the item; every skill's words (`about`, `takes`, `gives`) and every law's; the minds' world text with the seasons line built as the mind service builds it; and 52,920 node amounts for every shipped resource kind across every season, four amounts each, on the 12-minute and 48-minute days and on 1,000,003 ms, in years of 8, 10 and 7 days, the old `growing_ms` formula against the new `regrowth_ms` with the kind's shares. None differs (`rules3-bit-identical.txt` in the evidence). The shipped kinds have no `regrow_by_season` (`regrowth_by_season_is_a_value_on_each_kind` checks every one is at `GROWING`), and `regrowth_ms` with those shares takes the old path, `growing_ms`.
 - **Rates in game time, rates-2.** `rates_check::rates_are_bit_identical` (`living/rules/src/rates_check.rs`, ignored: it reads main's script from `LIVING_OLD_SKILLS`) compares `f2d803fa`'s script with this one on the 12-minute day over 12,325 states, computing what the authority computes from each law: a stack's loss in one spoiling sweep for every item, 14 stack sizes, four carrier kinds and every structure kind; a node's amount after 12 growing times from four amounts for every resource kind with both defaults; a pasture of 0 to 256 tiles after each growing time; a trap's catches over 2,000 s; remains due for four kinds at four times; and every law's words for minds. None differs (`rates-bit-identical.txt` in the evidence).
 - **Rates.** A temporary test compared the shipped script at `origin/main` with this branch's over 19,200 need states (3 kinds × 4 stages × 5 activities × 64 combinations of cloak, fire, shelter, night, winter and rain × 5 hunger and energy levels): every rate and every sleep duration is bit-identical on the 12-minute day.
 - **The world text.** The minds' text is unchanged: "One day lasts 12 real minutes; night is 20:00-06:00." and "hunger rises ~1.2/min … energy falls ~0.9/min" (`world_text_is_built_from_the_laws`).
@@ -243,6 +359,11 @@ The root plots are open lots now, not `garden` lots: a garden is planted with be
 | Rates in game time (rates-2): spoiling, regrowth, traps, remains | the script's name tables, once per revision (`num_of`), converted by `Scripts::per_minute` / `hour_ms` | the same rows as before (`inventory` by the spoiling sweep, `resource_node.regen` when a node is made, `rot.due_ms` at a death) | as before | as before | as before | none |
 | A plan's resources, structures and stores at creation (rates-2) | the hosted plan; `lot` rows by id for a lot's own structure | 158 `resource_node` rows (Cullet), 34 `structure` rows with `lit_until_ms`, their `inventory` rows (3 stores) | PK | `resource_node`, `structure` and `inventory` subscribers by chunk, once | once, in `init` or the staged creation's last step | none after creation |
 | `floor::check`'s plan kinds (rates-2) | the seed's plans against the compiled script's tables | — | — | — | once, before creation | — |
+| A node's amount by season (rules-3: `common::amount_now`) | the node's row, the cached script's shares for its kind (a map lookup) | — (the same rows as before, at a harvest) | PK | as before | each look at a node, as before | none |
+| Storing and taking (rules-3) | the target's kind traits from the compiled tables (`holds`), its inventory rows as before | as before | as before | as before | per act | none |
+| A graph's structure selector (rules-3: `is_kind`) | the scene's structures, each kind's `like` (a map lookup) | — | — | — | per selector, as before | none |
+| Household stores at creation (rules-3) | the households' owners recorded while their residents are spawned (in memory) | 22 `structure` rows (Cullet) with their owners, and their `inventory` rows | PK | `structure` and `inventory` subscribers by chunk, once | once, in the creating transaction, after the settlements' people | none after creation |
+| The minds' seasons line (rules-3) | `seasons_text()` once per rules revision (853 operations on Cullet's laws at install) | — | — | — | once per revision in the mind service | none |
 
 No whole-World scan was added. SpacetimeDB documentation consulted (2.0.0 pages; the service is 2.14.1): [views](https://spacetimedb.com/docs/functions/views/) (a view re-runs when a row in its read set changes; so a projection is written only when it changed, never rewritten unchanged), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/), [table performance](https://spacetimedb.com/docs/tables/performance/), and, as read by the coordinator for this task, [tables](https://spacetimedb.com/docs/tables/), [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) and [reducers](https://spacetimedb.com/docs/functions/reducers/). No table, column, reducer, view or subscription was added or changed; bindings are unchanged. rates-2 changed none either: its plan structures and resources are ordinary rows inserted in the creating transaction, as plan-2's resources were ([reducer lifecycle](https://spacetimedb.com/docs/functions/reducers/lifecycle/): a failed `init` publishes nothing, so a plan refused in `floor::check` leaves no world); no documentation page needed re-reading for it, and `just living-generate` was not run.
 
@@ -260,6 +381,17 @@ No whole-World scan was added. SpacetimeDB documentation consulted (2.0.0 pages;
 At 48 m every graph scene holds about 19 times the area, and on the island's crowded towns that doubles the graph work (`tick.slots` 35–40 → 77–82 ms a second) and the tick (p99 3.4–4.0 → 6.7–6.9 ms; no tick over 16.7 ms in any window). This is the island's density, not Cullet's: Cullet has 64 residents on a smaller, broken-up town. It says nothing about the 216-character gate except that sight this long is not free there. Not measured: a player's perceived set and the re-projection every sweep that `p.dist` adds (no players in these windows), lamplight's structure look per creature at night, and anything at 64 Cullet residents, which waits for Cullet's seed (as the task said).
 
 ## Verification
+
+### rules-3
+
+On the worker's own server (`rules3-stdb`, 2.14.1, port 3325), scratch databases only, no mind service, no model calls. Evidence under `.local/living/verify/<run>/` and `.local/rules3/evidence/` on the dev-box (git-ignored).
+
+- **Rules.** `cargo test -p living-rules`: 211 pass, 10 ignored, after merging main `1d71e6c2`. New: `script::tests::a_store_holds_what_its_kind_holds`, `script::tests::regrowth_by_season_is_a_value_on_each_kind`, `season_tests::seasons_split_time_on_growings_quarters`, and `settle::plan::tests::a_plans_structures_and_stores_are_kept_on_the_land` with owners and a lot's own door kind. `rules3_check::rules3_is_bit_identical` (ignored, `LIVING_OLD_SKILLS` = main's `93019a37` script): 63,753 states, none differ (`rules3-bit-identical.txt`). `cargo test -p living-authority --lib`: 19 pass (`seed::tests::a_plan_naming_kinds_the_world_lacks_is_refused` now refuses an unknown household and an unknown door kind). `cargo test -p living-mind`: 92 pass.
+- **verify-core:** `goods` 22 of 22 and `stock` 4 of 4 (`core-r3-goods2`); `decay` 6 of 6 over 6 game hours (`core-r3-decay2`); the new `winter` scene 9 of 9 (`core-r3-winter5`): a fishing spot regrew 3.5825 units in a winter where the 0.75 share gives 3.5825 (the full rate 4.4957), and a root plot regrew nothing where the full rate would have grown 1.55. The failed attempts were harness faults, fixed in the scenes, and one lost harness fix (a seed's own laws overwritten at launch; goods-2's `07d42911`, now on main); see [verify-core's validation](../.agents/skills/verify-core/references/validation.md).
+- **verify-generation:** `generation-r3-200638` (island 979 of 979, plan-test 79 of 79 with its Hollis household store owned) and `generation-r3c-201236` (cullet 319 of 319: the 22 household stores placed and owned by their household's house owner, the Store and the peat barn as their own kinds at their doors, every store holding what the plan says, less what 17 households had already taken from their own stores in the seconds the world ran). See [verify-generation's validation](../.agents/skills/verify-generation/references/validation.md).
+- `python3 living/tools/cullet_plan.py --check` and `python3 living/tools/author_world.py cullet --check` pass (0 errors, 0 warnings; 64 residents, 22 households bound to their homes).
+- **`just living-check`**: passes, all five steps (`living-check.txt`). After merging main `25c1fb92` (goods-2, layout-1, speech-2): passes, six steps with the script fuel gate (`living-check-merged.txt`; rules 224 passed); authority 20 and mind 93 pass; `rules3_is_bit_identical` against that main's script finds none of 63,754 states differ; verify-generation `generation-r3m-210752`: plan-test 79 of 79, cullet 319 of 319. The verify-core scenes were run before this merge, not after.
+- **Not run:** verify-player, verify-client (no table, column, reducer, view or subscription changed), verify-minds and verify-llm (the seasons line changes only for a world whose kinds regrow in winter; the mind's tests pass), verify-knowledge, verify-ui, and the other verify-core scenes. No soak.
 
 ### rates-2
 
@@ -285,6 +417,8 @@ All on my own server (`rules1-stdb`, 2.14.1, port 3312), scratch databases only,
 - **Not run:** verify-player (what a player perceives changes only on a world whose laws use `glow` or `p.dist`; the `laws` scene drove a real player identity's perceived and projected rows as the owner, not its `seen_*` views), verify-minds and verify-llm (the perceive JSON and the prompts are the same shape; the mind compiles the rules for the world's day, and its tests pass), verify-client (no table, reducer, view or subscription changed), verify-knowledge (it hard-codes the shared server's port).
 
 ## Files
+
+- rules-3: rules crate `lib.rs` (`GROWING`, `season_ms`, `regrowth_ms`), `script.rs` (`StructureTraits.holds`, `.like`, `is_kind`, `regrow_seasons`, `read_seasons`, `seasons_words`), `script/check.rs` (`seasons_text`'s install check), `settle/plan.rs` (`StructureSpec.owner`, `LotSpec.structure`, `LaidStructure.household`, `LaidLot.structure`), `rules3_check.rs` (new). Script `skills.rhai` (`storage`'s `holds: 120`, `holds_of`, `stores_text`, `seasons_text`; `storage_holds` removed). Authority `common.rs` (`amount_now`), `brain.rs` (the selector), `perceive.rs` (contents of any store), `island.rs` (a lot's own door kind), `seed.rs` (`plan_structures` with owners, `authored_households` records them), `floor.rs` (households and door kinds checked). Mind `prompts.rs` (the seasons line). Cullet: `laws.rhai` (`store_kinds`, `winter_regrowth`, `with_winter`; `storage_holds` removed), `cullet_plan.py`, `plan.json`, `cullet.json`; `living/tools/cullet_winter.py` (new); `plan-test.json` (a household's store). Verification: verify-core `scenes.py winter`, `winter.json`, `rhythm.py`; verify-generation `generation.py`.
 
 - Rules crate: `script.rs` (`with_day`, `hour_ms`, `NeedLaw`'s `per`, `daylight`, `glow`, `Reach.glow`, `lights`, `RegardIn.dist`, `base_` functions left out), `script/context.rs` (`a.daylight`, `a.actor.lit`), `script/check.rs` (samples in twilight and lamplight, the `daylight` and `glow` checks), `catalog.rs` (`lamp`), `lib.rs` (`shipped_night`), `cullet_check.rs` (new).
 - Script: `living/scripts/skills.rhai`: `rates` and `sleep_duration` per game hour, `night_hours`, `ease`, `daylight`, `calendar_law`, `needs_law`'s words.

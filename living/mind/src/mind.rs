@@ -712,10 +712,26 @@ impl Minds {
             }
         }
         let tag = if who.is_empty() { String::new() } else { format!(" {{{}}}", who.join(", ")) };
+        let tag = format!("{}{tag}", self.heard_by(e));
         if with_id {
             format!("[{}] {} {}{tag}", e.id, fmt(e.at_ms), e.text)
         } else {
             format!("[{}] {}{tag}", fmt(e.at_ms), e.text)
+        }
+    }
+
+    /// Who heard one's own line, as the speaker saw it (`heard`): " (heard by Bram and a
+    /// stranger)"; nothing for other rows, or a line with no `heard` row.
+    fn heard_by(&self, e: &Experience) -> String {
+        if e.kind != "said" {
+            return String::new();
+        }
+        let Some(h) = self.conn.db.line_heard().line().find(&e.id) else { return String::new() };
+        let names: Vec<String> = h.hearers.iter().map(|id| self.known_as(e.observer, *id)).collect();
+        match names.as_slice() {
+            [] => " (no one you saw heard it)".into(),
+            [one] => format!(" (heard by {one})"),
+            [rest @ .., last] => format!(" (heard by {} and {last})", rest.join(", ")),
         }
     }
 
@@ -1791,7 +1807,7 @@ impl Minds {
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, say, to, d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, say, to, String::new(), d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
@@ -1946,7 +1962,7 @@ impl Minds {
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, String::new(), 0, d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, String::new(), 0, String::new(), d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     return rx.await?.map_err(|e| anyhow!("mind_say: {e}"));
@@ -2049,7 +2065,7 @@ impl Minds {
         }
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
-        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
+        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "whisper" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         if c.stage <= 1 {
             for m in patch.remember.iter_mut() {

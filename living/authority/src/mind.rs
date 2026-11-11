@@ -371,7 +371,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        let _ = perceive::speak(ctx, actor, &say, say_to, now);
+        let _ = crate::speech::speak(ctx, actor, &say, say_to, "say", now);
     }
     Ok(())
 }
@@ -381,7 +381,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
 /// deliberation reasons and the deliberation clock alone, so talking never displaces or
 /// postpones thinking about what to do.
 #[spacetimedb::reducer]
-pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way: String, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
     let c = authorize(ctx, actor)?;
     if !c.alive {
         return Err("character is dead".into());
@@ -396,7 +396,7 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        perceive::speak(ctx, actor, &say, say_to, now)?;
+        crate::speech::speak(ctx, actor, &say, say_to, &way, now)?;
     }
     Ok(())
 }
@@ -475,6 +475,10 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
         let done: Vec<u64> = ctx.db.experience().observer().filter(actor).filter(|e| e.id <= upto).map(|e| e.id).collect();
         for id in done {
             ctx.db.experience().id().delete(id);
+        }
+        // Who heard the lines it integrated goes with them.
+        for line in ctx.db.line_heard().speaker().filter(actor).filter(|h| h.line <= upto).map(|h| h.line).collect::<Vec<_>>() {
+            crate::speech::forget_line(ctx, line);
         }
     }
     let row = MindCursor { actor, upto, updated_ms: now };

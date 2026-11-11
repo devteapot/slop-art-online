@@ -727,12 +727,14 @@ fn declarations_place_and_present() {
 
 #[test]
 fn a_way_of_speaking_is_presented_in_the_box() {
-    let s = with("fn whisper_speech() { #{ label: \"Whisper\" } }\nfn whisper_ui() { #{ on: \"box\", alias: \"/w\", to_label: \"Whisper to {b}\", bubble: \"hushed\", rows: #{ whisper: \"line\", whispered: \"dots\" } } }");
+    // The shipped script has the ways (`whisper_speech()`, docs/COMMUNICATION.md); a declaration
+    // presents one.
+    let s = with("fn whisper_ui() { #{ on: \"box\", alias: \"/w\", to_label: \"Whisper to {b}\", bubble: \"hushed\", rows: #{ whisper: \"line\", whispered: \"dots\" } } }");
     assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
     let w = s.ui("whisper").unwrap();
     let way = w.way.as_ref().unwrap();
     assert_eq!((w.on.clone(), way.alias.as_deref(), way.bubble, way.rows.get("whispered").copied()), (vec![On::Box], Some("/w"), Some(Bubble::Hushed), Some(Row::Dots)));
-    let s = with("fn whisper_speech() { #{} }\nfn whisper_ui() { #{ label: \"W\", on: \"bar\" } }");
+    let s = with("fn whisper_ui() { #{ label: \"W\", on: \"bar\" } }");
     assert!(s.ui_errors().iter().any(|e| e.contains("a way's `label` is set by `whisper_speech()`")));
     assert!(s.ui_errors().iter().any(|e| e.contains("text box")));
 }

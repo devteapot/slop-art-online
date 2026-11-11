@@ -2,7 +2,7 @@
 
 | Feature | File |
 | --- | --- |
-| Player character: join, move, act (a command runs once, `command.py`; a failed command told as an AI is told, `told.py`), walk far by click-to-move, speak, refusals | [player-character.md](player-character.md) |
+| Player character: join, move, act (a command runs once, `command.py`; a failed command told as an AI is told, `told.py`), walk far by click-to-move, speak (`human_say`, `human_speak` in each way of `speech_card`, `my_heard`; `speak.py`), refusals | [player-character.md](player-character.md) |
 | Combat skills: use, refusals, strike, killing a person, bow, fire bolt, block, dodge, heal, wolves, death and rejoin | [combat.md](combat.md) |
 | Gestures: wave, nod and face through `human_act`, answered by residents; refusals | [gestures.md](gestures.md) |
 | Hospitality: a resident takes the player in (`host`), `lodging`, the stay's end, no theft from the host's store during it; the player's own `host` refused without a house; `guest` private | [hosting.md](hosting.md) |

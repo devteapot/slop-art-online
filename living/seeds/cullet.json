@@ -2737,7 +2737,8 @@
        "contents": {
         "smoked_fish": 212,
         "roots": 297
-       }
+       },
+       "structure": "store"
       },
       {
        "id": "boatshed",
@@ -5831,7 +5832,8 @@
         "empty": 0.0,
         "cause": "+20 m above the sea; 183 m from the Cone at bearing 326; front faces 270"
        },
-       "note": "at the top of the Moss road; peat comes down here"
+       "note": "at the top of the Moss road; peat comes down here",
+       "structure": "peat_barn"
       },
       {
        "id": "turf_house",
@@ -7408,7 +7410,7 @@
        "note": "the Cone's furnace, full (13 game hours at full firing)"
       },
       {
-       "kind": "storage",
+       "kind": "yard_store",
        "lot": "cone_yard",
        "contents": {
         "peat": 824
@@ -7625,6 +7627,248 @@
        "spot": "Rafe's place by the light",
        "fuel": 8.0,
        "note": "at the Watchglass, where Rafe fishes by the light"
+      },
+      {
+       "kind": "house_store",
+       "lot": "lamp_house",
+       "owner": "household:faro",
+       "contents": {
+        "smoked_fish": 7,
+        "roots": 10,
+        "peat": 24
+       },
+       "note": "the faro household's own store: 3 days of food for 2 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "low_1",
+       "owner": "household:dunlin",
+       "contents": {
+        "smoked_fish": 7,
+        "roots": 10,
+        "peat": 24
+       },
+       "note": "the dunlin household's own store: 3 days of food for 2 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "low_2",
+       "owner": "household:calloway",
+       "contents": {
+        "smoked_fish": 14,
+        "roots": 19,
+        "peat": 24
+       },
+       "note": "the calloway household's own store: 3 days of food for 4 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "low_4",
+       "owner": "household:tarn",
+       "contents": {
+        "smoked_fish": 24,
+        "roots": 33,
+        "peat": 24
+       },
+       "note": "the tarn household's own store: 3 days of food for 7 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "low_5",
+       "owner": "household:okoro",
+       "contents": {
+        "smoked_fish": 14,
+        "roots": 19,
+        "peat": 24
+       },
+       "note": "the okoro household's own store: 3 days of food for 4 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "low_6",
+       "owner": "household:vane",
+       "contents": {
+        "smoked_fish": 7,
+        "roots": 10,
+        "peat": 24
+       },
+       "note": "the vane household's own store: 3 days of food for 2 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "low_7",
+       "owner": "household:morrow",
+       "contents": {
+        "smoked_fish": 7,
+        "roots": 10,
+        "peat": 24
+       },
+       "note": "the morrow household's own store: 3 days of food for 2 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "low_8",
+       "owner": "household:sato",
+       "contents": {
+        "smoked_fish": 10,
+        "roots": 14,
+        "peat": 24
+       },
+       "note": "the sato household's own store: 3 days of food for 3 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "low_10",
+       "owner": "household:marl",
+       "contents": {
+        "smoked_fish": 7,
+        "roots": 10,
+        "peat": 24
+       },
+       "note": "the marl household's own store: 3 days of food for 2 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "marver",
+       "owner": "household:achterberg",
+       "contents": {
+        "smoked_fish": 10,
+        "roots": 14,
+        "peat": 24
+       },
+       "note": "the achterberg household's own store: 3 days of food for 3 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "mid_1",
+       "owner": "household:greave",
+       "contents": {
+        "smoked_fish": 14,
+        "roots": 19,
+        "peat": 24
+       },
+       "note": "the greave household's own store: 3 days of food for 4 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "mid_2",
+       "owner": "household:fenwick",
+       "contents": {
+        "smoked_fish": 14,
+        "roots": 19,
+        "peat": 24
+       },
+       "note": "the fenwick household's own store: 3 days of food for 4 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "mid_4",
+       "owner": "household:stannard",
+       "contents": {
+        "smoked_fish": 7,
+        "roots": 10,
+        "peat": 24
+       },
+       "note": "the stannard household's own store: 3 days of food for 2 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "mid_5",
+       "owner": "household:sarro",
+       "contents": {
+        "smoked_fish": 7,
+        "roots": 10,
+        "peat": 24
+       },
+       "note": "the sarro household's own store: 3 days of food for 2 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "mid_7",
+       "owner": "household:brandt",
+       "contents": {
+        "smoked_fish": 10,
+        "roots": 14,
+        "peat": 24
+       },
+       "note": "the brandt household's own store: 3 days of food for 3 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "high_1",
+       "owner": "household:pontil",
+       "contents": {
+        "smoked_fish": 10,
+        "roots": 14,
+        "peat": 24
+       },
+       "note": "the pontil household's own store: 3 days of food for 3 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "high_2",
+       "owner": "household:hollin",
+       "contents": {
+        "smoked_fish": 14,
+        "roots": 19,
+        "peat": 24
+       },
+       "note": "the hollin household's own store: 3 days of food for 4 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "high_3",
+       "owner": "household:quill",
+       "contents": {
+        "smoked_fish": 10,
+        "roots": 14,
+        "peat": 24
+       },
+       "note": "the quill household's own store: 3 days of food for 3 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "high_5",
+       "owner": "household:dunmore",
+       "contents": {
+        "smoked_fish": 10,
+        "roots": 14,
+        "peat": 24
+       },
+       "note": "the dunmore household's own store: 3 days of food for 3 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "readers_house",
+       "owner": "household:orme",
+       "contents": {
+        "smoked_fish": 4,
+        "roots": 5,
+        "peat": 24
+       },
+       "note": "the orme household's own store: 3 days of food for 1 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "turf_house",
+       "owner": "household:roon",
+       "contents": {
+        "smoked_fish": 10,
+        "roots": 14,
+        "peat": 24
+       },
+       "note": "the roon household's own store: 3 days of food for 3 and 24 hearth peat"
+      },
+      {
+       "kind": "house_store",
+       "lot": "hanger_cottage",
+       "owner": "household:sedge",
+       "contents": {
+        "smoked_fish": 4,
+        "roots": 5,
+        "peat": 24
+       },
+       "note": "the sedge household's own store: 3 days of food for 1 and 24 hearth peat"
       }
      ]
     }
