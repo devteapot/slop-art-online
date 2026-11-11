@@ -168,7 +168,7 @@ The lot ids, the 65 buildings, the landmarks, the frame, the land, the resources
 - **Levels.** 16: three more. `clay_pit` (+16.3) is the east end of the upper terrace, dug 0.7 m down; `graves_2` (+20.5) and `graves_3` (+21.0) are the graveyard's upper terraces in the Crown's south-east corner. The upper terrace runs 6 m into the Crown between x 8 and 26 (the quarry's bay), so the Crown's and the upper terrace's polygons are no longer rectangles.
 - **Lots.** 203: the same 65 buildings, and 138 open lots (28 before). The graveyard moved from the Crown's north-west to its south-east corner (three lots, one a terrace); 108 courts, plots, yards, tofts, gardens, corners and sills are open lots with spots.
 - **Streets.** 49: on the Crown, the Tally Wynd's head, the Crown path (to the Readers' yard), the cistern path, the peat road (round the Readers' House's west gable to the barn and the gap in the dyke) and the grave path.
-- **Fixtures.** 351 for the kit (315 before), and 261 blocking lines in the seed (`map.params.plans[0].fixtures`, 2,372 m of wall: 69 above the eye, 192 below).
+- **Fixtures.** 372 for the kit (336 on main with kit-2), and 261 blocking lines in the seed (`map.params.plans[0].fixtures`, 2,372 m of wall: 69 above the eye, 192 below).
 - **Resources.** The clay bank's node stands in the clay pit (it was a point east of the Crown).
 - **As a city.** The Fish Steps to the Crown bench 233 m, 90 s; to the Readers' House 98 s; to the Lintel 237 s; to the turf house 163 s; the quay as before. Every door, 387 spots and every authored resource can be walked to.
 
@@ -220,11 +220,11 @@ SpacetimeDB documentation consulted for layout-2 (the live pages show 2.0.0; the
 
 | Row | Before | After | Who receives it | Then |
 | --- | --- | --- | --- | --- |
-| `land` (one row; `params` is the seed's `map.params` as written) | 86 kB | 146 kB | every client, once, at connection | never updated |
+| `land` (one row; `params` is the seed's `map.params` as written) | 94 kB | 153 kB | every client, once, at connection | never updated |
 | `lot` | 93 | 203 | by chunk subscription, as before | never updated |
 | `place` (private) | 4 named places a resident | 10 a resident (384 more rows for 64 residents) | nobody: private | a mind's projection keeps given places |
 
-The `land` row is the cost to watch: it is sent whole to every client that connects. Cullet's script keeps what pass 2 adds lean (a wall's id and an open lot's cause and wear stay in `plan.json`, not in the seed); the 53 kB of kit inputs that the 93 older lots carry in the seed (wear, causes, household notes) could leave it the same way. A bad fixture is refused in `params_of` before anything is written, so "failure prevents publishing". No per-tick cost was added: tiles are decided at hosting. Not measured: connection time with the larger row, and a mind's prompt with six more given places.
+The `land` row is the cost to watch: it is sent whole to every client that connects. Cullet's script keeps what pass 2 adds lean (a wall's id and an open lot's cause and wear stay in `plan.json`, not in the seed); the 58 kB of kit inputs that the 93 older lots carry in the seed (wear, causes, household notes) could leave it the same way. A bad fixture is refused in `params_of` before anything is written, so "failure prevents publishing". No per-tick cost was added: tiles are decided at hosting. Not measured: connection time with the larger row, and a mind's prompt with six more given places.
 
 **plan-2** (dev-box, own container `plan2-stdb`, 2.14.1, port 3314; private `CARGO_TARGET_DIR`):
 - `cargo test -p living-rules`: the pinned digests hold (island and megacity unchanged), with the new `land::tests::an_authored_outline_and_stamps_shape_the_land`, `settle::plan::tests::the_cullet_seed_is_valid_and_reachable` and `the_test_plans_resources_are_kept_on_the_land`; `cargo test -p living-authority seed::tests` with `the_cullet_seed_is_hosted`.

@@ -182,7 +182,7 @@ On the dev-box, with a private `CARGO_TARGET_DIR` and my own container (`layout1
 
 Branch `layout-2`, Claude Fable 5.2. The owner's words stand ("the layout is really simple, doesn't seem that intentional, and there are lots of empty spaces"). Pass 1 answered most of that; three places still read as empty, and the dev-box coordinator decided what goes in each. This pass lays them out, and adds two rules for every world's plans: walls block walking, and courts and plots are places people can be sent to.
 
-**Status.** Written in `living/tools/cullet_plan.py` (the section "Layout pass 2") and built by `living/tools/blender/cullet.py` (the same). The 65 buildings, the households' homes, the residents, the structures and the five landmarks are kept; ways and town life gained six named places and seven habits. Judged in the game's renderer in look-dev, before and after from 33 viewpoints at 13:00 and 18:30. Not walked by the owner. Not a performance result: 45 new models add about 40,000 triangles (the kit is about 436,000), and no frame time was measured.
+**Status.** Written in `living/tools/cullet_plan.py` (the section "Layout pass 2") and built by `living/tools/blender/cullet.py` (the same). The 65 buildings, the households' homes, the residents, the structures and the five landmarks are kept; ways and town life gained six named places and seven habits. Merged with main at `e301aa9f` (kit-2's ground and models, rules-3's stores). Judged in the game's renderer in look-dev, before (main with kit-2) and after from 33 viewpoints at 13:00 and 18:30. Not walked by the owner. Not a performance result: the kit goes from 434 to 469 models and from about 481,500 to 515,200 triangles, and no frame time was measured.
 
 ### The Crown
 
@@ -210,7 +210,7 @@ Branch `layout-2`, Claude Fable 5.2. The owner's words stand ("the layout is rea
 | **The peat road**, rerouted | From the Crown path round the Readers' House's west gable to the barn's door and the gap | The straight line from the barn to the wynd runs through the Readers' House; feet bend round its corner. It no longer crosses the school's yard. |
 | The grave path | From the wynd's head along the lip of the quarry's bay to the graveyard's gate | |
 
-kit-2 models the Crown's buildings (the Readers' House, the cistern house, the peat barn), the cistern's tank, the thorn and the bench. This pass builds none of them. Its `gen_graveyard` (three rows on the lot's rectangle) is superseded: the graveyard's three lots now name no model.
+kit-2 models the Crown's buildings (the Readers' House, the cistern house, the peat barn), the cistern's tank, the thorn and the bench. This pass builds none of them. Its `gen_graveyard` (three rows on the lot's rectangle) is no longer used: the graveyard's three lots name no model, and `graveyard/graveyard.glb` is now the lowest band's fixture.
 
 ### The quarry
 
@@ -284,7 +284,7 @@ A general rule in use, not in code: an open lot is a `lamp` lot of no height and
 
 - **Not done:** a household's own court as its people's place (the Tarns' washing, Rafe Dunlin's boat). Ways are keyed by trade, and the Tarns are fishers, a smoker and children. It needs a place on the residents themselves, which come from the cast (`author_world.py --compile-only`); the lots are there for it.
 - The Fish Steps' lot gained four spots (the gutting tables, the mending bench, the bait tubs), since a lot may not stand on the quay's street.
-- **Found:** a spot's first number runs east along a south front, not west as the plan's names assumed. The Cone's west and east mouths, the Crown bench's seats, the wash-house's warm wall and the Fish Steps' second step each had the other's name; "Magda's place" stood in the harbour. Corrected. kit-2's `spot_at` helper assumes the old reading.
+- **Found:** a spot's first number runs east along a south front, not west as the plan's names assumed. The Cone's west and east mouths, the Crown bench's seats, the wash-house's warm wall and the Fish Steps' second step each had the other's name; "Magda's place" stood in the harbour. Corrected, and kit-2's `spot_at` with them (below).
 
 ### Walking times
 
@@ -304,20 +304,21 @@ The turf house's 9 s are the dyke: the way to the Moss goes by the peat gap. Lan
 
 ### In the kit, and in the client
 
-- `cullet.py`, "Layout pass 2": 31 kinds of content, `gen_quarry_face`, `gen_quarry_crane`, `gen_kelp_kiln`, a paling for `e_wall`, and slumps in a dry wall. `e_wall` gained two branches; no other existing function changed. 399 models pass `cullet_kit_check.py`.
+- `cullet.py`, "Layout pass 2": 31 kinds of content, `gen_quarry_face`, `gen_quarry_crane`, `gen_kelp_kiln`, a paling for `e_wall`, and slumps in a dry wall. `e_wall` gained two branches; no other existing function changed. After the merge with kit-2 all 469 models pass `cullet_kit_check.py`, the coplanar check among them (44 new, 9 gone: four lengths of wall, pass 1's four quarry groups and its graveyard wall; 11 older ones changed, the sills, three yards, the locked garden and the wall at the bay).
+- An enclosure's `ground` names one of kit-2's surfaces (`setts`, `earth`), so the ground pass paints the Readers' yard, the quarry's floor, the clay pit and the Strand's four new yards (152 areas, 147 before). The graveyard, the apron and the stance stand on the Crown's own turf.
+- kit-2's `spot_at` took a spot's first number toward the west for a south front; the engine takes it east. It now follows the engine, and the three spots it reads (Halvard's bench, the cullet heaps, the trough) were moved onto the dressing kit-2 stands there, so the bench people are sent to is the bench that is drawn.
 - Tall things stand alone (the crane is its own model), because the client fades and keeps the camera out of a model by its whole box.
 - `fixtures.json` gives each fixture's `size`. The client draws no slab under an open lot a fixture stands on.
 - **A bug found in the client and fixed:** every one of the engine's own wall pieces and flights on Cullet drew a kit model of its folder at random, on top of the kit's own. It hid the quarry's face behind a wall. See [authored plans](AUTHORED_PLANS.md#the-game-client).
 
 ### What still reads as empty
 
-- **The Crown's middle and north.** 80 × 40 m of open ground between the cistern, the Readers' House, the barn and the dyke. It is meant to be open; it still wants its own ground (thin turf, rock showing) and the buildings' models.
+- **The Crown's middle and north.** 80 × 40 m of open turf between the cistern, the Readers' House, the barn and the dyke. It is meant to be open, and with kit-2's ground and buildings it reads as a hilltop; whether it wants more is for the owner's walk.
 - **The square.** 30 × 14 m of flags with a lamp. The market is under the arcade; the yard has nothing that says market day.
 - **Cinder Row's yard**, as pass 1 left it.
 - **The sills**, five benches on 500 m of parapet.
 - **The Strand between the Store and the peat stance**, and the slot west of the Counting House.
 - **The quarry's west third**, one grassed heap on 16 m.
-- **The ground itself.** Everything here stands on lawn until kit-2's ground is on main; the quarry's bay and the clay pit bring their own floors.
 
 ### Not done, and next
 
@@ -326,3 +327,16 @@ The turf house's 9 s are the dyke: the way to the Moss goes by the peat gap. Lan
 - **Household courts as places** (above).
 - **The clay face and the graveyard's markers** are plain: spade lifts read as blocks, and glass has no thickness of its own in the toon shader.
 - **Performance.** 45 more models and 110 more lot rows, without a frame or connection measurement.
+
+### Verification (pass 2)
+
+On the dev-box, 2026-11-11, on the branch merged with main `e301aa9f`, with a private `CARGO_TARGET_DIR` and my own container (`layout2-stdb`, SpacetimeDB 2.14.1, port 3329). No paid model call.
+
+- `cullet_plan.py --check` and `author_world.py cullet --check` (0 errors, 0 warnings; 64 residents, 22 homes bound) pass; `cullet.json` keeps its residents, homes, ways, town life and 56 structures.
+- `cargo test -p living-rules`: 227 passed, 10 ignored: the pinned digests (the island and the megacity floor unchanged), the three new fixture tests and the extended Cullet test ([authored plans](AUTHORED_PLANS.md#fixtures-that-block)).
+- `cullet_kit_check.py`: 469 of 469 on footprint, height, doors, triangles, surfaces, palette, materials and coplanar.
+- verify-generation `--feature worlds --seeds cullet,plan-test` (`generation-layout2m-20261111-214828`): Cullet 329 of 329, plan-test 83 of 83, with the new checks (blocking fixtures on unwalkable tiles, walls above the eye as `Wall`, every gap open, every spot standable, each named place on one of its lot's spots) and `land` digests equal to the native generator's. The four checks that failed for pass 1 pass now. Record: [verify-generation's validation](../.agents/skills/verify-generation/references/validation.md).
+- verify-core `rhythm`: RHYTHM_RESULT
+- `set -o pipefail; just living-check`: LIVING_CHECK_RESULT
+- The game client in look-dev: STILLS_RESULT
+- Not done: a walk in a connected world by a person; verify-ui (its `support` spots did not move: the Ladder Wynd's first flight, the Marver's terrace, the quay, `wall_002`); verify-client, verify-player, verify-minds (no table, reducer, view or protocol changed); the authority's native `seed::tests`; any frame-time or connection measurement.
