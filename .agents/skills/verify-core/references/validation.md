@@ -5,7 +5,7 @@
 
 Branch `hearth-1`, own container `hearth1-stdb` (2.14.1, port 3331), `scoped`, no minds. `rhythm.py` gained `household_things` (two households' own hearth and store, used from the door by deliberate acts).
 
-- `core-hearth1-rhythm-223954` (before the merge of origin/main `61b7b2eb`) and `core-hearth1m-rhythm-225209` (merged): **34 of 34** each. Halvard Dunmore's hearth 1.0 m and store 1.41 m from his door, Bram Calloway's the same; each fed the hearth (`lit_until_ms` up by 60 s, one unit at Cullet's 0.5 a game hour on a 12-minute day), cooked a fish there, took a smoked fish from and stored a peat in his own store (`peat` 24 to 25), and ate it; no act failed.
+- `core-hearth1-rhythm-223954` (before the merge of origin/main `d124c0f7`) and `core-hearth1m-rhythm-225209` (merged): **34 of 34** each. Halvard Dunmore's hearth 1.0 m and store 1.41 m from his door, Bram Calloway's the same; each fed the hearth (`lit_until_ms` up by 60 s, one unit at Cullet's 0.5 a game hour on a 12-minute day), cooked a fish there, took a smoked fish from and stored a peat in his own store (`peat` 24 to 25), and ate it; no act failed.
 - `core-hearth1-goods-224440`: `goods` 24 of 24, `stock` 4 of 4 (before the merge).
 - Not run: `decay`, `town`, the other scenes.
 

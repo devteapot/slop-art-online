@@ -2,7 +2,7 @@
 
 ## 2026-11-11 hearth-1: a household's own structures inside its lot (dev-box)
 
-Branch `hearth-1` (from `9c6ca13c`; merged with origin/main `61b7b2eb`), own container `hearth1-stdb` (2.14.1, port 3331, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. The plan format gained `lots[].inside`; an owned structure placed for a lot without a spot stands on the lot's own tiles ([authored plans](../../../../docs/AUTHORED_PLANS.md#a-households-own-things-stand-inside-its-lot)); `check_plans` gained three checks (inside its lot, within 1.5 m of a tile joined to the door, each household's house, store and fire).
+Branch `hearth-1` (from `9c6ca13c`; merged with origin/main `d124c0f7`), own container `hearth1-stdb` (2.14.1, port 3331, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. The plan format gained `lots[].inside`; an owned structure placed for a lot without a spot stands on the lot's own tiles ([authored plans](../../../../docs/AUTHORED_PLANS.md#a-households-own-things-stand-inside-its-lot)); `check_plans` gained three checks (inside its lot, within 1.5 m of a tile joined to the door, each household's house, store and fire).
 
 - `generation-hearth1-20261111-223528` (`--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k`): **island 979, plan-test 86, cullet 332, floor-megacity-2k 77**, all pass; `land` digests equal `floor_preview`'s. plan-test: 4 household structures inside (`storage` 3, `campfire` 1; 3 on a floor); Cullet: 43 (`hearth` 21, `house_store` 22; all on a floor), 22 households with house, store and fire.
 - `generation-hearth1m-20261111-225211` (merged tree, `--seeds island,plan-test,cullet`): 979, 86 and 332 pass; original seeds unchanged.
