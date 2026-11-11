@@ -869,6 +869,35 @@ Measured on a scratch island world with the play-test scene's sight installed (4
 - No F1 panel slider.
 - By day at 48 m, most of the default view already lies within sight, so "not seen now" marks only the far end of a street.
 
+## Talking and tapping (2026-11-11)
+
+Branch `talk-1`, after play-test 2. In that session the residents answered every line within 3–28 s, yet the owner found them "not interactive". Evidence is in `.local/living/talk-1/` (git-ignored). Client only: no table, reducer, view, subscription, rule or mind change. The client calls the existing `human_say(text, to)` with `to` set, and reads `silence` rows from the existing `my_experience` view. No SpacetimeDB feature is used in a new way, so no new documentation was consulted.
+
+- **Addressed speech** (`talk.rs`, `ui/chat.rs`):
+  - Enter opens the text box addressed to the person under the cursor, if they are within earshot, else to the nearest person within earshot.
+  - Earshot is the rules': the world's `senses` law, asked per person perceived. The play-test scene gives 12 m.
+  - The box reads "Say to a stranger" (or a name the rules give: the projection's `label` from `seen_characters`), and the one addressed is the HUD's target while it is open. Tab goes to the next person within earshot, nearest first.
+  - With nobody in earshot it reads "Say — nobody in earshot" and the line goes to no one (`to = 0`), as before. If the addressee is no longer perceived, the box falls back to the nearest person in earshot.
+  - **What the authority accepts:** any `to`. Everyone within their own hearing hears the line. The one addressed hears it as said to them (salience 0.9, a conversation turn for their mind), whatever the 6 m `address_m` rule for unaddressed speech. If the addressee is out of earshot, they hear nothing and the speaker gets "No answer from …" (a `silence` row). The client shows that as a red note, and shows "speaking too fast" (a line within 2 s of the last) the same way.
+  - Before, every line was `to = 0`: with two or more people within 6 m, nobody was addressed, and a stranger's unaddressed line draws no turn from minds that do not care about them.
+- **The tap rule** (provisional; the owner is being asked what they expected): *a left tap on a person who is not hostile to you (has not hurt you in the last 15 s and has no move aimed at you) turns you to them and opens the text box to them; striking them takes a held press (0.22 s).*
+  - Animals, and people hostile to you, are struck by a tap as before.
+  - With the box open, a tap on a peaceful person addresses them instead.
+  - `combat::hostile_to_me` is the HUD's hostile stance, now shared.
+- **First-time hint** (`ui/tips.rs`): "Enter — talk to the person you point at", under the target frame, for 6 s once the first load lifts, and again the first time someone speaks to you. `Tips::once` is a shared line, so other first-time hints (F2, F3) can stack there.
+- **F1 controls line:** it said "right click: walk to" and "R: turn to where you face". It now lists the skill bar's keys.
+- **F at remains offered "take wound tending"** and the authority refused it three times. The client checks `take` as if the remains held whatever is asked, because their contents are not perceived, and its candidates included the techniques the player knows.
+  - Techniques are now candidates only toward a person (teach) or oneself.
+  - A refused act is no longer the one a tap repeats.
+  - Still open, for the interface redesign: what remains or a store hold is not perceived, so `take ›` can still offer an item that is not there.
+
+Measured on scratch worlds from the play-test 2 scene's module and script (`verify-talk1-*`; no mind service, no model calls):
+- In the crowd case (three people within 6 m), the line went out with `to = 7`. Osric's row reads "A stranger said to you" (0.9); the two others' read "A stranger said to Osric Abbot" (0.45).
+- A tap on a peaceful resident sent `face` and no strike. A held press struck them (hit for 10). A tap on a resident who had just struck the player struck back (hit for 7).
+- At the remains, `take wound_tending` is not offered; `take berries` is.
+
+Not covered: the "No answer" note and the "(out of earshot)" label on screen. The authority's `silence` row was shown by verify-player. Also not covered: a real trackpad (captures are headless), and whether minds answer an addressed line (no mind service ran).
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
