@@ -708,6 +708,8 @@ Each phase ends with something the owner can look at. "Touches" names what chang
 
 **Order and overlap.** Phase 1 can start today. Phases 2 and 4 do not depend on each other. Phase 3 needs phases 1 and 2. Phase 5's bible can be written during phase 3. The client-feel work runs alongside all of it and is not in this plan.
 
+**Phase 2, engine part (2026-11-11, branch `plan-1`).** A land seed can now carry hand-authored plans (`map.params.plans`): levels at exact heights, streets, stairs, a square, a harbour and lots with explicit models and heights, drawn as grey boxes until the kit exists. Households bind to lots (`homes`). See [authored plans](AUTHORED_PLANS.md). The full 65-lot plan is the next task; `living/seeds/cullet.json` is a rough first version.
+
 **What could stop it:**
 
 - **The authored plan** (phase 2) is the largest unknown. The planner generates settlements, and nothing today reads a hand-made layout. `SeedTown.buildings` is the nearest existing hook.

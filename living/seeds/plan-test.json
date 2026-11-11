@@ -1,0 +1,3722 @@
+{
+  "run": "plan-test",
+  "seed": 3,
+  "map": {
+    "kind": "land",
+    "size": 1024,
+    "params": {
+      "sites": [
+        {"kind": "village", "min": 2, "max": 2, "per_km2": 0.0, "radius_m": 50.0, "spacing_m": 300.0, "scale": 1.0, "flatten": 0.75}
+      ],
+      "plans": [
+        {
+          "id": "plan_test",
+          "kind": "town",
+          "style": "cullet",
+          "origin": [575, 888],
+          "rotation_deg": 15,
+          "levels": [
+            {"id": "quay", "height_m": 2.5, "area": [[-40, 0], [40, 0], [40, 24], [-40, 24]]},
+            {"id": "row", "height_m": 6.5, "area": [[-40, 24], [40, 24], [40, 54], [-40, 54]]}
+          ],
+          "sea": [[-60, -70], [60, -70], [60, 0], [-60, 0]],
+          "square": {"level": "quay", "area": [[-12, 2], [12, 2], [12, 14], [-12, 14]], "paved": true},
+          "streets": [
+            {"id": "quay west", "points": [[-38, 6], [-12, 6]], "width_m": 4.0, "class": "street", "surface": "flags", "level": "quay"},
+            {"id": "quay east", "points": [[12, 6], [38, 6]], "width_m": 4.0, "class": "street", "surface": "flags", "level": "quay"},
+            {"id": "the row", "points": [[-38, 40], [38, 40]], "width_m": 4.0, "class": "street", "surface": "setts", "level": "row"},
+            {"id": "the road out", "points": [[38, 40], [55, 62], [72, 96]], "width_m": 3.6, "class": "trunk", "surface": "earth"}
+          ],
+          "stairs": [
+            {"id": "the steps", "from": "quay", "to": "row", "foot": [32, 18], "head": [32, 28], "width_m": 2.4, "rise_m": 4.0}
+          ],
+          "lots": [
+            {"id": "store", "kind": "workshop", "name": "the Store", "at": [-30, 14], "size": [8, 9], "facing": "south", "level": "quay", "model": "cullet/workshop/store.glb", "height_m": 7.5, "wear": {"salt": 0.7}},
+            {"id": "loft", "kind": "barn", "at": [-20, 14], "size": [7, 9], "facing": "south", "level": "quay", "model": "cullet/barn/loft.glb", "height_m": 9.0},
+            {"id": "hall", "kind": "hall", "name": "the Tally Hall", "at": [0, 19], "size": [16, 9], "facing": "south", "level": "quay", "model": "cullet/hall/tally.glb", "height_m": 14.0, "landmark": true, "spots": [{"name": "under the arch", "at": [-4, 5.5]}, {"name": "by the door", "at": [4, 5.5]}]},
+            {"id": "inn", "kind": "inn", "name": "the Marrow", "at": [22, 15], "size": [10, 10], "facing": "south", "level": "quay", "height_m": 8.0, "spots": [{"name": "seat 1", "at": [-3, 6]}, {"name": "seat 2", "at": [0, 6]}, {"name": "seat 3", "at": [3, 6]}]},
+            {"id": "house_a", "kind": "house", "at": [-20, 32.5], "size": [6, 9], "facing": "north", "level": "row", "model": "cullet/house/row-a.glb", "height_m": 8.5, "door_colour": "oxblood", "keepsake": "glass floats"},
+            {"id": "house_b", "kind": "house", "at": [-14, 32.5], "size": [6, 9], "facing": "north", "level": "row", "height_m": 8.0},
+            {"id": "house_c", "kind": "house", "at": [-8, 32.5], "size": [6, 9], "facing": "north", "level": "row", "height_m": 8.5},
+            {"id": "house_d", "kind": "house", "at": [0, 47], "size": [7, 9], "facing": "south", "level": "row", "height_m": 9.0, "door_colour": "mustard"},
+            {"id": "house_e", "kind": "house", "at": [7, 47], "size": [7, 9], "facing": 180, "level": "row", "height_m": 8.0}
+          ]
+        }
+      ]
+    }
+  },
+  "setting": "A small harbour town on the south coast of an island: a stone quay at the water, one row of houses above it, steps between them, and a road out to the villages inland.",
+  "animals": {"deer": 4, "wolf": 0},
+  "towns": [
+    {
+      "name": "Pellmouth",
+      "site": "plan_test",
+      "walled": false,
+      "character": "a harbour town laid out by hand: the quay, the row, the steps",
+      "stores": {"berries": 20, "wood": 6},
+      "homes": {"hollis": "house_a", "wren": "house_d"},
+      "buildings": [
+        {"kind": "hall", "name": "the Tally Hall", "lot": "hall", "about": "where debts are written"}
+      ],
+      "residents": [
+        {"name": "Ada Hollis", "age": 41, "household": "hollis", "occupation": "fisher"},
+        {"name": "Tom Hollis", "age": 44, "household": "hollis", "occupation": "fisher"},
+        {"name": "Nell Hollis", "age": 9, "household": "hollis", "occupation": "child", "parents": ["Ada Hollis", "Tom Hollis"]},
+        {"name": "Bryn Wren", "age": 35, "household": "wren", "occupation": "cook"},
+        {"name": "Ivo Wren", "age": 37, "household": "wren", "occupation": "builder"}
+      ]
+    }
+  ],
+  "villages": [],
+  "town_life": {
+    "places": {"square": ["plaza"], "hall": ["lot:hall"], "inn": ["lot:inn", "plaza"]},
+    "work": {"fisher": ["plaza"], "cook": ["lot:inn"], "builder": ["lot:store"]},
+    "evening": ["inn", "home", "square"]
+  },
+  "weather": {"spell_s": 180, "rain_share": 0.2},
+  "newcomer": {"items": {"bow": 1, "arrow": 30, "berries": 4}, "knows": ["fire", "fire_bolt", "wound_tending"]},
+  "ways": {
+   "common": {
+    "stay safe": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "hurt_within": 5
+         },
+         {
+          "health": {
+           "below": 40
+          }
+         },
+         {
+          "near": {
+           "target": {
+            "nearest": "wolf"
+           },
+           "within": 8
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "flee",
+        "target": "attacker"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "hurt_within": 5
+         },
+         {
+          "health": {
+           "below": 40
+          }
+         },
+         {
+          "not": {
+           "near": {
+            "target": {
+             "nearest": "wolf"
+            },
+            "within": 8
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "yield",
+        "target": "attacker"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "hurt_within": 2
+         },
+         {
+          "health": {
+           "below": 40
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "flee",
+        "target": "attacker"
+       }
+      },
+      {
+       "if": {
+        "hurt_within": 5
+       },
+       "then": {
+        "do": "attack",
+        "target": "attacker"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "threatened": true
+         },
+         {
+          "count": {
+           "of": "person",
+           "within": 7,
+           "at_least": 2
+          }
+         },
+         {
+          "not": {
+           "count": {
+            "of": {
+             "kind": "person",
+             "relation": "friend"
+            },
+            "within": 7,
+            "at_least": 1
+           }
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "yield"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "near": {
+           "target": {
+            "nearest": "wolf"
+           },
+           "within": 10
+          }
+         },
+         {
+          "count": {
+           "of": "person",
+           "within": 8,
+           "at_least": 2
+          }
+         },
+         {
+          "health": {
+           "above": 60
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "attack",
+        "target": {
+         "nearest": "wolf"
+        }
+       }
+      },
+      {
+       "if": {
+        "near": {
+         "target": {
+          "nearest": "wolf"
+         },
+         "within": 12
+        }
+       },
+       "then": {
+        "do": "flee",
+        "target": {
+         "nearest": "wolf"
+        }
+       }
+      }
+     ]
+    },
+    "get out of the rain": {
+     "first": [
+      {
+       "if": {
+        "near": {
+         "target": "home",
+         "within": 2.5
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "energy": {
+            "below": 60
+           }
+          },
+          "then": {
+           "do": "sleep"
+          }
+         },
+         {
+          "do": "rest"
+         }
+        ]
+       }
+      },
+      {
+       "if": {
+        "near": {
+         "target": {
+          "nearest": "inn"
+         },
+         "within": 2.5
+        }
+       },
+       "then": {
+        "do": "rest"
+       }
+      },
+      {
+       "if": {
+        "near": {
+         "target": {
+          "nearest": "hall"
+         },
+         "within": 2.5
+        }
+       },
+       "then": {
+        "do": "rest"
+       }
+      },
+      {
+       "if": {
+        "near": {
+         "target": {
+          "nearest": "house"
+         },
+         "within": 2.5
+        }
+       },
+       "then": {
+        "do": "rest"
+       }
+      },
+      {
+       "if": {
+        "not": {
+         "near": {
+          "target": "home",
+          "within": 40
+         }
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "do": "goto",
+          "target": {
+           "nearest": "inn"
+          }
+         },
+         {
+          "do": "goto",
+          "target": {
+           "nearest": "hall"
+          }
+         },
+         {
+          "do": "goto",
+          "target": {
+           "nearest": "house"
+          }
+         }
+        ]
+       }
+      },
+      {
+       "do": "goto",
+       "target": "home"
+      }
+     ]
+    },
+    "sleep": {
+     "first": [
+      {
+       "if": {
+        "near": {
+         "target": "home",
+         "within": 2.5
+        }
+       },
+       "then": {
+        "do": "sleep"
+       }
+      },
+      {
+       "seq": [
+        {
+         "do": "goto",
+         "target": "home"
+        },
+        {
+         "do": "sleep"
+        }
+       ]
+      }
+     ]
+    },
+    "keep warm": {
+     "first": [
+      {
+       "if": {
+        "near": {
+         "target": "home",
+         "within": 2.5
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "energy": {
+            "below": 90
+           }
+          },
+          "then": {
+           "do": "sleep"
+          }
+         },
+         {
+          "do": "rest"
+         }
+        ]
+       }
+      },
+      {
+       "do": "goto",
+       "target": "home"
+      }
+     ]
+    },
+    "answer a greeting": {
+     "first": [
+      {
+       "if": {
+        "near": {
+         "target": "hailer",
+         "within": 5
+        }
+       },
+       "then": {
+        "do": "nod",
+        "target": "hailer"
+       }
+      },
+      {
+       "do": "wave",
+       "target": "hailer"
+      }
+     ]
+    },
+    "watch what happens": {
+     "first": [
+      {
+       "do": "face",
+       "target": "commotion"
+      },
+      {
+       "wait": 2
+      }
+     ]
+    },
+    "mind the people near me": {
+     "first": [
+      {
+       "if": {
+        "all": [
+         {
+          "heard_within": 4
+         },
+         {
+          "near": {
+           "target": "speaker",
+           "within": 9
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "face",
+        "target": "speaker"
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "moving": false
+         },
+         {
+          "near": {
+           "target": {
+            "nearest": {
+             "kind": "person",
+             "relation": "enemy"
+            }
+           },
+           "within": 6
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "face",
+        "target": {
+         "nearest": {
+          "kind": "person",
+          "relation": "enemy"
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "chance": 0.03
+         },
+         {
+          "not": {
+           "near": {
+            "target": "home",
+            "within": 8
+           }
+          }
+         },
+         {
+          "near": {
+           "target": {
+            "nearest": {
+             "kind": "person",
+             "relation": "friend"
+            }
+           },
+           "within": 11
+          }
+         }
+        ]
+       },
+       "then": {
+        "do": "wave",
+        "target": {
+         "nearest": {
+          "kind": "person",
+          "relation": "friend"
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "all": [
+         {
+          "moving": false
+         },
+         {
+          "near": {
+           "target": {
+            "nearest": "person"
+           },
+           "within": 2.5
+          }
+         }
+        ]
+       },
+       "then": {
+        "first": [
+         {
+          "do": "step_aside",
+          "target": {
+           "nearest": "person"
+          }
+         },
+         {
+          "do": "face",
+          "target": {
+           "nearest": "person"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    "spend the evening out": {
+     "if": {
+      "all": [
+       {
+        "evening": true
+       },
+       {
+        "raining": false
+       }
+      ]
+     },
+     "then": {
+      "first": [
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "evening"
+           },
+           "within": 6
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "evening"
+         }
+        }
+       },
+       {
+        "if": {
+         "chance": 0.04
+        },
+        "then": {
+         "first": [
+          {
+           "do": "nod",
+           "target": {
+            "nearest": {
+             "kind": "person",
+             "relation": "friend"
+            }
+           }
+          },
+          {
+           "do": "nod",
+           "target": {
+            "nearest": "person"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "do": "rest"
+       }
+      ]
+     }
+    },
+    "find food and eat": {
+     "first": [
+      {
+       "if": {
+        "has": {
+         "item": "food"
+        }
+       },
+       "then": {
+        "do": "eat",
+        "item": "food",
+        "qty": 4
+       }
+      },
+      {
+       "do": "take",
+       "target": {
+        "nearest": "storage"
+       },
+       "item": "food"
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "berry_bush"
+       }
+      },
+      {
+       "do": "gather",
+       "target": {
+        "nearest": "fishing_spot"
+       }
+      },
+      {
+       "seq": [
+        {
+         "first": [
+          {
+           "do": "goto",
+           "target": {
+            "place": "store"
+           }
+          },
+          {
+           "wait": 1
+          }
+         ]
+        },
+        {
+         "first": [
+          {
+           "do": "goto",
+           "target": {
+            "place": "berries"
+           }
+          },
+          {
+           "wait": 1
+          }
+         ]
+        },
+        {
+         "do": "wander"
+        },
+        {
+         "do": "wander"
+        },
+        {
+         "do": "wander"
+        },
+        {
+         "do": "wander"
+        },
+        {
+         "do": "wander"
+        },
+        {
+         "do": "wander"
+        },
+        {
+         "do": "wander"
+        },
+        {
+         "do": "wander"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "occupations": {
+    "farmer": {
+     "routine": "tend the fields",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "has": {
+          "item": "berries",
+          "at_least": 12
+         }
+        },
+        "then": {
+         "seq": [
+          {
+           "do": "goto",
+           "target": {
+            "place": "square"
+           }
+          },
+          {
+           "do": "store",
+           "target": {
+            "nearest": "storage"
+           },
+           "item": "berries",
+           "qty": 8
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 10
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "gather",
+        "target": {
+         "nearest": "berry_bush"
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "fisher": {
+     "routine": "fishing",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "has": {
+          "item": "fish",
+          "at_least": 4
+         }
+        },
+        "then": {
+         "seq": [
+          {
+           "do": "goto",
+           "target": {
+            "place": "square"
+           }
+          },
+          {
+           "do": "store",
+           "target": {
+            "nearest": "storage"
+           },
+           "item": "fish",
+           "qty": 4
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 6
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "gather",
+        "target": {
+         "nearest": "fishing_spot"
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "cook": {
+     "routine": "keep the kitchen",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "all": [
+          {
+           "has": {
+            "item": "fish"
+           }
+          },
+          {
+           "sees": {
+            "nearest": "campfire"
+           }
+          }
+         ]
+        },
+        "then": {
+         "do": "cook",
+         "target": {
+          "nearest": "campfire"
+         },
+         "item": "fish"
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 4
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "innkeeper": {
+     "routine": "keep the inn",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "all": [
+          {
+           "has": {
+            "item": "fish"
+           }
+          },
+          {
+           "sees": {
+            "nearest": "campfire"
+           }
+          }
+         ]
+        },
+        "then": {
+         "do": "cook",
+         "target": {
+          "nearest": "campfire"
+         },
+         "item": "fish"
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 4
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "trader": {
+     "routine": "keep the stall",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 3
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "builder": {
+     "routine": "work at the workshop",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 4
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "carpenter": {
+     "routine": "work at the workshop",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 4
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "mason": {
+     "routine": "work at the workshop",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 4
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "guard": {
+     "routine": "keep watch",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "sees": {
+          "nearest": "wolf"
+         }
+        },
+        "then": {
+         "do": "face",
+         "target": {
+          "nearest": "wolf"
+         }
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 4
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "scribe": {
+     "routine": "keep the records",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "near": {
+          "target": {
+           "nearest": "sign"
+          },
+          "within": 3
+         }
+        },
+        "then": {
+         "seq": [
+          {
+           "do": "read",
+           "target": {
+            "nearest": "sign"
+           }
+          },
+          {
+           "do": "keep"
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 4
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "healer": {
+     "routine": "tend the hurt",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "health_of": {
+          "target": {
+           "nearest": "person"
+          },
+          "below": 70
+         }
+        },
+        "then": {
+         "do": "tend",
+         "target": {
+          "nearest": "person"
+         }
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 4
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "hunter": {
+     "routine": "keep the barn",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 6
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "child": {
+     "routine": "play",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "all": [
+          {
+           "not": {
+            "near": {
+             "target": "home",
+             "within": 14
+            }
+           }
+          },
+          {
+           "not": {
+            "near": {
+             "target": {
+              "place": "square"
+             },
+             "within": 14
+            }
+           }
+          }
+         ]
+        },
+        "then": {
+         "do": "goto",
+         "target": "home"
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": "play"
+         },
+         {
+          "do": "wander"
+         },
+         {
+          "do": "play"
+         },
+         {
+          "wait": 2
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "outlaw": {
+     "routine": "keep the road",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 14
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "if": {
+         "can": {
+          "do": "seize",
+          "target": {
+           "nearest": {
+            "kind": "person",
+            "relation": "outsider"
+           }
+          },
+          "item": "stone",
+          "qty": 3
+         }
+        },
+        "then": {
+         "do": "seize",
+         "target": {
+          "nearest": {
+           "kind": "person",
+           "relation": "outsider"
+          }
+         },
+         "item": "stone",
+         "qty": 3
+        }
+       },
+       {
+        "if": {
+         "can": {
+          "do": "seize",
+          "target": {
+           "nearest": {
+            "kind": "person",
+            "relation": "outsider"
+           }
+          },
+          "item": "berries",
+          "qty": 3
+         }
+        },
+        "then": {
+         "do": "seize",
+         "target": {
+          "nearest": {
+           "kind": "person",
+           "relation": "outsider"
+          }
+         },
+         "item": "berries",
+         "qty": 3
+        }
+       },
+       {
+        "if": {
+         "can": {
+          "do": "seize",
+          "target": {
+           "nearest": {
+            "kind": "person",
+            "relation": "outsider"
+           }
+          },
+          "item": "cooked_fish",
+          "qty": 2
+         }
+        },
+        "then": {
+         "do": "seize",
+         "target": {
+          "nearest": {
+           "kind": "person",
+           "relation": "outsider"
+          }
+         },
+         "item": "cooked_fish",
+         "qty": 2
+        }
+       },
+       {
+        "if": {
+         "can": {
+          "do": "seize",
+          "target": {
+           "nearest": {
+            "kind": "person",
+            "relation": "outsider"
+           }
+          },
+          "item": "mark",
+          "qty": 1
+         }
+        },
+        "then": {
+         "do": "seize",
+         "target": {
+          "nearest": {
+           "kind": "person",
+           "relation": "outsider"
+          }
+         },
+         "item": "mark",
+         "qty": 1
+        }
+       },
+       {
+        "if": {
+         "all": [
+          {
+           "near": {
+            "target": {
+             "nearest": {
+              "kind": "person",
+              "relation": "outsider"
+             }
+            },
+            "within": 11
+           }
+          },
+          {
+           "count": {
+            "of": {
+             "kind": "person",
+             "relation": "friend"
+            },
+            "within": 9,
+            "at_least": 1
+           }
+          },
+          {
+           "not": {
+            "threatened": true
+           }
+          }
+         ]
+        },
+        "then": {
+         "do": "threaten",
+         "target": {
+          "nearest": {
+           "kind": "person",
+           "relation": "outsider"
+          }
+         }
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "woodcutter": {
+     "routine": "cut wood",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "has": {
+          "item": "wood",
+          "at_least": 6
+         }
+        },
+        "then": {
+         "seq": [
+          {
+           "do": "goto",
+           "target": {
+            "place": "square"
+           }
+          },
+          {
+           "do": "store",
+           "target": {
+            "nearest": "storage"
+           },
+           "item": "wood",
+           "qty": 6
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 12
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "gather",
+        "target": {
+         "nearest": "tree"
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "quarrier": {
+     "routine": "cut stone",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "has": {
+          "item": "stone",
+          "at_least": 5
+         }
+        },
+        "then": {
+         "seq": [
+          {
+           "do": "goto",
+           "target": {
+            "place": "square"
+           }
+          },
+          {
+           "do": "store",
+           "target": {
+            "nearest": "storage"
+           },
+           "item": "stone",
+           "qty": 5
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "not": {
+          "near": {
+           "target": {
+            "place": "work"
+           },
+           "within": 12
+          }
+         }
+        },
+        "then": {
+         "do": "goto",
+         "target": {
+          "place": "work"
+         }
+        }
+       },
+       {
+        "do": "gather",
+        "target": {
+         "nearest": "boulder"
+        }
+       },
+       {
+        "do": "keep"
+       }
+      ]
+     }
+    },
+    "stone carter": {
+     "routine": "carry stone on the stone road",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "has": {
+          "item": "stone",
+          "at_least": 3
+         }
+        },
+        "then": {
+         "first": [
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work"
+             },
+             "within": 6
+            }
+           },
+           "then": {
+            "do": "store",
+            "target": {
+             "nearest": "storage"
+            },
+            "item": "stone",
+            "qty": 3
+           }
+          },
+          {
+           "first": [
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 11"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 11"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 10"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 10"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 9"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 9"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 8"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 8"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 7"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 7"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 6"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 6"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 5"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 5"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 4"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 4"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 3"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 3"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "first": [
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 2"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 2"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 1"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 1"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "do": "goto",
+           "target": {
+            "place": "work 1"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "all": [
+          {
+           "near": {
+            "target": {
+             "place": "work"
+            },
+            "within": 8
+           }
+          },
+          {
+           "not": {
+            "has": {
+             "item": "berries",
+             "at_least": 3
+            }
+           }
+          }
+         ]
+        },
+        "then": {
+         "do": "take",
+         "target": {
+          "nearest": "storage"
+         },
+         "item": "berries",
+         "qty": 3
+        }
+       },
+       {
+        "if": {
+         "has": {
+          "item": "berries",
+          "at_least": 3
+         }
+        },
+        "then": {
+         "first": [
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "square"
+             },
+             "within": 6
+            }
+           },
+           "then": {
+            "do": "store",
+            "target": {
+             "nearest": "storage"
+            },
+            "item": "berries",
+            "qty": 3
+           }
+          },
+          {
+           "first": [
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "square"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "square"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 1"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 1"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 2"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 2"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 3"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 3"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 4"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 4"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 5"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 5"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 6"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 6"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 7"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 7"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 8"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 8"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 9"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 9"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "first": [
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 10"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 10"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 11"
+               },
+               "within": 100
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 11"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "do": "goto",
+           "target": {
+            "place": "work 11"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "near": {
+          "target": {
+           "place": "square"
+          },
+          "within": 8
+         }
+        },
+        "then": {
+         "do": "take",
+         "target": {
+          "nearest": "storage"
+         },
+         "item": "stone",
+         "qty": 3
+        }
+       },
+       {
+        "do": "goto",
+        "target": {
+         "place": "square"
+        }
+       }
+      ]
+     }
+    },
+    "fish runner": {
+     "routine": "carry cooked fish on the fish road",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "has": {
+          "item": "cooked_fish",
+          "at_least": 3
+         }
+        },
+        "then": {
+         "first": [
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work"
+             },
+             "within": 6
+            }
+           },
+           "then": {
+            "do": "store",
+            "target": {
+             "nearest": "storage"
+            },
+            "item": "cooked_fish",
+            "qty": 3
+           }
+          },
+          {
+           "first": [
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 13"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 13"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 12"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 12"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 11"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 11"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 10"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 10"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 9"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 9"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 8"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 8"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 7"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 7"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 6"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 6"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 5"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 5"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "first": [
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 4"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 4"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 3"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 3"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 2"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 2"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 1"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 1"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "do": "goto",
+           "target": {
+            "place": "work 1"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "all": [
+          {
+           "near": {
+            "target": {
+             "place": "work"
+            },
+            "within": 8
+           }
+          },
+          {
+           "not": {
+            "has": {
+             "item": "stone",
+             "at_least": 3
+            }
+           }
+          }
+         ]
+        },
+        "then": {
+         "do": "take",
+         "target": {
+          "nearest": "storage"
+         },
+         "item": "stone",
+         "qty": 3
+        }
+       },
+       {
+        "if": {
+         "has": {
+          "item": "stone",
+          "at_least": 3
+         }
+        },
+        "then": {
+         "first": [
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "square"
+             },
+             "within": 6
+            }
+           },
+           "then": {
+            "do": "store",
+            "target": {
+             "nearest": "storage"
+            },
+            "item": "stone",
+            "qty": 3
+           }
+          },
+          {
+           "first": [
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "square"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "square"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 1"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 1"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 2"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 2"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 3"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 3"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 4"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 4"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 5"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 5"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 6"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 6"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 7"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 7"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 8"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 8"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 9"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 9"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "first": [
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 10"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 10"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 11"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 11"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 12"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 12"
+              }
+             }
+            },
+            {
+             "if": {
+              "near": {
+               "target": {
+                "place": "work 13"
+               },
+               "within": 180
+              }
+             },
+             "then": {
+              "do": "goto",
+              "target": {
+               "place": "work 13"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "do": "goto",
+           "target": {
+            "place": "work 13"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "near": {
+          "target": {
+           "place": "square"
+          },
+          "within": 8
+         }
+        },
+        "then": {
+         "do": "take",
+         "target": {
+          "nearest": "storage"
+         },
+         "item": "cooked_fish",
+         "qty": 3
+        }
+       },
+       {
+        "do": "goto",
+        "target": {
+         "place": "square"
+        }
+       }
+      ]
+     }
+    },
+    "meat carrier": {
+     "routine": "carry cooked meat on the giants' track",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "has": {
+          "item": "cooked_meat",
+          "at_least": 3
+         }
+        },
+        "then": {
+         "first": [
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work"
+             },
+             "within": 6
+            }
+           },
+           "then": {
+            "do": "store",
+            "target": {
+             "nearest": "storage"
+            },
+            "item": "cooked_meat",
+            "qty": 3
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 9"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 9"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 8"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 8"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 7"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 7"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 6"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 6"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 5"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 5"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 4"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 4"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 3"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 3"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 2"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 2"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 1"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 1"
+            }
+           }
+          },
+          {
+           "do": "goto",
+           "target": {
+            "place": "work 1"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "all": [
+          {
+           "near": {
+            "target": {
+             "place": "work"
+            },
+            "within": 8
+           }
+          },
+          {
+           "not": {
+            "has": {
+             "item": "wood",
+             "at_least": 3
+            }
+           }
+          }
+         ]
+        },
+        "then": {
+         "do": "take",
+         "target": {
+          "nearest": "storage"
+         },
+         "item": "wood",
+         "qty": 3
+        }
+       },
+       {
+        "if": {
+         "has": {
+          "item": "wood",
+          "at_least": 3
+         }
+        },
+        "then": {
+         "first": [
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "square"
+             },
+             "within": 6
+            }
+           },
+           "then": {
+            "do": "store",
+            "target": {
+             "nearest": "storage"
+            },
+            "item": "wood",
+            "qty": 3
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "square"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "square"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 1"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 1"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 2"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 2"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 3"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 3"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 4"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 4"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 5"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 5"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 6"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 6"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 7"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 7"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 8"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 8"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 9"
+             },
+             "within": 115
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 9"
+            }
+           }
+          },
+          {
+           "do": "goto",
+           "target": {
+            "place": "work 9"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "near": {
+          "target": {
+           "place": "square"
+          },
+          "within": 8
+         }
+        },
+        "then": {
+         "do": "take",
+         "target": {
+          "nearest": "storage"
+         },
+         "item": "cooked_meat",
+         "qty": 3
+        }
+       },
+       {
+        "do": "goto",
+        "target": {
+         "place": "square"
+        }
+       }
+      ]
+     }
+    },
+    "pedlar": {
+     "routine": "carry fiber on the east road",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "has": {
+          "item": "fiber",
+          "at_least": 3
+         }
+        },
+        "then": {
+         "first": [
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work"
+             },
+             "within": 6
+            }
+           },
+           "then": {
+            "do": "store",
+            "target": {
+             "nearest": "storage"
+            },
+            "item": "fiber",
+            "qty": 3
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 9"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 9"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 8"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 8"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 7"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 7"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 6"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 6"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 5"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 5"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 4"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 4"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 3"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 3"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 2"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 2"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 1"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 1"
+            }
+           }
+          },
+          {
+           "do": "goto",
+           "target": {
+            "place": "work 1"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "all": [
+          {
+           "near": {
+            "target": {
+             "place": "work"
+            },
+            "within": 8
+           }
+          },
+          {
+           "not": {
+            "has": {
+             "item": "fish",
+             "at_least": 3
+            }
+           }
+          }
+         ]
+        },
+        "then": {
+         "do": "take",
+         "target": {
+          "nearest": "storage"
+         },
+         "item": "fish",
+         "qty": 3
+        }
+       },
+       {
+        "if": {
+         "has": {
+          "item": "fish",
+          "at_least": 3
+         }
+        },
+        "then": {
+         "first": [
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "square"
+             },
+             "within": 6
+            }
+           },
+           "then": {
+            "do": "store",
+            "target": {
+             "nearest": "storage"
+            },
+            "item": "fish",
+            "qty": 3
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "square"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "square"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 1"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 1"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 2"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 2"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 3"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 3"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 4"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 4"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 5"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 5"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 6"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 6"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 7"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 7"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 8"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 8"
+            }
+           }
+          },
+          {
+           "if": {
+            "near": {
+             "target": {
+              "place": "work 9"
+             },
+             "within": 100
+            }
+           },
+           "then": {
+            "do": "goto",
+            "target": {
+             "place": "work 9"
+            }
+           }
+          },
+          {
+           "do": "goto",
+           "target": {
+            "place": "work 9"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "if": {
+         "near": {
+          "target": {
+           "place": "square"
+          },
+          "within": 8
+         }
+        },
+        "then": {
+         "do": "take",
+         "target": {
+          "nearest": "storage"
+         },
+         "item": "fiber",
+         "qty": 3
+        }
+       },
+       {
+        "do": "goto",
+        "target": {
+         "place": "square"
+        }
+       }
+      ]
+     }
+    }
+   },
+   "top": {
+    "desires": [
+     {
+      "want": "safety",
+      "weight": {
+       "base": 2.0,
+       "threatened": 3,
+       "hurt": 1.2
+      },
+      "do": {
+       "routine": "stay safe"
+      }
+     },
+     {
+      "want": "shelter",
+      "weight": {
+       "base": -0.2,
+       "rain": 1.0
+      },
+      "do": {
+       "routine": "get out of the rain"
+      }
+     },
+     {
+      "want": "food",
+      "weight": {
+       "base": -0.2,
+       "hunger": 3.6,
+       "starving": 1.5
+      },
+      "do": {
+       "routine": "find food and eat"
+      }
+     },
+     {
+      "want": "sleep",
+      "weight": {
+       "base": -0.7,
+       "tired": 1.3,
+       "exhausted": 1.0,
+       "bedtime": 1.2
+      },
+      "do": {
+       "routine": "sleep"
+      }
+     },
+     {
+      "want": "greet",
+      "weight": {
+       "hailed": 2.2
+      },
+      "do": {
+       "routine": "answer a greeting"
+      }
+     },
+     {
+      "want": "look",
+      "weight": {
+       "commotion": 1.6
+      },
+      "do": {
+       "routine": "watch what happens"
+      }
+     },
+     {
+      "want": "manners",
+      "weight": {
+       "base": 0.9
+      },
+      "do": {
+       "routine": "mind the people near me"
+      }
+     },
+     {
+      "want": "evening",
+      "weight": {
+       "base": 0.8
+      },
+      "do": {
+       "routine": "spend the evening out"
+      }
+     },
+     {
+      "want": "work",
+      "weight": {
+       "base": 0.7,
+       "bedtime": -0.9,
+       "evening": -0.4
+      },
+      "do": {
+       "routine": "WORK"
+      }
+     },
+     {
+      "want": "home at night",
+      "weight": {
+       "base": -0.1,
+       "winter": 0.3,
+       "bedtime": 0.6
+      },
+      "do": {
+       "routine": "keep warm"
+      }
+     },
+     {
+      "want": "a family",
+      "weight": {
+       "base": 0.2,
+       "hunger": -0.8,
+       "longing": 0.4,
+       "company": 0.2,
+       "courted": 0.8
+      },
+      "do": {
+       "routine": "keep close to my partner"
+      }
+     },
+     {
+      "want": "company",
+      "weight": {
+       "base": 0.15,
+       "alone": 0.3,
+       "longing": 0.3
+      },
+      "do": {
+       "routine": "be with people"
+      }
+     }
+    ]
+   }
+  }
+}

@@ -2,6 +2,8 @@
 
 Status: **implemented, not yet run in a lab** (2026-09-28). Unit tests cover seed parsing, ages, birth order, sheet resolution, model groups and recall of authored memories (against Neo4j). The seeding reducer path compiles but has not been executed against a published module.
 
+Its places can be authored too: a land seed may lay a settlement out by hand, levels, streets, stairs and lots ([authored plans](AUTHORED_PLANS.md)), and bind households to its lots.
+
 A seeded town normally gets its people from occupation counts: generated names, a one-line background, and a model call that invents each identity ([LIVING_CORE.md](LIVING_CORE.md#worlds-of-any-size-towns-and-bands-checkpoint-3)). An authored world names its people instead. Each resident has a sheet (identity, relationships, memories, stances) that the mind installs as written, with no model call. From then on it is ordinary identity: consolidation, fading and revision treat it like anything else the character holds.
 
 ## Residents
