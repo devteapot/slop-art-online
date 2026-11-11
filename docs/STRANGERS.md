@@ -1,6 +1,6 @@
 # Strangers: noticing a newcomer by personality and duty (design, 2026-11-11)
 
-Status: **design and measurement plan, nothing built or run.** It is read from main `feb6a10c`. The ar2 figures come from the arrival batch on branch `trials-ar2` (docs/TRIALS.md, "Arrival batch ar2").
+Status: **design approved 2026-11-12 with the decisions at the end; nothing built or run yet.** It is read from main `feb6a10c`. The ar2 figures come from the arrival batch on branch `trials-ar2` (docs/TRIALS.md, "Arrival batch ar2").
 
 **The owner's decision.** Attention to newcomers is not a world rule. The arrival laws on `exp-arrive` (`newcomer_salience`, `newcomer_scene_min`, `newcomer_drive_s`) are rejected and are not on main. The target is a plausible spread by personality and duty, not a contact share:
 - someone whose life includes watching who comes in asks a stranger their business;
@@ -139,3 +139,58 @@ The owner judges from the inspector pages, one per arm.
 - whether contact lasts beyond 20 minutes.
 
 The unheard-line problem of ar2 (a `say` beyond earshot) is not fixed on main and will recur. It is counted, not excluded.
+
+## Decisions (2026-11-12)
+
+The general coordinator approved this design with the decisions below. Where they differ from §1–§6, they replace them.
+
+1. **The filter fix is built behind a law switch.** With the switch on, `relation: "stranger"` means "I don't know their name", the scene's rule (`perception::knows_name`, §3). It is off by default and in arms C and L, and on in S and LS. Whether it becomes the default is decided from the results, and that decision goes back to the general coordinator, because it changes what existing graphs match.
+2. **The two lives (§2) went to dev-box,** which owns Cullet's cast. dev-box may adjust the wording and will send the commit. Once the lives are on main, arms C and S run with Aldous Quill's and Ingrid Morrow's earlier text, so the arms still differ only as the table in §6 lists. The stage 2 runner must provide that override.
+3. **The crowd first-sight gap is fixed now, for every arm.** The owner ruled against attention caps on 2026-11-10: everything in sight is perceived. Skipping the first-sight line for unrelated people when more than 6 are in sight (`brain.rs:1157`) is such a cap.
+   - Several first sights may be batched into one line, but nobody seen for the first time goes unmentioned, and each gets its `familiar` row.
+   - The fix merges before stage 2. It is therefore part of the Cullet baseline, not an arm.
+4. **Runs:**
+   - Stages 0–1 go now.
+   - Stage 2 (about $10–13) is approved once four conditions hold: stage 1 looks sane, and speech-truth, the crowd fix and the two lives are all on main.
+   - Stage 3 waits on stage 2's result.
+5. **The target spread** is fixed below, before any run. It replaces §6's "shape written down before running".
+
+### Target spread (fixed before any run)
+
+The target is for the 63-mind Cullet world under §6's script.
+- **Who is counted.** "In range" means within 12 m of the newcomer during a stand. About 10–16 residents are expected in range at 09:30 on the yard and the Fish Steps.
+- **The four exclusive classes.** Each resident in range has exactly one, taken in this order of precedence by the end of the run:
+  - *asks*: a line to the newcomer, heard or not;
+  - *approaches silently*: comes within 4 m with no line;
+  - *notices inwardly*: a thought names the stranger, with no act toward them;
+  - *unaware*: none of these.
+- ***Tells others*** is counted separately, over all 63 residents: a line about the stranger to someone else. A teller may be in another class, or out of range.
+
+Bands for one run, in the arms with the lives (L, LS):
+
+| Class | Count per run | Share of those in range | Who |
+|---|---|---|---|
+| Asks | 1–3 | about 10–25% | Aldous during his hours (9–15), plus at most 2 others. Most of the others have curiosity or sociability of 70 or more. |
+| Approaches silently | 0–2 | 0–15% | anyone |
+| Notices inwardly | 3–8 | 25–60% | at least as many as asks and approaches together |
+| Unaware | at most 6 | at most 40% | every one of them still got a first-sight line (decision 3) |
+| Tells others (all 63) | 1–4 | — | at least one teller out of range when the stranger arrived. Ingrid is a teller in 2 or more of 4 runs. |
+
+**Also in L and LS:**
+- the first line the newcomer hears comes within 5 minutes of the join in 3 or more of 4 runs, sooner in LS than in L if the routine matters;
+- `converge_60s` is at most 3;
+- `together_4m` is at most 2;
+- the guards (false replies, repeated lines, and talk that led to something, net of placebo) stay within C's spread.
+
+**In C and S** the same bands hold, except that asks may be 0–2 and nobody is required to ask. S is expected to match C.
+
+**Out of shape, whatever the arm:**
+- 5 or more askers in a run, the newcomer-law pattern from ar2;
+- no asker in L or LS across 2 or more runs: the life does not lead to asking;
+- unaware above 60% of those in range;
+- 3 or more residents within 4 m at once.
+
+**How the bands are read:**
+- An arm is in shape in stage 3 when 3 or more of its 4 runs fall within every band.
+- Stage 2 has one replicate per arm, so it is read against the bands as indicative only.
+- These are the owner's target written as numbers, not a pass mark. The owner judges from the inspector pages, one per arm.
