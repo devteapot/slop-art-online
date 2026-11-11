@@ -1,5 +1,11 @@
 # verify-ui: last real run
 
+**2026-11-11, branch `fov-senses` (my own senses from `my_senses`; on main `c8dbf60d`).**
+- **Setup:** world `verify-ui-shade-1111-230826`, island seed, real assets.
+- **Full suite: 198/199** (`checks-senses-full.json`). field 28/28, with the new check that the client's sight and five values equal the `character_senses` row after F5. The one failure is pick's new "two bodies stacked on one spot" check, which also fails on main `9ddd2b6d` and is routed to its owner.
+- **Found:** the field comparison took a moving resident's row position, its segment's start. The comparison now takes standing bodies only, and the four looks agree on the same snapshots.
+- **Before this, main `9ddd2b6d` itself** (`verify-ui-main-1111-230110`): 195/198. The failures were look-walk chest and loose "sudden 90°" crossing times (repeated on a re-run) and the same pick check.
+
 **2026-11-11, branch `ui-1-step4` (interface D step 4 = INTERFACE.md step 2: the cluster and skill bar on the rules' `bar_places`, sheathe and draw, offer cards, face out of the lists).** Laptop, Docker SpacetimeDB 2.14.1, private `CARGO_TARGET_DIR`, builds through `build-slot`; no mind service, no model calls. Final code `668585d3` (origin/main merged through stairs-place and look-walk). New scenarios `bar` (11 checks) and `offers` (23 checks); `talk` gained the scene's 1.5 m check and "More… leaves out face"; `pick` gained two bodies stacked on one spot.
 - **Clear, every scenario but support** on a fresh `verify-ui-h` (`$V launch --run ui-h --seed island`, doctor ok): **102 passed, 0 failed** (`ui-h/ui/checks-clear.json`). After the last merge: windows, themes and look-walk **85 passed, 4 failed** on a loaded laptop (37 frames over 50 ms; look-walk's leg-easing and crossing checks); look-walk again on main's client (`9c6ca13c`) and on this branch's: **69 passed, 0 failed** each (`checks-lookwalk-main.json`, `checks-lookwalk-step4.json`).
 - **Themes:** Night, Linen and Walnut: windows, items, bar and offers, **55 passed, 0 failed** each (`verify-ui-g`, `checks-<theme>.json`).
