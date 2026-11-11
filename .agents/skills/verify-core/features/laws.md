@@ -32,3 +32,31 @@ Start it right after launch: the day checks need the world's morning, then the s
 - `install_script` installs a whole script: installing the shipped one on such a world removes its laws until it is created again.
 - The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it". Since `goods-1` the lamp burns oil and lights only while lit: the seed gives it 8 units (32 game hours, past the scene's night at 21:00); a lamp seeded without fuel is dark and the lamplight check fails.
 - These checks do not measure cost: longer sight and re-projection every sweep cost more per player (docs/CULLET_RULES.md, "Costs").
+
+## Decay
+
+Since `rates-2` (docs/CULLET_RULES.md, "The other rates in game time"): spoiling (`spoil_per_h(item)`), resource regrowth (a kind's `regrow_per_h`, read by `regrow_per_h(kind)`), grass regrowth (`laws().pasture_regen_per_h`), traps (`trap_every_h`) and remains (a kind's `remains_h`) are written in game time; the engine keeps them in real time for the world's day (`Scripts::spoil_per_min`, `regrow_per_min`, `trap_every_ms`, `remains_ms`, `Laws::pasture_regen`; `resource_node.regen` stays per real minute). A script that defines the old real-time law (`spoil_rate`, `regrow`, `trap_every_s`, `remains_s`, `pasture_regen`) is read as before.
+
+### Sub-features
+
+- On a `cullet-laws` world (48-minute day): a new node's `regen` is its kind's `regrow_per_h` × 60,000 / the game hour's real ms (exact to 1e-6).
+- 1,000 raw fish carried and about 600 in a storage spoil once a real minute at `spoil_per_h("fish")` turned into real minutes (a storage at its `kept_spoil` third): after `--game-hours` the stacks lie within the band of `q (1 − r)^k` for the real minutes passed, give or take one sweep and each sweep's chance (`decay-samples.json` keeps the trajectory).
+- An emptied greens bed, gathered once beside it after the watch, held what its `regen` grew over the real minutes since it was emptied (the row's new amount plus one, within 0.01; growing time). Gathering more would count the wild beds `nearest` walks on to.
+- Unit checks: `rates_check::rates_are_bit_identical` (ignored; `LIVING_OLD_SKILLS=<the script before rates-2>`): on the 12-minute day every spoiling loss, regrowth, pasture, trap catch, remains due time, need rate, sleep and law description is bit-identical to the old script's. `script::tests::game_time_rates_follow_the_day_and_real_time_laws_stay_real` (a 48-minute day quarters them; an overlay in real time keeps its numbers). `cullet_check::tests::cullet_s_goods_meet_their_targets_in_a_game_day` (Cullet's spoiling, stores, traps, remains and the plan's daily yield against SMALL_CITY §2 and §4).
+
+### Driving it
+
+```bash
+R=core-decay-$(date +%H%M%S)
+python3 "$V" launch --run "$R" --seed cullet-laws > ".local/living/verify/$R/launch.txt" 2>&1
+python3 .agents/skills/verify-core/scripts/scenes.py decay --run "$R" [--game-hours 24] > ".local/living/verify/$R/decay.txt" 2>&1
+python3 "$V" cleanup --run "$R"
+```
+
+A whole game day (the default) is 48 real minutes on Cullet's day; `--game-hours 2` takes about 5 minutes and checks the same rates, with fewer sweeps.
+
+### Gotchas
+
+- Person `a` holds the 1,000 fish, so its pack is full and it cannot gather: person `b` stores its fish first and does the gathering.
+- Regrowth happens only in growing time (not winter): a watch across winter fails the regrowth check, which reads the elapsed time, not the season.
+- The two people are held on `wait` for an hour; they grow hungry over a whole Cullet day but do not starve, and nobody eats the fish.

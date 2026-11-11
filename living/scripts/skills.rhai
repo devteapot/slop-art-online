@@ -18,9 +18,10 @@ fn laws() {
         // How often a body smells afresh; between reads it keeps what it last smelled.
         scent_hz: 1.0,
         input_hz: 30.0, input_burst: 15.0,
-        // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
-        // tiles (it was one per 70, and the wilds filled with deer).
-        pasture_regen: 0.0015,
+        // Grass regrowth per grassy tile per growing game hour (0.0015 a real minute on the
+        // 12-minute day): about one grazer per 300 grassy tiles (it was one per 70, and the
+        // wilds filled with deer).
+        pasture_regen_per_h: 0.00075,
         // Someone with no other person within this many tiles is alone (predators dare more).
         alone_within: 6.0,
         // A body within this many radians of facing something already faces it.
@@ -222,12 +223,12 @@ fn items_with(t) { having("items", t) }
 //   blow                        the damage of its bare attack, before strength and skill
 //   dodge_dist, dodge_speed     its dodge: a dash of so many metres at so many metres a second
 //   carcass                     what its body leaves in its remains (items and amounts)
-//   remains_s                   seconds its remains lie before they are gone
+//   remains_h                   game hours its remains lie before they are gone
 fn kinds() {
     [
-        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_s: 3600 },
-        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_s: 1800 },
-        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_s: 1800 },
+        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_h: 120.0 },
+        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_h: 60.0 },
+        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_h: 60.0 },
     ]
 }
 fn kind_of(kind) { let all = kinds(); for k in all { if k.name == kind { return k; } } all[0] }
@@ -249,19 +250,20 @@ fn carried(a) {
 }
 // A basket carries 20 more.
 fn pack_full(a) { carried(a) >= carry_limit(a.actor.kind) + if inv(a, "basket") > 0 { 20.0 } else { 0.0 } }
-// Share of a food that spoils per real minute (a lab day is 12 minutes): raw meat and fish
-// within about a day, berries in a few days, cooked food more slowly. A storage keeps food
-// three times longer.
-fn spoil_rate(item) {
+// Share of a food that spoils in a game hour (the engine turns it into real time for the
+// world's day; on the 12-minute day a game hour is half a real minute): raw meat and fish within
+// about a day, berries in a few days, cooked food more slowly. A storage keeps food three times
+// longer.
+fn spoil_per_h(item) {
     switch item {
-        "meat" => 0.05,
-        "fish" => 0.05,
-        "berries" => 0.02,
-        "cooked_meat" => 0.012,
-        "cooked_fish" => 0.012,
+        "meat" => 0.025,
+        "fish" => 0.025,
+        "berries" => 0.01,
+        "cooked_meat" => 0.006,
+        "cooked_fish" => 0.006,
         // Smoked food keeps for weeks: something to carry to another town.
-        "smoked_meat" => 0.002,
-        "smoked_fish" => 0.002,
+        "smoked_meat" => 0.001,
+        "smoked_fish" => 0.001,
         _ => 0.0,
     }
 }
@@ -352,6 +354,10 @@ fn rates(a) {
     }
     // A suckling animal lives mostly on its mother's milk (not modelled on the mother).
     if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
+    // Asked once each: a law called with `a` gets its own copy of the whole context, so asking
+    // `cold(a)` three times cost three copies (the fuel budget, docs/LIVING_CORE.md).
+    let is_cold = cold(a);
+    let is_wet = wet(a);
     let r = #{
         per: "hour",
         hunger: hunger, energy: energy,
@@ -364,10 +370,10 @@ fn rates(a) {
         tiring_gene: "endurance", healing_gene: "vitality", appetite_gene: "appetite", hardiness_gene: "hardiness",
         // Exposure tires: rain soaks people out from under a roof (a cloak keeps some of it
         // off), and a cold night without a fire, shelter or warm cloak is uncomfortable.
-        wet_energy: (if wet(a) { if inv(a, "cloak") > 0 { -0.5 } else { -1.25 } } else { 0.0 })
-            + (if cold(a) { -0.75 } else { 0.0 }),
+        wet_energy: (if is_wet { if inv(a, "cloak") > 0 { -0.5 } else { -1.25 } } else { 0.0 })
+            + (if is_cold { -0.75 } else { 0.0 }),
         // A cold night hurts only in winter or in the rain (a storm night).
-        cold_hp: if cold(a) && freezing(a) { if a.season == "winter" { -1.5 } else { -0.75 } } else { 0.0 },
+        cold_hp: if is_cold && freezing(a) { if a.season == "winter" { -1.5 } else { -0.75 } } else { 0.0 },
     };
     if a.actor.kind == "person" {
         let k = person_pace(0);
@@ -406,19 +412,19 @@ fn gather_duration(a) {
 }
 // Every kind of resource, in order (read once when the script compiles):
 //   yields      what one gathering gives
-//   regrow      units it regrows a minute of growing time, up to its max
+//   regrow_per_h  units it regrows a game hour of growing time, up to its max
 //   max         units a node of it holds when full
 //   ground      the ground a settlement's promised nodes of it are placed on (`resources` in a
 //               town of the seed), and by_water: only beside water
 //   gather_ms   how long one gathering takes without a tool (`gather_duration`)
 fn resources() {
     [
-        #{ name: "berry_bush", yields: "berries", regrow: 1.2, max: 5.0, ground: ["grass"], gather_ms: 2000 },
-        #{ name: "tree", yields: "wood", regrow: 0.5, max: 8.0, ground: ["forest", "grass"], gather_ms: 4000 },
-        #{ name: "boulder", yields: "stone", regrow: 0.2, max: 6.0, ground: ["grass", "dirt"], gather_ms: 5000 },
-        #{ name: "reeds", yields: "fiber", regrow: 1.0, max: 4.0, ground: ["sand", "grass"], by_water: true, gather_ms: 2500 },
-        #{ name: "fishing_spot", yields: "fish", regrow: 1.4, max: 5.0, ground: ["sand", "grass"], by_water: true, gather_ms: 6500 },
-        #{ name: "clay_bank", yields: "clay", regrow: 0.6, max: 6.0, ground: ["grass"], by_water: true, gather_ms: 3000 },
+        #{ name: "berry_bush", yields: "berries", regrow_per_h: 0.6, max: 5.0, ground: ["grass"], gather_ms: 2000 },
+        #{ name: "tree", yields: "wood", regrow_per_h: 0.25, max: 8.0, ground: ["forest", "grass"], gather_ms: 4000 },
+        #{ name: "boulder", yields: "stone", regrow_per_h: 0.1, max: 6.0, ground: ["grass", "dirt"], gather_ms: 5000 },
+        #{ name: "reeds", yields: "fiber", regrow_per_h: 0.5, max: 4.0, ground: ["sand", "grass"], by_water: true, gather_ms: 2500 },
+        #{ name: "fishing_spot", yields: "fish", regrow_per_h: 0.7, max: 5.0, ground: ["sand", "grass"], by_water: true, gather_ms: 6500 },
+        #{ name: "clay_bank", yields: "clay", regrow_per_h: 0.3, max: 6.0, ground: ["grass"], by_water: true, gather_ms: 3000 },
     ]
 }
 // What one gathering at each resource yields.
@@ -577,8 +583,9 @@ fn build_check(a) {
 }
 fn build_duration(a) { switch a.item { "campfire" => 6000, "shelter" => 20000, "house" => 40000, "wall" => 6000, "gate" => 15000, "trap" => 8000, "bridge" => 20000, _ => 10000 } }
 
-// A trap catches small game over time: one meat about every 4 minutes, holding at most 3.
-fn trap_every_s(x) { 240.0 }
+// A trap catches small game over time: one meat about every 8 game hours (4 real minutes on the
+// 12-minute day), holding at most 3.
+fn trap_every_h(x) { 8.0 }
 fn trap_holds(x) { 3.0 }
 fn build_done(a) {
     // Place first: if the spot turns out unusable, nothing is spent.
@@ -887,14 +894,15 @@ fn yield_duration(a) { 1000 }
 fn yield_done(a) { [#{ op: "yield" }] }
 
 // What a creature's body leaves in its remains when it dies, however it died, beside what it
-// carried (its kind's `carcass`), and how long the remains lie (its kind's `remains_s`).
+// carried (its kind's `carcass`), and how long the remains lie in game hours (its kind's
+// `remains_h`).
 fn carcass(kind) { let c = kind_of(kind).carcass; if c == () { #{} } else { c } }
-fn remains_s(kind) { kind_of(kind).remains_s }
+fn remains_h(kind) { kind_of(kind).remains_h }
 
 fn max_hp(kind) { kind_of(kind).max_hp }
 
-// Regrowth per minute for resource kinds (their `regrow`).
-fn regrow(kind) { let r = entry_of("resources", kind); if r == () || r.regrow == () { 0.0 } else { r.regrow } }
+// Regrowth a game hour of growing time for resource kinds (their `regrow_per_h`).
+fn regrow_per_h(kind) { let r = entry_of("resources", kind); if r == () || r.regrow_per_h == () { 0.0 } else { r.regrow_per_h } }
 
 // ---- life course --------------------------------------------------------
 
@@ -1970,7 +1978,7 @@ fn know_how_law() {
 }
 
 fn food_law() {
-    #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_rate", "carried_spoil", "kept_spoil", "carry_limit", "source_of", "items"],
+    #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_per_h", "carried_spoil", "kept_spoil", "carry_limit", "source_of", "items"],
        about: `${foods_text()} (hunger points). Cook raw ${or_list(items_with("cooks_to"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass("deer").meat} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
 }
 
@@ -2002,7 +2010,7 @@ fn making_law() {
         for m in c.keys() { if need != "" { need += " + "; } need += `${c[m]} ${m}`; }
         parts.push(`${k} = ${need}`);
     }
-    #{ cadence: "event", topic: "making", covers: ["structures", "resources", "regrow", "planted_max", "trap_every_s", "trap_holds"],
+    #{ cadence: "event", topic: "making", covers: ["structures", "resources", "regrow_per_h", "planted_max", "trap_every_h", "trap_holds"],
        about: `${list(parts)} (a wall and a road per tile; a tablet or sign is 1 wood, to write on). A spear hits much harder and fishes faster; an axe cuts wood and a pick breaks stone twice as fast; a cloak keeps the night cold off; a house is a home, warm like a shelter and a fire; walking on road is faster; anyone can take from a storage.` }
 }
 
@@ -2026,8 +2034,8 @@ fn theft_law() {
 }
 
 fn remains_law() {
-    #{ cadence: "event", topic: "food", covers: ["carcass", "remains_s"],
-       about: `Whatever dies leaves remains where it fell: what it carried, and what its body gives (a deer ${carcass("deer").meat} meat and ${carcass("deer").hide} hide, a wolf ${carcass("wolf").meat} meat and ${carcass("wolf").hide} hide). A kill does not fill the killer's pack: whoever is beside the remains, the hunter, its pack or anyone else, takes from them (take). Remains are gone after about ${short(remains_s("deer") / 60.0)} minutes (a person's after ${short(remains_s("person") / 60.0)}), with whatever is left in them, unless they hold a tablet or sign.` }
+    #{ cadence: "event", topic: "food", covers: ["carcass", "remains_h"],
+       about: `Whatever dies leaves remains where it fell: what it carried, and what its body gives (a deer ${carcass("deer").meat} meat and ${carcass("deer").hide} hide, a wolf ${carcass("wolf").meat} meat and ${carcass("wolf").hide} hide). A kill does not fill the killer's pack: whoever is beside the remains, the hunter, its pack or anyone else, takes from them (take). Remains are gone after about ${short(remains_h("deer") * hour_ms() / 60000.0)} minutes (a person's after ${short(remains_h("person") * hour_ms() / 60000.0)}), with whatever is left in them, unless they hold a tablet or sign.` }
 }
 
 fn combat_law() {
@@ -2080,7 +2088,7 @@ fn laws_about(l) {
         combat_hz: `in a fight a body looks again ${short(l.combat_hz)} times a second`,
         input_hz: `a player may send ${short(l.input_hz)} movement inputs a second`,
         input_burst: `and ${short(l.input_burst)} in a burst`,
-        pasture_regen: `grass regrows ${l.pasture_regen} grazing units per grassy tile per growing minute`,
+        pasture_regen_per_h: `grass regrows ${l.pasture_regen_per_h} grazing units per grassy tile per growing game hour`,
         alone_within: `someone with no other person within ${short(l.alone_within)} m is alone`,
         face_slack: `a body within ${short(l.face_slack)} radians of facing something already faces it`,
         flee_clear: `a flight ends ${short(l.flee_clear)} m farther from the threat than it began`,

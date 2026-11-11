@@ -213,7 +213,7 @@ fn spoil(ctx: &ReducerContext, now: u64) {
     let mut kept: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
     let mut carrier: (u64, f32) = (u64::MAX, 1.0);
     for mut r in rows.into_iter().filter(|r| r.qty > 0) {
-        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.num_of("spoil_rate", &r.item, 0.0) as f32);
+        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.spoil_per_min(&r.item) as f32);
         if rate <= 0.0 {
             continue;
         }
