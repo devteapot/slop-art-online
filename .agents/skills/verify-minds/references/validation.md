@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-11 laws-2 (dev-box)
+
+Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. `verify_minds.py` with the fake model (`minds-l6c`): roundtrip (with the new check that every think and deliberate prompt carries the SENSES, MOVING, FOOD and SETTLEMENTS sections built from the laws), acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night, rethink, rethink-llm and dealings pass; consolidation its known XFAIL; `jev` timed out waiting for a judgment in that run and passed alone (`minds-j1`). The first run (`minds-l6`) died when the disk filled.
+
 ## 2026-11-10 rules2-r2 fixes (dev-box)
 
 On the dev-box worktree `~/dev/slop-mind-small`, branch `fix-mind-small`, own container `mind-small-stdb` (2.14.1, port 3427, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only.

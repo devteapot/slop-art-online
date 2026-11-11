@@ -1,5 +1,9 @@
 # Validation record (generation)
 
+## 2026-11-11 laws-2 (dev-box)
+
+Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. `generation.py --feature worlds --seeds island,floor-megacity-4k` (`generation-l6c`): 972 and 87 checks pass, including the new `the seed's rules are kept as the world's laws` (the island's `{"minds": false}` as one `world_law` row; the floor module given its seed by `create_floor`, without `LIVING_RULES`). The full `generation-l6` run before that check passed too (its child worlds' evidence kept).
+
 ## 2026-11-10 fix-rules-small (dev-box)
 
 Own container `rules-small-stdb` (2.14.1). `generation.py --feature worlds` (`generation-rs-final`, head `9115e59`): all nine worlds pass, with the native digests, and repeatability passes every comparison, now required for resources, names, ages, genes and animal positions too (compared without ids). The 4096 m floor: three bad sizes refused, `resume_genesis` refused before creation, while a step is scheduled and once made, `stop_genesis` stalled the chain for 8 s, `resume_genesis` finished it (142 steps, no restarts). Owner SQL cannot stop the chain: 2.14.1 refuses "SQL writes to scheduled tables" (`generation-rs-floor1`).

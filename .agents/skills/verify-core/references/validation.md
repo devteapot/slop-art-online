@@ -1,5 +1,13 @@
 # Core validation record
 
+## 2026-11-11 laws-2 (dev-box)
+
+Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. The first parallel batch (`*-l6`, eleven worlds at once) overloaded the server and then filled the dev-box disk; its tick (45 Hz) and needs timeouts were load, and its failures are kept.
+
+- `cargo_checks.py` pass; `scenes.py` tick, needs, food, refusal, seize, sight, moves pass (`core-l6c`); `senses` 7 of 7 (`core-x4-senses`); `skirmish`, `dealings` (`core-l6-*`), `town.py`, `infant` pass; `lives.py` 24 min pass (`core-l6c-lives`); mechanics and five steering checks pass (`core-l6-mechanics`, `-steering`).
+- **Found and fixed:** `needs` timed out on the first rerun: a new body never got its need rates, because the key with unknown thresholds could equal the initial key (unit 3's `NeedLaw::cuts`). A body whose thresholds are not known now always asks the law. The first `lives` failure (a fish runner reaching no stage) was the same bug.
+- **Scene fixes:** `senses` failed three times on its own graph: a watcher already facing a spot is refused ("you already face it"), so it now faces the subject and then turns away, and the scene waits for the expected watchers (at most 30 s) instead of a fixed sleep. The same scene against the unit-2 build failed the same way, so it was the scene, not the rules.
+
 ## 2026-11-10 fix-rules-small (dev-box)
 
 Own container `rules-small-stdb` (2.14.1, port 3417), private `CARGO_TARGET_DIR`, head `9115e59` for the sweep. `cargo_checks.py` pass; `scenes.py` tick 6/6, food 4/4 (new), refusal 4/4 (new), seize, sight, needs pass (`core-rs-final`); flee 4/4 (new) and grazing 3/3 with its new `doing` check (`core-rs-final-stage`, stage1-acts); steering 5/5; mechanics 23/23; skirmish and dealings pass; `town.py` 20 of 21, failing "a resident faces someone who comes up behind them", the scene's recorded flake (above, on base worlds too). Not run: lives, infant, lifecycle, wildlife (its 20-minute migration).

@@ -198,6 +198,27 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 - **The minds' world text** (`Scripts::world_text`): one line per section of `world_topics()`, its laws' `about` in source order, with the world's own sections (`seasons`, `life`, from the seed) where they belong. `prompts::world_rules` builds it once per rules revision (the WORLD line from the seed first), so the static prefix of every prompt changes only when the rules do; the prefix-cache tests (`*_shares_prefix`) pass. Print it with `cargo test -p living-rules --lib print_world_text -- --ignored --nocapture`.
 - **What changed in the text** against the old hard-coded `RULES` (`living/mind/src/prompts.rs`): two numbers it had wrong are now the laws' (a deer gives 5 meat, not 3; a person moves 2.6 m/s walking, the old line called it running), warmth distances are exact (3.5 and 2.5 m, not 3 and 2), sight, hearing and moving have their own sections (SENSES, MOVING; hearing moved out of OTHERS), recipes list every ingredient, theft is stated under SETTLEMENTS, and OTHERS says when a name is known.
 
+### Costs and verification (laws-2)
+
+**Fuel** (`just living-script-gate`, dev-box, head of the branch): rates 7,318, rates-law 120,539, strike 257,804, cooldown 1,704, perceived 53,125, hook 432,380, senses 3,093, senses-law 43,742, moves 1,922. Main on the same machine: 7,312, 120,208, 256,303, 1,694, 52,953, 431,135. Every law is within its budget.
+
+**In the authority.** Island seed, 277 people and 34 animals at rest, each window a fresh world on my own 2.14.1 container (`laws2-stdb`), 20 s settling, 60 s profiled with `living/tools/bench.py`, arms alternated A B B A; no subscribers, no minds. Not a performance acceptance at the 216-character gate.
+
+| Arms | run | tick p50 / p99 ms | tick work ms/s | `needs.rates` ms/s | `tick.slots` ms/s |
+| --- | --- | ---: | ---: | ---: | ---: |
+| main | 1 | 1.64 / 3.27 | 80.8 | 3.3 | 40.4 |
+| senses and motion (units 1–2) | 2 | 1.42 / 3.34 | 71.6 | 2.7 | 35.5 |
+| senses and motion | 3 | 1.40 / 3.14 | 70.7 | 2.6 | 34.1 |
+| main | 4 | 1.43 / 3.18 | 72.4 | 2.9 | 36.3 |
+| main | 1 | 1.62 / 4.55 | 83.4 | 3.2 | 41.5 |
+| branch head (all units) | 2 | 1.65 / 3.20 | 80.7 | 3.0 | 39.1 |
+| branch head | 3 | 1.31 / 2.75 | 65.3 | 2.5 | 31.8 |
+| main | 4 | 1.26 / 2.99 | 62.5 | 2.5 | 31.1 |
+
+The arms differ by less than main's own two runs differ (8–21 ms/s of tick work); no tick passed 16.7 ms. The first pair's run 4 overlapped a build of mine. Graph evaluations (`tick.slots`, where scenes ask a creature's sight) and steering (`tick.motion`) are flat.
+
+**Verification:** `verify-core` (cargo checks; tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, town, infant, lives, mechanics, steering), `verify-player` (deal, new_skill, told, appraise, combat, gesture), `verify-client` (30 of 30), `verify-generation` (island and the 4 km floor, with the seed rules kept as world laws), `verify-minds` with the fake model (17 cases); details and the failed attempts in each skill's `references/validation.md`. One rules bug was found by them and fixed (a new body's need rates). Not covered: a real model reading the new world text; the game client drawn and driven; `verify-knowledge` and `verify-llm` (not touched).
+
 ## Primitives
 
 Four engine primitives, with no engine code per kind of social state:
