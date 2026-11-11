@@ -4,6 +4,14 @@
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`. New scene `audience` (`features/laws.md`), run `core-audience-150613`: all 8 checks pass. Law off: no row. Law on: one row, the two hearers within the shipped 9 m and not the one at 13 m, distances about 1 and 4 m, both ahead of the speaker. A line 61 s later deleted the first row. Only `speak` changed in the authority (`speech_audience`, off by default). The other scenes were not rerun.
 
+## 2026-11-11 hearth-1: households' hearths and stores inside their houses (dev-box)
+
+Branch `hearth-1`, own container `hearth1-stdb` (2.14.1, port 3331), `scoped`, no minds. `rhythm.py` gained `household_things` (two households' own hearth and store, used from the door by deliberate acts).
+
+- `core-hearth1-rhythm-223954` (before the merge of origin/main `d124c0f7`) and `core-hearth1m-rhythm-225209` (merged): **34 of 34** each. Halvard Dunmore's hearth 1.0 m and store 1.41 m from his door, Bram Calloway's the same; each fed the hearth (`lit_until_ms` up by 60 s, one unit at Cullet's 0.5 a game hour on a 12-minute day), cooked a fish there, took a smoked fish from and stored a peat in his own store (`peat` 24 to 25), and ate it; no act failed.
+- `core-hearth1-goods-224440`: `goods` 24 of 24, `stock` 4 of 4 (before the merge).
+- Not run: `decay`, `town`, the other scenes.
+
 ## 2026-11-11 fix-health-leak: another's health as perceived in fight reports and `health_of` (Spark)
 
 Branch `fix-health-leak` (from `e3f0527f`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (combat.md, the README row, SKILL.md's baseline), not a source wave.
