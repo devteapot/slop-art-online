@@ -212,6 +212,22 @@ pub struct EventRow(usize);
 #[derive(Resource, Default)]
 pub struct LogPage(pub u8);
 
+/// Consecutive lines with the same speaker, listener and words, as one line (the latest, so its
+/// "heard by" is the newest) and how many times it was said.
+fn collapse<'a>(lines: impl Iterator<Item = &'a Line>) -> Vec<(&'a Line, usize)> {
+    let mut out: Vec<(&'a Line, usize)> = Vec::new();
+    for l in lines {
+        match out.last_mut() {
+            Some((p, n)) if p.speaker == l.speaker && p.to == l.to && p.text == l.text => {
+                *p = l;
+                *n += 1;
+            }
+            _ => out.push((l, 1)),
+        }
+    }
+    out
+}
+
 fn bubble(p: &mut ChildSpawnerCommands, f: &Fonts, w: Win, i: usize) {
     p.spawn((Msg(w, i), Node { flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(9.0), Val::Px(9.0), Val::Px(5.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(10.0), max_width: Val::Px(330.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::field()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|m| {
         m.spawn((MsgName(w, i), Text::new(""), f.body(12.0, 900), TextColor(wood::talk_ink()), Pickable::IGNORE));
@@ -459,7 +475,7 @@ pub fn update(
         ParamSet<(Query<(&WinTitle, &mut Text)>, Query<(&PersonRowText, &mut Text)>, Query<(&PersonRowNote, &mut Text)>, Query<(&EventRow, &mut Text, &mut Node)>, Query<(&GiveText, &mut Text)>)>,
     )>,
     (mut msgs, mut tabs, mut rows, mut gives, mut empties): (
-        Query<(&Msg, &mut Node, &mut BackgroundColor), (Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<PersonRow>, Without<GiveRow>, Without<Empty>)>,
+        Query<(&Msg, &mut Node, &mut BackgroundColor, &mut BorderColor), (Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<PersonRow>, Without<GiveRow>, Without<Empty>)>,
         Query<(&LogTab, &mut Node), (Without<Msg>, Without<MsgHeard>, Without<EventRow>, Without<PersonRow>, Without<GiveRow>, Without<Empty>)>,
         Query<(&PersonRow, &mut Node), (Without<Msg>, Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<GiveRow>, Without<Empty>)>,
         Query<(&GiveRow, &mut Node), (Without<Msg>, Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<PersonRow>, Without<Empty>)>,
@@ -474,28 +490,35 @@ pub fn update(
     let lower = |id: u32| if Some(id) == me { "you".to_string() } else { looks.of(id).unwrap_or("someone").to_string() };
     let perceived = |id: u32| net.conn.as_ref().is_some_and(|c| c.db.seen_characters().id().find(&id).is_some());
     // Each open window's lines (the log: everything heard and said).
-    let mut shown: HashMap<Win, Vec<&Line>> = HashMap::new();
+    // The same words said again by the same speaker to the same one, in a row, are one bubble
+    // with a count (the owner's coordinator: ten "Good evening" bubbles filled the window).
+    let mut shown: HashMap<Win, Vec<(&Line, usize)>> = HashMap::new();
     for o in &ws.open {
         match o.win {
             Win::Person(id) => {
-                let v: Vec<&Line> = talks.with(id).collect();
+                let v = collapse(talks.with(id));
                 shown.insert(o.win, v[v.len().saturating_sub(THREAD)..].to_vec());
             }
             Win::Log => {
-                let v: Vec<&Line> = talks.lines.values().collect();
+                let v = collapse(talks.lines.values());
                 shown.insert(o.win, v[v.len().saturating_sub(HEARD_ROWS)..].to_vec());
             }
             _ => {}
         }
     }
-    let line_of = |w: &Win, i: usize| shown.get(w).and_then(|v| v.get(i)).copied();
-    for (m, mut n, mut bg) in &mut msgs {
+    let line_of = |w: &Win, i: usize| shown.get(w).and_then(|v| v.get(i)).map(|(l, _)| *l);
+    let times_of = |w: &Win, i: usize| shown.get(w).and_then(|v| v.get(i)).map_or(1, |(_, n)| *n);
+    for (m, mut n, mut bg, mut border) in &mut msgs {
         let l = line_of(&m.0, m.1);
         show(&mut n, l.is_some());
         if let Some(l) = l {
             let (col, align) = if l.mine { (wood::mine(), AlignSelf::FlexEnd) } else { (wood::field(), AlignSelf::FlexStart) };
             if bg.0 != col {
                 bg.0 = col;
+            }
+            let edge = if l.mine { wood::mine_edge() } else { wood::edge() };
+            if border.top != edge {
+                *border = BorderColor::all(edge);
             }
             if n.align_self != align {
                 n.align_self = align;
@@ -520,6 +543,8 @@ pub fn update(
                     }
                     (_, _) => format!("{} › {}", name(l.speaker), if l.to == 0 { "the room".to_string() } else { lower(l.to) }),
                 };
+                let times = times_of(&m.0, m.1);
+                let s = if times > 1 { format!("{s}  ×{times}") } else { s };
                 set_text(&mut t, &s);
                 super::set_color(&mut c, if l.mine { wood::name_mine() } else { wood::talk_ink() });
             }
@@ -829,5 +854,21 @@ pub fn offers(mut talks: ResMut<Talks>, looks: Res<Looks>, mut ws: ResMut<Window
         if let Some((_, label)) = skills.get(a.2) {
             set_text(&mut t, label);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{collapse, Line};
+
+    fn line(speaker: u32, to: u32, text: &str) -> Line {
+        Line { at_ms: 0, speaker, to, text: text.into(), mine: false, heard_by: None, unheard: false }
+    }
+
+    #[test]
+    fn the_same_words_again_are_one_line_with_a_count() {
+        let v = [line(1, 2, "Good evening"), line(1, 2, "Good evening"), line(1, 2, "Good evening"), line(2, 1, "Good evening"), line(1, 2, "Bread?"), line(1, 2, "Good evening")];
+        let c: Vec<(u32, &str, usize)> = collapse(v.iter()).into_iter().map(|(l, n)| (l.speaker, l.text.as_str(), n)).collect();
+        assert_eq!(c, vec![(1, "Good evening", 3), (2, "Good evening", 1), (1, "Bread?", 1), (1, "Good evening", 1)]);
     }
 }
