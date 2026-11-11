@@ -135,6 +135,16 @@ fn described(s: &Scripts) -> Result<(), String> {
     Ok(())
 }
 
+/// The interface declarations (`<name>_ui()`) read without a problem: an install refuses what a
+/// client would only log and play on without (docs/INTERFACE.md §3).
+fn interface(s: &Scripts) -> Result<(), String> {
+    match s.ui_errors() {
+        [] => Ok(()),
+        [e] => Err(format!("install refused: {e}")),
+        [e, rest @ ..] => Err(format!("install refused: {e} (and {} more interface problems)", rest.len())),
+    }
+}
+
 fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     // Every law reads only fields the engine provides.
     for f in s.ctx_laws() {
@@ -155,6 +165,7 @@ fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String>
     hooks(&mut p)?;
     yes_or_no(&mut p)?;
     described(s)?;
+    interface(s)?;
     record_texts(&mut p)?;
     regard(&mut p)?;
     daylight(&mut p)?;

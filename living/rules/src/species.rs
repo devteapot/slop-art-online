@@ -176,12 +176,11 @@ pub fn skills_help(sp: &Species) -> String {
     skills_help_of(sp, &crate::catalog::skills())
 }
 
-/// The same, from a given set of skills.
+/// The same, from a given set of skills: the skills this body is offered (`ui::offered`, the
+/// filter the player's interface uses too).
 pub fn skills_help_of(sp: &Species, skills: &crate::catalog::Skills) -> String {
-    skills
-        .iter()
-        .filter(|s| sp.allows(&s.name) && (sp.skills.is_some() || s.listed))
-        .filter(|s| s.name != "signal" || !sp.signals.is_empty())
+    crate::ui::offered(skills, Some(sp))
+        .into_iter()
         .map(crate::catalog::skill_line)
         .collect::<Vec<_>>()
         .join("\n")
