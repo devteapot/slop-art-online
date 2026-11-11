@@ -1,5 +1,14 @@
 # Internal mind validation
 
+## 2026-11-11 recipes-1: crafting, cooking and smoking as recipes (dev-box)
+
+Branch `recipes-1` (from main `3c73d835`), own container `recipes1-stdb` (2.14.1, port 3327, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR` (the island cases now build there too), `scoped`, fake model only. The host ran other workers and, during the suite, this branch's eight-minute release comparison.
+
+- Full suite `minds-recipes1-214923`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, drop, night, rethink, rethink-llm, parked, death-names, frame and reasons pass; consolidation its known XFAIL; `animals` its known gap (timed out waiting for a request answered by instinct); `fov`, `resident` (a lesson taught through `mind_act`), `jev` and `dealings` timed out.
+- Alone (`minds-recipes1b-223738`): `fov`, `resident` and `jev` pass. `dealings` failed again the same way: the mind had already deliberated with the demand and paid the stone ("You did what you had decided: give stone → person"), but the case, finding no pending deliberation, asked again and waited 65 s for a row that had come and gone. Harness race, fixed in the case: it asks again only while the demand is open, and takes the pending request or the demand met. Then `dealings` passes (`minds-recipes1c-224221`).
+- `paid_safety.py` passes (inert children, no model calls).
+- What recipes-1 changes for minds: nothing they are told (the skill reference and the world text are bit-identical, `making_check::making_is_bit_identical`); `acts` and `resident` drive deliberate acts and teaching through the same skills.
+
 ## 2026-11-11 fov-1: hearing what one cannot see (dev-box)
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).

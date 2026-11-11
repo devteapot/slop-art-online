@@ -1,5 +1,13 @@
 # Knowledge validation
 
+## 2026-11-11 recipes-1: crafting, cooking and smoking as recipes (dev-box)
+
+Branch `recipes-1` (from main `3c73d835`), own container `recipes1-stdb` (2.14.1, port 3327), one private `CARGO_TARGET_DIR`: the runner now builds the mind, its tests and the module there when it is set (it had its own `.local/living/verify/build-knowledge` and `living/target/verify-authored-test`), `scoped`, no model calls.
+
+- Full `verify_knowledge.py run` (`knowledge-recipes1-213900`): all 21 proofs pass, among them missing know-how blocking a craft and know-how enabling it with practice counted (a cloak, now a recipe by `craft`).
+- `world-know-how` (`knowledge-glass-recipes1-214751`, cullet-laws, whose recipes are now `base_recipes() + [...]`): passes (glassmaking taught; "they must first learn fire"; "they already know glassmaking").
+- A thing named for teaching is still refused with what makes it ("leather is a thing, not a technique: it is made with tanning"; verify-core `teach`): `made_by` reads the craft recipes; old against new, `teach_check` gives the same answer for every name in both worlds (`making_check::making_is_bit_identical`).
+
 ## 2026-11-11 goods-2: teaching a world's own technique (dev-box)
 
 Branch `goods-2` (from main `62d861f0`, merged with main four times, last with `94050f9a` at `6fefe997`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
