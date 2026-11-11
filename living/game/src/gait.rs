@@ -418,12 +418,19 @@ fn record(
         };
         let p = root.translation();
         let anim = anims.get(e).ok();
+        let fwd = root.rotation() * Vec3::Z;
+        let yaw = fwd.z.atan2(fwd.x).to_degrees();
         let rest = serde_json::json!({
             "t": time.elapsed_secs_f64(),
             "root": [p.x, p.y, p.z],
             "speed": roam.speed,
             // The one-shot asked of the body this frame (a skill's clip, a gesture), and when.
             "action": motions.get(e).ok().and_then(|m| m.action.map(|a| (a.clip, a.start_ms))),
+            // The body's facing (the model's +Z on the ground, degrees from +X toward +Z), how far
+            // its upper body turns from it and whether it walks backwards (`twist.rs`, `anim.rs`).
+            "yaw": yaw,
+            "twist": motions.get(e).ok().map(|m| m.twist.to_degrees()),
+            "reverse": motions.get(e).ok().map(|m| m.reverse),
             // Connected play: the authority time my body is drawn at, and its segment then.
             "mine_ms": scene.as_ref().map(|s| s.mine_ms),
             // The game camera's eye and its pitch below the horizon (degrees).

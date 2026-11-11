@@ -149,6 +149,11 @@ struct Shown {
     /// A rigged animal's tilt with the ground under its paws (`bodies::lie_on`), eased.
     tilt: Quat,
     kind: String,
+    /// A person's upper-body facing (sim angle), eased like `yaw`; it differs from the legs'
+    /// while walking one way and looking another ([`legs_and_twist`]).
+    face: f32,
+    /// Walking backwards (the legs face away from the travel, the gaits reversed).
+    back: bool,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -171,6 +176,21 @@ const STILL_S: f32 = 1.0;
 
 /// How fast drawn yaw takes up a new facing (1/s): about 90% in 0.15 s.
 const YAW_RATE: f32 = 16.0;
+/// Walking while looking more than this far from the travel (radians), a person walks
+/// backwards, and forward again under [`BACK_OFF`]; between, the upper body turns.
+const BACK_ON: f32 = 110.0 * PI / 180.0;
+const BACK_OFF: f32 = 80.0 * PI / 180.0;
+/// The most the upper body turns from the legs (radians).
+const TWIST_MAX: f32 = 110.0 * PI / 180.0;
+
+/// Where a moving person's legs face and whether it walks backwards: the legs step along the
+/// travel, so its feet keep still, and the upper body turns toward where it looks. Clips have
+/// no strafe or backward takes; the forward gaits reversed walk backwards.
+fn legs_and_twist(travel: f32, look: f32, back: bool) -> (f32, bool) {
+    let off = living_rules::steer::wrap(look - travel).abs();
+    let back = if back { off > BACK_OFF } else { off > BACK_ON };
+    (if back { living_rules::steer::wrap(travel + PI) } else { travel }, back)
+}
 
 #[derive(Resource, Default)]
 pub struct Live {
@@ -418,7 +438,7 @@ fn bodies(
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone() });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false });
             live.heights.insert(id, height);
             continue;
         }
@@ -465,10 +485,27 @@ fn bodies(
             Some(&seg) if on_segment => s.speed += (seg - s.speed) * (1.0 - (-dt * 8.0).exp()),
             _ => s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp()),
         }
-        if let Some(h) = h {
-            s.yaw += living_rules::steer::wrap(h - s.yaw) * (1.0 - (-dt * YAW_RATE).exp());
-            s.yaw = living_rules::steer::wrap(s.yaw);
+        // A person walking one way while looking another (my cursor, a move's aim): the legs keep
+        // to the travel, forward or backward, and the upper body turns toward the look.
+        let look_at = aimed.or(look);
+        let walking = s.person && s.speed > MOVING;
+        let (legs, back) = match (walking, look_at, heading) {
+            (true, Some(l), Some(t)) => {
+                let (y, b) = legs_and_twist(t, l, s.back);
+                (Some(y), b)
+            }
+            _ => (h, false),
+        };
+        s.back = back;
+        let k = 1.0 - (-dt * YAW_RATE).exp();
+        if let Some(y) = legs {
+            s.yaw = living_rules::steer::wrap(s.yaw + living_rules::steer::wrap(y - s.yaw) * k);
         }
+        if let Some(f) = look_at.filter(|_| walking).or(legs) {
+            s.face = living_rules::steer::wrap(s.face + living_rules::steer::wrap(f - s.face) * k);
+        }
+        let twist = if s.person { living_rules::steer::wrap(s.face - s.yaw).clamp(-TWIST_MAX, TWIST_MAX) } else { 0.0 };
+        let reverse = s.back;
         let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
         let rising = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(t, _)| t);
         let startle = s.startle.map(|(t, _)| crate::combat::Action { clip: STARTLE.0, rate: 1.0, start_ms: t, hold: None, face: None });
@@ -519,6 +556,8 @@ fn bodies(
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
         motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None })).or(startle);
         motion.now_ms = scene.now_ms;
+        motion.reverse = reverse;
+        motion.twist = twist;
     }
 }
 
