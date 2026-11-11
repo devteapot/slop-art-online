@@ -141,7 +141,7 @@ A house's tiles are all blocked, so a hearth and a store placed for it stand on 
 
 **Rows written.** None new and no schema change: the same `structure` rows (and their `inventory` rows) are inserted in the same creating transaction, after the residents, with different `x`, `y` and `chunk`; a structure's chunk follows its point, so its subscribers are those of the house's chunk. Hosting reads each owned lot's footprint once (a few tiles per structure).
 
-**Worlds without plans are unchanged.** `placed_structures` reads only `land.plans`; a land without plans has none, the island and generated cities have no `Inside` structure, and every other caller of `put_authored` (a seed's `structures`) passes `exact: false`, so it snaps as before. verify-generation's island and megacity structure rows were compared with `origin/main`'s ([below](#verification-hearth-1)).
+**Worlds without plans are unchanged.** `placed_structures` reads only `land.plans`; a land without plans has none, the island and generated cities have no `Inside` structure, and every other caller of `put_authored` (a seed's `structures`) passes `exact: false`, so it snaps as before. verify-generation's island and megacity structure rows were compared with those of the branch point `9c6ca13c` ([below](#hearth-1)).
 
 **For the client.** Such a structure stands inside a building on a blocked tile. Since `hearth-1` Cullet's 21 home hearths and 22 household stores stand on their houses' floors, about 0.5 m behind the front wall's face; the client draws them at their rows' points, inside the house model, where the model's front wall may cut through them (a hearth's model is 1.3 × 0.8 m). Drawing them inside the house, or hiding them while the house is drawn closed, is the client's choice; the rules do not need them seen.
 
@@ -239,6 +239,21 @@ The lot ids, the 65 buildings, the landmarks, the frame, the land, the resources
   - No residents (phase 5), no tide, no sight values for Cullet (phase 4).
 
 ## Verification (2026-11-11)
+
+### hearth-1
+
+Dev-box, own container `hearth1-stdb` (2.14.1, port 3331), private `CARGO_TARGET_DIR`, `scoped`, no minds; branch `hearth-1` from `9c6ca13c`, merged with origin/main `61b7b2eb` (rules-senses-outcomes, kit2-client); every run below was repeated on the merged tree unless noted.
+
+- `cargo test -p living-rules`: 231 passed, 11 ignored (before the merge), with the new `settle::plan::tests::a_households_own_structures_stand_inside_its_lot` (plan-test: the Hollis store and campfire on two different floor tiles behind house_a's door, the Wrens' store at its named point, their woodpile on the garth's ground, the hall's lamp still at its door; an `inside` point outside its lot and one in the middle of the hall refused) and `the_cullet_seed_is_valid_and_reachable` (Cullet's 21 hearths and 22 stores inside, every one within 1.5 m of a reachable tile, and the walk an act makes to it ending within 1.5 m). `cargo test -p living-authority --lib`: 21 pass (Cullet's owned structures are 43).
+- verify-generation `--feature worlds`: `generation-hearth1-20261111-223528` (island, plan-test, cullet, floor-megacity-2k: 979, 86, 332 and 77 checks pass) and, merged, `generation-hearth1m-20261111-225211` (island 979, plan-test 86, cullet 332). New checks: household structures placed for a lot stand on its own tiles, not a street's or another lot's (plan-test 4, Cullet 43); each within 1.5 m of a tile joined to the lot's door; each household has its house and the store and fire its plan gives its home (Cullet 22).
+- **Unplanned worlds unchanged:** the same generation on the branch point (`generation-hearth1base-20261111-223941`, from `git archive 9c6ca13c`) against the branch: island 573 structures and floor-megacity-2k 3,563, equal in kind, position, owner and fuel (sha `4b14377672acbf58` and `2ca8437b064d0308` both sides), and equal `land` digests, lot rows and resource nodes.
+- verify-core `rhythm` (`core-hearth1-rhythm-223954`, merged `core-hearth1m-rhythm-225209`): 34 of 34. Halvard Dunmore (High Row) and Bram Calloway (Low Row), stood at their doors, fed and cooked at their own hearth 1.0 to 1.41 m away inside the house, took smoked fish from and stored peat in their own store, and ate. `goods` 24 of 24 and `stock` 4 of 4 (`core-hearth1-goods-224440`, before the merge).
+- `cullet_plan.py --check` and `author_world.py cullet --check` pass (0 errors, 0 warnings); `envs/cullet.json` keeps its `resources` map (kit2-client's) through the script.
+- `set -o pipefail; just living-check` on the merged tree: ok in 480 s.
+- Not covered: verify-ui and the game client (nothing in the client changed; how it draws a structure inside a house is open, [above](#a-households-own-things-stand-inside-its-lot)); verify-client, verify-player and verify-minds (no table, reducer, view or protocol changed); decay; any frame-time or scale measurement.
+
+SpacetimeDB documentation consulted (live pages show 2.0.0; the service and crates are 2.14.1): [reducer lifecycle](https://spacetimedb.com/docs/functions/reducers/lifecycle/) (`init` "runs once when the module is first published or when the database is cleared"; "Failure prevents publishing or clearing": a plan with a structure nobody can reach is refused before anything is written), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) ("sends you the matching rows immediately and then pushes updates": the structures go to their chunk's subscribers as before, once) and [table performance](https://spacetimedb.com/docs/tables/performance/) ("batch them in a single reducer call": they are inserted in the creating transaction). No table, column, reducer, view or subscription changed.
+
 
 **layout-2** (dev-box, own container `layout2-stdb`, 2.14.1, port 3329; private `CARGO_TARGET_DIR`): see [Cullet's layout, pass 2](CULLET_LAYOUT.md#verification-pass-2).
 
