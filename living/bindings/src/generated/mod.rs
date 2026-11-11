@@ -10,6 +10,8 @@ pub mod acquaintance_table;
 pub mod acquaintance_type;
 pub mod act_card_table;
 pub mod act_card_type;
+pub mod act_outcome_table;
+pub mod act_outcome_type;
 pub mod act_queue_table;
 pub mod activity_table;
 pub mod activity_type;
@@ -26,6 +28,8 @@ pub mod bond_offer_table;
 pub mod bond_offer_type;
 pub mod brain_table;
 pub mod brain_type;
+pub mod character_senses_table;
+pub mod character_senses_type;
 pub mod character_table;
 pub mod character_type;
 pub mod chronicle_table;
@@ -137,6 +141,7 @@ pub mod missile_type;
 pub mod motion_seen_table;
 pub mod motion_seen_type;
 pub mod motion_type;
+pub mod my_act_outcomes_table;
 pub mod my_body_table;
 pub mod my_characters_table;
 pub mod my_combat_table;
@@ -153,6 +158,7 @@ pub mod my_places_table;
 pub mod my_readiness_table;
 pub mod my_record_type;
 pub mod my_records_table;
+pub mod my_senses_table;
 pub mod my_skill_uses_table;
 pub mod my_vitals_table;
 pub mod own_habits_reducer;
@@ -277,6 +283,8 @@ pub use acquaintance_table::*;
 pub use acquaintance_type::Acquaintance;
 pub use act_card_table::*;
 pub use act_card_type::ActCard;
+pub use act_outcome_table::*;
+pub use act_outcome_type::ActOutcome;
 pub use act_queue_table::*;
 pub use activity_table::*;
 pub use activity_type::Activity;
@@ -293,6 +301,8 @@ pub use bond_offer_table::*;
 pub use bond_offer_type::BondOffer;
 pub use brain_table::*;
 pub use brain_type::Brain;
+pub use character_senses_table::*;
+pub use character_senses_type::CharacterSenses;
 pub use character_table::*;
 pub use character_type::Character;
 pub use chronicle_table::*;
@@ -404,6 +414,7 @@ pub use missile_type::Missile;
 pub use motion_seen_table::*;
 pub use motion_seen_type::MotionSeen;
 pub use motion_type::Motion;
+pub use my_act_outcomes_table::*;
 pub use my_body_table::*;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
@@ -420,6 +431,7 @@ pub use my_places_table::*;
 pub use my_readiness_table::*;
 pub use my_record_type::MyRecord;
 pub use my_records_table::*;
+pub use my_senses_table::*;
 pub use my_skill_uses_table::*;
 pub use my_vitals_table::*;
 pub use own_habits_reducer::own_habits;
@@ -1051,6 +1063,7 @@ impl __sdk::Reducer for Reducer {
 pub struct DbUpdate {
     acquaintance: __sdk::TableUpdate<Acquaintance>,
     act_card: __sdk::TableUpdate<ActCard>,
+    act_outcome: __sdk::TableUpdate<ActOutcome>,
     act_queue: __sdk::TableUpdate<PlannedAct>,
     activity: __sdk::TableUpdate<Activity>,
     artifact: __sdk::TableUpdate<Artifact>,
@@ -1060,6 +1073,7 @@ pub struct DbUpdate {
     bond_offer: __sdk::TableUpdate<BondOffer>,
     brain: __sdk::TableUpdate<Brain>,
     character: __sdk::TableUpdate<Character>,
+    character_senses: __sdk::TableUpdate<CharacterSenses>,
     chronicle: __sdk::TableUpdate<Chronicle>,
     clock: __sdk::TableUpdate<Clock>,
     combat_seen: __sdk::TableUpdate<CombatSeen>,
@@ -1098,6 +1112,7 @@ pub struct DbUpdate {
     mind_state: __sdk::TableUpdate<MindState>,
     missile: __sdk::TableUpdate<Missile>,
     motion_seen: __sdk::TableUpdate<MotionSeen>,
+    my_act_outcomes: __sdk::TableUpdate<ActOutcome>,
     my_body: __sdk::TableUpdate<Motion>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
@@ -1112,6 +1127,7 @@ pub struct DbUpdate {
     my_places: __sdk::TableUpdate<Place>,
     my_readiness: __sdk::TableUpdate<Readiness>,
     my_records: __sdk::TableUpdate<MyRecord>,
+    my_senses: __sdk::TableUpdate<CharacterSenses>,
     my_skill_uses: __sdk::TableUpdate<SkillUse>,
     my_vitals: __sdk::TableUpdate<Vitals>,
     pasture: __sdk::TableUpdate<Pasture>,
@@ -1172,6 +1188,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "act_card" => db_update
                     .act_card
                     .append(act_card_table::parse_table_update(table_update)?),
+                "act_outcome" => db_update
+                    .act_outcome
+                    .append(act_outcome_table::parse_table_update(table_update)?),
                 "act_queue" => db_update
                     .act_queue
                     .append(act_queue_table::parse_table_update(table_update)?),
@@ -1199,6 +1218,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "character" => db_update
                     .character
                     .append(character_table::parse_table_update(table_update)?),
+                "character_senses" => db_update
+                    .character_senses
+                    .append(character_senses_table::parse_table_update(table_update)?),
                 "chronicle" => db_update
                     .chronicle
                     .append(chronicle_table::parse_table_update(table_update)?),
@@ -1313,6 +1335,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "motion_seen" => db_update
                     .motion_seen
                     .append(motion_seen_table::parse_table_update(table_update)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
+                    .append(my_act_outcomes_table::parse_table_update(table_update)?),
                 "my_body" => db_update
                     .my_body
                     .append(my_body_table::parse_table_update(table_update)?),
@@ -1355,6 +1380,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_records" => db_update
                     .my_records
                     .append(my_records_table::parse_table_update(table_update)?),
+                "my_senses" => db_update
+                    .my_senses
+                    .append(my_senses_table::parse_table_update(table_update)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(my_skill_uses_table::parse_table_update(table_update)?),
@@ -1525,6 +1553,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.act_card = cache
             .apply_diff_to_table::<ActCard>("act_card", &self.act_card)
             .with_updates_by_pk(|row| &row.skill);
+        diff.act_outcome = cache
+            .apply_diff_to_table::<ActOutcome>("act_outcome", &self.act_outcome)
+            .with_updates_by_pk(|row| &row.id);
         diff.act_queue = cache
             .apply_diff_to_table::<PlannedAct>("act_queue", &self.act_queue)
             .with_updates_by_pk(|row| &row.id);
@@ -1551,6 +1582,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.character = cache
             .apply_diff_to_table::<Character>("character", &self.character)
+            .with_updates_by_pk(|row| &row.id);
+        diff.character_senses = cache
+            .apply_diff_to_table::<CharacterSenses>("character_senses", &self.character_senses)
             .with_updates_by_pk(|row| &row.id);
         diff.chronicle = cache
             .apply_diff_to_table::<Chronicle>("chronicle", &self.chronicle)
@@ -1786,6 +1820,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.heard_sounds = cache
             .apply_diff_to_table::<HeardSound>("heard_sounds", &self.heard_sounds)
             .with_updates_by_pk(|row| &row.key);
+        diff.my_act_outcomes = cache
+            .apply_diff_to_table::<ActOutcome>("my_act_outcomes", &self.my_act_outcomes)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_body = cache
             .apply_diff_to_table::<Motion>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
@@ -1822,6 +1859,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_readiness =
             cache.apply_diff_to_table::<Readiness>("my_readiness", &self.my_readiness);
         diff.my_records = cache.apply_diff_to_table::<MyRecord>("my_records", &self.my_records);
+        diff.my_senses = cache
+            .apply_diff_to_table::<CharacterSenses>("my_senses", &self.my_senses)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_skill_uses =
             cache.apply_diff_to_table::<SkillUse>("my_skill_uses", &self.my_skill_uses);
         diff.my_vitals = cache
@@ -1852,6 +1892,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "act_card" => db_update
                     .act_card
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "act_outcome" => db_update
+                    .act_outcome
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "act_queue" => db_update
                     .act_queue
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1878,6 +1921,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "character" => db_update
                     .character
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "character_senses" => db_update
+                    .character_senses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "chronicle" => db_update
                     .chronicle
@@ -1993,6 +2039,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "motion_seen" => db_update
                     .motion_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_body" => db_update
                     .my_body
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2034,6 +2083,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_records" => db_update
                     .my_records
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_senses" => db_update
+                    .my_senses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
@@ -2192,6 +2244,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "act_card" => db_update
                     .act_card
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "act_outcome" => db_update
+                    .act_outcome
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "act_queue" => db_update
                     .act_queue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2218,6 +2273,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "character" => db_update
                     .character
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "character_senses" => db_update
+                    .character_senses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "chronicle" => db_update
                     .chronicle
@@ -2333,6 +2391,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "motion_seen" => db_update
                     .motion_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_body" => db_update
                     .my_body
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2374,6 +2435,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_records" => db_update
                     .my_records
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_senses" => db_update
+                    .my_senses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
@@ -2530,6 +2594,7 @@ impl __sdk::DbUpdate for DbUpdate {
 pub struct AppliedDiff<'r> {
     acquaintance: __sdk::TableAppliedDiff<'r, Acquaintance>,
     act_card: __sdk::TableAppliedDiff<'r, ActCard>,
+    act_outcome: __sdk::TableAppliedDiff<'r, ActOutcome>,
     act_queue: __sdk::TableAppliedDiff<'r, PlannedAct>,
     activity: __sdk::TableAppliedDiff<'r, Activity>,
     artifact: __sdk::TableAppliedDiff<'r, Artifact>,
@@ -2539,6 +2604,7 @@ pub struct AppliedDiff<'r> {
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
     brain: __sdk::TableAppliedDiff<'r, Brain>,
     character: __sdk::TableAppliedDiff<'r, Character>,
+    character_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
     chronicle: __sdk::TableAppliedDiff<'r, Chronicle>,
     clock: __sdk::TableAppliedDiff<'r, Clock>,
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
@@ -2577,6 +2643,7 @@ pub struct AppliedDiff<'r> {
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
     missile: __sdk::TableAppliedDiff<'r, Missile>,
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
+    my_act_outcomes: __sdk::TableAppliedDiff<'r, ActOutcome>,
     my_body: __sdk::TableAppliedDiff<'r, Motion>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
@@ -2591,6 +2658,7 @@ pub struct AppliedDiff<'r> {
     my_places: __sdk::TableAppliedDiff<'r, Place>,
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
+    my_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
     my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     my_vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     pasture: __sdk::TableAppliedDiff<'r, Pasture>,
@@ -2656,6 +2724,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<ActCard>("act_card", &self.act_card, event);
+        callbacks.invoke_table_row_callbacks::<ActOutcome>("act_outcome", &self.act_outcome, event);
         callbacks.invoke_table_row_callbacks::<PlannedAct>("act_queue", &self.act_queue, event);
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
         callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
@@ -2665,6 +2734,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
         callbacks.invoke_table_row_callbacks::<Brain>("brain", &self.brain, event);
         callbacks.invoke_table_row_callbacks::<Character>("character", &self.character, event);
+        callbacks.invoke_table_row_callbacks::<CharacterSenses>(
+            "character_senses",
+            &self.character_senses,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Chronicle>("chronicle", &self.chronicle, event);
         callbacks.invoke_table_row_callbacks::<Clock>("clock", &self.clock, event);
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
@@ -2723,6 +2797,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
         callbacks.invoke_table_row_callbacks::<Missile>("missile", &self.missile, event);
         callbacks.invoke_table_row_callbacks::<MotionSeen>("motion_seen", &self.motion_seen, event);
+        callbacks.invoke_table_row_callbacks::<ActOutcome>(
+            "my_act_outcomes",
+            &self.my_act_outcomes,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Motion>("my_body", &self.my_body, event);
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
@@ -2757,6 +2836,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<MyRecord>("my_records", &self.my_records, event);
+        callbacks.invoke_table_row_callbacks::<CharacterSenses>(
+            "my_senses",
+            &self.my_senses,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SkillUse>(
             "my_skill_uses",
             &self.my_skill_uses,
@@ -3497,6 +3581,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         acquaintance_table::register_table(client_cache);
         act_card_table::register_table(client_cache);
+        act_outcome_table::register_table(client_cache);
         act_queue_table::register_table(client_cache);
         activity_table::register_table(client_cache);
         artifact_table::register_table(client_cache);
@@ -3506,6 +3591,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         bond_offer_table::register_table(client_cache);
         brain_table::register_table(client_cache);
         character_table::register_table(client_cache);
+        character_senses_table::register_table(client_cache);
         chronicle_table::register_table(client_cache);
         clock_table::register_table(client_cache);
         combat_seen_table::register_table(client_cache);
@@ -3544,6 +3630,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         mind_state_table::register_table(client_cache);
         missile_table::register_table(client_cache);
         motion_seen_table::register_table(client_cache);
+        my_act_outcomes_table::register_table(client_cache);
         my_body_table::register_table(client_cache);
         my_characters_table::register_table(client_cache);
         my_combat_table::register_table(client_cache);
@@ -3558,6 +3645,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_places_table::register_table(client_cache);
         my_readiness_table::register_table(client_cache);
         my_records_table::register_table(client_cache);
+        my_senses_table::register_table(client_cache);
         my_skill_uses_table::register_table(client_cache);
         my_vitals_table::register_table(client_cache);
         pasture_table::register_table(client_cache);
@@ -3608,6 +3696,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "acquaintance",
         "act_card",
+        "act_outcome",
         "act_queue",
         "activity",
         "artifact",
@@ -3617,6 +3706,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "bond_offer",
         "brain",
         "character",
+        "character_senses",
         "chronicle",
         "clock",
         "combat_seen",
@@ -3655,6 +3745,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "mind_state",
         "missile",
         "motion_seen",
+        "my_act_outcomes",
         "my_body",
         "my_characters",
         "my_combat",
@@ -3669,6 +3760,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_places",
         "my_readiness",
         "my_records",
+        "my_senses",
         "my_skill_uses",
         "my_vitals",
         "pasture",

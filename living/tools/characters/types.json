@@ -1,0 +1,4785 @@
+{
+ "about": "Face types, the identity rig and the anchors they were set from (living/tools/characters/face_types.py; docs/CHARACTERS.md). Lengths are in units of the head's height H, chin to crown, unless a name says otherwise.",
+ "version": 1,
+ "bands": [
+  {
+   "band": "child",
+   "ages": [
+    0,
+    12
+   ]
+  },
+  {
+   "band": "youth",
+   "ages": [
+    12,
+    18
+   ]
+  },
+  {
+   "band": "adult",
+   "ages": [
+    18,
+    60
+   ]
+  },
+  {
+   "band": "elder",
+   "ages": [
+    60,
+    99
+   ]
+  }
+ ],
+ "lines": {
+  "a": "round",
+  "b": "even",
+  "c": "long"
+ },
+ "rig": {
+  "about": "Identity bones. A person's value v in -1..1 gives the bone's change from its rest: least at -1, none at 0, most at 1 (a scale's rest is 1, a move's and a turn's 0). `move` is in thousandths of the head's height.",
+  "axes": {
+   "x": "across: file X; for a paired bone, away from the midline on both sides",
+   "y": "forward: file -Z",
+   "z": "up: file Y",
+   "note": "a bone's own axes at rest; a bone turned at rest (the cheeks) moves along its turned axes"
+  },
+  "bones": [
+   {
+    "name": "J_Id_Cranium",
+    "parent": "J_Bip_C_Head",
+    "part": "skull",
+    "at": "the head's middle at the brow line",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "cranium_width",
+      "does": "scale",
+      "axis": "x",
+      "least": 0.94,
+      "most": 1.07,
+      "unit": "\u00d7",
+      "note": "new"
+     },
+     {
+      "id": "cranium_depth",
+      "does": "scale",
+      "axis": "y",
+      "least": 0.95,
+      "most": 1.06,
+      "unit": "\u00d7",
+      "note": "new"
+     },
+     {
+      "id": "cranium_height",
+      "does": "scale",
+      "axis": "z",
+      "least": 0.95,
+      "most": 1.07,
+      "unit": "\u00d7",
+      "note": "new"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Forehead",
+    "parent": "J_Id_Cranium",
+    "part": "skull",
+    "at": "the forehead's middle",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "forehead",
+      "does": "move",
+      "axis": "y",
+      "least": -12,
+      "most": 16,
+      "unit": "\u2030H",
+      "note": "pass 2's `forehead`: low and sloping to high and full"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Glabella",
+    "parent": "J_Id_Cranium",
+    "part": "brows",
+    "at": "between the brows",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "brow_ridge",
+      "does": "move",
+      "axis": "y",
+      "least": -4,
+      "most": 12,
+      "unit": "\u2030H",
+      "note": "pass 2's `brow_ridge`"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Face",
+    "parent": "J_Bip_C_Head",
+    "part": "outline",
+    "at": "the bridge of the nose",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "face_length",
+      "does": "scale",
+      "axis": "z",
+      "least": 0.92,
+      "most": 1.1,
+      "unit": "\u00d7",
+      "note": "pass 2's `face_length`: everything below the eyes"
+     },
+     {
+      "id": "face_width",
+      "does": "scale",
+      "axis": "x",
+      "least": 0.94,
+      "most": 1.07,
+      "unit": "\u00d7",
+      "note": "pass 2's `face_width`"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Corner_L",
+    "parent": "J_Id_Face",
+    "part": "outline",
+    "at": "the cheek corner beside the eye",
+    "mirrored": "J_Id_Corner_R",
+    "values": [
+     {
+      "id": "front_breadth",
+      "does": "move",
+      "axis": "x",
+      "least": -16,
+      "most": 16,
+      "unit": "\u2030H",
+      "note": "new: how broad the front planes are"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Zygoma_L",
+    "parent": "J_Id_Face",
+    "part": "outline",
+    "at": "the cheekbone's point",
+    "mirrored": "J_Id_Zygoma_R",
+    "values": [
+     {
+      "id": "cheekbones",
+      "does": "move",
+      "axis": "x",
+      "least": -12,
+      "most": 16,
+      "unit": "\u2030H",
+      "note": "pass 2's `cheekbones`"
+     },
+     {
+      "id": "cheekbone_height",
+      "does": "move",
+      "axis": "z",
+      "least": -12,
+      "most": 12,
+      "unit": "\u2030H",
+      "note": "new"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Cheek_L",
+    "parent": "J_Id_Face",
+    "part": "outline",
+    "at": "the cheek's fullest point",
+    "mirrored": "J_Id_Cheek_R",
+    "values": [
+     {
+      "id": "cheeks",
+      "does": "move",
+      "axis": "y",
+      "least": -12,
+      "most": 20,
+      "unit": "\u2030H",
+      "note": "pass 2's `cheeks`: hollow to full; this bone is turned at rest to face out of the cheek, so its forward is the surface's normal"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Jaw",
+    "parent": "J_Id_Face",
+    "part": "outline",
+    "at": "the jaw's hinge, under the ear",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "jaw_width",
+      "does": "scale",
+      "axis": "x",
+      "least": 0.88,
+      "most": 1.14,
+      "unit": "\u00d7",
+      "note": "pass 2's `jaw_width`"
+     },
+     {
+      "id": "jaw_angle",
+      "does": "turn",
+      "axis": "x",
+      "least": -4.0,
+      "most": 5.0,
+      "unit": "\u00b0",
+      "note": "new: a steeper or flatter jaw line"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Gonion_L",
+    "parent": "J_Id_Jaw",
+    "part": "outline",
+    "at": "the angle of the jaw",
+    "mirrored": "J_Id_Gonion_R",
+    "values": [
+     {
+      "id": "jaw_square",
+      "does": "move",
+      "axis": "x",
+      "least": -10,
+      "most": 14,
+      "unit": "\u2030H",
+      "note": "pass 2's `jaw_square`: tapered to square"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Chin",
+    "parent": "J_Id_Jaw",
+    "part": "outline",
+    "at": "the chin's point",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "chin_length",
+      "does": "move",
+      "axis": "z",
+      "least": -28,
+      "most": 20,
+      "unit": "\u2030H",
+      "note": "pass 2's `chin_length` (down is longer)"
+     },
+     {
+      "id": "chin_width",
+      "does": "scale",
+      "axis": "x",
+      "least": 0.7,
+      "most": 1.4,
+      "unit": "\u00d7",
+      "note": "pass 2's `chin_width`: pointed to broad"
+     },
+     {
+      "id": "chin_forward",
+      "does": "move",
+      "axis": "y",
+      "least": -16,
+      "most": 20,
+      "unit": "\u2030H",
+      "note": "pass 2's `chin_forward`"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Orbit_L",
+    "parent": "J_Id_Face",
+    "part": "eyes",
+    "at": "the eye's middle, on the skin",
+    "mirrored": "J_Id_Orbit_R",
+    "values": [
+     {
+      "id": "eye_spacing",
+      "does": "move",
+      "axis": "x",
+      "least": -12,
+      "most": 14,
+      "unit": "\u2030H",
+      "note": "pass 2's `eye_spacing`"
+     },
+     {
+      "id": "eye_height",
+      "does": "move",
+      "axis": "z",
+      "least": -14,
+      "most": 14,
+      "unit": "\u2030H",
+      "note": "pass 2's `eye_height`"
+     },
+     {
+      "id": "socket_depth",
+      "does": "move",
+      "axis": "y",
+      "least": -10,
+      "most": 8,
+      "unit": "\u2030H",
+      "note": "new: the eye set deeper or shallower"
+     },
+     {
+      "id": "eye_size",
+      "does": "scale",
+      "axis": "xyz",
+      "least": 0.88,
+      "most": 1.13,
+      "unit": "\u00d7",
+      "note": "pass 2's `eye_size`"
+     },
+     {
+      "id": "eye_open",
+      "does": "scale",
+      "axis": "z",
+      "least": 0.82,
+      "most": 1.18,
+      "unit": "\u00d7",
+      "note": "pass 2's `eye_open`"
+     },
+     {
+      "id": "eye_tilt",
+      "does": "turn",
+      "axis": "y",
+      "least": -6.0,
+      "most": 7.0,
+      "unit": "\u00b0",
+      "note": "pass 2's `eye_tilt`: outer corners down to up"
+     }
+    ]
+   },
+   {
+    "name": "J_Adj_L_FaceEye",
+    "parent": "J_Id_Orbit_L",
+    "part": "eyes",
+    "at": "behind the eye (the bone the look turns; it exists today)",
+    "mirrored": "J_Adj_R_FaceEye",
+    "values": [
+     {
+      "id": "iris_size",
+      "does": "scale",
+      "axis": "xyz",
+      "least": 0.9,
+      "most": 1.1,
+      "unit": "\u00d7",
+      "note": "pass 2's `iris_size`"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Brow_L",
+    "parent": "J_Id_Face",
+    "part": "brows",
+    "at": "the brow's middle",
+    "mirrored": "J_Id_Brow_R",
+    "values": [
+     {
+      "id": "brow_height",
+      "does": "move",
+      "axis": "z",
+      "least": -12,
+      "most": 16,
+      "unit": "\u2030H",
+      "note": "pass 2's `brow_height`"
+     },
+     {
+      "id": "brow_tilt",
+      "does": "turn",
+      "axis": "y",
+      "least": -8.0,
+      "most": 8.0,
+      "unit": "\u00b0",
+      "note": "pass 2's `brow_tilt`"
+     },
+     {
+      "id": "brow_thickness",
+      "does": "scale",
+      "axis": "z",
+      "least": 0.7,
+      "most": 1.4,
+      "unit": "\u00d7",
+      "note": "pass 2's `brow_thickness`"
+     },
+     {
+      "id": "brow_length",
+      "does": "scale",
+      "axis": "x",
+      "least": 0.9,
+      "most": 1.12,
+      "unit": "\u00d7",
+      "note": "pass 2's `brow_length`"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Nose",
+    "parent": "J_Id_Face",
+    "part": "nose",
+    "at": "the bridge, between the eyes",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "nose_length",
+      "does": "scale",
+      "axis": "z",
+      "least": 0.85,
+      "most": 1.2,
+      "unit": "\u00d7",
+      "note": "pass 2's `nose_length`"
+     },
+     {
+      "id": "nose_width",
+      "does": "scale",
+      "axis": "x",
+      "least": 0.8,
+      "most": 1.25,
+      "unit": "\u00d7",
+      "note": "pass 2's `nose_width`"
+     },
+     {
+      "id": "nose_bridge",
+      "does": "scale",
+      "axis": "y",
+      "least": 0.8,
+      "most": 1.25,
+      "unit": "\u00d7",
+      "note": "pass 2's `nose_bridge`: how far the nose stands out"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_NoseTip",
+    "parent": "J_Id_Nose",
+    "part": "nose",
+    "at": "the nose's tip",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "nose_tip",
+      "does": "move",
+      "axis": "z",
+      "least": -10,
+      "most": 12,
+      "unit": "\u2030H",
+      "note": "pass 2's `nose_tip`: turned down to turned up"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Mouth",
+    "parent": "J_Id_Face",
+    "part": "mouth",
+    "at": "the mouth's middle",
+    "mirrored": null,
+    "values": [
+     {
+      "id": "mouth_height",
+      "does": "move",
+      "axis": "z",
+      "least": -12,
+      "most": 12,
+      "unit": "\u2030H",
+      "note": "pass 2's `mouth_height` (down is lower)"
+     },
+     {
+      "id": "mouth_width",
+      "does": "scale",
+      "axis": "x",
+      "least": 0.85,
+      "most": 1.18,
+      "unit": "\u00d7",
+      "note": "pass 2's `mouth_width`"
+     },
+     {
+      "id": "lip_fullness",
+      "does": "scale",
+      "axis": "z",
+      "least": 0.7,
+      "most": 1.35,
+      "unit": "\u00d7",
+      "note": "pass 2's `lip_fullness`"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_MouthCorner_L",
+    "parent": "J_Id_Mouth",
+    "part": "mouth",
+    "at": "the mouth's corner",
+    "mirrored": "J_Id_MouthCorner_R",
+    "values": [
+     {
+      "id": "mouth_curve",
+      "does": "move",
+      "axis": "z",
+      "least": -6,
+      "most": 6,
+      "unit": "\u2030H",
+      "note": "pass 2's `mouth_curve`: corners down to up"
+     }
+    ]
+   },
+   {
+    "name": "J_Id_Ear_L",
+    "parent": "J_Bip_C_Head",
+    "part": "ears",
+    "at": "the ear's root",
+    "mirrored": "J_Id_Ear_R",
+    "values": [
+     {
+      "id": "ear_size",
+      "does": "scale",
+      "axis": "xyz",
+      "least": 0.87,
+      "most": 1.2,
+      "unit": "\u00d7",
+      "note": "pass 2's `ear_size`"
+     },
+     {
+      "id": "ear_out",
+      "does": "turn",
+      "axis": "z",
+      "least": -8.0,
+      "most": 18.0,
+      "unit": "\u00b0",
+      "note": "pass 2's `ear_out`"
+     }
+    ]
+   }
+  ],
+  "fixed_by_type": {
+   "eye_shape": "where the upper lid peaks",
+   "eye_fold": "the lid fold's depth",
+   "brow_arch": "how arched the brow is"
+  },
+  "directions": {
+   "broad": {
+    "face_width": 0.8,
+    "cranium_width": 0.6,
+    "jaw_width": 0.6,
+    "cheekbones": 0.5,
+    "front_breadth": 0.6,
+    "eye_spacing": 0.4,
+    "nose_width": 0.3,
+    "mouth_width": 0.3
+   },
+   "long": {
+    "face_length": 0.8,
+    "chin_length": 0.5,
+    "nose_length": 0.6,
+    "mouth_height": 0.3,
+    "cranium_height": 0.3,
+    "forehead": 0.2
+   },
+   "bony": {
+    "cheekbones": 0.5,
+    "cheeks": -0.7,
+    "brow_ridge": 0.6,
+    "jaw_square": 0.6,
+    "socket_depth": -0.5,
+    "chin_forward": 0.3,
+    "nose_bridge": 0.4
+   },
+   "eyes": {
+    "eye_size": 0.8,
+    "eye_open": 0.6,
+    "iris_size": 0.4,
+    "brow_height": 0.3
+   }
+  },
+  "draw": {
+   "direction_sd": 0.42,
+   "value_sd": 0.22,
+   "reach": 0.42,
+   "family_share": 0.7
+  }
+ },
+ "measured": {
+  "reference": {
+   "H_m": 0.2332,
+   "w15": [
+    0.187,
+    0.377,
+    0.521,
+    0.586,
+    0.635,
+    0.685,
+    0.639,
+    0.614,
+    0.415
+   ],
+   "w30": [
+    0.187,
+    0.417,
+    0.568,
+    0.646,
+    0.718,
+    0.759,
+    0.777,
+    0.716,
+    0.612
+   ],
+   "wide": [
+    0.187,
+    0.417,
+    0.568,
+    0.693,
+    0.755,
+    0.767,
+    0.796,
+    0.759,
+    0.612
+   ],
+   "p00": [
+    -0.028,
+    0.013,
+    0.05,
+    0.042,
+    0.0,
+    0.02,
+    0.037,
+    0.021,
+    -0.05
+   ],
+   "p08": [
+    -0.064,
+    -0.006,
+    0.019,
+    0.007,
+    -0.017,
+    0.006,
+    0.018,
+    0.003,
+    -0.076
+   ],
+   "p30": [
+    null,
+    null,
+    -0.224,
+    -0.107,
+    -0.112,
+    -0.08,
+    -0.065,
+    -0.099,
+    -0.206
+   ],
+   "eye_z": 0.394,
+   "eye_apart": 0.387,
+   "eye_w": 0.158,
+   "eye_h": 0.115,
+   "socket_brow": 0.038,
+   "socket_cheek": 0.039,
+   "nose_tip_z": 0.245,
+   "nose_out": 0.119,
+   "nose_tip_y": 0.082,
+   "mouth_z": 0.14,
+   "mouth_w": 0.092
+  },
+  "sister": {
+   "H_m": 0.212,
+   "w15": [
+    0.257,
+    0.482,
+    0.562,
+    0.587,
+    0.633,
+    0.653,
+    0.682,
+    0.604,
+    0.412
+   ],
+   "w30": [
+    0.257,
+    0.514,
+    0.613,
+    0.655,
+    0.72,
+    0.755,
+    0.778,
+    0.709,
+    0.606
+   ],
+   "wide": [
+    0.257,
+    0.514,
+    0.637,
+    0.691,
+    0.755,
+    0.764,
+    0.79,
+    0.752,
+    0.606
+   ],
+   "p00": [
+    -0.022,
+    0.018,
+    0.053,
+    0.082,
+    0.002,
+    0.025,
+    0.039,
+    0.022,
+    -0.05
+   ],
+   "p08": [
+    -0.042,
+    -0.0,
+    0.02,
+    0.008,
+    -0.018,
+    0.008,
+    0.02,
+    0.002,
+    -0.075
+   ],
+   "p30": [
+    null,
+    null,
+    -0.129,
+    -0.108,
+    -0.11,
+    -0.081,
+    -0.083,
+    -0.1,
+    -0.203
+   ],
+   "eye_z": 0.373,
+   "eye_apart": 0.402,
+   "eye_w": 0.166,
+   "eye_h": 0.15,
+   "socket_brow": 0.038,
+   "socket_cheek": 0.035,
+   "nose_tip_z": 0.272,
+   "nose_out": 0.129,
+   "nose_tip_y": 0.087,
+   "mouth_z": 0.142,
+   "mouth_w": 0.12
+  },
+  "pass2_adult_f": {
+   "H_m": 0.2574,
+   "w15": [
+    0.2,
+    0.368,
+    0.449,
+    0.518,
+    0.557,
+    0.581,
+    0.545,
+    0.484,
+    null
+   ],
+   "w30": [
+    0.225,
+    0.44,
+    0.522,
+    0.588,
+    0.652,
+    0.675,
+    0.667,
+    0.599,
+    null
+   ],
+   "wide": [
+    0.225,
+    0.446,
+    0.529,
+    0.596,
+    0.679,
+    0.692,
+    0.667,
+    0.599,
+    null
+   ],
+   "p00": [
+    -0.017,
+    0.004,
+    0.009,
+    0.027,
+    0.015,
+    -0.002,
+    0.004,
+    -0.017,
+    null
+   ],
+   "p08": [
+    -0.051,
+    -0.009,
+    0.004,
+    0.011,
+    -0.006,
+    -0.006,
+    -0.0,
+    -0.024,
+    null
+   ],
+   "p30": [
+    null,
+    null,
+    null,
+    -0.205,
+    -0.137,
+    -0.13,
+    -0.152,
+    -0.202,
+    null
+   ],
+   "eye_z": 0.467,
+   "eye_apart": 0.283,
+   "eye_w": 0.182,
+   "eye_h": 0.142,
+   "socket_brow": 0.049,
+   "socket_cheek": 0.051,
+   "nose_tip_z": 0.301,
+   "nose_out": 0.056,
+   "nose_tip_y": 0.049,
+   "mouth_z": 0.153,
+   "mouth_w": 0.142
+  },
+  "pass2_adult_m": {
+   "H_m": 0.2726,
+   "w15": [
+    0.25,
+    0.393,
+    0.452,
+    0.485,
+    0.522,
+    0.526,
+    0.513,
+    0.462,
+    null
+   ],
+   "w30": [
+    0.259,
+    0.444,
+    0.508,
+    0.546,
+    0.591,
+    0.619,
+    0.617,
+    0.56,
+    null
+   ],
+   "wide": [
+    0.259,
+    0.444,
+    0.511,
+    0.55,
+    0.63,
+    0.638,
+    0.643,
+    0.56,
+    null
+   ],
+   "p00": [
+    -0.008,
+    -0.011,
+    0.003,
+    0.002,
+    0.042,
+    0.0,
+    -0.001,
+    -0.029,
+    null
+   ],
+   "p08": [
+    -0.027,
+    -0.017,
+    -0.003,
+    0.0,
+    -0.002,
+    -0.02,
+    -0.006,
+    -0.037,
+    null
+   ],
+   "p30": [
+    null,
+    null,
+    null,
+    null,
+    -0.2,
+    -0.176,
+    -0.183,
+    -0.237,
+    null
+   ],
+   "eye_z": 0.518,
+   "eye_apart": 0.261,
+   "eye_w": 0.145,
+   "eye_h": 0.093,
+   "socket_brow": 0.051,
+   "socket_cheek": 0.052,
+   "nose_tip_z": 0.346,
+   "nose_out": 0.075,
+   "nose_tip_y": 0.063,
+   "mouth_z": 0.193,
+   "mouth_w": 0.157
+  },
+  "pass2_elder_f": {
+   "H_m": 0.2586,
+   "w15": [
+    0.217,
+    0.375,
+    0.449,
+    0.507,
+    0.554,
+    0.564,
+    0.536,
+    0.481,
+    null
+   ],
+   "w30": [
+    0.24,
+    0.448,
+    0.52,
+    0.577,
+    0.639,
+    0.663,
+    0.657,
+    0.592,
+    null
+   ],
+   "wide": [
+    0.24,
+    0.453,
+    0.528,
+    0.665,
+    0.668,
+    0.679,
+    0.689,
+    0.592,
+    null
+   ],
+   "p00": [
+    -0.02,
+    -0.0,
+    0.006,
+    0.029,
+    0.018,
+    -0.002,
+    0.004,
+    -0.016,
+    null
+   ],
+   "p08": [
+    -0.048,
+    -0.011,
+    0.0,
+    0.01,
+    -0.006,
+    -0.008,
+    -0.001,
+    -0.024,
+    null
+   ],
+   "p30": [
+    null,
+    null,
+    null,
+    -0.225,
+    -0.145,
+    -0.137,
+    -0.162,
+    -0.205,
+    null
+   ],
+   "eye_z": 0.475,
+   "eye_apart": 0.279,
+   "eye_w": 0.17,
+   "eye_h": 0.12,
+   "socket_brow": 0.05,
+   "socket_cheek": 0.047,
+   "nose_tip_z": 0.29,
+   "nose_out": 0.066,
+   "nose_tip_y": 0.052,
+   "mouth_z": 0.154,
+   "mouth_w": 0.142
+  },
+  "pass2_elder_m": {
+   "H_m": 0.2741,
+   "w15": [
+    0.26,
+    0.405,
+    0.453,
+    0.482,
+    0.512,
+    0.518,
+    0.514,
+    0.456,
+    null
+   ],
+   "w30": [
+    0.271,
+    0.459,
+    0.513,
+    0.544,
+    0.582,
+    0.609,
+    0.616,
+    0.555,
+    null
+   ],
+   "wide": [
+    0.271,
+    0.459,
+    0.516,
+    0.548,
+    0.621,
+    0.627,
+    0.635,
+    0.555,
+    null
+   ],
+   "p00": [
+    -0.011,
+    -0.014,
+    -0.001,
+    -0.001,
+    0.044,
+    0.0,
+    0.0,
+    -0.031,
+    null
+   ],
+   "p08": [
+    -0.029,
+    -0.018,
+    -0.005,
+    -0.004,
+    -0.004,
+    -0.022,
+    -0.005,
+    -0.039,
+    null
+   ],
+   "p30": [
+    null,
+    null,
+    null,
+    null,
+    -0.224,
+    -0.187,
+    -0.192,
+    null,
+    null
+   ],
+   "eye_z": 0.524,
+   "eye_apart": 0.259,
+   "eye_w": 0.137,
+   "eye_h": 0.078,
+   "socket_brow": 0.051,
+   "socket_cheek": 0.048,
+   "nose_tip_z": 0.332,
+   "nose_out": 0.09,
+   "nose_tip_y": 0.068,
+   "mouth_z": 0.19,
+   "mouth_w": 0.157
+  },
+  "pass2_youth_f": {
+   "H_m": 0.2573,
+   "w15": [
+    0.202,
+    0.361,
+    0.453,
+    0.518,
+    0.558,
+    0.581,
+    0.544,
+    0.484,
+    null
+   ],
+   "w30": [
+    0.226,
+    0.442,
+    0.523,
+    0.589,
+    0.652,
+    0.676,
+    0.667,
+    0.599,
+    null
+   ],
+   "wide": [
+    0.226,
+    0.447,
+    0.531,
+    0.597,
+    0.679,
+    0.692,
+    0.667,
+    0.599,
+    null
+   ],
+   "p00": [
+    -0.017,
+    0.005,
+    0.008,
+    0.026,
+    0.015,
+    -0.002,
+    0.005,
+    -0.016,
+    null
+   ],
+   "p08": [
+    -0.051,
+    -0.009,
+    0.003,
+    0.012,
+    -0.006,
+    -0.006,
+    -0.0,
+    -0.023,
+    null
+   ],
+   "p30": [
+    null,
+    null,
+    null,
+    -0.199,
+    -0.137,
+    -0.129,
+    -0.152,
+    -0.202,
+    null
+   ],
+   "eye_z": 0.466,
+   "eye_apart": 0.283,
+   "eye_w": 0.181,
+   "eye_h": 0.142,
+   "socket_brow": 0.051,
+   "socket_cheek": 0.052,
+   "nose_tip_z": 0.3,
+   "nose_out": 0.055,
+   "nose_tip_y": 0.049,
+   "mouth_z": 0.153,
+   "mouth_w": 0.141
+  },
+  "pass2_youth_m": {
+   "H_m": 0.2717,
+   "w15": [
+    0.251,
+    0.401,
+    0.462,
+    0.498,
+    0.533,
+    0.546,
+    0.524,
+    0.467,
+    null
+   ],
+   "w30": [
+    0.263,
+    0.456,
+    0.518,
+    0.557,
+    0.602,
+    0.63,
+    0.625,
+    0.566,
+    null
+   ],
+   "wide": [
+    0.263,
+    0.457,
+    0.521,
+    0.56,
+    0.636,
+    0.653,
+    0.653,
+    0.566,
+    null
+   ],
+   "p00": [
+    -0.008,
+    -0.007,
+    0.01,
+    0.006,
+    0.039,
+    0.0,
+    -0.0,
+    -0.026,
+    null
+   ],
+   "p08": [
+    -0.028,
+    -0.014,
+    0.004,
+    0.005,
+    0.0,
+    -0.016,
+    -0.005,
+    -0.033,
+    null
+   ],
+   "p30": [
+    null,
+    null,
+    null,
+    -0.298,
+    -0.19,
+    -0.159,
+    -0.178,
+    -0.231,
+    null
+   ],
+   "eye_z": 0.508,
+   "eye_apart": 0.264,
+   "eye_w": 0.149,
+   "eye_h": 0.101,
+   "socket_brow": 0.052,
+   "socket_cheek": 0.053,
+   "nose_tip_z": 0.339,
+   "nose_out": 0.07,
+   "nose_tip_y": 0.061,
+   "mouth_z": 0.184,
+   "mouth_w": 0.154
+  },
+  "pass2_child_f": {
+   "H_m": 0.2562,
+   "w15": [
+    0.226,
+    0.406,
+    0.494,
+    0.542,
+    0.575,
+    0.592,
+    0.541,
+    0.506,
+    null
+   ],
+   "w30": [
+    0.254,
+    0.478,
+    0.56,
+    0.612,
+    0.664,
+    0.689,
+    0.674,
+    0.613,
+    null
+   ],
+   "wide": [
+    0.254,
+    0.485,
+    0.568,
+    0.68,
+    0.691,
+    0.707,
+    0.674,
+    0.613,
+    null
+   ],
+   "p00": [
+    -0.028,
+    -0.003,
+    0.01,
+    0.016,
+    0.006,
+    -0.0,
+    0.009,
+    -0.006,
+    null
+   ],
+   "p08": [
+    -0.052,
+    -0.013,
+    0.008,
+    0.013,
+    -0.01,
+    -0.004,
+    0.004,
+    -0.014,
+    null
+   ],
+   "p30": [
+    null,
+    null,
+    -0.268,
+    -0.164,
+    -0.134,
+    -0.121,
+    -0.151,
+    -0.186,
+    null
+   ],
+   "eye_z": 0.443,
+   "eye_apart": 0.286,
+   "eye_w": 0.184,
+   "eye_h": 0.147,
+   "socket_brow": 0.054,
+   "socket_cheek": 0.06,
+   "nose_tip_z": 0.308,
+   "nose_out": 0.032,
+   "nose_tip_y": 0.034,
+   "mouth_z": 0.158,
+   "mouth_w": 0.124
+  },
+  "pass2_child_m": {
+   "H_m": 0.2584,
+   "w15": [
+    0.234,
+    0.413,
+    0.495,
+    0.539,
+    0.567,
+    0.587,
+    0.547,
+    0.506,
+    null
+   ],
+   "w30": [
+    0.261,
+    0.482,
+    0.559,
+    0.609,
+    0.657,
+    0.682,
+    0.668,
+    0.609,
+    null
+   ],
+   "wide": [
+    0.261,
+    0.489,
+    0.567,
+    0.677,
+    0.684,
+    0.701,
+    0.668,
+    0.609,
+    null
+   ],
+   "p00": [
+    -0.025,
+    -0.005,
+    0.009,
+    0.014,
+    0.007,
+    -0.002,
+    0.006,
+    -0.009,
+    null
+   ],
+   "p08": [
+    -0.048,
+    -0.014,
+    0.007,
+    0.013,
+    -0.01,
+    -0.005,
+    0.001,
+    -0.016,
+    null
+   ],
+   "p30": [
+    null,
+    null,
+    -0.274,
+    -0.174,
+    -0.137,
+    -0.123,
+    -0.152,
+    -0.189,
+    null
+   ],
+   "eye_z": 0.448,
+   "eye_apart": 0.283,
+   "eye_w": 0.182,
+   "eye_h": 0.146,
+   "socket_brow": 0.054,
+   "socket_cheek": 0.061,
+   "nose_tip_z": 0.313,
+   "nose_out": 0.033,
+   "nose_tip_y": 0.034,
+   "mouth_z": 0.161,
+   "mouth_w": 0.123
+  }
+ },
+ "types": {
+  "child-u-a": {
+   "id": "child-u-a",
+   "band": "child",
+   "ages": [
+    0,
+    12
+   ],
+   "sex": "either",
+   "line": "a",
+   "name": "round",
+   "head": {
+    "height_m": 0.23,
+    "figure_heads": 5.6
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.273,
+     0.502,
+     0.599,
+     0.609,
+     0.647,
+     0.668,
+     0.672,
+     0.628,
+     0.413
+    ],
+    "w30": [
+     0.276,
+     0.535,
+     0.642,
+     0.676,
+     0.728,
+     0.766,
+     0.782,
+     0.722,
+     0.607
+    ],
+    "wide": [
+     0.276,
+     0.536,
+     0.662,
+     0.774,
+     0.763,
+     0.777,
+     0.795,
+     0.765,
+     0.607
+    ],
+    "p00": [
+     -0.033,
+     0.009,
+     0.053,
+     0.062,
+     -0.007,
+     0.025,
+     0.042,
+     0.031,
+     -0.05
+    ],
+    "p08": [
+     -0.045,
+     -0.006,
+     0.023,
+     0.01,
+     -0.022,
+     0.009,
+     0.022,
+     0.011,
+     -0.075
+    ],
+    "p30": [
+     null,
+     null,
+     -0.148,
+     -0.072,
+     -0.109,
+     -0.073,
+     -0.079,
+     -0.085,
+     -0.204
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.874,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.364,
+    "apart": 0.401,
+    "w": 0.165,
+    "h": 0.136,
+    "tilt_deg": 1.9,
+    "behind_brow": 0.043,
+    "behind_cheek": 0.045,
+    "iris": 0.62,
+    "shape": 0.02,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.109,
+    "thick": 0.0121,
+    "tilt_deg": -0.1,
+    "arch": 0.29,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.263,
+    "out": 0.104,
+    "tip_y": 0.071,
+    "base_z": 0.228,
+    "bridge_z": 0.389,
+    "width": 0.082
+   },
+   "mouth": {
+    "z": 0.147,
+    "w": 0.094,
+    "lips": 0.0276
+   },
+   "jaw": {
+    "angle_z": 0.211,
+    "angle_back": 0.409,
+    "under": 0.063
+   },
+   "ear": {
+    "z": 0.319,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.4,
+    "brow_line": 0.45,
+    "jaw_line": 0.45,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     0.85,
+     1.2,
+     1.43
+    ],
+    "weight": 0.35,
+    "muscle": 0.0,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's child child \u2212 pass 2's adult woman) + 0.8 \u00d7 (sister \u2212 reference)"
+  },
+  "child-u-b": {
+   "id": "child-u-b",
+   "band": "child",
+   "ages": [
+    0,
+    12
+   ],
+   "sex": "either",
+   "line": "b",
+   "name": "even",
+   "head": {
+    "height_m": 0.23,
+    "figure_heads": 5.6
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.217,
+     0.418,
+     0.567,
+     0.608,
+     0.649,
+     0.694,
+     0.638,
+     0.636,
+     0.415
+    ],
+    "w30": [
+     0.22,
+     0.457,
+     0.606,
+     0.669,
+     0.727,
+     0.769,
+     0.781,
+     0.728,
+     0.612
+    ],
+    "wide": [
+     0.22,
+     0.458,
+     0.606,
+     0.776,
+     0.763,
+     0.779,
+     0.8,
+     0.771,
+     0.612
+    ],
+    "p00": [
+     -0.038,
+     0.005,
+     0.051,
+     0.03,
+     -0.008,
+     0.021,
+     0.04,
+     0.031,
+     -0.05
+    ],
+    "p08": [
+     -0.063,
+     -0.011,
+     0.022,
+     0.009,
+     -0.021,
+     0.007,
+     0.02,
+     0.012,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.224,
+     -0.071,
+     -0.111,
+     -0.072,
+     -0.065,
+     -0.084,
+     -0.206
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.874,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.372,
+    "apart": 0.389,
+    "w": 0.159,
+    "h": 0.119,
+    "tilt_deg": 1.9,
+    "behind_brow": 0.043,
+    "behind_cheek": 0.049,
+    "iris": 0.62,
+    "shape": 0.02,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.109,
+    "thick": 0.0121,
+    "tilt_deg": -0.1,
+    "arch": 0.29,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.255,
+    "out": 0.096,
+    "tip_y": 0.067,
+    "base_z": 0.22,
+    "bridge_z": 0.398,
+    "width": 0.082
+   },
+   "mouth": {
+    "z": 0.147,
+    "w": 0.08,
+    "lips": 0.0276
+   },
+   "jaw": {
+    "angle_z": 0.211,
+    "angle_back": 0.409,
+    "under": 0.063
+   },
+   "ear": {
+    "z": 0.328,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.52,
+    "brow_line": 0.45,
+    "jaw_line": 0.57,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     0.87,
+     1.22,
+     1.45
+    ],
+    "weight": 0.0,
+    "muscle": 0.0,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's child child \u2212 pass 2's adult woman)"
+  },
+  "child-u-c": {
+   "id": "child-u-c",
+   "band": "child",
+   "ages": [
+    0,
+    12
+   ],
+   "sex": "either",
+   "line": "c",
+   "name": "long",
+   "head": {
+    "height_m": 0.23,
+    "figure_heads": 5.6
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.178,
+     0.354,
+     0.534,
+     0.608,
+     0.65,
+     0.71,
+     0.617,
+     0.641,
+     0.416
+    ],
+    "w30": [
+     0.181,
+     0.396,
+     0.571,
+     0.664,
+     0.726,
+     0.771,
+     0.78,
+     0.732,
+     0.615
+    ],
+    "wide": [
+     0.181,
+     0.409,
+     0.572,
+     0.777,
+     0.763,
+     0.78,
+     0.803,
+     0.774,
+     0.615
+    ],
+    "p00": [
+     -0.041,
+     0.002,
+     0.049,
+     0.01,
+     -0.009,
+     0.019,
+     0.039,
+     0.03,
+     -0.05
+    ],
+    "p08": [
+     -0.074,
+     -0.014,
+     0.022,
+     0.009,
+     -0.021,
+     0.006,
+     0.019,
+     0.013,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.272,
+     -0.07,
+     -0.112,
+     -0.071,
+     -0.056,
+     -0.084,
+     -0.207
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.874,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.397,
+    "apart": 0.381,
+    "w": 0.155,
+    "h": 0.107,
+    "tilt_deg": 1.9,
+    "behind_brow": 0.043,
+    "behind_cheek": 0.051,
+    "iris": 0.62,
+    "shape": 0.02,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.109,
+    "thick": 0.0121,
+    "tilt_deg": -0.1,
+    "arch": 0.29,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.253,
+    "out": 0.09,
+    "tip_y": 0.065,
+    "base_z": 0.218,
+    "bridge_z": 0.422,
+    "width": 0.082
+   },
+   "mouth": {
+    "z": 0.152,
+    "w": 0.066,
+    "lips": 0.0276
+   },
+   "jaw": {
+    "angle_z": 0.211,
+    "angle_back": 0.409,
+    "under": 0.063
+   },
+   "ear": {
+    "z": 0.352,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.66,
+    "brow_line": 0.45,
+    "jaw_line": 0.71,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     0.9,
+     1.25,
+     1.48
+    ],
+    "weight": -0.3,
+    "muscle": 0.05,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's child child \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  },
+  "youth-f-a": {
+   "id": "youth-f-a",
+   "band": "youth",
+   "ages": [
+    12,
+    18
+   ],
+   "sex": "female",
+   "line": "a",
+   "name": "round",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.245,
+     0.454,
+     0.558,
+     0.587,
+     0.634,
+     0.659,
+     0.672,
+     0.606,
+     0.413
+    ],
+    "w30": [
+     0.245,
+     0.497,
+     0.605,
+     0.654,
+     0.72,
+     0.757,
+     0.778,
+     0.71,
+     0.607
+    ],
+    "wide": [
+     0.245,
+     0.497,
+     0.625,
+     0.692,
+     0.755,
+     0.765,
+     0.791,
+     0.753,
+     0.607
+    ],
+    "p00": [
+     -0.023,
+     0.018,
+     0.051,
+     0.073,
+     0.002,
+     0.024,
+     0.04,
+     0.023,
+     -0.05
+    ],
+    "p08": [
+     -0.046,
+     -0.001,
+     0.019,
+     0.009,
+     -0.018,
+     0.008,
+     0.02,
+     0.003,
+     -0.075
+    ],
+    "p30": [
+     null,
+     null,
+     -0.148,
+     -0.102,
+     -0.11,
+     -0.08,
+     -0.079,
+     -0.1,
+     -0.204
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.385,
+    "apart": 0.399,
+    "w": 0.164,
+    "h": 0.133,
+    "tilt_deg": 2.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.037,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.252,
+    "out": 0.126,
+    "tip_y": 0.086,
+    "base_z": 0.217,
+    "bridge_z": 0.41,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.14,
+    "w": 0.105,
+    "lips": 0.03
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.34,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.6,
+    "brow_line": 0.35,
+    "jaw_line": 0.65,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.48,
+     1.58,
+     1.68
+    ],
+    "weight": 0.3,
+    "muscle": -0.1,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's youth woman \u2212 pass 2's adult woman) + 0.8 \u00d7 (sister \u2212 reference)"
+  },
+  "youth-f-b": {
+   "id": "youth-f-b",
+   "band": "youth",
+   "ages": [
+    12,
+    18
+   ],
+   "sex": "female",
+   "line": "b",
+   "name": "even",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.189,
+     0.37,
+     0.525,
+     0.586,
+     0.636,
+     0.685,
+     0.638,
+     0.614,
+     0.415
+    ],
+    "w30": [
+     0.189,
+     0.419,
+     0.569,
+     0.647,
+     0.718,
+     0.76,
+     0.777,
+     0.716,
+     0.612
+    ],
+    "wide": [
+     0.189,
+     0.419,
+     0.57,
+     0.694,
+     0.755,
+     0.767,
+     0.796,
+     0.759,
+     0.612
+    ],
+    "p00": [
+     -0.028,
+     0.014,
+     0.049,
+     0.041,
+     0.0,
+     0.02,
+     0.038,
+     0.022,
+     -0.05
+    ],
+    "p08": [
+     -0.064,
+     -0.006,
+     0.018,
+     0.008,
+     -0.017,
+     0.006,
+     0.018,
+     0.004,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.224,
+     -0.101,
+     -0.112,
+     -0.079,
+     -0.065,
+     -0.099,
+     -0.206
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.393,
+    "apart": 0.387,
+    "w": 0.157,
+    "h": 0.115,
+    "tilt_deg": 2.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.04,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.244,
+    "out": 0.118,
+    "tip_y": 0.082,
+    "base_z": 0.209,
+    "bridge_z": 0.418,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.14,
+    "w": 0.091,
+    "lips": 0.03
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.348,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.72,
+    "brow_line": 0.35,
+    "jaw_line": 0.77,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.5,
+     1.6,
+     1.7
+    ],
+    "weight": -0.05,
+    "muscle": -0.1,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's youth woman \u2212 pass 2's adult woman)"
+  },
+  "youth-f-c": {
+   "id": "youth-f-c",
+   "band": "youth",
+   "ages": [
+    12,
+    18
+   ],
+   "sex": "female",
+   "line": "c",
+   "name": "long",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.134,
+     0.305,
+     0.492,
+     0.585,
+     0.637,
+     0.701,
+     0.617,
+     0.619,
+     0.416
+    ],
+    "w30": [
+     0.134,
+     0.358,
+     0.534,
+     0.643,
+     0.717,
+     0.762,
+     0.776,
+     0.72,
+     0.615
+    ],
+    "wide": [
+     0.134,
+     0.369,
+     0.535,
+     0.695,
+     0.755,
+     0.768,
+     0.799,
+     0.762,
+     0.615
+    ],
+    "p00": [
+     -0.031,
+     0.011,
+     0.048,
+     0.021,
+     -0.001,
+     0.018,
+     0.037,
+     0.022,
+     -0.05
+    ],
+    "p08": [
+     -0.075,
+     -0.009,
+     0.017,
+     0.007,
+     -0.017,
+     0.005,
+     0.017,
+     0.005,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.272,
+     -0.101,
+     -0.113,
+     -0.079,
+     -0.056,
+     -0.099,
+     -0.207
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.418,
+    "apart": 0.38,
+    "w": 0.153,
+    "h": 0.104,
+    "tilt_deg": 2.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.042,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.242,
+    "out": 0.113,
+    "tip_y": 0.08,
+    "base_z": 0.207,
+    "bridge_z": 0.443,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.145,
+    "w": 0.077,
+    "lips": 0.03
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.373,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.86,
+    "brow_line": 0.35,
+    "jaw_line": 0.91,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.53,
+     1.63,
+     1.73
+    ],
+    "weight": -0.35,
+    "muscle": -0.05,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's youth woman \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  },
+  "youth-m-a": {
+   "id": "youth-m-a",
+   "band": "youth",
+   "ages": [
+    12,
+    18
+   ],
+   "sex": "male",
+   "line": "a",
+   "name": "round",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.294,
+     0.494,
+     0.567,
+     0.567,
+     0.609,
+     0.624,
+     0.652,
+     0.589,
+     0.413
+    ],
+    "w30": [
+     0.294,
+     0.511,
+     0.6,
+     0.622,
+     0.67,
+     0.711,
+     0.736,
+     0.677,
+     0.607
+    ],
+    "wide": [
+     0.294,
+     0.511,
+     0.615,
+     0.655,
+     0.712,
+     0.726,
+     0.777,
+     0.72,
+     0.607
+    ],
+    "p00": [
+     -0.014,
+     0.006,
+     0.053,
+     0.053,
+     0.026,
+     0.026,
+     0.035,
+     0.013,
+     -0.05
+    ],
+    "p08": [
+     -0.023,
+     -0.006,
+     0.02,
+     0.002,
+     -0.012,
+     -0.002,
+     0.015,
+     -0.007,
+     -0.075
+    ],
+    "p30": [
+     null,
+     null,
+     -0.148,
+     -0.201,
+     -0.163,
+     -0.11,
+     -0.105,
+     -0.129,
+     -0.204
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.427,
+    "apart": 0.38,
+    "w": 0.136,
+    "h": 0.099,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.041,
+    "behind_cheek": 0.038,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.017,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.291,
+    "out": 0.141,
+    "tip_y": 0.098,
+    "base_z": 0.256,
+    "bridge_z": 0.452,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.171,
+    "w": 0.114,
+    "lips": 0.022
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.382,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.68,
+    "brow_line": 0.7,
+    "jaw_line": 0.73,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.48,
+     1.64,
+     1.78
+    ],
+    "weight": 0.25,
+    "muscle": 0.0,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's youth man \u2212 pass 2's adult woman) + 0.8 \u00d7 (sister \u2212 reference)"
+  },
+  "youth-m-b": {
+   "id": "youth-m-b",
+   "band": "youth",
+   "ages": [
+    12,
+    18
+   ],
+   "sex": "male",
+   "line": "b",
+   "name": "even",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.238,
+     0.41,
+     0.534,
+     0.566,
+     0.611,
+     0.65,
+     0.618,
+     0.597,
+     0.415
+    ],
+    "w30": [
+     0.238,
+     0.433,
+     0.564,
+     0.615,
+     0.668,
+     0.714,
+     0.735,
+     0.683,
+     0.612
+    ],
+    "wide": [
+     0.238,
+     0.433,
+     0.564,
+     0.657,
+     0.712,
+     0.728,
+     0.782,
+     0.726,
+     0.612
+    ],
+    "p00": [
+     -0.019,
+     0.002,
+     0.051,
+     0.021,
+     0.024,
+     0.022,
+     0.033,
+     0.012,
+     -0.05
+    ],
+    "p08": [
+     -0.041,
+     -0.011,
+     0.019,
+     0.001,
+     -0.011,
+     -0.004,
+     0.013,
+     -0.006,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.224,
+     -0.2,
+     -0.165,
+     -0.109,
+     -0.091,
+     -0.128,
+     -0.206
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.435,
+    "apart": 0.368,
+    "w": 0.129,
+    "h": 0.082,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.041,
+    "behind_cheek": 0.041,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.017,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.283,
+    "out": 0.133,
+    "tip_y": 0.094,
+    "base_z": 0.248,
+    "bridge_z": 0.46,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.171,
+    "w": 0.1,
+    "lips": 0.022
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.39,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.8,
+    "brow_line": 0.7,
+    "jaw_line": 0.85,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.5,
+     1.66,
+     1.8
+    ],
+    "weight": -0.1,
+    "muscle": 0.0,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's youth man \u2212 pass 2's adult woman)"
+  },
+  "youth-m-c": {
+   "id": "youth-m-c",
+   "band": "youth",
+   "ages": [
+    12,
+    18
+   ],
+   "sex": "male",
+   "line": "c",
+   "name": "long",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.238,
+     0.346,
+     0.502,
+     0.565,
+     0.612,
+     0.666,
+     0.597,
+     0.602,
+     0.416
+    ],
+    "w30": [
+     0.238,
+     0.372,
+     0.529,
+     0.611,
+     0.667,
+     0.716,
+     0.734,
+     0.686,
+     0.615
+    ],
+    "wide": [
+     0.238,
+     0.379,
+     0.529,
+     0.658,
+     0.712,
+     0.73,
+     0.785,
+     0.73,
+     0.615
+    ],
+    "p00": [
+     -0.022,
+     -0.0,
+     0.05,
+     0.001,
+     0.023,
+     0.019,
+     0.032,
+     0.012,
+     -0.05
+    ],
+    "p08": [
+     -0.052,
+     -0.014,
+     0.018,
+     0.001,
+     -0.011,
+     -0.005,
+     0.012,
+     -0.006,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.272,
+     -0.2,
+     -0.166,
+     -0.108,
+     -0.082,
+     -0.128,
+     -0.207
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.46,
+    "apart": 0.361,
+    "w": 0.125,
+    "h": 0.074,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.041,
+    "behind_cheek": 0.043,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.017,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.282,
+    "out": 0.128,
+    "tip_y": 0.091,
+    "base_z": 0.247,
+    "bridge_z": 0.485,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.176,
+    "w": 0.086,
+    "lips": 0.022
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.415,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.94,
+    "brow_line": 0.7,
+    "jaw_line": 0.99,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.53,
+     1.69,
+     1.83
+    ],
+    "weight": -0.4,
+    "muscle": 0.05,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's youth man \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  },
+  "adult-f-a": {
+   "id": "adult-f-a",
+   "band": "adult",
+   "ages": [
+    18,
+    60
+   ],
+   "sex": "female",
+   "line": "a",
+   "name": "round",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.243,
+     0.461,
+     0.554,
+     0.587,
+     0.633,
+     0.659,
+     0.673,
+     0.606,
+     0.413
+    ],
+    "w30": [
+     0.243,
+     0.495,
+     0.604,
+     0.653,
+     0.72,
+     0.756,
+     0.778,
+     0.71,
+     0.607
+    ],
+    "wide": [
+     0.243,
+     0.495,
+     0.623,
+     0.691,
+     0.755,
+     0.765,
+     0.791,
+     0.753,
+     0.607
+    ],
+    "p00": [
+     -0.023,
+     0.017,
+     0.052,
+     0.074,
+     0.002,
+     0.024,
+     0.039,
+     0.022,
+     -0.05
+    ],
+    "p08": [
+     -0.046,
+     -0.001,
+     0.02,
+     0.008,
+     -0.018,
+     0.008,
+     0.02,
+     0.002,
+     -0.075
+    ],
+    "p30": [
+     null,
+     null,
+     -0.148,
+     -0.108,
+     -0.11,
+     -0.081,
+     -0.079,
+     -0.1,
+     -0.204
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.386,
+    "apart": 0.399,
+    "w": 0.164,
+    "h": 0.133,
+    "tilt_deg": 2.5,
+    "behind_brow": 0.038,
+    "behind_cheek": 0.036,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.253,
+    "out": 0.127,
+    "tip_y": 0.086,
+    "base_z": 0.218,
+    "bridge_z": 0.411,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.14,
+    "w": 0.106,
+    "lips": 0.03
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.341,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.6,
+    "brow_line": 0.35,
+    "jaw_line": 0.65,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.48,
+     1.62,
+     1.76
+    ],
+    "weight": 0.35,
+    "muscle": -0.1,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's adult woman \u2212 pass 2's adult woman) + 0.8 \u00d7 (sister \u2212 reference)"
+  },
+  "adult-f-b": {
+   "id": "adult-f-b",
+   "band": "adult",
+   "ages": [
+    18,
+    60
+   ],
+   "sex": "female",
+   "line": "b",
+   "name": "even",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.187,
+     0.377,
+     0.521,
+     0.586,
+     0.635,
+     0.685,
+     0.639,
+     0.614,
+     0.415
+    ],
+    "w30": [
+     0.187,
+     0.417,
+     0.568,
+     0.646,
+     0.718,
+     0.759,
+     0.777,
+     0.716,
+     0.612
+    ],
+    "wide": [
+     0.187,
+     0.417,
+     0.568,
+     0.693,
+     0.755,
+     0.767,
+     0.796,
+     0.759,
+     0.612
+    ],
+    "p00": [
+     -0.028,
+     0.013,
+     0.05,
+     0.042,
+     0.0,
+     0.02,
+     0.037,
+     0.021,
+     -0.05
+    ],
+    "p08": [
+     -0.064,
+     -0.006,
+     0.019,
+     0.007,
+     -0.017,
+     0.006,
+     0.018,
+     0.003,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.224,
+     -0.107,
+     -0.112,
+     -0.08,
+     -0.065,
+     -0.099,
+     -0.206
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.394,
+    "apart": 0.387,
+    "w": 0.158,
+    "h": 0.115,
+    "tilt_deg": 2.5,
+    "behind_brow": 0.038,
+    "behind_cheek": 0.039,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.245,
+    "out": 0.119,
+    "tip_y": 0.082,
+    "base_z": 0.21,
+    "bridge_z": 0.419,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.14,
+    "w": 0.092,
+    "lips": 0.03
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.349,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.72,
+    "brow_line": 0.35,
+    "jaw_line": 0.77,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.5,
+     1.64,
+     1.78
+    ],
+    "weight": 0.0,
+    "muscle": -0.1,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's adult woman \u2212 pass 2's adult woman)"
+  },
+  "adult-f-c": {
+   "id": "adult-f-c",
+   "band": "adult",
+   "ages": [
+    18,
+    60
+   ],
+   "sex": "female",
+   "line": "c",
+   "name": "long",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.132,
+     0.312,
+     0.488,
+     0.585,
+     0.636,
+     0.701,
+     0.617,
+     0.619,
+     0.416
+    ],
+    "w30": [
+     0.132,
+     0.356,
+     0.533,
+     0.641,
+     0.717,
+     0.761,
+     0.776,
+     0.72,
+     0.615
+    ],
+    "wide": [
+     0.132,
+     0.368,
+     0.533,
+     0.694,
+     0.755,
+     0.768,
+     0.799,
+     0.762,
+     0.615
+    ],
+    "p00": [
+     -0.031,
+     0.01,
+     0.049,
+     0.022,
+     -0.001,
+     0.018,
+     0.036,
+     0.021,
+     -0.05
+    ],
+    "p08": [
+     -0.075,
+     -0.009,
+     0.018,
+     0.007,
+     -0.017,
+     0.005,
+     0.017,
+     0.004,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.272,
+     -0.106,
+     -0.113,
+     -0.08,
+     -0.056,
+     -0.099,
+     -0.207
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.419,
+    "apart": 0.38,
+    "w": 0.154,
+    "h": 0.104,
+    "tilt_deg": 2.5,
+    "behind_brow": 0.038,
+    "behind_cheek": 0.041,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.243,
+    "out": 0.114,
+    "tip_y": 0.08,
+    "base_z": 0.208,
+    "bridge_z": 0.444,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.145,
+    "w": 0.078,
+    "lips": 0.03
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.374,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.86,
+    "brow_line": 0.35,
+    "jaw_line": 0.91,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.53,
+     1.67,
+     1.81
+    ],
+    "weight": -0.3,
+    "muscle": -0.05,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's adult woman \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  },
+  "adult-m-a": {
+   "id": "adult-m-a",
+   "band": "adult",
+   "ages": [
+    18,
+    60
+   ],
+   "sex": "male",
+   "line": "a",
+   "name": "round",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.293,
+     0.486,
+     0.557,
+     0.554,
+     0.598,
+     0.604,
+     0.641,
+     0.584,
+     0.413
+    ],
+    "w30": [
+     0.293,
+     0.499,
+     0.59,
+     0.611,
+     0.659,
+     0.7,
+     0.728,
+     0.671,
+     0.607
+    ],
+    "wide": [
+     0.293,
+     0.499,
+     0.605,
+     0.645,
+     0.706,
+     0.711,
+     0.767,
+     0.714,
+     0.607
+    ],
+    "p00": [
+     -0.014,
+     0.002,
+     0.046,
+     0.049,
+     0.029,
+     0.026,
+     0.034,
+     0.01,
+     -0.05
+    ],
+    "p08": [
+     -0.022,
+     -0.009,
+     0.013,
+     -0.003,
+     -0.014,
+     -0.006,
+     0.014,
+     -0.011,
+     -0.075
+    ],
+    "p30": [
+     null,
+     null,
+     -0.148,
+     -0.108,
+     -0.173,
+     -0.127,
+     -0.11,
+     -0.135,
+     -0.204
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.437,
+    "apart": 0.377,
+    "w": 0.132,
+    "h": 0.093,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.037,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.017,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.298,
+    "out": 0.146,
+    "tip_y": 0.1,
+    "base_z": 0.263,
+    "bridge_z": 0.462,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.18,
+    "w": 0.116,
+    "lips": 0.022
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.392,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.68,
+    "brow_line": 0.7,
+    "jaw_line": 0.73,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.58,
+     1.75,
+     1.92
+    ],
+    "weight": 0.35,
+    "muscle": 0.15,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's adult man \u2212 pass 2's adult woman) + 0.8 \u00d7 (sister \u2212 reference)"
+  },
+  "adult-m-b": {
+   "id": "adult-m-b",
+   "band": "adult",
+   "ages": [
+    18,
+    60
+   ],
+   "sex": "male",
+   "line": "b",
+   "name": "even",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.237,
+     0.402,
+     0.524,
+     0.553,
+     0.6,
+     0.63,
+     0.607,
+     0.592,
+     0.415
+    ],
+    "w30": [
+     0.237,
+     0.421,
+     0.554,
+     0.604,
+     0.657,
+     0.703,
+     0.727,
+     0.677,
+     0.612
+    ],
+    "wide": [
+     0.237,
+     0.421,
+     0.554,
+     0.647,
+     0.706,
+     0.713,
+     0.772,
+     0.72,
+     0.612
+    ],
+    "p00": [
+     -0.019,
+     -0.002,
+     0.044,
+     0.017,
+     0.027,
+     0.022,
+     0.032,
+     0.009,
+     -0.05
+    ],
+    "p08": [
+     -0.04,
+     -0.014,
+     0.012,
+     -0.004,
+     -0.013,
+     -0.008,
+     0.012,
+     -0.01,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.224,
+     -0.107,
+     -0.175,
+     -0.126,
+     -0.096,
+     -0.134,
+     -0.206
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.445,
+    "apart": 0.365,
+    "w": 0.126,
+    "h": 0.075,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.04,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.017,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.29,
+    "out": 0.138,
+    "tip_y": 0.096,
+    "base_z": 0.255,
+    "bridge_z": 0.47,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.18,
+    "w": 0.102,
+    "lips": 0.022
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.4,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.8,
+    "brow_line": 0.7,
+    "jaw_line": 0.85,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.6,
+     1.77,
+     1.94
+    ],
+    "weight": 0.0,
+    "muscle": 0.15,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's adult man \u2212 pass 2's adult woman)"
+  },
+  "adult-m-c": {
+   "id": "adult-m-c",
+   "band": "adult",
+   "ages": [
+    18,
+    60
+   ],
+   "sex": "male",
+   "line": "c",
+   "name": "long",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.237,
+     0.338,
+     0.492,
+     0.552,
+     0.601,
+     0.646,
+     0.585,
+     0.597,
+     0.416
+    ],
+    "w30": [
+     0.237,
+     0.36,
+     0.519,
+     0.6,
+     0.656,
+     0.705,
+     0.726,
+     0.681,
+     0.615
+    ],
+    "wide": [
+     0.237,
+     0.366,
+     0.519,
+     0.648,
+     0.706,
+     0.715,
+     0.775,
+     0.724,
+     0.615
+    ],
+    "p00": [
+     -0.022,
+     -0.004,
+     0.043,
+     -0.003,
+     0.026,
+     0.019,
+     0.031,
+     0.009,
+     -0.05
+    ],
+    "p08": [
+     -0.051,
+     -0.017,
+     0.011,
+     -0.004,
+     -0.013,
+     -0.009,
+     0.011,
+     -0.009,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.272,
+     -0.106,
+     -0.176,
+     -0.126,
+     -0.087,
+     -0.133,
+     -0.207
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.47,
+    "apart": 0.358,
+    "w": 0.122,
+    "h": 0.068,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.042,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.65,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.017,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.288,
+    "out": 0.133,
+    "tip_y": 0.093,
+    "base_z": 0.253,
+    "bridge_z": 0.495,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.185,
+    "w": 0.088,
+    "lips": 0.022
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.425,
+    "size": 0.235,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.94,
+    "brow_line": 0.7,
+    "jaw_line": 0.99,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.63,
+     1.8,
+     1.97
+    ],
+    "weight": -0.3,
+    "muscle": 0.2,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's adult man \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  },
+  "elder-f-a": {
+   "id": "elder-f-a",
+   "band": "elder",
+   "ages": [
+    60,
+    99
+   ],
+   "sex": "female",
+   "line": "a",
+   "name": "round",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.26,
+     0.468,
+     0.554,
+     0.576,
+     0.63,
+     0.642,
+     0.664,
+     0.603,
+     0.413
+    ],
+    "w30": [
+     0.26,
+     0.503,
+     0.602,
+     0.642,
+     0.707,
+     0.744,
+     0.768,
+     0.703,
+     0.607
+    ],
+    "wide": [
+     0.26,
+     0.503,
+     0.622,
+     0.76,
+     0.744,
+     0.752,
+     0.813,
+     0.746,
+     0.607
+    ],
+    "p00": [
+     -0.026,
+     0.013,
+     0.049,
+     0.076,
+     0.005,
+     0.024,
+     0.039,
+     0.023,
+     -0.05
+    ],
+    "p08": [
+     -0.043,
+     -0.003,
+     0.016,
+     0.007,
+     -0.018,
+     0.006,
+     0.019,
+     0.002,
+     -0.075
+    ],
+    "p30": [
+     null,
+     null,
+     -0.148,
+     -0.128,
+     -0.118,
+     -0.088,
+     -0.089,
+     -0.103,
+     -0.204
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.394,
+    "apart": 0.395,
+    "w": 0.154,
+    "h": 0.115,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.039,
+    "behind_cheek": 0.032,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.95,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.242,
+    "out": 0.137,
+    "tip_y": 0.089,
+    "base_z": 0.207,
+    "bridge_z": 0.419,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.141,
+    "w": 0.106,
+    "lips": 0.0255
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.349,
+    "size": 0.254,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.65,
+    "brow_line": 0.35,
+    "jaw_line": 0.7,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.46,
+     1.59,
+     1.72
+    ],
+    "weight": 0.45,
+    "muscle": -0.2,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's elder woman \u2212 pass 2's adult woman) + 0.8 \u00d7 (sister \u2212 reference)"
+  },
+  "elder-f-b": {
+   "id": "elder-f-b",
+   "band": "elder",
+   "ages": [
+    60,
+    99
+   ],
+   "sex": "female",
+   "line": "b",
+   "name": "even",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.204,
+     0.384,
+     0.521,
+     0.575,
+     0.632,
+     0.668,
+     0.63,
+     0.611,
+     0.415
+    ],
+    "w30": [
+     0.204,
+     0.425,
+     0.566,
+     0.635,
+     0.705,
+     0.747,
+     0.767,
+     0.709,
+     0.612
+    ],
+    "wide": [
+     0.204,
+     0.425,
+     0.567,
+     0.762,
+     0.744,
+     0.754,
+     0.818,
+     0.752,
+     0.612
+    ],
+    "p00": [
+     -0.031,
+     0.009,
+     0.047,
+     0.044,
+     0.003,
+     0.02,
+     0.037,
+     0.022,
+     -0.05
+    ],
+    "p08": [
+     -0.061,
+     -0.008,
+     0.015,
+     0.006,
+     -0.017,
+     0.004,
+     0.017,
+     0.003,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.224,
+     -0.127,
+     -0.12,
+     -0.087,
+     -0.075,
+     -0.102,
+     -0.206
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.402,
+    "apart": 0.383,
+    "w": 0.148,
+    "h": 0.097,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.039,
+    "behind_cheek": 0.035,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.95,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.234,
+    "out": 0.129,
+    "tip_y": 0.085,
+    "base_z": 0.199,
+    "bridge_z": 0.427,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.141,
+    "w": 0.092,
+    "lips": 0.0255
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.357,
+    "size": 0.254,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.77,
+    "brow_line": 0.35,
+    "jaw_line": 0.82,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.48,
+     1.61,
+     1.74
+    ],
+    "weight": 0.1,
+    "muscle": -0.2,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's elder woman \u2212 pass 2's adult woman)"
+  },
+  "elder-f-c": {
+   "id": "elder-f-c",
+   "band": "elder",
+   "ages": [
+    60,
+    99
+   ],
+   "sex": "female",
+   "line": "c",
+   "name": "long",
+   "head": {
+    "height_m": 0.233,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.149,
+     0.32,
+     0.488,
+     0.575,
+     0.633,
+     0.684,
+     0.609,
+     0.616,
+     0.416
+    ],
+    "w30": [
+     0.149,
+     0.364,
+     0.531,
+     0.631,
+     0.704,
+     0.749,
+     0.766,
+     0.712,
+     0.615
+    ],
+    "wide": [
+     0.149,
+     0.375,
+     0.532,
+     0.763,
+     0.744,
+     0.756,
+     0.821,
+     0.756,
+     0.615
+    ],
+    "p00": [
+     -0.034,
+     0.006,
+     0.045,
+     0.024,
+     0.002,
+     0.018,
+     0.036,
+     0.022,
+     -0.05
+    ],
+    "p08": [
+     -0.072,
+     -0.011,
+     0.014,
+     0.006,
+     -0.017,
+     0.003,
+     0.016,
+     0.004,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.272,
+     -0.127,
+     -0.121,
+     -0.087,
+     -0.066,
+     -0.101,
+     -0.207
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.86,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.426,
+    "apart": 0.376,
+    "w": 0.144,
+    "h": 0.087,
+    "tilt_deg": 0.5,
+    "behind_brow": 0.039,
+    "behind_cheek": 0.037,
+    "iris": 0.62,
+    "shape": 0.05,
+    "fold": 0.95,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.105,
+    "thick": 0.01,
+    "tilt_deg": -1.0,
+    "arch": 0.35,
+    "ridge": 0.0
+   },
+   "nose": {
+    "tip_z": 0.232,
+    "out": 0.124,
+    "tip_y": 0.082,
+    "base_z": 0.197,
+    "bridge_z": 0.452,
+    "width": 0.085
+   },
+   "mouth": {
+    "z": 0.146,
+    "w": 0.078,
+    "lips": 0.0255
+   },
+   "jaw": {
+    "angle_z": 0.2,
+    "angle_back": 0.4,
+    "under": 0.06
+   },
+   "ear": {
+    "z": 0.382,
+    "size": 0.254,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.91,
+    "brow_line": 0.35,
+    "jaw_line": 0.96,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.51,
+     1.64,
+     1.77
+    ],
+    "weight": -0.2,
+    "muscle": -0.15,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's elder woman \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  },
+  "elder-m-a": {
+   "id": "elder-m-a",
+   "band": "elder",
+   "ages": [
+    60,
+    99
+   ],
+   "sex": "male",
+   "line": "a",
+   "name": "round",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.303,
+     0.498,
+     0.558,
+     0.551,
+     0.588,
+     0.596,
+     0.642,
+     0.578,
+     0.413
+    ],
+    "w30": [
+     0.303,
+     0.514,
+     0.595,
+     0.609,
+     0.65,
+     0.69,
+     0.727,
+     0.666,
+     0.607
+    ],
+    "wide": [
+     0.303,
+     0.514,
+     0.61,
+     0.643,
+     0.697,
+     0.7,
+     0.759,
+     0.709,
+     0.607
+    ],
+    "p00": [
+     -0.017,
+     -0.001,
+     0.042,
+     0.046,
+     0.031,
+     0.026,
+     0.035,
+     0.008,
+     -0.05
+    ],
+    "p08": [
+     -0.024,
+     -0.01,
+     0.011,
+     -0.007,
+     -0.016,
+     -0.008,
+     0.015,
+     -0.013,
+     -0.075
+    ],
+    "p30": [
+     null,
+     null,
+     -0.148,
+     -0.108,
+     -0.197,
+     -0.138,
+     -0.119,
+     -0.1,
+     -0.204
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.443,
+    "apart": 0.375,
+    "w": 0.125,
+    "h": 0.081,
+    "tilt_deg": -1.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.033,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.95,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.0196,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.284,
+    "out": 0.161,
+    "tip_y": 0.105,
+    "base_z": 0.249,
+    "bridge_z": 0.468,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.177,
+    "w": 0.116,
+    "lips": 0.0187
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.398,
+    "size": 0.254,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.73,
+    "brow_line": 0.7,
+    "jaw_line": 0.78,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.56,
+     1.72,
+     1.88
+    ],
+    "weight": 0.45,
+    "muscle": 0.0,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's elder man \u2212 pass 2's adult woman) + 0.8 \u00d7 (sister \u2212 reference)"
+  },
+  "elder-m-b": {
+   "id": "elder-m-b",
+   "band": "elder",
+   "ages": [
+    60,
+    99
+   ],
+   "sex": "male",
+   "line": "b",
+   "name": "even",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.247,
+     0.414,
+     0.525,
+     0.55,
+     0.59,
+     0.622,
+     0.608,
+     0.586,
+     0.415
+    ],
+    "w30": [
+     0.247,
+     0.436,
+     0.559,
+     0.602,
+     0.648,
+     0.693,
+     0.726,
+     0.672,
+     0.612
+    ],
+    "wide": [
+     0.247,
+     0.436,
+     0.559,
+     0.645,
+     0.697,
+     0.702,
+     0.764,
+     0.715,
+     0.612
+    ],
+    "p00": [
+     -0.022,
+     -0.005,
+     0.04,
+     0.014,
+     0.029,
+     0.022,
+     0.033,
+     0.007,
+     -0.05
+    ],
+    "p08": [
+     -0.042,
+     -0.015,
+     0.01,
+     -0.008,
+     -0.015,
+     -0.01,
+     0.013,
+     -0.012,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.224,
+     -0.107,
+     -0.199,
+     -0.137,
+     -0.105,
+     -0.099,
+     -0.206
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.451,
+    "apart": 0.363,
+    "w": 0.119,
+    "h": 0.063,
+    "tilt_deg": -1.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.036,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.95,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.0196,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.276,
+    "out": 0.153,
+    "tip_y": 0.101,
+    "base_z": 0.241,
+    "bridge_z": 0.476,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.177,
+    "w": 0.102,
+    "lips": 0.0187
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.406,
+    "size": 0.254,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.85,
+    "brow_line": 0.7,
+    "jaw_line": 0.9,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.58,
+     1.74,
+     1.9
+    ],
+    "weight": 0.1,
+    "muscle": 0.0,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's elder man \u2212 pass 2's adult woman)"
+  },
+  "elder-m-c": {
+   "id": "elder-m-c",
+   "band": "elder",
+   "ages": [
+    60,
+    99
+   ],
+   "sex": "male",
+   "line": "c",
+   "name": "long",
+   "head": {
+    "height_m": 0.245,
+    "figure_heads": 7.0
+   },
+   "sections": {
+    "z": [
+     0.04,
+     0.12,
+     0.2,
+     0.28,
+     0.4,
+     0.52,
+     0.64,
+     0.76,
+     0.88
+    ],
+    "w15": [
+     0.247,
+     0.35,
+     0.492,
+     0.549,
+     0.591,
+     0.638,
+     0.587,
+     0.591,
+     0.416
+    ],
+    "w30": [
+     0.247,
+     0.375,
+     0.524,
+     0.598,
+     0.647,
+     0.695,
+     0.726,
+     0.675,
+     0.615
+    ],
+    "wide": [
+     0.247,
+     0.381,
+     0.524,
+     0.646,
+     0.697,
+     0.704,
+     0.767,
+     0.719,
+     0.615
+    ],
+    "p00": [
+     -0.025,
+     -0.008,
+     0.039,
+     -0.006,
+     0.028,
+     0.019,
+     0.032,
+     0.007,
+     -0.05
+    ],
+    "p08": [
+     -0.053,
+     -0.018,
+     0.009,
+     -0.009,
+     -0.015,
+     -0.011,
+     0.012,
+     -0.011,
+     -0.076
+    ],
+    "p30": [
+     null,
+     null,
+     -0.272,
+     -0.106,
+     -0.2,
+     -0.137,
+     -0.096,
+     -0.099,
+     -0.207
+    ]
+   },
+   "skull": {
+    "crown": 1.0,
+    "depth": 0.84,
+    "back_z": 0.58
+   },
+   "eye": {
+    "z": 0.476,
+    "apart": 0.356,
+    "w": 0.115,
+    "h": 0.057,
+    "tilt_deg": -1.5,
+    "behind_brow": 0.04,
+    "behind_cheek": 0.038,
+    "iris": 0.62,
+    "shape": -0.05,
+    "fold": 0.95,
+    "iris_behind_lid": 0.017,
+    "white_depth": 0.064
+   },
+   "brow": {
+    "above_eye": 0.085,
+    "thick": 0.0196,
+    "tilt_deg": 2.0,
+    "arch": 0.15,
+    "ridge": 0.008
+   },
+   "nose": {
+    "tip_z": 0.275,
+    "out": 0.148,
+    "tip_y": 0.099,
+    "base_z": 0.24,
+    "bridge_z": 0.501,
+    "width": 0.105
+   },
+   "mouth": {
+    "z": 0.182,
+    "w": 0.088,
+    "lips": 0.0187
+   },
+   "jaw": {
+    "angle_z": 0.17,
+    "angle_back": 0.43,
+    "under": 0.07
+   },
+   "ear": {
+    "z": 0.431,
+    "size": 0.254,
+    "out_deg": 22,
+    "back": 0.5
+   },
+   "planes": {
+    "cheek_corner": 0.99,
+    "brow_line": 0.7,
+    "jaw_line": 1.0,
+    "under_jaw": 0.8
+   },
+   "body": {
+    "height_m": [
+     1.61,
+     1.77,
+     1.93
+    ],
+    "weight": -0.2,
+    "muscle": 0.05,
+    "head_power": 0.6
+   },
+   "made_from": "reference + (pass 2's elder man \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  }
+ }
+}

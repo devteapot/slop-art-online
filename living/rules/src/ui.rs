@@ -448,8 +448,11 @@ pub fn on_by_spec(src: &Source) -> Vec<On> {
         return on;
     }
     if spec.needs_target {
-        on.push(On::Person);
-        if src.checked {
+        // A spec's `target_class` says what it may be aimed at.
+        if spec.takes_class("creature") {
+            on.push(On::Person);
+        }
+        if src.checked && spec.takes_things() {
             on.push(On::Thing);
         }
     } else {
@@ -723,6 +726,13 @@ pub fn offered<'a>(skills: &'a Skills, body: Option<&crate::species::Species>) -
             Some(sp) => sp.allows(&s.name) && (sp.skills.is_some() || s.listed) && (s.name != "signal" || !sp.signals.is_empty()),
         })
         .collect()
+}
+
+/// What is offered toward a target of `class` (one of `catalog::TARGET_CLASSES`): the skills
+/// `offered` gives the body that take a target of that class (a spec's `target_class`, any when
+/// it names none). The same filter for players' lists and any reader that knows what it aims at.
+pub fn offered_toward<'a>(skills: &'a Skills, body: Option<&crate::species::Species>, class: &str) -> Vec<&'a SkillSpec> {
+    offered(skills, body).into_iter().filter(|s| s.takes_class(class)).collect()
 }
 
 /// Whether a skill is ongoing or real-time behaviour (it belongs in a graph or on the bar, not

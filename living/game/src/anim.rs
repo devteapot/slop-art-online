@@ -103,6 +103,15 @@ pub struct Motion {
     /// How far the upper body turns from the legs toward where the body looks (radians, sim
     /// sense: counter-clockwise seen from above is positive), spread over the spine (`twist.rs`).
     pub twist: f32,
+    /// The part of [`Motion::twist`] the neck and head take (head first, `twist::LookWalk`); the
+    /// spine and chest take the rest.
+    pub neck: f32,
+    /// How far the eyes turn beyond the head (radians, sim sense), where the file has eye bones.
+    pub eyes: f32,
+    /// Looking at something: the neck and head hold the look ([`Motion::neck`] from the chest)
+    /// instead of adding it to the clip's own turn of the head (a diagonal take's head turns
+    /// about 30° by itself).
+    pub aim: bool,
     /// How much faster than its own pace the ground makes the body go (the rules' road speed on
     /// a road; 1 elsewhere). The gait is chosen at `speed / pace`, so a walk on a road stays a
     /// walk, and steps at the body's real speed, so its feet stay planted.
@@ -118,7 +127,7 @@ pub struct Motion {
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0, freeze: false, travel: 0.0 }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, neck: 0.0, eyes: 0.0, aim: false, pace: 1.0, freeze: false, travel: 0.0 }
     }
 }
 

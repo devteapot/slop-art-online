@@ -2411,6 +2411,63 @@ mod tests {
         assert!(e.contains("which is no household") && e.contains("the households are none"), "{e}");
     }
 
+    /// Every tracked seed with its own laws (`laws_file`) has them in force once its world is
+    /// created, by the path `init` takes: the overlay read in as `build.rs` reads it,
+    /// `floor::check` composing and validating it, `floor::begin` writing the `script` row
+    /// (`installed_source`, for the install and again for the seed's `rules`), and every cache
+    /// compiling that row on the world's day (`common::scripts`), whose `life_years` the tick's
+    /// deaths of old age read (`common::life_of`). The seed's people are seeded at their own
+    /// ages, short of old age under those laws. Cullet's people die of old age from 75 of 90, so
+    /// its eldest (Halvard Dunmore, 70) live; under the shipped tables (from 60.9) they died 6 s
+    /// after creation when a harness installed the plain script over the world's (fix-laws).
+    #[test]
+    fn a_seeds_laws_are_in_force_after_init() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../seeds");
+        let bits = |l: living_rules::life::Life| [l.years, l.infant, l.child, l.elder, l.old_age, l.gestation, l.interbirth].map(f32::to_bits);
+        let mut with_laws = Vec::new();
+        let mut paths: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+        paths.sort();
+        for path in paths {
+            let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&path).unwrap()) else { continue };
+            let Some(file) = v.get("laws_file").and_then(|f| f.as_str()).map(String::from) else { continue };
+            let name = path.file_stem().unwrap().to_string_lossy().to_string();
+            if v.get("laws").and_then(|l| l.as_str()).is_none_or(|l| l.trim().is_empty()) {
+                v["laws"] = std::fs::read_to_string(dir.join(&file)).unwrap().into();
+            }
+            let s: Seed = serde_json::from_value(v).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let composed = crate::floor::check(&s).unwrap_or_else(|e| panic!("{name}: {e}")).unwrap_or_else(|| panic!("{name}: its laws are not composed"));
+            let rules: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let row = crate::installed_source(&crate::installed_source(&composed, &rules), &rules);
+            assert!(row.contains("// ---- floor overlay ----") && row.contains(s.laws.trim()), "{name}: the installed script lost its overlay");
+            let day_ms = s.day_ms().unwrap();
+            let sc = living_rules::script::Scripts::with_day(&row, day_ms).unwrap_or_else(|e| panic!("{name}: {e}"));
+            // Each of its functions replaces the shipped one of that name (kept as `base_NAME`).
+            let defines = |src: &str, f: &str| src.lines().any(|l| l.trim_start().trim_start_matches("private ").starts_with(&format!("fn {f}(")));
+            for f in living_rules::floors::overlay_functions(&s.laws).unwrap() {
+                if defines(SKILLS, &f) {
+                    assert!(defines(&row, &format!("base_{f}")), "{name}: `{f}` of its laws does not replace the shipped one");
+                }
+            }
+            let pace = living_rules::life::Pace { year_days: s.year_days as f32, pace: s.life_pace };
+            let life = sc.life("person", common::species_life("person"));
+            if sc.has("life_years") {
+                assert_ne!(bits(life), bits(common::species_life("person")), "{name}: its `life_years` does not reach the life tables");
+            }
+            for r in s.towns.iter().chain(s.villages.iter()).flat_map(|t| t.residents.iter()) {
+                let days = life.seeded_age(r.age, pace);
+                assert_eq!(days, living_rules::life::days_of_years(r.age, pace), "{name}: {} ({} years) is past old age under its laws", r.name, r.age);
+                assert!(life.fraction(days, pace) < life.old_age, "{name}: {} would die of old age at creation", r.name);
+            }
+            with_laws.push((name, life, pace, s));
+        }
+        let (_, life, pace, s) = with_laws.iter().find(|(n, ..)| n == "cullet").expect("cullet has its own laws");
+        assert!((life.years * life.old_age - 75.0).abs() < 1e-3 && (life.years - 90.0).abs() < 1e-3, "Cullet's old age: {life:?}");
+        let halvard = s.towns.iter().flat_map(|t| t.residents.iter()).find(|r| r.name == "Halvard Dunmore").unwrap();
+        assert!(halvard.age >= 70.0);
+        let shipped = common::species_life("person");
+        assert!(shipped.fraction(living_rules::life::days_of_years(halvard.age, *pace), *pace) >= shipped.old_age, "the shipped tables would let him live: the test no longer tells them apart");
+    }
+
     #[test]
     fn older_seeds_still_parse() {
         for (name, text) in [

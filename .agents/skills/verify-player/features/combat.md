@@ -47,3 +47,5 @@ $V cleanup --run $R
 - SQL returns `Ready` rows positionally: `[skill, from_ms, at_ms]`.
 - Presentation codes are `skill_card.code`, kept stable across script installs by the authority's private `skill_code` table; they are the world's codes, so read them from `skill_card`, never hard-code a number.
 - How `use_skill` aims a skill comes from its script shape (`aim`: creature, self_or_ally, point, facing, dash), not its name; the refusal text "no one there to <skill>" names the skill.
+
+Since 2026-11-11 (branch `rules-senses-outcomes`) the death scene also checks the death in codes: the player's `my_act_outcomes` has a `death` row with code `killed` (or `killed_yielding`) and the killer's id in `other`, and its line in `my_experience` reads "You were killed by …", the killer as the dead knew them ([outcomes.md](outcomes.md)).

@@ -192,7 +192,7 @@ Branch `eye-2`. By drop-1's height rule a thing hid throughout when its model's 
 
 **The measure** (`living/tools/blender/buildings.py`, `eye_cells`). At generation time each model is cut at four heights in 1.2–1.8 m above its floor (`EYE_BAND_M`). Each cut's outline is drawn on a fine grid (5 cm for a model up to 20 m across, coarser for bigger ones). What the outline encloses counts as solid: a post, a barrel, a room behind its door leaf and window panes. Gaps up to 0.6 m (seams; scaled with the inhabitants) are closed to find rooms, while a stall's open side or the space between a well's posts stays open. Per 0.5 m square of the footprint (`EYE_CELL_M`, finer than a tile, so each square lands on one tile whatever the lot's position and facing), the square's level is the larger blocked share of its view, looking along the model's X or along its Y. A thin wall across the square blocks all of one view; a 0.18 m post about 40% of both.
 
-**The table.** `data/buildings.json` gains two fields per model, written by the generators' `--table` step (`gen_buildings.sh`, `gen_city.sh`):
+**The table.** `data/buildings.json` gains two fields per model, written by the generators' `--table` step (`gen_buildings.sh`, `gen_city.sh`; Cullet's lots since kit-2 by `gen_cullet.sh`, which measures each lot's model with `eye_record`, writes the same sidecars and replaces only the `cullet` style's entries, [Cullet's kit](CULLET_KIT.md#sight-from-model-data)):
 - `eye_solid`: the share of the footprint's area that is solid in the band.
 - `eye_cells`: the squares as columns, a colon, then runs of a count and a level, `a` (none) to `k` (all), meaning at least that many tenths blocked. Rows run from the front row (glTF +Z), and column 0 is at the model's -X. The fantasy well-05 is `6:12a1e1h2f1h1e12a`: one row of squares across its middle (posts and windlass) at 40–70%, the rest open.
 
@@ -206,6 +206,8 @@ The table step measures any model whose sidecar lacks the fields from its file (
 | Its model rises no higher than `eye_m` | All `Low` |
 | Its model is measured, and `eye_m` lies in the band | `Wall` where a square of the model with a level of at least `solid` lands (the square's centre, placed as the client places the model: +X along `(front.1, -front.0)`), `Low` elsewhere |
 | No model, or not measured | All `Wall` |
+
+Since `layout-2` a plan's blocking fixtures (walls, fences: [authored plans](AUTHORED_PLANS.md#fixtures-that-block)) are hosted by the same rule with the plan's own numbers, since a fixture has no model in the table: `Low` when its `height_m` is no higher than the eye, or when it rises above it with an `eye_solid` under `solid`; `Wall` otherwise; `hides_m` by its `kind` first (`host::fixture_hides`).
 
 Each kind's model is the default; there is no list of kinds in the code. A drop under a square that does not hide stays `Drop`. The rule is land data, like drop-1's, for the same reason: the client hosts the same land for its own sight test.
 

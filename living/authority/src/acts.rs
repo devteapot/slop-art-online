@@ -6,6 +6,8 @@
 //! success or failure with the reason, comes back to the actor as an experience.
 
 use crate::act::{self, ACT};
+use crate::outcomes::{self, Told};
+use living_rules::outcome::{act as code, kind};
 use crate::perceive::{self, percept};
 use crate::tables::*;
 use crate::{brain, common};
@@ -13,10 +15,13 @@ use living_rules::acts as rules;
 use living_rules::graph;
 use spacetimedb::{ReducerContext, Table};
 
-fn feedback(ctx: &ReducerContext, actor: u32, now: u64, text: String, salience: f32, think: bool) {
+/// Tell the actor how an act went (an `act` line), with its outcome row for a person's client.
+fn feedback(ctx: &ReducerContext, actor: u32, now: u64, text: String, salience: f32, think: bool, told: Told) {
     let Some(c) = ctx.db.character().id().find(actor) else { return };
     let at = ctx.db.body().id().find(actor).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
-    percept(ctx, &c, now, "act", actor, 0, at, text.clone(), salience);
+    if let Some(line) = percept(ctx, &c, now, "act", actor, 0, at, text.clone(), salience) {
+        outcomes::write(ctx, actor, line, now, &told, false);
+    }
     if think {
         perceive::request_deliberation(ctx, actor, &text, now);
     }
@@ -39,13 +44,18 @@ pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, r
         let a = match parsed {
             Ok(a) => a,
             Err(why) => {
-                feedback(ctx, actor, now, format!("You could not act on what you decided ({}): {why}", raw.chars().take(120).collect::<String>()), 0.4, false);
+                let what: String = raw.chars().take(120).collect();
+                let skill = serde_json::from_str::<serde_json::Value>(raw).ok().and_then(|v| v["do"].as_str().or_else(|| v["do"]["skill"].as_str()).or_else(|| v["skill"].as_str()).map(String::from)).unwrap_or_default();
+                let told = Told { kind: kind::ACT, ok: false, skill: &skill, code: code::UNREADABLE, what: &what, why: &why, other: 0 };
+                feedback(ctx, actor, now, format!("You could not act on what you decided ({what}): {why}"), 0.4, false, told);
                 notes.push(format!("rejected: {why}"));
                 continue;
             }
         };
         if ctx.db.act_queue().actor().filter(actor).count() >= rules::MAX_QUEUED {
-            feedback(ctx, actor, now, format!("You have too much in mind already to also {}.", graph::describe(&graph::Node::Do(a.clone()))), 0.3, false);
+            let what = graph::describe(&graph::Node::Do(a.clone()));
+            let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: code::BUSY, what: &what, why: "too much in mind already", other: 0 };
+            feedback(ctx, actor, now, format!("You have too much in mind already to also {what}."), 0.3, false, told);
             notes.push("queue full".into());
             continue;
         }
@@ -71,14 +81,17 @@ pub fn next(ctx: &ReducerContext, actor: u32, now: u64) {
         let Ok(a) = rules::from_json(&p.node) else { continue };
         let what = graph::describe(&graph::Node::Do(a.clone()));
         if now.saturating_sub(p.at_ms) > rules::QUEUE_MS {
-            feedback(ctx, actor, now, format!("You never got to {what}; the moment passed."), 0.3, false);
+            let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: code::EXPIRED, what: &what, why: "the moment passed", other: 0 };
+            feedback(ctx, actor, now, format!("You never got to {what}; the moment passed."), 0.3, false, told);
             continue;
         }
         let target = match &a.target {
             Some(t) => match brain::resolve_for(ctx, actor, t, now) {
                 Some(r) => r,
                 None => {
-                    feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: no {} in sight.", graph::describe_target(t)), 0.5, true);
+                    let why = format!("no {} in sight", graph::describe_target(t));
+                    let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: code::UNSEEN, what: &what, why: &why, other: 0 };
+                    feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, true, told);
                     continue;
                 }
             },
@@ -91,20 +104,25 @@ pub fn next(ctx: &ReducerContext, actor: u32, now: u64) {
                 common::wake(ctx, actor);
                 return;
             }
-            Err(why) => feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, true),
+            Err(why) => {
+                let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: act::refusal(), what: &what, why: &why, other: 0 };
+                feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, true, told)
+            }
         }
     }
 }
 
-/// How an act went, told to the actor (called when an `ACT` activity ends).
-pub fn outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64) {
+/// How an act went, told to the actor (called when an `ACT` activity ends); `code` says at
+/// which point it was decided (`living_rules::outcome::act`).
+pub fn outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64, code: &'static str) {
     let text = if ok {
         let why = why.trim();
         format!("You did what you had decided: {}{}", a.label, if why.is_empty() { ".".to_string() } else { format!(" ({why}).") })
     } else {
         format!("What you had decided did not work out: {}: {why}.", a.label)
     };
-    feedback(ctx, a.id, now, text, if ok { 0.35 } else { 0.55 }, !ok);
+    let told = Told { kind: kind::ACT, ok, skill: &a.skill, code, what: &a.label, why: if ok { "" } else { why }, other: 0 };
+    feedback(ctx, a.id, now, text, if ok { 0.35 } else { 0.55 }, !ok, told);
 }
 
 /// A reflex takes the body back: the act in progress stops, and what was waiting is dropped
@@ -115,7 +133,9 @@ pub fn interrupt(ctx: &ReducerContext, a: Activity, reflex: &str, now: u64) {
     ctx.db.act_queue().actor().delete(id);
     act::cancel(ctx, a, now, Some(&format!("you broke off to {reflex}")));
     if !dropped.is_empty() {
-        feedback(ctx, id, now, format!("You set aside what you still meant to do: {}.", dropped.join("; ")), 0.3, false);
+        let what = dropped.join("; ");
+        let told = Told { kind: kind::ACT, ok: false, skill: "", code: code::SET_ASIDE, what: &what, why: reflex, other: 0 };
+        feedback(ctx, id, now, format!("You set aside what you still meant to do: {what}."), 0.3, false, told);
     }
 }
 

@@ -77,18 +77,22 @@ PRIVATE = ['clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberat
            # world law on a running world (`set_world_law`).
            'heard', 'hear_salt', 'law_change',
            # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
-           'line_heard']
+           'line_heard',
+           # What each player's character senses (the `senses` law), read through my_senses.
+           'character_senses',
+           # How each player's acts and death came out, in codes; read through my_act_outcomes.
+           'act_outcome']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_act_outcomes']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_act_outcomes']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -664,7 +668,11 @@ class Run:
                     # Offers to or from my character; incoming exactly when addressed to me.
                     and all((o['to'] in mine) == o['incoming'] and (o['from'] in mine or o['to'] in mine) for o in p['my_offers'])
                     # Who heard my lines: only my own lines (docs/COMMUNICATION.md §6).
-                    and {h['speaker'] for h in p['my_heard']} <= mine)
+                    and {h['speaker'] for h in p['my_heard']} <= mine
+                    # My senses: exactly one row, my character's, with the law's sight and hearing.
+                    and [s['id'] for s in p['my_senses']] == sorted(mine) and all(s['sight'] > 0 and s['hearing'] > 0 for s in p['my_senses'])
+                    # My outcomes: only my character's, each keyed by a line of my_experience.
+                    and {o['observer'] for o in p['my_act_outcomes']} <= mine)
         anonymous = own['anonymous']['final']['perception']
         spoke = {l: v['final']['perception']['my_heard'] for l, v in own.items() if l != 'anonymous'}
         # Breath and focus (docs/STAMINA.md): each player's own row carries the pools, rested

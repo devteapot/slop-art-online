@@ -867,6 +867,30 @@
         ],
         [
          55,
+         126.0
+        ],
+        [
+         41.0,
+         126.0
+        ],
+        [
+         41.0,
+         134
+        ],
+        [
+         26.0,
+         134
+        ],
+        [
+         26.0,
+         140.0
+        ],
+        [
+         8.0,
+         140.0
+        ],
+        [
+         8.0,
          134
         ],
         [
@@ -874,7 +898,7 @@
          134
         ]
        ],
-       "note": "the upper terrace: the Ladder's seventh, and the old quarry's bench below the Crown"
+       "note": "the upper terrace: the Ladder's seventh, and the old quarry's bench below the Crown, with the bay it cut into the Crown"
       },
       {
        "id": "crown",
@@ -885,8 +909,40 @@
          134
         ],
         [
+         8.0,
+         134
+        ],
+        [
+         8.0,
+         140.0
+        ],
+        [
+         26.0,
+         140.0
+        ],
+        [
+         26.0,
+         134
+        ],
+        [
          55,
          134
+        ],
+        [
+         55,
+         143.0
+        ],
+        [
+         30.0,
+         143.0
+        ],
+        [
+         30.0,
+         157.5
+        ],
+        [
+         55,
+         157.5
         ],
         [
          55,
@@ -905,7 +961,76 @@
          146.0
         ]
        ],
-       "note": "the Crown, and a ledge over the Ladder's top wall"
+       "note": "the Crown, and a ledge over the Ladder's top wall; the quarry's bay and the graveyard's upper terraces are cut out of it"
+      },
+      {
+       "id": "clay_pit",
+       "height_m": 16.3,
+       "area": [
+        [
+         41.0,
+         126.0
+        ],
+        [
+         55.0,
+         126.0
+        ],
+        [
+         55.0,
+         134
+        ],
+        [
+         41.0,
+         134
+        ]
+       ],
+       "note": "the clay pit at the quarry bench's east end, dug 0.7 m down (a bank one walks), under the Crown's edge and the graveyard's wall"
+      },
+      {
+       "id": "graves_2",
+       "height_m": 20.5,
+       "area": [
+        [
+         30.0,
+         143.0
+        ],
+        [
+         55,
+         143.0
+        ],
+        [
+         55,
+         150.0
+        ],
+        [
+         30.0,
+         150.0
+        ]
+       ],
+       "note": "the graveyard's second terrace, half a metre up: the graves since the lean years"
+      },
+      {
+       "id": "graves_3",
+       "height_m": 21.0,
+       "area": [
+        [
+         30.0,
+         150.0
+        ],
+        [
+         55,
+         150.0
+        ],
+        [
+         55,
+         157.5
+        ],
+        [
+         30.0,
+         157.5
+        ]
+       ],
+       "note": "the graveyard's top terrace: the lean years' graves and the ship days' stones"
       },
       {
        "id": "lad_1",
@@ -1466,6 +1591,23 @@
        "level": "upper"
       },
       {
+       "id": "the Tally Wynd's head",
+       "points": [
+        [
+         0.0,
+         134.5
+        ],
+        [
+         0.0,
+         139.0
+        ]
+       ],
+       "width_m": 3.0,
+       "class": "lane",
+       "surface": "setts",
+       "level": "crown"
+      },
+      {
        "id": "the Crown path",
        "points": [
         [
@@ -1477,12 +1619,16 @@
          139.0
         ],
         [
-         14,
-         150.0
+         9.5,
+         146.5
         ],
         [
-         24,
-         160.3
+         13.0,
+         152.5
+        ],
+        [
+         15.6,
+         156.6
         ]
        ],
        "width_m": 3.0,
@@ -1491,30 +1637,84 @@
        "level": "crown"
       },
       {
+       "id": "the cistern path",
+       "points": [
+        [
+         0.0,
+         139.0
+        ],
+        [
+         -2.2,
+         147.0
+        ],
+        [
+         -4.5,
+         154.6
+        ]
+       ],
+       "width_m": 2.2,
+       "class": "lane",
+       "surface": "earth",
+       "level": "crown"
+      },
+      {
        "id": "the peat road",
        "points": [
         [
-         24,
-         160.3
+         13.0,
+         152.5
         ],
         [
-         32.5,
-         160.3
+         14.2,
+         162.0
         ],
         [
-         35,
-         176.0
+         16.3,
+         174.0
         ],
         [
-         37.5,
-         192.5
+         30.0,
+         178.5
         ],
         [
-         50,
-         192.5
+         37.4,
+         184.0
+        ],
+        [
+         37.6,
+         192.6
+        ],
+        [
+         50.5,
+         192.6
         ]
        ],
        "width_m": 3.0,
+       "class": "lane",
+       "surface": "earth",
+       "level": "crown"
+      },
+      {
+       "id": "the grave path",
+       "points": [
+        [
+         0.0,
+         139.0
+        ],
+        [
+         6.5,
+         142.3
+        ],
+        [
+         27.2,
+         142.3
+        ],
+        [
+         29.2,
+         140.9
+        ]
+       ],
+       "width_m": 2.2,
        "class": "lane",
        "surface": "earth",
        "level": "crown"
@@ -2317,14 +2517,14 @@
         {
          "name": "the second step, west",
          "at": [
-          2.5,
+          -2.5,
           0.2
          ]
         },
         {
          "name": "the second step, east",
          "at": [
-          -2.5,
+          2.5,
           0.2
          ]
         },
@@ -2332,7 +2532,35 @@
          "name": "Magda's place, where the catch is divided",
          "at": [
           0,
-          2.4
+          -2.9
+         ]
+        },
+        {
+         "name": "the gutting table, west",
+         "at": [
+          9.2,
+          -5.0
+         ]
+        },
+        {
+         "name": "the gutting table, east",
+         "at": [
+          12.0,
+          -5.0
+         ]
+        },
+        {
+         "name": "the mending bench",
+         "at": [
+          -10.6,
+          -6.0
+         ]
+        },
+        {
+         "name": "the bait tubs",
+         "at": [
+          -8.3,
+          -4.1
          ]
         }
        ],
@@ -2662,7 +2890,7 @@
        "height_m": 6.4,
        "district": "the Strand",
        "building": true,
-       "model": "cullet/smokehouse/smokehouse_1.glb",
+       "model": "cullet/smoke_shed/smokehouse_1.glb",
        "seed": 35824,
        "wear": {
         "salt": 1.0,
@@ -2692,7 +2920,7 @@
        "height_m": 6.4,
        "district": "the Strand",
        "building": true,
-       "model": "cullet/smokehouse/smokehouse_2.glb",
+       "model": "cullet/smoke_shed/smokehouse_2.glb",
        "seed": 27434,
        "wear": {
         "salt": 1.0,
@@ -2798,7 +3026,9 @@
         "empty": 0.0,
         "cause": "+2 m above the sea; 261 m from the Cone at bearing 267; front faces 180"
        },
-       "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings"
+       "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings",
+       "stage": 0.4,
+       "stage_cause": "the hull's stage of building, 0 to 1: in frame, planked four strakes of ten"
       },
       {
        "id": "slip",
@@ -2850,7 +3080,7 @@
         {
          "name": "the west mouth",
          "at": [
-          6.1,
+          -6.1,
           7.8
          ]
         },
@@ -2864,14 +3094,14 @@
         {
          "name": "the east mouth",
          "at": [
-          -6.1,
+          6.1,
           7.8
          ]
         },
         {
          "name": "Halvard's bench at the mouth",
          "at": [
-          3.0,
+          -3.0,
           9.2
          ]
         }
@@ -2910,14 +3140,14 @@
         {
          "name": "the cullet heaps",
          "at": [
-          6,
+          -6,
           2
          ]
         },
         {
          "name": "the trough",
          "at": [
-          -8,
+          8,
           2
          ]
         }
@@ -2956,7 +3186,7 @@
         {
          "name": "the warm wall, west",
          "at": [
-          -4,
+          4,
           3.6
          ]
         },
@@ -2970,7 +3200,7 @@
         {
          "name": "the warm wall, east",
          "at": [
-          4,
+          -4,
           3.6
          ]
         },
@@ -3152,7 +3382,14 @@
        "people": 2,
        "door_colour": "sea_green",
        "keepsake": "a lamp-oil drum and a coil of wick",
-       "address": "the lamp house on the mole"
+       "address": "the lamp house on the mole",
+       "lit": {
+        "windows": [
+         "g",
+         "u0"
+        ],
+        "cause": "Anselm Faro keeps the Watchglass: the lamp house is awake all night, below and above"
+       }
       },
       {
        "id": "watchglass",
@@ -3246,7 +3483,11 @@
        "family": "strand",
        "people": 2,
        "door_colour": "chalk_blue",
-       "keepsake": "a lamp hook and a creel"
+       "keepsake": "a lamp hook and a creel",
+       "lit": {
+        "windows": [],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 16841)"
+       }
       },
       {
        "id": "low_2",
@@ -3286,7 +3527,13 @@
        "family": "strand",
        "people": 4,
        "door_colour": "sea_green",
-       "keepsake": "a ship's knee of timber propped by the door"
+       "keepsake": "a ship's knee of timber propped by the door",
+       "lit": {
+        "windows": [
+         "u1"
+        ],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 33811); a full house (4): someone is still up above"
+       }
       },
       {
        "id": "low_3",
@@ -3322,7 +3569,11 @@
        "terrace": "Low Row east",
        "front_cause": "an original 5 m plot, empty",
        "state": "empty, sound",
-       "door_colour": "faded"
+       "door_colour": "faded",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "low_4",
@@ -3362,7 +3613,11 @@
        "family": "strand",
        "people": 7,
        "door_colour": "oxblood",
-       "keepsake": "a row of glass floats; the Tarns have always painted their door so"
+       "keepsake": "a row of glass floats; the Tarns have always painted their door so",
+       "lit": {
+        "windows": [],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 28134); a full house (7), all abed (seed 28134)"
+       }
       },
       {
        "id": "low_5",
@@ -3402,7 +3657,14 @@
        "family": "strand",
        "people": 4,
        "door_colour": "mustard",
-       "keepsake": "a string of sea-glass, each colour from a known wreck"
+       "keepsake": "a string of sea-glass, each colour from a known wreck",
+       "lit": {
+        "windows": [
+         "g",
+         "u0"
+        ],
+        "cause": "a Strand house, one in four (seed 14192): someone mends by lamplight; a full house (4): someone is still up above"
+       }
       },
       {
        "id": "batch",
@@ -3496,7 +3758,11 @@
        "family": "strand",
        "people": 2,
        "door_colour": "chalk_blue",
-       "keepsake": "a counters board chalked on the step"
+       "keepsake": "a counters board chalked on the step",
+       "lit": {
+        "windows": [],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 32458)"
+       }
       },
       {
        "id": "low_7",
@@ -3536,7 +3802,13 @@
        "family": "strand",
        "people": 2,
        "door_colour": "oxblood",
-       "keepsake": "a caged gull"
+       "keepsake": "a caged gull",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Strand house, one in four (seed 23388): someone mends by lamplight"
+       }
       },
       {
        "id": "low_8",
@@ -3576,7 +3848,11 @@
        "family": "strand",
        "people": 3,
        "door_colour": "sea_green",
-       "keepsake": "a sack of kelp ash and a smoke-grey line of washing"
+       "keepsake": "a sack of kelp ash and a smoke-grey line of washing",
+       "lit": {
+        "windows": [],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 3949)"
+       }
       },
       {
        "id": "low_9",
@@ -3613,7 +3889,11 @@
        "front_cause": "an original plot, its roof stripped for fuel in the lean years",
        "state": "roofless shell",
        "door_colour": "none",
-       "note": "a tree grows inside the walls"
+       "note": "a tree grows inside the walls",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "low_10",
@@ -3653,7 +3933,14 @@
        "family": "kiln",
        "people": 2,
        "door_colour": "mustard",
-       "keepsake": "wind chimes of cullet"
+       "keepsake": "wind chimes of cullet",
+       "lit": {
+        "windows": [
+         "g",
+         "u1"
+        ],
+        "cause": "Thessaly Marl stokes the Cone by night: the kitchen lamp is left for her, and a night light burns above for Wick, who is five"
+       }
       },
       {
        "id": "marver",
@@ -3707,7 +3994,13 @@
        "keepsake": "a ship's figurehead over the door",
        "address": "over the Marver, Mid Row",
        "note": "the cookshop: open front, figurehead over the door; the Achterbergs live over it",
-       "terrace": "Mid Row east"
+       "terrace": "Mid Row east",
+       "lit": {
+        "windows": [
+         "u1"
+        ],
+        "cause": "Pieter Achterberg rises at 02:30 to fire the Batch: one window over the hearth"
+       }
       },
       {
        "id": "marver_terrace",
@@ -3820,7 +4113,14 @@
        "family": "ladder",
        "people": 4,
        "door_colour": "sea_green",
-       "keepsake": "seedling trays on the sill"
+       "keepsake": "seedling trays on the sill",
+       "lit": {
+        "windows": [
+         "g",
+         "u0"
+        ],
+        "cause": "a Ladder house, every second one (seed 19180): done at 16:00, they sit up; a full house (4): someone is still up above"
+       }
       },
       {
        "id": "mid_2",
@@ -3860,7 +4160,13 @@
        "family": "ladder",
        "people": 4,
        "door_colour": "mustard",
-       "keepsake": "a rain gauge on a post"
+       "keepsake": "a rain gauge on a post",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Ladder house, every second one (seed 82518): done at 16:00, they sit up; a full house (4), all abed (seed 82518)"
+       }
       },
       {
        "id": "mid_3",
@@ -3896,7 +4202,11 @@
        "terrace": "Mid Row east",
        "front_cause": "an original plot, its roof stripped for fuel in the lean years",
        "state": "roofless shell",
-       "door_colour": "none"
+       "door_colour": "none",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "mid_4",
@@ -3936,7 +4246,11 @@
        "family": "ladder",
        "people": 2,
        "door_colour": "oxblood",
-       "keepsake": "a stack of odd slates"
+       "keepsake": "a stack of odd slates",
+       "lit": {
+        "windows": [],
+        "cause": "a Ladder house: early to bed (seed 83427)"
+       }
       },
       {
        "id": "mid_5",
@@ -3976,7 +4290,13 @@
        "family": "kiln",
        "people": 2,
        "door_colour": "chalk_blue",
-       "keepsake": "a pontil rod hung over the door"
+       "keepsake": "a pontil rod hung over the door",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Kiln house, two in three (seed 55189): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+       }
       },
       {
        "id": "mid_6",
@@ -4012,7 +4332,11 @@
        "terrace": "Mid Row west",
        "front_cause": "an original 5 m plot, empty",
        "state": "empty, sound",
-       "door_colour": "faded"
+       "door_colour": "faded",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "mid_7",
@@ -4052,7 +4376,13 @@
        "family": "kiln",
        "people": 3,
        "door_colour": "sea_green",
-       "keepsake": "a hen coop against the front"
+       "keepsake": "a hen coop against the front",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Kiln house, two in three (seed 93433): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+       }
       },
       {
        "id": "high_1",
@@ -4092,7 +4422,11 @@
        "family": "kiln",
        "people": 3,
        "door_colour": "chalk_blue",
-       "keepsake": "a sill of cullet, one piece of every colour Ode has kept"
+       "keepsake": "a sill of cullet, one piece of every colour Ode has kept",
+       "lit": {
+        "windows": [],
+        "cause": "a Kiln house off the watch tonight (seed 53250): dark"
+       }
       },
       {
        "id": "high_2",
@@ -4132,7 +4466,14 @@
        "family": "kiln",
        "people": 4,
        "door_colour": "sea_green",
-       "keepsake": "a bucket of off-cuts the children play with by the step"
+       "keepsake": "a bucket of off-cuts the children play with by the step",
+       "lit": {
+        "windows": [
+         "g",
+         "u0"
+        ],
+        "cause": "a Kiln house, two in three (seed 52568): someone is on the evening watch at the Cone, and the kitchen lamp waits; a full house (4): someone is still up above"
+       }
       },
       {
        "id": "high_3",
@@ -4172,7 +4513,13 @@
        "family": "kiln",
        "people": 3,
        "door_colour": "mustard",
-       "keepsake": "a slate tally board by the door"
+       "keepsake": "a slate tally board by the door",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Kiln house, two in three (seed 93998): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+       }
       },
       {
        "id": "high_4",
@@ -4208,7 +4555,11 @@
        "terrace": "High Row east",
        "front_cause": "an original 5 m plot, empty",
        "state": "empty, sound",
-       "door_colour": "faded"
+       "door_colour": "faded",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "high_5",
@@ -4248,7 +4599,13 @@
        "family": "kiln",
        "people": 3,
        "door_colour": "chalk_blue",
-       "keepsake": "a bench made from a boat's thwart"
+       "keepsake": "a bench made from a boat's thwart",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Kiln house, two in three (seed 76987): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+       }
       },
       {
        "id": "high_6",
@@ -4284,7 +4641,11 @@
        "terrace": "High Row west",
        "front_cause": "an original 5 m plot, empty",
        "state": "empty, sound",
-       "door_colour": "faded"
+       "door_colour": "faded",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "high_7",
@@ -4320,7 +4681,11 @@
        "terrace": "High Row west",
        "front_cause": "an original plot, its roof stripped for fuel in the lean years",
        "state": "roofless shell",
-       "door_colour": "none"
+       "door_colour": "none",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "glasshouse_1",
@@ -5053,6 +5418,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_1.glb",
        "seed": 20736,
        "wear": {
         "salt": 0.12,
@@ -5083,6 +5449,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_2.glb",
        "seed": 6138,
        "wear": {
         "salt": 0.12,
@@ -5113,6 +5480,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_3.glb",
        "seed": 51756,
        "wear": {
         "salt": 0.12,
@@ -5143,6 +5511,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_4.glb",
        "seed": 93839,
        "wear": {
         "salt": 0.0,
@@ -5173,6 +5542,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_5.glb",
        "seed": 78041,
        "wear": {
         "salt": 0.0,
@@ -5203,6 +5573,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_6.glb",
        "seed": 62083,
        "wear": {
         "salt": 0.0,
@@ -5233,6 +5604,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_7.glb",
        "seed": 26389,
        "wear": {
         "salt": 0.0,
@@ -5263,6 +5635,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_8.glb",
        "seed": 3300,
        "wear": {
         "salt": 0.0,
@@ -5293,6 +5666,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_9.glb",
        "seed": 95218,
        "wear": {
         "salt": 0.0,
@@ -5323,6 +5697,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_10.glb",
        "seed": 5295,
        "wear": {
         "salt": 0.0,
@@ -5353,6 +5728,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_11.glb",
        "seed": 22329,
        "wear": {
         "salt": 0.0,
@@ -5383,6 +5759,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_12.glb",
        "seed": 21763,
        "wear": {
         "salt": 0.0,
@@ -5413,6 +5790,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_13.glb",
        "seed": 56789,
        "wear": {
         "salt": 0.0,
@@ -5443,6 +5821,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_14.glb",
        "seed": 99830,
        "wear": {
         "salt": 0.0,
@@ -5473,6 +5852,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_15.glb",
        "seed": 32,
        "wear": {
         "salt": 0.0,
@@ -5503,6 +5883,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_16.glb",
        "seed": 95354,
        "wear": {
         "salt": 0.0,
@@ -5533,6 +5914,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_17.glb",
        "seed": 18156,
        "wear": {
         "salt": 0.0,
@@ -5563,6 +5945,7 @@
        "height_m": 0,
        "district": "the Ladder",
        "building": false,
+       "model": "cullet/root_plot/root_plot_18.glb",
        "seed": 40861,
        "wear": {
         "salt": 0.0,
@@ -5696,26 +6079,61 @@
        "door_colour": "chalk_blue",
        "keepsake": "a shelf of ship-day tablets in the window",
        "address": "the Readers' House",
-       "note": "the school and the ship-day tablets; Benedikt Orme lives here"
+       "note": "the school and the ship-day tablets; Benedikt Orme lives here",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "Benedikt Orme reads the ship-day tablets by lamp: the window with the shelf"
+       }
       },
       {
        "id": "graveyard",
        "kind": "lamp",
        "name": "the graveyard",
        "at": [
-        -35.0,
-        176.0
+        42.4,
+        138.75
        ],
        "size": [
-        26,
-        18
+        24.0,
+        7.9
        ],
        "facing": "south",
        "level": "crown",
        "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          -10.8,
+          -2.15
+         ]
+        },
+        {
+         "name": "the fever winter's row",
+         "at": [
+          -1.4,
+          0.15
+         ]
+        },
+        {
+         "name": "the row's east end, the next place",
+         "at": [
+          10.2,
+          0.15
+         ]
+        },
+        {
+         "name": "the wall over the clay pit",
+         "at": [
+          4.6,
+          2.85
+         ]
+        }
+       ],
        "district": "the Crown",
        "building": false,
-       "model": "cullet/graveyard/graveyard.glb",
        "seed": 83674,
        "wear": {
         "salt": 0.0,
@@ -5724,9 +6142,85 @@
         "age": 1.0,
         "repair": 0.5,
         "empty": 0.0,
-        "cause": "+20 m above the sea; 231 m from the Cone at bearing 308; front faces 180"
+        "cause": "+20 m above the sea; 149 m from the Cone at bearing 315; front faces 180"
        },
-       "note": "glass markers"
+       "note": "glass markers in rows up the Crown's south-east corner; this band is the newest graves, the fever winter's nine in one row; no lot model: its walls, rows and markers are fixtures"
+      },
+      {
+       "id": "graves_middle",
+       "kind": "lamp",
+       "name": "the graveyard's middle rows",
+       "at": [
+        42.4,
+        146.5
+       ],
+       "size": [
+        24.0,
+        6.0
+       ],
+       "facing": "south",
+       "level": "graves_2",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "among the middle rows",
+         "at": [
+          -4.4,
+          -0.1
+         ]
+        }
+       ],
+       "district": "the Crown",
+       "building": false,
+       "seed": 44290,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.66,
+        "age": 1.0,
+        "repair": 0.4,
+        "empty": 0.0,
+        "cause": "+20.5 m above the sea; 154 m from the Cone at bearing 317; front faces 180"
+       },
+       "note": "the graves since the lean years: each a slab of the colour its family chose"
+      },
+      {
+       "id": "graves_old",
+       "kind": "lamp",
+       "name": "the graveyard's old rows",
+       "at": [
+        42.4,
+        153.45
+       ],
+       "size": [
+        24.0,
+        5.9
+       ],
+       "facing": "south",
+       "level": "graves_3",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "by the ship-day stones",
+         "at": [
+          1.6,
+          -0.45
+         ]
+        }
+       ],
+       "district": "the Crown",
+       "building": false,
+       "seed": 73534,
+       "wear": {
+        "salt": 0.0,
+        "soot": 0.0,
+        "wind": 0.67,
+        "age": 1.0,
+        "repair": 0.2,
+        "empty": 0.0,
+        "cause": "+21 m above the sea; 160 m from the Cone at bearing 319; front faces 180"
+       },
+       "note": "the lean years' graves, close set and small, and the ship days' carved stones above them"
       },
       {
        "id": "thorn",
@@ -5777,14 +6271,14 @@
         {
          "name": "the bench, west seat",
          "at": [
-          0.55,
+          -0.55,
           0.8
          ]
         },
         {
          "name": "the bench, east seat",
          "at": [
-          -0.55,
+          0.55,
           0.8
          ]
         }
@@ -5869,7 +6363,11 @@
        "people": 3,
        "door_colour": "oxblood",
        "keepsake": "a stack of drying peat by the door",
-       "address": "the turf house on the Moss"
+       "address": "the turf house on the Moss",
+       "lit": {
+        "windows": [],
+        "cause": "asleep"
+       }
       },
       {
        "id": "hanger_cottage",
@@ -5905,7 +6403,11 @@
        "people": 1,
        "door_colour": "sea_green",
        "keepsake": "a seedling bed of thorn and rowan",
-       "address": "the Hanger cottage"
+       "address": "the Hanger cottage",
+       "lit": {
+        "windows": [],
+        "cause": "asleep"
+       }
       },
       {
        "id": "lintel",
@@ -5937,6 +6439,4113 @@
         "cause": "+46 m above the sea; 524 m from the Cone at bearing 341; front faces 180"
        },
        "note": "two standing stones and a capstone; a slab of dark glass fills the opening. It is shut. A fact with no purpose"
+      },
+      {
+       "id": "court_low_1",
+       "kind": "lamp",
+       "name": "the Dunlins' court",
+       "at": [
+        61.55,
+        49.0
+       ],
+       "size": [
+        4.0,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -0.95,
+          -0.05
+         ]
+        },
+        {
+         "name": "the creels",
+         "at": [
+          0.2,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_1",
+       "kind": "lamp",
+       "name": "the Dunlins' plot",
+       "at": [
+        61.55,
+        56.55
+       ],
+       "size": [
+        4.0,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the creels",
+         "at": [
+          -0.95,
+          1.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_2",
+       "kind": "lamp",
+       "name": "the Calloways' court",
+       "at": [
+        56.25,
+        49.0
+       ],
+       "size": [
+        4.8,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.35,
+          -0.05
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_2",
+       "kind": "lamp",
+       "name": "the Calloways' plot",
+       "at": [
+        56.25,
+        56.55
+       ],
+       "size": [
+        4.8,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the timber",
+         "at": [
+          0.0,
+          -0.55
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_3",
+       "kind": "lamp",
+       "name": "Low Row 3's court",
+       "at": [
+        50.9,
+        49.0
+       ],
+       "size": [
+        4.1,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_3",
+       "kind": "lamp",
+       "name": "Low Row 3's plot",
+       "at": [
+        50.9,
+        56.55
+       ],
+       "size": [
+        4.1,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_4",
+       "kind": "lamp",
+       "name": "the Tarns' court",
+       "at": [
+        45.15,
+        49.0
+       ],
+       "size": [
+        5.6,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.75,
+          -0.05
+         ]
+        },
+        {
+         "name": "the washing line",
+         "at": [
+          -0.35,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_4",
+       "kind": "lamp",
+       "name": "the Tarns' plot",
+       "at": [
+        45.15,
+        56.55
+       ],
+       "size": [
+        5.6,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_5",
+       "kind": "lamp",
+       "name": "the Okoros' court",
+       "at": [
+        39.05,
+        49.0
+       ],
+       "size": [
+        4.8,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.35,
+          -0.05
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_5",
+       "kind": "lamp",
+       "name": "the Okoros' plot",
+       "at": [
+        39.05,
+        56.55
+       ],
+       "size": [
+        4.8,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the wrack racks",
+         "at": [
+          0.0,
+          -0.55
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          -1.35,
+          1.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_batch",
+       "kind": "lamp",
+       "name": "the Batch's court",
+       "at": [
+        13.8,
+        49.0
+       ],
+       "size": [
+        7.1,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.6,
+          0.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_batch",
+       "kind": "lamp",
+       "name": "the Batch's plot",
+       "at": [
+        13.8,
+        56.55
+       ],
+       "size": [
+        7.1,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.2,
+          -0.85
+         ]
+        },
+        {
+         "name": "the peat stack, 2",
+         "at": [
+          1.6,
+          1.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_6",
+       "kind": "lamp",
+       "name": "the Vanes' court",
+       "at": [
+        7.35,
+        49.0
+       ],
+       "size": [
+        4.0,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          -0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -0.95,
+          -0.05
+         ]
+        },
+        {
+         "name": "the handcart",
+         "at": [
+          0.2,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_6",
+       "kind": "lamp",
+       "name": "the Vanes' plot",
+       "at": [
+        7.35,
+        56.55
+       ],
+       "size": [
+        4.0,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          -0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          -0.0,
+          -0.2
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          0.95,
+          -1.05
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_7",
+       "kind": "lamp",
+       "name": "the Morrows' court",
+       "at": [
+        2.45,
+        49.0
+       ],
+       "size": [
+        4.0,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -0.95,
+          -0.05
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          0.2,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_7",
+       "kind": "lamp",
+       "name": "the Morrows' plot",
+       "at": [
+        2.45,
+        56.55
+       ],
+       "size": [
+        4.0,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_8",
+       "kind": "lamp",
+       "name": "the Satos' court",
+       "at": [
+        -2.65,
+        49.0
+       ],
+       "size": [
+        4.4,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.15,
+          -0.05
+         ]
+        },
+        {
+         "name": "the ash sacks",
+         "at": [
+          0.2,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_8",
+       "kind": "lamp",
+       "name": "the Satos' plot",
+       "at": [
+        -2.65,
+        56.55
+       ],
+       "size": [
+        4.4,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the wrack racks",
+         "at": [
+          0.0,
+          -0.55
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          -1.15,
+          1.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_9",
+       "kind": "lamp",
+       "name": "Low Row 9's court",
+       "at": [
+        -7.7,
+        49.0
+       ],
+       "size": [
+        3.9,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          0.0,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_9",
+       "kind": "lamp",
+       "name": "Low Row 9's plot",
+       "at": [
+        -7.7,
+        56.55
+       ],
+       "size": [
+        3.9,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          -0.6,
+          -0.45
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_low_10",
+       "kind": "lamp",
+       "name": "the Marls' court",
+       "at": [
+        -12.8,
+        49.0
+       ],
+       "size": [
+        4.5,
+        3.5
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.2,
+          -0.05
+         ]
+        },
+        {
+         "name": "the washing line",
+         "at": [
+          -0.35,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_low_10",
+       "kind": "lamp",
+       "name": "the Marls' plot",
+       "at": [
+        -12.8,
+        56.55
+       ],
+       "size": [
+        4.5,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          -0.2
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          1.2,
+          -1.05
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_marver",
+       "kind": "lamp",
+       "name": "the Achterbergs' court",
+       "at": [
+        58.0,
+        77.9
+       ],
+       "size": [
+        11.1,
+        3.3
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -0.66
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -4.5,
+          0.05
+         ]
+        },
+        {
+         "name": "the barrels",
+         "at": [
+          0.2,
+          0.66
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_marver",
+       "kind": "lamp",
+       "name": "the Achterbergs' plot",
+       "at": [
+        58.0,
+        85.95
+       ],
+       "size": [
+        11.1,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the hen run",
+         "at": [
+          0.0,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_mid_1",
+       "kind": "lamp",
+       "name": "the Greaves' court",
+       "at": [
+        49.15,
+        77.4
+       ],
+       "size": [
+        4.8,
+        4.3
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.35,
+          -0.45
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.2,
+          1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_mid_1",
+       "kind": "lamp",
+       "name": "the Greaves' plot",
+       "at": [
+        49.15,
+        85.95
+       ],
+       "size": [
+        4.8,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          -1.25
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_mid_2",
+       "kind": "lamp",
+       "name": "the Fenwicks' court",
+       "at": [
+        43.45,
+        77.4
+       ],
+       "size": [
+        4.8,
+        4.3
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.35,
+          -0.45
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_mid_2",
+       "kind": "lamp",
+       "name": "the Fenwicks' plot",
+       "at": [
+        43.45,
+        85.95
+       ],
+       "size": [
+        4.8,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          -0.2
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          1.35,
+          -1.65
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_mid_3",
+       "kind": "lamp",
+       "name": "Mid Row 3's court",
+       "at": [
+        38.2,
+        77.4
+       ],
+       "size": [
+        3.9,
+        4.3
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          0.0,
+          1.1
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          -0.9,
+          -1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_mid_3",
+       "kind": "lamp",
+       "name": "Mid Row 3's plot",
+       "at": [
+        38.2,
+        85.95
+       ],
+       "size": [
+        3.9,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          -0.6,
+          -1.05
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.6
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_mid_4",
+       "kind": "lamp",
+       "name": "the Stannards' court",
+       "at": [
+        33.35,
+        77.4
+       ],
+       "size": [
+        4.0,
+        4.3
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -0.95,
+          -0.45
+         ]
+        },
+        {
+         "name": "the slates",
+         "at": [
+          0.2,
+          1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_mid_4",
+       "kind": "lamp",
+       "name": "the Stannards' plot",
+       "at": [
+        33.35,
+        85.95
+       ],
+       "size": [
+        4.0,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the flower beds",
+         "at": [
+          0.0,
+          -0.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_mid_5",
+       "kind": "lamp",
+       "name": "the Sarros' court",
+       "at": [
+        -2.0,
+        77.4
+       ],
+       "size": [
+        4.5,
+        4.3
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.2,
+          -0.45
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          0.2,
+          1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_mid_5",
+       "kind": "lamp",
+       "name": "the Sarros' plot",
+       "at": [
+        -2.0,
+        85.95
+       ],
+       "size": [
+        4.5,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          -0.2
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          1.2,
+          -1.65
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_mid_6",
+       "kind": "lamp",
+       "name": "Mid Row 6's court",
+       "at": [
+        -7.2,
+        77.4
+       ],
+       "size": [
+        4.1,
+        4.3
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_mid_6",
+       "kind": "lamp",
+       "name": "Mid Row 6's plot",
+       "at": [
+        -7.2,
+        85.95
+       ],
+       "size": [
+        4.1,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_mid_7",
+       "kind": "lamp",
+       "name": "the Brandts' court",
+       "at": [
+        -12.6,
+        77.4
+       ],
+       "size": [
+        4.9,
+        4.3
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.4,
+          -0.45
+         ]
+        },
+        {
+         "name": "the crucibles on their planks",
+         "at": [
+          0.2,
+          1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_mid_7",
+       "kind": "lamp",
+       "name": "the Brandts' plot",
+       "at": [
+        -12.6,
+        85.95
+       ],
+       "size": [
+        4.9,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the hen run",
+         "at": [
+          0.0,
+          0.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_high_1",
+       "kind": "lamp",
+       "name": "the Pontils' court",
+       "at": [
+        61.1,
+        107.4
+       ],
+       "size": [
+        4.9,
+        4.3
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.4,
+          -0.45
+         ]
+        },
+        {
+         "name": "the cullet",
+         "at": [
+          0.2,
+          1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_high_1",
+       "kind": "lamp",
+       "name": "the Pontils' plot",
+       "at": [
+        61.1,
+        115.95
+       ],
+       "size": [
+        4.9,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          -0.2
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          1.4,
+          -1.65
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_high_2",
+       "kind": "lamp",
+       "name": "the Hollins' court",
+       "at": [
+        55.1,
+        107.4
+       ],
+       "size": [
+        5.3,
+        4.3
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.6,
+          -0.45
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.2,
+          1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_high_2",
+       "kind": "lamp",
+       "name": "the Hollins' plot",
+       "at": [
+        55.1,
+        115.95
+       ],
+       "size": [
+        5.3,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the washing line",
+         "at": [
+          0.0,
+          -0.3
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_high_3",
+       "kind": "lamp",
+       "name": "the Quills' court",
+       "at": [
+        49.1,
+        107.4
+       ],
+       "size": [
+        4.9,
+        4.3
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.4,
+          -0.45
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          0.2,
+          1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_high_3",
+       "kind": "lamp",
+       "name": "the Quills' plot",
+       "at": [
+        49.1,
+        115.95
+       ],
+       "size": [
+        4.9,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the herb beds",
+         "at": [
+          0.0,
+          -0.2
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          -1.4,
+          -1.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_high_4",
+       "kind": "lamp",
+       "name": "High Row 4's court",
+       "at": [
+        43.7,
+        107.4
+       ],
+       "size": [
+        4.1,
+        4.3
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_high_4",
+       "kind": "lamp",
+       "name": "High Row 4's plot",
+       "at": [
+        43.7,
+        115.95
+       ],
+       "size": [
+        4.1,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_high_5",
+       "kind": "lamp",
+       "name": "the Dunmores' court",
+       "at": [
+        -2.8,
+        107.4
+       ],
+       "size": [
+        4.9,
+        4.3
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          -0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -1.4,
+          -0.45
+         ]
+        },
+        {
+         "name": "the lean-to",
+         "at": [
+          0.4,
+          0.45
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_high_5",
+       "kind": "lamp",
+       "name": "the Dunmores' plot",
+       "at": [
+        -2.8,
+        115.95
+       ],
+       "size": [
+        4.9,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          -0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          -0.0,
+          -0.2
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          1.4,
+          -1.65
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_high_6",
+       "kind": "lamp",
+       "name": "High Row 6's court",
+       "at": [
+        -8.2,
+        107.4
+       ],
+       "size": [
+        4.1,
+        4.3
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_high_6",
+       "kind": "lamp",
+       "name": "High Row 6's plot",
+       "at": [
+        -8.2,
+        115.95
+       ],
+       "size": [
+        4.1,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "court_high_7",
+       "kind": "lamp",
+       "name": "High Row 7's court",
+       "at": [
+        -13.1,
+        107.4
+       ],
+       "size": [
+        3.9,
+        4.3
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          -1.1
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          0.0,
+          1.1
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          -0.9,
+          -1.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_high_7",
+       "kind": "lamp",
+       "name": "High Row 7's plot",
+       "at": [
+        -13.1,
+        115.95
+       ],
+       "size": [
+        3.9,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          -0.6,
+          -1.05
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.6
+         ]
+        }
+       ]
+      },
+      {
+       "id": "oven_court",
+       "kind": "lamp",
+       "name": "the oven court",
+       "at": [
+        25.5,
+        45.25
+       ],
+       "size": [
+        14.5,
+        11.0
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          -4.45
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          -6.2,
+          3.55
+         ]
+        },
+        {
+         "name": "the bench, 2",
+         "at": [
+          -6.2,
+          -0.45
+         ]
+        },
+        {
+         "name": "the table",
+         "at": [
+          -0.5,
+          0.45
+         ]
+        },
+        {
+         "name": "the bench, 3",
+         "at": [
+          -0.5,
+          -0.95
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -6.1,
+          -3.65
+         ]
+        },
+        {
+         "name": "the trough",
+         "at": [
+          5.4,
+          0.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_oven_court",
+       "kind": "lamp",
+       "name": "Low Row's drying green",
+       "at": [
+        25.5,
+        56.55
+       ],
+       "size": [
+        14.5,
+        4.8
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          -4.1,
+          1.35
+         ]
+        },
+        {
+         "name": "the washing line",
+         "at": [
+          0.0,
+          1.35
+         ]
+        },
+        {
+         "name": "the washing line, 2",
+         "at": [
+          0.0,
+          0.05
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          6.1,
+          -1.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "toft_1",
+       "kind": "lamp",
+       "name": "toft 1 on Mid Row (the Sarros)",
+       "at": [
+        6.42,
+        73.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the old hearth",
+         "at": [
+          -1.22,
+          0.3
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          2.6
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          1.2,
+          -1.85
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_toft_1",
+       "kind": "lamp",
+       "name": "the old plot behind toft 1",
+       "at": [
+        6.42,
+        85.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          0.35
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          1.22,
+          -1.55
+         ]
+        }
+       ]
+      },
+      {
+       "id": "toft_2",
+       "kind": "lamp",
+       "name": "toft 2 on Mid Row (the Greaves)",
+       "at": [
+        11.86,
+        73.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the old hearth",
+         "at": [
+          -1.22,
+          0.3
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          0.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_toft_2",
+       "kind": "lamp",
+       "name": "the old plot behind toft 2",
+       "at": [
+        11.86,
+        85.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          0.35
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          1.22,
+          -1.55
+         ]
+        }
+       ]
+      },
+      {
+       "id": "toft_3",
+       "kind": "lamp",
+       "name": "toft 3 on Mid Row (nobody)",
+       "at": [
+        17.3,
+        73.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the old hearth",
+         "at": [
+          -1.22,
+          0.3
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          2.6
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          0.8,
+          0.65
+         ]
+        },
+        {
+         "name": "among the weeds, 2",
+         "at": [
+          0.0,
+          -3.55
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_toft_3",
+       "kind": "lamp",
+       "name": "the old plot behind toft 3",
+       "at": [
+        17.3,
+        85.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "toft_4",
+       "kind": "lamp",
+       "name": "toft 4 on Mid Row (the Row)",
+       "at": [
+        22.74,
+        73.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the old hearth",
+         "at": [
+          -1.22,
+          0.3
+         ]
+        },
+        {
+         "name": "the washing line",
+         "at": [
+          0.05,
+          2.1
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          0.0,
+          -1.55
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_toft_4",
+       "kind": "lamp",
+       "name": "the old plot behind toft 4",
+       "at": [
+        22.74,
+        85.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "toft_5",
+       "kind": "lamp",
+       "name": "toft 5 on Mid Row (Gwil Stannard)",
+       "at": [
+        28.18,
+        73.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the old hearth",
+         "at": [
+          -1.22,
+          0.3
+         ]
+        },
+        {
+         "name": "the slates",
+         "at": [
+          -1.0,
+          1.9
+         ]
+        },
+        {
+         "name": "the slates, 2",
+         "at": [
+          1.2,
+          4.1
+         ]
+        },
+        {
+         "name": "the cut stone",
+         "at": [
+          0.9,
+          -2.45
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_toft_5",
+       "kind": "lamp",
+       "name": "the old plot behind toft 5",
+       "at": [
+        28.18,
+        85.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.35
+         ]
+        }
+       ]
+      },
+      {
+       "id": "garden_1",
+       "kind": "lamp",
+       "name": "walled garden 1 on High Row (the Dunmores)",
+       "at": [
+        2.82,
+        103.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          -1.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_garden_1",
+       "kind": "lamp",
+       "name": "the plot under the quarry behind garden 1",
+       "at": [
+        2.82,
+        115.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the cut stone",
+         "at": [
+          0.3,
+          -1.35
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "garden_2",
+       "kind": "lamp",
+       "name": "walled garden 2 on High Row (the Hollins)",
+       "at": [
+        8.26,
+        103.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          -3.95
+         ]
+        },
+        {
+         "name": "the cold frames, 2",
+         "at": [
+          0.0,
+          0.9
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_garden_2",
+       "kind": "lamp",
+       "name": "the plot under the quarry behind garden 2",
+       "at": [
+        8.26,
+        115.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.35
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          0.6,
+          -0.45
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_garden_3",
+       "kind": "lamp",
+       "name": "the plot under the quarry behind garden 3",
+       "at": [
+        13.71,
+        115.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the cut stone",
+         "at": [
+          0.3,
+          -1.35
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "garden_4",
+       "kind": "lamp",
+       "name": "walled garden 4 on High Row (Mirren Quill)",
+       "at": [
+        19.15,
+        103.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the herb beds",
+         "at": [
+          0.0,
+          -0.6
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_garden_4",
+       "kind": "lamp",
+       "name": "the plot under the quarry behind garden 4",
+       "at": [
+        19.15,
+        115.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.35
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          0.6,
+          -0.45
+         ]
+        }
+       ]
+      },
+      {
+       "id": "garden_5",
+       "kind": "lamp",
+       "name": "walled garden 5 on High Row (Ode Pontil)",
+       "at": [
+        24.59,
+        103.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the cullet",
+         "at": [
+          0.0,
+          -0.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_garden_5",
+       "kind": "lamp",
+       "name": "the plot under the quarry behind garden 5",
+       "at": [
+        24.59,
+        115.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the cut stone",
+         "at": [
+          0.3,
+          -1.35
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "garden_6",
+       "kind": "lamp",
+       "name": "walled garden 6 on High Row (the Quills)",
+       "at": [
+        30.04,
+        103.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          0.0,
+          -1.0
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_garden_6",
+       "kind": "lamp",
+       "name": "the plot under the quarry behind garden 6",
+       "at": [
+        30.04,
+        115.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.35
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          0.6,
+          -0.45
+         ]
+        }
+       ]
+      },
+      {
+       "id": "garden_7",
+       "kind": "lamp",
+       "name": "walled garden 7 on High Row (the Pontils)",
+       "at": [
+        35.48,
+        103.65
+       ],
+       "size": [
+        4.54,
+        11.8
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          0.0,
+          4.85
+         ]
+        },
+        {
+         "name": "the hen run",
+         "at": [
+          0.0,
+          -0.4
+         ]
+        }
+       ]
+      },
+      {
+       "id": "plot_garden_7",
+       "kind": "lamp",
+       "name": "the plot under the quarry behind garden 7",
+       "at": [
+        35.48,
+        115.95
+       ],
+       "size": [
+        4.54,
+        6.0
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.0,
+          1.95
+         ]
+        },
+        {
+         "name": "the cut stone",
+         "at": [
+          0.3,
+          -1.35
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          0.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "the_bleach",
+       "kind": "lamp",
+       "name": "the Bleach",
+       "at": [
+        71.85,
+        49.45
+       ],
+       "size": [
+        6.4,
+        18.2
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.05,
+          8.05
+         ]
+        },
+        {
+         "name": "the washing line, 2",
+         "at": [
+          0.0,
+          5.15
+         ]
+        },
+        {
+         "name": "the washing line, 3",
+         "at": [
+          0.0,
+          2.05
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          -1.85,
+          8.05
+         ]
+        }
+       ]
+      },
+      {
+       "id": "marver_yard",
+       "kind": "lamp",
+       "name": "the Marver's kitchen garden",
+       "at": [
+        73.7,
+        73.28
+       ],
+       "size": [
+        10.1,
+        11.05
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          -3.9,
+          4.47
+         ]
+        },
+        {
+         "name": "the beds",
+         "at": [
+          -0.7,
+          0.08
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          4.0,
+          4.47
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          -0.7,
+          -3.87
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_1",
+       "kind": "lamp",
+       "name": "the Ladder's first working corner",
+       "at": [
+        -22.15,
+        42.9
+       ],
+       "size": [
+        3.4,
+        6.1
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          0.0,
+          -0.9
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          1.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_2",
+       "kind": "lamp",
+       "name": "the Ladder's second working corner",
+       "at": [
+        -23.65,
+        55.9
+       ],
+       "size": [
+        6.4,
+        6.1
+       ],
+       "facing": "south",
+       "level": "lad_1",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          0.0,
+          -0.9
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          1.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_2w",
+       "kind": "lamp",
+       "name": "the Ladder's second working corner, west",
+       "at": [
+        -79.85,
+        55.9
+       ],
+       "size": [
+        5.6,
+        6.1
+       ],
+       "facing": "south",
+       "level": "lad_1",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          -0.15,
+          -0.9
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_3",
+       "kind": "lamp",
+       "name": "the Ladder's third working corner",
+       "at": [
+        -81.4,
+        70.9
+       ],
+       "size": [
+        2.5,
+        6.1
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          0.0,
+          -0.9
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          1.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_4",
+       "kind": "lamp",
+       "name": "the Ladder's fourth working corner",
+       "at": [
+        -23.65,
+        85.9
+       ],
+       "size": [
+        6.4,
+        6.1
+       ],
+       "facing": "south",
+       "level": "lad_2",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          0.0,
+          -0.9
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          1.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_4w",
+       "kind": "lamp",
+       "name": "the Ladder's fourth working corner, west",
+       "at": [
+        -79.85,
+        85.9
+       ],
+       "size": [
+        5.6,
+        6.1
+       ],
+       "facing": "south",
+       "level": "lad_2",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          -0.15,
+          -0.9
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_5",
+       "kind": "lamp",
+       "name": "the Ladder's fifth working corner",
+       "at": [
+        -22.15,
+        100.9
+       ],
+       "size": [
+        3.4,
+        6.1
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          0.0,
+          -0.9
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          1.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_6",
+       "kind": "lamp",
+       "name": "the Ladder's sixth working corner",
+       "at": [
+        -23.65,
+        115.9
+       ],
+       "size": [
+        6.4,
+        6.1
+       ],
+       "facing": "south",
+       "level": "lad_3",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          0.0,
+          -0.9
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          1.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_6w",
+       "kind": "lamp",
+       "name": "the Ladder's sixth working corner, west",
+       "at": [
+        -79.85,
+        115.9
+       ],
+       "size": [
+        5.6,
+        6.1
+       ],
+       "facing": "south",
+       "level": "lad_3",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          -0.15,
+          -0.9
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ladder_corner_7",
+       "kind": "lamp",
+       "name": "the Ladder's seventh working corner",
+       "at": [
+        -81.4,
+        129.9
+       ],
+       "size": [
+        2.5,
+        6.1
+       ],
+       "facing": "south",
+       "level": "upper",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack",
+         "at": [
+          0.0,
+          -0.9
+         ]
+        },
+        {
+         "name": "the cold frames",
+         "at": [
+          0.0,
+          1.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "ropewalk",
+       "kind": "lamp",
+       "name": "the ropewalk",
+       "at": [
+        -34.25,
+        30.2
+       ],
+       "size": [
+        28.6,
+        1.5
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the ropewalk's wheel",
+         "at": [
+          0.6,
+          0.3
+         ]
+        }
+       ]
+      },
+      {
+       "id": "net_green",
+       "kind": "lamp",
+       "name": "the net green",
+       "at": [
+        -64.7,
+        25.05
+       ],
+       "size": [
+        19.7,
+        11.2
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          0.2,
+          4.55
+         ]
+        },
+        {
+         "name": "the net poles",
+         "at": [
+          -5.9,
+          3.25
+         ]
+        },
+        {
+         "name": "the net poles, 2",
+         "at": [
+          0.3,
+          0.65
+         ]
+        },
+        {
+         "name": "the net poles, 3",
+         "at": [
+          6.5,
+          3.25
+         ]
+        },
+        {
+         "name": "the boat on its trestles",
+         "at": [
+          4.7,
+          -3.15
+         ]
+        },
+        {
+         "name": "the creels",
+         "at": [
+          -6.8,
+          -3.95
+         ]
+        },
+        {
+         "name": "the barrels",
+         "at": [
+          8.5,
+          4.55
+         ]
+        }
+       ]
+      },
+      {
+       "id": "smoke_yard",
+       "kind": "lamp",
+       "name": "the smokehouses' yard",
+       "at": [
+        -43.5,
+        22.25
+       ],
+       "size": [
+        10.1,
+        11.0
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the way in",
+         "at": [
+          -0.8,
+          -4.45
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -3.0,
+          -0.75
+         ]
+        },
+        {
+         "name": "the barrels",
+         "at": [
+          2.5,
+          4.05
+         ]
+        },
+        {
+         "name": "the barrels, 2",
+         "at": [
+          -0.1,
+          4.25
+         ]
+        },
+        {
+         "name": "the timber",
+         "at": [
+          1.9,
+          -1.75
+         ]
+        },
+        {
+         "name": "the creels",
+         "at": [
+          -3.9,
+          4.05
+         ]
+        }
+       ]
+      },
+      {
+       "id": "tally_court",
+       "kind": "lamp",
+       "name": "the Counting House's back court",
+       "at": [
+        0.0,
+        26.7
+       ],
+       "size": [
+        27.1,
+        7.9
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          -12.5,
+          1.5
+         ]
+        },
+        {
+         "name": "the barrels",
+         "at": [
+          -8.0,
+          -1.3
+         ]
+        },
+        {
+         "name": "the barrels, 2",
+         "at": [
+          -5.4,
+          -1.7
+         ]
+        },
+        {
+         "name": "the handcart",
+         "at": [
+          4.0,
+          0.8
+         ]
+        },
+        {
+         "name": "the cut stone",
+         "at": [
+          10.9,
+          -2.0
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          0.0,
+          1.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "store_yard",
+       "kind": "lamp",
+       "name": "the Store's yard",
+       "at": [
+        54.0,
+        25.7
+       ],
+       "size": [
+        11.1,
+        9.9
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          -4.5,
+          1.7
+         ]
+        },
+        {
+         "name": "the peat stack",
+         "at": [
+          -3.0,
+          -2.7
+         ]
+        },
+        {
+         "name": "the peat stack, 2",
+         "at": [
+          2.0,
+          -2.7
+         ]
+        },
+        {
+         "name": "the barrels",
+         "at": [
+          3.4,
+          3.3
+         ]
+        },
+        {
+         "name": "the timber",
+         "at": [
+          -2.0,
+          2.7
+         ]
+        }
+       ]
+      },
+      {
+       "id": "sill_low_30",
+       "kind": "lamp",
+       "name": "the oven court's sill",
+       "at": [
+        30.0,
+        33.49
+       ],
+       "size": [
+        2.5,
+        0.9
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the bench",
+         "at": [
+          0.0,
+          -0.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "sill_low_0",
+       "kind": "lamp",
+       "name": "Ingrid Morrow's sill",
+       "at": [
+        0.0,
+        33.49
+       ],
+       "size": [
+        2.5,
+        0.9
+       ],
+       "facing": "south",
+       "level": "low",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the bench",
+         "at": [
+          0.0,
+          -0.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "sill_mid_16",
+       "kind": "lamp",
+       "name": "the sill before the tofts",
+       "at": [
+        16.0,
+        61.49
+       ],
+       "size": [
+        2.5,
+        0.9
+       ],
+       "facing": "south",
+       "level": "mid",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the bench",
+         "at": [
+          0.0,
+          -0.1
+         ]
+        }
+       ]
+      },
+      {
+       "id": "sill_high_20",
+       "kind": "lamp",
+       "name": "the Kiln's sill",
+       "at": [
+        20.0,
+        91.5
+       ],
+       "size": [
+        2.5,
+        0.9
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the bench",
+         "at": [
+          0.0,
+          -0.09
+         ]
+        }
+       ]
+      },
+      {
+       "id": "sill_high_52",
+       "kind": "lamp",
+       "name": "the sill before the Pontils' door",
+       "at": [
+        52.0,
+        91.5
+       ],
+       "size": [
+        2.5,
+        0.9
+       ],
+       "facing": "south",
+       "level": "high",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the bench",
+         "at": [
+          0.0,
+          -0.09
+         ]
+        }
+       ]
+      },
+      {
+       "id": "readers_yard",
+       "kind": "lamp",
+       "name": "the Readers' House's yard",
+       "at": [
+        22.5,
+        157.75
+       ],
+       "size": [
+        10.9,
+        7.4
+       ],
+       "facing": "south",
+       "level": "crown",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the gate",
+         "at": [
+          -4.4,
+          1.15
+         ]
+        },
+        {
+         "name": "the tablets' bench",
+         "at": [
+          -1.6,
+          -2.65
+         ]
+        },
+        {
+         "name": "stone 1 of the half ring",
+         "at": [
+          -2.45,
+          0.11
+         ]
+        },
+        {
+         "name": "stone 2 of the half ring",
+         "at": [
+          -1.96,
+          0.92
+         ]
+        },
+        {
+         "name": "stone 3 of the half ring",
+         "at": [
+          -1.2,
+          1.5
+         ]
+        },
+        {
+         "name": "stone 4 of the half ring",
+         "at": [
+          -0.27,
+          1.74
+         ]
+        },
+        {
+         "name": "stone 5 of the half ring",
+         "at": [
+          0.67,
+          1.63
+         ]
+        },
+        {
+         "name": "stone 6 of the half ring",
+         "at": [
+          1.51,
+          1.17
+         ]
+        },
+        {
+         "name": "stone 7 of the half ring",
+         "at": [
+          2.11,
+          0.42
+         ]
+        },
+        {
+         "name": "stone 8 of the half ring",
+         "at": [
+          2.39,
+          -0.49
+         ]
+        },
+        {
+         "name": "the sand tray",
+         "at": [
+          3.7,
+          -0.75
+         ]
+        }
+       ]
+      },
+      {
+       "id": "quarry_old",
+       "kind": "lamp",
+       "name": "the old quarry",
+       "at": [
+        -10.75,
+        129.65
+       ],
+       "size": [
+        14.6,
+        6.0
+       ],
+       "facing": "south",
+       "level": "upper",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the spoil heap",
+         "at": [
+          -0.25,
+          1.95
+         ]
+        },
+        {
+         "name": "the cut stone",
+         "at": [
+          -3.95,
+          -0.65
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          4.75,
+          -1.95
+         ]
+        },
+        {
+         "name": "among the weeds, 2",
+         "at": [
+          -3.25,
+          1.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "quarry_bay",
+       "kind": "lamp",
+       "name": "the quarry",
+       "at": [
+        17.0,
+        132.65
+       ],
+       "size": [
+        15.3,
+        12.0
+       ],
+       "facing": "south",
+       "level": "upper",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the crane",
+         "at": [
+          -1.6,
+          1.45
+         ]
+        },
+        {
+         "name": "the squared stones",
+         "at": [
+          -5.4,
+          4.75
+         ]
+        },
+        {
+         "name": "the squared stones, 2",
+         "at": [
+          -2.4,
+          4.95
+         ]
+        },
+        {
+         "name": "the split block",
+         "at": [
+          3.4,
+          -2.95
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          -6.4,
+          -3.55
+         ]
+        },
+        {
+         "name": "the fallen stone, 2",
+         "at": [
+          6.4,
+          -2.75
+         ]
+        },
+        {
+         "name": "among the weeds",
+         "at": [
+          6.6,
+          4.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "quarry_spoil",
+       "kind": "lamp",
+       "name": "the quarry's spoil",
+       "at": [
+        33.55,
+        129.65
+       ],
+       "size": [
+        12.2,
+        6.0
+       ],
+       "facing": "south",
+       "level": "upper",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the spoil heap",
+         "at": [
+          -2.55,
+          1.95
+         ]
+        },
+        {
+         "name": "the spoil heap, 2",
+         "at": [
+          2.65,
+          1.85
+         ]
+        },
+        {
+         "name": "the fallen stone",
+         "at": [
+          0.25,
+          1.95
+         ]
+        }
+       ]
+      },
+      {
+       "id": "clay_pit",
+       "kind": "lamp",
+       "name": "the clay pit",
+       "at": [
+        48.0,
+        129.65
+       ],
+       "size": [
+        12.7,
+        6.0
+       ],
+       "facing": "south",
+       "level": "clay_pit",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the last of the clay",
+         "at": [
+          2.8,
+          -0.75
+         ]
+        },
+        {
+         "name": "the clay boards",
+         "at": [
+          -3.4,
+          0.45
+         ]
+        }
+       ]
+      },
+      {
+       "id": "kelp_stance",
+       "kind": "lamp",
+       "name": "the wrack stance",
+       "at": [
+        -28.5,
+        19.7
+       ],
+       "size": [
+        16.9,
+        16.5
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the wrack racks",
+         "at": [
+          -5.7,
+          5.4
+         ]
+        },
+        {
+         "name": "the wrack racks, 2",
+         "at": [
+          -0.9,
+          6.4
+         ]
+        },
+        {
+         "name": "the wrack racks, 3",
+         "at": [
+          3.9,
+          5.4
+         ]
+        },
+        {
+         "name": "the wrack",
+         "at": [
+          7.1,
+          7.2
+         ]
+        },
+        {
+         "name": "the wrack, 2",
+         "at": [
+          2.9,
+          7.2
+         ]
+        },
+        {
+         "name": "the creels",
+         "at": [
+          -2.3,
+          7.2
+         ]
+        }
+       ]
+      },
+      {
+       "id": "peat_stance",
+       "kind": "lamp",
+       "name": "the peat stance",
+       "at": [
+        36.8,
+        28.05
+       ],
+       "size": [
+        20.3,
+        5.4
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the peat ricks",
+         "at": [
+          -8.2,
+          -0.35
+         ]
+        },
+        {
+         "name": "the peat ricks, 2",
+         "at": [
+          -4.3,
+          -0.35
+         ]
+        },
+        {
+         "name": "the peat ricks, 3",
+         "at": [
+          -0.4,
+          -0.35
+         ]
+        },
+        {
+         "name": "the tally slate",
+         "at": [
+          -8.9,
+          1.65
+         ]
+        }
+       ]
+      },
+      {
+       "id": "creel_stand",
+       "kind": "lamp",
+       "name": "the creel stand",
+       "at": [
+        73.9,
+        18.3
+       ],
+       "size": [
+        10.1,
+        13.7
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the loading bank",
+         "at": [
+          -0.5,
+          -3.8
+         ]
+        },
+        {
+         "name": "the creels",
+         "at": [
+          -2.3,
+          -2.3
+         ]
+        },
+        {
+         "name": "the handcart",
+         "at": [
+          1.9,
+          -1.0
+         ]
+        },
+        {
+         "name": "the bench",
+         "at": [
+          -3.9,
+          5.8
+         ]
+        }
+       ]
+      },
+      {
+       "id": "boatyard",
+       "kind": "lamp",
+       "name": "the boatyard",
+       "at": [
+        -80.05,
+        20.6
+       ],
+       "size": [
+        8.3,
+        20.4
+       ],
+       "facing": "south",
+       "level": "strand",
+       "height_m": 0,
+       "spots": [
+        {
+         "name": "the saw trestles",
+         "at": [
+          0.05,
+          2.2
+         ]
+        },
+        {
+         "name": "the pitch pot",
+         "at": [
+          0.85,
+          -4.4
+         ]
+        },
+        {
+         "name": "the steaming box",
+         "at": [
+          -18.85,
+          4.0
+         ]
+        },
+        {
+         "name": "the timber stacks",
+         "at": [
+          -14.55,
+          -4.6
+         ]
+        },
+        {
+         "name": "the gate",
+         "at": [
+          -2.95,
+          9.4
+         ]
+        }
+       ]
       }
      ],
      "resources": [
@@ -6745,10 +11354,10 @@
       {
        "kind": "clay_bank",
        "at": [
-        64.0,
-        140.0
+        50.6,
+        130.6
        ],
-       "where": "the clay bank below the Crown"
+       "where": "the clay pit under the graveyard's wall: the last bank of good clay"
       },
       {
        "kind": "kelp_bed",
@@ -7869,6 +12478,4895 @@
         "peat": 24
        },
        "note": "the sedge household's own store: 3 days of food for 1 and 24 hearth peat"
+      }
+     ],
+     "fixtures": [
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -61.48,
+         40.02
+        ],
+        [
+         -53.92,
+         40.02
+        ],
+        [
+         -53.92,
+         45.58
+        ],
+        [
+         -61.48,
+         45.58
+        ],
+        [
+         -61.48,
+         40.02
+        ]
+       ],
+       "gaps": [
+        [
+         0.83,
+         1.93
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -71.48,
+         40.02
+        ],
+        [
+         -63.92,
+         40.02
+        ],
+        [
+         -63.92,
+         45.58
+        ],
+        [
+         -71.48,
+         45.58
+        ],
+        [
+         -71.48,
+         40.02
+        ]
+       ],
+       "gaps": [
+        [
+         2.03,
+         3.13
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -81.48,
+         40.02
+        ],
+        [
+         -73.92,
+         40.02
+        ],
+        [
+         -73.92,
+         45.58
+        ],
+        [
+         -81.48,
+         45.58
+        ],
+        [
+         -81.48,
+         40.02
+        ]
+       ],
+       "gaps": [
+        [
+         3.23,
+         4.33
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -36.08,
+         53.02
+        ],
+        [
+         -28.52,
+         53.02
+        ],
+        [
+         -28.52,
+         58.58
+        ],
+        [
+         -36.08,
+         58.58
+        ],
+        [
+         -36.08,
+         53.02
+        ]
+       ],
+       "gaps": [
+        [
+         0.83,
+         1.93
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -75.48,
+         53.02
+        ],
+        [
+         -67.92,
+         53.02
+        ],
+        [
+         -67.92,
+         58.58
+        ],
+        [
+         -75.48,
+         58.58
+        ],
+        [
+         -75.48,
+         53.02
+        ]
+       ],
+       "gaps": [
+        [
+         2.03,
+         3.13
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -48.28,
+         68.02
+        ],
+        [
+         -40.72,
+         68.02
+        ],
+        [
+         -40.72,
+         73.58
+        ],
+        [
+         -48.28,
+         73.58
+        ],
+        [
+         -48.28,
+         68.02
+        ]
+       ],
+       "gaps": [
+        [
+         3.23,
+         4.33
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -38.28,
+         68.02
+        ],
+        [
+         -30.72,
+         68.02
+        ],
+        [
+         -30.72,
+         73.58
+        ],
+        [
+         -38.28,
+         73.58
+        ],
+        [
+         -38.28,
+         68.02
+        ]
+       ],
+       "gaps": [
+        [
+         0.83,
+         1.93
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -28.28,
+         68.02
+        ],
+        [
+         -20.72,
+         68.02
+        ],
+        [
+         -20.72,
+         73.58
+        ],
+        [
+         -28.28,
+         73.58
+        ],
+        [
+         -28.28,
+         68.02
+        ]
+       ],
+       "gaps": [
+        [
+         2.03,
+         3.13
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -36.08,
+         83.02
+        ],
+        [
+         -28.52,
+         83.02
+        ],
+        [
+         -28.52,
+         88.58
+        ],
+        [
+         -36.08,
+         88.58
+        ],
+        [
+         -36.08,
+         83.02
+        ]
+       ],
+       "gaps": [
+        [
+         3.23,
+         4.33
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -75.48,
+         83.02
+        ],
+        [
+         -67.92,
+         83.02
+        ],
+        [
+         -67.92,
+         88.58
+        ],
+        [
+         -75.48,
+         88.58
+        ],
+        [
+         -75.48,
+         83.02
+        ]
+       ],
+       "gaps": [
+        [
+         0.83,
+         1.93
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -61.48,
+         98.02
+        ],
+        [
+         -53.92,
+         98.02
+        ],
+        [
+         -53.92,
+         103.58
+        ],
+        [
+         -61.48,
+         103.58
+        ],
+        [
+         -61.48,
+         98.02
+        ]
+       ],
+       "gaps": [
+        [
+         2.03,
+         3.13
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -71.48,
+         98.02
+        ],
+        [
+         -63.92,
+         98.02
+        ],
+        [
+         -63.92,
+         103.58
+        ],
+        [
+         -71.48,
+         103.58
+        ],
+        [
+         -71.48,
+         98.02
+        ]
+       ],
+       "gaps": [
+        [
+         3.23,
+         4.33
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -81.48,
+         98.02
+        ],
+        [
+         -73.92,
+         98.02
+        ],
+        [
+         -73.92,
+         103.58
+        ],
+        [
+         -81.48,
+         103.58
+        ],
+        [
+         -81.48,
+         98.02
+        ]
+       ],
+       "gaps": [
+        [
+         0.83,
+         1.93
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -36.08,
+         113.02
+        ],
+        [
+         -28.52,
+         113.02
+        ],
+        [
+         -28.52,
+         118.58
+        ],
+        [
+         -36.08,
+         118.58
+        ],
+        [
+         -36.08,
+         113.02
+        ]
+       ],
+       "gaps": [
+        [
+         2.03,
+         3.13
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -75.48,
+         113.02
+        ],
+        [
+         -67.92,
+         113.02
+        ],
+        [
+         -67.92,
+         118.58
+        ],
+        [
+         -75.48,
+         118.58
+        ],
+        [
+         -75.48,
+         113.02
+        ]
+       ],
+       "gaps": [
+        [
+         3.23,
+         4.33
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -48.28,
+         127.02
+        ],
+        [
+         -40.72,
+         127.02
+        ],
+        [
+         -40.72,
+         132.58
+        ],
+        [
+         -48.28,
+         132.58
+        ],
+        [
+         -48.28,
+         127.02
+        ]
+       ],
+       "gaps": [
+        [
+         0.83,
+         1.93
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -38.28,
+         127.02
+        ],
+        [
+         -30.72,
+         127.02
+        ],
+        [
+         -30.72,
+         132.58
+        ],
+        [
+         -38.28,
+         132.58
+        ],
+        [
+         -38.28,
+         127.02
+        ]
+       ],
+       "gaps": [
+        [
+         2.03,
+         3.13
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -28.28,
+         127.02
+        ],
+        [
+         -20.72,
+         127.02
+        ],
+        [
+         -20.72,
+         132.58
+        ],
+        [
+         -28.28,
+         132.58
+        ],
+        [
+         -28.28,
+         127.02
+        ]
+       ],
+       "gaps": [
+        [
+         3.23,
+         4.33
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         59.3,
+         46.8
+        ],
+        [
+         59.3,
+         51.2
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         59.1,
+         51.0
+        ],
+        [
+         64.0,
+         51.0
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true,
+       "gaps": [
+        [
+         1.95,
+         2.95
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         63.8,
+         46.8
+        ],
+        [
+         63.8,
+         51.2
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         59.3,
+         53.7
+        ],
+        [
+         59.3,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         59.1,
+         53.9
+        ],
+        [
+         64.0,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         1.85,
+         3.05
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         63.8,
+         53.7
+        ],
+        [
+         63.8,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         53.6,
+         46.8
+        ],
+        [
+         53.6,
+         51.2
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         53.4,
+         51.0
+        ],
+        [
+         59.1,
+         51.0
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true,
+       "gaps": [
+        [
+         2.35,
+         3.35
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         53.6,
+         53.7
+        ],
+        [
+         53.6,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         53.4,
+         53.9
+        ],
+        [
+         59.1,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.25,
+         3.45
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         48.6,
+         46.8
+        ],
+        [
+         48.6,
+         51.2
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         48.4,
+         51.0
+        ],
+        [
+         53.4,
+         51.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true,
+       "gaps": [
+        [
+         2.0,
+         3.0
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         48.6,
+         53.7
+        ],
+        [
+         48.6,
+         59.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         48.4,
+         53.9
+        ],
+        [
+         53.4,
+         53.9
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         1.9,
+         3.1
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         42.1,
+         46.8
+        ],
+        [
+         42.1,
+         51.2
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         41.9,
+         51.0
+        ],
+        [
+         48.4,
+         51.0
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true,
+       "gaps": [
+        [
+         2.75,
+         3.75
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         42.1,
+         53.7
+        ],
+        [
+         42.1,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         41.9,
+         53.9
+        ],
+        [
+         48.4,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.65,
+         3.85
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         36.4,
+         46.8
+        ],
+        [
+         36.4,
+         51.2
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         36.2,
+         51.0
+        ],
+        [
+         41.9,
+         51.0
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true,
+       "gaps": [
+        [
+         2.35,
+         3.35
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         36.4,
+         53.7
+        ],
+        [
+         36.4,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         36.2,
+         53.9
+        ],
+        [
+         41.9,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.25,
+         3.45
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         10.0,
+         46.8
+        ],
+        [
+         10.0,
+         51.2
+        ]
+       ],
+       "height_m": 1.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         9.8,
+         51.0
+        ],
+        [
+         17.8,
+         51.0
+        ]
+       ],
+       "height_m": 1.6,
+       "blocks": true,
+       "gaps": [
+        [
+         3.5,
+         4.5
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         17.6,
+         46.8
+        ],
+        [
+         17.6,
+         51.2
+        ]
+       ],
+       "height_m": 1.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         10.0,
+         53.7
+        ],
+        [
+         10.0,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         9.8,
+         53.9
+        ],
+        [
+         17.8,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         3.4,
+         4.6
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         17.6,
+         53.7
+        ],
+        [
+         17.6,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         5.1,
+         46.8
+        ],
+        [
+         5.1,
+         51.2
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         4.9,
+         51.0
+        ],
+        [
+         9.8,
+         51.0
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true,
+       "gaps": [
+        [
+         1.95,
+         2.95
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         5.1,
+         53.7
+        ],
+        [
+         5.1,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         4.9,
+         53.9
+        ],
+        [
+         9.8,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         1.85,
+         3.05
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         0.2,
+         46.8
+        ],
+        [
+         0.2,
+         51.2
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         0.0,
+         51.0
+        ],
+        [
+         4.9,
+         51.0
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true,
+       "gaps": [
+        [
+         1.95,
+         2.95
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         0.2,
+         53.7
+        ],
+        [
+         0.2,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         0.0,
+         53.9
+        ],
+        [
+         4.9,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         1.85,
+         3.05
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -5.1,
+         46.8
+        ],
+        [
+         -5.1,
+         51.2
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -5.3,
+         51.0
+        ],
+        [
+         0.0,
+         51.0
+        ]
+       ],
+       "height_m": 1.5,
+       "blocks": true,
+       "gaps": [
+        [
+         2.15,
+         3.15
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -5.1,
+         53.7
+        ],
+        [
+         -5.1,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -5.3,
+         53.9
+        ],
+        [
+         0.0,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.05,
+         3.25
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -9.9,
+         46.8
+        ],
+        [
+         -9.9,
+         51.2
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -10.1,
+         51.0
+        ],
+        [
+         -5.3,
+         51.0
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         1.9,
+         2.9
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -9.9,
+         53.7
+        ],
+        [
+         -9.9,
+         59.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -10.1,
+         53.9
+        ],
+        [
+         -5.3,
+         53.9
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         1.8,
+         3.0
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -15.3,
+         46.8
+        ],
+        [
+         -15.3,
+         51.2
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -15.5,
+         51.0
+        ],
+        [
+         -10.1,
+         51.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.2,
+         3.2
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -15.3,
+         53.7
+        ],
+        [
+         -15.3,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -15.5,
+         53.9
+        ],
+        [
+         -10.1,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.1,
+         3.3
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         52.2,
+         75.8
+        ],
+        [
+         52.2,
+         80.0
+        ]
+       ],
+       "height_m": 1.8,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         52.0,
+         79.8
+        ],
+        [
+         64.0,
+         79.8
+        ]
+       ],
+       "height_m": 1.8,
+       "blocks": true,
+       "gaps": [
+        [
+         5.5,
+         6.5
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         63.8,
+         75.8
+        ],
+        [
+         63.8,
+         80.0
+        ]
+       ],
+       "height_m": 1.8,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         52.2,
+         82.5
+        ],
+        [
+         52.2,
+         89.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         52.0,
+         82.7
+        ],
+        [
+         64.0,
+         82.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         5.4,
+         6.6
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         63.8,
+         82.5
+        ],
+        [
+         63.8,
+         89.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         46.5,
+         74.8
+        ],
+        [
+         46.5,
+         80.0
+        ]
+       ],
+       "height_m": 1.7,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         46.3,
+         79.8
+        ],
+        [
+         52.0,
+         79.8
+        ]
+       ],
+       "height_m": 1.7,
+       "blocks": true,
+       "gaps": [
+        [
+         2.35,
+         3.35
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         46.5,
+         82.5
+        ],
+        [
+         46.5,
+         89.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         46.3,
+         82.7
+        ],
+        [
+         52.0,
+         82.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.25,
+         3.45
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         40.8,
+         74.8
+        ],
+        [
+         40.8,
+         80.0
+        ]
+       ],
+       "height_m": 1.7,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         40.6,
+         79.8
+        ],
+        [
+         46.3,
+         79.8
+        ]
+       ],
+       "height_m": 1.7,
+       "blocks": true,
+       "gaps": [
+        [
+         2.35,
+         3.35
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         40.8,
+         82.5
+        ],
+        [
+         40.8,
+         89.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         40.6,
+         82.7
+        ],
+        [
+         46.3,
+         82.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.25,
+         3.45
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         36.0,
+         74.8
+        ],
+        [
+         36.0,
+         80.0
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         35.8,
+         79.8
+        ],
+        [
+         40.6,
+         79.8
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         1.9,
+         2.9
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         36.0,
+         82.5
+        ],
+        [
+         36.0,
+         89.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         35.8,
+         82.7
+        ],
+        [
+         40.6,
+         82.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         1.8,
+         3.0
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         31.1,
+         74.8
+        ],
+        [
+         31.1,
+         80.0
+        ]
+       ],
+       "height_m": 1.7,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.9,
+         79.8
+        ],
+        [
+         35.8,
+         79.8
+        ]
+       ],
+       "height_m": 1.7,
+       "blocks": true,
+       "gaps": [
+        [
+         1.95,
+         2.95
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         31.1,
+         82.5
+        ],
+        [
+         31.1,
+         89.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.9,
+         82.7
+        ],
+        [
+         35.8,
+         82.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         1.85,
+         3.05
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -4.5,
+         74.8
+        ],
+        [
+         -4.5,
+         80.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -4.7,
+         79.8
+        ],
+        [
+         0.7,
+         79.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.2,
+         3.2
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         0.5,
+         74.8
+        ],
+        [
+         0.5,
+         80.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -4.5,
+         82.5
+        ],
+        [
+         -4.5,
+         89.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -4.7,
+         82.7
+        ],
+        [
+         0.7,
+         82.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.1,
+         3.3
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         0.5,
+         82.5
+        ],
+        [
+         0.5,
+         89.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -9.5,
+         74.8
+        ],
+        [
+         -9.5,
+         80.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -9.7,
+         79.8
+        ],
+        [
+         -4.7,
+         79.8
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true,
+       "gaps": [
+        [
+         2.0,
+         3.0
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -9.5,
+         82.5
+        ],
+        [
+         -9.5,
+         89.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -9.7,
+         82.7
+        ],
+        [
+         -4.7,
+         82.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         1.9,
+         3.1
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -15.3,
+         74.8
+        ],
+        [
+         -15.3,
+         80.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -15.5,
+         79.8
+        ],
+        [
+         -9.7,
+         79.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.4,
+         3.4
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -15.3,
+         82.5
+        ],
+        [
+         -15.3,
+         89.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -15.5,
+         82.7
+        ],
+        [
+         -9.7,
+         82.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.3,
+         3.5
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         58.4,
+         104.8
+        ],
+        [
+         58.4,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         58.2,
+         109.8
+        ],
+        [
+         64.0,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.4,
+         3.4
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         63.8,
+         104.8
+        ],
+        [
+         63.8,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         58.4,
+         112.5
+        ],
+        [
+         58.4,
+         119.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         58.2,
+         112.7
+        ],
+        [
+         64.0,
+         112.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.3,
+         3.5
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         63.8,
+         112.5
+        ],
+        [
+         63.8,
+         119.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         52.2,
+         104.8
+        ],
+        [
+         52.2,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         52.0,
+         109.8
+        ],
+        [
+         58.2,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.6,
+         3.6
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         52.2,
+         112.5
+        ],
+        [
+         52.2,
+         119.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         52.0,
+         112.7
+        ],
+        [
+         58.2,
+         112.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.5,
+         3.7
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         46.4,
+         104.8
+        ],
+        [
+         46.4,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         46.2,
+         109.8
+        ],
+        [
+         52.0,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.4,
+         3.4
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         46.4,
+         112.5
+        ],
+        [
+         46.4,
+         119.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         46.2,
+         112.7
+        ],
+        [
+         52.0,
+         112.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.3,
+         3.5
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         41.4,
+         104.8
+        ],
+        [
+         41.4,
+         110.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         41.2,
+         109.8
+        ],
+        [
+         46.2,
+         109.8
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true,
+       "gaps": [
+        [
+         2.0,
+         3.0
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         41.4,
+         112.5
+        ],
+        [
+         41.4,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         41.2,
+         112.7
+        ],
+        [
+         46.2,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         1.9,
+         3.1
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -5.5,
+         104.8
+        ],
+        [
+         -5.5,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -5.7,
+         109.8
+        ],
+        [
+         0.1,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.4,
+         3.4
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -0.1,
+         104.8
+        ],
+        [
+         -0.1,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -5.5,
+         112.5
+        ],
+        [
+         -5.5,
+         119.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -5.7,
+         112.7
+        ],
+        [
+         0.1,
+         112.7
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.3,
+         3.5
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -0.1,
+         112.5
+        ],
+        [
+         -0.1,
+         119.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -10.5,
+         104.8
+        ],
+        [
+         -10.5,
+         110.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -10.7,
+         109.8
+        ],
+        [
+         -5.7,
+         109.8
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true,
+       "gaps": [
+        [
+         2.0,
+         3.0
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -10.5,
+         112.5
+        ],
+        [
+         -10.5,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -10.7,
+         112.7
+        ],
+        [
+         -5.7,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         1.9,
+         3.1
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -15.3,
+         104.8
+        ],
+        [
+         -15.3,
+         110.0
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -15.5,
+         109.8
+        ],
+        [
+         -10.7,
+         109.8
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         1.9,
+         2.9
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -15.3,
+         112.5
+        ],
+        [
+         -15.3,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -15.5,
+         112.7
+        ],
+        [
+         -10.7,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         1.8,
+         3.0
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         17.8,
+         51.0
+        ],
+        [
+         33.2,
+         51.0
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         6.5,
+         8.9
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         18.0,
+         53.7
+        ],
+        [
+         18.0,
+         59.4
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         17.8,
+         53.9
+        ],
+        [
+         33.2,
+         53.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         3.0,
+         4.2
+        ],
+        [
+         10.5,
+         11.7
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         3.7,
+         67.5
+        ],
+        [
+         9.14,
+         67.5
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         3.9,
+         67.3
+        ],
+        [
+         3.9,
+         73.4
+        ]
+       ],
+       "height_m": 2.6,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         3.9,
+         73.4
+        ],
+        [
+         3.9,
+         80.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         3.7,
+         74.8
+        ],
+        [
+         9.14,
+         74.8
+        ]
+       ],
+       "height_m": 2.9,
+       "blocks": true,
+       "gaps": [
+        [
+         3.62,
+         4.62
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         3.7,
+         79.8
+        ],
+        [
+         9.14,
+         79.8
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         3.9,
+         82.5
+        ],
+        [
+         3.9,
+         89.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         3.7,
+         82.7
+        ],
+        [
+         9.14,
+         82.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         9.14,
+         67.5
+        ],
+        [
+         14.58,
+         67.5
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         9.34,
+         67.3
+        ],
+        [
+         9.34,
+         73.4
+        ]
+       ],
+       "height_m": 2.6,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         9.34,
+         73.4
+        ],
+        [
+         9.34,
+         80.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         9.14,
+         74.8
+        ],
+        [
+         14.58,
+         74.8
+        ]
+       ],
+       "height_m": 2.9,
+       "blocks": true,
+       "gaps": [
+        [
+         3.62,
+         4.62
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         9.14,
+         79.8
+        ],
+        [
+         14.58,
+         79.8
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         9.34,
+         82.5
+        ],
+        [
+         9.34,
+         89.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         9.14,
+         82.7
+        ],
+        [
+         14.58,
+         82.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         14.58,
+         67.5
+        ],
+        [
+         20.02,
+         67.5
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         14.78,
+         67.3
+        ],
+        [
+         14.78,
+         73.4
+        ]
+       ],
+       "height_m": 2.6,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         14.78,
+         73.4
+        ],
+        [
+         14.78,
+         80.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         14.58,
+         74.8
+        ],
+        [
+         20.02,
+         74.8
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true,
+       "gaps": [
+        [
+         3.62,
+         4.62
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         14.58,
+         79.8
+        ],
+        [
+         20.02,
+         79.8
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         14.78,
+         82.5
+        ],
+        [
+         14.78,
+         89.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         14.58,
+         82.7
+        ],
+        [
+         20.02,
+         82.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         20.02,
+         67.5
+        ],
+        [
+         25.46,
+         67.5
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         20.22,
+         67.3
+        ],
+        [
+         20.22,
+         73.4
+        ]
+       ],
+       "height_m": 2.6,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         20.22,
+         73.4
+        ],
+        [
+         20.22,
+         80.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         20.02,
+         74.8
+        ],
+        [
+         25.46,
+         74.8
+        ]
+       ],
+       "height_m": 2.9,
+       "blocks": true,
+       "gaps": [
+        [
+         3.62,
+         4.62
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         20.02,
+         79.8
+        ],
+        [
+         25.46,
+         79.8
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         20.22,
+         82.5
+        ],
+        [
+         20.22,
+         89.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         20.02,
+         82.7
+        ],
+        [
+         25.46,
+         82.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         25.46,
+         67.5
+        ],
+        [
+         30.9,
+         67.5
+        ]
+       ],
+       "height_m": 1.1,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         25.66,
+         67.3
+        ],
+        [
+         25.66,
+         73.4
+        ]
+       ],
+       "height_m": 2.6,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         25.66,
+         73.4
+        ],
+        [
+         25.66,
+         80.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         25.46,
+         74.8
+        ],
+        [
+         30.9,
+         74.8
+        ]
+       ],
+       "height_m": 2.9,
+       "blocks": true,
+       "gaps": [
+        [
+         3.62,
+         4.62
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         25.46,
+         79.8
+        ],
+        [
+         30.9,
+         79.8
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         30.7,
+         67.3
+        ],
+        [
+         30.7,
+         73.4
+        ]
+       ],
+       "height_m": 2.6,
+       "blocks": true
+      },
+      {
+       "kind": "stub_wall",
+       "points": [
+        [
+         30.7,
+         73.4
+        ],
+        [
+         30.7,
+         80.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         25.66,
+         82.5
+        ],
+        [
+         25.66,
+         89.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         25.46,
+         82.7
+        ],
+        [
+         30.9,
+         82.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.7,
+         82.5
+        ],
+        [
+         30.7,
+         89.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         0.1,
+         97.5
+        ],
+        [
+         5.54,
+         97.5
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         0.3,
+         97.3
+        ],
+        [
+         0.3,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         0.1,
+         109.8
+        ],
+        [
+         5.54,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         0.3,
+         112.5
+        ],
+        [
+         0.3,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         0.1,
+         112.7
+        ],
+        [
+         5.54,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         5.54,
+         97.5
+        ],
+        [
+         10.98,
+         97.5
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         5.74,
+         97.3
+        ],
+        [
+         5.74,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         5.54,
+         109.8
+        ],
+        [
+         10.98,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         5.74,
+         112.5
+        ],
+        [
+         5.74,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         5.54,
+         112.7
+        ],
+        [
+         10.98,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         10.99,
+         97.5
+        ],
+        [
+         16.43,
+         97.5
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         11.19,
+         97.3
+        ],
+        [
+         11.19,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         10.99,
+         109.8
+        ],
+        [
+         16.43,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         11.19,
+         112.5
+        ],
+        [
+         11.19,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         10.99,
+         112.7
+        ],
+        [
+         16.43,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         16.43,
+         97.5
+        ],
+        [
+         21.87,
+         97.5
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         16.63,
+         97.3
+        ],
+        [
+         16.63,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         16.43,
+         109.8
+        ],
+        [
+         21.87,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         16.63,
+         112.5
+        ],
+        [
+         16.63,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         16.43,
+         112.7
+        ],
+        [
+         21.87,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         21.87,
+         97.5
+        ],
+        [
+         27.31,
+         97.5
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         22.07,
+         97.3
+        ],
+        [
+         22.07,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         21.87,
+         109.8
+        ],
+        [
+         27.31,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         22.07,
+         112.5
+        ],
+        [
+         22.07,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         21.87,
+         112.7
+        ],
+        [
+         27.31,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         27.32,
+         97.5
+        ],
+        [
+         32.76,
+         97.5
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         27.52,
+         97.3
+        ],
+        [
+         27.52,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         27.32,
+         109.8
+        ],
+        [
+         32.76,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         27.52,
+         112.5
+        ],
+        [
+         27.52,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         27.32,
+         112.7
+        ],
+        [
+         32.76,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         32.76,
+         97.5
+        ],
+        [
+         38.2,
+         97.5
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         32.96,
+         97.3
+        ],
+        [
+         32.96,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         32.76,
+         109.8
+        ],
+        [
+         38.2,
+         109.8
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         38.0,
+         97.3
+        ],
+        [
+         38.0,
+         110.0
+        ]
+       ],
+       "height_m": 2.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         32.96,
+         112.5
+        ],
+        [
+         32.96,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         32.76,
+         112.7
+        ],
+        [
+         38.2,
+         112.7
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true,
+       "gaps": [
+        [
+         2.22,
+         3.22
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         38.0,
+         112.5
+        ],
+        [
+         38.0,
+         119.4
+        ]
+       ],
+       "height_m": 0.6,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         68.2,
+         40.1
+        ],
+        [
+         75.5,
+         40.1
+        ]
+       ],
+       "height_m": 0.8,
+       "blocks": true,
+       "gaps": [
+        [
+         3.0,
+         4.4
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         68.4,
+         39.9
+        ],
+        [
+         68.4,
+         59.0
+        ]
+       ],
+       "height_m": 0.8,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         68.2,
+         58.8
+        ],
+        [
+         75.5,
+         58.8
+        ]
+       ],
+       "height_m": 0.8,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         68.2,
+         67.5
+        ],
+        [
+         79.2,
+         67.5
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true,
+       "gaps": [
+        [
+         1.0,
+         2.2
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         68.4,
+         67.3
+        ],
+        [
+         68.4,
+         79.25
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         68.2,
+         79.05
+        ],
+        [
+         79.2,
+         79.05
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         79.0,
+         67.3
+        ],
+        [
+         79.0,
+         79.25
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.7,
+         32.0
+        ],
+        [
+         -83.7,
+         46.4
+        ]
+       ],
+       "height_m": 2.4,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.7,
+         47.0
+        ],
+        [
+         -83.7,
+         59.4
+        ]
+       ],
+       "height_m": 2.4,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.7,
+         60.0
+        ],
+        [
+         -83.7,
+         74.4
+        ]
+       ],
+       "height_m": 2.4,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.7,
+         75.0
+        ],
+        [
+         -83.7,
+         89.4
+        ]
+       ],
+       "height_m": 2.4,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.7,
+         90.0
+        ],
+        [
+         -83.7,
+         104.4
+        ]
+       ],
+       "height_m": 2.4,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.7,
+         105.0
+        ],
+        [
+         -83.7,
+         119.4
+        ]
+       ],
+       "height_m": 2.4,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.7,
+         120.0
+        ],
+        [
+         -83.7,
+         133.4
+        ]
+       ],
+       "height_m": 2.4,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -74.8,
+         19.0
+        ],
+        [
+         -74.8,
+         31.1
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -75.0,
+         19.2
+        ],
+        [
+         -54.4,
+         19.2
+        ]
+       ],
+       "height_m": 1.0,
+       "blocks": true,
+       "gaps": [
+        [
+         9.0,
+         12.0
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -49.0,
+         28.0
+        ],
+        [
+         -38.0,
+         28.0
+        ]
+       ],
+       "height_m": 1.4,
+       "blocks": true,
+       "gaps": [
+        [
+         4.0,
+         5.4
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -38.2,
+         16.3
+        ],
+        [
+         -38.2,
+         28.2
+        ]
+       ],
+       "height_m": 1.4,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         -13.8,
+         22.3
+        ],
+        [
+         -13.8,
+         31.1
+        ]
+       ],
+       "height_m": 2.2,
+       "blocks": true,
+       "gaps": [
+        [
+         2.2,
+         3.6
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         13.8,
+         22.3
+        ],
+        [
+         13.8,
+         31.1
+        ]
+       ],
+       "height_m": 2.2,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         48.2,
+         20.3
+        ],
+        [
+         48.2,
+         31.1
+        ]
+       ],
+       "height_m": 1.8,
+       "blocks": true,
+       "gaps": [
+        [
+         3.0,
+         4.4
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         59.8,
+         20.3
+        ],
+        [
+         59.8,
+         31.1
+        ]
+       ],
+       "height_m": 1.8,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.0,
+         134.3
+        ],
+        [
+         54.8,
+         134.3
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.2,
+         134.1
+        ],
+        [
+         30.2,
+         143.5
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true,
+       "gaps": [
+        [
+         4.5,
+         5.7
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         54.6,
+         134.1
+        ],
+        [
+         54.6,
+         143.5
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.0,
+         142.7
+        ],
+        [
+         54.8,
+         142.7
+        ]
+       ],
+       "height_m": 0.55,
+       "blocks": true,
+       "gaps": [
+        [
+         6.4,
+         8.0
+        ],
+        [
+         16.8,
+         18.4
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.2,
+         143.0
+        ],
+        [
+         30.2,
+         150.5
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         54.6,
+         143.0
+        ],
+        [
+         54.6,
+         150.5
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.0,
+         149.7
+        ],
+        [
+         54.8,
+         149.7
+        ]
+       ],
+       "height_m": 0.55,
+       "blocks": true,
+       "gaps": [
+        [
+         6.4,
+         8.0
+        ],
+        [
+         16.8,
+         18.4
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.2,
+         150.0
+        ],
+        [
+         30.2,
+         157.5
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         54.6,
+         150.0
+        ],
+        [
+         54.6,
+         157.5
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.0,
+         157.3
+        ],
+        [
+         54.8,
+         157.3
+        ]
+       ],
+       "height_m": 1.2,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         16.8,
+         153.6
+        ],
+        [
+         16.8,
+         161.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true,
+       "gaps": [
+        [
+         2.4,
+         3.6
+        ]
+       ]
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         16.6,
+         153.8
+        ],
+        [
+         28.4,
+         153.8
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "coped_wall",
+       "points": [
+        [
+         28.2,
+         153.6
+        ],
+        [
+         28.2,
+         161.9
+        ]
+       ],
+       "height_m": 0.9,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -25.8,
+         134.6
+        ],
+        [
+         -25.8,
+         140.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -25.8,
+         140.6
+        ],
+        [
+         -23.2,
+         140.6
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.4,
+         134.5
+        ],
+        [
+         -83.4,
+         145.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -83.4,
+         145.4
+        ],
+        [
+         -57.4,
+         145.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -57.4,
+         145.4
+        ],
+        [
+         -57.4,
+         171.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -57.4,
+         171.0
+        ],
+        [
+         -57.4,
+         195.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -57.4,
+         195.4
+        ],
+        [
+         -28.0,
+         195.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         -28.0,
+         195.4
+        ],
+        [
+         2.0,
+         195.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true,
+       "gaps": [
+        [
+         15.4,
+         16.6
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         2.0,
+         195.4
+        ],
+        [
+         30.0,
+         195.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         30.0,
+         195.4
+        ],
+        [
+         54.4,
+         195.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true,
+       "gaps": [
+        [
+         19.5,
+         23.1
+        ]
+       ]
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         54.4,
+         176.0
+        ],
+        [
+         54.4,
+         195.4
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "dry_wall",
+       "points": [
+        [
+         54.4,
+         157.6
+        ],
+        [
+         54.4,
+         176.0
+        ]
+       ],
+       "height_m": 1.3,
+       "blocks": true
+      },
+      {
+       "kind": "paling",
+       "points": [
+        [
+         -103.6,
+         9.8
+        ],
+        [
+         -97.6,
+         9.8
+        ]
+       ],
+       "height_m": 1.4,
+       "blocks": true
+      },
+      {
+       "kind": "paling",
+       "points": [
+        [
+         -84.4,
+         9.8
+        ],
+        [
+         -75.4,
+         9.8
+        ]
+       ],
+       "height_m": 1.4,
+       "blocks": true,
+       "gaps": [
+        [
+         0.6,
+         2.2
+        ]
+       ]
       }
      ]
     }
@@ -21799,6 +31297,39 @@
       },
       {
        "if": {
+        "hour": {
+         "above": 11,
+         "below": 13
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "not": {
+            "near": {
+             "target": {
+              "place": "the wrack stance"
+             },
+             "within": 6
+            }
+           }
+          },
+          "then": {
+           "do": "goto",
+           "target": {
+            "place": "the wrack stance"
+           }
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
+      {
+       "if": {
         "not": {
          "near": {
           "target": {
@@ -22692,6 +32223,39 @@
       },
       {
        "if": {
+        "hour": {
+         "above": 13,
+         "below": 16
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "not": {
+            "near": {
+             "target": {
+              "place": "the ropewalk"
+             },
+             "within": 6
+            }
+           }
+          },
+          "then": {
+           "do": "goto",
+           "target": {
+            "place": "the ropewalk"
+           }
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
+      {
+       "if": {
         "not": {
          "near": {
           "target": {
@@ -22752,6 +32316,39 @@
     "routine": "work on the boats",
     "graph": {
      "first": [
+      {
+       "if": {
+        "hour": {
+         "above": 13,
+         "below": 16
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "not": {
+            "near": {
+             "target": {
+              "place": "the boatyard"
+             },
+             "within": 6
+            }
+           }
+          },
+          "then": {
+           "do": "goto",
+           "target": {
+            "place": "the boatyard"
+           }
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
       {
        "if": {
         "not": {
@@ -22861,6 +32458,39 @@
      "first": [
       {
        "if": {
+        "hour": {
+         "above": 9,
+         "below": 12
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "not": {
+            "near": {
+             "target": {
+              "place": "the Readers' yard"
+             },
+             "within": 5
+            }
+           }
+          },
+          "then": {
+           "do": "goto",
+           "target": {
+            "place": "the Readers' yard"
+           }
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
+      {
+       "if": {
         "near": {
          "target": {
           "nearest": "sign"
@@ -22956,6 +32586,39 @@
      "first": [
       {
        "if": {
+        "hour": {
+         "above": 11,
+         "below": 13
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "not": {
+            "near": {
+             "target": {
+              "place": "the Bleach"
+             },
+             "within": 5
+            }
+           }
+          },
+          "then": {
+           "do": "goto",
+           "target": {
+            "place": "the Bleach"
+           }
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
+      {
+       "if": {
         "not": {
          "near": {
           "target": {
@@ -22982,6 +32645,39 @@
     "routine": "make pots",
     "graph": {
      "first": [
+      {
+       "if": {
+        "hour": {
+         "above": 7,
+         "below": 10
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "not": {
+            "near": {
+             "target": {
+              "place": "the clay pit"
+             },
+             "within": 5
+            }
+           }
+          },
+          "then": {
+           "do": "goto",
+           "target": {
+            "place": "the clay pit"
+           }
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
       {
        "if": {
         "not": {
@@ -23097,6 +32793,39 @@
     "routine": "play",
     "graph": {
      "first": [
+      {
+       "if": {
+        "hour": {
+         "above": 9,
+         "below": 12
+        }
+       },
+       "then": {
+        "first": [
+         {
+          "if": {
+           "not": {
+            "near": {
+             "target": {
+              "place": "the Readers' yard"
+             },
+             "within": 5
+            }
+           }
+          },
+          "then": {
+           "do": "goto",
+           "target": {
+            "place": "the Readers' yard"
+           }
+          }
+         },
+         {
+          "do": "keep"
+         }
+        ]
+       }
+      },
       {
        "if": {
         "all": [
@@ -23265,6 +32994,24 @@
    "ash house": [
     "lot:ash_house",
     "storage"
+   ],
+   "the Bleach": [
+    "lot:the_bleach"
+   ],
+   "the Readers' yard": [
+    "lot:readers_yard"
+   ],
+   "the clay pit": [
+    "lot:clay_pit"
+   ],
+   "the ropewalk": [
+    "lot:ropewalk"
+   ],
+   "the wrack stance": [
+    "lot:kelp_stance"
+   ],
+   "the boatyard": [
+    "lot:boatyard"
    ]
   },
   "evening": [

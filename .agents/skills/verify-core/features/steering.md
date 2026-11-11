@@ -34,8 +34,15 @@ Run the existing driver through the recorder using [SKILL.md](../SKILL.md). It s
 
 Since `laws-2` (2026-11-11) a creature's run, flight and step aside (as shares of its walk), its turn rate, the speed it keeps in sharp turns and its separation from others are the script's per-creature `motion(a)` law (docs/WORLD_RULES.md, "Laws"), asked through `common::moves_of`. `scenes.py moves` on a default-seed run: a person walks off (its cruising speed in `body.speed` is its walk), flees a second person with `run: false` (1.15 times that) and by default (a run since `stamina-1`, the `run_share` law times; [breath.md](breath.md)), then turns on the spot to face someone placed behind it (`body.turn` ±6 rad/s). An installed overlay with a flight of 2 and turning at 3 shows both changed; the shipped script is installed again at the end. Evidence: `moves-*.json`.
 
+## Admin placement
+
+Since `fix-place-free` (2026-11-11) the test-support reducers `place_near(id, near)` and `place_at(id, x, y)` (admin only, signatures unchanged) put a body on the nearest free walkable tile: walkable, and no other body standing on it (bodies of the chunks around the point, through the `body.chunk` index), within 6 m (`PLACE_RADIUS` in `living/authority/src/lib.rs`, `Map::nearest_free` in `living/rules/src/map.rs`). `place_near` keeps the exact point 1 m east of the target when that tile qualifies, else takes the nearest free tile centre of ground walkable from the target (once routes are warm); `place_at` takes the nearest free tile's centre. With none in the radius both refuse with `no free walkable tile within 6 m of (x, y)` and the body stays. Before, `place_near` could put a body inside an obstacle (goto and give then failed: "could not get there", "the way is blocked") and `place_at` put two bodies on one tile (nearest walkable within 12 tiles, occupancy ignored).
+
+`scenes.py placement` on a default-seed run: a target beside an obstacle more than 10 m from every body; `place_near` lands on a walkable tile and the body then walks 5 m (`goto`); a second `place_near` takes another tile; two `place_at` requests 1.9 m apart that the old snapping put on one tile (the scene recomputes it, `old_snap`) land on two; a request with no walkable tile within 6 m (deep water or rock, else off the map) is refused. Evidence: `placement-spots.json`, `placement-near-uses.json`, `placement-actions.jsonl`. Run it last on a shared run: its bodies stay, and `open_line` (used by `moves`, `say` and others) does not avoid bodies, so a crowded line can fail `moves`' turn check.
+
 ## Gotchas
 
+- Scenes that `place_at` two bodies on one point (`sight`, `drop`, speech `ways`) now get two neighbouring tiles; all passed on 2026-11-11 (`core-place-20261111-205914*`).
 - Pass an explicit `verify-core-*` database. The driver publishes and deletes it itself.
 - It uses the admin CLI identity for `join` and `human_move`. Use `verify-player` for the player's own identity.
 - A body row is an analytic segment. Its `x` and `y` alone are not the current position.

@@ -86,9 +86,9 @@ fn move_speed(a) {
     if a.actor.energy < tired_below() && a.actor.energy >= 10.0 { s * 0.8 } else { s }
 }
 // The status and the minds say why: tired (a slow walk), or exhausted as everywhere.
-fn slowed(a) {
-    if a.actor.energy < tired_below() && a.actor.energy >= 10.0 { return "tired, so you walk slower"; }
-    base_slowed(a)
+fn slow_words(kind, energy) {
+    if energy < tired_below() && energy >= 10.0 { return "tired, so you walk slower"; }
+    base_slow_words(kind, energy)
 }
 
 // ---- light and sight (docs/SMALL_CITY.md §5; decision 6) --------------------------------------

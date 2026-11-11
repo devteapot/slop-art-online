@@ -386,6 +386,25 @@ pub struct Vitals {
     pub focus_from_ms: u64,
 }
 
+impl Vitals {
+    /// The row's columns (a world's `meters()` may name any of them). A column added to this
+    /// table is added here and in [`Vitals::fields`], and nowhere else: the rules read the body
+    /// by field name (`living_rules::script::BodyFacts`).
+    pub const FIELDS: [&'static str; 20] = [
+        "id", "hp", "max_hp", "hunger", "energy", "at_ms", "hp_rate", "hunger_rate", "energy_rate", "rate_key", "hurt_ms", "hurt_by",
+        "stamina", "stamina_max", "stamina_rate", "stamina_from_ms", "focus", "focus_max", "focus_rate", "focus_from_ms",
+    ];
+
+    /// The row's numeric fields by name, in [`Vitals::FIELDS`]'s order.
+    pub fn fields(&self) -> Vec<(String, f64)> {
+        let v = [
+            self.id as f64, self.hp as f64, self.max_hp as f64, self.hunger as f64, self.energy as f64, self.at_ms as f64, self.hp_rate as f64, self.hunger_rate as f64, self.energy_rate as f64, self.rate_key as f64, self.hurt_ms as f64, self.hurt_by as f64,
+            self.stamina as f64, self.stamina_max as f64, self.stamina_rate as f64, self.stamina_from_ms as f64, self.focus as f64, self.focus_max as f64, self.focus_rate as f64, self.focus_from_ms as f64,
+        ];
+        Self::FIELDS.iter().zip(v).map(|(k, v)| (k.to_string(), v)).collect()
+    }
+}
+
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
 pub struct TargetRef {
     /// 0 none, 1 resource, 2 structure, 3 creature, 4 point.
@@ -1275,6 +1294,72 @@ pub struct Readiness {
     pub move_dx: f32,
     pub move_dy: f32,
     pub move_run: bool,
+}
+
+/// What a player's character senses now (private; its client reads its own through the
+/// `my_senses` view): the world's `senses(a)` law for the character with all its facts, so a
+/// client draws its sight and hearing from the rules' answer instead of running the law on
+/// the few facts it has. Written at the character's frames only when a value changed
+/// (`frame::show_senses`): nightfall, dawn, a torch picked up or put away. `field` is whether
+/// sight depends on facing (the world's `fov_on` law); its five numbers are 0 while it does
+/// not. One row per character a person plays now; it goes when the character dies.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = character_senses)]
+pub struct CharacterSenses {
+    #[primary_key]
+    pub id: u32,
+    /// Metres seen and heard (one tile is one metre).
+    pub sight: f32,
+    pub hearing: f32,
+    /// Sight narrows away from facing (`living_rules::sight::Field`).
+    pub field: bool,
+    pub focal_deg: f32,
+    pub side_deg: f32,
+    pub side_share: f32,
+    pub near_m: f32,
+    pub margin_deg: f32,
+    /// When a value last changed (authority ms).
+    pub at_ms: u64,
+}
+
+impl CharacterSenses {
+    /// The row for character `id` from the law's answer (`at_ms` 0: stamped when written).
+    pub fn of(id: u32, s: &living_rules::script::Senses) -> Self {
+        let f = s.field.unwrap_or(living_rules::sight::Field { focal_deg: 0.0, side_deg: 0.0, side_share: 0.0, near_m: 0.0, margin_deg: 0.0 });
+        Self { id, sight: s.sight, hearing: s.hearing, field: s.field.is_some(), focal_deg: f.focal_deg, side_deg: f.side_deg, side_share: f.side_share, near_m: f.near_m, margin_deg: f.margin_deg, at_ms: 0 }
+    }
+
+    /// The same senses, whenever they were stamped.
+    pub fn same(&self, o: &Self) -> bool {
+        Self { at_ms: 0, ..self.clone() } == Self { at_ms: 0, ..o.clone() }
+    }
+}
+
+/// How an act or a death came out, for a person's client (private; read through
+/// `my_act_outcomes`): one row per experience line that tells it, keyed by that line's id and
+/// written in the same transaction (`outcomes::write`). `kind` picks the vocabulary of `code`
+/// (`living_rules::outcome`): `act` (a deliberate act: a player's command or a mind's decision)
+/// and `own` (a graph's action, told when it failed) take an act code; `death` (the
+/// character's own) a death code, with the killer in `other`. `what` is the act as described,
+/// `why` the rules' words for a refusal or a failure (empty when done). Written only for a
+/// character a person plays now, and kept as long as its line is in `my_experience` (the newest
+/// `frame::LINES_SHOWN`); a person's rows go when they play another character.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = act_outcome)]
+pub struct ActOutcome {
+    /// The experience line's id.
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub at_ms: u64,
+    pub kind: String,
+    pub ok: bool,
+    pub skill: String,
+    pub code: String,
+    pub what: String,
+    pub why: String,
+    pub other: u32,
 }
 
 // ---- town life (docs/TOWN_LIFE.md) ------------------------------------------------

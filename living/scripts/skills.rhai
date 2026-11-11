@@ -553,8 +553,11 @@ fn move_speed(a) {
     if a.actor.energy < 10.0 { base * law("tired_pace") } else { base }
 }
 // Why a body walks slower than its pace, in the words its status shows and its mind feels ("":
-// it is not slowed). Every slowdown in `move_speed` but age has its words here.
-fn slowed(a) { if a.actor.energy < 10.0 { "exhausted, so you walk slower" } else { "" } }
+// it is not slowed). Every slowdown in `move_speed` but age has its words here; `slowed(a)`
+// (a skill's context: the scene a mind reads) and `status_of` (the body: a player's pill and the
+// mind's felt words) both ask `slow_words`, so a world changes them in one place.
+fn slow_words(kind, energy) { if energy < 10.0 { "exhausted, so you walk slower" } else { "" } }
+fn slowed(a) { slow_words(a.actor.kind, a.actor.energy) }
 
 // ---- breath and focus (a law per creature, kept per state) ---------------------------------
 // Two short pools in real seconds, beside tiredness (`energy`, the needs): breath (`stamina`) for
@@ -2173,7 +2176,7 @@ fn rework_spec() {
 
 fn wave_spec() { #{ target: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
 fn nod_spec() { #{ target: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
-fn appraise_spec() { #{ target: true, reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
+fn appraise_spec() { #{ target: true, target_class: "creature", reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
 fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
 fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
 fn keep_spec() { #{ about: "Keep your post a while (a stall, a workshop, a gate, a door): stand at it and attend to whoever comes by.", takes: "10 seconds at your post", gives: "you are seen at work there" } }
@@ -2315,6 +2318,86 @@ fn rates_awake() {
     ()
 }
 
+// ---- the body's meters and statuses (players' screens and minds' words alike) ----------------
+// `meters()`: the bars a body has, each naming fields of its `my_vitals` row: `value`, and `max`
+// a field or a number; `shown: false` keeps a meter off the screen while it still bounds its
+// value and feeds the statuses. A world that adds a vital adds its column and a row here.
+// Breath is a bar under health, always; focus a bar under the world's word for it, while it is
+// not full; tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
+fn meters() {
+    let w = pool_word("focus");
+    [
+        #{ name: "health", value: "hp", max: "max_hp", order: 0 },
+        #{ name: "stamina", value: "stamina", max: "stamina_max", order: 1 },
+        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1), while_short: true },
+        #{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },
+        #{ name: "hunger", value: "hunger", max: 100.0, order: 4, shown: false },
+    ]
+}
+
+// How a body is: one set of thresholds for the players' screens, the minds' words about their
+// bodies and their bodily alarms. `a` is the body, not a skill's context: each my_vitals field by
+// name as it stands now (a rate moved along it; whole numbers), `hurt_ago_s` (-1: never hurt; at
+// most 120), `share` (each meter over its max: `a.share.health`), `kind`, `stage` and `night`.
+// Each status is `#{ name, tone, text }` (tone: good, warn, bad or plain; text for a screen), with
+// `meter` (the meter it speaks of), `felt` (a mind's words) and an alarm told once each time it
+// begins: `alarm`, `salience`, `think` (always, no_food or never: whether it makes the mind think)
+// and `routine` (the want whose routine is quoted when it does).
+fn hunger_status(h) {
+    if h >= 97.0 {
+        #{ name: "starving", tone: "bad", text: "Starving", meter: "hunger", felt: "starving, your body wasting away",
+           alarm: "You are starving: your body is wasting away.", salience: 0.8, think: "always", routine: "food" }
+    } else if h >= 80.0 {
+        #{ name: "very_hungry", tone: "warn", text: "Very hungry", meter: "hunger", felt: "very hungry",
+           alarm: "You are very hungry.", salience: 0.5, think: "no_food" }
+    } else if h > 55.0 { #{ name: "hungry", tone: "warn", text: "Hungry", meter: "hunger", felt: "hungry" } }
+    else if h > 40.0 { #{ name: "peckish", tone: "plain", text: "Peckish", meter: "hunger", felt: "beginning to feel hungry" } }
+    else if h <= 15.0 { #{ name: "fed", tone: "good", text: "Well fed", meter: "hunger", felt: "well fed" } }
+    else { #{ name: "not_hungry", tone: "plain", text: "Not hungry", meter: "hunger", felt: "not hungry" } }
+}
+fn energy_status(e) {
+    if e <= 0.0 {
+        #{ name: "spent", tone: "bad", text: "Spent", meter: "energy", felt: "utterly spent", alarm: "You are exhausted.", salience: 0.4 }
+    } else if e < 12.0 {
+        #{ name: "exhausted", tone: "bad", text: "Exhausted", meter: "energy", felt: "exhausted", alarm: "You are exhausted.", salience: 0.4 }
+    } else if e < 30.0 { #{ name: "tired", tone: "warn", text: "Tired", meter: "energy", felt: "tired" } }
+    else if e < 50.0 { #{ name: "a_little_tired", tone: "plain", text: "A little tired", meter: "energy", felt: "a little tired" } }
+    else if e >= 85.0 { #{ name: "well_rested", tone: "good", text: "Well rested", meter: "energy", felt: "well rested" } }
+    else { #{ name: "rested", tone: "plain", text: "Rested", meter: "energy", felt: "rested" } }
+}
+// By the share of full health.
+fn health_status(f) {
+    if f < 0.15 {
+        #{ name: "barely_alive", tone: "bad", text: "Barely alive", meter: "health", felt: "barely alive", alarm: "You are badly hurt.", salience: 0.7, think: "always" }
+    } else if f < 0.35 {
+        #{ name: "badly_hurt", tone: "bad", text: "Badly hurt", meter: "health", felt: "badly wounded", alarm: "You are badly hurt.", salience: 0.7, think: "always" }
+    } else if f < 0.6 { #{ name: "hurt", tone: "warn", text: "Hurt", meter: "health", felt: "hurt" } }
+    else if f < 0.9 { #{ name: "a_little_hurt", tone: "plain", text: "A little hurt", meter: "health", felt: "a little hurt" } }
+    else { #{ name: "unhurt", tone: "plain", text: "Unhurt", meter: "health", felt: "unhurt" } }
+}
+fn status_of(a) {
+    let out = [];
+    if a.hunger != () { out.push(hunger_status(a.hunger)); }
+    if a.energy != () { out.push(energy_status(a.energy)); }
+    let f = a.share.health;
+    if f != () { out.push(health_status(f)); }
+    let falling = if a.hp_rate == () { 0.0 } else { a.hp_rate };
+    // Losing health in the night air without starving: the cold (an alarm the mind acts on).
+    if a.night && a.kind == "person" && falling < 0.0 && a.hunger != () && a.hunger < 100.0 {
+        out.push(#{ name: "freezing", tone: "bad", text: "Freezing", alarm: "You are freezing in the night air; you need a fire or shelter.", salience: 0.6, think: "always" });
+    }
+    if a.hurt_ago_s != () && a.hurt_ago_s >= 0.0 && a.hurt_ago_s < 15.0 { out.push(#{ name: "in_combat", tone: "bad", text: "In combat" }); }
+    // Breath: short of it after a run or in a fight (the refusal's words); slowed, and why.
+    if a.stamina != () && a.stamina < 20.0 { out.push(#{ name: "out_of_breath", tone: "warn", text: "Out of breath", meter: "stamina", felt: "out of breath" }); }
+    if a.energy != () {
+        let slow = slow_words(a.kind, a.energy);
+        if slow != "" { out.push(#{ name: "slowed", tone: "warn", text: "Walking slower", meter: "energy", felt: "walking slower" }); }
+    }
+    if falling < -0.01 { out.push(#{ name: "wasting", tone: "bad", text: "Wasting", felt: "you are growing weaker" }); }
+    else if falling > 0.01 && f != () && f < 0.99 { out.push(#{ name: "recovering", tone: "good", text: "Recovering", felt: "your wounds are mending" }); }
+    out
+}
+
 // A rate of the rates law in real minutes, as the engine turns it (`per`: a game hour or a minute).
 fn per_real_minute(r, x) { if r.per == "hour" { x * 60000.0 / hour_ms() } else { x } }
 
@@ -2322,7 +2405,7 @@ fn needs_law() {
     let awake = rates_awake();
     let l = laws();
     let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(per_real_minute(awake, awake.hunger))}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-per_real_minute(awake, awake.energy))}/min` };
-    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing"],
+    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing", "meters", "status_of"],
        about: `${rise} awake and recovers while sleeping (faster within ${short(l.shelter_warmth)} m of a shelter or house). At night, people farther than ${short(l.fire_warmth)} m from a campfire and ${short(l.shelter_warmth)} m from a shelter or house, and without a warm cloak, are cold: it tires them, and on winter nights or in the rain it also costs health. Health recovers slowly when fed and rested. Death is permanent.` }
 }
 
