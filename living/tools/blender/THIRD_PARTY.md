@@ -1,10 +1,10 @@
 # Third-party material and the character generator
 
-What the character generator (`person.py`, `head_form.py`, `head_mesh.py`, `face_paint.py`, `person_params.py`) starts from, and under what licence. Checked 2026-11-11.
+What the character generator (`person.py`, `head_form.py`, `head_mesh.py`, `face_paint.py`, `hair.py`, `person_params.py`) starts from, and under what licence. Checked 2026-11-11, and again for pass 2 (`char-3`) the same day.
 
 ## Included in the generator: nothing
 
-Every mesh, weight, colour and texture of a generated person is computed by the scripts in this directory. No third-party mesh, texture, morph target or code is in the repository or in a generated file.
+Every mesh, weight, colour and texture of a generated person is computed by the scripts in this directory. No third-party mesh, texture, morph target or code is in the repository or in a generated file. That holds for pass 2: the hair's locks are walked and built by `hair.py`, its strand texture is painted by `hair.paint_strands`, and the iris by `face_paint.paint_iris`.
 
 ## Studied, not copied: the VRoid samples
 
@@ -12,8 +12,15 @@ The two look-dev controls, `lookdev/vroid-Sendagaya_Shino.glb` and `lookdev/vroi
 
 - **Licence:** each file's own VRM metadata says `"licenseName": "CC0"`, `"commercialUssageName": "Allow"`, `"allowedUserName": "Everyone"` (read from the files on 2026-11-11).
 - **What was taken:** the method only. The face is a mask with real eye openings. The eye is a surface set back behind the lids, with painted layers. Lashes, lid lines and brows are separate pieces standing off the skin. The mouth is a real slit with an inside. Expressions are morph targets named `Fcl_…`. `docs/CHARACTERS.md` records the findings.
-- **What was not taken:** no vertex, triangle, UV layout or texel. The generator's topology is its own (a cube-sphere on a parametric form, cut and stitched by script), and its textures are painted by `face_paint.py`.
-- The generator writes VRoid's material-name tags, bone names and morph-target names, because the game and `animate.py` recognise characters by them. Names are an interface, not content.
+- **What was taken in pass 2:** again the method only, read from the file's structure (primitive counts, vertex counts per lock, UV ranges, material settings, image sizes and their mean values by row) and from looking at its hair and eye pictures:
+  - hair as about fifty broad locks, each a front and a back surface a few vertices across, mapped root to tip onto one tall grey strand texture that is darker at the root and the tip, over a scalp painted with the same strands;
+  - the highlight as a band across the locks broken into teeth;
+  - long locks hung from chains of spring bones with colliders on the head and body;
+  - the eye as a white set back behind the lids, an iris layer and a highlight layer over it, turned by one bone an eye (`J_Adj_L_FaceEye`, `J_Adj_R_FaceEye`);
+  - the iris drawn with a dark rim, a shaded top, a warm lit crescent below and a cool arc above;
+  - the face's proportions, measured on the mesh (where the eyes sit on the head, the eye opening's height over its width, the head's width over its height), which set `person_params.STYLE`.
+- **What was not taken:** no vertex, triangle, UV layout or texel, in either pass. The generator's topology is its own (a cube-sphere on a parametric form, cut and stitched by script; locks walked over that form), and its textures are painted by `face_paint.py` and `hair.py`. The reference's textures were opened only to look at and to take row averages from; none was saved into the repository or used as a source for ours.
+- The generator writes VRoid's material-name tags, bone names (the `J_Bip_*` skeleton, the two eye bones, `J_Sec_Hair*` for spring chains) and morph-target names, and a VRM 0.x block (humanoid, look-at, spring bones), because the game and `animate.py` recognise characters by them. Names and a file format are an interface, not content.
 
 ## Checked and not used: MakeHuman and MPFB2
 
@@ -35,4 +42,4 @@ These are run, not redistributed; their licences put no terms on what they produ
 | Pillow | Contact sheets in `living/tools/characters/` | MIT-CMU (HPND) |
 | ffmpeg | Clips on the check pages | LGPL/GPL (the program) |
 
-The motion clips are the project's existing Kimodo library (`living/tools/kimodo/`, `clips.json`); this pass generated none and changed nothing there.
+The motion clips are the project's existing Kimodo library (`living/tools/kimodo/`, `clips.json`); neither pass generated any or changed anything there. No online or paid generation service was used in either pass.

@@ -88,6 +88,26 @@ struct ActorMind {
     deferring: bool,
     /// Deliberations in a row whose model could not be reached (their request waits).
     model_failures: u32,
+    /// How many deliberations each pending reason (its text and arrival time) was already
+    /// carried by (`carried_reasons`).
+    carried: HashMap<(String, u64), u32>,
+}
+
+/// The record of what a deliberation carried: each reason line of its request, when it
+/// arrived, and how many earlier deliberations of this service already carried that same
+/// arrival (0 for a reason seen the first time). `counts` keeps only the reasons still pending.
+fn carry(counts: &mut HashMap<(String, u64), u32>, lines: Vec<(String, u64)>) -> Value {
+    counts.retain(|k, _| lines.contains(k));
+    let out: Vec<Value> = lines
+        .into_iter()
+        .map(|(text, arrived_ms)| {
+            let n = counts.entry((text.clone(), arrived_ms)).or_insert(0);
+            let before = *n;
+            *n += 1;
+            json!({"text": text, "arrived_ms": arrived_ms, "carried_before": before})
+        })
+        .collect();
+    Value::Array(out)
 }
 
 /// Where a character's first identity comes from, when the service finds none.
@@ -1575,6 +1595,12 @@ impl Minds {
 
     // ---- deliberation ------------------------------------------------------------
 
+    /// What this deliberation carried (see `carry`), for its thought's `detail.reasons`.
+    fn carried_reasons(&self, d: &Deliberation) -> Value {
+        let lines = living_rules::reasons::lines(&d.reason, &d.arrived);
+        carry(&mut self.actors.lock().unwrap().entry(d.actor).or_default().carried, lines)
+    }
+
     async fn deliberate(&self, d: &Deliberation) -> Result<()> {
         let actor = d.actor;
         let lane = self.deliberation_lane(d);
@@ -1746,7 +1772,7 @@ impl Minds {
                             if acts.is_empty() { String::new() } else { format!(" and acts: {}", acts_text(&acts)) },
                             if say.is_empty() { String::new() } else { format!(" and says “{say}”") }
                         ),
-                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "projects": project_detail}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "reply": v, "attempts": attempt + 1, "projects": project_detail}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
                         model: reply.model.clone(),
@@ -1791,7 +1817,7 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!("{thought} → {plan}{}{serves_note}", if acts.is_empty() { String::new() } else { format!(" (acts: {})", acts_text(&acts)) }),
-                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "pruned": pruned, "projects": project_detail}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "reply": v, "attempts": attempt + 1, "pruned": pruned, "projects": project_detail}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
                         model: reply.model.clone(),
@@ -1902,7 +1928,7 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!("{feeling} → {impulse}{}", if changed.is_empty() { String::new() } else { format!(" (reworks {})", changed.join(", ")) }),
-                        detail: json!({"reason": d.reason, "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1}).to_string(),
                         latency_ms: latency,
                         tokens,
                         model: format!("{} → {}", felt.model, reply.model),
@@ -1925,7 +1951,7 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!("{feeling} → {impulse}"),
-                        detail: json!({"reason": d.reason, "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
                         latency_ms: latency,
                         tokens,
                         model: format!("{} → {}", felt.model, reply.model),
@@ -2259,6 +2285,21 @@ fn label_node(node: Value, label: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The per-deliberation record of reasons: a reason carried again keeps counting, a new
+    /// arrival of the same words starts at 0, and reasons no longer pending are forgotten.
+    #[test]
+    fn carried_reasons_count_earlier_deliberations_per_arrival() {
+        let mut counts = HashMap::new();
+        let first = carry(&mut counts, vec![("You long for another child.".into(), 10), ("I finished my plan.".into(), 12)]);
+        assert_eq!(first.as_array().unwrap().iter().map(|r| r["carried_before"].as_u64().unwrap()).collect::<Vec<_>>(), vec![0, 0]);
+        let again = carry(&mut counts, vec![("You long for another child.".into(), 10), ("I finished my plan.".into(), 30)]);
+        assert_eq!(again[0]["carried_before"], 1);
+        assert_eq!(again[1]["carried_before"], 0, "a new arrival of the same words is a new reason");
+        assert_eq!(again[0]["arrived_ms"], 10);
+        carry(&mut counts, vec![]);
+        assert!(counts.is_empty());
+    }
 
     /// A compile that put the decision's words in a say act (a real rules2-r2 reply's shape)
     /// speaks them when the decision said nothing; when it did, its speech stands. Either way

@@ -64,6 +64,7 @@ from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import face_paint  # noqa: E402
+import hair  # noqa: E402
 import head_form  # noqa: E402
 import head_mesh  # noqa: E402
 import person_params  # noqa: E402
@@ -121,6 +122,8 @@ SKIN_SHADE = (0.66, 0.45, 0.37)
 HAIR = (0.115, 0.09, 0.08)
 HAIR_TIP = (0.20, 0.155, 0.125)
 RECEDE = 0.0  # how far the front hairline has moved back, m
+BALD = 0.0  # 0 a full head of hair to 1 a bald crown from the forehead back
+STRANDS_PATH = ""  # where the strands' picture is written
 LIMB_K = 1.0  # girth of arms and legs
 GIRTH = 1.0  # girth of the torso
 BELLY = 0.0  # how far a belly stands forward (a share of the torso's depth)
@@ -211,6 +214,12 @@ def mirror_name(n):
 
 def make_armature():
     finger_joints()
+    # The eyes' bones (VRoid's names), each at the centre of the ball its iris lies on: turning
+    # one slides that iris over the white.
+    if HF is not None:
+        for side, n in ((-1, "J_Adj_L_FaceEye"), (1, "J_Adj_R_FaceEye")):
+            JOINTS[n] = tuple(hw(head_mesh.eye_ball(HF, side)))
+            PARENT[n] = "J_Bip_C_Head"
     for n in [n for n in JOINTS if n.startswith("J_Bip_L_")]:
         x, y, z = JOINTS[n]
         JOINTS[mirror_name(n)] = (-x, y, z)
@@ -678,7 +687,7 @@ def boot(part, d=0.0, tag_fn=None):
 # The head. Its form is head_form.py's (a loft with the face's features as bumps, set by the
 # face parameters); these place it on the neck and give the rest of the script its surface.
 
-HEAD_SCALE = 1.08  # a little larger than life, as stylised figures are
+HEAD_SCALE = 1.08  # a little larger than life, as stylised figures are (configure() sets it from the style)
 HEAD = Vector((0, -0.004, 1.535 + 0.131 * HEAD_SCALE))  # configure() keeps the chin at 1.535 m
 ORIGIN = Vector(head_form.ORIGIN)  # rays leave from here (relative to HEAD)
 
@@ -923,12 +932,16 @@ def make_face(arm, spec, atlas_path):
     head's surface (positions relative to HEAD, quads) for hair, beards and headwear."""
     look = spec["look"]
     # The scalp is dropped where the hair's cap covers it (well inside the hairline).
-    face = head_mesh.Face(HF, look, keep=lambda c: c[2] < hairline(az_of(c)) + 0.016)
+    face = head_mesh.Face(HF, look, keep=lambda c: c[2] < hairline(az_of(c)) + 0.016 or bald_depth(c) > -0.012)
     m = face.mesh
-    order = [k for k in ("face", "eye", "line", "brow", "mouth") if k in set(m.fm)]
+    # The iris shares the eye's material (the atlas); highlights are plain colour, as the lines are.
+    fm = [dict(iris="eye", glint="line").get(k, k) for k in m.fm]
+    order = [k for k in ("face", "eye", "line", "brow", "mouth") if k in set(fm)]
     base = np.array(HEAD)[None, :]
     world = base + np.array(m.v) * HEAD_SCALE
-    ob = raw_object("Face", world, m.f, [{"J_Bip_C_Head": 1.0}] * len(m.v), m.col, None, arm, uvs=m.uv, materials=[MAT[k] for k in order], face_mats=[order.index(k) for k in m.fm])
+    eye_bone = {-1: "J_Adj_L_FaceEye", 1: "J_Adj_R_FaceEye"}
+    weights = [{"J_Bip_C_Head": 1.0} if e is None else ({eye_bone[e[0]]: e[1], "J_Bip_C_Head": 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}) for e in m.eye]
+    ob = raw_object("Face", world, m.f, weights, m.col, None, arm, uvs=m.uv, materials=[MAT[k] for k in order], face_mats=[order.index(k) for k in fm])
     ob.shape_key_add(name="Basis", from_mix=False)
     for name, delta in face.morphs.items():
         key = ob.shape_key_add(name=name, from_mix=False)
@@ -1034,123 +1047,216 @@ def snap_plane(p, depth_of):
     return p
 
 
-def make_hair(arm, seed, pos, quads, style="tousled", covered=None):
-    """Hair: a cap over the scalp and clumps over it. Styles: `tousled` (short, a swept fringe),
-    `sides` (what shows under a cap: sides and back), `kerchief` (a fringe and temples; the rest
-    is under the scarf). `covered(p)` > 0 where headwear hides the head."""
-    rng = random.Random(seed)
-    verts, faces, cols = [], [], []
-    # The cap: the scalp's own quads, pushed out; its edge is the hairline.
-    line = lambda p: p[2] - (hairline(az_of(p)) - 0.002)
-    cp, cn, cd, cf = region_shell(pos, quads, line, lambda p: head_point(az_of(p), hairline(az_of(p)) - 0.002))
+def bald_depth(p):
+    """How far inside a bald crown a point of the head lies (metres; negative outside): an
+    ellipse seen from above, reaching from the forehead to the crown when BALD is 1."""
+    if BALD <= 0.01 or p[2] < 0.025:
+        return -1.0
+    rx, ry = 0.060 * (0.55 + 0.45 * BALD), 0.086 * (0.5 + 0.5 * BALD)
+    q = math.hypot(p[0] / rx, (p[1] - 0.022 * BALD) / ry)
+    return (1 - q) * rx
+
+
+def hair_depth(p):
+    """How far inside the region hair grows on a point of the head lies."""
+    return min(p[2] - (hairline(az_of(p)) - 0.002), -bald_depth(p))
+
+
+def make_hair(arm, spec, pos, quads, covered=None):
+    """Hair (hair.py): a cap on the scalp and layers of locks combed over it, textured with one
+    shared picture of strands. Long locks hang from spring bones, which are added to the
+    armature here. Returns the objects (hair, and ties in cloth)."""
+    look = spec["look"]
+    seed = spec["seed"]
+    verts, faces, cols, uvs, weights = [], [], [], [], []
+    # The cap: the scalp's own quads, pushed out; its edge is the hairline. It carries the same
+    # strands, running out from the crown, so no skin shows between locks.
+    if BALD > 0.01:
+        cp, cn, cd, cf = region_shell(pos, quads, hair_depth, lambda p: snap_plane(p, hair_depth))
+    else:
+        line = lambda p: p[2] - (hairline(az_of(p)) - 0.002)
+        cp, cn, cd, cf = region_shell(pos, quads, line, lambda p: head_point(az_of(p), hairline(az_of(p)) - 0.002))
+    comb = hair.Comb(HF)
+    whorl = comb.surface(180.0, 64.0)[0]
+    wn = np.array(head_normal(whorl[None, :])[0])
+    e1 = np.array([1.0, 0.0, 0.0]) - wn * wn[0]
+    e1 /= np.linalg.norm(e1)
+    e2 = np.cross(wn, e1)
+    reps = 5.0
+    cap_c = np.array(HAIR) * 0.80 / hair.TEX_MEAN
+    cap_uv = []
     for p_, n_, d_ in zip(cp, cn, cd):
-        verts.append(hw(p_ + n_ * (0.0012 + 0.0080 * smooth(d_ / 0.02))))
-        cols.append(mix(HAIR, (0, 0, 0), 0.25))
-    faces += [list(f) for f in cf]
-
-    def lock(az0, el0, az1, el1, w0, lift, tip_out=0.0, sweep=0.0, segs=7, shade=0.0, base=0.008, hang=0.0):
-        """A clump: a flat, tapering leaf that follows the head from one direction to another
-        (degrees round the head from the front, + toward the character's left; degrees up),
-        `lift` off the scalp along its middle and `tip_out` at its point. `hang` metres more
-        fall straight down from where it leaves the head (longer hair)."""
-        ts = [i / segs for i in range(segs + 1)]
-        dirs = np.array([head_dir(lerp(az0, az1, t) + sweep * math.sin(PI * t), lerp(el0, el1, t)) for t in ts])
-        dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
-        rad = head_radius(dirs)
-        pts = [Vector(ORIGIN) + Vector(d) * (r + base + lift * math.sin(PI * min(t * 1.15, 1.0)) + tip_out * t * t) for t, d, r in zip(ts, dirs, rad)]
-        outs = [Vector(d) for d in dirs]
-        if hang > 0:
-            flat = Vector((outs[-1].x, outs[-1].y, 0.0))
-            flat = flat.normalized() if flat.length > 1e-6 else Vector((0, -1, 0))
-            steps = max(2, round(hang / 0.022))
-            for k in range(1, steps + 1):
-                f = k / steps
-                pts.append(pts[segs] + Vector((0, 0, -hang * f)) + flat * (0.010 * math.sin(PI * f * 0.8)))
-                outs.append(flat)
-        total = len(pts) - 1
-        first = len(verts)
-        tone = rng.uniform(-0.10, 0.10) + shade
-        across = (-1.0, -0.5, 0.0, 0.5, 1.0)
-        for i in range(total):
-            t = i / total
-            tan = (pts[i + 1] - pts[max(i - 1, 0)]).normalized()
-            out = outs[i]
-            side = tan.cross(out).normalized()
-            out = side.cross(tan).normalized()
-            w = w0 * (1 - t ** (2.4 if hang <= 0 else 4.0)) * (0.72 + 0.28 * smooth(t / 0.3))
-            th = 0.15 * w + 0.0015
-            c = pts[i]
-            col = mix(HAIR, HAIR_TIP, smooth(t * 1.1))
-            col = mix(col, (0, 0, 0), -tone * 2) if tone < 0 else mix(col, HAIR_TIP, tone * 2)
-            for a in across:
-                verts.append(hw(c + side * (w / 2 * a) + out * (th * (1 - a * a) - (w / 2 * a) ** 2 / 0.17)))
-                cols.append(mix(col, (0, 0, 0), 0.22 * abs(a)))
-            verts.append(hw(c - out * th * 0.5))
-            cols.append(mix(col, (0, 0, 0), 0.4))
-        tip = len(verts)
-        verts.append(hw(pts[-1]))
-        cols.append(HAIR_TIP)
-        nr = len(across) + 1
-        for i in range(total - 1):
-            a, b = first + nr * i, first + nr * (i + 1)
-            for k in range(nr):
-                faces.append((a + k, a + (k + 1) % nr, b + (k + 1) % nr, b + k))
-        a = first + nr * (total - 1)
-        for k in range(nr):
-            faces.append((a + k, a + (k + 1) % nr, tip))
-
-    u = rng.uniform
-    long = style in ("bob", "bob_parted")
-    # Under layer: the sides and back, hanging from mid-height to the hairline (and past it, for
-    # a bob).
-    for i in range(15):
-        az = 52 + 256 * i / 14
-        a = az if az <= 180 else az - 360
-        if style == "kerchief" and abs(a) > 84:
+        verts.append(hw(p_ + n_ * (0.0010 + 0.0050 * smooth(d_ / 0.02))))
+        r = p_ - whorl
+        # The seam runs down the back of the head, under the hair.
+        ang = math.atan2(-(r @ e1), r @ e2) / (2 * PI) + 0.5
+        cap_uv.append((ang * reps, 1.0 - min(np.linalg.norm(r) / 0.34, 0.97)))
+        cols.append(tuple(np.clip(cap_c * (0.82 + 0.18 * smooth(d_ / 0.03)), 0, 1)))
+    extra = {}
+    for f in cf:
+        us = [cap_uv[i][0] for i in f]
+        g = list(f)
+        if max(us) - min(us) > reps / 2:
+            for k, i in enumerate(f):
+                if cap_uv[i][0] < reps / 2:
+                    if i not in extra:
+                        extra[i] = len(verts)
+                        verts.append(verts[i])
+                        cols.append(cols[i])
+                        cap_uv.append((cap_uv[i][0] + reps, cap_uv[i][1]))
+                    g[k] = extra[i]
+        faces.append(g)
+    uvs += cap_uv
+    weights += [{"J_Bip_C_Head": 1.0}] * len(verts)
+    # The cap's faces look away from the head.
+    c0 = hw((0, 0, -0.03))
+    for k, f in enumerate(faces):
+        a, b, c = (Vector(verts[i]) for i in f[:3])
+        if (b - a).cross(c - a).dot((a + b + c) / 3 - c0) < 0:
+            faces[k] = list(reversed(f))
+    # The locks.
+    hs = dict(spec["hair"], colour=look["hair_natural"], tip=look["hair_natural_tip"], silver=look["hair_silver"], grey=look["hair_grey"], seed=seed)
+    hd = lambda z: (z - HEAD.z) / HEAD_SCALE
+    collar = dict(coat=0.090, smock=0.068).get(spec["coat"], 0.064)
+    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(-0.018 - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if spec["coat"] else 0.014)),
+                half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE)
+    h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body)
+    base = len(verts)
+    names = add_spring_bones(arm, h.chains)
+    for p_, c_, uv_, ch, al in zip(h.v, h.col, h.uv, h.chain, h.along):
+        verts.append(hw(p_))
+        cols.append(tuple(c_))
+        uvs.append(tuple(uv_))
+        weights.append(chain_weights(names[ch], h.chains[ch]["step"] * HEAD_SCALE, al * HEAD_SCALE) if ch >= 0 and names.get(ch) else {"J_Bip_C_Head": 1.0})
+    lock_faces = [tuple(base + i for i in f) for f in h.f]
+    ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
+    orient_islands(ob, skip=len(faces))
+    # Shading normals: the cap's are the head's, the locks' their own (hair.py).
+    normals = [tuple(head_normal(np.array(p_)[None, :])[0]) for p_ in cp] + [None] * len(extra)
+    for i, k in extra.items():
+        normals[k] = normals[i]
+    normals += [tuple(n_) for n_ in h.nrm]
+    ob.data.normals_split_custom_set_from_vertices(normals)
+    # The strands' picture, the same for everyone.
+    path = STRANDS_PATH
+    if not os.path.exists(path):
+        face_paint.write_png(path, hair.paint_strands())
+    img = bpy.data.images.load(path)
+    img.pack()
+    mat = material(MAT["hair"])
+    if not any(n.type == "TEX_IMAGE" for n in mat.node_tree.nodes):
+        tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        tex.image = img
+        bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+        mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    obs = [ob]
+    # Ties: a band of cloth round a tail or a braid's end.
+    for kind, d in h.extra:
+        if kind != "tie":
             continue
-        low = math.degrees(math.asin(max(min(hairline(a) / 0.10, 1), -1)))
-        if long:
-            lock(a + u(-4, 4), 44 + u(-5, 5), a + u(-3, 3), min(low, -8) - 4 + u(-3, 3), 0.062 + u(-0.004, 0.006), 0.007 + u(0, 0.003), 0.004, base=0.008, hang=LONG + u(-0.012, 0.012))
-        else:
-            lock(a + u(-4, 4), 42 + u(-5, 5), a + u(-3, 3) + (8 if a > 0 else -8) * (1 if abs(a) < 120 else 0), low - 6 + u(-4, 3), 0.058 + u(-0.005, 0.006), 0.006 + u(0, 0.003), 0.003, base=0.007)
-    if style in ("tousled", "short", "bob", "bob_parted"):
-        # Over layer: from the crown down over the under layer's roots, all round.
-        for i in range(13):
-            az = -180 + 360 * (i + 0.5) / 13
-            if abs(az) < (40 if style != "short" else 0):
-                continue
-            end = 22 + u(-8, 8) if not long else -2 + u(-6, 6)
-            if style == "short" and abs(az) < 62:
-                end = math.degrees(math.asin(max(min((hairline(az) + 0.012) / 0.11, 1), -1))) + u(-2, 4)
-            lock(az * 0.9 + u(-8, 8), 82 + u(-4, 4), az + u(-6, 6), end, 0.060 + u(-0.006, 0.006), 0.007 + u(0, 0.004), 0.004 + u(0, 0.004), base=0.011, shade=0.03,
-                 hang=(LONG * 0.55 + u(-0.01, 0.01)) if long and abs(az) > 50 else 0.0)
-    if style == "tousled":
-        # The fringe: from the crown forward, swept to the character's right, ending above the
-        # brows at uneven lengths.
-        for i in range(8):
-            az = -60 + 120 * i / 7
-            end = 37 + 7 * abs(az) / 60 + u(-3, 6) + RECEDE * 500
-            lock(az * 0.45 + 10 + u(-5, 5), 76 + u(-5, 5), az - 12 + u(-4, 4), end, 0.044 + u(-0.004, 0.008), 0.012 + u(0, 0.004), 0.005 + u(0, 0.003), sweep=-9, base=0.012)
-        # A few tufts that break the outline.
-        for az, el in ((150, 62), (-120, 66), (40, 70), (-30, 78)):
-            lock(az + u(-10, 10), 84, az + u(-10, 10), el + u(-5, 5), 0.036, 0.012, 0.014 + u(0, 0.006), base=0.013, shade=0.06, segs=5)
-    elif style == "bob":
-        # A straight fringe to the brows.
-        for i in range(7):
-            az = -48 + 96 * i / 6
-            lock(az * 0.5 + u(-4, 4), 76 + u(-4, 4), az + u(-3, 3), 33 + 5 * abs(az) / 48 + u(-2, 3), 0.046 + u(-0.003, 0.006), 0.011 + u(0, 0.003), 0.004, base=0.012)
-    elif style in ("kerchief", "bob_parted"):
-        # A fringe parted in the middle, falling to the temples (from under a scarf's edge).
-        for side in (-1, 1):
-            for i in range(4):
-                az = side * (6 + 15 * i)
-                root = 60 if style == "kerchief" else 80
-                lock(az * 0.5 + u(-3, 3), root + u(-3, 3), az + side * (12 + 8 * i) + u(-3, 3), 34 - 8 * i + u(-3, 3), 0.040 + u(-0.004, 0.006), 0.009 + u(0, 0.003), 0.004, sweep=side * 6, base=0.008 if style == "kerchief" else 0.012)
-            # Longer locks in front of the ears, to the jaw.
-            for az, el in ((62, -22), (74, -30)):
-                lock(side * (az - 14) + u(-3, 3), 40 + u(-4, 4), side * az + u(-2, 2), el + u(-4, 4), 0.034, 0.006, 0.006, base=0.008, segs=8)
-    ob = raw_object("Hair", verts, faces, [{"J_Bip_C_Head": 1.0}] * len(verts), cols, MAT["hair"], arm, orient=True)
-    return ob
+        tv, tf, tc = [], [], []
+        axis = np.array(d["axis"], float)
+        a1 = np.cross(axis, [1.0, 0.0, 0.0])
+        a1 /= np.linalg.norm(a1)
+        a2 = np.cross(axis, a1)
+        n = 10
+        for i in range(n):
+            a = 2 * PI * i / n
+            for k, (dr, dz) in enumerate(((0.0, -0.006), (0.004, 0.0), (0.0, 0.006))):
+                tv.append(hw(np.array(d["p"]) + (a1 * math.cos(a) + a2 * math.sin(a)) * (d["r"] + dr) + axis * dz))
+                tc.append(mix(spec["headwear_colour"], (0, 0, 0), 0.10 + 0.10 * (k != 1)))
+        for i in range(n):
+            for k in range(2):
+                a, b = 3 * i + k, 3 * ((i + 1) % n) + k
+                tf.append((a, b, b + 1, a + 1))
+        ch = d.get("chain", -1)
+        w = chain_weights(names[ch], h.chains[ch]["step"] * HEAD_SCALE, d["along"] * HEAD_SCALE) if ch >= 0 and names.get(ch) else {"J_Bip_C_Head": 1.0}
+        obs.append(raw_object("HairTie", tv, tf, [w] * len(tv), tc, MAT["coat"], arm, orient=True))
+    spec["springs"] = [names[i] for i in sorted(names) if names[i]]
+    return obs
+
+
+def orient_islands(ob, skip=0):
+    """Wind each closed lock so its faces look outward (the first `skip` faces are left)."""
+    me = ob.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    seen = set(f.index for f in bm.faces[:skip])
+    for f0 in bm.faces[skip:]:
+        if f0.index in seen:
+            continue
+        island, stack = [], [f0]
+        seen.add(f0.index)
+        while stack:
+            f = stack.pop()
+            island.append(f)
+            for e in f.edges:
+                for g in e.link_faces:
+                    if g.index not in seen:
+                        seen.add(g.index)
+                        stack.append(g)
+        bmesh.ops.recalc_face_normals(bm, faces=island)
+        vol = sum(f.calc_center_median().dot(f.normal) * f.calc_area() for f in island)
+        if vol < 0:
+            bmesh.ops.reverse_faces(bm, faces=island)
+    bm.to_mesh(me)
+    bm.free()
+
+
+def add_spring_bones(arm, chains):
+    """Chains of bones for hanging hair, under the head: `J_Sec_Hair<chain>_<joint>`. The game
+    swings them (characters.rs, VRM spring bones); they are listed in the file's VRM block."""
+    names = {}
+    todo = [(i, c) for i, c in enumerate(chains) if len(c.get("joints") or []) >= 2]
+    if not todo:
+        return names
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    frame = Matrix.Rotation(math.radians(90), 4, "X")
+    for i, c in todo:
+        parent = arm.data.edit_bones["J_Bip_C_Head"]
+        names[i] = []
+        for j, p in enumerate(c["joints"]):
+            n = f"J_Sec_Hair{i + 1}_{j + 1:02d}"
+            eb = arm.data.edit_bones.new(n)
+            eb.head = (0, 0, 0)
+            eb.tail = (0, 0.04, 0)
+            eb.matrix = Matrix.Translation(hw(p)) @ frame
+            eb.parent = parent
+            parent = eb
+            names[i].append(n)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return names
+
+
+def chain_weights(bones, step, along):
+    """Weights of a vertex `along` metres down a spring chain whose joints are `step` apart:
+    each stretch follows its own bone, shared half and half at a joint. Above the first joint
+    it joins the head."""
+    if along <= -0.03:
+        return {"J_Bip_C_Head": 1.0}
+    m = len(bones) - 1  # the last bone only marks the end
+    f = along / step
+    i = int(min(max(math.floor(f), 0), m - 1))
+    t = f - i if f > 0 else 0.0
+    w = {}
+    here = bones[i]
+    before = bones[i - 1] if i > 0 else "J_Bip_C_Head"
+    if along < 0:
+        k = smooth((along + 0.03) / 0.03) * 0.5
+        return {"J_Bip_C_Head": 1 - k, bones[0]: k}
+    if t < 0.5:
+        k = 0.5 * (1 - smooth(t / 0.5))
+        w[before] = k
+        w[here] = 1 - k
+    elif i < m - 1:
+        k = 0.5 * smooth((t - 0.5) / 0.5)
+        w[bones[i + 1]] = k
+        w[here] = 1 - k
+    else:
+        w[here] = 1.0
+    return {n: x for n, x in w.items() if x > 1e-4}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1391,8 +1497,8 @@ def configure(spec):
     g = globals()
     look = spec["look"]
     g.update(
-        HF=head_form.Head(masc=spec["masc"], child=spec["child"], elder=spec["elder"], face=spec["face"]), SKIN=look["skin"], SKIN_SHADE=look["skin_shade"], SKIN_WARM=look["skin_warm"],
-        HAIR=look["hair"], HAIR_TIP=look["hair_tip"], RECEDE=spec["recede"], LIMB_K=spec["limb"], GIRTH=spec["girth"], BELLY=spec["belly"], CHEST=spec["chest"], LONG=spec["hair_length"],
+        HF=head_form.Head(masc=spec["masc"], child=spec["child"], elder=spec["elder"], face=spec["face"], style=spec["style"]), HEAD_SCALE=spec["head_scale"], SKIN=look["skin"], SKIN_SHADE=look["skin_shade"], SKIN_WARM=look["skin_warm"],
+        HAIR=look["hair"], HAIR_TIP=look["hair_tip"], RECEDE=spec["recede"], BALD=spec["bald"], LIMB_K=spec["limb"], GIRTH=spec["girth"], BELLY=spec["belly"], CHEST=spec["chest"], LONG=spec["hair_length"],
         TORSO=WOMAN_TORSO if spec["woman_torso"] else MAN_TORSO,
     )
     # The chin stays where the neck expects it, whatever the face's length.
@@ -1503,7 +1609,8 @@ def build_person(arm, spec, atlas_path, body=False):
     head, pos, quads = make_face(arm, spec, atlas_path)
     obs.append(head)
     obs.append(make_neck(arm))
-    obs.append(make_hair(arm, seed, pos, quads, spec["hair_style"]))
+    covered = dict(kerchief=lambda p: min(kerchief_depth(p), (p[2] + 0.070) * 2), cap=cap_depth).get(spec["headwear"])
+    obs += make_hair(arm, spec, pos, quads, covered)
     if spec["headwear"] == "kerchief":
         obs += make_kerchief(arm, pos, quads, spec["headwear_colour"])
     elif spec["headwear"] == "cap":
@@ -1575,6 +1682,8 @@ def bake_shade(obs, strength=0.50, reach=0.11):
 # ---------------------------------------------------------------------------------------------
 # Export.
 
+LOOK_RANGE = 6.0  # degrees an eye's bone turns for a look fully to one side
+
 HUMAN = {
     "hips": "J_Bip_C_Hips", "spine": "J_Bip_C_Spine", "chest": "J_Bip_C_Chest", "upperChest": "J_Bip_C_UpperChest", "neck": "J_Bip_C_Neck",
     "head": "J_Bip_C_Head", "leftShoulder": "J_Bip_L_Shoulder", "leftUpperArm": "J_Bip_L_UpperArm", "leftLowerArm": "J_Bip_L_LowerArm",
@@ -1583,7 +1692,34 @@ HUMAN = {
 }
 
 
-def add_vrm(path, title):
+def secondary(nodes, springs):
+    """VRM 0.x spring bones for hanging hair, with spheres on the head, neck and shoulders it
+    must not pass through. Offsets are in each bone's own frame (the file's axes: Y up, the
+    character facing -Z), which is how the game reads them (characters.rs)."""
+    if not springs:
+        return {"boneGroups": [], "colliderGroups": []}
+
+    def sphere(bone, at, r):
+        j = JOINTS[bone]
+        return {"offset": {"x": at[0] - j[0], "y": at[2] - j[2], "z": -(at[1] - j[1])}, "radius": r}
+
+    # Smaller than the head, neck and shoulders themselves: the hair at rest lies on those, and
+    # a sphere that reached it would push it off them.
+    hc = HEAD + Vector((0, -0.010, 0.012)) * HEAD_SCALE
+    colliders = [
+        {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.074 * HEAD_SCALE), sphere("J_Bip_C_Head", hc + Vector((0, 0.014, -0.070)) * HEAD_SCALE, 0.046 * HEAD_SCALE)]},
+        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.040)]},
+        {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055),
+                                                             sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055)]},
+    ]
+    # Stiff enough to settle within half a second of a jump in pose (the asset view photographs
+    # 0.6 s after posing), loose enough to swing in a walk.
+    groups = [{"comment": "Hair", "stiffiness": 2.0, "gravityPower": 0.10, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.5, "center": -1, "hitRadius": 0.010,
+               "bones": [nodes[chain[0]] for chain in springs], "colliderGroups": [0, 1, 2]}]
+    return {"boneGroups": groups, "colliderGroups": colliders}
+
+
+def add_vrm(path, title, springs=None):
     """Mark the file as a VRM 0.x humanoid (plain JSON in the GLB's extensions), with the
     expressions' groups under VRM's preset names."""
     b = open(path, "rb").read()
@@ -1591,7 +1727,7 @@ def add_vrm(path, title):
     j = json.loads(b[20 : 20 + jl])
     rest = b[20 + jl :]
     nodes = {n.get("name"): i for i, n in enumerate(j["nodes"])}
-    bones = []
+    bones = [{"bone": "leftEye", "node": nodes["J_Adj_L_FaceEye"], "useDefaultValues": True}, {"bone": "rightEye", "node": nodes["J_Adj_R_FaceEye"], "useDefaultValues": True}]
     for k, n in HUMAN.items():
         bones.append({"bone": k, "node": nodes[n], "useDefaultValues": True})
         if k.startswith("left"):
@@ -1613,8 +1749,11 @@ def add_vrm(path, title):
         "specVersion": "0.0",
         "meta": {"title": title, "author": "Slop Art Online (generated by living/tools/blender/person.py)", "licenseName": "Other"},
         "humanoid": {"humanBones": bones},
+        # The eyes turn by their bones; a few degrees crosses the whole eye (head_mesh.EYE_R).
+        "firstPerson": {"firstPersonBone": nodes["J_Bip_C_Head"], "firstPersonBoneOffset": {"x": 0, "y": 0.06, "z": 0}, "meshAnnotations": [], "lookAtTypeName": "Bone",
+                        **{k: {"curve": [0, 0, 0, 1, 1, 1, 1, 0], "xRange": 90, "yRange": LOOK_RANGE} for k in ("lookAtHorizontalInner", "lookAtHorizontalOuter", "lookAtVerticalDown", "lookAtVerticalUp")}},
         "blendShapeMaster": {"blendShapeGroups": groups},
-        "secondaryAnimation": {"boneGroups": [], "colliderGroups": []},
+        "secondaryAnimation": secondary(nodes, springs or []),
     }
     js = json.dumps(j, separators=(",", ":")).encode()
     js += b" " * (-len(js) % 4)
@@ -1631,6 +1770,7 @@ def main():
     ap.add_argument("--out", required=True)
     person_params.add_args(ap)
     ap.add_argument("--expression", default="", help="expressions the file starts with, to look at them: `Fcl_MTH_Fun=1,Fcl_BRW_Fun=1` (the game drives Fcl_EYE_Close and Fcl_MTH_A itself)")
+    ap.add_argument("--look", default="", help="turn the eyes in the file, to look at it: `yaw,pitch` in degrees of the eyes' bones (about 6 is fully aside)")
     ap.add_argument("--body", action="store_true", help="the unclothed form instead of the clothes")
     ap.add_argument("--no-shade", action="store_true", help="leave out the painted shade (bake_shade)")
     ap.add_argument("--blend")
@@ -1645,6 +1785,8 @@ def main():
     unknown = set(spec["expression"]) - set(head_mesh.EXPRESSIONS)
     if unknown:
         raise SystemExit(f"--expression: {sorted(unknown)} not among {sorted(head_mesh.EXPRESSIONS)}")
+    if a.look:
+        spec["look"]["gaze"] = tuple(float(x) for x in a.look.split(","))
     configure(spec)
     out = os.path.abspath(a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -1653,6 +1795,8 @@ def main():
     # game recipe's height and proportions.
     with open(stem + ".params.json", "w") as f:
         json.dump(dict(params=params, recipe=spec["recipe"]), f, indent=1)
+    g = globals()
+    g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
     arm = make_armature()
     obs = build_person(arm, spec, stem + ".atlas.png", body=a.body)
     if not a.no_shade:
@@ -1669,7 +1813,7 @@ def main():
         export_rest_position_armature=True, use_selection=False, export_morph=True, export_morph_normal=False,
         export_try_sparse_sk=False,  # Bevy's loader rejects sparse morph accessors
     )
-    j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})")
+    j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})", spec.get("springs"))
     zs = [v.co.z for ob in obs for v in ob.data.vertices]
     print(f"PERSON {out}: {params['sex']} {params['age']:.0f}y seed {params['seed']}, {sum(tris.values())} triangles, {len(arm.data.bones)} bones, {len(j['materials'])} materials, "
           f"{len(j.get('images', []))} texture, height {max(zs) - min(zs):.3f} m, floor {min(zs):+.4f}")

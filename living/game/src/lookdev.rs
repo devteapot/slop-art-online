@@ -80,6 +80,10 @@ pub struct Fitted {
 #[derive(Component)]
 pub struct NightGlow;
 
+/// On a model's root: a fire that is out (`world::things`): its glowing materials don't glow.
+#[derive(Component)]
+pub struct Unlit;
+
 /// The toon materials of [`NightGlow`] models that glow, with their glow as authored, and the
 /// daylight share last applied to them.
 #[derive(Resource, Default)]
@@ -259,7 +263,7 @@ pub fn convert(
     assets: Res<AssetServer>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>)>,
+    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>, Has<Unlit>)>,
     mut glows: ResMut<NightGlows>,
     detail: Option<Res<crate::style::DetailLayers>>,
     palette: Res<Palette>,
@@ -276,7 +280,7 @@ pub fn convert(
                 break;
             }
         }
-        let Some((owner, no_shadow, beast, night)) = owner else { continue };
+        let Some((owner, no_shadow, beast, night, unlit)) = owner else { continue };
         if no_shadow {
             commands.entity(e).insert(bevy::light::NotShadowCaster);
         }
@@ -294,7 +298,7 @@ pub fn convert(
         // A slot's glow lights up models with no glow of their own (kits without emissive
         // materials); models that carry emissive materials keep exactly those.
         let glow = owner.glow.filter(|_| !has_glow(&owner.file));
-        let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24) | u32::from(night) << 25;
+        let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24) | u32::from(night) << 25 | u32::from(unlit) << 26;
         let Some(base) = standards.get(&mat.0) else { continue };
         // VRoid names materials …_SKIN, …_FACE, …_EYE, …_HAIR, …_CLOTH; the face's own skin is
         // `…Face_00_SKIN`.
@@ -335,6 +339,10 @@ pub fn convert(
                 if let Some([r, g, bl]) = glow {
                     let c = b.base_color.to_linear();
                     b.emissive = LinearRgba::new(c.red * r, c.green * g, c.blue * bl, 1.0) * 8.0 + LinearRgba::new(r, g, bl, 1.0) * 2.0;
+                }
+                // A fire that is out: its flame's materials as they are, unlit.
+                if unlit {
+                    b.emissive = LinearRgba::BLACK;
                 }
                 // Every model file brings its own copies of the same few materials (the
                 // environment kits share 14 between about a thousand). One toon material per
