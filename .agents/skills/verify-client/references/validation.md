@@ -1,5 +1,10 @@
 # Client protocol validation
 
+
+## 2026-11-11 the scoped inventory gains `audience` (mind-act-outcome-far, Spark)
+
+`drive.py`'s `SCOPED` lacked the `audience` table that exp-greet added under the `LIVING_PERCEPTION` switch, so `run.py` stopped at the inventory guard ("scoped table inventory changed") on origin/main `3216b06d` too (`client-far2-233156`, drive.log). With `audience` added: `client-far3-234118` on branch `mind-act-outcome-far` at 3328c7bb, every check passes (39), the reducer permission matrix 229 calls and 0 mismatches, 77 tables private in the scoped build; `my_act_outcomes` gives only the caller's character's rows.
+
 ## 2026-11-11 rules-senses-outcomes: my_senses, my_act_outcomes (Spark)
 
 Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`. A maintain pass scoped to this change (perception and visibility; the inventories and own-state check), without the per-feature reader fan-out.
