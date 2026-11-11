@@ -480,7 +480,17 @@ def mount_points():
             if len(f) > 4:
                 pts.append(f[4].replace("\\040", " "))
     except OSError:
-        r = subprocess.run(["mount"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        # macOS keeps `mount` in /sbin, which a minimal PATH (the self-test's, a launchd job's)
+        # may leave out: try PATH, then the usual places.
+        exe = shutil.which("mount") or next((p for p in ("/sbin/mount", "/usr/sbin/mount", "/bin/mount") if os.access(p, os.X_OK)), None)
+        if exe is None:
+            print("disk_clean: warning: no `mount` found, so bind mounts under build folders cannot be seen", file=sys.stderr)
+            return pts
+        try:
+            r = subprocess.run([exe], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        except OSError as e:
+            print(f"disk_clean: warning: `{exe}` failed ({e}), so bind mounts under build folders cannot be seen", file=sys.stderr)
+            return pts
         pts = [m.group(1) for m in re.finditer(r" on (/.*?) \(", r.stdout)]
     return pts
 
