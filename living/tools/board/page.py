@@ -2,7 +2,7 @@
 (the latest version beside the accepted one, shot by shot, with diffs, a flicker, the numbers,
 the palette and the clips; then every version and decision). Static HTML with relative paths and
 a few lines of script, so the folder works from a tarball on any machine. The style is the
-character spike page's (living/tools/char_spike/page.py)."""
+character spike page's (living/tools/char_spike/page.py, now living/tools/characters/)."""
 
 import html
 import json
