@@ -22,6 +22,8 @@ pub mod normalize;
 #[cfg(feature = "scripting")]
 pub mod floors;
 #[cfg(feature = "scripting")]
+pub mod cullet_check;
+#[cfg(feature = "scripting")]
 pub mod script;
 pub mod social;
 pub mod species;
@@ -42,7 +44,10 @@ pub fn day_of(now_ms: u64, epoch_ms: u64, day_ms: u64) -> u64 {
     (now_ms.saturating_sub(epoch_ms) + day_ms * 7 / 24) / day_ms + 1
 }
 
-pub fn is_night(hour: f32) -> bool {
+/// Night as the shipped `daylight` law has it (20:00 to 06:00), for a client that does not
+/// compile the world's script (the developer observer's clock label). The authority, the mind
+/// service and the rules ask the world's own law (`script::Scripts::is_night`).
+pub fn shipped_night(hour: f32) -> bool {
     !(6.0..20.0).contains(&hour)
 }
 

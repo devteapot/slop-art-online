@@ -135,6 +135,10 @@ pub struct LandParams {
     /// arterials ([`crate::settle::MetroParams`]); the sites above stand outside it. None: no city.
     #[serde(default)]
     pub metro: Option<MetroParams>,
+    /// Hand-authored settlements ([`crate::settle::PlanSpec`], docs/AUTHORED_PLANS.md): laid out
+    /// as written; the generator steps aside for them. Empty: the land is as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plans: Vec<settle::PlanSpec>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -274,7 +278,7 @@ pub struct SiteSpec {
 
 impl Default for LandParams {
     fn default() -> Self {
-        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None }
+        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None, plans: Vec::new() }
     }
 }
 
@@ -411,12 +415,18 @@ pub struct Site {
     /// town of its own.
     #[serde(skip)]
     pub(crate) ward: bool,
+    /// The id of the hand-authored plan laid out here ([`crate::settle::PlanSpec`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
 }
 
 impl Site {
-    /// What a seed calls this kind of site: the kind (`town`, `village`, ...), or
-    /// `<style>_<kind>` for a site with its own style (`steampunk_town`).
+    /// What a seed calls this kind of site: a plan's id; else the kind (`town`, `village`,
+    /// ...), or `<style>_<kind>` for a site with its own style (`steampunk_town`).
     pub fn id(&self) -> String {
+        if let Some(p) = &self.plan {
+            return p.clone();
+        }
         match &self.style {
             Some(st) => format!("{st}_{}", self.kind.id()),
             None => self.kind.id().to_string(),
@@ -510,6 +520,8 @@ pub struct Land {
     /// Street ornaments, stairs and retaining walls of every settlement, derived from the
     /// layout (not stored by the authority; see `docs/ISLAND_AUTHORITY.md`).
     pub props: Vec<Prop>,
+    /// Hand-authored settlements as laid out: their lots' and streets' names, for the authority.
+    pub plans: Vec<settle::Laid>,
     pub(crate) mods: settle::Mods,
     n: usize,
     cell: f32,
@@ -942,7 +954,9 @@ struct Work {
 impl Gen {
     pub fn new(seed: u64, size_m: u32, p: LandParams) -> Self {
         assert!((256..=MAX_SIDE).contains(&size_m), "land side {size_m} m outside 256..={MAX_SIDE}");
-        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan: settle::Staged::default(), dispersed_done: 0 }
+        let mut plan = settle::Staged::default();
+        plan.specs = p.plans.clone();
+        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan, dispersed_done: 0 }
     }
 
     fn band_rows(&self) -> usize {
@@ -1104,6 +1118,9 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
     // The city's centre and radius, if the land holds one: no ranges or lakes inside it, and its
     // ground is levelled.
     let city: Option<((f32, f32), f32, f32)> = p.metro.as_ref().map(|m| ((m.centre[0] * s, m.centre[1] * s), m.radius * s * 0.5, m.flatten));
+    // Hand-authored settlements: no islets or lakes on them, and the relief follows their levels.
+    let plans: Vec<settle::PlanResolved> = p.plans.iter().map(|sp| settle::resolve_plan(sp).unwrap_or_else(|e| panic!("{e}"))).collect();
+    let near_plan = |x: f32, y: f32, m: f32| plans.iter().any(|q| settle::plan_covers(q, (x, y), m));
 
     // Island shape and ranges.
     let centre = (s * 0.5 + (rng.f() - 0.5) * s * 0.04, s * 0.5 + (rng.f() - 0.5) * s * 0.04);
@@ -1170,7 +1187,7 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
             let k = (rng.f() * nn as f32) as usize % nn;
             let (x, y) = pos(k);
             let e = elev[k];
-            if !(-14.0..=-3.0).contains(&e) || x.min(y).min(s - x).min(s - y) < 150.0 {
+            if !(-14.0..=-3.0).contains(&e) || x.min(y).min(s - x).min(s - y) < 150.0 || near_plan(x, y, 150.0) {
                 continue;
             }
             let rad = rng.range(r.islet_radius_m);
@@ -1200,6 +1217,9 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
         if city.is_some_and(|(cc, cr, _)| (x - cc.0).d_hypot(y - cc.1) < cr * 1.15 + rad * 1.9) {
             continue;
         }
+        if near_plan(x, y, rad * 1.9 + 120.0) {
+            continue;
+        }
         if basins.iter().any(|b| (b.0 - x).d_hypot(b.1 - y) < 450.0) {
             continue;
         }
@@ -1214,6 +1234,8 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
         });
         basins.push((x, y, rad));
     }
+
+    settle::stamp_plans(&mut elev, n, cell, &plans);
 
     // Sea: below zero and connected to the border.
     let mut sea = vec![false; nn];
@@ -1692,7 +1714,21 @@ fn macro_pass(h: Hydro, p: &LandParams) -> Work {
     let mut still_d: Vec<f32> = (0..nn).map(|k| if sea[k] || lake_of[k] != NONE { 0.0 } else { f32::INFINITY }).collect();
     chamfer(n, n, cell, &mut still_d, None);
     let avoid = city.map(|(cc, cr, _)| (cc, cr));
-    let sites = place_sites(&SiteCtx { p, n, cell, s, elev: &elev, wd: &wd, still_d: &still_d, sea_d: &sea_d, node_kind: &node_kind, max_e, land_km2, seed, avoid }, &|k| slope_of(&elev, k));
+    // Planned settlements' fixed sites come first; generated sites keep their distance.
+    let fixed: Vec<Site> = p
+        .plans
+        .iter()
+        .map(|sp| {
+            let r = settle::resolve_plan(sp).unwrap_or_else(|e| panic!("{e}"));
+            let k = {
+                let i = ((r.centre.0 / cell).round() as isize).clamp(0, n as isize - 1) as usize;
+                let j = ((r.centre.1 / cell).round() as isize).clamp(0, n as isize - 1) as usize;
+                j * n + i
+            };
+            settle::plan_site(&r, node_kind[k])
+        })
+        .collect();
+    let sites = place_sites(&SiteCtx { p, n, cell, s, elev: &elev, wd: &wd, still_d: &still_d, sea_d: &sea_d, node_kind: &node_kind, max_e, land_km2, seed, avoid }, &|k| slope_of(&elev, k), fixed);
 
     let mut land = Land {
         ways: None,
@@ -1712,6 +1748,7 @@ fn macro_pass(h: Hydro, p: &LandParams) -> Work {
         roads: Vec::new(),
         crossings: Vec::new(),
         props: Vec::new(),
+        plans: Vec::new(),
         mods: settle::Mods::default(),
         n,
         cell,
@@ -2148,8 +2185,8 @@ impl Level {
 /// Placement relaxes its limits in these steps when a site does not fit.
 const RELAX: [f32; 4] = [1.0, 1.6, 2.5, 4.0];
 
-fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
-    let mut placed: Vec<Site> = Vec::new();
+fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32, fixed: Vec<Site>) -> Vec<Site> {
+    let mut placed: Vec<Site> = fixed;
     // Dispersed sites (hamlets) are placed in their own steps afterwards ([`Gen`]).
     let mut order: Vec<&SiteSpec> = c.p.sites.iter().filter(|sp| !sp.dispersed).collect();
     // Towns in their own style come after the villages, so the first sites stay where they were.
@@ -2345,7 +2382,7 @@ fn place_spec(c: &SiteCtx, slope: &dyn Fn(usize) -> f32, sp: &SiteSpec, placed: 
             }
             let Some((_, ci)) = best else { break };
             let (_, x, y, mean, kind) = level.cands[ci];
-            placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone(), ward: false });
+            placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone(), ward: false, plan: None });
             level.apply(placed.last().expect("placed"), sp, relax);
             level.seen = placed.len();
             *budget -= 1;

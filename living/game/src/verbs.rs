@@ -94,7 +94,9 @@ impl Rules {
             return;
         }
         self.revision = row.revision;
-        match Scripts::new(&row.source) {
+        // The world's day: laws written per game hour, and the day's words, follow it.
+        let day_ms = conn.db.world().iter().next().map(|w| w.day_ms).unwrap_or(living_rules::DEFAULT_DAY_MS);
+        match Scripts::with_day(&row.source, day_ms) {
             Ok(s) => {
                 self.skills = skills_of(&s);
                 info!("rules: skill script revision {} compiled ({} skills)", row.revision, self.skills.len());

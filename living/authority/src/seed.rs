@@ -266,6 +266,11 @@ pub struct SeedTown {
     pub near: String,
     #[serde(default)]
     pub region: Vec<String>,
+    /// On a hand-authored settlement (`map.params.plans`): household key -> the id of the lot
+    /// it lives in (docs/AUTHORED_PLANS.md). Households it leaves out take the other homes,
+    /// nearest the square first, as before.
+    #[serde(default)]
+    pub homes: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -278,6 +283,10 @@ pub struct SeedBuilding {
     /// What the sign beside it says after the name.
     #[serde(default)]
     pub about: String,
+    /// On a hand-authored settlement: the id of the lot it is, so it stands at that lot's door
+    /// instead of in a free spot near the centre.
+    #[serde(default)]
+    pub lot: String,
 }
 
 /// A person written by the world's author: who they are is installed as given (see
@@ -536,6 +545,42 @@ pub struct Seed {
     /// The world's own values of laws (`laws()` in the script), by name: `{"minds": false}`.
     #[serde(default)]
     pub rules: serde_json::Map<String, serde_json::Value>,
+    /// Real minutes in one game day (the world's `day_ms`; none: the shipped 12). Laws written
+    /// per game hour keep their balance per game day whatever this is.
+    #[serde(default)]
+    pub day_minutes: Option<f64>,
+    /// The world's own laws: a Rhai overlay over the shipped script (`floors::compose`: its
+    /// functions replace the base's of the same name, which stay as `base_NAME`), installed
+    /// when the world is created through the same checks as `install_script`.
+    #[serde(default)]
+    pub laws: String,
+    /// Where the overlay's source is kept, relative to `living/seeds`. A sender puts its text
+    /// into `laws` (`build.rs` for a compiled seed, `living/tools/seed_text.py` for
+    /// `create_floor`); a seed that names a file without its text is refused.
+    #[serde(default)]
+    pub laws_file: String,
+}
+
+impl Seed {
+    /// The world's day in real milliseconds, checked: between 1 and 1440 real minutes.
+    pub fn day_ms(&self) -> Result<u64, String> {
+        match self.day_minutes {
+            None => Ok(living_rules::DEFAULT_DAY_MS),
+            Some(m) if (1.0..=1440.0).contains(&m) => Ok((m * 60_000.0).round() as u64),
+            Some(m) => Err(format!("seed: day_minutes is between 1 and 1440 real minutes, not {m}")),
+        }
+    }
+
+    /// The world's script: the shipped one, or with the seed's overlay composed over it.
+    pub fn script(&self) -> Result<Option<String>, String> {
+        if self.laws.trim().is_empty() {
+            if !self.laws_file.is_empty() {
+                return Err(format!("seed: laws_file `{}` was not read into `laws` (send the seed through living/tools/seed_text.py)", self.laws_file));
+            }
+            return Ok(None);
+        }
+        living_rules::floors::compose(SKILLS, &self.laws).map(Some).map_err(|e| format!("seed laws: {e}"))
+    }
 }
 
 #[derive(Deserialize, Default)]
@@ -1558,13 +1603,43 @@ fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32,
 /// A settlement's named buildings: each on free walkable ground 5-12 tiles from the center,
 /// a few tiles from anything else, with a sign giving its name; then every resident's
 /// background lists them as places (their minds turn those into remembered places).
-fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, center: (f32, f32), residents: &[u32], authored: &[(String, u32)], now: u64) {
+fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, residents: &[u32], authored: &[(String, u32)], now: u64) {
     if t.buildings.is_empty() {
         return;
     }
+    let center = layout.center;
     let mut taken: Vec<(f32, f32)> = ctx.db.structure().iter().filter(|s| common::dist((s.x, s.y), center) < 16.0).map(|s| (s.x, s.y)).collect();
     let mut places = Vec::new();
     for (i, b) in t.buildings.iter().enumerate() {
+        // A named building that is a planned lot stands at that lot's door.
+        let at_lot = (!b.lot.is_empty()).then(|| layout.lots.iter().find(|(k, _)| *k == b.lot).map(|l| l.1)).flatten();
+        if !b.lot.is_empty() && at_lot.is_none() {
+            log::warn!("{}: {} names lot {:?}, which the settlement does not have; placed near the centre", t.name, b.name, b.lot);
+        }
+        if let Some(at) = at_lot {
+            let owner = authored.iter().find(|(n, _)| *n == b.owner).map(|(_, id)| *id).unwrap_or(0);
+            // The lot's own structure stands at its door already when it is of this kind.
+            let existing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| s.kind == b.kind && common::dist((s.x, s.y), at) < 0.6);
+            match existing {
+                Some(mut st) if owner != 0 => {
+                    common::invalidate_structures(ctx);
+                    st.owner = owner;
+                    ctx.db.structure().id().update(st);
+                }
+                Some(_) => {}
+                None => {
+                    put(ctx, map, &b.kind, at, owner, now);
+                }
+            }
+            let sign_at = (at.0 + 1.5, at.1);
+            let sid = put(ctx, map, "sign", sign_at, owner, now);
+            let text = if b.about.is_empty() { b.name.clone() } else { format!("{}. {}", b.name, b.about) };
+            let author = if owner != 0 { b.owner.clone() } else { format!("the people of {}", t.name) };
+            ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: owner, author_name: author, written_ms: 0, topic: b.name.clone(), text });
+            taken.extend([at, sign_at]);
+            places.push(serde_json::json!({"name": b.name, "at": [at.0.round(), at.1.round()], "kind": b.kind}));
+            continue;
+        }
         let spot = (5..=12)
             .flat_map(|r| (0..16).map(move |k| (r as f32, (k as f32 + i as f32 * 0.37) * std::f32::consts::TAU / 16.0)))
             .map(|(r, a)| ((center.0 + r * a.cos()).floor() + 0.5, (center.1 + r * a.sin()).floor() + 0.5))
@@ -1642,7 +1717,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
         let sid = put(ctx, map, "sign", at, 0, now);
         ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: 0, author_name: format!("the elders of {}", t.name), written_ms: 0, topic: String::new(), text: t.ledger.clone() });
     }
-    buildings(ctx, map, t, center, &ids, &authored, now);
+    buildings(ctx, map, t, layout, &ids, &authored, now);
     if let Some(mut com) = ctx.db.community().id().find(c.id) {
         com.founder = ids.first().copied().unwrap_or(0);
         ctx.db.community().id().update(com);
@@ -1750,7 +1825,30 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
     let center = layout.center;
     let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
     let keys = household_keys(&t.residents);
-    let home_of = |h: usize| layout.houses.get(h % layout.houses.len().max(1)).copied().unwrap_or(center);
+    // Households the seed binds to a planned lot live at its door (`homes`); the others take
+    // the remaining houses in order, nearest the square first. Without `homes`, household h
+    // takes house h as before. (home, whether it is a house to claim)
+    let lot_door = |id: &str| layout.lots.iter().find(|(k, _)| k == id).map(|l| l.1);
+    for (hh, lot) in &t.homes {
+        if lot_door(lot).is_none() {
+            log::warn!("{}: homes names lot {lot:?} for {hh}, which the settlement does not have; {hh} takes a free house", t.name);
+        }
+    }
+    let bound: Vec<Option<(f32, f32)>> = keys.iter().map(|k| t.homes.get(*k).and_then(|lot| lot_door(lot))).collect();
+    let free: Vec<(f32, f32)> = layout.houses.iter().filter(|h| !bound.iter().flatten().any(|b| common::dist(*b, **h) < 0.5)).copied().collect();
+    let mut unbound = 0;
+    let homes: Vec<((f32, f32), bool)> = bound
+        .iter()
+        .map(|b| match b {
+            Some(p) => (*p, true),
+            None => {
+                let i = unbound;
+                unbound += 1;
+                (free.get(i % free.len().max(1)).copied().unwrap_or(center), i < free.len())
+            }
+        })
+        .collect();
+    let home_of = |h: usize| homes.get(h).map_or(center, |x| x.0);
     // (resident index, id, occupation as lived)
     let mut spawned: Vec<(usize, u32, String)> = Vec::new();
     for i in birth_order(&t.residents) {
@@ -1804,7 +1902,7 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
     }
     for (h, key) in keys.iter().enumerate() {
         let owner = spawned.iter().find(|(j, ..)| household_of(&t.residents[*j]) == *key).map(|s| s.1).unwrap_or(0);
-        if h < layout.houses.len() {
+        if homes.get(h).is_some_and(|x| x.1) {
             house(ctx, map, home_of(h), owner, now);
         }
     }

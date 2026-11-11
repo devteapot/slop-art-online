@@ -109,19 +109,19 @@ impl Resolved {
     }
 }
 
-/// What the structures near a spot give it: a fire's warmth, a roof, a fire's light.
+/// What the structures near a spot give it: a fire's warmth and a roof (light is
+/// `common::lit_at`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Warmth {
     pub fire: bool,
     pub shelter: bool,
-    pub light: bool,
 }
 
-/// Whether a spot is near a fire, near a shelter (a house is both: a roof and a hearth) and in
-/// a fire's light. What each kind does is the script's (its traits in `structures()`): a roof
-/// shelters within `shelter_warmth`; a fire that needs no feeding warms within `fire_warmth` (a
-/// building with one within `shelter_warmth`) and lights within its `light`; a fire that burns
-/// fuel warms and lights within its `burns` radii only while lit (`lit_until_ms` ahead of now).
+/// Whether a spot is near a fire and near a shelter (a house is both: a roof and a hearth). What
+/// each kind does is the script's (its traits in `structures()`): a roof shelters within
+/// `shelter_warmth`; a fire that needs no feeding warms within `fire_warmth` (a building with
+/// one within `shelter_warmth`); a fire that burns fuel warms within its `burns.warmth` only
+/// while lit (`lit_until_ms` ahead of now).
 pub fn warmth(ctx: &ReducerContext, at: (f32, f32), now: u64) -> Warmth {
     let mut w = Warmth::default();
     let laws = common::laws(ctx);
@@ -135,13 +135,11 @@ pub fn warmth(ctx: &ReducerContext, at: (f32, f32), now: u64) -> Warmth {
             Some(b) => {
                 if living_rules::fire::lit(s.lit_until_ms, now) {
                     w.fire |= d <= b.warmth;
-                    w.light |= d <= b.light;
                 }
             }
             None => {
                 let reach = if t.roof { laws.shelter_warmth } else { laws.fire_warmth };
                 w.fire |= t.warms && d <= reach;
-                w.light |= t.light > 0.0 && d <= t.light;
             }
         }
     }
@@ -179,7 +177,6 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         energy,
         near_fire: warm.fire,
         near_shelter: warm.shelter,
-        near_light: warm.light,
         terrain: common::map(ctx).at(at.0, at.1).name().into(),
         activity: ctx.db.activity().id().find(id).filter(|a| a.phase == 1).map(|a| a.skill).unwrap_or_default(),
         inv: common::inv_list(ctx, id as u64),
@@ -198,6 +195,7 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         room: 0,
         community: 0,
         home: String::new(),
+        lit: common::lit_at(ctx, at),
     }
 }
 
@@ -207,7 +205,7 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
 pub fn law_ctx(ctx: &ReducerContext, id: u32, w: &World, now: u64, plan: &living_rules::script::context::Plan) -> SkillCtx {
     use living_rules::script::context::{Keys, ACTOR, TOP};
     let top = |f: &str| plan.top & (1 << TOP.iter().position(|t| *t == f).expect("a top-level field")) != 0;
-    let mut c = SkillCtx { night: common::night(w, now), ..Default::default() };
+    let mut c = SkillCtx { night: common::night(ctx, w, now), dark: common::dark(ctx, w, now), ..Default::default() };
     if top("hour") {
         c.hour = common::hour(w, now);
     }
@@ -222,12 +220,16 @@ pub fn law_ctx(ctx: &ReducerContext, id: u32, w: &World, now: u64, plan: &living
     }
     let reads = |f: &str| plan.actor & (1 << ACTOR.iter().position(|t| *t == f).expect("an actor field")) != 0;
     // Fields only `facts` (or a skill's context) works out: take them all.
-    const CHEAP: [&str; 11] = ["id", "kind", "inv", "knows", "stage", "age", "life", "speed", "strength", "endurance", "vitality"];
+    const CHEAP: [&str; 12] = ["id", "kind", "inv", "knows", "stage", "age", "life", "speed", "strength", "endurance", "vitality", "lit"];
     if ACTOR.iter().any(|f| !CHEAP.contains(f) && reads(f)) {
         c.actor = facts(ctx, id, now);
         return c;
     }
     c.actor.id = id;
+    if reads("lit") {
+        // In lamplight: one look round the body for structures that give light.
+        c.actor.lit = ctx.db.body().id().find(id).is_some_and(|b| common::lit_at(ctx, pos(&b, now)));
+    }
     if ["kind", "stage", "age", "life"].iter().any(|f| reads(f)) {
         if let Some(ch) = ctx.db.character().id().find(id) {
             let age = common::age_days(&ch, w, now);
@@ -253,9 +255,11 @@ pub fn law_ctx(ctx: &ReducerContext, id: u32, w: &World, now: u64, plan: &living
 }
 
 pub fn body_state(ctx: &ReducerContext, id: u32, now: u64) -> Result<living_rules::script::BodyState, String> {
+    let w = common::world(ctx);
     common::scripts(ctx).body_state(&living_rules::script::SkillCtx {
         actor: facts(ctx, id, now),
-        night: common::night(&common::world(ctx), now),
+        night: common::night(ctx, &w, now),
+        dark: common::dark(ctx, &w, now),
         ..Default::default()
     })
 }
@@ -355,7 +359,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
             let mut sensed: Vec<(String, u32)> = Vec::new();
             // Itself among them, as before; others when seen (a clear sight line) or smelled.
             let map = common::map(ctx);
-            let seen = common::creatures_near(ctx, from, sight, now).into_iter().filter(|c| c.id == id || map.sight_clear(from, c.pos));
+            let seen = common::creatures_near(ctx, from, common::gather_radius(ctx, sight), now).into_iter().filter(|c| c.id == id || (c.dist <= common::sight_to(ctx, sight, c.id, &w, now) && map.sight_clear(from, c.pos)));
             for c in seen.chain(common::smelled_near(ctx, id, &actor.kind, from, sight, now)) {
                 match sensed.iter_mut().find(|(k, _)| *k == *c.kind) {
                     Some(e) => e.1 += 1,
@@ -399,7 +403,8 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         target,
         item: a.item.clone(),
         qty: a.qty,
-        night: living_rules::is_night(hour),
+        night: sc.is_night(hour),
+        dark: sc.dark(hour),
         hour,
         season: common::season(ctx, now).into(),
         text: a.text.clone(),
@@ -673,7 +678,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     }
     if node == PLAYER && target.class == 3 && target.id as u32 != id {
         let w = common::world(ctx);
-        if !crate::perception::in_sight(&common::map(ctx), here, target.at, dist(here, target.at), common::sight_for(ctx, id, &w, now)) {
+        if !crate::perception::in_sight(&common::map(ctx), here, target.at, dist(here, target.at), common::sight_to(ctx, common::sight_for(ctx, id, &w, now), target.id as u32, &w, now)) {
             return Err("you cannot see them".into());
         }
     }

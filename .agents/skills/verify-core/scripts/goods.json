@@ -6,21 +6,68 @@
   },
   "year_days": 1800,
   "life_pace": 1.0,
+  "laws_file": "worlds/cullet/laws.rhai",
   "bands": [
     {
       "name": "goods fixture",
       "family": [
-        { "stage": "adult" },
-        { "stage": "adult" },
-        { "stage": "adult" }
+        {
+          "stage": "adult"
+        },
+        {
+          "stage": "adult"
+        },
+        {
+          "stage": "adult"
+        }
       ],
       "camp": []
     }
   ],
   "resource_nodes": [
-    { "kind": "fishing_spot", "at": [40.5, 40.5], "max": 3, "regrow": 0.0, "pool": "jetty" },
-    { "kind": "fishing_spot", "at": [42.5, 40.5], "pool": "jetty" },
-    { "kind": "fishing_spot", "at": [44.5, 40.5], "pool": "jetty" }
+    {
+      "kind": "kelp_bed",
+      "at": [
+        31.5,
+        31.5
+      ]
+    },
+    {
+      "kind": "fishing_spot",
+      "at": [
+        40.5,
+        40.5
+      ],
+      "max": 3,
+      "regrow": 0.0,
+      "pool": "jetty"
+    },
+    {
+      "kind": "fishing_spot",
+      "at": [
+        42.5,
+        40.5
+      ],
+      "pool": "jetty"
+    },
+    {
+      "kind": "fishing_spot",
+      "at": [
+        44.5,
+        40.5
+      ],
+      "pool": "jetty"
+    }
+  ],
+  "structures": [
+    {
+      "kind": "hearth",
+      "at": [
+        30.5,
+        30.5
+      ],
+      "fuel": 12
+    }
   ],
   "animals": {
     "deer": 0,

@@ -80,6 +80,15 @@ python3 "$C/scenes.py" goods --run "$G" > ".local/living/verify/$G/goods.txt" 2>
 python3 "$C/scenes.py" stock --run "$G" > ".local/living/verify/$G/stock.txt" 2>&1
 python3 "$V" cleanup --run "$G" > ".local/living/verify/$G/cleanup.txt" 2>&1
 
+# A world's own day and laws (about 30 min; it waits for the world's own night):
+# day_minutes, the laws overlay, rates per game hour, sight, names, lamplight
+# (features/laws.md, docs/CULLET_RULES.md).
+W=$R-laws
+mkdir -p ".local/living/verify/$W"
+python3 "$V" launch --run "$W" --seed cullet-laws > ".local/living/verify/$W/launch.txt" 2>&1
+python3 "$C/scenes.py" laws --run "$W" > ".local/living/verify/$W/laws.txt" 2>&1
+python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
+
 # Infant assertions use their own small, long-lived family fixture.
 I=$R-infant
 IE=.local/living/verify/$I

@@ -66,7 +66,7 @@ living-reset: living-build
 living-floor name db=living_db:
     LIVING_SEED=none cargo build --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release
     {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{db}} --delete-data -y
-    {{living_stdb}} call -s local {{db}} create_floor "$(python3 -c 'import json; print(json.dumps(open("living/seeds/{{name}}.json").read()))')"
+    {{living_stdb}} call -s local {{db}} create_floor "$(python3 living/tools/seed_text.py living/seeds/{{name}}.json --arg)"
     just living-token
 
 living-sql query:

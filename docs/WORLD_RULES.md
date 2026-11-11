@@ -185,7 +185,7 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 
 - The torch in `senses`: the law names the item it reads (`inv(a, "torch")`), in the script. A `light` trait read through the items would make the law read the whole pack, so the per-state key would be every pack and the hot-path memo would stop sharing answers.
 - `catalog::CREATURES`: the names generation, species files and the client draw from. `RESOURCES`, `STRUCTURES` and `TECHNIQUES` moved into the script on `goods-1` (2026-11-11) as `resources()`, `structures()` and `know_how()` ([goods](#goods-recipes-and-fuel)); a build without the script runtime (the lab viewer) keeps the old resource and structure names to tell kinds apart.
-- The calendar (night 20:00–06:00, the world starting at 07:00, winter as a quarter of the year): `is_night` and `season_of` run in the rules crate, the authority and the client on every frame or tick. The minds' world text states them (`calendar_law`).
+- The calendar's frame (the world starting at 07:00, winter as a quarter of the year): `hour_of` and `season_of` run in the rules crate, the authority and the client on every frame or tick. Night itself is a law since `rules-1` (`daylight(hour)` over `night_hours()`, read once per game minute of the day; [Cullet's rules](CULLET_RULES.md#night-as-a-law)), and so is the day's length (a seed's `day_minutes`). The minds' world text states them (`calendar_law`).
 - Infrastructure limits (memo sizes, sweep and step cadences, table bounds, input buckets' clamps) and generation constants: not rules a world varies.
 - Many remaining numbers the survey found (alert thresholds in `brain.rs`, think and re-think timings, fight-report pacing, mutation sizes, wander distances): rules, still in Rust; listed for the next pass in the branch's survey.
 
@@ -399,7 +399,7 @@ What the world has is data in the script, each a list of maps with a `name`, rea
 | Table | Required | What its traits are |
 | --- | --- | --- |
 | `items()` | yes | `cooks_to`, `smokes_to` (what cooking or smoking makes), `fuel` (units a fire that burns `fuel` gets from one), and any trait a world's recipes read (`alkali`, `bakes_to`, `oil`) |
-| `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `light` (metres a fire that needs no feeding lights), `burns` (below); other traits are the rules' data |
+| `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `lights` (metres of lamplight, rules-1), `burns` (below); other traits are the rules' data. A script with `structure_traits()` (from before, or a world's own) has its `warms`, `roof` and `lights` stand over the listed kinds' |
 | `resources()` | yes (new) | `yields`, `regrow` (a minute), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
 | `know_how()` | yes (new) | `help` (what someone taught or reading is told), `requires` |
 | `recipes()` | no (none) | below |
@@ -422,7 +422,7 @@ A structure kind with a `burns` trait is a fire that eats fuel:
 - **Lit only while it holds fuel.** Its one number is `structure.lit_until_ms`: the moment its fuel runs out. The fuel left is the time left times the rate (`living_rules::fire`). Nothing is written or scanned while it burns.
 - **Settled on change.** Feeding it (`feed`) or drawing on it (a recipe's `fuel`, op `burn`) settles what is left and writes the new moment once. Fed fuel is gone from the pack; it is not an item to take back.
 - **Goes out** when the moment passes, with no write. **Relit** by feeding it again, which takes knowing `fire` (the rules' check, `feed_check`); anyone may feed a lit fire.
-- **Warmth and light come only from lit fires.** `act::warmth` counts a burning structure within its `burns.warmth` as a fire and within `burns.light` as light (`a.actor.near_light`, a new fact the shipped laws do not read yet; sight is the rules worker's). The search radius is the largest warmth, shelter or light radius of the world's kinds; the shipped campfire has no `light`, so an old world searches its 3.5 m as before. A fire that needs no feeding (a campfire, `warms` without `burns`) warms as before, within `fire_warmth`. A body's needs pick up a fire going out at the next look (the needs' state key includes `near_fire`), as when it walks away.
+- **Warmth and light come only from lit fires.** `act::warmth` counts a burning structure within its `burns.warmth` as a fire; its search radius is the largest warmth or shelter radius of the world's kinds, so an old world searches its 3.5 m as before. `common::lit_at` (rules-1's lamplight, `a.actor.lit`) counts a kind's light (its `lights`, or a fire's `burns.light`), and for a kind that `burns` only while it is lit: a lamp out of oil is dark. Cullet's lamp is such a fire (oil, 0.25 a game hour, holds 8); `cullet-laws.json` seeds its lamp with 8 units (32 game hours). A fire that needs no feeding (a campfire, `warms` without `burns`) warms as before, within `fire_warmth`. A body's needs pick up a fire going out at the next look (the needs' state key includes `near_fire`), as when it walks away.
 - **What others perceive.** A mind's scene says a burning structure is "burning, about N hours of fuel left on it", or "out". A client reads `lit_until_ms` on the public `structure` table: lit while it is ahead of the clock. Under `LIVING_PERCEPTION=scoped` the inventory table is private, so the fuel is not kept as items.
 - **What reads it:** `a.target.lit` and `a.target.fuel` (units) for a structure target. Cooking and smoking work at a burning fire that eats fuel as at a campfire, and are refused at an out one.
 
@@ -444,7 +444,7 @@ The shipped world has no recipes and no fires that burn fuel, so `make` and `fee
 
 ### Cullet's goods, as data
 
-[`living/scripts/cullet_goods.rhai`](../living/scripts/cullet_goods.rhai) is an overlay composed over the shipped script (`floors::compose`); it adds no rule. Its numbers are first guesses for the soak.
+They are the goods section of Cullet's laws, [`living/seeds/worlds/cullet/laws.rhai`](../living/seeds/worlds/cullet/laws.rhai) (the seed's `laws_file`, composed over the shipped script when the world is created; [Cullet's rules](CULLET_RULES.md)). It adds no rule. Its numbers are first guesses for the soak.
 
 | Goods | Traits |
 | --- | --- |
@@ -458,7 +458,7 @@ The shipped world has no recipes and no fires that burn fuel, so `make` and `fee
 | Place | Kind | Gives |
 | --- | --- | --- |
 | hearth, oven, furnace (the Cone), smokehouse | `burns` peat or wood at 0.5, 1, 3 and 0.5 units a game hour | warmth 4, 2.5, 6 and 2 m while lit |
-| lamp | `burns` oil at 0.25 a game hour | light 10 m |
+| lamp | `burns` oil at 0.25 a game hour, holds 8 | lamplight 8 m while lit |
 | kelp_bed, sand_bank, peat_bank, root_plot, greens_bed, weir | resources | kelp, sand, peat, roots, greens, fish |
 
 | Recipe | At | Takes | Heat |
@@ -496,6 +496,16 @@ No whole-World scan was added. A fire costs nothing while it burns: no per-tick 
 - **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
 - **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here.
 - **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
+
+## Day length, game-hour rates, a seed's laws, light (rules-1)
+
+Built 2026-11-11 for Cullet ([Cullet's rules](CULLET_RULES.md), which has the details and the evidence):
+
+- **A seed's day.** `day_minutes` sets `World.day_ms` when the world is created.
+- **Rates per game hour.** `rates(a)` returns `per: "hour"` and the engine turns its numbers into real time for the world's day (`Scripts::with_day`). The shipped numbers are the old per-minute ones halved, so the island's real-time rates are bit-identical. Laws may read `hour_ms()` and `day_minutes()`.
+- **A seed's laws.** `laws` (or `laws_file`, read in by `build.rs` and `living/tools/seed_text.py`) is an overlay composed with `floors::compose` and installed at creation through the same checks as `install_script`. `base_` functions are no longer taken for laws of their own.
+- **Night as a law.** `daylight(hour)` (0 to 1; night below one half) replaces the Rust `is_night` in the authority and the mind service; `a.daylight` reaches laws, and the graphs' `night` weight is the darkness.
+- **Light on people.** `glow(a)` (how far a creature is seen from by a light on it, bounded by `senses_law`'s `reach.glow`), the `lights` structure trait and `a.actor.lit` (in lamplight), and `p.dist` for `perceived_of` (who someone is, by distance). A script without them takes the old paths.
 
 ## How a floor adds its own rules
 

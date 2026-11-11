@@ -173,10 +173,19 @@ def launch(a):
     keep = getattr(a, "keep_data", False)
     fresh = [] if keep else ["--delete-data"]
     stdb("publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y")
-    # Over HTTP: the script is past the 128 KiB a command-line argument may hold.
-    code, body = http(f"/v1/database/{st['db']}/call/install_script", [(LIVING / "scripts/skills.rhai").read_text()], admin_token(), timeout=180)
-    if code != 200:
-        sys.exit(f"install_script failed: {code} {body.strip()[-4000:]}")
+    # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
+    # shipped script and installed when its world was created; installing the plain script now
+    # would drop them. Every other world gets the working tree's script, as before.
+    seed_file = Path(a.seed if a.seed.startswith("/") else LIVING / "seeds" / a.seed).with_suffix(".json") if a.seed != "none" else None
+    seed_json = json.loads(seed_file.read_text()) if seed_file and seed_file.exists() else {}
+    st["seed_laws"] = bool(str(seed_json.get("laws") or "").strip() or seed_json.get("laws_file"))
+    if st["seed_laws"]:
+        log(st, "the seed carries its own laws: kept as installed at creation (no install_script)")
+    else:
+        # Over HTTP: the script is past the 128 KiB a command-line argument may hold.
+        code, body = http(f"/v1/database/{st['db']}/call/install_script", [(LIVING / "scripts/skills.rhai").read_text()], admin_token(), timeout=180)
+        if code != 200:
+            sys.exit(f"install_script failed: {code} {body.strip()[-4000:]}")
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)

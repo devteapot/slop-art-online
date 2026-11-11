@@ -18,16 +18,20 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
-SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "floor-megacity-2k", "floor-megacity-4k")
+SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "floor-megacity-2k", "floor-megacity-4k", "cullet-laws", "cullet-laws-floor")
 # Seeds derived from a tracked seed in the run's directory (published through `--seed` with an
 # absolute path): the megacity floor (docs/FLOORS.md) at 2048 m, created inside `init` from a
 # compiled seed, and at 4096 m as a floor: a module built without a seed (`--seed none`) given
 # the seed at runtime by `create_floor`, which creates the land in scheduled steps (`genesis`).
 DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048}), "floor-megacity-4k": ("floor-megacity", {"size": 4096})}
-FLOORS = ("floor-megacity-4k",)
+FLOORS = ("floor-megacity-4k", "cullet-laws-floor")
+# Seeds with their own day and laws (`day_minutes`, `laws_file`; docs/CULLET_RULES.md): compiled in
+# (`cullet-laws`, its laws file read in by build.rs) and given to a floor module (`cullet-laws-floor`,
+# the same seed sent as living/tools/seed_text.py sends it). Both are created in the one call.
+LAWS_FLOORS = {"cullet-laws-floor": "cullet-laws"}
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine", "relation", "acquaintance", "world_law")
+          "place", "routine", "relation", "acquaintance", "world_law", "script")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -102,6 +106,14 @@ def create_floor(run, d, seed):
         bad["map"]["size"] = size
         code = harness("call", run, d / f"create-floor-{size}.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", "a land's side is a multiple of 16")
         checks.append({"check": f"create_floor refuses a {size} m land ({why})", "pass": code == 0})
+    # A hand-authored plan the generator cannot honour (a stair whose rise disagrees with the
+    # levels it joins) is refused before anything is kept (docs/AUTHORED_PLANS.md).
+    plan = json.loads((ROOT / "living/seeds/plan-test.json").read_text())["map"]["params"]["plans"][0]
+    plan["stairs"][0]["rise_m"] = 3.0
+    bad = json.loads(json.dumps(seed))
+    bad["map"].setdefault("params", {})["plans"] = [plan]
+    code = harness("call", run, d / "create-floor-bad-plan.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", "rises 3 m")
+    checks.append({"check": "create_floor refuses a plan whose stair disagrees with its levels", "pass": code == 0})
     code = harness("call", run, d / "resume-none.log", "resume_genesis", "[]", "--as-admin", "--expect-refusal", "no staged creation")
     checks.append({"check": "resume_genesis is refused before any creation", "pass": code == 0})
     started = time.time()
@@ -136,6 +148,31 @@ def create_floor(run, d, seed):
     return checks
 
 
+def seed_text(path):
+    """A seed as `create_floor` takes it: its `laws_file` read into `laws` (living/tools/seed_text.py)."""
+    sys.path.insert(0, str(ROOT / "living/tools"))
+    import seed_text as st
+    return st.resolved(path)
+
+
+def create_floor_laws(run, d, seed):
+    """Give a floor module a seed with its own day and laws, created in this call; returns the
+    checks. On the way: a seed naming a laws file without its text, laws that fail the install
+    checks, and a day out of range are refused, and nothing is written."""
+    checks = []
+    for label, change, words in [("laws-file-unread", {"laws": ""}, "was not read into `laws`"),
+                                 ("laws-broken", {"laws": "fn rates(a) { 1 }"}, "seed laws"),
+                                 ("day-zero", {"day_minutes": 0}, "day_minutes is between")]:
+        bad = dict(seed, **change)
+        code = harness("call", run, d / f"create-floor-{label}.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", words)
+        checks.append({"check": f"create_floor refuses a seed: {label}", "pass": code == 0})
+    code = harness("call", run, d / "create-floor.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin")
+    checks.append({"check": "create_floor accepted the seed with its laws", "pass": code == 0})
+    again = harness("call", run, d / "create-floor-again.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin", "--expect-refusal", "already has its seed")
+    checks.append({"check": "a second create_floor is refused", "pass": again == 0})
+    return checks
+
+
 def snapshot(run, tables):
     directory = BASE / run
     result = {}
@@ -165,6 +202,15 @@ def check_seed(seed, rows):
         checks.append({"check": name, "pass": bool(condition), "detail": detail})
 
     w = rows["world"][0]
+    # The seed's day and its own laws (docs/CULLET_RULES.md): the world's day, and the installed
+    # script is the shipped one with the overlay composed over it.
+    equal("world day length", w["day_ms"], round(seed.get("day_minutes", 12) * 60000))
+    script = (rows.get("script") or [{}])[0].get("source", "")
+    if str(seed.get("laws") or "").strip():
+        parts = script.split("// ---- floor overlay ----", 1)
+        present("the seed's laws are composed over the shipped script", len(parts) == 2 and parts[1].strip() == seed["laws"].strip() and "fn base_rates(a)" in parts[0], {"chars": len(script)})
+    else:
+        present("the installed script is the shipped one", "// ---- floor overlay ----" not in script and script.strip() == (ROOT / "living/scripts/skills.rhai").read_text().strip())
     m = seed.get("map", {})
     if m.get("kind") == "land":
         size = [m.get("size") or max(m.get("w", 0), m.get("h", 0))] * 2
@@ -328,11 +374,14 @@ def check_land(seed, rows, side, tiles):
     present("settlement rows", len(settlements) >= len(entries), {"rows": len(settlements), "seeded": len(entries)})
     linked = {s["community"] for s in settlements if s["community"]}
     present("every seeded settlement linked to its community", all(communities.get(t["name"], {}).get("id") in linked for t in entries), sorted(linked))
+    plans = {p["id"]: p for p in seed.get("map", {}).get("params", {}).get("plans", [])}
     for t in entries:
         want = t.get("site") or ("town" if t in seed.get("towns", []) else "village")
         c = communities.get(t["name"], {}).get("id")
-        # A town in its own style is named by its site id, `<style>_<kind>` (steampunk_town).
-        present(f"{t['name']} stands on a {want} site", any(s["community"] == c and want in (s["kind"], f"{s['style']}_{s['kind']}") for s in settlements))
+        # A town in its own style is named by its site id, `<style>_<kind>` (steampunk_town); a
+        # hand-authored one by its plan's id, in the plan's style.
+        planned = lambda s: want in plans and s["style"] == plans[want]["style"] and s["kind"] == plans[want].get("kind", "town")
+        present(f"{t['name']} stands on a {want} site", any(s["community"] == c and (want in (s["kind"], f"{s['style']}_{s['kind']}") or planned(s)) for s in settlements))
     lots = rows.get("lot", [])
     structures = {s["id"]: s for s in rows["structure"]}
     present("lot ids are 0..n", sorted(l["id"] for l in lots) == list(range(len(lots))), len(lots))
@@ -449,6 +498,8 @@ def check_land(seed, rows, side, tiles):
         present("the land's other settlements stand outside the city", outside and all(((s["x"] - core["x"]) ** 2 + (s["y"] - core["y"]) ** 2) ** 0.5 > reach * 0.9 for s in outside), [(s["style"], s["x"], s["y"]) for s in outside])
         gates = rows.get("gate", [])
         present("the city wall has gate tiles on its arterials", len(gates) >= arterials * 4, len(gates))
+    if plans:
+        checks.extend(check_plans(seed, rows, plans, tile))
     # A seed's `rules` are the world's own law values, kept when it is made (docs/WORLD_RULES.md).
     kept = {r["name"]: json.loads(r["value"]) for r in rows.get("world_law", [])}
     present("the seed's rules are kept as the world's laws", kept == seed.get("rules", {}), {"kept": kept, "seed": seed.get("rules", {})})
@@ -456,6 +507,79 @@ def check_land(seed, rows, side, tiles):
         world = rows["world"][0]
         minded = [c["id"] for c in rows["character"] if c["ai"] or c["controller"] == world["admin"]]
         present("rules.minds false: nobody is mind-controlled", not minded, minded[:20])
+    return checks
+
+
+def check_plans(seed, rows, plans, tile):
+    """Hand-authored settlements (`map.params.plans`, docs/AUTHORED_PLANS.md): the planned
+    settlement's lot rows are its plan's lots in order, with their kinds, sizes, models and
+    heights; its doors are walkable; households the seed binds to lots (`homes`) own those
+    houses; named buildings at a lot (`buildings[].lot`) have their sign there; and residents'
+    `lot:<id>` places stand at that lot (its spots, else its door)."""
+    checks = []
+
+    def present(name, condition, detail=None):
+        checks.append({"check": name, "pass": bool(condition), "detail": detail})
+
+    settlements, lots = rows.get("settlement", []), rows.get("lot", [])
+    structures = {s["id"]: s for s in rows["structure"]}
+    communities = {r["name"]: r["id"] for r in rows["community"]}
+    by_name = {c["name"]: c for c in rows["character"]}
+    for pid, plan in plans.items():
+        town = next((t for t in seed.get("towns", []) + seed.get("villages", []) if t.get("site") == pid), None)
+        mine = [s for s in settlements if s["style"] == plan["style"] and s["kind"] == plan.get("kind", "town")]
+        present(f"plan {pid}: one settlement in its style", len(mine) == 1, [(s["id"], s["style"]) for s in mine])
+        if len(mine) != 1:
+            continue
+        sid = mine[0]["id"]
+        rows_of = sorted((l for l in lots if l["settlement"] == sid), key=lambda l: l["id"])
+        want = plan.get("lots", [])
+        present(f"plan {pid}: its {len(want)} lots, in order", len(rows_of) == len(want), {"rows": len(rows_of), "plan": len(want)})
+        wrong = []
+        for spec, row in zip(want, rows_of):
+            h = spec.get("height_m", 6.0 if spec["kind"] not in ("garden", "field") else 0.0)
+            ok = row["kind"] == spec["kind"] and row["model"] == (spec.get("model") or "") and abs(row["height_m"] - h) < 1e-4 and abs(row["width_m"] - spec["size"][0]) < 1e-3 and abs(row["depth_m"] - spec["size"][1]) < 1e-3
+            level = next(lv for lv in plan["levels"] if lv["id"] == spec["level"])
+            ok = ok and abs(row["floor_m"] - level["height_m"]) < 1e-4
+            if not ok:
+                wrong.append({"lot": spec["id"], "row": {k: row[k] for k in ("kind", "model", "height_m", "width_m", "depth_m", "floor_m")}})
+        present(f"plan {pid}: lots have their kinds, sizes, models, heights and level floors", not wrong, wrong[:10])
+        present(f"plan {pid}: doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in rows_of if l["structure"]), [l["id"] for l in rows_of if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE])
+        key = {spec["id"]: row for spec, row in zip(want, rows_of)}
+        if not town:
+            continue
+        members = {}
+        for r in town.get("residents", []):
+            members.setdefault(r.get("household") or r["name"], []).append(r["name"])
+        for hh, lot_id in town.get("homes", {}).items():
+            row = key.get(lot_id)
+            owner = structures.get(row["structure"], {}).get("owner") if row else None
+            names = {by_name[n]["id"] for n in members.get(hh, []) if n in by_name}
+            present(f"plan {pid}: household {hh} owns the house on lot {lot_id}", row and owner in names, {"owner": owner, "household": sorted(names)})
+            homes = {(round(by_name[n]["home_x"], 1), round(by_name[n]["home_y"], 1)) for n in members.get(hh, []) if n in by_name}
+            present(f"plan {pid}: household {hh} lives at lot {lot_id}'s door", row and homes == {(round(row["door_x"], 1), round(row["door_y"], 1))}, {"homes": sorted(homes), "door": row and [row["door_x"], row["door_y"]]})
+        signs = {a["topic"]: a for a in rows["artifact"] if a["kind"] == "sign"}
+        for b in town.get("buildings", []):
+            if not b.get("lot"):
+                continue
+            row, a = key.get(b["lot"]), signs.get(b["name"])
+            st = structures.get((a or {}).get("holder", 0) & ~(1 << 40))
+            present(f"plan {pid}: {b['name']}'s sign stands at lot {b['lot']}'s door", row and st and math.dist((st["x"], st["y"]), (row["door_x"], row["door_y"])) < 3.0, {"sign": st and [st["x"], st["y"]], "door": row and [row["door_x"], row["door_y"]]})
+        places = {}
+        for p in rows.get("place", []):
+            places.setdefault(p["actor"], {})[p["name"]] = (p["x"], p["y"])
+        residents = [by_name[r["name"]]["id"] for r in town.get("residents", []) if r["name"] in by_name]
+        for name, kinds in seed.get("town_life", {}).get("places", {}).items():
+            lk = next((k[4:] for k in kinds if k.startswith("lot:")), None)
+            if not lk or lk not in key:
+                continue
+            spec = next(x for x in want if x["id"] == lk)
+            row = key[lk]
+            # Spots are in the lot's frame; a place stands near the lot's front either way.
+            far = [i for i in residents if name in places.get(i, {}) and math.dist(places[i][name], (row["door_x"], row["door_y"])) > max(6.0, max(spec["size"]) * 0.5 + 1.0)]
+            known = [i for i in residents if name in places.get(i, {})]
+            present(f"plan {pid}: place {name!r} is at lot {lk}", known and not far, {"residents": len(known), "far": far})
+        present(f"plan {pid}: its town's community stands on it", communities.get(town["name"]) == mine[0]["community"], {"community": mine[0]["community"]})
     return checks
 
 
@@ -597,9 +721,12 @@ def suite(args):
                 derived["run"] = seed_name
                 seed_path = directory / f"{seed_name}.json"
                 write(seed_path, derived)
+            elif seed_name in LAWS_FLOORS:
+                seed_path = ROOT / f"living/seeds/{LAWS_FLOORS[seed_name]}.json"
             else:
                 seed_path = directory / "malformed.json" if seed_name == "malformed" else ROOT / f"living/seeds/{seed_name}.json"
-            write(d / "seed.json", json.loads(seed_path.read_text()))
+            # As the world receives it: a laws file read in (build.rs, seed_text.py).
+            write(d / "seed.json", seed_text(seed_path) if seed_name != "malformed" else json.loads(seed_path.read_text()))
             database = "verify-" + active_run
             seed_arg = "none" if seed_name in FLOORS else str(seed_path.with_suffix("")) if seed_name == "malformed" or seed_name in DERIVED else seed_name
             # A seed's `rules` are world laws kept at creation (`world_law`), not compiled in.
@@ -640,7 +767,7 @@ def suite(args):
                     continue
                 if launch_code:
                     raise RuntimeError(f"launch failed; read {d}/launch.log")
-                floor_checks = create_floor(active_run, d, json.loads(seed_path.read_text())) if seed_name in FLOORS else []
+                floor_checks = create_floor_laws(active_run, d, seed_text(seed_path)) if seed_name in LAWS_FLOORS else create_floor(active_run, d, json.loads(seed_path.read_text())) if seed_name in FLOORS else []
                 if floor_checks and not all(c["pass"] for c in floor_checks):
                     write(d / "checks.json", floor_checks)
                     raise RuntimeError(f"floor creation failed; read {d}/create-floor.log and genesis-final.json")

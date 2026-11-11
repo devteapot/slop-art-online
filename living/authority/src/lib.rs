@@ -79,9 +79,8 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     // one call); a floor module waits for `create_floor` (floor.rs).
     if !seed::VALLEY.is_empty() {
         let s: seed::Seed = serde_json::from_str(seed::VALLEY).map_err(|e| format!("seed: {e}"))?;
-        let over: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-        sc.laws_with(&over).map_err(|e| format!("seed rules: {e}"))?;
-        floor::begin(ctx, &s, now);
+        let laws = floor::check(&s)?;
+        floor::begin(ctx, &s, laws, now)?;
     }
     Ok(())
 }
@@ -116,9 +115,15 @@ pub fn set_paused(ctx: &ReducerContext, paused: bool) -> Result<(), String> {
 #[spacetimedb::reducer]
 pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String> {
     require_admin(ctx)?;
+    install_source(ctx, source)
+}
+
+/// Install a skill script: compiled and validated on the world's day, then written with a new
+/// revision. `install_script` (the admin) and a seed's laws overlay (`floor::begin`) go through it.
+pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(), String> {
     let mut sc = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
-        living_rules::script::Scripts::new(&source)?
+        living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
     };
     // Installs are rare: always timed.
     let checked = {

@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- Idle hunger rises and energy falls, at the rules' pace: every person rate is scaled by `person_pace` (0.3 since iter-11: hunger 1.2 a minute), and the needs and infant scenes read the law and scale their thresholds and hunger waits by it.
+- Idle hunger rises and energy falls, at the rules' pace: every person rate is scaled by `person_pace` (0.3 since iter-11: hunger 1.2 a minute), and the needs and infant scenes read the law and scale their thresholds and hunger waits by it. Since `rules-1` the shipped rates are written per game hour (`per: "hour"`, the old per-minute numbers halved) and the engine doubles them on the 12-minute day, so the scenes' real-minute expectations (cold tiring 1.5 × `person_pace` a minute) are unchanged; `person_pace` now scales game-hour rates. A world with another day is [laws.md](laws.md).
 - Rest recovers energy over time.
 - Eating consumes food and lowers hunger.
 - "food" is whatever the rules give nutrition (`nutrition(item)` in `skills.rhai`): `has food`, and eat, give, store and take of `food`, all read it. `eat food` takes the most nourishing food held.

@@ -212,7 +212,7 @@ The owner's rule: resources come from the world, and nothing spawns by magic. So
 - **Goods.** The catalog has berries, fish and meat. Cullet needs kelp, ash, sand, glass, roots, greens, peat and lamp oil, with their recipes. The owner's "traits, not lists" decision suggests goods should become data with properties, so that food is anything with nutrition and fuel is anything that burns.
 - **Fire that eats fuel.** A furnace or hearth is lit only while it is fed.
 
-  *Built 2026-11-11 on `goods-1`:* goods, fires that eat fuel, recipes and shared fishing stocks, with Cullet's goods as data in `living/scripts/cullet_goods.rhai` ([world rules](WORLD_RULES.md#goods-recipes-and-fuel)). Placing Cullet's nodes and fires is the authored plan's.
+  *Built 2026-11-11 on `goods-1`:* goods, fires that eat fuel, recipes and shared fishing stocks, with Cullet's goods as data in its laws file, `living/seeds/worlds/cullet/laws.rhai` ([world rules](WORLD_RULES.md#goods-recipes-and-fuel)). Placing Cullet's nodes and fires is the authored plan's.
 - **Decay and upkeep.** Panes break and need glass. The owner has asked for this, as Rhai laws.
 - **Fish as a stock.** Today a fishing spot regrows. The owner wants fish to be animals eventually. For this test, regrowing spots with a shared limit are enough.
 - **Tide** (optional, recommended). A law that gives the water's state from the clock, shifting about 50 minutes later each day. It gates the Weirs and the wrack. It changes no terrain.
@@ -710,6 +710,8 @@ Each phase ends with something the owner can look at. "Touches" names what chang
 
 **Order and overlap.** Phase 1 can start today. Phases 2 and 4 do not depend on each other. Phase 3 needs phases 1 and 2. Phase 5's bible can be written during phase 3. The client-feel work runs alongside all of it and is not in this plan.
 
+**Phase 2, engine part (2026-11-11, branch `plan-1`).** A land seed can now carry hand-authored plans (`map.params.plans`): levels at exact heights, streets, stairs, a square, a harbour and lots with explicit models and heights, drawn as grey boxes until the kit exists. Households bind to lots (`homes`). See [authored plans](AUTHORED_PLANS.md). The full 65-lot plan is the next task; `living/seeds/cullet.json` is a rough first version.
+
 **What could stop it:**
 
 - **The authored plan** (phase 2) is the largest unknown. The planner generates settlements, and nothing today reads a hand-made layout. `SeedTown.buildings` is the nearest existing hook.
@@ -749,4 +751,4 @@ Given through the general coordinator. The owner's words on the recommendations:
 | 12 | Fable 5.2 builds the asset kit, starting from the Fable arm (branch `ab-arm1`). The owner liked Fable's results more in general. That is a general preference; no sheet-by-sheet scores were given. The Opus arm (`ab-arm2`) is kept for the record. |
 | 13 | Replaced. How the view shows the edge of sight is being prototyped in the client for the owner's next play-test. What the owner picks there replaces options A to D. |
 
-**Decisions 4 and 5 against the current rules.** Section 4's "Now" column was written before the change that paces people's needs to real time (`person_pace` 0.3 in `skills.rhai`, on the island's 12-minute day). With that law, hunger already rises about 1.2 a real minute, not 5. Phase 4 derives Cullet's law values again from the current script, for a 48-minute day, and keeps the outcomes in the targets table. Where the two differ, it records which it chose.
+**Decisions 4 and 5 against the current rules.** Section 4's "Now" column was written before the change that paces people's needs to real time (`person_pace` 0.3 in `skills.rhai`, on the island's 12-minute day). With that law, hunger already rises about 1.2 a real minute, not 5. Phase 4 derives Cullet's law values again from the current script, for a 48-minute day, and keeps the outcomes in the targets table. Where the two differ, it records which it chose. Done on `rules-1`: [Cullet's rules](CULLET_RULES.md) has the law table, the outcomes computed from the script, and the choices.
