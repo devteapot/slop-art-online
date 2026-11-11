@@ -687,11 +687,11 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 
 ### What the client needs for types
 
-Nothing in `living/game` was edited in step 3, and every file loads in today's client. For the laptop coordinator, in the order they unlock things:
+Nothing in `living/game` was edited in step 3, and every file loads in today's client. For the laptop coordinator, in the order they unlock things. 1 to 3 are done in the client since types-1 ([below](#the-client-since-types-1-2026-11-12)); 4 waits for the style files.
 
 **1. Outline normals from the file** (`lookdev.rs`, `convert` and the scenery path). Small.
 
-- Name the attribute to the glTF loader: `GltfPlugin::default().add_custom_vertex_attribute("_OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL)`.
+- Name the attribute to the glTF loader: `GltfPlugin::default().add_custom_vertex_attribute("OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL)`, without the underscore: the gltf crate names a custom attribute `_X` as `Semantic::Extras("X")` (types-1 found the name with the underscore never matches).
 - Skip `generate_outline_normals` for a mesh that already has `ATTRIBUTE_OUTLINE_NORMAL`.
 - It saves the generation at load for every person and closes the outline between a person's meshes. Per-vertex line width (step 5) will ride the same path.
 
@@ -715,6 +715,40 @@ Nothing in `living/game` was edited in step 3, and every file loads in today's c
 
 - A hair style's spring chains hang under `J_Id_Cranium`; a type's file has none of its own.
 - The far switch and clips once are as in [what the client needs](#what-the-client-needs).
+
+### The client since types-1 (2026-11-12)
+
+**What the client does now:**
+
+- **Outline directions from the file.**
+  - `main.rs` names `_OUTLINE_NORMAL` to the glTF loader, as `OUTLINE_NORMAL`. Every place that gave a mesh outline directions now calls `style::outline_normals`, which keeps a mesh's own and generates them only for a mesh without.
+  - The `assets:` diag line counts both. A type's or a new person's meshes bring theirs (21 of 21 in a run of the three people below); pass 3's town files predate `outline_normals.py` and are generated as before.
+  - `LIVING_GAME_PERF=genoutlines` generates every mesh's, to compare.
+- **Identity** (`characters/identity.rs`, `characters.rs` `set_identity`).
+  - A recipe's `identity` (values by name) moves the identity bones by compose.py's rule, ported line for line. The rig comes from `characters/types.json` under the asset folder when there is one, else from the copy compiled in (`living/tools/characters/types.json`).
+  - **It is set when the person's scene comes in** (the `WorldInstanceReady` observer, which also runs for a scene spawned again), not in `shape`. Bevy 0.20 takes a skinned mesh's bounds from its joints, and `fit` sizes the person by those bounds. Set in `shape`, a person was fitted on the type's rest head and came out about a pixel larger than the same person composed in the file.
+  - A file whose identity bones are already moved (`gen_person.sh`'s people, through compose.py) starts from the rest its nodes record (`extras.rest_translation`), so values given again change nothing.
+  - **The proof:**
+    - `characters::identity::tests` holds the port to compose.py's own `transforms` for three sets of values (every value at 1, every value at -1, a generated person's 38): 81 bone changes (`living/tools/characters/identity_cases.py` writes them).
+    - In the client, a person whose identity bones were put back to rest, given the same values in its recipe, ends with all 27 bones at compose.py's transforms: translation within 5×10⁻⁹ m, scale 1×10⁻⁷, rotation 3×10⁻⁹.
+    - Photographed with the idle clip held, that person, the same person composed by compose.py and the same person baked (`IDENTITY=bake`) show the same face. Their pixels differ by 0.05 to 1% between any two, the composed and baked pair included, from the pose's run-to-run settling (foot IK, the head on the hips).
+  - **A type's file can't be a character by itself yet:** it is a head, neck and hands, and `fit` sizes a person by its meshes, so it would stretch the head to the person's height. That waits for the style files (4).
+- **Colours without pictures held on the CPU** (`characters.rs` `thumb_pictures`, `Thumbs`).
+  - The tag colour was already applied per fragment (mode 3 in `toon.wesl`). The CPU read a picture only for the mean colour of the texels a mesh uses, and for that kept every picture's pixels.
+  - Now each picture of a character file (`lookdev/…`) keeps a 64×64 summary of its colours, and its usage becomes the render world's alone, so Bevy drops the main world's copy once it is uploaded. The means are taken from the summary, so a page shared by 16 people serves the ones that spawn later.
+  - `LIVING_GAME_PERF=keeppixels` keeps the pixels, to compare.
+  - **Measured** (the `assets:` line, laptop, at the game camera):
+
+    | | Pixels kept (before) | Pixels dropped (types-1) |
+    |---|---|---|
+    | Cullet's 64 (both-files, paged) | 525.9 MiB of images | 9.2 MiB |
+    | 64 VRoid bases (recoloured) | 182.4 MiB | 9.2 MiB |
+
+    The 9.2 MiB left are the scene's own pictures. The recoloured VRoid crowd draws the same either way: 0.13% of pixels differ, from the idle loops' timing.
+- **The shared clip file again.** `lookdev/anim/own-clips.glb` is baked from today's `man` preset, 1.803 m with the cage head. Stride against it still gives each of three of Cullet's people their own metres a cycle to 1 mm in every forward gait (walk 1.408 against 1.409 m at most).
+- **Morphs:** the client drives `Fcl_EYE_Close` (the blink) and `Fcl_MTH_A` (the mouth, only for look-dev's `talk`) and no other, so `--morphs client` loses nothing.
+- **Not done here:** step 4's optional shading (the shadow lookup along the head's forward vector, the face and neck shade blended at the jaw, the sun's height in the map's blue channel) and the far head's own round normals; type files as characters with styles (4).
+- **Evidence:** `.local/living/types-1/` (`view/identity-held`, `view/outline-*`, `mem/`, `identity-transforms.json`).
 
 ## Motions on generated people
 
