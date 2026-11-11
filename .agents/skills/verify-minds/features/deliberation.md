@@ -11,6 +11,7 @@
 - `mind-body`: the service subscribes, as the owner, to the `vitals` of the characters it thinks for (a join on `character.controller` and `ai`, `living/mind/src/main.rs`), and think, compile and talk prompts carry "How your body feels: …" in words (`prompts::felt_body`, `living/mind/src/prompts.rs`).
 - `id-target`: an act aimed at `{"id": n}` resolves a structure or resource in sight as well as a creature (`brain.rs` `visible_thing`), so a thing the scene listed by id is not reported "no #n in sight".
 - `missed-things`: a failure at a thing named by id ("no #n in sight", "depleted") weakens what the mind remembers of `#n` before its next deliberation (`Minds::weaken_missed`, `Store::weaken`) and the reason says so. Proved against Neo4j in `verify-knowledge`, not here (this suite runs with `LIVING_NEO4J=off`).
+- `projects` (`LIVING_PROJECTS=1`, off by default): the think step's `# Your projects` section and `serves` field, recorded in the thought's `detail.projects`. Needs a store, so it is driven by a fake trial batch, not these cases: [projects.md](projects.md).
 
 ## How to get to it (user POV)
 

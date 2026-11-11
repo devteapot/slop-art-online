@@ -1220,6 +1220,17 @@ class Run:
                 ev.append(f"mind log {fmt_dt(x[0] - ms)}: {x[1][5:] if x[1].startswith('INFO') else x[1]} ({x[3]})")
                 first_kind = first_kind or x[4]
             kinds = [x[4] for x in pair_logs]
+            if fate and fate["kind"] == "turn" and "parked" in kinds:
+                # The turn came, but only after the line waited behind deliberations.
+                c_turn = self.turn_of.get((l["i"], hid))
+                upto = c_turn["queued"] + 1000 if c_turn else ms + 180_000
+                before = [x for x in self.logs[lo:bisect.bisect_right(self.log_ms, upto)]
+                          if x[5] and x[5][0] == hid and x[5][1] == sp and x[4] in ("parked", "unpark")]
+                parks = [x for x in before if x[4] == "parked" and "alongside" not in x[1]]
+                rels = [x for x in before if x[4] == "unpark"]
+                if parks:
+                    fate["short"] += (f"; before it, the line was parked behind a running deliberation {len(parks)} time{'s' if len(parks) > 1 else ''}"
+                                      + (f" (released {', '.join(fmt_dt(x[0] - ms) for x in rels)})" if rels else ""))
             if not fate:
                 if first_kind == "settled":
                     fate = dict(kind="settled", short="no turn: they had settled the exchange")
@@ -1688,7 +1699,7 @@ def act_text(a):
 def fate_tag(f):
     """A few words for a hearer's fate, for the lines table."""
     k, s = f.get("kind"), f.get("short", "")
-    tag = {"turn": "talk turn", "delib": "answered by a deliberation", "player": "a player", "later": "later deliberation"}.get(k)
+    tag = {"turn": "talk turn after parking" if "was parked" in s else "talk turn", "delib": "answered by a deliberation", "player": "a player", "later": "later deliberation"}.get(k)
     if k == "parked":
         tag = "parked → turn" if "turn that followed" in s else ("parked → answered" if "answered" in s else "parked → no turn")
     elif k == "settled":
