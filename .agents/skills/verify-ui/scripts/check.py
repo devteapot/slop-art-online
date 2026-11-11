@@ -735,7 +735,7 @@ def field(run, c):
         h2 = math.degrees(heading_at(stood, snaps["stood"][0]["wall_ms"]))
         c.check(s, "standing, a look west turns the body there and a release leaves it there", abs(abs(h1) - 180.0) < 4.0 and abs(math.degrees(wrap(math.radians(h2 - h1)))) < 2.0, f"looked {h1:.1f}°, after the release {h2:.1f}°")
     sends = len(re.findall(r"look: human_face\(", L))
-    refusals = re.findall(r"face refused: ([^\n]+)", L)
+    refusals = re.findall(r"(?:look|face) refused: ([^\n]+)", L)
     c.check(s, "looks went through human_face, none refused for anything but the input bucket", sends >= 6 and all("too many movement inputs" in x for x in refusals), f"{sends} sends; refusals {refusals[:3]}")
     c.check(s, "Settings › Play shows facing sight on, its switch and the values", fs("03").get("on") and "settings:facing_sight" in ((d["03"] or {}).get("tags") or {}))
     c.check(s, "the Settings switch turns it off; the field goes", fs("04").get("on") is False and dumps and dumps[-1][0].get("facing") is None, json.dumps(fs("04")))

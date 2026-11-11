@@ -370,7 +370,7 @@ pub fn look(net: &Net, dir: Option<Vec2>, st: &mut LookSend, now: f64) {
     st.sends += 1;
     let d = dir.unwrap_or(Vec2::ZERO);
     debug!("look: human_face({:.3}, {:.3})", d.x, d.y);
-    let (seq, refused, failed, report) = (st.sends, st.refused.clone(), st.failed.clone(), net.on_reply("face", "human_face", || serde_json::json!({"dx": d.x, "dy": d.y})));
+    let (seq, refused, failed, report) = (st.sends, st.refused.clone(), st.failed.clone(), net.on_reply("look", "human_face", || serde_json::json!({"dx": d.x, "dy": d.y})));
     let r = conn.reducers.human_face_then(d.x, d.y, move |ctx, r| {
         if let Ok(Err(e)) = &r {
             if e.contains("too many movement inputs") {
@@ -381,7 +381,7 @@ pub fn look(net: &Net, dir: Option<Vec2>, st: &mut LookSend, now: f64) {
         }
         report(ctx, r);
     });
-    net.report("face", r);
+    net.report("look", r);
 }
 
 /// Whether a look is sent while a direction is held. Off until dev-box's look-2 is on main: on
