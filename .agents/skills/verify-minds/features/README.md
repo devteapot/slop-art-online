@@ -3,6 +3,7 @@
 | Feature | Cases | File |
 | --- | --- | --- |
 | Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt) | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
+| A deliberation consumes the reasons its prompt contained: plan-finished churn during model calls keeps no older reason pending, a reason arriving mid-call waits for the next deliberation only; each thought's `detail.reasons` with `carried_before` | `reasons` | [deliberation.md](deliberation.md) |
 | Answer speech and close an exchange | `conversation` | [conversations.md](conversations.md) |
 | No-store persona/cursor, patch-loss XFAIL | `consolidation` | [consolidation.md](consolidation.md) |
 | Validate graphs, restrict actors, recover connection | `prune`, `reject`, `only`, `reconnect` | [robustness.md](robustness.md) |
