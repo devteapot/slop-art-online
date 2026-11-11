@@ -8,6 +8,14 @@ Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb`
 - `player-sso-island-215136` (island): `combat.py --scene death` 4 of 4: killed by a wolf, a `death` row with code `killed` and the wolf's id in `other`, its line "You were killed by …".
 - Earlier on the branch: `player-senses-204918` (senses 7 of 7, then 9 of 9 after the death case and a wait after a handback), `player-outcomes-210154` (outcomes 6 of 7, then 7 of 7 after waiting for the `own` line, which can come up to one release after its row).
 
+## 2026-11-11 ui-1 step 4: the bar, offer cards, face out of the lists (laptop)
+
+Branch `ui-1-step4` (origin/main merged at `5cd546da`), on the laptop's Docker SpacetimeDB 2.14.1, `scoped`, no model calls; world `verify-player-ui1d` (`$V launch --run player-ui1d --seed island`, joined as `Verifier`). The step changes no authority code; the rules are identical with every `_ui()` stripped (`living_rules` test), and its acts go through `human_act` and `use_skill` as before.
+
+- `offers.py` 17 of 17, `answers.py` 9 of 9 (the decline told to the walker, the player's outcome), `gesture.py` 10 of 10.
+- `offers.py` now has the walker ask for hide, not berries: the island's newcomer arrives with berries, so "accept without the goods" was accepted at once on a fresh world (an earlier run here: 13 of 17).
+- `combat.py --scene all`: 26 of 26 on `player-ui1c` before origin/main's `fix-place-free` (e3f0527f); 16 of 26 on `player-ui1d` after it. Every failure is a staged fight: the target is put on the nearest free tile, out of a strike's reach ("refused: out of reach"), and the jump finds "no room to jump". Not this branch's: its scenes need placing for the new `place_at`. Evidence `.local/living/verify/player-ui1d/combat.txt`.
+
 ## 2026-11-11 speech-2: whisper and call, refusals in the script's words (Spark)
 
 Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
@@ -245,6 +253,10 @@ Genericity: scratch authority with a throwaway `polish` (catalog line and `polis
 ## 2026-11-11, branch fix-perceived-moving (a walking player is perceived walking)
 
 Spark, the trial stack's own server (`slop-trials-stdb`, v2.14.1, :3320), worktree on `origin/main` 6a905c3 plus the change (docs/PERCEPTION.md "Activity derived from the body"). New script `approach.py`. Before the change, on island worlds built from `origin/main` (`fixperc-pre2` at 4df9a89, `fixperc-pre3` at 6a905c3 with the three authority files reverted), `--expect-wait` passed: the resident R's scene had the walking player as `"doing": "wait"`, its first sight was "For the first time you see a stranger, 11 tiles west, wait.", and the AI walking the same line read `goto → person`. After the change, on fresh island worlds (`fixperc-post4`, and `player-fixperc-1`), all 6 checks passed: the walking player read `walk → person`, R's first sight was "For the first time you see a stranger, 11 tiles west, walk → person.", the player standing read `wait`, and the AI read `goto → person`. A bystander player's `seen_bodies` held both bodies moving and its `seen_doing` no row for either. In the same `player-fixperc-1` world, `appraise.py` passed 10/10 and `gesture.py` 10/10. Earlier attempts (`fixperc-post`, `-post2`, `-post3`) show the fixture problems the script now handles: a resident on a house tile with a campfire east of it, a side with no sight line, a just-published world's late `think`, and a crowd in which strangers are not announced. Evidence: `.local/living/verify/{fixperc-pre2,fixperc-pre3,fixperc-post4,player-fixperc-1}/approach.json`.
+
+## 2026-11-11, branch fix-staging-place (staging for the free-tile `place_at`)
+
+Spark, the trial stack's own server (`slop-trials-stdb`, v2.14.1, :3320), worktree on `origin/main` d2a2d228 plus the change. Each script on its own fresh run (`player-sta-*` island, plan-test and cullet-laws; `player-stb-*` default seed). `combat.py` before the change 19 of 26 (`player-stage-1111-221608`, "out of reach" in strike, kill and block; the laptop saw 16), after 26 of 26 on the same world with `--fresh`, then 25 of 26 on a fresh island world (`player-sta-combat`: the jump saw no blow in its 1 s window) and the jump scene 4 of 4 alone (`player-stc-jump`). Unchanged and passing: gesture 10, appraise 10, host 11, drop 6, workplace 15, speak 15, told 12, command 4, new_skill 6, fov 18, face 11, offers 17, answers 9, deal 13. `approach.py` 3 of 5 after appraise on `player-sta-appraise-approach` (the AI walker had already arrived when R's scene was taken: `goto` read as `wait`), 5 of 5 on `player-stc-jump`. `living/tools/combat_scene.py` put its residents 2.0, 8.0 and 1.0 m from the player, as asked.
 
 ## Not verified
 

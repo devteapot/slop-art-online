@@ -2,11 +2,12 @@
 """Trade offers a player receives and accepts (`my_offers`, docs/PERCEPTION.md "Offers").
 
 A scene walker (an AI resident, acting through admin `mind_act` as a mind would) offers the
-player 2 wood for 1 berries. The player reads it in `my_offers` (incoming, from the walker,
+player 2 wood for 1 hide (a newcomer carries berries, never hide). The player reads it in
+`my_offers` (incoming, from the walker,
 `until_ms` the law's window after `at_ms`) and is told of it in `my_experience`. A second
 player makes its own offer to the walker and reads it in its `my_offers` as outgoing; neither
 player sees the other's offer, and an anonymous client sees none. The player's `accept`
-without the berries is refused with the rules' words and leaves the offer standing; with
+without the hide is refused with the rules' words and leaves the offer standing; with
 them, the goods move both ways and the row goes. `trade_offer` stays private.
 
     offers.py --run RUN
@@ -85,16 +86,16 @@ def main():
     law = p.sql("SELECT name, value FROM world_law")
     window_ms = int(float(next((w["value"] for w in law if w["name"] == "trade_window_s"), 180)) * 1000)
 
-    # The resident offers the player 2 wood for 1 berries.
+    # The resident offers the player 2 wood for 1 hide (the newcomer's kit has berries, not hide).
     since = now_ms()
-    p.call("mind_act", [walker, [json.dumps({"do": "offer", "target": {"id": me}, "item": "wood", "qty": 2, "want": "berries", "want_qty": 1})], "verify-player"], "admin")
+    p.call("mind_act", [walker, [json.dumps({"do": "offer", "target": {"id": me}, "item": "wood", "qty": 2, "want": "hide", "want_qty": 1})], "verify-player"], "admin")
     got = wait_for(lambda: p.sql("SELECT * FROM my_offers", "player"), 12)
     o = got[0] if got else {}
     check(p, "the player reads the resident's offer in my_offers", len(got) == 1 and o.get("incoming") is True and o.get("from") == walker and o.get("to") == me
-          and (o.get("give_item"), o.get("give_qty"), o.get("want_item"), o.get("want_qty")) == ("wood", 2, "berries", 1), f"{got}")
+          and (o.get("give_item"), o.get("give_qty"), o.get("want_item"), o.get("want_qty")) == ("wood", 2, "hide", 1), f"{got}")
     check(p, "until_ms is the law's window after at_ms", o and o["until_ms"] - o["at_ms"] == window_ms and o["at_ms"] >= since - 2000, f"window {window_ms} ms: {o}")
     check(p, "the row names no one: ids, no name column", o and not any(k in o for k in ("name", "label", "from_name")), f"columns {sorted(o)}")
-    told = wait_for(lambda: mine(p, "offers you 2 wood for 1 berries", since), 8)
+    told = wait_for(lambda: mine(p, "offers you 2 wood for 1 hide", since), 8)
     check(p, "the player is told of the offer in my_experience", told, f"{[e['text'] for e in told]}")
 
     # The second player offers the walker 1 berries for 1 wood: its own row, outgoing.
@@ -112,21 +113,21 @@ def main():
     owner = p.sql("SELECT * FROM trade_offer")
     check(p, "the authority holds both offers (owner's read)", {(r["from"], r["to"]) for r in owner} >= {(walker, me), (other, walker)} and all(r["until_ms"] > 0 for r in owner), f"{owner}")
 
-    # Accepting without the berries is refused with the rules' words; the offer stands.
+    # Accepting without the hide is refused with the rules' words; the offer stands.
     since = now_ms()
     code, body = p.act({"do": "accept", "target": {"id": walker}})
-    refused = wait_for(lambda: mine(p, "you don't have 1 berries", since), 10)
+    refused = wait_for(lambda: mine(p, "you don't have 1 hide", since), 10)
     check(p, "accept without the goods is refused and told", code == 200 and refused, f"{code} {[e['text'] for e in refused]}")
     check(p, "the refused accept leaves the offer standing", [r["id"] for r in p.sql("SELECT * FROM my_offers", "player")] == [o.get("id")], "")
 
-    # With the berries the trade goes through the ordinary accept path.
-    p.call("grant_items", [me, "berries", 1], "admin")
-    w0, b0, ww0, wb0 = inv(p, me, "wood"), inv(p, me, "berries"), inv(p, walker, "wood"), inv(p, walker, "berries")
+    # With the hide the trade goes through the ordinary accept path.
+    p.call("grant_items", [me, "hide", 1], "admin")
+    w0, b0, ww0, wb0 = inv(p, me, "wood"), inv(p, me, "hide"), inv(p, walker, "wood"), inv(p, walker, "hide")
     since = now_ms()
     code, body = p.act({"do": "accept", "target": {"id": walker}})
     gone = wait_for(lambda: not p.sql("SELECT * FROM my_offers", "player"), 10)
-    w1, b1, ww1, wb1 = inv(p, me, "wood"), inv(p, me, "berries"), inv(p, walker, "wood"), inv(p, walker, "berries")
-    check(p, "accept moves the goods both ways", code == 200 and (w1 - w0, b1 - b0, ww1 - ww0, wb1 - wb0) == (2, -1, -2, 1), f"player wood {w0}->{w1} berries {b0}->{b1}; walker wood {ww0}->{ww1} berries {wb0}->{wb1}")
+    w1, b1, ww1, wb1 = inv(p, me, "wood"), inv(p, me, "hide"), inv(p, walker, "wood"), inv(p, walker, "hide")
+    check(p, "accept moves the goods both ways", code == 200 and (w1 - w0, b1 - b0, ww1 - ww0, wb1 - wb0) == (2, -1, -2, 1), f"player wood {w0}->{w1} hide {b0}->{b1}; walker wood {ww0}->{ww1} hide {wb0}->{wb1}")
     check(p, "the accepted offer leaves my_offers", gone, f"{p.sql('SELECT * FROM my_offers', 'player')}")
     mine_inv = {r["item"]: r["qty"] for r in p.sql("SELECT item, qty FROM my_inventory", "player")}
     check(p, "my_inventory shows the wood", mine_inv.get("wood", 0) == w1, f"{mine_inv}")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick turns look-walk support (default: all but support)
+  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick turns look-walk bar offers support (default: all but support)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -124,12 +124,31 @@ def talk(run, c):
     s = "talk"
     a, b = residents(run)
     plan = ("ready;sync:scene;wait:2;shot:01_scene;cursor:0.5,0.12;wait:0.3;key:Enter:tap;wait:0.6;shot:02_room;dump:02;type:Good morning, all.;enter;wait:11.5;shot:03_room_note;dump:03;"
-            "point:{A};wait:0.4;shot:04_hover;key:Enter:tap;wait:0.6;shot:05_to_them;dump:05;type:Hello there, good morning.;enter;wait:1.2;shot:06_said;dump:06;"
-            "key:Enter:tap;wait:0.4;tab;wait:0.4;dump:07a;tab;wait:0.4;dump:07b;tab;wait:0.4;dump:07c;shot:07_tab;key:Escape:tap;wait:0.4;dump:08;"
+            "sync:hold;wait:0.8;dump:04p;point:{A};wait:0.4;shot:04_hover;key:Enter:tap;wait:0.6;shot:05_to_them;dump:05;type:Hello there, good morning.;enter;wait:1.2;shot:06_said;dump:06;"
+            "key:Enter:tap;wait:0.4;tab;wait:0.4;dump:07a;tab;wait:0.4;dump:07b;tab;wait:0.4;dump:07c;tab;wait:0.4;dump:07d;tab;wait:0.4;dump:07e;tab;wait:0.4;dump:07f;tab;wait:0.4;dump:07g;tab;wait:0.4;dump:07h;shot:07_tab;key:Escape:tap;wait:0.4;dump:08;"
             "key:KeyL:tap;wait:0.4;click:@log:tab:1;wait:0.4;shot:09_people;click:@log:person:0;wait:0.6;shot:10_window;dump:10;"
-            "menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.5;click:@person:more;wait:0.5;shot:11_more;click:@acts:0:introduce;wait:0.5;shot:11_intro;dump:11;quit").replace("{A}", str(a))
-    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"])
+            "menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.5;click:@person:more;wait:0.5;shot:11_more;dump:11m;click:@acts:0:introduce;wait:0.5;shot:11_intro;dump:11;quit").replace("{A}", str(a))
+    # Placed apart across the view, and placed again just before the cursor goes to A: in the
+    # 11 s of the room's note they may walk (town life), once onto one spot, stacked on screen.
+    wait = json.dumps(json.dumps({"wait": 600}))
+    # Open ground on either side of the arrival stall (`place_at` snaps to the nearest walkable
+    # tile: spots in the stall put both on one tile, stacked exactly on screen).
+    hold = f"hold=place_at|{a}|(mx-3.0)|(my-1.0);set_behavior|{a}|{wait};place_at|{b}|(mx+2.0)|(my-2.0);set_behavior|{b}|{wait}"
+    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:2.0:-2.0"], syncs=[hold])
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    # The scene first: the two stand apart where they landed, and on screen, before the pick.
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    at = (sc.get("placed_at") or {}).get("hold") or {}
+    pa, pb = at.get(str(a)), at.get(str(b))
+    apart_m = ((pa[0] - pb[0]) ** 2 + (pa[1] - pb[1]) ** 2) ** 0.5 if pa and pb else 0
+    seen = {x["id"]: x for x in (dump(out, "04p") or {}).get("seen") or []}
+    if a in seen and b in seen:
+        fa, fb = seen[a]["feet"], seen[b]["feet"]
+        ppm = abs(seen[a]["feet"][1] - seen[a]["head"][1]) / 1.75
+        apart_px = ((fa[0] - fb[0]) ** 2 + (fa[1] - fb[1]) ** 2) ** 0.5
+    else:
+        ppm, apart_px = 1, 0
+    c.check(s, "scene: the two residents stand at least 1.5 m apart, in the world and on screen", apart_m >= 1.5 and apart_px >= 1.5 * ppm, f"world {apart_m:.2f} m ({pa}, {pb}); screen {apart_px:.0f} px at {ppm:.0f} px/m")
     d = {k: dump(out, k) for k in ["02", "03", "05", "06", "07a", "07b", "07c", "08", "10", "11"]}
     L = log(out)
     t2 = (d["02"] or {}).get("typing") or {}
@@ -141,7 +160,8 @@ def talk(run, c):
     c.check(s, "the box names them by looks, not a name", t5.get("label", "").startswith("To a"), t5.get("label"))
     c.check(s, "Enter says it to them (human_say with to)", re.search(rf'say: "Hello there, good morning\." to #{a}\b', L) is not None)
     c.check(s, "their window stays after saying it", d["06"] and (f"Person{a}", "Left") in wins(d["06"]) and not d["06"]["typing"])
-    tabs = [(d[k] or {}).get("typing") or {} for k in ["07a", "07b", "07c"]]
+    # Up to eight: as many may be within earshot at a busy hour, nearest first, then the room.
+    tabs = [(dump(out, f"07{k}") or {}).get("typing") or {} for k in "abcdefgh"]
     c.check(s, "Tab: someone else in earshot (the window follows) and the room", any(t.get("to") not in (None, a) and t.get("window") == f"Person{t.get('to')}" for t in tabs) and any(t.get("to") is None and t.get("window") == "Log" for t in tabs), json.dumps(tabs))
     c.check(s, "Esc closes the box and its window", d["08"] and wins(d["08"]) == [] and not d["08"]["typing"], str(wins(d["08"])))
     c.check(s, "Log › People lists them; a click opens a person's window", d["10"] and any(w.startswith("Person") for w, _ in wins(d["10"])), str(wins(d["10"])))
@@ -151,6 +171,8 @@ def talk(run, c):
     c.check(s, "the authority's said row has to = the addressee", any("Hello there, good morning." in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
     rows0 = sql(run, "SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = 0")
     c.check(s, "and the room's line has to = 0", any("Good morning, all." in r.get("text", "") for r in rows0), f"{len(rows0)} said rows to the room")
+    more = ((dump(out, "11m") or {}).get("acts") or {}).get("rows") or []
+    c.check(s, "every act toward them (More…) leaves out face: a player faces where it looks (play-test 5)", len(more) > 3 and not any(r == "face" or r.startswith("face ") for r in more), str(more))
 
 
 def items(run, c):
@@ -210,6 +232,77 @@ def themes(run, c):
     saved = json.load(open(st)).get("theme") if os.path.exists(st) else None
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
 
+
+def act(actor, a):
+    """An admin `mind_act` for a resident, as its mind would decide (scene setup)."""
+    inner = json.dumps(a, separators=(",", ":")).replace('"{me}"', "{me}")  # the player's id, filled in by drive.py
+    return "mind_act|%d|%s|\"verify-ui\"" % (actor, json.dumps([inner]))
+
+
+def offers(run, c):
+    """A resident's swap and terms, offered to the player (admin `mind_act`, as a mind decides):
+    each a card in the maker's window; its buttons are the rules' skills on `offer` (Accept,
+    Decline), naming the card's offer or record; a refusal is the rules' words; Decline tells the
+    maker. It leaves nothing standing; one left by a failed run opens its maker's window on
+    arrival until it lapses (`trade_window_s`)."""
+    s = "offers"
+    a, b = residents(run)
+    inv = lambda who, item: sum(r["qty"] for r in sql(run, f"SELECT item, qty FROM inventory WHERE owner = {who} AND item = '{item}'"))
+    ME = "{me}"
+    swap = act(a, {"do": "offer", "target": {"id": ME}, "item": "berries", "qty": 2, "want": "wood", "want_qty": 1})
+    dear = act(a, {"do": "offer", "target": {"id": ME}, "item": "berries", "qty": 2, "want": "hide", "want_qty": 5})
+    terms = act(b, {"do": "offer_terms", "target": {"id": ME}, "item": "berries", "qty": 1, "want": "stone", "want_qty": 1, "text": "bring it by dusk"})
+    plan = ("ready;sync:scene;sync:kit;wait:1;sync:swap;wait:4;shot:01_offer;dump:01;click:@person:offer:{A}:0:0;wait:4;shot:02_taken;dump:02;"
+            "sync:dear;wait:4;dump:03;click:@person:offer:{A}:0:0;wait:4;shot:03_refused;dump:04;click:@person:offer:{A}:0:1;wait:4;shot:04_declined;dump:05;"
+            "sync:again;wait:4;dump:07;click:@person:offer:{A}:0:0;wait:4;dump:08;"
+            "sync:terms;wait:4;shot:05_terms;dump:06;key:Escape:tap;wait:0.4;menu:f@id:{B};wait:0.5;click:@acts:0:window;wait:0.8;shot:06_terms_card;dump:09;"
+            "click:@person:offer:{B}:0:0;wait:4;shot:07_agreed;dump:10;"
+            "menu:f@id:{B};wait:0.5;click:@acts:0:offer;wait:0.5;dump:11a;click:@acts:1:berries;wait:0.5;click:@acts:1:berries_for_wood;wait:3;menu:f@id:{B};wait:0.5;click:@acts:0:window;wait:0.8;shot:08_mine;dump:11;quit").replace("{A}", str(a)).replace("{B}", str(b))
+    # Goods for the swaps and the terms (admin), then the residents' own acts.
+    kit = f'kit=grant_items|{a}|"berries"|4;grant_items|{b}|"berries"|1;grant_items|{{me}}|"wood"|1'
+    # Offered again, with the wood for it: the scene leaves nothing standing.
+    again = f'grant_items|{{me}}|"wood"|1;{swap}'
+    wood0 = inv(a, "wood")
+    # Within reach (3 m: the rules refuse an accept from farther, "Out of reach").
+    out, code, text = drive(run, s, plan, places=[f"{a}:-1.8:1.2", f"{b}:-0.6:2.2"], syncs=[kit, f"swap={swap}", f"dear={dear}", f"again={again}", f"terms={terms}"])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"]}
+    cards = lambda k: ((d[k] or {}).get("extra") or {}).get("cards") or []
+    tags = lambda k: set(((d[k] or {}).get("tags") or {}).keys())
+    notes = lambda k: (d[k] or {}).get("notes") or []
+    # A card per standing proposal: its acts are the rules' skills on `offer` (Accept, Decline).
+    acc, dec = f"person:offer:{a}:0:0", f"person:offer:{a}:0:1"
+    c.check(s, "an offer opens their window with Accept and Decline", (f"Person{a}", "Left") in wins(d["01"]) and {acc, dec} <= tags("01"), str((wins(d["01"]), sorted(tags("01")))))
+    left = [cd["text"] for cd in cards("01") if cd["with"] == a]
+    secs = [int(m.group(1)) * 60 + int(m.group(2)) for t in left for m in [re.search(r"(\d+):(\d\d) left", t)] if m]
+    c.check(s, "the card counts down to until_ms (at most the 3 min window)", secs and 0 < secs[0] <= 180, str(left))
+    c.check(s, "the note says the offer in the rows' goods", any("offers you 2 berries for 1 wood" in n for n in notes("01")), str(notes("01")))
+    L = log(out)
+    sent = len(re.findall(rf'"do":"accept","offer":\d+,"target":\{{"id":{a}\}}', L))
+    c.check(s, "Accept sends the rules' accept toward its maker, naming the offer (human_act)", sent >= 1, f"{sent} sent")
+    c.check(s, "the card's button is the rules' skill on `offer`, by its label", re.search(rf'verbs: Accept → \{{"do":"accept"', L) is not None)
+    c.check(s, "the card goes when the rules take the offer", acc not in tags("02"), str(sorted(tags("02"))))
+    me = json.load(open(os.path.join(out, "scene.json"))).get("me")
+    c.check(s, "the rules traded it (their note: 2 berries for 1 wood)", any("2 berries for 1 wood" in n for n in notes("02")), str(notes("02")))
+    # Both swaps they made took a wood of mine.
+    c.check(s, "the authority swapped the goods (they got my wood, twice)", inv(a, "wood") - wood0 == 2, f"their wood {wood0} -> {inv(a, 'wood')}")
+    c.check(s, "a second offer shows again", acc in tags("03"), str(sorted(tags("03"))))
+    c.check(s, "a refused accept is noted in the rules' words and the card stays", acc in tags("04") and len(notes("04")) > len([n for n in notes("03") if n in notes("04")]), str(notes("04")))
+    c.check(s, "Decline sends the rules' decline, naming the offer", re.search(rf'verbs: Decline → \{{"do":"decline","offer":\d+,"target":\{{"id":{a}\}}', L) is not None)
+    c.check(s, "and the card closes (the rules drop the offer)", acc not in tags("05"), str(sorted(tags("05"))))
+    told = [r for r in sql(run, f"SELECT kind, text FROM experience WHERE observer = {a}") if "declined your offer" in r.get("text", "")]
+    c.check(s, "the maker is told (\"… declined your offer …\")", len(told) >= 1, str([r.get("text") for r in told][-2:]))
+    c.check(s, "proposed terms are noted once, in the rules' words", len([n for n in notes("06") if "bring it by dusk" in n]) == 1, str(notes("06")))
+    c.check(s, "offered again, it shows again", acc in tags("07"), str(sorted(tags("07"))))
+    c.check(s, "and taken, it goes", acc not in tags("08"), str(sorted(tags("08"))))
+    tb = f"person:offer:{b}:0:0"
+    c.check(s, "the terms have their own card in the proposer's window", tb in tags("09") and (f"Person{b}", "Left") in wins(d["09"]), str((wins(d["09"]), sorted(t for t in tags("09") if t.startswith("person:")))))
+    c.check(s, "Accept on it names the record", re.search(rf'verbs: Accept → \{{"do":"accept","record":\d+,"target":\{{"id":{b}\}}', L) is not None)
+    c.check(s, "Accept on it agrees to the terms (the record is agreed) and the card goes", tb not in tags("10") and any(r.get("status") == "agreed" for r in sql(run, f"SELECT status FROM record WHERE kind = 'agreement'")), str(sql(run, "SELECT status FROM record WHERE kind = 'agreement'")))
+    mine = [cd["text"] for cd in cards("11") if cd["with"] == b]
+    c.check(s, "my own offer (Offer › berries) shows in their window, counting down, with no answers", any(t.startswith("You offer") and "left" in t for t in mine) and f"person:offer:{b}:0:0" not in tags("11"), str((mine, sorted(t for t in tags("11") if t.startswith("person:offer")))))
+    c.check(s, "nothing is left standing toward me", me is not None and sql(run, f"SELECT id FROM trade_offer WHERE to = {me}") == [], str(sql(run, f"SELECT * FROM trade_offer WHERE to = {me}") if me else "?"))
+    c.check(s, "and the client reads them as terms (Accept takes them)", re.search(rf"ui: proposal Terms\(\d+\) from #{b}: .*proposes terms: they give 1 berries, you give 1 stone", L) is not None)
 
 # Where the support scenario stands the player on Cullet (land metres; the plan's x + 510 and
 # 784 - y, as of layout pass 1: the Ladder Wynd at plan x -52, the Marver's terrace at x 68..80)
@@ -284,8 +377,11 @@ def pick(run, c):
     # the view, where the ray through A's chest meets the ground.
     plan = ("ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
             "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:{LINE};enter;wait:1.2;dump:03;key:Escape:tap;wait:0.6;"
-            "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;quit").replace("{A}", str(a)).replace("{LINE}", line)
-    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"])
+            "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;"
+            "sync:stack;wait:1;point:{A}:1.0;wait:0.5;dump:05a;wait:0.5;dump:05b;wait:0.5;dump:05c;shot:05_stacked;quit").replace("{A}", str(a)).replace("{LINE}", line)
+    # Last, both on one spot (stacked exactly on screen): one answer every frame, the nearer the camera.
+    stack = f"stack=place_at|{a}|(mx-3.0)|(my-1.0);place_at|{b}|(mx-3.0)|(my-1.0)"
+    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"], syncs=[stack])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["01", "02", "03", "04"]}
     L = log(out)
@@ -299,6 +395,41 @@ def pick(run, c):
     c.check(s, "a tap on the one in front talks to them (combat's target is the same pick)", t4.get("to") == a, json.dumps(t4))
     rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
     c.check(s, "the authority's said row has to = the one in front", any(line in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
+    st = [dump(out, f"05{k}") or {} for k in "abc"]
+    unders = [x.get("under") for x in st]
+    def front(x):
+        both = [b_ for b_ in (x.get("seen") or []) if b_["id"] in (a, b)]
+        return min(both, key=lambda b_: (b_["depth"], b_["id"]))["id"] if len(both) == 2 else None
+    c.check(s, "two bodies stacked on one spot: the same one every frame, the nearer the camera", len(set(unders)) == 1 and unders[0] in (a, b) and all(front(x) == unders[0] for x in st), f"under {unders}, front by depth {[front(x) for x in st]}")
+
+
+def bar(run, c):
+    """The cluster on the rules' bar (`bar_places`): sheathed, the hostile slots are greyed with
+    their reason and X draws; a press the rules refuse is noted in their words and flashes its
+    slot; a held guard shows held; the tooltip names the slot and why it is greyed."""
+    s = "bar"
+    plan = ("ready;wait:2;cursor:0.5,0.3;wait:0.3;shot:01_sheathed;dump:01;cursor:@bar:Primary;wait:0.5;shot:02_tip;dump:02;"
+            "cursor:0.5,0.3;key:KeyX:tap;wait:0.6;shot:03_drawn;dump:03;tap;wait:0.4;shot:04_refused;dump:04;wait:0.6;"
+            "key:KeyQ:down;wait:0.5;shot:05_block;dump:05;key:KeyQ:up;wait:0.3;key:KeyX:tap;wait:0.5;dump:06;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06"]}
+    ex = lambda k: (d[k] or {}).get("extra") or {}
+    slot = lambda k, n: (ex(k).get("slots") or {}).get(f"bar:{n}") or {}
+    L = log(out)
+    m = re.search(r"combat: bar places primary Some\(\"(\w+)\"\), secondary Some\(\"(\w+)\"\), keys \[([^\]]*)\], jump Some\(\"(\w+)\"\), dodge Some\(\"(\w+)\"\)", L)
+    c.check(s, "the bar is the rules' bar_places (strike, bow shot; block, heal, fire bolt; jump; dodge)", m is not None and m.group(1, 2, 4, 5) == ("strike", "bowshot", "jump", "dodge") and "block" in m.group(3) and "firebolt" in m.group(3), m.group(0) if m else "no bar places logged")
+    c.check(s, "the slots carry the declared labels", (slot("01", "Primary").get("label"), slot("01", "Secondary").get("label"), slot("01", "Skill3").get("label")) == ("Strike", "Bow shot", "Fire bolt"), str([slot("01", n).get("label") for n in ["Primary", "Secondary", "Skill3"]]))
+    c.check(s, "sheathed at first, and the weapon slot says so", ex("01").get("drawn") is False and slot("01", "Weapon").get("caption") == "sheathed", str((ex("01").get("drawn"), slot("01", "Weapon"))))
+    c.check(s, "sheathed, the hostile slots are greyed with the reason", "Sheathed" in (slot("01", "Primary").get("off") or "") and "Sheathed" in (slot("01", "Secondary").get("off") or ""), str((slot("01", "Primary").get("off"), slot("01", "Secondary").get("off"))))
+    c.check(s, "a guard or a heal is not greyed by the sheath", "Sheathed" not in (slot("01", "Skill1").get("off") or "") and "Sheathed" not in (slot("01", "Skill2").get("off") or ""), str((slot("01", "Skill1").get("off"), slot("01", "Skill2").get("off"))))
+    tip = ex("02").get("tooltip") or {}
+    c.check(s, "hovering a slot shows its label and why it is greyed", tip.get("title") == "Strike" and "X draws" in (tip.get("text") or ""), str(tip))
+    c.check(s, "X draws the weapon", ex("03").get("drawn") is True and slot("03", "Weapon").get("caption") == "drawn" and not slot("03", "Primary").get("off"), str((ex("03").get("drawn"), slot("03", "Primary"))))
+    notes = (d["04"] or {}).get("notes") or []
+    c.check(s, "a strike at no one is refused, in the rules' words, on the slot and as a note", slot("04", "Primary").get("refused") is True and len(notes) > 0, str((slot("04", "Primary"), notes)))
+    c.check(s, "Q held raises the guard: its slot shows held", slot("05", "Skill1").get("held") is True, str(slot("05", "Skill1")))
+    c.check(s, "X again sheathes it", ex("06").get("drawn") is False, str(ex("06").get("drawn")))
 
 
 def cursor(d):
@@ -597,7 +728,7 @@ def look_walk(run, c):
     c.check(s, "the settings file keeps it", saved == "head", str(saved))
 
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "support": support}
+SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "support": support}
 
 
 def main():

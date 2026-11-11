@@ -27,4 +27,4 @@ Preconditions: baseline.
 ## Gotchas
 
 - The settings file of a drive name persists between drives of the same run: a later drive starts in the theme the last one left, unless `LIVING_GAME_THEME` is set.
-- The old target frame, the old cluster and nameplates are not themed yet (the cluster comes with step 4, the fight plate with step 6).
+- The old target frame and nameplates are not themed yet (the fight plate comes with step 6); the cluster is.

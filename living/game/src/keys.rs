@@ -294,6 +294,11 @@ pub fn all_keys() -> impl Iterator<Item = KeyCode> {
     KEYS.iter().map(|(_, k)| *k)
 }
 
+/// Whether a key types a character in the text box (then it cannot also change whom).
+pub fn types(k: KeyCode) -> bool {
+    key_name(k).is_some_and(|n| n.starts_with("Key") || n.starts_with("Digit") || matches!(n, "Space" | "Backquote" | "Minus" | "Equal" | "BracketLeft" | "BracketRight" | "Semicolon" | "Quote" | "Comma" | "Period" | "Slash" | "Backslash"))
+}
+
 pub fn key_label(k: KeyCode) -> String {
     let n = key_name(k).unwrap_or("?");
     if let Some(l) = n.strip_prefix("Key").or_else(|| n.strip_prefix("Digit")) {
