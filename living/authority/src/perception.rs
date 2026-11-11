@@ -112,10 +112,16 @@ pub fn sees(ctx: &ReducerContext, id: u32, eye: (f32, f32), at: (f32, f32), w: &
     in_sight(map, eye, at, common::dist(eye, at), common::sight_for(ctx, id, w, now))
 }
 
-/// The creatures a character at `at` with sight `sight` sees (itself excluded), nearest first.
+/// The creatures a character at `at` with sight `sight` sees (itself excluded), nearest first:
+/// within its sight, or within the `glow` of a light on them (a carried torch, lamplight).
 pub fn visible(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> Vec<NearCreature> {
     let map = common::map(ctx);
-    common::creatures_near(ctx, at, sight, now).into_iter().filter(|c| c.id != id && map.sight_clear(at, c.pos)).collect()
+    let gather = common::gather_radius(ctx, sight);
+    if gather <= sight {
+        return common::creatures_near(ctx, at, sight, now).into_iter().filter(|c| c.id != id && map.sight_clear(at, c.pos)).collect();
+    }
+    let w = common::world(ctx);
+    common::creatures_near(ctx, at, gather, now).into_iter().filter(|c| c.id != id && (c.dist <= sight || c.dist <= common::glow_of(ctx, c.id, &w, now)) && map.sight_clear(at, c.pos)).collect()
 }
 
 /// The largest sight anyone has now (for gathering onlookers before each one's own test): the
@@ -231,6 +237,7 @@ fn known_techniques(ctx: &ReducerContext, id: u32) -> Vec<String> {
 /// The law's answer with the observer's know-how already read (one observer, several targets).
 fn regard_knowing(ctx: &ReducerContext, observer: &Character, knows: &[String], target: &Character, now: u64) -> Regard {
     let w = common::world(ctx);
+    let sc = common::scripts(ctx);
     let knows = knows.to_vec();
     let input = RegardIn {
         observer_kind: observer.kind.clone(),
@@ -239,9 +246,22 @@ fn regard_knowing(ctx: &ReducerContext, observer: &Character, knows: &[String], 
         known: knows_name(ctx, observer, target),
         revealed: revealed(ctx, observer.id, target.id, now),
         own: observer.id == target.id,
-        night: common::night(&w, now),
+        night: common::night(ctx, &w, now),
+        dist: regard_dist(ctx, &sc, observer.id, target.id, now),
     };
-    regard_of(&common::scripts(ctx), input)
+    regard_of(&sc, input)
+}
+
+/// How far `target` is from `observer` for the `perceived_of` law, in whole metres rounded up;
+/// 0 when the law does not read it (two body lookups otherwise).
+fn regard_dist(ctx: &ReducerContext, sc: &Scripts, observer: u32, target: u32, now: u64) -> u16 {
+    if observer == target || !sc.regard_reads_dist() {
+        return 0;
+    }
+    match (ctx.db.body().id().find(observer), ctx.db.body().id().find(target)) {
+        (Some(a), Some(b)) => common::dist(pos(&a, now), pos(&b, now)).ceil().clamp(0.0, u16::MAX as f32) as u16,
+        _ => 0,
+    }
 }
 
 /// How one refers to someone whose name one does not know.
@@ -386,11 +406,15 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
     let keep = common::laws(ctx).keep_seen_m;
-    for c in common::creatures_near(ctx, here, sight + keep, now) {
+    // Gathered within the viewer's sight, or the farthest glow when the world's laws light
+    // people (a carried torch, lamplight); each is then seen within its own reach.
+    let gather = common::gather_radius(ctx, sight);
+    for c in common::creatures_near(ctx, here, gather + keep, now) {
         if c.id == id {
             continue;
         }
-        let reach = if had.contains(&c.id) { sight + keep } else { sight };
+        let s = if gather > sight { common::sight_to(ctx, sight, c.id, w, now) } else { sight };
+        let reach = if had.contains(&c.id) { s + keep } else { s };
         if in_sight(map, here, c.pos, c.dist, reach) {
             seen.insert(c.id);
         }
@@ -432,6 +456,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             _ => (true, HashSet::new()),
         }
     });
+    // A law that reads how far the target is (names only within a distance) may answer
+    // otherwise as anyone moves: every row is projected again, and written only if it changed.
+    let all = all || common::scripts(ctx).regard_reads_dist();
     // The viewer's own row (its exact health drifting between blows) is projected again about
     // once a second; blows reach it at once through `health_moved`.
     let own_due = (now / SWEEP_MS) % 5 == id as u64 % 5;

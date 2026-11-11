@@ -185,7 +185,7 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 
 - The torch in `senses`: the law names the item it reads (`inv(a, "torch")`), in the script. A `light` trait read through the items would make the law read the whole pack, so the per-state key would be every pack and the hot-path memo would stop sharing answers.
 - `catalog::CREATURES`, `RESOURCES`, `STRUCTURES` and `TECHNIQUES`: the names generation, species files and the client draw from. Their rules (what a kind, a structure or a technique does) are the script's; the name lists are the world's vocabulary. Moving them is the next step of the same kind as `items()`.
-- The calendar (night 20:00–06:00, the world starting at 07:00, winter as a quarter of the year): `is_night` and `season_of` run in the rules crate, the authority and the client on every frame or tick. The minds' world text states them (`calendar_law`).
+- The calendar's frame (the world starting at 07:00, winter as a quarter of the year): `hour_of` and `season_of` run in the rules crate, the authority and the client on every frame or tick. Night itself is a law since `rules-1` (`daylight(hour)` over `night_hours()`, read once per game minute of the day; [Cullet's rules](CULLET_RULES.md#night-as-a-law)), and so is the day's length (a seed's `day_minutes`). The minds' world text states them (`calendar_law`).
 - Infrastructure limits (memo sizes, sweep and step cadences, table bounds, input buckets' clamps) and generation constants: not rules a world varies.
 - Many remaining numbers the survey found (alert thresholds in `brain.rs`, think and re-think timings, fight-report pacing, mutation sizes, wander distances): rules, still in Rust; listed for the next pass in the branch's survey.
 
@@ -381,6 +381,16 @@ All of this is in `skills.rhai`. It is the same for players, minds and graphs: t
 
 - A skill whose spec reads `want` offers one choice per thing to ask for, from what the player carries and the skill's `items`: `offer`, and now `offer_terms`.
 - What the rules tell the player (experiences of kind `record`) shows as a toast.
+
+## Day length, game-hour rates, a seed's laws, light (rules-1)
+
+Built 2026-11-11 for Cullet ([Cullet's rules](CULLET_RULES.md), which has the details and the evidence):
+
+- **A seed's day.** `day_minutes` sets `World.day_ms` when the world is created.
+- **Rates per game hour.** `rates(a)` returns `per: "hour"` and the engine turns its numbers into real time for the world's day (`Scripts::with_day`). The shipped numbers are the old per-minute ones halved, so the island's real-time rates are bit-identical. Laws may read `hour_ms()` and `day_minutes()`.
+- **A seed's laws.** `laws` (or `laws_file`, read in by `build.rs` and `living/tools/seed_text.py`) is an overlay composed with `floors::compose` and installed at creation through the same checks as `install_script`. `base_` functions are no longer taken for laws of their own.
+- **Night as a law.** `daylight(hour)` (0 to 1; night below one half) replaces the Rust `is_night` in the authority and the mind service; `a.daylight` reaches laws, and the graphs' `night` weight is the darkness.
+- **Light on people.** `glow(a)` (how far a creature is seen from by a light on it, bounded by `senses_law`'s `reach.glow`), the `lights` structure trait and `a.actor.lit` (in lamplight), and `p.dist` for `perceived_of` (who someone is, by distance). A script without them takes the old paths.
 
 ## How a floor adds its own rules
 
