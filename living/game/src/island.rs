@@ -785,6 +785,18 @@ fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate, step: usize) -> (M
             pos.push([x, land.height(x, z), z]);
             let v = hash((x0 + i as i32 * st) as u32, (z0 + j as i32 * st) as u32);
             let (mut c, b) = blended_ground(land, x, z, v, climate);
+            // A face: the ground steps more than about a metre per metre to a neighbour (a quay
+            // standing out of the sea, an authored drop). The mesh's smoothed normals round such
+            // a step into a slope that the shader's slope test leaves as grass, so the stone is
+            // chosen here from the heights themselves ([`face_share`]).
+            let face = face_share(land, x, z, step as f32);
+            let b = if face > 0.0 { b.toward(Layer::Rock, face) } else { b };
+            if face > 0.0 {
+                let stone = ground_colour(Terrain::Rock, RegionKind::Meadow, v, climate);
+                for k in 0..3 {
+                    c[k] += (stone[k] - c[k]) * face;
+                }
+            }
             // The rules' blocking rock, crisp per tile (not blended): the share of the four tiles
             // round this vertex, for the shader's cliff (terrain.rs `BLOCKED_ALPHA`).
             let rock = [(-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)].iter().filter(|(dx, dz)| land.map.at(x + dx, z + dz) == Terrain::Rock).count();
@@ -838,6 +850,16 @@ fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate, step: usize) -> (M
             .with_inserted_indices(Indices::U32(widx))
     });
     (ground, water)
+}
+
+/// How much of a face the ground is at a vertex (0–1): its steepest step to a neighbour `step`
+/// m away, from about 45° (a rise of 0.9 m per metre: stairs climb 0.55, generated hills
+/// rarely more) to 1.6 m per metre.
+fn face_share(land: &Land, x: f32, z: f32, step: f32) -> f32 {
+    let y = land.height(x, z);
+    let drop = [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)].iter().map(|(dx, dz)| (land.height(x + dx, z + dz) - y).abs()).fold(0.0f32, f32::max) / step;
+    let t = ((drop - 0.9) / 0.7).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// The scene file a thing spawns from (a person's: its recipe's animated base).
