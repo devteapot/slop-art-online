@@ -2,6 +2,8 @@
 
 Started 2026-11-09. This note records how the living authority limits what a human player's client receives to what the player's character perceives now, plus the character's own state ([game brief](GAME_BRIEF.md#core-work-the-game-needs-engine-independent), core work 1; [island authority](ISLAND_AUTHORITY.md), "Perception-scoped subscriptions" and "A slimmer moving-body stream"). It covers the table audit, the SpacetimeDB documentation and source the design rests on, the design, the measured cost, the per-table decisions, the client change and the verification.
 
+**Status (sixth change, 2026-11-11, branch `rules-offers`).** A player reads the trade offers addressed to its character, and its own, through a new view, `my_offers`; `trade_offer` stays private and gains a `to` index and a stored end, `until_ms` ([Offers](#offers-what-a-player-is-offered)).
+
 **Status (fifth change, 2026-11-11, branch `fix-perceived-moving`).** What others perceive a creature doing is derived from its body when it moves under motion intent, so a walking player reads `walk → person`, not `wait`, as an AI character walking the same line reads `goto → person` ([Activity derived from the body](#activity-derived-from-the-body)). No table or view changed.
 
 **Status (fourth change, 2026-11-10, branch `scale-1`).** Perceived state reaches each player once per frame through per-viewer copies, and every view reads a handful of keys ([Frames](#frames-what-others-do-reaches-a-player-once-per-frame)). Measured against the 216-character gate and verified as recorded in [Fourth change: measurements and verification](#fourth-change-measurements-and-verification); the gate's verdicts are in [gate 216](GATE_216.md#scale-change-frames-2026-11-10-branch-scale-1).
@@ -87,7 +89,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `brain`, `mind_state`, `mind_cursor`, `routine`, `routine_stat` | developer audit truth (behaviour graphs and their runtime) | private | private | mind service, observer (owner) |
 | `genome`, `background` | developer audit truth (inborn genes, authored pasts) | private | private | mind service (owner) |
 | `chronicle`, `stats` | developer audit truth (the world's event log, speech included; load counters) | private | private | observer, tools (owner) |
-| `community`, `membership`, `join_request`, `bond_offer`, `trade_offer`, `expecting` | developer audit truth (social facts between characters; a player learns of them through its experiences) | private | private | mind service, observer (owner) |
+| `community`, `membership`, `join_request`, `bond_offer`, `trade_offer`, `expecting` | developer audit truth (social facts between characters; a player learns of them through its experiences, and since the sixth change reads the trade offers it is a party to through `my_offers`) | private | private | mind service, observer (owner) |
 | `artifact` | developer audit truth (tablets and signs; reading one is an act, and its text reaches the reader as an experience) | private | private | observer (owner) |
 | `perceived` | private engine state (new: who each player perceives) | private | private | the `seen_*` views |
 | `projected` | private engine state (second change: what each player perceives of each creature in its scene, the `perceived_of` projection) | private | private | `seen_characters`, `seen_fighters` |
@@ -234,6 +236,41 @@ Fifth change (2026-11-11, branch `fix-perceived-moving`). Human-controlled and A
 
 - **Cost.** It is computed when a scene or a first-sight line is built. It reads, per creature listed, its `activity` row as before, plus the `steer` and `body` rows by primary key, only when the activity is none or `wait`. It writes nothing and adds no table, column, view or subscription. The 60 Hz path, the frames and the views' read sets are untouched.
 - **SpacetimeDB documentation consulted (2026-11-11), against 2.14.1.** [Indexes](https://spacetimedb.com/docs/tables/indexes/): primary keys create an index for equality lookups, and `find` on one is the access pattern to use. [Performance](https://spacetimedb.com/docs/tables/performance/): prefer indexed lookups to scans, and split tables by access pattern so that updates touch fewer rows. [Views](https://spacetimedb.com/docs/functions/views/): a view re-runs when a row in its read set changes. The implications are three. Computing the label in the reducer that builds a scene, from rows read by key, costs three point lookups and changes no subscription. Putting it in a table or a column would add a write on the motion path, and a view re-run for every viewer whose read set holds it. Deriving it in a view would put `steer` and `body` in that view's read set. So the projection computes it.
+
+### Offers: what a player is offered
+
+Sixth change, 2026-11-11, branch `rules-offers`, on the Spark. In play-test 4 the owner's last line to a resident was "want to trade ?": a reply in the form of an offer would have reached the player only as one experience line, which the client did not draw, because `trade_offer` is private and no view carried it (the interface design, `docs/INTERFACE.md` on branch `design-interface`, §1 "Trade and offers" and §7 "`my_offers`").
+
+**SpacetimeDB documentation and source consulted (2026-11-11).** The docs' selector reads 2.0.0. Claims were checked in the pinned `spacetimedb-2.14.1` and `spacetimedb-bindings-macro-2.14.1` crates (cargo registry) and against the server source findings recorded above for the fourth change.
+
+| Source | What it says | What follows here |
+|---|---|---|
+| [Views](https://spacetimedb.com/docs/functions/views/) | "views can only access table data through indexed lookups (`.find()` and `.filter()` on indexed columns)"; "Full table scans create pessimistic read sets"; if any row in the read set changes, SpacetimeDB "must re-execute the entire view function"; `ViewContext` gives the caller's identity. | `my_offers` reads `trade_offer` only through two btree filters. It re-runs in full, so it stays small: one row per offer the caller is a party to. |
+| Source: `spacetimedb-2.14.1/src/table.rs` `is_point_scan` | `B::POINT && B::COLS_PROVIDED == I::NUM_COLS_INDEXED`: a `filter(value)` on a one-column btree is a point scan, recorded as that key (`record_index_scan_point_inner`, fourth change). | `trade_offer().to().filter(me)` and `.from().filter(me)` are point reads. An offer between two others does not re-run my view. Measured below. |
+| Source: `spacetimedb-2.14.1/src/lib.rs` `ViewContext` | Fields are `sender`, `db` (read-only), `from` and `env`. No timestamp. | A view cannot decide whether an offer has ended. The end is stored on the row (`until_ms`), and housekeeping deletes an ended offer. |
+| [Indexes](https://spacetimedb.com/docs/tables/indexes/) | `#[index(btree)]` on a field; B-trees serve equality and ranges; indexes "slow down inserts and updates". | One index, `trade_offer.to`. The table holds at most one offer per character and is written once per offer. |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) | "Adding indexes" is a safe change; adding columns needs a default at the end (`AddColumns`, fourth change source check). Views are not listed. | `to`'s index and `#[default(0u64)] until_ms` at the end migrate a running world in place. Checked by an in-place update below. |
+| [Table performance](https://spacetimedb.com/docs/tables/performance/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) | Make tables public only when clients need them; cleanup reducers for growth; "keep subscriptions small". | `trade_offer` stays private; a client subscribes `SELECT * FROM my_offers` once per connection. |
+
+**The view.** `my_offers` (`perception.rs`, `primary_key = id`) returns, for the caller's living character (`living`, as the other `my_*` views), every `trade_offer` row addressed to it and the one it made (a new offer replaces the maker's earlier one, `act.rs` `Effect::Offer`). Its row, `MyOffer`:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | `u64` | the offer (primary key: the bindings give updates) |
+| `incoming` | `bool` | addressed to me (I may accept it), or mine |
+| `from`, `to` | `u32` | character ids. The client names them through `seen_characters`; the row carries no name the caller may not know. |
+| `give_item`, `give_qty` | `String`, `u32` | what `from` gives |
+| `want_item`, `want_qty` | `String`, `u32` | what `from` wants of `to` |
+| `at_ms` | `u64` | when it was made (world time, ms since the Unix epoch, as `experience.at_ms`) |
+| `until_ms` | `u64` | it can be accepted while world time ≤ `until_ms` |
+
+One view with a direction column rather than two views: the outgoing offer costs one more point read in the same refresh, and a client needs both to draw its own standing offer beside the ones made to it.
+
+**The end of an offer.** `trade_offer` gains `until_ms`, set when the offer is made to `at_ms` + the `trade_window_s` law (180 s). `accept`, the mind's scene and housekeeping read it (`TradeOffer::ends_ms`); a law changed while an offer stands no longer changes that offer's end. Housekeeping (1 Hz) now deletes a trade offer as soon as it ends, not a minute later, so the row leaves `my_offers` within a second. A row written before the column (its default 0) is read through the law's window and given its end at the next housekeeping. `perceive.rs`'s "asked of you" now reads offers through the new `to` index instead of scanning the table. Bond offers are unchanged.
+
+**Accept and decline.** Accepting is the existing `accept` act toward the maker (`from`), unchanged: refused with the rules' words when either side lacks the goods or the offer has ended, else the goods move both ways and the row goes. `accept_done` takes a proposal record of terms from the same person first, and the standing trade only when there is none. There is no decline act: an offer ends at `until_ms` or when its maker offers again.
+
+**Data paths.** Writes: one insert per offer, a delete per accept, replacement or end. Each re-runs the `my_offers` of the players who are its maker or addressee (the previous addressee too when an offer is replaced), and nobody else's. Reads: two point reads plus the `living` lookup per refresh. Retained: at most one row per character, for at most `trade_window_s` plus one second. Subscribers: the two parties.
 
 ### Compatibility: the `LIVING_PERCEPTION` build switch
 
