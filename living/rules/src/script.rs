@@ -405,7 +405,8 @@ pub struct Laws {
     /// A crying infant makes its carers think about it; false: the cry is only heard.
     pub cry_prompts_carers: bool,
     /// Speech records who heard each line and how they stood toward the speaker (the private
-    /// `audience` table), for the mind service's conversation rules; off by default.
+    /// `audience` table), for the mind service's conversation rules (on since 2026-11-11, when
+    /// `LIVING_GREET=nearest` became the minds' default).
     pub speech_audience: bool,
     /// Real minutes after one's own birth, or one's youngest child's, before a grown person
     /// feels the longing for a child; the most nurturing feel it sooner ([`longing_wait_ms`]).
@@ -460,7 +461,7 @@ impl Default for Laws {
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
             cry_prompts_carers: true,
-            speech_audience: false,
+            speech_audience: true,
             longing_after_min: 20.0,
             longing_food: 0.0,
         }
@@ -2496,8 +2497,8 @@ mod tests {
         assert_eq!(over("fire_warmth", serde_json::json!(5)).unwrap().fire_warmth, 5.0);
         assert!(over("mindz", serde_json::json!(false)).unwrap_err().starts_with("`mindz` is not a law of this world"));
         assert!(over("cry_prompts_carers", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
-        // Who heard a line is kept only where a world asks for it.
-        assert!(!sc.laws().speech_audience && over("speech_audience", serde_json::json!(true)).unwrap().speech_audience);
+        // Who heard a line is kept by default (the minds' `LIVING_GREET=nearest` reads it); a world may turn it off.
+        assert!(sc.laws().speech_audience && !over("speech_audience", serde_json::json!(false)).unwrap().speech_audience);
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));

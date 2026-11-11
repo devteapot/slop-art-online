@@ -61,32 +61,36 @@ const FACE_CONE: f32 = 0.6;
 const FRESH_MS: u64 = 2_000;
 
 /// What draws a listener into a line said to no one in particular by someone they have not met
-/// or barely know (`LIVING_GREET`, off by default). Under every mode other than `off`, an
+/// or barely know (`LIVING_GREET`; `nearest` by default since 2026-11-11, the owner's choice
+/// after the paid greeting batches gr1/gr2, docs/TRIALS.md). Under every mode other than `off`, an
 /// addressed line from such a speaker always gets a turn (the turn may still say nothing),
 /// and hostility no longer counts as caring: a listener who feels strongly against the
 /// speaker answers only lines addressed to them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Greet {
-    /// As before: only a listener who cares about the speaker may be drawn in.
+    /// The rule before 2026-11-11: only a listener who cares about the speaker may be drawn in.
     Off,
-    /// The nearest hearer within `GREET_NEAR_M` who is free to talk takes the one turn.
+    /// The default. The nearest hearer within `GREET_NEAR_M` who is free to talk takes the one
+    /// turn.
     Nearest,
     /// A hearer within `GREET_NEAR_M` is drawn in by curiosity, paced by curiosity and
     /// sociability; the first drawn takes the one turn.
     Curious,
     /// The hearer the speaker faces (within `GREET_NEAR_M` and `FACE_CONE`) is addressed,
-    /// whoever the speaker is.
+    /// whoever the speaker is. Not for players yet: a player's facing is where they last
+    /// walked until the client sends a look (`human_face`), and then it belongs to players'
+    /// lines only, or as a tie-break.
     Facing,
 }
 
 /// What happens to a line addressed to a listener whose deliberation is running
-/// (`LIVING_PARK`, `wait` by default).
+/// (`LIVING_PARK`; `concurrent` by default since 2026-11-11).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Park {
-    /// It waits for the deliberation to end (and gets no turn if the deliberation spoke to
-    /// the speaker after hearing it).
+    /// The rule before 2026-11-11: it waits for the deliberation to end (and gets no turn if
+    /// the deliberation spoke to the speaker after hearing it).
     Wait,
-    /// It gets its turn alongside the deliberation when the deliberation's prompt was built
+    /// The default. It gets its turn alongside the deliberation when the deliberation's prompt was built
     /// just before the line (within `FRESH_MS`), or as soon as the deliberation has decided and
     /// its words are not for the speaker. Whichever of the two speaks to the speaker first
     /// is the answer; the other's words to them are not said.
@@ -106,15 +110,15 @@ impl Config {
 
     fn parse(greet: Option<&str>, park: Option<&str>) -> Result<Self> {
         let greet = match greet.map(|s| s.trim().to_lowercase()).as_deref() {
-            None | Some("") | Some("off") | Some("0") => Greet::Off,
-            Some("nearest") => Greet::Nearest,
+            None | Some("") | Some("nearest") => Greet::Nearest,
+            Some("off") | Some("0") => Greet::Off,
             Some("curious") => Greet::Curious,
             Some("facing") => Greet::Facing,
             Some(x) => return Err(anyhow!("LIVING_GREET={x}: expected off, nearest, curious or facing")),
         };
         let park = match park.map(|s| s.trim().to_lowercase()).as_deref() {
-            None | Some("") | Some("wait") => Park::Wait,
-            Some("concurrent") => Park::Concurrent,
+            None | Some("") | Some("concurrent") => Park::Concurrent,
+            Some("wait") => Park::Wait,
             Some(x) => return Err(anyhow!("LIVING_PARK={x}: expected wait or concurrent")),
         };
         Ok(Self { greet, park })
@@ -1398,13 +1402,20 @@ mod tests {
     }
 
     #[test]
-    fn switches_default_off_and_refuse_typos() {
-        let c = Config::parse(None, None).unwrap();
-        assert_eq!((c.greet, c.park), (Greet::Off, Park::Wait));
-        assert!(!c.audience());
-        for (g, p) in [(Some(""), Some("")), (Some("off"), Some("wait")), (Some(" OFF "), Some("Wait")), (Some("0"), None)] {
+    fn the_defaults_are_nearest_and_concurrent() {
+        for (g, p) in [(None, None), (Some(""), Some("")), (Some(" Nearest "), Some("CONCURRENT"))] {
+            let c = Config::parse(g, p).unwrap();
+            assert_eq!((c.greet, c.park), (Greet::Nearest, Park::Concurrent));
+            assert!(c.audience());
+        }
+    }
+
+    #[test]
+    fn the_old_rules_stay_selectable_and_typos_are_refused() {
+        for (g, p) in [(Some("off"), Some("wait")), (Some(" OFF "), Some("Wait")), (Some("0"), Some("wait"))] {
             let c = Config::parse(g, p).unwrap();
             assert_eq!((c.greet, c.park), (Greet::Off, Park::Wait));
+            assert!(!c.audience());
         }
         assert_eq!(Config::parse(Some("nearest"), Some("concurrent")).unwrap().park, Park::Concurrent);
         assert!(Config::parse(Some("curious"), None).unwrap().audience());
@@ -1444,6 +1455,7 @@ mod tests {
 
     #[test]
     fn greet_off_is_the_old_rule() {
+        // `LIVING_GREET=off`, selected explicitly (the default is `nearest`).
         // Before LIVING_GREET: addressed by `to` or by the authority's mark; drawn into a remark
         // only when free, caring (hostility included) and the remark draw passes; the remark
         // draw always applies. Whatever else is known of a line changes nothing.

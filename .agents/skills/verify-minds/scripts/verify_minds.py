@@ -1008,7 +1008,8 @@ def parked_case(run):
     talks = lambda: [e for e in requests() if e['purpose'] == 'talk']
     # 1. The deliberation says nothing to the player: the line gets its turn when it ends.
     run.request(actor, 'first')
-    run.start(models, [actor])
+    # The old rule, selected explicitly (`concurrent` is the default since 2026-11-11; `alongside` covers it).
+    run.start(models, [actor], extra_env={'LIVING_PARK': 'wait'})
     run.wait(lambda: any(e['purpose'] == 'deliberate' for e in requests()), 'first deliberation running', 60)
     run.harness('player', 'say', 'Will you answer me once you have thought it over?', '--to', str(actor))
     time.sleep(3)
@@ -1044,6 +1045,17 @@ def alongside_case(run):
     actor = people[0]['id']
     run.harness('player', 'join', 'MindsAlongside')
     player = run.sql("SELECT id FROM character WHERE name = 'MindsAlongside'", 'player')[0]['id']
+
+    def say_now(text):
+        # Straight over HTTP with the player's token (from the run's state.json): a line that must
+        # land within 2 s of a deliberation's prompt cannot wait for a harness subprocess under load.
+        token = json.loads((run.directory / 'state.json').read_text())['token']
+        req = urllib.request.Request(f"{shared.STDB_URL}/v1/database/{run.db}/call/human_say", data=json.dumps([text, actor]).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'}, method='POST')
+        with urllib.request.urlopen(req, timeout=10) as r:
+            assert r.status == 200
+        with (run.directory / 'actions.log').open('a') as log:
+            log.write(f"{time.strftime('%H:%M:%S')} player human_say{json.dumps([text, actor])} -> 200 (HTTP, fast)\n")
     run.admin('place_near', player, actor)
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
                           'deliberate': basic_reply(),
@@ -1071,7 +1083,7 @@ def alongside_case(run):
     c0, t0 = len(compiles()), len(thinks())
     run.request(actor, 'first')
     run.wait(lambda: len(thinks()) >= t0 + 1, 'first think running', 60)
-    run.harness('player', 'say', 'Hello, do you have a moment?', '--to', str(actor))
+    say_now('Hello, do you have a moment?')
     run.wait(lambda: talks(), 'a turn alongside the running think step', 5)
     assert len(compiles()) == c0, 'the turn waited for the think step'
     run.wait(lambda: spoken('verify minds alongside answer'), 'alongside answer spoken', 10)
@@ -1097,7 +1109,7 @@ def alongside_case(run):
     # 3. The decision would speak to the player, whom a turn alongside already answered.
     run.request(actor, 'third')
     run.wait(lambda: len(thinks()) >= t0 + 3, 'third think running', 60)
-    run.harness('player', 'say', 'Something new: are the fish running today?', '--to', str(actor))
+    say_now('Something new: are the fish running today?')
     run.wait(lambda: 'already answered' in run.log(), "the deliberation's words withheld", 40)
     time.sleep(10)
     assert not spoken('verify minds deliberation words'), 'the deliberation spoke to someone already answered'
@@ -1131,7 +1143,10 @@ def greet_case(run):
                           'talk': {'thought': 'A stranger speaks.', 'say': 'verify minds greet answer', 'end': True}}}
     models = model(run, script)
     talks = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'talk']
-    answers = lambda: sorted((c for c in run.sql(f'SELECT * FROM chronicle WHERE b = {player}', 'greet-answers') if 'verify minds greet answer' in c['text']), key=lambda c: c['id'])
+    # Answers by their talk-turn thought rows (the chronicle merges a line repeated word for word
+    # into its earlier row, so a second identical fake answer adds no row there).
+    answers = lambda: sorted((t for t in run.sql(f'SELECT * FROM thought WHERE kind = \'talk\'', 'greet-answers')
+                              if json.loads(t.get('detail') or '{}').get('with') == player and 'verify minds greet answer' in t['summary']), key=lambda t: t['id'])
     results = {}
     for arm, text in (('off', 'Hello there!'), ('nearest', 'Good day to you all.'), ('facing', 'Fine weather today.')):
         if run.mind:
@@ -1140,15 +1155,8 @@ def greet_case(run):
         subscribed = run.log().count('world subscribed:')
         if run.mind is None:
             run.start(models, [a, b], extra_env={'LIVING_GREET': arm})
-            # The world keeps who heard each line: the shipped rules with that law on, installed
-            # over HTTP with the admin token the mind was given (the script is too long for argv).
-            shipped = (ROOT / 'living/scripts/skills.rhai').read_text()
-            assert shipped.count('speech_audience: false,') == 1
-            req = urllib.request.Request(f"{shared.STDB_URL}/v1/database/{run.db}/call/install_script",
-                                         data=json.dumps([shipped.replace('speech_audience: false,', 'speech_audience: true,')]).encode(),
-                                         headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {run.token}'}, method='POST')
-            with urllib.request.urlopen(req, timeout=60) as r:
-                assert r.status == 200
+            # The shipped rules keep who heard each line (`speech_audience`, on by default).
+            assert (ROOT / 'living/scripts/skills.rhai').read_text().count('speech_audience: true,') == 1
         else:
             run.env['LIVING_GREET'] = arm
             run.launch_mind()
@@ -1157,9 +1165,10 @@ def greet_case(run):
             run.request(who, f'{arm}-{who}')
         run.wait(lambda: not run.private(f'SELECT * FROM deliberation WHERE actor = {a} OR actor = {b}', f'pending-{arm}'), f'{arm}: deliberations done', 60)
         time.sleep(3)
+        # Residents wander on their own ways between arms: everyone back in place for each line.
+        place()
+        time.sleep(1)
         if arm == 'facing':
-            place()
-            time.sleep(1)
             run.harness('player', 'act', json.dumps({'do': 'face', 'target': {'id': b}}))
             time.sleep(2)
         before, heard = len(answers()), len(talks())
@@ -1174,7 +1183,7 @@ def greet_case(run):
         nearest = min(hs, key=lambda h: h[1])[0]
         cone = [h for h in hs if h[1] <= 6.0 and h[2] <= 0.6]
         faced = min(cone, key=lambda h: (h[2], h[1]))[0] if cone else None
-        results[arm] = {'answers_by': [c['a'] for c in new], 'talk_requests': len(talks()) - heard, 'hearers': hs, 'nearest': nearest, 'faced': faced}
+        results[arm] = {'answers_by': [t['actor'] for t in new], 'talk_requests': len(talks()) - heard, 'hearers': hs, 'nearest': nearest, 'faced': faced}
         # A restarted service replays speech under 30 s old (talk.rs STALE_MS): let this line age out.
         time.sleep(25)
     (run.directory / 'greet.json').write_text(json.dumps(results, indent=2))

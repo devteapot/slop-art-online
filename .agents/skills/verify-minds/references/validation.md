@@ -1,5 +1,19 @@
 # Internal mind validation
 
+## 2026-11-11 greeting switches on by default (exp-greet after main 990ab80, Spark)
+
+Branch `exp-greet` with origin/main and `greet-result` merged. The defaults are now `LIVING_GREET=nearest`, `LIVING_PARK=concurrent` and the law `speech_audience` on. Trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, host load 24–32 from other batches.
+
+- Unit tests (`cargo test -p living-mind`, 98 pass): `the_defaults_are_nearest_and_concurrent` (new), `the_old_rules_stay_selectable_and_typos_are_refused`, and `greet_off_is_the_old_rule`, which selects `off` explicitly.
+- Full suite `minds-greetdefault-20261111-195138`:
+  - Pass: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, drop, resident, night, rethink, rethink-llm, parked (now selects `LIVING_PARK=wait`), death-names and frame. `consolidation` is its known XFAIL.
+  - `animals` fails at its last step ("nothing new: no call"): the known gap recorded under lives-2.
+  - `jev` and `dealings` timed out under load (a cached judgment, a demand record), as recorded before, and pass alone.
+  - `alongside` failed at step 3 on timing: the line reached the authority 2 s after the think started, outside the freshness window, so it correctly waited and was answered by the deliberation. The case now sends its fresh lines over HTTP.
+  - `greet` failed on its fixture: the far resident had walked off, so the off arm's line had one hearer and was marked addressed; and an identical second fake answer was merged into its earlier chronicle row. The case now places everyone before each line and counts thought rows.
+- Rerun `minds-greetdefault2-20261111-203835`: `alongside`, `greet`, `jev` and `dealings` pass.
+- Maintain pass (`maintain-verification-skill`, scoped to this default change; no subagents): the map has no missing or dead entries. `conversations.md` now gives the defaults, the `wait` parking as the old rule, the `audience` subscription of its own, the user-POV room line and the two gotchas above. SKILL.md and README.md list `alongside` and `greet`. The live pass is the full suite above.
+
 ## 2026-11-11 conversation switches (exp-greet, Spark)
 
 Branch `exp-greet` (main 90f6fac with `exp-hamlet-births` merged), worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only. Batches `l9` and `pf2` ran on the same service.

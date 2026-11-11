@@ -1656,12 +1656,12 @@ def laws(s):
 
 def audience(s):
     """Who heard a line (the `speech_audience` law; perceive.rs `speak`, the private `audience`
-    table). With the shipped law (off) a line writes nothing. On, a line writes one row: each
-    person who heard it (within hearing, not beyond), the distance to them and how far off the
-    speaker's facing they stood; a row older than 60 s is deleted by the next line. The shipped
-    script is installed again at the end."""
+    table; on by default since 2026-11-11). With the law turned off a line writes nothing. On,
+    a line writes one row: each person who heard it (within hearing, not beyond), the distance to
+    them and how far off the speaker's facing they stood; a row older than 60 s is deleted by the
+    next line. The shipped script is installed again at the end."""
     shipped = (ROOT / "living/scripts/skills.rhai").read_text()
-    s.expect("the shipped laws() keeps no audience", shipped.count("speech_audience: false,") == 1)
+    s.expect("the shipped laws() keeps who heard a line", shipped.count("speech_audience: true,") == 1)
     a, b, c, far = s.people(4)
     line = open_line(s)
     (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
@@ -1674,10 +1674,12 @@ def audience(s):
     thought = {"kind": "verify", "summary": "verify-core audience", "detail": "", "latency_ms": 0, "tokens": 0, "model": "", "reference": "verify-core"}
     say = lambda text: (s.call("mind_say", a, text, 0, 0, thought), time.sleep(2.2))
     hearers = lambda row: {(h["id"] if isinstance(h, dict) else h[0]): (h["d"], h["off"]) if isinstance(h, dict) else (h[1], h[2]) for h in row["hearers"]}
-    say("verify audience while the law is off")
-    s.expect("law off: a line writes no audience row", not s.rows("SELECT * FROM audience", "audience-off"))
     try:
-        s.call("install_script", shipped.replace("speech_audience: false,", "speech_audience: true,"))
+        s.call("install_script", shipped.replace("speech_audience: true,", "speech_audience: false,"))
+        time.sleep(2.2)
+        say("verify audience while the law is off")
+        s.expect("law off: a line writes no audience row", not s.rows("SELECT * FROM audience", "audience-off"))
+        s.call("install_script", shipped)
         time.sleep(2.2)
         say("verify audience while the law is on")
         rows = s.rows(f"SELECT * FROM audience WHERE speaker = {a}", "audience-on")

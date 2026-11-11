@@ -580,7 +580,7 @@ pub struct Hearer {
 }
 
 /// Who heard a line and how they stood toward the speaker. Written by `speak` only when the
-/// world's `speech_audience` law is on (off by default), one row per line, deleted after 60 s.
+/// world's `speech_audience` law is on (on by default since 2026-11-11), one row per line, deleted after 60 s.
 /// Private: the mind service reads it as the database owner to tell, for a line said to no
 /// one in particular, which hearer was nearest or faced (talk.rs, `LIVING_GREET`).
 #[derive(Clone, Debug, PartialEq)]
