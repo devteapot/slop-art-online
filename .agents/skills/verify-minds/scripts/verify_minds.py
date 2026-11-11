@@ -21,7 +21,9 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
-         'death-names')
+         'death-names', 'frame')
+# How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
+PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 DROP, LOW = 8, 9
@@ -195,6 +197,8 @@ def run_case(run, case):
         return resident_case(run)
     if case == 'parked':
         return parked_case(run)
+    if case == 'frame':
+        return frame_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -279,6 +283,8 @@ def run_case(run, case):
         assert json.loads(thought['detail'])['reply']['say'] == 'verify minds round trip speech'
         assert thought['model'] == 'fake-minds' and thought['tokens'] == 34 and thought['reference']
         assert {e['purpose'] for e in run.exchanges()} >= {'think', 'deliberate'}
+        # The default frame (no LIVING_FRAME) is the character frame: no request is player-framed.
+        assert not any(PLAYER_FRAME_HEAD in system_text(e['body']) for e in shared.rows(run.directory / 'fake-requests.jsonl'))
         # The body as felt, from the vitals the service subscribes to (owner path): in words, no numbers.
         sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
         felt = [m.split('How your body feels: ', 1)[1].split('\n', 1)[0] for e in sent for m in [json.dumps(e, ensure_ascii=False).replace('\\n', '\n')] if 'How your body feels: ' in m]
@@ -1021,6 +1027,64 @@ def parked_case(run):
     assert len(talks()) == after_first, 'a talk turn repeated what the deliberation answered'
     assert 'in its deliberation' in run.log()
     return {'status': 'pass', 'talk_turns': len(talks())}
+
+
+def system_text(body):
+    return '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'system')
+
+
+def frame_case(run):
+    """LIVING_FRAME=player: a person's think, compile, talk and consolidation requests open with
+    the player frame, as sent (fake log) and as journaled; a starting identity is not framed; a
+    value that is neither frame stops the service before it connects."""
+    bad = subprocess.run([str(shared.MIND_BIN)], cwd=ROOT, capture_output=True, text=True, timeout=30,
+                         env=dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_FRAME='npc', LIVING_NEO4J='off',
+                                  LIVING_SERVER='http://127.0.0.1:9', LIVING_TOKEN='unused'))
+    (run.directory / 'bad-frame.log').write_text(bad.stdout + bad.stderr)
+    assert bad.returncode != 0 and 'expected character or player' in bad.stdout + bad.stderr, bad.returncode
+    people = prepare(run)
+    actor = people[0]['id']
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'A question.', 'say': 'verify frame answer', 'end': False},
+                          'consolidate': {'summary': 'verify frame integrated speech', 'identity': None}}}
+    models = model(run, script)
+    run.request(actor, 'first')
+    run.start(models, [actor], extra_env={'LIVING_FRAME': 'player'})
+    assert 'prompt frame: player (LIVING_FRAME)' in run.log()
+    accepted(run, actor)
+    run.harness('player', 'join', 'FrameSpeaker')
+    player = run.sql("SELECT id FROM character WHERE name = 'FrameSpeaker'", 'player')[0]['id']
+    run.admin('place_near', player, actor)
+    for line in ('Will you listen to this important verification question?',
+                 'Can you remember the river and the missing berry basket?',
+                 'Did you notice the stone tower and the winter campfire?',
+                 'Will you recall our conversation when morning comes?'):
+        run.harness('player', 'say', line, '--to', str(actor))
+        time.sleep(2.2)
+    sent = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    consolidation = lambda e: e['purpose'] == 'consolidate' and 'self-understanding' in system_text(e['body'])
+    run.wait(lambda: {'think', 'deliberate', 'talk'} <= {e['purpose'] for e in sent()} and any(consolidation(e) for e in sent()),
+             'think, compile, talk and consolidation requests', 110)
+    framed = {}
+    for e in sent():
+        system = system_text(e['body'])
+        kind = 'identity' if 'starting identity' in system else ('consolidation' if consolidation(e) else e['purpose'])
+        framed.setdefault(kind, []).append(system.startswith(PLAYER_FRAME_HEAD))
+    (run.directory / 'frame.json').write_text(json.dumps({k: f'{sum(v)}/{len(v)}' for k, v in framed.items()}, indent=2))
+    for kind in ('think', 'deliberate', 'talk', 'consolidation'):
+        assert framed.get(kind) and all(framed[kind]), (kind, framed.get(kind))
+    assert not any(framed.get('identity', [])), framed.get('identity')
+    # As journaled: system prompts are stored once beside the journal (content_ref).
+    journaled = []
+    for e in run.exchanges():
+        for m in e.get('request', {}).get('messages', []):
+            if m.get('role') == 'system':
+                text = m.get('content') or (run.journal / m['content_ref']).read_text()
+                journaled.append((e['purpose'], text.startswith(PLAYER_FRAME_HEAD)))
+    assert any(f for p, f in journaled if p == 'talk') and any(f for p, f in journaled if p == 'think'), journaled[:6]
+    return {'status': 'pass', 'framed': {k: f'{sum(v)}/{len(v)}' for k, v in framed.items()},
+            'journaled_framed': sum(f for _, f in journaled), 'journaled': len(journaled), 'bad_value_exit': bad.returncode}
 
 
 def main():

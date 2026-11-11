@@ -3,6 +3,10 @@
 # Copies the script to ~/.local/share/slop-tools/ (so removing a worktree never breaks it) and
 # runs it every 30 minutes with --apply: a systemd user timer on Linux (with lingering on, it
 # runs without a login), a launchd agent on macOS. Re-run after the script changes.
+# The machine's protected paths are in ~/.config/slop-disk/protect.txt (one per line, # comments,
+# ~ expanded); every run reads it, so an edit applies from the next run. The installer writes a
+# commented template when there is none, checks the file and prints the protected paths; an
+# invalid file stops the installation.
 # Usage: living/tools/disk_clean_install.sh [--floor-gb 40] [--target-gb N] [--every-min 30] [--repo PATH] [--uninstall]
 set -eu
 FLOOR=40 TARGET="" EVERY=30 REPO="" UNINSTALL=""
@@ -23,6 +27,22 @@ DEST="$HOME/.local/share/slop-tools"
 PY=$(command -v python3)
 ARGS="--apply --repo $REPO --floor-gb $FLOOR --target-gb $TARGET"
 NAME=slop-disk-clean
+PROTECT="$HOME/.config/slop-disk/protect.txt"
+
+protect_check() {  # the script to be installed reads the file as the timer will
+  if [ ! -e "$PROTECT" ]; then
+    mkdir -p "$(dirname "$PROTECT")"
+    cat > "$PROTECT" <<'TEMPLATE'
+# Paths disk_clean.py must never touch on this machine, besides its built-in list
+# (docs/TOOLING.md, "Disk"). One path per line; ~ is expanded; # starts a comment.
+# A path protects everything under it, and any build folder that holds it.
+# ~/dev/slop-trials
+TEMPLATE
+    echo "disk_clean_install: wrote a template $PROTECT (no paths in it yet)"
+  fi
+  "$PY" "$HERE/disk_clean.py" --repo "$REPO" --list-protected || {
+    echo "disk_clean_install: fix $PROTECT first; the timer is not (re)installed" >&2; exit 1; }
+}
 
 case "$(uname -s)" in
   Linux)
@@ -34,6 +54,7 @@ case "$(uname -s)" in
       echo "disk_clean_install: removed $NAME.timer"; exit 0
     fi
     mkdir -p "$DEST" "$UNIT"
+    protect_check
     install -m 0755 "$HERE/disk_clean.py" "$DEST/disk_clean.py"
     cat > "$UNIT/$NAME.service" <<EOF
 [Unit]
@@ -77,6 +98,7 @@ EOF
       echo "disk_clean_install: removed $PLIST"; exit 0
     fi
     mkdir -p "$DEST" "$HOME/Library/LaunchAgents" "$HOME/.local/state/slop-disk"
+    protect_check
     install -m 0755 "$HERE/disk_clean.py" "$DEST/disk_clean.py"
     ARGS_XML=""
     for a in $ARGS; do ARGS_XML="$ARGS_XML<string>$a</string>"; done
