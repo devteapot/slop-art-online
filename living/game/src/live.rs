@@ -79,7 +79,7 @@ impl Plugin for LivePlugin {
             .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
-                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
+                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, crate::envs::reach, report)
                     .chain()
                     .in_set(Phase::Present)
                     .after(me)
@@ -313,19 +313,37 @@ fn regenerate(row: &LandInfo) -> Result<Built, String> {
     })
 }
 
-/// Buildings from the `lot` rows in the window, near enough to see.
-fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, assets: Res<AssetServer>, mut live: ResMut<Live>, roam: Res<Roam>) {
+/// Buildings from the `lot` rows in the window, near enough to see, and the landmarks.
+///
+/// - **Ordinary lots** are drawn within [`LOT_FAR`] of me, fading out over the last few metres
+///   (`envs::Reach`), and dropped past [`LOT_DROP`].
+/// - **Landmarks** (`Lot::landmark` in the regenerated land: Cullet's Cone, Counting House, Heron,
+///   Watchglass and Lintel) are drawn out to where the mood's fog is complete
+///   (`world::Draw::landmark_reach`, 600 m on Cullet), so they can be seen across the town. Lots
+///   never change and the land is the authority's (its digests are checked), so a landmark past
+///   the `lot` window (±184 m, `net.rs`) is drawn from the land itself; ids are the land's lot
+///   indices, as the authority writes them (`island::build_lots`).
+fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, assets: Res<AssetServer>, mut live: ResMut<Live>, roam: Res<Roam>, draw: Res<crate::world::Draw>) {
     let (Some(island), Some(conn)) = (island, net.conn.as_ref()) else { return };
     let here = roam.pos;
-    let gone: Vec<u32> = live.lots.keys().copied().filter(|id| conn.db.lot().id().find(id).is_none_or(|l| Vec2::new(l.x, l.y).distance(here) > LOT_DROP)).collect();
+    let far = if crate::perf::has("nofar") { LOT_FAR } else { draw.landmark_reach().max(LOT_FAR) };
+    let land = &island.land;
+    let landmark = |id: u32| land.lots.get(id as usize).is_some_and(|l| l.landmark);
+    let reach = |id: u32| if landmark(id) { far } else { LOT_FAR };
+    let at = |id: u32| conn.db.lot().id().find(&id).map(|l| Vec2::new(l.x, l.y)).or_else(|| landmark(id).then(|| land.lots[id as usize].centre).map(|c| Vec2::new(c.0, c.1)));
+    let gone: Vec<u32> = live.lots.keys().copied().filter(|id| at(*id).is_none_or(|p| p.distance(here) > reach(*id) + (LOT_DROP - LOT_FAR))).collect();
     for id in gone {
         for e in live.lots.remove(&id).unwrap_or_default() {
             commands.entity(e).despawn();
         }
     }
-    let mut todo: Vec<(f32, Lot)> = conn.db.lot().iter().filter(|l| !live.lots.contains_key(&l.id)).map(|l| (Vec2::new(l.x, l.y).distance(here), l)).filter(|(d, _)| *d < LOT_FAR).collect();
-    todo.sort_by(|a, b| a.0.total_cmp(&b.0));
-    for (_, l) in todo.into_iter().take(LOTS_PER_FRAME) {
+    let mut todo: Vec<(f32, LotRow)> = Vec::new();
+    let fresh: Vec<Lot> = conn.db.lot().iter().filter(|l| !live.lots.contains_key(&l.id)).collect();
+    for l in fresh {
+        let d = Vec2::new(l.x, l.y).distance(here);
+        if d >= reach(l.id) {
+            continue;
+        }
         let set = conn.db.settlement().id().find(&l.settlement);
         let site = set.as_ref().and_then(|s| crate::island::site_kind(&s.kind));
         let (Some(site), Some(kind)) = (site, living_rules::settle::LotKind::from_id(&l.kind)) else {
@@ -333,12 +351,30 @@ fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, 
             continue;
         };
         let env = set.as_ref().map_or(site.env(), |s| living_rules::settle::env_of(&s.style));
-        let row = LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, width_m: l.width_m, depth_m: l.depth_m, model: l.model.clone(), env };
+        todo.push((d, LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, width_m: l.width_m, depth_m: l.depth_m, model: l.model.clone(), env }));
+    }
+    // Landmarks beyond the window, from the land.
+    for (i, l) in land.lots.iter().enumerate().filter(|(_, l)| l.landmark) {
+        let id = i as u32;
+        let d = Vec2::new(l.centre.0, l.centre.1).distance(here);
+        if d < far && !live.lots.contains_key(&id) && conn.db.lot().id().find(&id).is_none() {
+            if let Some(row) = LotRow::of_land(land, id) {
+                todo.push((d, row));
+            }
+        }
+    }
+    todo.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for (d, row) in todo.into_iter().take(LOTS_PER_FRAME) {
         let es = island.spawn_lot(&mut commands, &assets, &row);
-        live.lots.insert(l.id, es);
+        if let (Some(&root), false) = (es.first(), landmark(row.id)) {
+            commands.entity(root).insert((crate::envs::Reach(LOT_FAR), crate::envs::Reach::fade_at(LOT_FAR, d)));
+        }
+        if landmark(row.id) && !es.is_empty() {
+            debug!("lots: landmark {} ({}) drawn at {d:.0} m", row.id, row.kind.id());
+        }
+        live.lots.insert(row.id, es);
     }
 }
-
 
 /// Folk and dress style as anyone sees them: the authority's projection (`seen_characters`
 /// `folk` and `style`, from the settlement the character lives in; no home position is sent).

@@ -47,6 +47,13 @@ use std::sync::Arc;
 const CHUNK: i32 = 64;
 const FAR: f32 = 170.0;
 const NEAR: f32 = 60.0;
+/// Past [`FAR`], out to where the mood's fog is complete (`world::Draw::landmark_reach`: 600 m
+/// on Cullet, where landmarks are drawn), the ground and the sea are drawn coarse: a vertex
+/// every [`COARSE_STEP`] m, with no scatter or props, a few chunks a frame.
+const COARSE_STEP: usize = 4;
+const COARSE_PER_FRAME: usize = 8;
+/// Things drawn to a distance (`envs::Reach`) fade out over this band before it (m).
+pub const REACH_BAND: f32 = 25.0;
 /// Things at most this tall count as small.
 const SMALL: f32 = 1.6;
 /// Chunk builds per frame, so walking doesn't hitch.
@@ -150,6 +157,9 @@ pub struct Island {
     /// Loaded chunks: ground (with water) and big things; small things separately.
     ground: HashMap<(i32, i32), Vec<Entity>>,
     small: HashMap<(i32, i32), Vec<Entity>>,
+    /// Coarse far chunks (ground and sea only), and whether the sea round the map is placed.
+    coarse: HashMap<(i32, i32), Vec<Entity>>,
+    ocean: Vec<Entity>,
     /// Things waiting to spawn, by chunk and tier ([`SPAWN_BUDGET`]).
     queue: Vec<Queued>,
     /// The files of a loaded chunk's small things and people, held from its ground's build.
@@ -399,7 +409,7 @@ impl Island {
                 }
             }
         }
-        Self { land, climate, envs, site_items, ground: HashMap::new(), small: HashMap::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false, flights }
+        Self { land, climate, envs, site_items, ground: HashMap::new(), small: HashMap::new(), coarse: HashMap::new(), ocean: Vec::new(), queue: Vec::new(), prefetch: HashMap::new(), start, settled: false, flights }
     }
 
     /// A building on an authority `lot` row (connected): the row's model file when it is on
@@ -581,6 +591,28 @@ pub struct LotRow {
     /// The environment of its settlement's style (`living_rules::settle::env_of`), for lots
     /// without a model path.
     pub env: &'static str,
+}
+
+impl LotRow {
+    /// A lot of the regenerated land (the same as the authority's `lot` row of that id: the
+    /// authority writes the land's lots in order).
+    pub fn of_land(land: &Land, id: u32) -> Option<Self> {
+        let l = land.lots.get(id as usize)?;
+        let st = land.settlements.get(l.settlement as usize)?;
+        Some(Self {
+            id,
+            site: st.kind,
+            kind: l.kind,
+            at: Vec2::new(l.centre.0, l.centre.1),
+            yaw: l.yaw,
+            floor_m: l.floor_m,
+            height_m: l.height_m,
+            width_m: l.width_m,
+            depth_m: l.depth_m,
+            model: l.model_file.clone().unwrap_or_default(),
+            env: living_rules::settle::env_of(&st.style),
+        })
+    }
 }
 
 /// A settlement kind from its id (`settlement.kind`).
@@ -780,18 +812,20 @@ fn blended_ground(land: &Land, x: f32, z: f32, v: f32, climate: Climate) -> ([f3
     (acc.map(|c| c / 11.0), blend)
 }
 
-/// A chunk's ground (indexed 1 m grid, smooth normals) and its water surface.
-fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate) -> (Mesh, Option<Mesh>) {
-    let n = CHUNK as usize;
+/// A chunk's ground (an indexed grid, a vertex every `step` m: 1 near, [`COARSE_STEP`] far;
+/// smooth normals) and its water surface.
+fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate, step: usize) -> (Mesh, Option<Mesh>) {
+    let n = CHUNK as usize / step;
+    let st = step as i32;
     let (x0, z0) = (c.0 * CHUNK, c.1 * CHUNK);
     let mut pos = Vec::with_capacity((n + 1) * (n + 1));
     let mut col = Vec::with_capacity((n + 1) * (n + 1));
     let mut blends = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
         for i in 0..=n {
-            let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
+            let (x, z) = ((x0 + i as i32 * st) as f32, (z0 + j as i32 * st) as f32);
             pos.push([x, land.height(x, z), z]);
-            let v = hash((x0 + i as i32) as u32, (z0 + j as i32) as u32);
+            let v = hash((x0 + i as i32 * st) as u32, (z0 + j as i32 * st) as u32);
             let (mut c, b) = blended_ground(land, x, z, v, climate);
             // The rules' blocking rock, crisp per tile (not blended): the share of the four tiles
             // round this vertex, for the shader's cliff (terrain.rs `BLOCKED_ALPHA`).
@@ -820,12 +854,14 @@ fn chunk_meshes(land: &Land, c: (i32, i32), climate: Climate) -> (Mesh, Option<M
     // above dry ground well away from it.
     let mut wpos: Vec<[f32; 3]> = Vec::new();
     let mut widx: Vec<u32> = Vec::new();
+    let k = step as f32;
     for j in 0..n {
         for i in 0..n {
-            let (x, z) = ((x0 + i as i32) as f32, (z0 + j as i32) as f32);
-            let corners = [(x, z), (x + 1.0, z), (x, z + 1.0), (x + 1.0, z + 1.0)];
-            let water = |dx: f32, dz: f32| land.map.at(x + 0.5 + dx, z + 0.5 + dz) == Terrain::Water;
-            let wet = water(0.0, 0.0) || water(1.0, 0.0) || water(-1.0, 0.0) || water(0.0, 1.0) || water(0.0, -1.0);
+            let (x, z) = ((x0 + i as i32 * st) as f32, (z0 + j as i32 * st) as f32);
+            let corners = [(x, z), (x + k, z), (x, z + k), (x + k, z + k)];
+            let water = |dx: f32, dz: f32| land.map.at(x + 0.5 * k + dx, z + 0.5 * k + dz) == Terrain::Water;
+            let h = 0.5 * k;
+            let wet = water(0.0, 0.0) || water(k, 0.0) || water(-k, 0.0) || water(0.0, k) || water(0.0, -k) || (step > 1 && (water(-h, -h) || water(h, -h) || water(-h, h) || water(h, h)));
             if !wet {
                 continue;
             }
@@ -913,11 +949,12 @@ pub fn report(island: Option<Res<Island>>, time: Res<Time>, roam: Res<crate::env
     }
     let small: usize = island.small.values().map(Vec::len).sum();
     info!(
-        "island perf: mean {:.1} ms ({:.0} fps), worst {:.1} ms; chunks {} ground / {} near ({} small things); {} models, {} meshes; at ({:.0}, {:.0}) {}",
+        "island perf: mean {:.1} ms ({:.0} fps), worst {:.1} ms; chunks {} ground / {} coarse / {} near ({} small things); {} models, {} meshes; at ({:.0}, {:.0}) {}",
         acc.0 / acc.2 as f32 * 1000.0,
         acc.2 as f32 / acc.0,
         acc.1 * 1000.0,
         island.ground.len(),
+        island.coarse.len(),
         island.small.len(),
         small,
         models.iter().count(),
@@ -929,8 +966,48 @@ pub fn report(island: Option<Res<Island>>, time: Res<Time>, roam: Res<crate::env
     *acc = (0.0, 0.0, 0, 0.0);
 }
 
+/// A chunk's ground and water entities, a vertex every `step` m.
+fn spawn_ground(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, ground_mat: &GroundMat, land: &Land, c: (i32, i32), climate: Climate, step: usize) -> Vec<Entity> {
+    let (g, w) = chunk_meshes(land, c, climate, step);
+    // The painted ground material (terrain.rs); `noterrain` for A/B with the plain toon.
+    let mut ground = commands.spawn((EnvPart, Mesh3d(meshes.add(g)), Transform::default()));
+    if crate::perf::has("noterrain") {
+        ground.insert(MeshMaterial3d(palette.vertex.clone()));
+    } else {
+        ground.insert(MeshMaterial3d(ground_mat.0.clone()));
+    }
+    let mut es = vec![ground.id()];
+    if !crate::perf::has("nostencil") {
+        commands.entity(es[0]).insert(crate::style::ground_stencil());
+    }
+    if let Some(w) = w {
+        es.push(commands.spawn((EnvPart, Mesh3d(meshes.add(w)), MeshMaterial3d(palette.water.clone()), Transform::default())).id());
+    }
+    es
+}
+
+/// The sea beyond the land's square, at sea level, out past `reach`: four quads round the map,
+/// so a long view over the water ends in fog, not at the map's edge.
+fn spawn_ocean(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Palette, size: f32, reach: f32) -> Vec<Entity> {
+    let (lo, hi) = (-reach - 200.0, size + reach + 200.0);
+    let quads = [(lo, lo, hi, 0.0), (lo, size, hi, hi), (lo, 0.0, 0.0, size), (size, 0.0, hi, size)];
+    quads
+        .iter()
+        .map(|&(x0, z0, x1, z1)| {
+            let pos = vec![[x0, -0.05, z0], [x1, -0.05, z0], [x0, -0.05, z1], [x1, -0.05, z1]];
+            let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; 4])
+                .with_inserted_indices(Indices::U32(vec![0, 2, 1, 1, 2, 3]));
+            commands.spawn((EnvPart, Mesh3d(meshes.add(mesh)), MeshMaterial3d(palette.water.clone()), Transform::default())).id()
+        })
+        .collect()
+}
+
 /// Stream the island around you: build near chunks (nearest first, a few per frame), drop far
-/// ones; small things only within `NEAR`.
+/// ones; small things only within `NEAR`. Past [`FAR`], out to the mood's landmark reach, coarse
+/// chunks of ground and sea, and the sea round the map.
+#[allow(clippy::too_many_arguments)]
 pub fn stream(
     mut commands: Commands,
     island: Option<ResMut<Island>>,
@@ -940,18 +1017,38 @@ pub fn stream(
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     alive: Query<(), With<EnvPart>>,
+    draw: Res<crate::world::Draw>,
 ) {
     let Some(mut island) = island else { return };
     let me = roam.pos;
     let size = island.land.size as i32 / CHUNK;
-    let r = (FAR / CHUNK as f32).ceil() as i32 + 1;
+    // How far coarse ground goes: where the mood's fog is complete, if that is past FAR.
+    // `LIVING_GAME_PERF=nofar` leaves the coarse ring and the far landmarks out (measurement only).
+    let reach = if crate::perf::has("nofar") { FAR } else { draw.landmark_reach().max(FAR) };
+    let coarse_on = reach > FAR + 1.0;
+    let r = (reach / CHUNK as f32).ceil() as i32 + 1;
     let (cx, cz) = chunk_of(me);
-    // Drop chunks the environment switch already despawned, then far ones.
+    // Drop chunks the environment switch already despawned, then far ones. A detailed chunk
+    // going out of FAR stays until its coarse one is built, so no hole opens.
     island.ground.retain(|_, es| es.first().is_some_and(|e| alive.contains(*e)));
+    island.coarse.retain(|_, es| es.first().is_some_and(|e| alive.contains(*e)));
     island.small.retain(|_, es| es.iter().all(|e| alive.contains(*e)) || es.is_empty());
-    let far: Vec<_> = island.ground.keys().copied().filter(|c| chunk_distance(*c, me) > FAR + 32.0).collect();
+    let far: Vec<_> = island.ground.keys().copied().filter(|c| {
+        let d = chunk_distance(*c, me);
+        d > FAR + 32.0 && (!coarse_on || d > reach + 32.0 || island.coarse.contains_key(c))
+    }).collect();
     for c in far {
         for e in island.ground.remove(&c).unwrap_or_default() {
+            commands.entity(e).despawn();
+        }
+    }
+    // A coarse chunk goes past the reach, or where the detailed one stays (within FAR + 32 m).
+    let gone: Vec<_> = island.coarse.keys().copied().filter(|c| {
+        let d = chunk_distance(*c, me);
+        !coarse_on || d > reach + 32.0 || (d <= FAR + 32.0 && island.ground.contains_key(c))
+    }).collect();
+    for c in gone {
+        for e in island.coarse.remove(&c).unwrap_or_default() {
             commands.entity(e).despawn();
         }
     }
@@ -965,34 +1062,33 @@ pub fn stream(
     for j in (cz - r).max(0)..=(cz + r).min(size - 1) {
         for i in (cx - r).max(0)..=(cx + r).min(size - 1) {
             let d = chunk_distance((i, j), me);
-            if d <= FAR {
+            if d <= reach {
                 want.push(((i, j), d));
             }
         }
     }
     want.sort_by(|a, b| a.1.total_cmp(&b.1));
     let land = island.land.clone();
+    let climate = island.climate;
     let mut built = 0;
+    let mut coarse_built = 0;
     for &(c, d) in &want {
+        if d > FAR {
+            // Coarse: ground and sea only, a few a frame.
+            // A detailed chunk in the band just past FAR stays; farther out its coarse one replaces it.
+            let detailed = island.ground.contains_key(&c) && d <= FAR + 32.0;
+            if coarse_built < COARSE_PER_FRAME && !detailed && !island.coarse.contains_key(&c) {
+                let es = spawn_ground(&mut commands, &mut meshes, &palette, &ground_mat, &land, c, climate, COARSE_STEP);
+                island.coarse.insert(c, es);
+                coarse_built += 1;
+            }
+            continue;
+        }
         if built >= BUILDS_PER_FRAME {
-            break;
+            continue;
         }
         if !island.ground.contains_key(&c) {
-            let (g, w) = chunk_meshes(&land, c, island.climate);
-            // The painted ground material (terrain.rs); `noterrain` for A/B with the plain toon.
-            let mut ground = commands.spawn((EnvPart, Mesh3d(meshes.add(g)), Transform::default()));
-            if crate::perf::has("noterrain") {
-                ground.insert(MeshMaterial3d(palette.vertex.clone()));
-            } else {
-                ground.insert(MeshMaterial3d(ground_mat.0.clone()));
-            }
-            let mut es = vec![ground.id()];
-            if !crate::perf::has("nostencil") {
-                commands.entity(es[0]).insert(crate::style::ground_stencil());
-            }
-            if let Some(w) = w {
-                es.push(commands.spawn((EnvPart, Mesh3d(meshes.add(w)), MeshMaterial3d(palette.water.clone()), Transform::default())).id());
-            }
+            let es = spawn_ground(&mut commands, &mut meshes, &palette, &ground_mat, &land, c, climate, 1);
             // Big things queue now; the small things' and people's files start loading.
             let (big, small): (Vec<Item>, Vec<Item>) = island.site_items.get(&c).cloned().unwrap_or_default().into_iter().chain(island.wild_items(c)).partition(|it| it.height > SMALL && it.person.is_none());
             let fetch = small.iter().map(|it| scene_of(&assets, it).untyped()).collect();
@@ -1002,6 +1098,10 @@ pub fn stream(
                 island.queue.push(Queued { chunk: c, small: false, item, scene });
             }
             island.ground.insert(c, es);
+            // Its coarse stand-in goes now that the detailed ground is there.
+            for e in island.coarse.remove(&c).unwrap_or_default() {
+                commands.entity(e).despawn();
+            }
             built += 1;
         }
         if d <= NEAR && !island.small.contains_key(&c) && island.ground.contains_key(&c) {
@@ -1015,8 +1115,15 @@ pub fn stream(
             built += 1;
         }
     }
+    if coarse_on && island.ocean.is_empty() {
+        island.ocean = spawn_ocean(&mut commands, &mut meshes, &palette, land.size as f32, reach);
+    } else if !coarse_on && !island.ocean.is_empty() {
+        for e in std::mem::take(&mut island.ocean) {
+            commands.entity(e).despawn();
+        }
+    }
     spawn_queued(&mut commands, &assets, &mut island, me);
-    island.settled = built == 0 && island.queue.is_empty();
+    island.settled = built == 0 && coarse_built == 0 && island.queue.is_empty();
 }
 
 /// Spawn queued things, nearest first, within [`SPAWN_BUDGET`]; drop those whose chunk went.
@@ -1043,6 +1150,12 @@ fn spawn_queued(commands: &mut Commands, assets: &AssetServer, island: &mut Isla
             continue;
         }
         let es = spawn_item(commands, assets, land, &q.item);
+        // Drawn out to its tier's distance, fading over the last few metres (`envs::reach`):
+        // past the mood's fog start (Cullet's 180 m) the fog no longer hides where streaming stops.
+        if let (Some(&root), None) = (es.first(), &q.item.person) {
+            let r = if q.small { NEAR } else { FAR };
+            commands.entity(root).insert((crate::envs::Reach(r), crate::envs::Reach::fade_at(r, q.item.at.distance(me))));
+        }
         let list = if q.small { small.get_mut(&q.chunk) } else { ground.get_mut(&q.chunk) };
         if let Some(list) = list {
             list.extend(es);
