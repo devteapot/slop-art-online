@@ -144,7 +144,8 @@ def scene(run, args):
     for who in (S, A, B, F, D):
         run.admin('set_behavior', who, json.dumps({'wait': 120}))
     x0, y0 = quiet_spot(run, 12, 30)
-    x1, y1 = quiet_spot(run, 10, 30, avoid=[(x0 + i, y0) for i in range(12)])
+    # The far group beyond the way's carry (a call carries 2.5 voices), with room to spare.
+    x1, y1 = quiet_spot(run, 10, max(30.0, carry + 25.0), avoid=[(x0 + i, y0) for i in range(12)])
     reach = way['reach_m'] if way['reach_m'] > 0 else 1.0
     at = {S: (x0 + 2, y0), A: (x0 + 2 + min(1.0, reach), y0), B: (x0 + 6, y0), near.id: (x0 + 7, y0),
           F: (x1 + 2, y1), D: (x1 + 4, y1), far.id: (x1 + 6, y1)}
@@ -220,6 +221,9 @@ def scene(run, args):
     # The verdict, channel by channel.
     has = lambda texts: any(word in t for t in texts)
     report = {'word': word, 'way': args.way, 'control': args.control, 'consolidated': {names[w]: v for w, v in done.items()}, 'violations': [], 'positives': [], 'missing_positives': []}
+    # A way's noticers (a whisper's onlookers): within its noticing range, seeing the speaker, a
+    # row of its own kind with no words. Listed, so a reader sees what they did learn.
+    report['noticed'] = {names[w]: [r['text'] for r in rows[w] if r['kind'] not in ('speech', 'said', 'whisper', 'signal') and r['subject'] == S] for w in (B, near.id)}
     def judge(channel, who, found, applicable=True):
         if not applicable:
             return

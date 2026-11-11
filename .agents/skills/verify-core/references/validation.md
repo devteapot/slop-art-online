@@ -1,5 +1,16 @@
 # Core validation record
 
+## 2026-11-11 speech-2: whisper, call, truthful silence, overheard names, refusals in the script (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `just living-check` passes (rules 157 tests).
+- `speech.py regress` (`core-speech4-regress`) against `core-speech-base` (a107fdf): identical except the `introduced` rows. `core-speech2-regress` was identical too. `core-speech4-regress` first differed only in the repeat row's "11 s ago" against "17 s ago" (the scene's pacing under load); `diff` now ignores that number.
+- `speech.py channels`: `core-speech4-channels` 22 of 22. `core-speech2-channels` failed only the unseen-silence check, on the scene's own 2 s limit (a second line too soon); `-channels2`/`-3` passed after the fix and before the refusal refactor.
+- `speech.py ways`: `core-speech4-ways` 21 of 21, with the three cards.
+- `speech.py crowd` with `--way` (30 people in a 30 m square, 60 lines at one every 0.5 s): `core-speech2-crowd-say` and `-call`; the whisper run records that a crowd of room lines does not drive a way that needs someone. Numbers in docs/COMMUNICATION.md §14.
+- Not run: the rest of the baseline.
+
 ## 2026-11-11 speech-1: ways of speaking (Spark)
 
 Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.

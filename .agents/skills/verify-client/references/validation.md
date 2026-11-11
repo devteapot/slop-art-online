@@ -1,5 +1,11 @@
 # Client protocol validation
 
+## 2026-11-11 speech-2 (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `run.py` `client-speech4`: every check passes (33), with three `speech_card` rows. `client-speech2` ran on a module rebuilt in the middle of the refusal refactor and is superseded.
+
 ## 2026-11-11 speech-1: heard, my_heard, speech_card (Spark)
 
 Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.

@@ -44,7 +44,7 @@ python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
 # Speech (features/speech.md): each scene on its own launched run (they spawn people named
 # Walker1..4, and a second spawn would repeat the names).
-for S in regress ways crowd; do
+for S in regress ways channels crowd; do
   P=$R-$S; mkdir -p ".local/living/verify/$P"
   python3 "$V" launch --run "$P" > ".local/living/verify/$P/launch.txt" 2>&1
   python3 "$C/speech.py" $S --run "$P" > ".local/living/verify/$P/speech-$S.txt" 2>&1

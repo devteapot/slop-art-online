@@ -51,3 +51,13 @@ The `speech` case (`verify_minds.py --case speech`) checks:
 3. A second line draws a reply in `"way": "shout"`, which the world lacks: it is said aloud.
 4. The second talk prompt shows the mind's first line "(heard by …)", the player among those it lists (residents nearby may be listed too).
 5. A consolidation request carries "MindsTeller told you their name. {MindsTeller=#id}".
+
+Since `speech-2`:
+
+- A `whisper` row (words whispered to the mind) gives a turn as `speech` does; a `whispered` row (noticed, no words) never does.
+- The turn is told "They whispered this to you; …", and a reply that names no way is whispered back. A whisper refused because the speaker stepped away is not said aloud instead.
+- A turn answering a call is told how far the caller is, from its own row's words ("MindsTeller calls out to you from about 15 m"; this service does not follow bodies), and what an ordinary voice carries.
+- The reply format lists the ways (`"way": "say" or "whisper" or "call"`) when the world has more than one.
+- The `speech` case checks both, when the card has the ways:
+  - a whispered question from 1 m is answered with a "(whisper)" line, and its prompt says it was whispered;
+  - a call from 15 m is answered with a "(call)" line, and its prompt holds the distance, the voice's 9 m and the ways.

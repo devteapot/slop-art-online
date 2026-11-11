@@ -1,5 +1,14 @@
 # Validation record (player)
 
+## 2026-11-11 speech-2: whisper and call, refusals in the script's words (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `speak.py` `player-speak5`: 15 of 15. For each way on the card, the refusal (a whisper to no one, a whisper 4 m away, a second call within 6 s) is the reducer's error, byte for byte the words of the installed script's `<way>_check` on the same facts, run outside the authority as a client runs it (`living-rules` example `way_check`, `speech::check_ctx`).
+- Earlier attempts:
+  - `player-speak3` 12 of 12 was before refusals moved to the script.
+  - `player-speak4` failed only the second call: its facts and SQL took 5.7 s before the second call was sent, past the 6 s gap, so the reducer accepted it. It now sends at once and asks the client's check about the same moment.
+
 ## 2026-11-11 speech-1: human_speak (Spark)
 
 Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.

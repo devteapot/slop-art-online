@@ -48,6 +48,14 @@ python3 .agents/skills/verify-minds/scripts/privacy.py --run minds-privacy-ctl -
 
 The password is read from the file and handed to the mind's environment only; it is never printed or written to evidence. Nodes are written under the run's own database name and deleted at the end (`neo4j-cleanup-check.txt` holds the count left, 0).
 
+## Ways covered
+
+Since `speech-2`, the driver runs for each way on `speech_card`:
+
+- `say`: public, carry 9 m. The bystander and the near player receive the words; the far group must not.
+- `whisper`: private, 1.5 m. Only the addressee receives the words. The bystander and the near player, within 6 m and seeing the speaker, get `whispered` rows ("… whispers something to …") with no words, listed under `noticed` in `privacy.json`. The far group gets nothing.
+- `call`: public, carry 22.5 m. The far group is placed at least the carry plus 25 m away, and must not receive the words.
+
 ## Evidence
 
 `<run>/privacy.json`, `cast.json` (the way, the word, who receives and who must not), `experience-<id>.json`, `my-experience.json`, `neo4j-<id>.txt`, `thoughts-<id>.json`, `journal/` (copied at cleanup), `result.json`.

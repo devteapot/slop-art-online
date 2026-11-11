@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | Tick, housekeeping, pause and resume | `scenes.py tick` | [tick.md](tick.md) |
 | Graph parsing, normalization, evaluation and routines; a refused start counted and told; `say` to an id in every form, waiting out the speaking limit, told when it cannot be said | Cargo, mechanics, steering, `scenes.py refusal` and `scenes.py say` | [graphs.md](graphs.md) |
-| Speech: ways of speaking as script (`<way>_speech()`), the one primitive (`speech::speak`), `introduced` rows, `heard`/`my_heard`, `speech_card`, `human_speak`; the shipped `say` unchanged (a row diff against the pre-change module); the cost of a line in a talking crowd | `speech.py regress`, `ways`, `crowd`, `diff` | [speech.md](speech.md) |
+| Speech: ways of speaking as script (`<way>_speech()`), the one primitive (`speech::speak`), `introduced` rows, `heard`/`my_heard`, `speech_card`, `human_speak`; whisper, call, truthful silence, overheard names; the shipped `say` unchanged (a row diff against the pre-change module); the cost of a line in a talking crowd | `speech.py regress`, `ways`, `channels`, `crowd`, `diff` | [speech.md](speech.md) |
 | Rhai skills, laws, crafting and exchanges | Cargo and 23 mechanics checks | [mechanics.md](mechanics.md) |
 | Hunger, energy, eating, infant appearance and cry routing | `scenes.py needs` and `scenes.py infant` | [needs.md](needs.md) |
 | "food" as anything with nutrition: eat and give of `food`, the most nourishing first | `scenes.py food` | [needs.md](needs.md) |

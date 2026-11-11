@@ -966,21 +966,31 @@ def speech_case(run):
                           'talk': {'thought': 'I answer, aloud.', 'say': 'verify minds spoken in a way', 'way': 'say', 'end': False},
                           'consolidate': {'summary': 'verify minds names', 'remember': [{'exp': '$EXP:told you their name', 'gist': gist, 'salience': 0.6, 'involves': ['$PERSON']}],
                                           'nodes': [], 'edges': [], 'retract': [], 'merge': [], 'identity': None, 'relations': [], 'judgments': [], 'places': []}},
-              'rules': [{'purpose': 'talk', 'contains': 'shout it', 'times': -1,
-                         'reply': {'thought': 'I shout back.', 'say': 'verify minds shouted back', 'way': 'shout', 'end': True}},
+              # A turn's prompt holds the conversation so far: the latest line's rule comes first.
+              'rules': [{'purpose': 'talk', 'contains': 'over here', 'times': -1,
+                         'reply': {'thought': 'I call back.', 'say': 'verify minds called back', 'way': 'call', 'end': True}},
+                        # A whisper is answered in kind when the reply names no way.
+                        {'purpose': 'talk', 'contains': 'a secret', 'times': -1,
+                         'reply': {'thought': 'I answer quietly.', 'say': 'verify minds whispered back', 'end': False}},
+                        {'purpose': 'talk', 'contains': 'shout it', 'times': -1,
+                         'reply': {'thought': 'I shout back.', 'say': 'verify minds shouted back', 'way': 'shout', 'end': False}},
                         {'purpose': 'consolidate', 'cite': True, 'times': -1}]}
     models = model(run, script)
     # As in `conversation`: the mind's first deliberation is in before anyone speaks to it.
     run.request(actor, 'speech')
     run.start(models, [actor])
     accepted(run, actor)
-    # A line heard in the very second a deliberation is applied drew no turn once (minds-speech3):
-    # leave the deliberation a moment to settle.
-    time.sleep(3)
+    # The deliberation installs the fake's plan, which runs the resident's own routine: hold it
+    # where it is, and bring the player beside it again.
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', player, actor)
+    time.sleep(2)
     requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
     text_of = lambda e: json.dumps(e, ensure_ascii=False).replace('\\"', '"')
     spoken = lambda words: any(words in c['text'] and c['b'] == player for c in run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'mind-speech'))
-    run.harness('player', 'say', 'I am MindsTeller. Good day to you.', '--to', str(actor))
+    # A question: a remark that asks nothing is answered only by chance (talk.rs, 0.3 + 0.65 x
+    # sociability), which is what left minds-speech3, -4b and -6 without a turn.
+    run.harness('player', 'say', 'I am MindsTeller. How are you today?', '--to', str(actor))
     run.wait(lambda: spoken('verify minds spoken in a way'), 'a talk reply with "way": "say" is spoken through mind_say', 60)
     intro = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'introduced') if e['kind'] == 'introduced']
     assert len(intro) == 1 and intro[0]['subject'] == player and intro[0]['text'] == 'MindsTeller told you their name.', intro
@@ -997,9 +1007,37 @@ def speech_case(run):
     tagged = f'MindsTeller told you their name. {{MindsTeller=#{player}}}' in text_of(consolidation)
     assert tagged, 'the introduction is not tagged with the person (its anchor)'
     run.wait(lambda: any(t['kind'] == 'consolidate' for t in run.thoughts(actor, 'thoughts-consolidated')), 'consolidation applied', 60)
+    ways = {c['name'] for c in run.sql('SELECT * FROM speech_card', 'speech-card')}
+    whispered = called = None
+    chronicle = lambda: run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'mind-speech-ways')
+    if 'whisper' in ways:
+        # Beside the mind, the player whispers: the turn is told it was whispered, and the reply
+        # (naming no way) is whispered back.
+        body = run.private(f'SELECT * FROM body WHERE id = {actor}', 'actor-body')[0]
+        run.admin('place_at', player, body['x'] + 1.0, body['y'])
+        time.sleep(2.2)
+        run.harness('call', 'human_speak', json.dumps(['verify minds: may I tell you a secret?', actor, 'whisper']), '--as-player')
+        run.wait(lambda: any('verify minds whispered back' in c['text'] for c in chronicle()), 'a whisper answered', 60)
+        whispered = next(c['text'] for c in chronicle() if 'verify minds whispered back' in c['text'])
+        assert '(whisper)' in whispered, whispered
+        talk = next(e for e in requests() if e['purpose'] == 'talk' and 'a secret' in text_of(e))
+        assert 'They whispered this to you' in text_of(talk), 'the turn is not told the line was whispered'
+    if 'call' in ways:
+        # From 15 m the player calls: the turn is told the distance, and the reply calls back.
+        body = run.private(f'SELECT * FROM body WHERE id = {actor}', 'actor-body')[0]
+        run.admin('place_at', player, body['x'] + 15.0, body['y'])
+        # A listener takes at most its stamina's turns in one exchange (talk.rs), and an
+        # exchange starts afresh after 90 s of quiet: this one has had three turns already.
+        time.sleep(92)
+        run.harness('call', 'human_speak', json.dumps(['verify minds: can you hear me over here?', actor, 'call']), '--as-player')
+        run.wait(lambda: any('verify minds called back' in c['text'] for c in chronicle()), 'a call answered', 60)
+        called = next(c['text'] for c in chronicle() if 'verify minds called back' in c['text'])
+        talk = next(e for e in requests() if e['purpose'] == 'talk' and 'over here' in text_of(e))
+        assert '(call)' in called and re.search(r'calls out to you from about 1[3-7] m', text_of(talk)) and 'An ordinary voice carries 9 m' in text_of(talk), (called, 'distance and voice in the prompt')
+        assert '\\"way\\": how you say it' in json.dumps(talk) or '"way": how you say it' in text_of(talk), 'the talk turn does not list the ways'
     replies = [json.loads(t['detail']).get('reply', {}) for t in run.thoughts(actor, 'thoughts-talk') if t['kind'] == 'talk']
     return {'status': 'pass', 'talk_turns': len(talks), 'reply_ways': [r.get('way') for r in replies], 'introduced': intro[0]['text'],
-            'heard_rows': len(heard), 'consolidation_tagged': tagged}
+            'heard_rows': len(heard), 'consolidation_tagged': tagged, 'whispered_back': whispered, 'called_back': called}
 
 
 def main():

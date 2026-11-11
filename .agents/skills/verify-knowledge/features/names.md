@@ -16,6 +16,6 @@ Design: docs/COMMUNICATION.md §6 and §7 ("Names"). A name is learned only from
 
 The checks: one `introduced` row with the right subject and text; the only new acquaintance is the mind's; the consolidation prompt holds the tagged line; the memory keeps it; the person's node is named afterwards; the far mind's graph has no node naming the player. Evidence: `names.json`, `neo4j-person-before.txt`, `neo4j-person-after.txt`, `neo4j-memories.txt`, `neo4j-far.txt`.
 
-## Known gap
+## Names of two words
 
-`mentions` compares each word of the line with the whole name, so a name of two words ("Vessa Pontil", as in Cullet) is never mentioned: saying "I'm Vessa" teaches nothing. `--name` takes one word until that is fixed (docs/COMMUNICATION.md §13, "Found while building").
+`mentions` compares each word of the line with the whole name, so a name of two words ("Vessa Pontil", as in Cullet) is never mentioned: saying "I'm Vessa" teaches nothing. Fixed on `speech-2`: the player says only its given name, so `--name "Mara Quill"` proves a name of two words is learned from "I am Mara" (docs/COMMUNICATION.md §14).

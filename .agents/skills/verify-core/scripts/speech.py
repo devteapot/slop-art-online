@@ -243,7 +243,9 @@ def regress(s):
 
 def rows_differ(a, b):
     diffs = []
-    strip = lambda rows: [r for r in rows if r.get("kind") not in NEW_KINDS]
+    # A repeat row says how long ago the first line was: the scene's own pacing, not behaviour.
+    ago = lambda r: {**r, "text": re.sub(r"\b\d+ s ago", "<n> s ago", r["text"])} if "text" in r else r
+    strip = lambda rows: [ago(r) for r in rows if r.get("kind") not in NEW_KINDS]
     for section in ("experience", "line_seen"):
         for who in sorted(set(a[section]) | set(b[section])):
             ra, rb = strip(a[section].get(who, [])), strip(b[section].get(who, []))
@@ -286,9 +288,10 @@ def ways(s):
     # speech_card: public, one row per way (the shipped script: `say`).
     cards = sql(s, "SELECT * FROM speech_card")
     (s.out / "ways-speech-card.json").write_text(json.dumps(cards, indent=2) + "\n")
-    s.expect("speech_card is public and lists `say` as today's speech",
-             [(r["name"], r["label"], r["order"], r["needs_to"], r["reach_m"], r["carry_m"], r["requires"], r["needs_sight"], r["private"], r["max_chars"], r["gap_ms"]) for r in cards]
-             == [("say", "Say", 0, False, 0.0, 9.0, "", False, False, 400, 2000)], cards, fatal=False)
+    got = sorted((r["name"], r["label"], r["order"], r["needs_to"], r["reach_m"], r["carry_m"], r["requires"], r["needs_sight"], r["private"], r["max_chars"], r["gap_ms"]) for r in cards)
+    s.expect("speech_card is public and lists the shipped ways: say (today's speech), whisper, call",
+             got == sorted([("say", "Say", 0, False, 0.0, 9.0, "", False, False, 400, 2000), ("whisper", "Whisper", 1, True, 1.5, 1.5, "", False, True, 400, 2000),
+                            ("call", "Call out", 2, False, 0.0, 22.5, "", False, False, 80, 6000)]), cards, fatal=False)
     night = not (6 <= scenes.world_hour(s)[0] < 20)
     sight = 6.0 if night else 11.0
     dist = lambda x, y: math.dist(k.at[x], k.at[y])
@@ -381,6 +384,100 @@ def ways(s):
     s.expect("heard: a played character's lines stay", len(p.sql("SELECT * FROM my_heard")) == len(mh), None, fatal=False)
 
 
+def channels(s):
+    """Whisper, call, truthful silence and overheard names (docs/COMMUNICATION.md items 6, 7, 8,
+    10) on one quiet line: from the speaker a, b at 1 m, the deer at about 4 m, c at 4 m, the
+    player at 7 m, e at 10 m (in sight by day, beyond the 9 m voice), d at 20 m (within a call)."""
+    a, b, c, d, e = s.people(5)
+    deer = next(x["id"] for x in s.rows("SELECT id, kind, alive FROM character") if x["kind"] == "deer" and x["alive"])
+    s.graph(deer, {"wait": 120})
+    p = Person(s, "Mara Quill")
+    line = quiet_line(s, length=26)
+    x0, y0 = line[0]
+    at = {a: (x0 + 2, y0), b: (x0 + 3, y0), deer: (x0 + 5.5, y0 + 2.5), c: (x0 + 6, y0), p.id: (x0 + 9, y0), e: (x0 + 12, y0), d: (x0 + 22, y0)}
+    for who, (x, y) in at.items():
+        s.call("place_at", who, x, y)
+    names = {x["id"]: x["name"] for x in s.rows("SELECT id, name FROM character") if x["id"] in at}
+    night = not (6 <= scenes.world_hour(s)[0] < 20)
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"a": a, "b": b, "c": c, "d": d, "e": e, "deer": deer, "p": p.id, "names": names, "at": {str(k): v for k, v in at.items()}, "night": night}, indent=2) + "\n")
+    time.sleep(1.5)
+    def rows(who, since, kinds=None):
+        return sorted((r for r in s.rows(f"SELECT * FROM experience WHERE observer = {who}") if r["at_ms"] >= since and (kinds is None or r["kind"] in kinds)), key=lambda r: r["id"])
+    def line_by(speaker, text, to, way, label):
+        t = now(s)
+        r = say_as(s, speaker, text, to, way)
+        time.sleep(1.0)
+        got = {who: rows(who, t) for who in at}
+        (s.out / f"{s.name}-{label}.json").write_text(json.dumps({"code": r.returncode, "error": (r.stderr or "")[-300:], "rows": {names.get(k, str(k)): v for k, v in got.items()}}, indent=2, ensure_ascii=False) + "\n")
+        return r, got, t
+    # Whisper to b beside a: b gets the words; c (4 m, sees a) notices without the words; the
+    # player (7 m), e, d and the deer get nothing.
+    r, got, t = line_by(a, "The tally is short tonight.", b, "whisper", "whisper")
+    s.expect("whisper: accepted", r.returncode == 0, (r.stderr or "")[-200:])
+    words = lambda who: [x for x in got[who] if "tally is short" in x["text"]]
+    s.expect("whisper: b gets the words as a `whisper` row (0.9)", [(x["kind"], x["salience"]) for x in words(b)] == [("whisper", 0.9)] and "whispers to you: “The tally is short tonight.”" in words(b)[0]["text"], got[b], fatal=False)
+    s.expect("whisper: c, beside and seeing a, notices it without the words", [x["text"] for x in got[c] if x["kind"] == "whispered"] == ["A stranger whispers something to a stranger."] and not words(c), got[c], fatal=False)
+    s.expect("whisper: the player, e, d and the deer get nothing at all", not any(got[w] and any(x["subject"] == a for x in got[w]) for w in (p.id, e, d, deer)), {w: got[w] for w in (p.id, e, d, deer)}, fatal=False)
+    s.expect("whisper: the speaker's row reads `You whispered to …`", [x["text"] for x in got[a] if x["kind"] == "said"] == ["You whispered to a stranger: “The tally is short tonight.”"], got[a], fatal=False)
+    said = [x for x in got[a] if x["kind"] == "said"]
+    h = s.rows(f"SELECT * FROM heard WHERE line = {said[0]['id']}") if said else []
+    s.expect("whisper: heard lists b alone, way whisper", h and h[0]["hearers"] == [b] and h[0]["way"] == "whisper", h, fatal=False)
+    chron = [x["text"] for x in s.rows("SELECT * FROM chronicle WHERE kind = 'speech'") if x["at_ms"] >= t and x["a"] == a]
+    s.expect("whisper: the chronicle (audit) keeps the words and the way", chron == [f"{names[a]} (whisper) to {names[b]}: “The tally is short tonight.”"], chron, fatal=False)
+    ms = {w: s.rows(f"SELECT heard_ms, speaker FROM mind_state WHERE id = {w}")[0] for w in (b, c)}
+    s.expect("whisper: only b's hearing mark moves", ms[b]["heard_ms"] >= t and ms[c]["heard_ms"] < t, ms, fatal=False)
+    time.sleep(GAP)
+    # Refused whispers write nothing.
+    for label, to, text, want in (("to c at 4 m", c, "Come closer, c.", "too far to whisper: step closer"), ("to no one", 0, "Anyone?", "a whisper needs someone to whisper to")):
+        r, got, t = line_by(a, text, to, "whisper", f"whisper-refused-{to}")
+        s.expect(f"whisper {label} is refused: {want}", r.returncode != 0 and want in (r.stderr + r.stdout) and not any(got[w] for w in at), (r.stderr or "")[-200:], fatal=False)
+        time.sleep(GAP)
+    # A whispered introduction teaches only the one it was whispered to.
+    r, got, t = line_by(a, f"I am {names[a]}.", b, "whisper", "whisper-intro")
+    acq = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == a)
+    s.expect("whisper: a whispered name teaches b alone", acq == [b], acq, fatal=False)
+    time.sleep(GAP)
+    # A call carries to d at 20 m and to animals as a shout; a second within 6 s is refused; a
+    # long line is cut to 80 characters.
+    long = "Hey, everyone, the cart from the coast is here with fish and salt and news from the south road!"
+    r, got, t = line_by(a, long, 0, "call", "call")
+    cut = long[:80]
+    s.expect("call: d, 20 m away, hears it, and how far", [x["text"] for x in got[d] if x["kind"] == "speech"] == [f"A stranger calls out from about 20 m: “{cut}”"], got[d], fatal=False)
+    s.expect("call: the deer hears a person shouting", any(x["kind"] == "signal" and x["text"].startswith("You hear a person shouting,") for x in got[deer]), got[deer], fatal=False)
+    s.expect("call: those near hear it too, cut to 80 characters", all(any(x["kind"] == "speech" and x["text"].endswith(f"“{cut}”") for x in got[w]) for w in (b, c, p.id, e)), None, fatal=False)
+    # Past the 2 s speaking limit, within the call's own 6 s.
+    time.sleep(1.5)
+    r2, got2, _ = line_by(a, "Again!", 0, "call", "call-again")
+    s.expect("call: a second within 6 s is refused in call_check's words", r2.returncode != 0 and "too soon to call out again: wait a few seconds" in (r2.stderr + r2.stdout) and not any(got2[w] for w in at), (r2.stderr or "")[-200:], fatal=False)
+    time.sleep(6.5)
+    # Silence that tells the truth: e is seen (by day) but beyond the voice.
+    r, got, t = line_by(a, "Can you hear me, e?", e, "say", "silence")
+    sil = [x["text"] for x in got[a] if x["kind"] == "silence"]
+    want = ["A stranger is too far to hear you; call out or go closer."] if not night else ["No answer from a stranger; they don't seem to be within earshot."]
+    s.expect(f"silence: {'e, seen but beyond the voice, is too far to hear (call out or go closer)' if not night else 'at night e is not seen: no answer'}", sil == want, sil, fatal=False)
+    time.sleep(GAP)
+    r, got, t = line_by(a, "Can you hear me, d?", d, "say", "silence-unseen")
+    s.expect("silence: d, out of sight, gives no answer", [x["text"] for x in got[a] if x["kind"] == "silence"] == ["No answer from a stranger; they don't seem to be within earshot."], got[a], fatal=False)
+    time.sleep(GAP)
+    # Overheard names: b says c's name to c; whoever hears it in full and sees c learns it.
+    r, got, t = line_by(b, f"{names[c]}, come over here.", c, "say", "names")
+    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == c and x["since_ms"] >= t)
+    want = sorted(w for w in (a, p.id, e) if math.dist(at[b], at[w]) <= 9.0 and (math.dist(at[w], at[c]) <= (6.0 if night else 11.0)))
+    s.expect("names: those who heard c named and saw c learn c's name; c and d do not", learned == want, (learned, want), fatal=False)
+    told = [x["text"] for x in got[a] if x["kind"] == "introduced"]
+    s.expect("names: the row reads `You heard <caller> call <Name> by name.`", told == [f"You heard a stranger call {names[c]} by name."], told, fatal=False)
+    time.sleep(GAP)
+    r, got, t = line_by(a, f"{names[b]}, listen closely.", b, "whisper", "names-whisper")
+    s.expect("names: a name in a whisper teaches no onlooker", not [x for x in s.rows("SELECT * FROM acquaintance") if x["known"] == b and x["since_ms"] >= t], None, fatal=False)
+    time.sleep(GAP)
+    # A name of two words is mentioned by its given name.
+    t = now(s)
+    p.call("human_say", ["I'm Mara.", 0])
+    time.sleep(1.0)
+    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == p.id and x["since_ms"] >= t)
+    s.expect("names: saying a given name (Mara of Mara Quill) introduces to those in earshot", learned == sorted(w for w in (a, b, c, e, d) if math.dist(at[p.id], at[w]) <= 9.0), learned, fatal=False)
+
+
 def metrics(s):
     # The database's identity, as the server's metrics name it (`spacetime list`).
     ident = next(l.split("|")[1].strip() for l in s.command("list").stdout.splitlines() if "|" in l and l.split("|")[0].strip() == s.db)
@@ -398,6 +495,10 @@ def crowd(s):
     """N people stand in a square, each saying room lines in turn at a declared rate; the cost of
     one line from the server's metrics (per reducer and table, this database only)."""
     n, side, lines, every = s.args.n, s.args.side, s.args.lines, s.args.every
+    card = next((c for c in sql(s, "SELECT * FROM speech_card") if c["name"] == s.args.way), None) if not s.baseline else None
+    if card and card["needs_to"]:
+        s.expect(f"crowd: `{s.args.way}` needs someone to say it to; a crowd of room lines does not drive it", False, card, fatal=False, known=True)
+        return
     people = s.people(n)
     line = quiet_line(s, length=int(side) + 4, clear=40.0)
     x0, y0 = line[2]
@@ -405,11 +506,11 @@ def crowd(s):
     for i, who in enumerate(people):
         s.call("place_at", who, x0 + (i % cols) * side / max(1, cols - 1), y0 - 2 + (i // cols) * side / max(1, cols - 1))
     time.sleep(2)
-    way = None if s.baseline else "say"
+    way = None if s.baseline else s.args.way
     before = metrics(s)
     t0 = time.monotonic()
     for i in range(lines):
-        say_as(s, people[i % n], f"Line {i}: the market opens at noon today.", 0, way)
+        say_as(s, people[i % n], f"Line {i}: the market opens at noon.", 0, way)
         time.sleep(max(0.0, t0 + (i + 1) * every - time.monotonic()))
     time.sleep(1.5)
     after = metrics(s)
@@ -423,7 +524,7 @@ def crowd(s):
             rows[table] = rows.get(table, 0) + v
     exp = [r for who in people for r in s.rows(f"SELECT kind, at_ms FROM experience WHERE observer = {who}")]
     heard_rows = [r for r in s.rows("SELECT * FROM heard")] if not s.baseline else []
-    report = {"population": n, "square_m": side, "density_per_m2": round(n / (side * side), 3), "lines": lines, "line_every_s": every,
+    report = {"way": way or "say (before ways)", "population": n, "square_m": side, "density_per_m2": round(n / (side * side), 3), "lines": lines, "line_every_s": every,
               "lines_per_min": round(60 / every, 1), "calls_counted": calls,
               "wasm_us_per_line": round(pick("reducer_wasm_time_usec", "mind_say") / max(calls, 1), 1),
               "fuel_per_line": round(pick("reducer_wasmtime_fuel_used", "mind_say") / max(calls, 1)),
@@ -433,12 +534,12 @@ def crowd(s):
               "mean_hearers_listed": round(sum(len(h["hearers"]) for h in heard_rows) / max(1, len(heard_rows)), 2) if heard_rows else None,
               "rows_deleted_per_line": {k.split('table_name="', 1)[1].split('"', 1)[0]: round(v / max(calls, 1), 2) for k, v in sorted(delta.items()) if k.startswith("spacetime_num_rows_deleted_total") and 'reducer_or_query="mind_say"' in k},
               "metric_keys": sorted(k for k in delta if 'mind_say' in k)}
-    (s.out / f"crowd-{n}.json").write_text(json.dumps(report, indent=2) + "\n")
+    (s.out / f"crowd-{n}-{way or 'base'}.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({k: v for k, v in report.items() if k != "metric_keys"}, indent=1))
     s.expect("every line was counted", calls == lines, calls, fatal=False)
 
 
-SCENES = {"regress": regress, "ways": ways, "crowd": crowd}
+SCENES = {"regress": regress, "ways": ways, "channels": channels, "crowd": crowd}
 
 
 def main():
@@ -451,6 +552,7 @@ def main():
     ap.add_argument("--side", type=float, default=10.0)
     ap.add_argument("--lines", type=int, default=60)
     ap.add_argument("--every", type=float, default=0.5)
+    ap.add_argument("--way", default="say", help="crowd: the way the lines are said in")
     a = ap.parse_args()
     if a.scene == "diff":
         return diff(*a.runs)

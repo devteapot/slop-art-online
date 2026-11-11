@@ -12,7 +12,7 @@ A mind (the living-mind binary against the fake model, its memory in Neo4j) meet
 3. a bystander mind out of earshot learns nothing: no acquaintance, no `introduced` row, and
    its graph has no node naming the player.
 
-    names.py --run minds-names-<x> [--name Mercy]
+    names.py --run minds-names-<x> [--name Mercy | --name "Mara Quill"]  (says only the given name)
 
 Environment as `verify-minds/scripts/privacy.py` (LIVING_STDB_*, LIVING_PRIVACY_NEO4J,
 LIVING_PRIVACY_NEO4J_ENV). Writes `<run>/names.json`.
@@ -73,7 +73,8 @@ def scene(run, args):
     time.sleep(3)
     before = graph(mind, 'neo4j-person-before')
     # 2. The player says its name.
-    player.call('human_say', [f'I am {args.name}, verify names.', mind])
+    # The given name only: a name of two words is mentioned by its first (since speech-2).
+    player.call('human_say', [f'I am {args.name.split()[0]}, verify names.', mind])
     time.sleep(1.5)
     intro = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {mind}', 'introduced') if e['kind'] == 'introduced']
     acq = [a for a in run.private('SELECT * FROM acquaintance', 'acquaintance') if a['known'] == player.id]
