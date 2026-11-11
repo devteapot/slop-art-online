@@ -147,19 +147,26 @@ def tick(s):
     s.expect("profile emits actual tick spans", 'tick' in r.stdout and ('µs' in r.stdout or 'us' in r.stdout), s.db)
 
 
+def person_pace():
+    """The rules' `person_pace` law (a person's need rates against real time; 1.0 before iter-11)."""
+    m = re.search(r"fn person_pace\(x\) \{ ([0-9.]+) \}", (Path(__file__).resolve().parents[4] / "living/scripts/skills.rhai").read_text())
+    return float(m.group(1)) if m else 1.0
+
+
 def needs(s):
     a = s.people(1)[0]
+    k = person_pace()
     s.wait(lambda: s.vitals(a)["hunger_rate"] > 0)
     n0 = s.needs(a, "idle-before")
     time.sleep(8)
     n1 = s.needs(a, "idle-after")
-    s.expect("hunger rises and idle energy falls", n1["hunger"] > n0["hunger"] + 0.4 and n1["energy"] < n0["energy"] - 0.1)
+    s.expect("hunger rises and idle energy falls", n1["hunger"] > n0["hunger"] + 0.4 * k and n1["energy"] < n0["energy"] - 0.1 * k, {"person_pace": k})
     s.graph(a, {"first": [{"do": "rest"}]})
     s.wait(lambda: s.vitals(a)["energy_rate"] > 0)
     rest0 = s.needs(a, "rest-before")
     time.sleep(8)
     rest1 = s.needs(a, "rest-after")
-    s.expect("rest recovers energy over time", rest1["energy"] > rest0["energy"] + 0.4)
+    s.expect("rest recovers energy over time", rest1["energy"] > rest0["energy"] + 0.4 * k)
     s.call("grant_items", a, "cooked_meat", 1)
     before = s.needs(a, "eat-before")
     s.graph(a, {"seq": [{"do": "eat", "item": "cooked_meat"}, {"wait": 120}]})
@@ -181,11 +188,12 @@ def needs(s):
     s.graph(a, {"first": [{"do": "rest"}]})
     s.wait(lambda: s.vitals(a)["rate_key"] != cold["rate_key"])
     warm = s.vitals(a, "cloaked")
-    # An ordinary night's cold tires (1.5 a minute, divided by the body's hardiness gene) and
-    # does not hurt; only winter nights and nights in the rain do (docs/SEEDED_LIVES.md).
+    # An ordinary night's cold tires (1.5 a minute times `person_pace`, divided by the body's
+    # hardiness gene) and does not hurt; only winter nights and nights in the rain do
+    # (docs/SEEDED_LIVES.md).
     hardy = hardiness(s, a)
-    s.expect("cloak removes the cold's tiring", abs(warm["energy_rate"] - cold["energy_rate"] - 1.5 / hardy) < 0.05,
-             {"cold_energy_rate": cold["energy_rate"], "cloaked_energy_rate": warm["energy_rate"], "hardiness": hardy})
+    s.expect("cloak removes the cold's tiring", abs(warm["energy_rate"] - cold["energy_rate"] - 1.5 * k / hardy) < 0.05,
+             {"cold_energy_rate": cold["energy_rate"], "cloaked_energy_rate": warm["energy_rate"], "hardiness": hardy, "person_pace": k})
     s.expect("an ordinary night's cold does not hurt", abs(warm["hp_rate"] - cold["hp_rate"]) < 0.05,
              {"cold_hp_rate": cold["hp_rate"], "cloaked_hp_rate": warm["hp_rate"]})
 

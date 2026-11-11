@@ -1787,7 +1787,7 @@ mod tests {
         assert_eq!(heads[1..].join(" "), "SENSES MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
         assert!(t.starts_with("One day lasts 12 real minutes; night is 20:00-06:00.\nSENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m; at night 6 m, or 9 m carrying a torch."), "{t}");
         assert!(t.contains("FOOD: berries 12, fish 16, meat 20, cooked_fish 34, cooked_meat 42, smoked_fish 24, smoked_meat 30 (hunger points). Cook raw fish or meat at a campfire"), "{t}");
-        assert!(t.contains("BODY: hunger rises ~4/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");
+        assert!(t.contains("BODY: hunger rises ~1.2/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");
         assert!(t.contains("SETTLEMENTS: walls block the way;") && t.contains("Taking from someone else's store"), "{t}");
         assert_eq!(t, s.world_text(&[("seasons", "a year is 8 days.".into()), ("life", "a person lives about 70 years.".into())]), "the same rules give the same text");
         // A floor that changes a law changes what minds are told.
@@ -2460,8 +2460,9 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
                             let damage = s.rates(&c).unwrap().hp_per_min;
                             assert_eq!(state.cold, night && !fire && !shelter && !cloak);
                             assert!(state.looks().starts_with(if state.cold { "cold" } else { "warm" }));
-                            // Cold hurts only in winter (or in the rain): an ordinary night tires.
-                            assert_eq!(damage, if state.cold && winter { -3.0 } else { 0.0 });
+                            // Cold hurts only in winter (or in the rain): an ordinary night tires
+                            // (a person's rates are paced to real time: `person_pace`, 0.3).
+                            assert!((damage - if state.cold && winter { -3.0 * 0.3 } else { 0.0 }).abs() < 1e-5, "{damage}");
                         }
                     }
                 }
@@ -2537,12 +2538,23 @@ fn rates(a) {
                                     c.night = bits & 8 != 0;
                                     c.raining = bits & 16 != 0;
                                     c.season = if bits & 32 != 0 { "winter" } else { "summer" }.into();
-                                    let (x, y) = (before.rates(&c).unwrap(), now.rates(&c).unwrap());
-                                    assert_eq!(
-                                        (x.hunger_per_min.to_bits(), x.energy_per_min.to_bits(), x.hp_per_min.to_bits()),
-                                        (y.hunger_per_min.to_bits(), y.energy_per_min.to_bits(), y.hp_per_min.to_bits()),
-                                        "{kind} {stage} {activity:?} hunger {hunger} energy {energy} bits {bits:06b} genes {endurance}/{vitality}: {x:?} vs {y:?}"
-                                    );
+                                    let (mut x, y) = (before.rates(&c).unwrap(), now.rates(&c).unwrap());
+                                    // Since iter-11 every person rate is the old one times `person_pace`
+                                    // (0.3); animals keep theirs.
+                                    if kind == "person" {
+                                        // Scaled inside the law, not after: equal within rounding.
+                                        let k = now.num_of("person_pace", "", 0.0) as f32;
+                                        (x.hunger_per_min, x.energy_per_min, x.hp_per_min) = (x.hunger_per_min * k, x.energy_per_min * k, x.hp_per_min * k);
+                                        let close = |a: f32, b: f32| (a - b).abs() < 1e-5;
+                                        assert!(close(x.hunger_per_min, y.hunger_per_min) && close(x.energy_per_min, y.energy_per_min) && close(x.hp_per_min, y.hp_per_min),
+                                            "{kind} {stage} {activity:?} hunger {hunger} energy {energy} bits {bits:06b} genes {endurance}/{vitality}: {x:?} vs {y:?}");
+                                    } else {
+                                        assert_eq!(
+                                            (x.hunger_per_min.to_bits(), x.energy_per_min.to_bits(), x.hp_per_min.to_bits()),
+                                            (y.hunger_per_min.to_bits(), y.energy_per_min.to_bits(), y.hp_per_min.to_bits()),
+                                            "{kind} {stage} {activity:?} hunger {hunger} energy {energy} bits {bits:06b} genes {endurance}/{vitality}: {x:?} vs {y:?}"
+                                        );
+                                    }
                                     n += 1;
                                 }
                             }
@@ -2587,7 +2599,7 @@ fn rates(a) {
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, hungry");
         c.actor.hunger = 100.0;
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, starving");
-        assert_eq!(s.rates(&c).unwrap().hp_per_min, -4.0);
+        assert_eq!(s.rates(&c).unwrap().hp_per_min, -4.0 * 0.3);
         c.actor.hunger = 20.0;
         c.actor.hurt_ago = Some(1000.0);
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, hurt");
