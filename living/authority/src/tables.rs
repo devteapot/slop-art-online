@@ -596,6 +596,33 @@ pub struct InfantCry {
     pub prompted: Vec<CryPrompt>,
 }
 
+/// One person who heard a line: how far from the speaker, and how far off the speaker's
+/// facing they stood (radians, 0 = straight ahead, up to pi = behind).
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct Hearer {
+    pub id: u32,
+    pub d: f32,
+    pub off: f32,
+}
+
+/// Who heard a line and how they stood toward the speaker. Written by `speak` only when the
+/// world's `speech_audience` law is on (on by default since 2026-11-11), one row per line, deleted after 60 s.
+/// Private: the mind service reads it as the database owner to tell, for a line said to no
+/// one in particular, which hearer was nearest or faced (talk.rs, `LIVING_GREET`).
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = audience, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = audience))]
+pub struct Audience {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub speaker: u32,
+    pub to: u32,
+    #[index(btree)]
+    pub at_ms: u64,
+    pub hearers: Vec<Hearer>,
+}
+
 /// What reached a character's senses (sights, speech, what happened to them, their own
 /// results). Game state, not knowledge: written only by the authority, never edited, kept
 /// in a bounded per-character window. Minds read it and record how far they consolidated.
