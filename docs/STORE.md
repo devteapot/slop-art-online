@@ -275,8 +275,10 @@ What the scrubber does now:
   - Letter runs are folded (`ssssssssshi` and `sssshi` are both `shi`).
   - A one- or two-word line matches a word that is equal after folding, or within edit ratio 0.8 for words of four letters or more.
   - A common word ("hi", or anything of three letters or fewer) counts only when quoted alone or within two words after a speech verb. So a resident's own "Hi! Are you new here?" stays. `say` is not a speech verb, because it is the JSON key in front of every spoken line.
-  - A longer line matches a window sharing at least 60% of its words (at least three), or reading 80% alike.
+  - A longer line matches a window sharing at least 60% of its words (at least three), or reading 80% alike. The window must also share at least two of the line's **distinctive** words, totalling 8 letters or more. Distinctive means not in the stop-word list (`STOPWORDS`) and 3 letters or more. So a line of common words ("I can see it") is caught only when repeated exactly, and never in "you can see it" (fbc37c32 fix).
+  - **Templates are never fuzzy-matched.** The system prompt files (`journal/system/*.txt`), system messages inside journal entries, installed scripts (`installed_source*`, `installed_script.txt`) and `*.rhai` are written by us, not the owner. An owner line can reach them only by substitution, in quotes, so they get the exact quoted match only: no unquoted match, no echo, no dropped lines.
 - **What is dropped.** In a play session, a journal entry whose reply quotes or echoes an owner line is dropped whole, and so is any world row (JSON Lines) that does. A text line that does is replaced by `[line dropped: it quotes or repeats an owner line]`. Echoes inside prompts and JSON files are replaced by `[owner line]`.
+- **Command histories keep their rows.** A row of `commands.jsonl` or `events.jsonl`, or any row whose `cmd`/`kind`/`reducer` is a say, is kept with its timestamp. Every string in it that holds or echoes an owner line becomes `[owner line]`. `dropped.md` lists it with the action "kept, text replaced".
 - **File names.** Any word of a file name that echoes an owner line, even a common one, becomes `owner-line` (`journal_cuth_reply_hi.txt` becomes `journal_cuth_reply_owner-line.txt`).
 - **Report pages.** These (`*.html`) are excluded from session units: `play_report.py` regenerates them from the evidence.
 - **The list.** Everything dropped is listed in `dropped.md` and the unit's `MANIFEST.json`, without the owner's text.
@@ -312,6 +314,16 @@ Feedback was held by the owner's decision. The rest is agents' analysis of what 
 
 Held files are still read to learn the owner's lines. A client recorder's `events.jsonl` therefore teaches the scrubber every line sent, even though the file itself is not published.
 
+**Review-only files.** A session's `report.json` and `commands.jsonl` (`SESSION_REVIEW_NAMES`) are scrubbed in the same pass. `scrub --write DIR` writes them under `DIR/review/`, so no second pass with `--kind generic` is needed. They are listed as `review` in the reports and in the manifest's `held` section. They are never packed or published unless the general coordinator later approves.
+
+**Review files are redacted like published content** (fbc37c32 fix):
+- `report.md`, `report.json`, `dropped.md` and stdout pass every path and string through the published redaction. Paths appear as they would be published.
+- The source is named home-relative (`~/…`), or by its last two folders if it lies outside home, redacted too.
+- Masked examples of identity categories (names, logins, owner lines and echoes, host names, emails) show only a length, `[5 chars]`; home paths show `/home/…`.
+- The self-test `ReviewOutputs` searches every output, file names included, for the planted owner names, login, email and lines.
+
+Review folders written before this fix (in `~/store-dryrun-2026-11-11/` on the Spark) still list raw source paths. They are local only, and nothing published was affected.
+
 Play-test 2 under the allow-list: 38 files published (the journals, `session/run/`, `skills.rhai`). 22 held: `FEEDBACK.md`, all 20 files of `diagnosis/`, `session/CHECKLIST.md`, and `session/README.md`, which describes the owner's session.
 
 ### Publishing from the laptop or the dev-box
@@ -329,7 +341,8 @@ The steps are the same on every machine. The gate is per machine and per upload.
    STORE_MACHINE=laptop python3 living/tools/store.py scrub --write ~/store-dryrun-$(date +%F)/<name>-scrubbed <session folder> --kind play-session
    ```
    Then check:
-   - `report.md`: `owner_lines.distinct_lines` must equal the number of different lines typed in the session (the masked examples show first letter, last letter and length);
+   - `report.md`: `owner_lines.distinct_lines` must equal the number of different lines typed in the session (the masked examples show only each line's length);
+   - `review/`: the scrubbed `report.json` and `commands.jsonl`, held from publishing;
    - `dropped.md`: what the echo pass removed;
    - the `excluded` rows: what is held and why.
 
