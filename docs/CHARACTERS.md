@@ -35,11 +35,16 @@ python3 living/tools/characters/town.py x --write-town cullet.json      # save t
 
 # The comparison page beside the VRoid control (the same shots and clips for each).
 living/tools/characters/capture.sh cullet-man ours .local/cap all
+living/tools/characters/capture.sh cullet-man ours .local/cap motions   # whole clips, to judge a motion (MOTIONS=…)
+
+# Measure baked clips on a character's own mesh: lowest point against the floor, how busy the hands
+# are, how much it moves, hops, foot travel.
+blender -b -P living/tools/blender/clip_check.py -- --in living/game/assets/lookdev/anim/own-man.glb --clips gather,work
 python3 living/tools/characters/media.py .local/cap .local/page .local/town .local/sheets
 python3 living/tools/characters/page.py .local/page
 ```
 
-`gen_person.sh` needs Blender and, for clips, the Kimodo cache (`KIMODO_DIR`). The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate and 6 s to animate; 64 people with their photographs took under 4 minutes on eight cores (dev-box, 2026-11-11).
+`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes (`KIMODO_DIR`, default `.local/kimodo/outputs/library`); it bakes the whole library unless `ONLY` names clips. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and the whole library (34 clips) about a minute. 64 people with `idle` and `walk` and their photographs took under 4 minutes on eight cores (dev-box, 2026-11-11).
 
 ## A person's parameters
 
@@ -166,6 +171,22 @@ Each value runs from about -1 to 1 round the average for the person's sex and ag
 
 **Expressions.** The game drives `Fcl_EYE_Close` and `Fcl_MTH_A`. The file also carries `Fcl_EYE_Close_L`, `Fcl_EYE_Close_R`, `Fcl_EYE_Joy`, `Fcl_MTH_I`, `Fcl_MTH_U`, `Fcl_MTH_E`, `Fcl_MTH_O`, `Fcl_MTH_Fun`, `Fcl_MTH_Sorrow`, `Fcl_BRW_Angry`, `Fcl_BRW_Sorrow`, `Fcl_BRW_Surprised` and `Fcl_BRW_Fun`, and VRM expression groups (`a` `i` `u` `e` `o`, `blink`, `joy`, `fun`, `angry`, `sorrow`). `person.py --expression Fcl_MTH_Fun=1` writes a file that starts with an expression on, to look at it.
 
+## Motions on generated people
+
+`animate.py` retargets the clip library onto a generated person unchanged, since the skeleton is VRoid's. Limb lengths are our own, so a take can behave differently on our people than on a VRoid base: our man's arms are longer, and a hand that clears the floor on Shino goes 8 cm into it on him.
+
+The eight motions added to the library on 2026-11-11 were baked and judged on both (`clip_check.py`, and the pass-1 page):
+
+| Motion | Verdict | Why |
+|---|---|---|
+| `gather`, `eat`, `dodge` | Keep | They read at once. `dodge`'s boot toes dip up to 6 cm under the floor during the push-off, too briefly to show at the game camera. |
+| `work` | Needs new takes | The hands are busy for about 30% of 6 s, at chest height; it reads as looking at something held. |
+| `play` | Needs new takes | One hop in 4 s; the boots go 8 cm under the floor at the hop. |
+| `sit_ground_down`, `stand_up_ground` | Fix in retargeting | Good motions. The supporting hand goes 8 to 9 cm into the floor on our man, and the crossed feet sit 7 cm under at the ankle (14 cm at the boot). |
+| `sit_ground` | Needs new takes, and the same fix | One held pose: everything ranges 3 cm over 6 s. The feet are under the floor for the whole loop. |
+
+The fix proposed for `animate.py`, not made in pass 1: a floor guard after the legs are solved, per character. Hold each ankle and wrist at or above a clearance over the floor (about 5 cm and 3 cm), by raising the leg's target, a two-bone solve for the arm, and lifting the hips where a limb cannot reach. The same guard on the ball of the foot stops the toe dips.
+
 ## What was learnt from VRoid
 
 The controls `lookdev/vroid-Sendagaya_Shino.glb` and `vroid-Vivi.glb` were taken apart to see how the look is made. Nothing of theirs is used ([third-party record](../living/tools/blender/THIRD_PARTY.md)).
@@ -191,5 +212,5 @@ The controls `lookdev/vroid-Sendagaya_Shino.glb` and `vroid-Vivi.glb` were taken
 - **Plain clean-shaven men are the closest to each other.** With the same hair they need a second look; beards, age and skin carry much of the men's variety.
 - **Children wear adult garments** scaled by the recipe, and build is a light touch (girth, a belly, a chest).
 - **Neck and face shade differently**, so a line shows under the jaw, as on VRoid files.
-- **Cost is not measured.** A person is about 34,000 triangles (the head 9,700), one 1024² texture, 11 materials, 4 MiB with 13 clips. Each person's face and eye materials are their own, so 64 people add 128 materials. Level of detail and crowd frame cost are later passes.
+- **Cost is not measured.** A person is about 34,000 triangles (the head 9,700), one 1024² texture, 11 materials, 5.9 MiB with the library's 34 clips. Each person's face and eye materials are their own, so 64 people add 128 materials. Level of detail and crowd frame cost are later passes.
 - **Notes for later passes.** Outfit pieces should become slots chosen by parameter, as hair styles are. Children wear adult garments scaled by the recipe. `head_form.py`'s beard coverage could drive a beard of real strands. The atlas has room: the eyes' strip is 448×192 a eye and could hold separate iris layers.

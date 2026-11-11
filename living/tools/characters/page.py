@@ -8,8 +8,8 @@ PAGE_DIR/index.html, which refers to them by relative paths, so the folder can b
 as it is. Sections appear for the media that exists.
 
 `--notes` is a JSON file of HTML fragments written for one report: `title`, `sub`, `verdict`,
-`weak`, `holds`, `log`, `next`, `licences`, and `captions` (picture name -> caption, replacing the
-default). The pictures and tables are the tool's; the judgement is the report's.
+`weak`, `holds`, `log`, `next`, `licences`, `captions` (picture name -> caption, replacing the
+default), and `motions` (`title`, `html`, `clips`, `captions` by clip: more clips under section 2). The pictures and tables are the tool's; the judgement is the report's.
 """
 
 import argparse
@@ -76,11 +76,15 @@ def main():
     def row(shot, ext="jpg"):
         return f'<div class="grid g{len(who)}">' + "".join(fig(f"img/{w}-{shot}.{ext}", WHO[w]) for w in who) + "</div>"
 
-    side = json.load(open(os.path.join(a.page, "clips.json"))) if have("clips.json") else []
+    # Who is in each clip, left to right (media.py; an older page's list named them for all).
+    taken = json.load(open(os.path.join(a.page, "clips.json"))) if have("clips.json") else {}
+    everyone = taken if isinstance(taken, list) else [w for w in ("ours", "woman", "vroid") if have(f"img/{w}-front.jpg")]
+    taken = taken if isinstance(taken, dict) else {}
 
     def video(name, cap):
         if not have(f"clips/{name}.mp4"):
             return ""
+        side = taken.get(name, everyone)
         labels = "".join(f"<span>{WHO[w]}</span>" for w in side)
         return (f'<figure><div class="labels" style="grid-template-columns:repeat({len(side)}, 1fr)">{labels}</div>'
                 f'<video src="clips/{name}.mp4" controls loop muted autoplay playsinline></video><figcaption>{cap}</figcaption></figure>')
@@ -108,10 +112,16 @@ def main():
     out.append(f"<h3>The game camera (22 m, 28° down), whole frame at 1600×900</h3>{row('game')}")
     out.append("<p>At this distance a character is about 35 pixels tall. The same frames, the middle 200×150 pixels enlarged four times without smoothing:</p>" + row("game-crop", "png"))
     # 2. Clips.
-    if side:
+    if any(have(f"clips/{n}.mp4") for n, _ in CLIPS):
         out.append("<h2>2. Clips, the same frames for each</h2>")
         out.append("<p>Every character plays the same cached Kimodo takes, retargeted by <code>animate.py</code> with no change to it. Frames are poses held at fixed times, so VRoid's spring bones (hair, skirt) rest here; in play they swing, and ours has none.</p>")
         out.append('<div class="grid g2">' + "".join(video(n, c) for n, c in CLIPS) + "</div>")
+    # Other motions photographed whole (capture.sh `motions`), with the report's verdicts.
+    if notes.get("motions"):
+        m = notes["motions"]
+        out.append(f"<h3>{m.get('title', 'More motions')}</h3>{m.get('html', '')}")
+        vids = "".join(video(f"{c}-{v}", f"<b>{c}</b>{', from the side' if v == 'side' else ''}{'. ' + m.get('captions', {}).get(c, '') if m.get('captions', {}).get(c) else ''}") for c in m.get("clips", []) for v in ("tq", "side"))
+        out.append(f'<div class="grid g2">{vids}</div>')
     # 3. The town.
     if have("img/town-faces-24.jpg"):
         town = json.load(open(os.path.join(a.page, "town.json"))) if have("town.json") else {"people": []}

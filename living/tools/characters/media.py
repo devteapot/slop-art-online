@@ -119,24 +119,37 @@ def main():
         for k, x in picks.items():
             x[2].save(os.path.join(page, "img", f"{c}-{k}.jpg"), quality=92)
         print(f"blink {c}: eye-white pixels {picks['blink-shut'][0]} shut, {picks['blink-open'][0]} open; mouth pixels {picks['mouth-open'][1]} open")
-    # Clips: ours beside the control.
-    side = [c for c in ("ours", "woman", "vroid") if os.path.isdir(os.path.join(cap, c, "frames"))]
-    if len(side) >= 2:
-        for clip, view, fps in CLIPS:
-            dirs = [os.path.join(cap, c, "frames", f"{clip}-{view}") for c in side]
-            if not all(os.path.isdir(d) for d in dirs):
-                continue
-            n = min(len(os.listdir(d)) for d in dirs)
-            loop = LOOPS.get(clip, 1)
-            out = os.path.join(page, "clips", f"{clip}-{view}.mp4")
-            ins = []
-            for d in dirs:
-                ins += ["-framerate", str(fps), "-i", os.path.join(d, "%03d.png")]
-            filt = "".join(f"[{i}:v]" for i in range(len(dirs))) + f"hstack=inputs={len(dirs)},scale=iw*{2 / len(dirs):.4f}:-2,loop=loop={loop - 1}:size={n}:start=0,format=yuv420p[v]"
-            run(["ffmpeg", "-y", "-loglevel", "error"] + ins + ["-frames:v", str(n * loop), "-filter_complex", filt, "-map", "[v]", "-c:v", "libopenh264", "-b:v", "3500k", "-movflags", "+faststart", out])
-            print(f"clip {out}: {n} frames x{loop} at {fps} fps, {' | '.join(side)}")
+    # Clips: ours beside the control. The page's own set first, then any other clip photographed
+    # (capture.sh `motions`), each with the characters it was taken of.
+    made = {}
+    if os.path.exists(os.path.join(page, "clips.json")):
+        old = json.load(open(os.path.join(page, "clips.json")))
+        made = old if isinstance(old, dict) else {}
+    taken = {}
+    for c in ("ours", "woman", "vroid"):
+        d = os.path.join(cap, c, "frames")
+        for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            taken.setdefault(f, []).append(c)
+    fps_of = {f"{clip}-{view}": fps for clip, view, fps in CLIPS}
+    for name in [f"{clip}-{view}" for clip, view, _ in CLIPS] + sorted(set(taken) - set(fps_of)):
+        side = taken.get(name, [])
+        if len(side) < 2:
+            continue
+        dirs = [os.path.join(cap, c, "frames", name) for c in side]
+        fps_file = os.path.join(dirs[0], "fps.txt")
+        fps = fps_of.get(name) or (int(float(open(fps_file).read())) if os.path.exists(fps_file) else 15)
+        n = min(sum(1 for x in os.listdir(d) if x.endswith(".png")) for d in dirs)
+        loop = LOOPS.get(name.rsplit("-", 1)[0], 1)
+        out = os.path.join(page, "clips", f"{name}.mp4")
+        ins = []
+        for d in dirs:
+            ins += ["-framerate", str(fps), "-i", os.path.join(d, "%03d.png")]
+        filt = "".join(f"[{i}:v]" for i in range(len(dirs))) + f"hstack=inputs={len(dirs)},scale=iw*{2 / len(dirs):.4f}:-2,loop=loop={loop - 1}:size={n}:start=0,format=yuv420p[v]"
+        run(["ffmpeg", "-y", "-loglevel", "error"] + ins + ["-frames:v", str(n * loop), "-filter_complex", filt, "-map", "[v]", "-c:v", "libopenh264", "-b:v", "3500k", "-movflags", "+faststart", out])
+        made[name] = side
+        print(f"clip {out}: {n} frames x{loop} at {fps} fps, {' | '.join(side)}")
     with open(os.path.join(page, "clips.json"), "w") as f:
-        json.dump(side, f)
+        json.dump(made, f)
     import shutil
 
     if len(sys.argv) > 3 and os.path.isdir(sys.argv[3]):

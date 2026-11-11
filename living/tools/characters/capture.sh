@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Photograph a character recipe through the game's renderer for the check page
 # (living/tools/characters/page.py): the same stills and the same clip frames for every character.
-# Usage: living/tools/characters/capture.sh RECIPE NAME OUT_DIR [stills|clips|blink|all]
+# Usage: living/tools/characters/capture.sh RECIPE NAME OUT_DIR [stills|clips|motions|blink|all]
+#   `motions` photographs whole clips (MOTIONS="<clip>:<fps>:<views> …"; default the eight town and
+#   combat motions added to the library on 2026-11-11), for a verdict on each.
 #   FACE_K=<factor> FACE_AIM=<0..1>  scale and aim the close face shots (see below)
 #   OUT_DIR/NAME/stills/<shot>.png and OUT_DIR/NAME/frames/<clip>-<view>/NNN.png
 # Clip frames are poses held at a time (the asset view's `clip@seconds/view`), so spring bones
@@ -36,20 +38,27 @@ if [ "$what" = stills ] || [ "$what" = all ]; then
   names=(elbow knee shoulder hip)
   view 1000x1000 "sword_slash@1.25/35:10:0.34:0.72,run@0.2/90:6:0.34:0.3,wave@1.4/20:8:0.34:0.82,sit_idle@1.0/60:20:0.4:0.45" "$out/$name/stills"
 fi
+clip() { # clip, view name, view spec, start, end, fps
+  # The first shot of a run can catch the model still fading in: it is taken twice and the first
+  # copy dropped.
+  local shots="$1@$(python3 -c "print(f'{$4:.3f}')")/$3," t
+  local n=$(python3 -c "print(max(1, round(($5 - $4) * $6)))")
+  for k in $(seq 0 $((n - 1))); do
+    t=$(python3 -c "print(f'{$4 + $k / $6:.3f}')")
+    shots+="$1@$t/$3,"
+  done
+  # The view writes at most two digits of step index before names stop sorting; keep runs short.
+  local d="$out/$name/frames/$1-$2"
+  rm -rf "$d"
+  view 720x720 "${shots%,}" "$d" seq
+  rm -f "$d/000.png"
+  for k in $(seq 1 "$n"); do mv "$d/$(printf %03d "$k").png" "$d/$(printf %03d $((k - 1))).png"; done
+  echo "$6" > "$d/fps.txt"
+}
+tq=40:14:0.74; side=90:8:0.74
+len() { python3 -c "import json,sys; print(json.load(open('living/game/assets/lookdev/anim/$1.clips.json'))['$2']['seconds'])"; }
+base=$(python3 -c "import json; r=[r for r in json.load(open('living/game/assets/characters/recipes.json'))['recipes'] if r['name']=='$recipe'][0]; print(r['base'].split('/')[-1][:-4])")
 if [ "$what" = clips ] || [ "$what" = all ]; then
-  clip() { # clip, view name, view spec, start, end, fps
-    local shots="" t
-    local n=$(python3 -c "print(max(1, round(($5 - $4) * $6)))")
-    for k in $(seq 0 $((n - 1))); do
-      t=$(python3 -c "print(f'{$4 + $k / $6:.3f}')")
-      shots+="$1@$t/$3,"
-    done
-    # The view writes at most two digits of step index before names stop sorting; keep runs short.
-    view 720x720 "${shots%,}" "$out/$name/frames/$1-$2" seq
-  }
-  tq=40:14:0.74; side=90:8:0.74
-  len() { python3 -c "import json,sys; print(json.load(open('living/game/assets/lookdev/anim/$1.clips.json'))['$2']['seconds'])"; }
-  base=$(python3 -c "import json; r=[r for r in json.load(open('living/game/assets/characters/recipes.json'))['recipes'] if r['name']=='$recipe'][0]; print(r['base'].split('/')[-1][:-4])")
   clip idle tq $tq 0 4 12
   clip walk tq $tq 0 "$(len "$base" walk)" 15
   clip walk side $side 0 "$(len "$base" walk)" 15
@@ -58,6 +67,13 @@ if [ "$what" = clips ] || [ "$what" = all ]; then
   clip sword_slash tq $tq 0 "$(len "$base" sword_slash)" 15
   clip sit_down tq $tq 0 "$(len "$base" sit_down)" 15
   clip sit_idle tq $tq 0 2 12
+fi
+if [ "$what" = motions ]; then
+  # Whole clips to judge a motion by: MOTIONS="<clip>:<fps>:<views> …" (views: tq, side).
+  for m in ${MOTIONS:-gather:15:tq work:15:tq eat:15:tq play:15:tq,side sit_ground_down:15:tq,side sit_ground:12:tq stand_up_ground:15:tq,side dodge:30:tq,side}; do
+    IFS=: read -r c fps views <<< "$m"
+    for v in ${views//,/ }; do clip "$c" "$v" "${!v}" 0 "$(len "$base" "$c")" "$fps"; done
+  done
 fi
 if [ "$what" = blink ]; then
   # The game blinks and moves the mouth by itself (LIVING_GAME_ACT=talk); photograph the face many
