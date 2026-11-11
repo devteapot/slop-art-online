@@ -471,8 +471,8 @@ fn wall_along(map: &living_rules::map::Map, a: (f32, f32), b: (f32, f32)) -> Opt
 fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u64) {
     let sc = common::scripts(ctx);
     let code = sc.shapes().code(&m.skill);
-    // A dash in progress lets it pass through, but it is spent all the same.
-    if ctx.db.activity().id().find(victim).is_some_and(|a| sc.combat(&a.skill).is_some_and(|s| s.aim == Aim::Dash)) {
+    // A dash that evades (a dodge) lets it pass through, but it is spent all the same.
+    if ctx.db.activity().id().find(victim).is_some_and(|a| sc.combat(&a.skill).is_some_and(|s| s.evades)) {
         show(ctx, now, Seen { kind: seen::DODGED, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
         show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: 0, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
         outcome_of(ctx, m.use_id, "dodged", now);

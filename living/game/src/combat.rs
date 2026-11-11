@@ -182,6 +182,8 @@ pub fn look(card: &SkillCard) -> Look {
         "block" => l(&["block"], 2.2, Some(0.42), SkillIcon::Shield),
         // The dash on the rules' track (2.6 m at 5.2 m/s): the clip carries no travel of its own.
         "dodge" => l(&["dodge"], 1.0, None, SkillIcon::Dodge),
+        // Drawn by jump.rs over whatever the body plays (no jump take yet).
+        "jump" => l(&[crate::jump::CLIP], 1.0, None, SkillIcon::Dodge),
         _ => match card.aim.as_str() {
             "point" if card.radius >= BOLT_RADIUS => Look { bolt: true, ..l(&["cast"], 2.2, None, SkillIcon::Fire) },
             "point" => l(&["bow_shoot"], 3.4, None, SkillIcon::Bow),
@@ -415,9 +417,11 @@ pub fn input(
             keys.just_pressed(KeyCode::KeyE),
             keys.just_pressed(KeyCode::KeyR),
             shift(&keys, |b, k| b.just_pressed(k)),
+            keys.just_pressed(KeyCode::Space),
         ];
-        // In bar order, as before: LMB, RMB, Q, then R before E, then Shift.
-        for i in [0, 1, 2, 4, 3, 5] {
+        // In bar order, as before: LMB, RMB, Q, then R before E, then Shift, then Space (the
+        // jump, not drawn on the bar).
+        for i in [0, 1, 2, 4, 3, 5, 6] {
             if went_down[i] {
                 if let Some(s) = slot(i) {
                     presses.push((s, None, None));
@@ -448,9 +452,10 @@ pub fn input(
         let (target_id, point) = match card.aim.as_str() {
             "creature" => (tgt.or(c.target).or_else(|| nearest(&scene, me_id, me, aim, card.reach + 0.4)).unwrap_or(0), aim),
             "self_or_ally" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
-            // A dash goes the way I move, else back from where I face.
+            // A dash goes the way I move, else back from where I face (a jump: toward it).
             "dash" => {
-                let d = if input.dir != Vec2::ZERO { input.dir } else { (me - aim).normalize_or(Vec2::NEG_Y) };
+                let back = (me - aim).normalize_or(Vec2::NEG_Y);
+                let d = if input.dir != Vec2::ZERO { input.dir } else if skill == "jump" { -back } else { back };
                 (0, me + d * 2.0)
             }
             _ => (tgt.unwrap_or(0), aim),

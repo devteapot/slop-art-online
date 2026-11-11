@@ -171,7 +171,7 @@ pub fn two_bone(u: Vec3, k: Vec3, f: Vec3, a: Vec3, fallback_bend: Vec3) -> (Qua
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn solve(
-    mut people: Query<(&Transform, &Anim, &mut Legs, Option<&mut crate::characters::Shaped>)>,
+    mut people: Query<(&Transform, &Anim, &mut Legs, Option<&mut crate::characters::Shaped>, Option<&crate::anim::Motion>)>,
     mut bones: Query<&mut Transform, Without<Legs>>,
     island: Option<Res<crate::island::Island>>,
     envs: Option<Res<crate::envs::Envs>>,
@@ -197,9 +197,10 @@ fn solve(
     };
     let eye = cams.iter().next().map(|c| c.translation());
     let mut solved = 0;
-    for (root, anim, mut legs, shaped) in &mut people {
+    for (root, anim, mut legs, shaped, motion) in &mut people {
         let near = eye.map_or(1.0, |e| 1.0 - ((e.distance(root.translation) - IK_NEAR) / (IK_FAR - IK_NEAR)).clamp(0.0, 1.0));
-        let w = near * anim.ik;
+        // Off the ground in a jump, the feet aren't held (`jump.rs`).
+        let w = near * anim.ik * (1.0 - motion.map_or(0.0, crate::jump::airborne));
         if w <= 0.0 {
             legs.lock = [None; 2];
             legs.step = [None; 2];

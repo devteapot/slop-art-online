@@ -746,6 +746,7 @@ fn key_code(name: &str) -> Option<KeyCode> {
         "Enter" => KeyCode::Enter,
         "Escape" => KeyCode::Escape,
         "ShiftLeft" => KeyCode::ShiftLeft,
+        "Space" => KeyCode::Space,
         _ => return None,
     })
 }
