@@ -20,6 +20,8 @@ Rules: `cargo test -p living-rules` 218 pass, with `making_is_one_mechanism_thro
 
 Maintained: the `making` scene; features/goods.md and README (the one table, the scene); the goods block's time.
 
+After merging main `46fa9db3` (runs `core-recipes1m-230803-*`): `goods` 24 of 24, `making` 8 of 8, `stock` 4 of 4; `food` 4 of 4, `refusal` 4 of 4, `teach` 6 of 6; mechanics 23 of 23. `just living-check` exit 0; rules 245 pass; the old-against-new comparison against that main's scripts: island 5,682,170 states, Cullet 12,580,182, 0 differ.
+
 ## 2026-11-11 fix-health-leak: another's health as perceived in fight reports and `health_of` (Spark)
 
 Branch `fix-health-leak` (from `e3f0527f`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (combat.md, the README row, SKILL.md's baseline), not a source wave.
