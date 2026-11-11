@@ -947,11 +947,14 @@ class Session:
         token = Path(s.fill(s.token_pattern, db=db))
         token.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         env = {"LIVING_SERVER": s.server, "LIVING_DB": db, "LIVING_GAME_NAME": self.a.name or s.character,
-               "LIVING_GAME_TOKEN": token, "NO_COLOR": "1"}
+               "LIVING_GAME_TOKEN": token, "NO_COLOR": "1",
+               # Every reducer call the client sends, with the authority's reply (actions.rs).
+               "LIVING_GAME_ACTIONS": self.dir / "actions.jsonl"}
         env.update({k: s.fill(v, db=db, session=self.dir) for k, v in s.client_env.items()})
         for kv in self.a.client_env or []:
             k, _, v = kv.partition("=")
             env[k] = s.fill(v, db=db, session=self.dir)
+        self.info["actions"] = str(env["LIVING_GAME_ACTIONS"])   # empty: turned off with --client-env
         if self.capture:
             # The client records its own frames (the session's video), state and presses.
             env["LIVING_GAME_RECORD"] = self.capture / "client"

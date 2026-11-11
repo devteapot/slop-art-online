@@ -2,6 +2,6 @@
  "schema": 1,
  "family": "place:cullet-crown-and-views",
  "kind": "place",
- "title": "Cullet: the Crown, the upper terrace and the overviews",
- "description": "Cullet walked from fixed viewpoints (plan frame points in .local/layout1/tools/views.txt): the game camera (default: 22 m, 28 degrees down, looking north), a walking camera (close, or YAW_PITCH_DISTANCE_FOV low shots) and looks along the street, at 13:00 (day-) and 18:30 (dusk-)."
+ "title": "Cullet: the Crown, the quarry and the overviews",
+ "description": "Cullet walked from fixed viewpoints (plan frame points in .local/layout2/tools/views.txt, layout-1's twenty and layout-2's thirteen): the game camera (default: 22 m, 28 degrees down, looking north), the walking camera (close: 9 m, 24 degrees) and YAW_PITCH_DISTANCE_FOV looks, at 13:00 (day-) and 18:30 (dusk-)."
 }

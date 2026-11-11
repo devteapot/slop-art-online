@@ -18,6 +18,10 @@ Who and why:
 - Anselm Faro, lamp keeper: rises 13:00, works 19:30-06:00.
 - Tobiah Dunmore (16, stoker) and Col Roon (15): adults under Cullet's life law (a child until 15).
 - Halvard Dunmore (70): an elder, alive (old age from 75).
+- Since layout-2, five whose trade spends named hours at one of the plan's open lots (a named
+  place of `town_life.places`, reached through a gate in a wall that blocks): Otto Brandt at the
+  clay pit, Benedikt Orme and Edda Hollin (12) in the Readers' yard, Greta Dunmore on the Bleach,
+  Bram Calloway in the boatyard.
 
 The driver places a furnace beside Fenn at the Cone once he is there (the plan places none yet)
 and watches, at the world's own hours: rows (`rhythm`, `routine`, `place`), what each does and
@@ -40,7 +44,21 @@ T = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(T)
 V = T.V
 
-PEOPLE = ["Thessaly Marl", "Fenn Brandt", "Corvin Hollin", "Pieter Achterberg", "Anselm Faro", "Tobiah Dunmore", "Col Roon", "Halvard Dunmore"]
+PEOPLE = ["Thessaly Marl", "Fenn Brandt", "Corvin Hollin", "Pieter Achterberg", "Anselm Faro", "Tobiah Dunmore", "Col Roon", "Halvard Dunmore",
+          "Otto Brandt", "Benedikt Orme", "Edda Hollin", "Greta Dunmore", "Bram Calloway"]
+# A trade's hours at a named place (ways.json, layout-2): who, the place, the part of those hours
+# in which they must be there on this 12-minute day (a game hour is 30 s, so the walk takes one
+# or two of them), and within how many metres.
+HABITS = {
+    "Otto Brandt": ("the clay pit", 9.2, 9.95, 8.0),
+    "Benedikt Orme": ("the Readers' yard", 9.4, 11.9, 7.0),
+    # Edda follows her father down to the Cone before 09:00 and sets out from there: 230 m of
+    # wynds, about three of this day's 30 s hours. So she is checked on the way and at the end
+    # (`child_at_lessons`), not by a share of the lesson hours.
+    "Edda Hollin": ("the Readers' yard", 9.2, 12.75, 7.0),
+    "Greta Dunmore": ("the Bleach", 12.4, 12.95, 9.0),
+    "Bram Calloway": ("the boatyard", 15.1, 15.9, 9.0),
+}
 # The scene's own goods (Cullet's seed has no stores yet, and the cast's packs no food): a watch's
 # peat for each stoker (a furnace burns 3 units a game hour), melt for the blower, and food for
 # everyone so that hunger does not send them foraging (a person carries at most 40 things).
@@ -68,9 +86,13 @@ def make_seed(run):
     t = seed["towns"][0]
     t["residents"] = residents
     t["homes"] = {k: v for k, v in town["homes"].items() if k in houses}
+    # The plan's household stores belong to households (`owner: "household:<key>"`); a seed that
+    # names a household with nobody in it is refused, so keep only the eight's.
+    for p in seed["map"]["params"]["plans"]:
+        p["structures"] = [st for st in p.get("structures", []) if not st.get("owner") or st["owner"].removeprefix("household:") in houses]
     seed["run"] = "cullet-rhythm"
     seed["day_minutes"] = 12
-    seed["setting"] = "A scene world: Cullet's plan, laws and ways with eight of its cast on a 12-minute day (verify-core rhythm.py)."
+    seed["setting"] = "A scene world: Cullet's plan, laws and ways with thirteen of its cast on a 12-minute day (verify-core rhythm.py)."
     out = V.run_dir(run) / "cullet-rhythm.json"
     out.write_text(json.dumps(seed, indent=1, ensure_ascii=False) + "\n")
     print(out)
@@ -88,7 +110,8 @@ class Scene(T.Town):
         row = {"ms": self.now_ms(), "hour": round(self.hour(), 2), "furnace": f[0] if f else None,
                "people": {n: {"at": [round(p["at"][0], 1), round(p["at"][1], 1)], "skill": p["skill"], "stage": p["stage"],
                               "home_m": round(dist(p["at"], p["home"]), 1),
-                              "work_m": round(dist(p["at"], p["places"]["work"]), 1) if "work" in p["places"] else None} for n, p in by.items()}}
+                              "work_m": round(dist(p["at"], p["places"]["work"]), 1) if "work" in p["places"] else None,
+                              "habit_m": round(dist(p["at"], p["places"][HABITS[n][0]]), 1) if n in HABITS and HABITS[n][0] in p["places"] else None} for n, p in by.items()}}
         log.write(json.dumps(row) + "\n")
         log.flush()
         return row
@@ -104,6 +127,18 @@ def window(s, log, lo, hi, every=4.0):
             return rows
         rows.append(s.sample(log))
         time.sleep(every)
+
+
+def child_at_lessons(rows, name):
+    """A child's morning on this short day: by the end of the lesson hours she has come most of
+    the way to the place (within 25 m, having started more than 100 m off), and she stands in
+    the yard (within its habit distance) by 12:45."""
+    place, _, by, within = HABITS[name]
+    xs = [(r["hour"], r["people"][name]["habit_m"]) for r in rows if name in r["people"] and r["people"][name]["habit_m"] is not None]
+    lessons = [d for h, d in xs if 9.0 <= h < 12.0]
+    after = [d for h, d in xs if 12.0 <= h <= by]
+    ok = bool(lessons) and max(lessons) > 100.0 and lessons[-1] < 25.0 and any(d < within for d in lessons[-2:] + after)
+    return ok, {"place": place, "farthest_m": max(lessons) if lessons else None, "at_noon_m": lessons[-1] if lessons else None, "nearest_by_12_45_m": min(lessons[-2:] + after) if lessons else None}
 
 
 def share(rows, name, pred):
@@ -134,6 +169,8 @@ def drive(run):
             {n: routines.get(ids.get(n)) for n in ("Fenn Brandt", "Thessaly Marl", "Corvin Hollin", "Pieter Achterberg")})
     places = {p["name"]: (p["x"], p["y"]) for p in s.sql(f"SELECT name, x, y FROM place WHERE actor = {ids['Fenn Brandt']}")}
     s.check("the stoker knows a workplace (his cast's lot:cone)", "work" in places, {"places": places})
+    named = ["the Bleach", "the Readers' yard", "the clay pit", "the ropewalk", "the wrack stance", "the boatyard"]
+    s.check("everyone knows the six places of the plan's open lots (town_life.places, layout-2)", all(n in places for n in named), sorted(places))
 
     # Morning: the day watch works at the Cone; the night stoker sleeps at home.
     window(s, log, 8.0, 9.0)
@@ -152,8 +189,24 @@ def drive(run):
     asleep, n = share(morning, "Thessaly Marl", lambda p: p["skill"] in ("sleep", "rest", "") and p["home_m"] < 4)
     s.check("the night stoker is in bed at home in the morning (asleep or resting)", asleep >= 0.6, {"share": round(asleep, 2), "samples": n})
 
+    # The trades' hours at a place of the plan's open lots (layout-2), each reached on foot
+    # through the gate of a wall that blocks.
+    def at_habit(rows, name):
+        place, lo, hi, within = HABITS[name]
+        xs = [r["people"][name]["habit_m"] for r in rows if name in r["people"] and lo <= r["hour"] <= hi and r["people"][name]["habit_m"] is not None]
+        there = sum(1 for d in xs if d < within)
+        return there >= 0.5 * max(1, len(xs)) and len(xs) >= 3, {"place": place, "hours": [lo, hi], "there": there, "samples": len(xs), "nearest_m": min(xs) if xs else None}
+    for name, words in (("Otto Brandt", "the pot-maker is at the clay pit in the morning"), ("Benedikt Orme", "the reader teaches in the Readers' yard"),
+                        ("Greta Dunmore", "the washer is on the Bleach before 13:00")):
+        ok, detail = at_habit(morning, name)
+        s.check(words, ok, detail)
+    ok, detail = child_at_lessons(morning, "Edda Hollin")
+    s.check("a child walks up to lessons in the Readers' yard", ok, detail)
+
     # Afternoon: the night stoker is up (not at work, not asleep); the baker sleeps again.
     noon = window(s, log, 15.0, 18.5)
+    ok, detail = at_habit(noon, "Bram Calloway")
+    s.check("the boatwright is in the boatyard in the afternoon", ok, detail)
     up, n = share(noon, "Thessaly Marl", lambda p: p["skill"] != "sleep")
     s.check("the night stoker rises in the afternoon (15:00-18:30 awake)", up >= 0.8, {"share": round(up, 2), "samples": n})
     off, _ = share(noon, "Thessaly Marl", lambda p: p["skill"] not in ("feed", "keep"))

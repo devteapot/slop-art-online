@@ -324,7 +324,12 @@ impl Island {
             let env = pr.model_file.as_deref().and_then(|f| f.split('/').next()).filter(|e| !e.is_empty()).unwrap_or(living_rules::settle::env_of(&land.settlements[pr.settlement as usize].style));
             let files = crate::envs::assets_for(env, pr.kind.id());
             let exact = pr.model_file.as_ref().map(|f| format!("envs/{f}")).filter(|f| files.contains(f));
-            let Some(file) = exact.or_else(|| (!files.is_empty()).then(|| pick(&files, pi, 17))) else {
+            // A planned settlement's kit that lists fixtures of this kind brings its own (a flight
+            // per stair, a wall per drop, each where the plan has it): a prop without a model of
+            // its own is not given one of them at random (a Store Wynd flight stood at the Ladder
+            // Wynd's foot, on top of the Ladder Wynd's own).
+            let kit_brings = land.settlements[pr.settlement as usize].planned && crate::envs::fixtures(env).iter().any(|fx| fx.kind == pr.kind.id());
+            let Some(file) = prop_file(&files, exact, kit_brings, pi) else {
                 // A planned settlement's stairs and retaining walls without models: grey
                 // treads and walls, so the grey city can be walked and read.
                 // A kit that lists its fixtures (below) brings its own flights and walls.
@@ -524,6 +529,13 @@ impl Island {
         }
         out
     }
+}
+
+/// A street prop's model (`Island::build`): the file its plan names when the kit has it, else one
+/// of its kind's files picked by its index, unless the kit brings that kind as fixtures (then
+/// none: the fixture stands where the plan has it).
+fn prop_file(files: &[String], exact: Option<String>, kit_brings: bool, index: usize) -> Option<String> {
+    exact.or_else(|| (!kit_brings && !files.is_empty()).then(|| files[(hash(index as u32, 17) * files.len() as f32) as usize % files.len()].clone()))
 }
 
 /// A look-dev land from its worker thread ([`Island::generate`]): the land, its seconds, the
@@ -991,7 +1003,8 @@ fn ready(assets: &AssetServer, scene: &Handle<WorldAsset>) -> bool {
 /// - its model file (`model`, under `envs/`) when it is on disk;
 /// - in a **planned** settlement (an authored plan, docs/AUTHORED_PLANS.md), otherwise a grey box
 ///   of its footprint and height, or for an open lot of no height a footprint marker
-///   ([`MARKER_H`]). A planned lot is never given another lot's model: its plan sized it for its
+///   ([`MARKER_H`]), unless a fixture of its kit stands on it (since layout-2: a court or a plot
+///   is an open lot, and its enclosure draws it). A planned lot is never given another lot's model: its plan sized it for its
 ///   own, and a terrace of borrowed houses would overlap. Its environment's folder may be empty
 ///   or missing (Cullet's before its kit is generated);
 /// - elsewhere, a model of its kind from its environment (a generated town's buildings are
@@ -1014,6 +1027,11 @@ fn lot_item(envs: &HashMap<String, EnvDef>, land: &Land, lot: &LotRow) -> Option
         let (w, d) = (lot.width_m.max(0.1), lot.depth_m.max(0.1));
         if lot.height_m > 0.0 {
             return Some(Item { size: Some(Vec3::new(w, lot.height_m, d)), ..base });
+        }
+        // An open lot a fixture of the kit stands on (a court's walls, a plot's beds, a
+        // graveyard's rows) is drawn by that fixture: no slab under it.
+        if crate::envs::fixtures(lot.env).iter().any(|f| f.covers(lot.at)) {
+            return None;
         }
         return planned.then(|| Item { size: Some(Vec3::new(w, MARKER_H, d)), height: MARKER_H, marker: true, solid: false, ..base });
     }
@@ -1401,6 +1419,38 @@ mod tests {
         let gen = living_rules::land::generate(7, 512, &LandParams::default());
         for s in &gen.settlements {
             assert_eq!(structure_model(&gen, "sign", Vec2::new(s.centre.0, s.centre.1)), None);
+        }
+    }
+
+    /// A plan's stairs and retaining walls without a model of their own take none of the kit's
+    /// files at random when the kit brings that kind as fixtures (stairs-place: a Store Wynd
+    /// flight was drawn at the Ladder Wynd's foot); a named model, and a kit without such
+    /// fixtures, are as before.
+    #[test]
+    fn a_kit_that_brings_a_kind_as_fixtures_is_not_sampled_for_plan_props() {
+        let files: Vec<String> = ["envs/k/stairs/a.glb", "envs/k/stairs/b.glb"].iter().map(|s| s.to_string()).collect();
+        for i in 0..40 {
+            assert_eq!(prop_file(&files, None, true, i), None, "prop {i}");
+            assert!(prop_file(&files, None, false, i).is_some_and(|f| files.contains(&f)));
+            assert_eq!(prop_file(&files, Some(files[1].clone()), true, i).as_deref(), Some("envs/k/stairs/b.glb"));
+        }
+        assert_eq!(prop_file(&[], None, false, 3), None);
+        // Cullet's kit, when it is on disk: it lists stairs and retaining walls as fixtures, so
+        // none of the plan's props of those kinds is given a kit file at random.
+        let fx = crate::envs::fixtures("cullet");
+        if !fx.is_empty() {
+            let (land, _) = cullet();
+            let kinds: std::collections::HashSet<&str> = fx.iter().map(|f| f.kind.as_str()).collect();
+            let mut covered = 0;
+            for (pi, pr) in land.props.iter().enumerate() {
+                let env = living_rules::settle::env_of(&land.settlements[pr.settlement as usize].style);
+                if env != "cullet" || pr.model_file.is_some() || !kinds.contains(pr.kind.id()) {
+                    continue;
+                }
+                covered += 1;
+                assert_eq!(prop_file(&crate::envs::assets_for(env, pr.kind.id()), None, true, pi), None);
+            }
+            assert!(covered > 0, "Cullet's plan has stairs and walls its kit brings");
         }
     }
 

@@ -126,7 +126,7 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     // The world's own law values (`world_law`: a seed's `rules`, `set_world_law`) are written
     // at the end of the installed source, so every client that compiles the `script` row reads
     // the laws in force (`living_rules::script::with_world_laws`).
-    let source = living_rules::script::with_world_laws(living_rules::script::without_world_laws(&source), &world_law_values(ctx));
+    let source = installed_source(&source, &world_law_values(ctx));
     let mut sc = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
         living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
@@ -154,6 +154,13 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
     Ok(())
+}
+
+/// The text a script is kept as in the `script` row: `source` with the world's own law values
+/// written at its end, replacing any it carried. `install_source` and a seed's `rules`
+/// (`floor::world_laws`) write the row through it.
+pub(crate) fn installed_source(source: &str, values: &[(String, serde_json::Value)]) -> String {
+    living_rules::script::with_world_laws(living_rules::script::without_world_laws(source), values)
 }
 
 /// The world's own law values (`world_law` rows), by name.
@@ -407,23 +414,43 @@ pub fn set_behavior(ctx: &ReducerContext, id: u32, graph: String) -> Result<(), 
     mind::set_graph(ctx, id, &graph, "test", "test", common::now_ms(ctx)).map(|_| ())
 }
 
-/// Test support: move a character next to another.
+/// How far (tiles) `place_near` and `place_at` look for a free walkable tile.
+const PLACE_RADIUS: f32 = 6.0;
+
+/// The nearest walkable tile within [`PLACE_RADIUS`] of `want` that no other body stands on
+/// (bodies of the chunks around it, through the `body.chunk` index), or a refusal.
+fn free_spot(ctx: &ReducerContext, id: u32, want: (f32, f32), exact: bool, from: Option<(f32, f32)>, now: u64) -> Result<(f32, f32), String> {
+    let taken: std::collections::HashSet<(i32, i32)> = common::creatures_near(ctx, want, PLACE_RADIUS + 1.5, now)
+        .into_iter()
+        .filter(|c| c.id != id)
+        .map(|c| (c.pos.0.floor() as i32, c.pos.1.floor() as i32))
+        .collect();
+    common::map(ctx)
+        .nearest_free(want.0, want.1, PLACE_RADIUS, exact, from, |x, y| taken.contains(&(x, y)))
+        .ok_or_else(|| format!("no free walkable tile within {PLACE_RADIUS} m of ({:.1}, {:.1})", want.0, want.1))
+}
+
+/// Test support: move a character next to another: 1 tile east of it when that tile is
+/// walkable and no one stands there, else the nearest free tile of the ground walkable from
+/// the target within [`PLACE_RADIUS`].
 #[spacetimedb::reducer]
 pub fn place_near(ctx: &ReducerContext, id: u32, near: u32) -> Result<(), String> {
     require_admin(ctx)?;
     let now = common::now_ms(ctx);
     let t = ctx.db.body().id().find(near).ok_or("no such body")?;
     let p = common::pos(&t, now);
-    motion::place(ctx, id, (p.0 + 1.0, p.1), now)
+    let at = free_spot(ctx, id, (p.0 + 1.0, p.1), true, Some(p), now)?;
+    motion::place(ctx, id, at, now)
 }
 
-/// Test support: put a character at rest at a point (tiles).
+/// Test support: put a character at rest on the centre of the nearest walkable tile to a
+/// point (tiles) that no other body stands on, within [`PLACE_RADIUS`].
 #[spacetimedb::reducer]
 pub fn place_at(ctx: &ReducerContext, id: u32, x: f32, y: f32) -> Result<(), String> {
     require_admin(ctx)?;
-    let map = common::map(ctx);
-    let at = map.nearest_walkable(x, y).ok_or("no room there")?;
-    motion::place(ctx, id, at, common::now_ms(ctx))
+    let now = common::now_ms(ctx);
+    let at = free_spot(ctx, id, (x, y), false, None, now)?;
+    motion::place(ctx, id, at, now)
 }
 
 /// Create the seed's communities (if missing) and their members, on a running world.

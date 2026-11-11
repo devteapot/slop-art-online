@@ -76,6 +76,56 @@ pub struct PlanSpec {
     /// the fuel a fire starts burning and the items it holds ([`StructureSpec`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub structures: Vec<StructureSpec>,
+    /// What stands in the settlement and is not a lot: walls, fences, a stack, a shed
+    /// ([`FixtureSpec`]). The rules read those that block walking: their tiles block when the
+    /// land is hosted (`host::hosted_map`), and the land's eye-height rule decides whether they
+    /// also block sight. The others are for clients and are ignored here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixtures: Vec<FixtureSpec>,
+}
+
+/// A fixture of a plan ([`PlanSpec::fixtures`]): a line (`points`: a wall, a fence, a hedge, its
+/// middle from point to point, with `gaps` for its gates) or a rectangle (`at`, `size`, `facing`,
+/// as a lot's: a shed, a stack, a boat on trestles), `height_m` high. One that `blocks` becomes
+/// blocking tiles on the hosted land: every tile a line's middle crosses, save where a gap
+/// opens it, or every tile whose centre lies in the rectangle. Those tiles are `Wall` (no
+/// walking, no sight) where the fixture hides what is behind it, else `Low` (no walking; seen
+/// and shot over), by the land's `sight` parameters as for lots and props: its kind's
+/// `hides_m` when the seed names it, else its height against the eye's, and, above the eye,
+/// its `eye_solid` against `sight.solid` when it is not solid (a paling fence, a net rack).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct FixtureSpec {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    /// What it is (`yard_wall`, `fence`): `sight.hides_m` may name it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    /// A line's middle, point to point (at least two), in the plan's frame.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<[f32; 2]>,
+    /// Openings in a line (gates, a road through): each from and to, in metres along the line
+    /// from its first point. Every gap opens at least the tile its middle lies in.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gaps: Vec<[f32; 2]>,
+    /// A rectangle instead of a line: its centre, its size (along its front, then deep) and
+    /// where its front faces, as a lot's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facing: Option<Facing>,
+    /// How high it stands above its ground.
+    #[serde(default)]
+    pub height_m: f32,
+    /// Whether it blocks walking. The rules ignore a fixture that does not.
+    #[serde(default)]
+    pub blocks: bool,
+    /// The share of the view through it that is blocked at eye height (0 to 1; the measure of a
+    /// model's `eye_cells`, docs/ISLAND_AUTHORITY.md), for a thing that rises above the eye and
+    /// is not solid. None: solid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eye_solid: Option<f32>,
 }
 
 /// A resource at a point ([`PlanSpec::resources`]), with what it holds and regrows when the
@@ -113,6 +163,10 @@ pub struct StructureSpec {
     /// Items it holds at the start.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub contents: std::collections::BTreeMap<String, u32>,
+    /// Whose it is: `household:<key>`, a household of the seed's residents, resolved when the
+    /// world is created to the owner of that household's house (none: nobody's, as before).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
 }
 
 /// A ground level: a polygon at an exact height.
@@ -204,6 +258,10 @@ pub struct LotSpec {
     /// with no structure has nowhere to keep them, and they are left out and logged.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub contents: std::collections::BTreeMap<String, u32>,
+    /// The kind of structure at its door, when not its lot kind's (a barn's is a `storage`; a
+    /// world's own kind of store, `store`, here).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -306,6 +364,7 @@ pub(crate) struct PlanLot {
     pub(crate) height: f32,
     pub(crate) landmark: bool,
     pub(crate) spots: Vec<(String, V2)>,
+    pub(crate) structure: Option<String>,
 }
 
 /// A plan converted to the land's axes, its names resolved to indices.
@@ -325,6 +384,7 @@ pub(crate) struct Resolved {
     pub(crate) lots: Vec<PlanLot>,
     pub(crate) resources: Vec<LaidResource>,
     pub(crate) structures: Vec<LaidStructure>,
+    pub(crate) fixtures: Vec<LaidFixture>,
     pub(crate) drop: f32,
     pub(crate) skirt: f32,
     pub(crate) blend: f32,
@@ -515,7 +575,7 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
             }
             spots.push((sp.name.clone(), add(rect.c, add(mul(right, sp.at[0]), mul(front, sp.at[1])))));
         }
-        lots.push(PlanLot { id: l.id.clone(), kind: l.kind, name: l.name.clone(), rect, level: li, model: l.model.clone().filter(|m| !m.is_empty()), height, landmark: l.landmark, spots });
+        lots.push(PlanLot { id: l.id.clone(), kind: l.kind, name: l.name.clone(), rect, level: li, model: l.model.clone().filter(|m| !m.is_empty()), height, landmark: l.landmark, spots, structure: l.structure.clone().filter(|k| !k.is_empty()) });
     }
     let mut resources = Vec::new();
     for (i, rs) in s.resources.iter().enumerate() {
@@ -547,11 +607,63 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
             }
             _ => return Err(format!("plan {id}: {name} needs either `at` or a `lot` (with an optional `spot`)")),
         };
-        structures.push(LaidStructure { kind: st.kind.clone(), lot: String::new(), at, fuel: st.fuel, contents: st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect() });
+        let owner = match &st.owner {
+            None => String::new(),
+            Some(o) => match o.strip_prefix("household:") {
+                Some(k) if !k.is_empty() => k.to_string(),
+                _ => return Err(format!("plan {id}: {name} has owner {o:?}; an owner is \"household:<key>\", a household of the seed's residents")),
+            },
+        };
+        structures.push(LaidStructure { kind: st.kind.clone(), lot: String::new(), at, fuel: st.fuel, contents: st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect(), household: owner });
     }
     for (l, spec) in lots.iter().zip(&s.lots) {
         if !spec.contents.is_empty() {
-            structures.push(LaidStructure { kind: String::new(), lot: l.id.clone(), at: door(l), fuel: 0.0, contents: spec.contents.iter().map(|(k, v)| (k.clone(), *v)).collect() });
+            structures.push(LaidStructure { kind: String::new(), lot: l.id.clone(), at: door(l), fuel: 0.0, contents: spec.contents.iter().map(|(k, v)| (k.clone(), *v)).collect(), household: String::new() });
+        }
+    }
+    // Fixtures that block: their tiles on the land. The others are not the rules' business.
+    let mut fixtures = Vec::new();
+    for (i, fx) in s.fixtures.iter().enumerate() {
+        let name = if fx.id.is_empty() { format!("fixtures[{i}]") } else { format!("fixture {}", fx.id) };
+        if !(fx.height_m.is_finite() && fx.height_m >= 0.0) {
+            return Err(format!("plan {id}: {name} needs a height of at least 0"));
+        }
+        if fx.eye_solid.is_some_and(|v| !(v.is_finite() && (0.0..=1.0).contains(&v))) {
+            return Err(format!("plan {id}: {name} has an eye_solid outside 0 to 1"));
+        }
+        let rect = fx.at.is_some() || fx.size.is_some() || fx.facing.is_some();
+        let tiles = match (fx.points.is_empty(), rect) {
+            (false, false) => {
+                if fx.points.len() < 2 || !finite(&fx.points) {
+                    return Err(format!("plan {id}: {name} needs at least 2 points"));
+                }
+                if !finite(&fx.gaps) || fx.gaps.iter().any(|g| g[0] < 0.0 || g[1] <= g[0]) {
+                    return Err(format!("plan {id}: {name} has a gap that does not run from a distance along it to a greater one"));
+                }
+                let pts = dedup(fx.points.iter().map(|q| f.pt(*q)).collect());
+                if pts.len() < 2 {
+                    return Err(format!("plan {id}: {name} has no length"));
+                }
+                line_tiles(&pts, &fx.gaps)
+            }
+            (true, true) => {
+                let (Some(at), Some(size), Some(facing)) = (fx.at, fx.size, &fx.facing) else {
+                    return Err(format!("plan {id}: {name} needs `at`, `size` and `facing` (a rectangle), or `points` (a line)"));
+                };
+                if !fx.gaps.is_empty() {
+                    return Err(format!("plan {id}: {name} is a rectangle; only a line has gaps"));
+                }
+                if !finite(&[at, size]) || size[0] <= 0.0 || size[1] <= 0.0 {
+                    return Err(format!("plan {id}: {name} needs a position and a size"));
+                }
+                let front = f.dir(facing.bearing().map_err(|e| format!("plan {id}: {name}: {e}"))?);
+                crate::host::rect_tiles(f.pt(at), front, (size[0] * 0.5).max(0.25), (size[1] * 0.5).max(0.25))
+            }
+            (false, true) => return Err(format!("plan {id}: {name} is either a line (`points`) or a rectangle (`at`, `size`, `facing`), not both")),
+            (true, false) => return Err(format!("plan {id}: {name} needs `points` (a line) or `at`, `size` and `facing` (a rectangle)")),
+        };
+        if fx.blocks {
+            fixtures.push(LaidFixture { id: fx.id.clone(), kind: fx.kind.clone(), height_m: fx.height_m, eye_solid: fx.eye_solid, tiles });
         }
     }
     let n = square.len() as f32;
@@ -578,6 +690,7 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         lots,
         resources,
         structures,
+        fixtures,
         drop: s.drop_m,
         skirt: s.skirt_m,
         blend: s.blend_m,
@@ -587,6 +700,63 @@ pub(crate) fn resolve(s: &PlanSpec) -> Result<Resolved, String> {
         lo,
         hi,
     })
+}
+
+/// The tiles a line's middle crosses, point to point (every tile the segments pass through, so
+/// no one slips between two of them), without those a gap opens: a tile whose centre, set
+/// against the line, lies within a gap, and the tile a gap's middle lies in (so a gate narrower
+/// than a tile still opens one). `gaps` are distances along the line from its first point.
+pub(crate) fn line_tiles(pts: &[V2], gaps: &[[f32; 2]]) -> Vec<(i32, i32)> {
+    let cum = cumlen(pts);
+    // Where along the line a point lies: the nearest point of the nearest segment.
+    let along = |p: V2| {
+        let mut best = (f32::MAX, 0.0);
+        for i in 0..pts.len() - 1 {
+            let (d, t, _) = seg_near(p, pts[i], pts[i + 1]);
+            if d < best.0 {
+                best = (d, cum[i] + t * (cum[i + 1] - cum[i]));
+            }
+        }
+        best.1
+    };
+    let at = |s: f32| {
+        let i = (0..pts.len() - 1).find(|&i| s <= cum[i + 1]).unwrap_or(pts.len() - 2);
+        let l = (cum[i + 1] - cum[i]).max(1e-6);
+        add(pts[i], mul(sub(pts[i + 1], pts[i]), ((s - cum[i]) / l).clamp(0.0, 1.0)))
+    };
+    let open: Vec<(i32, i32)> = gaps.iter().map(|g| at((g[0] + g[1]) * 0.5)).map(|q| (q.0.floor() as i32, q.1.floor() as i32)).collect();
+    let mut out: Vec<(i32, i32)> = Vec::new();
+    let mut push = |t: (i32, i32)| {
+        let s = along((t.0 as f32 + 0.5, t.1 as f32 + 0.5));
+        if !open.contains(&t) && !gaps.iter().any(|g| s >= g[0] && s <= g[1]) && !out.contains(&t) {
+            out.push(t);
+        }
+    };
+    for w in pts.windows(2) {
+        // The tiles a segment crosses, edge by edge (as `Map::sight_clear` walks them).
+        let (a, b) = (w[0], w[1]);
+        let (mut tx, mut ty) = (a.0.floor() as i32, a.1.floor() as i32);
+        let end = (b.0.floor() as i32, b.1.floor() as i32);
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let (sx, sy) = (dx.signum() as i32, dy.signum() as i32);
+        let next = |p: f32, d: f32, t: i32| if d > 0.0 { (t as f32 + 1.0 - p) / d } else if d < 0.0 { (t as f32 - p) / d } else { f32::INFINITY };
+        let (mut tmx, mut tmy) = (next(a.0, dx, tx), next(a.1, dy, ty));
+        let (tdx, tdy) = (if dx != 0.0 { 1.0 / dx.abs() } else { f32::INFINITY }, if dy != 0.0 { 1.0 / dy.abs() } else { f32::INFINITY });
+        let mut guard = (end.0 - tx).abs() + (end.1 - ty).abs() + 2;
+        push((tx, ty));
+        while (tx, ty) != end && guard > 0 {
+            guard -= 1;
+            if tmx < tmy {
+                tx += sx;
+                tmx += tdx;
+            } else {
+                ty += sy;
+                tmy += tdy;
+            }
+            push((tx, ty));
+        }
+    }
+    out
 }
 
 /// Whether two polygons share area (more than touching along an edge or at a corner).
@@ -670,6 +840,11 @@ pub fn validate(s: &PlanSpec, size: u32) -> Result<(), String> {
         off(format!("structures[{i}] ({})", if q.kind.is_empty() { &q.lot } else { &q.kind }), &[q.at])?;
     }
     off("the sea".into(), &r.sea)?;
+    for fx in &r.fixtures {
+        if let Some(t) = fx.tiles.iter().find(|t| t.0 < 1 || t.1 < 1 || t.0 >= size as i32 - 1 || t.1 >= size as i32 - 1) {
+            return Err(format!("plan {id}: fixture {} at ({}, {}) is outside the {size} m land", fx.id, t.0, t.1));
+        }
+    }
     for l in &r.lots {
         off(format!("lot {}", l.id), &l.rect.corners())?;
     }
@@ -868,6 +1043,20 @@ pub struct Laid {
     /// Its authored structures and its lots' stores, on the land ([`PlanSpec::structures`],
     /// [`LotSpec::contents`]).
     pub structures: Vec<LaidStructure>,
+    /// Its fixtures that block walking, as tiles of the land ([`PlanSpec::fixtures`]):
+    /// `host::hosted_map` blocks them. Not digested themselves; the hosted tiles are.
+    pub fixtures: Vec<LaidFixture>,
+}
+
+/// A blocking fixture on the land: the tiles it stands on, how high it stands, and how much of
+/// the view it blocks at eye height when it is not solid.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct LaidFixture {
+    pub id: String,
+    pub kind: String,
+    pub height_m: f32,
+    pub eye_solid: Option<f32>,
+    pub tiles: Vec<(i32, i32)>,
 }
 
 /// An authored resource on the land.
@@ -889,6 +1078,9 @@ pub struct LaidStructure {
     pub at: V2,
     pub fuel: f32,
     pub contents: Vec<(String, u32)>,
+    /// The household whose it is ([`StructureSpec::owner`] without `household:`); empty:
+    /// nobody's.
+    pub household: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -898,6 +1090,8 @@ pub struct LaidLot {
     pub key: String,
     pub name: Option<String>,
     pub spots: Vec<(String, V2)>,
+    /// The structure kind at its door, when not its lot kind's ([`LotSpec::structure`]).
+    pub structure: Option<String>,
 }
 
 /// A plan laid out by the planner's `Plan` step, handed through the later steps.
@@ -946,7 +1140,7 @@ pub(crate) fn build(land: &Land, r: Resolved, idx: u16, site: u16, first_road: u
     let sq = &r.square;
     let near_square = |q: V2| poly_outside(sq, q) < 1.0;
     let mut roads = Vec::new();
-    let mut laid = Laid { id: r.id.clone(), settlement: idx, resources: r.resources.clone(), structures: r.structures.clone(), ..Laid::default() };
+    let mut laid = Laid { id: r.id.clone(), settlement: idx, resources: r.resources.clone(), structures: r.structures.clone(), fixtures: r.fixtures.clone(), ..Laid::default() };
     for (i, st) in r.streets.iter().enumerate() {
         // Points at most 2 m apart, each at the ground's height: the street lies on the plan.
         let pts = dedup(resample(&st.points, 2.0));
@@ -982,7 +1176,7 @@ pub(crate) fn build(land: &Land, r: Resolved, idx: u16, site: u16, first_road: u
             model_file: l.model.clone(),
             height_m: l.height,
         });
-        laid.lots.push(LaidLot { lot: 0, key: l.id.clone(), name: l.name.clone(), spots: l.spots.clone() });
+        laid.lots.push(LaidLot { lot: 0, key: l.id.clone(), name: l.name.clone(), spots: l.spots.clone(), structure: l.structure.clone() });
     }
     let k = r.scale.max(0.3);
     let mut props = Vec::new();
@@ -1215,6 +1409,58 @@ mod tests {
         assert!(l.lakes.is_empty() && l.rivers.is_empty(), "no lake or river on a rock that drinks rain");
         let forest = m.tiles.iter().filter(|t| **t == Terrain::Forest as u8).count();
         assert!(forest > 500 && l.regions.len() > 0, "the Hanger: {forest} forest tiles");
+        // Since layout-2 its walls block (`fixtures`): every one stands on the hosted tiles as
+        // `Wall` (above the eye) or `Low`, or on a tile that already blocked (a drop's edge, a
+        // building); and every place a person is sent to can still be walked to: each lot's
+        // spots as written (`town::seat` stands people on them), and each authored resource.
+        assert!(laid.fixtures.len() > 200, "{} walls block", laid.fixtures.len());
+        let eye = p.sight.eye_m;
+        let (mut low, mut tall) = (0, 0);
+        for fx in &laid.fixtures {
+            assert!(fx.height_m > 0.0 && !fx.tiles.is_empty(), "wall {} has a height and tiles", fx.id);
+            for &(x, y) in &fx.tiles {
+                let t = m.get(x, y);
+                assert!(!t.walkable(), "a wall's tile ({x}, {y}) is walked on");
+                if t == Terrain::Low {
+                    low += 1;
+                    assert!(fx.height_m <= eye || laid.fixtures.iter().any(|o| o.height_m <= eye && o.tiles.contains(&(x, y))), "a {} m wall's tile ({x}, {y}) is seen over", fx.height_m);
+                } else if t == Terrain::Wall {
+                    tall += 1;
+                }
+            }
+        }
+        assert!(low > 1000 && tall > 300, "{low} low and {tall} hiding wall tiles");
+        let reachable = |q: V2| m.walkable(q.0 as i32, q.1 as i32) && h.reachable[(q.1 as u32 * m.w + q.0 as u32) as usize];
+        let mut spots = 0;
+        let mut cut: Vec<String> = Vec::new();
+        for lot in &laid.lots {
+            for (name, q) in &lot.spots {
+                spots += 1;
+                if !reachable(*q) {
+                    cut.push(format!("{}: {name}", lot.key));
+                }
+            }
+        }
+        for r in &laid.resources {
+            // Fishing spots and weirs stand at the water's edge: the nearest walkable tile.
+            let q = m.nearest_walkable(r.at.0, r.at.1).expect("ground near a resource");
+            if !reachable(q) {
+                cut.push(format!("{} at {:?}", r.kind, r.at));
+            }
+        }
+        assert!(spots > 300 && cut.is_empty(), "{spots} spots; cut off: {cut:?}");
+        // The courts and plots are open lots: a place by lot id with spots of its own.
+        for key in ["court_low_4", "plot_low_4", "court_mid_7", "the_bleach", "clay_pit", "boatyard", "readers_yard", "kelp_stance", "ropewalk"] {
+            let lot = laid.lots.iter().find(|q| q.key == key).unwrap_or_else(|| panic!("open lot {key}"));
+            assert!(!lot.spots.is_empty() && l.lots[lot.lot as usize].kind == LotKind::Lamp && l.lots[lot.lot as usize].height_m == 0.0, "{key} is an open lot with spots");
+        }
+        // A court's wall stands between its inside and the back lane: no straight step through,
+        // and the way round goes by its gate.
+        let (inside, lane) = (f.pt([61.0, 49.0]), f.pt([61.0, 52.2]));
+        assert!(reachable(inside) && reachable(lane) && !m.line_clear(inside, lane), "Low Row 1's court wall stands between the court and the back lane");
+        assert!(m.sight_clear(inside, lane), "a Strand court's 1.5 m wall is seen over");
+        let (garden, row) = (f.pt([26.4, 103.0]), f.pt([26.4, 95.6]));
+        assert!(reachable(garden) && reachable(row) && !m.sight_clear(garden, row), "a Kiln garden's 2 m wall hides the garden from the Row");
     }
 
     /// Authored resources are kept on the land at their points, for the authority to place; one
@@ -1246,17 +1492,18 @@ mod tests {
         let mut s = spec();
         let f = Frame::of(&s);
         let spot = |id: &str, n: usize| s.lots.iter().find(|l| l.id == id).unwrap().spots[n].name.clone();
-        let st = |kind: &str| StructureSpec { kind: kind.into(), at: None, lot: None, spot: None, fuel: 0.0, contents: Default::default() };
+        let st = |kind: &str| StructureSpec { kind: kind.into(), at: None, lot: None, spot: None, fuel: 0.0, contents: Default::default(), owner: None };
         let (inn_seat, hall_door) = (spot("inn", 0), "hall".to_string());
         s.structures = vec![
             StructureSpec { at: Some([1.0, 2.0]), fuel: 4.0, ..st("lamp") },
             StructureSpec { lot: Some(hall_door.clone()), fuel: 6.0, ..st("hearth") },
-            StructureSpec { lot: Some("inn".into()), spot: Some(inn_seat.clone()), contents: [("peat".to_string(), 9)].into(), ..st("storage") },
+            StructureSpec { lot: Some("inn".into()), spot: Some(inn_seat.clone()), contents: [("peat".to_string(), 9)].into(), owner: Some("household:hollis".into()), ..st("storage") },
         ];
         for l in &mut s.lots {
             l.contents.clear();
         }
         s.lots.iter_mut().find(|l| l.id == "store").unwrap().contents = [("fish".to_string(), 3)].into();
+        s.lots.iter_mut().find(|l| l.id == "store").unwrap().structure = Some("barn_store".into());
         let r = resolve(&s).unwrap();
         let lot = |id: &str| r.lots.iter().find(|l| l.id == id).unwrap().clone();
         let door = |l: &PlanLot| add(l.rect.c, mul(l.rect.f, l.rect.hd + 0.5));
@@ -1265,6 +1512,10 @@ mod tests {
         assert!(dist(r.structures[1].at, door(&lot("hall"))) < 1e-4 && r.structures[1].kind == "hearth");
         let seat = lot("inn").spots.iter().find(|(n, _)| *n == inn_seat).unwrap().1;
         assert!(dist(r.structures[2].at, seat) < 1e-4 && r.structures[2].contents == vec![("peat".to_string(), 9)]);
+        // Owned by a household (resolved when the world is created), and nobody's otherwise.
+        assert_eq!((r.structures[2].household.as_str(), r.structures[0].household.as_str(), r.structures[3].household.as_str()), ("hollis", "", ""));
+        // A lot may say what stands at its door.
+        assert_eq!((lot("store").structure.as_deref(), lot("hall").structure.as_deref()), (Some("barn_store"), None));
         assert!(r.structures[3].kind.is_empty() && r.structures[3].lot == "store" && dist(r.structures[3].at, door(&lot("store"))) < 1e-4);
         assert!(validate(&s, 1024).is_ok());
         let refused = |change: &dyn Fn(&mut PlanSpec), words: &str| {
@@ -1279,6 +1530,8 @@ mod tests {
         refused(&|b| b.structures[0].fuel = -1.0, "fuel of at least 0");
         refused(&|b| b.structures[0].at = Some([0.0, 5000.0]), "structures[0]");
         refused(&|b| b.resources[0].regrow_per_h = Some(f32::NAN), "regrow_per_h");
+        refused(&|b| b.structures[2].owner = Some("hollis".into()), "an owner is \"household:<key>\"");
+        refused(&|b| b.structures[2].owner = Some("household:".into()), "an owner is \"household:<key>\"");
     }
 
     /// The test plan stands as written: its site and id, lots on their levels at exact
@@ -1418,6 +1671,138 @@ mod tests {
             }
         }
         assert!(pairs >= 20, "{pairs} places where people stand either side of the drop");
+    }
+
+    /// A plan's blocking fixtures block walking on the hosted land, and the eye-height rule
+    /// decides sight (`seeds/plan-test.json`, turned 15 degrees, so its walls cross the tiles
+    /// askew): the garth's 2 m wall is `Wall` and hides; no one walks through it, but its gate
+    /// lets them in, and with the gate shut the garth is cut off (the wall has no leak); the
+    /// 1.1 m fence is `Low`, seen over and not walked through; the net rack, above the eye but
+    /// mostly air, is `Low`; the bench, which does not block, changes nothing; and the land's
+    /// `sight` decides a kind outright as it does for lots and props.
+    #[test]
+    fn a_blocking_fixture_blocks_walking_and_the_eye_rule_decides_sight() {
+        let (l, map, reach) = plan_land();
+        let s = spec();
+        let f = Frame::of(&s);
+        let laid = &l.plans[0];
+        let fx = |id: &str| laid.fixtures.iter().find(|x| x.id == id).unwrap_or_else(|| panic!("fixture {id}"));
+        assert_eq!(laid.fixtures.len(), 3, "the three that block are kept; the bench is not");
+        let class = |id: &str| -> Vec<Terrain> { fx(id).tiles.iter().map(|&(x, y)| map.get(x, y)).collect() };
+        assert!(class("garth_wall").len() >= 38 && class("garth_wall").iter().all(|t| *t == Terrain::Wall), "the garth's wall hides: {:?}", class("garth_wall"));
+        assert!(class("quay_fence").len() >= 15 && class("quay_fence").iter().all(|t| *t == Terrain::Low), "the fence is seen over: {:?}", class("quay_fence"));
+        assert!(!class("net_rack").is_empty() && class("net_rack").iter().all(|t| *t == Terrain::Low), "the rack is seen through: {:?}", class("net_rack"));
+        // The unhosted land has none of them: fixtures are hosting's, like building footprints.
+        assert!(laid.fixtures.iter().flat_map(|x| x.tiles.iter()).all(|&(x, y)| l.map.get(x, y).walkable()));
+        let reachable = |q: V2| map.walkable(q.0 as i32, q.1 as i32) && reach[(q.1 as u32 * map.w + q.0 as u32) as usize];
+        // The garth: its lot's spots are inside the wall, reached through the gate only.
+        let garth = laid.lots.iter().find(|x| x.key == "garth").expect("the garth lot");
+        assert_eq!(garth.spots.len(), 2);
+        let (inside, street) = (f.pt([19.0, 48.5]), f.pt([19.0, 40.0]));
+        for (name, q) in garth.spots.iter().map(|(n, q)| (n.as_str(), *q)).chain([("the garth's middle", inside), ("the row", street)]) {
+            assert!(reachable(q), "{name} at {q:?} is reachable");
+        }
+        assert!(!map.line_clear(inside, street) && !map.sight_clear(inside, street), "the wall stops the foot and the eye");
+        let gate = f.pt([18.0, 44.0]);
+        assert!(map.walkable(gate.0 as i32, gate.1 as i32), "the gate is open at {gate:?}");
+        let way = map.path(street, inside, 50_000).expect("a way into the garth");
+        let through: Vec<V2> = std::iter::once(street).chain(way.iter().copied()).collect();
+        assert!(through.windows(2).any(|w| seg_near(gate, w[0], w[1]).0 < 1.5), "the way in passes the gate: {through:?}");
+        for w in through.windows(2) {
+            let n = (dist(w[0], w[1]) / 0.1).ceil().max(1.0) as i32;
+            assert!((0..=n).all(|i| map.free(w[0].0 + (w[1].0 - w[0].0) * i as f32 / n as f32, w[0].1 + (w[1].1 - w[0].1) * i as f32 / n as f32)), "the way in crosses a wall between {:?} and {:?}", w[0], w[1]);
+        }
+        // With the gate shut the wall has no leak, askew as it lies: the garth is cut off.
+        let mut shut_spec = s.clone();
+        shut_spec.fixtures.iter_mut().find(|x| x.id == "garth_wall").unwrap().gaps.clear();
+        let mut shut = l.clone();
+        shut.plans[0].fixtures = resolve(&shut_spec).unwrap().fixtures;
+        let p = params();
+        let (ms, hs) = crate::host::hosted_map(&shut, &p);
+        assert!(ms.walkable(inside.0 as i32, inside.1 as i32) && !hs.reachable[(inside.1 as u32 * ms.w + inside.0 as u32) as usize], "a wall without a gate shuts the garth");
+        assert!(hs.cut_off_tiles > 60, "the garth's inside is cut off: {}", hs.cut_off_tiles);
+        // The fence: no step across, but each side sees the other.
+        let across = f.dir(0.0);
+        let mut pairs = 0;
+        for &(x, y) in &fx("quay_fence").tiles {
+            let c = (x as f32 + 0.5, y as f32 + 0.5);
+            let (north, south) = (add(c, mul(across, 1.6)), sub(c, mul(across, 1.6)));
+            if map.free(north.0, north.1) && map.free(south.0, south.1) {
+                pairs += 1;
+                assert!(!map.line_clear(north, south) && map.sight_clear(north, south) && map.sight_clear(south, north), "the fence at {c:?} is seen over and not walked through");
+            }
+        }
+        assert!(pairs >= 6, "{pairs} places either side of the fence");
+        // The seed's `sight` decides a kind outright; and with no fixtures the land is as it was.
+        let mut low = p.clone();
+        low.sight.hides_m.insert("yard_wall".into(), 1.2);
+        low.sight.hides_m.insert("fence".into(), 2.5);
+        let (ml, _) = crate::host::hosted_map(l, &low);
+        assert!(fx("garth_wall").tiles.iter().all(|&(x, y)| ml.get(x, y) == Terrain::Low) && fx("quay_fence").tiles.iter().all(|&(x, y)| ml.get(x, y) == Terrain::Wall));
+        let mut solid = p.clone();
+        solid.sight.solid = 0.25;
+        let (mr, _) = crate::host::hosted_map(l, &solid);
+        assert!(fx("net_rack").tiles.iter().all(|&(x, y)| mr.get(x, y) == Terrain::Wall), "at `solid` 0.25 a rack blocking 0.3 of the view hides");
+        let mut bare = l.clone();
+        bare.plans[0].fixtures.clear();
+        let (mb, _) = crate::host::hosted_map(&bare, &p);
+        let changed: Vec<usize> = (0..mb.tiles.len()).filter(|&k| mb.tiles[k] != map.tiles[k]).collect();
+        let own: std::collections::HashSet<usize> = laid.fixtures.iter().flat_map(|x| x.tiles.iter()).map(|&(x, y)| (y as u32 * map.w + x as u32) as usize).collect();
+        assert!(!changed.is_empty() && changed.iter().all(|k| own.contains(k)), "only the fixtures' own tiles differ");
+        assert_ne!(crate::host::digests(l, map).tiles, crate::host::digests(&bare, &mb).tiles, "the tiles digest covers the fixtures");
+        assert_eq!(crate::host::digests(l, map).layout, crate::host::digests(&bare, &mb).layout);
+        assert_eq!(crate::host::digests(l, map).heights, crate::host::digests(&bare, &mb).heights);
+    }
+
+    /// A line's tiles: every tile its middle crosses, so no one slips through a wall that lies
+    /// askew; a gap opens the tiles whose centres it covers, and always the tile at its middle.
+    #[test]
+    fn a_lines_tiles_leave_no_leak_and_a_gap_opens_at_least_one() {
+        // Along a row of tiles, 0.3 m from their edge: one tile each, the ends' tiles too.
+        assert_eq!(line_tiles(&[(2.7, 5.3), (7.2, 5.3)], &[]), vec![(2, 5), (3, 5), (4, 5), (5, 5), (6, 5), (7, 5)]);
+        // A gap covering one centre opens that tile; one covering none still opens its middle's.
+        assert_eq!(line_tiles(&[(2.7, 5.3), (7.2, 5.3)], &[[1.5, 2.5]]), vec![(2, 5), (3, 5), (5, 5), (6, 5), (7, 5)]);
+        assert_eq!(line_tiles(&[(2.7, 5.3), (7.2, 5.3)], &[[1.0, 1.5]]), vec![(2, 5), (4, 5), (5, 5), (6, 5), (7, 5)]);
+        // Askew: consecutive tiles share an edge (4-connected), so steps and diagonals cannot pass.
+        for (a, b) in [((1.2, 1.7), (14.6, 6.3)), ((9.5, 2.5), (2.5, 9.5)), ((3.0, 3.0), (3.0, 12.0)), ((10.9, 4.1), (4.2, 4.0))] {
+            let t = line_tiles(&[a, b], &[]);
+            assert!(t.windows(2).all(|w| (w[0].0 - w[1].0).abs() + (w[0].1 - w[1].1).abs() == 1), "{a:?} to {b:?}: {t:?}");
+            assert_eq!((t[0], *t.last().unwrap()), ((a.0.floor() as i32, a.1.floor() as i32), (b.0.floor() as i32, b.1.floor() as i32)));
+        }
+        // A corner: the second leg does not repeat the corner's tile.
+        let t = line_tiles(&[(1.5, 1.5), (4.5, 1.5), (4.5, 3.5)], &[]);
+        assert_eq!(t, vec![(1, 1), (2, 1), (3, 1), (4, 1), (4, 2), (4, 3)]);
+    }
+
+    /// A fixture the generator cannot place is refused; one that does not block is not kept.
+    #[test]
+    fn validation_refuses_a_fixture_that_is_neither_a_line_nor_a_rectangle() {
+        let cases: Vec<(&str, Box<dyn Fn(&mut FixtureSpec)>)> = vec![
+            ("needs at least 2 points", Box::new(|x| x.points.truncate(1))),
+            ("has no length", Box::new(|x| x.points = vec![[13.0, 44.0], [13.0, 44.0]])),
+            ("not both", Box::new(|x| x.at = Some([0.0, 0.0]))),
+            ("a gap that does not run", Box::new(|x| x.gaps = vec![[3.0, 2.0]])),
+            ("a height of at least 0", Box::new(|x| x.height_m = -1.0)),
+            ("eye_solid outside 0 to 1", Box::new(|x| x.eye_solid = Some(1.5))),
+            ("is outside the 1024 m land", Box::new(|x| x.points[1] = [13.0, 4000.0])),
+            ("needs `points` (a line) or", Box::new(|x| x.points.clear())),
+        ];
+        for (want, change) in cases {
+            let mut s = spec();
+            change(s.fixtures.iter_mut().find(|x| x.id == "garth_wall").unwrap());
+            let e = validate(&s, 1024).expect_err(want);
+            assert!(e.contains(want), "{want:?} not in {e:?}");
+        }
+        let mut s = spec();
+        let rack = s.fixtures.iter_mut().find(|x| x.id == "net_rack").unwrap();
+        rack.gaps = vec![[0.0, 1.0]];
+        assert!(validate(&s, 1024).unwrap_err().contains("only a line has gaps"));
+        s = spec();
+        s.fixtures.iter_mut().find(|x| x.id == "net_rack").unwrap().facing = None;
+        assert!(validate(&s, 1024).unwrap_err().contains("needs `at`, `size` and `facing`"));
+        s = spec();
+        s.fixtures.iter_mut().for_each(|x| x.blocks = false);
+        assert!(resolve(&s).unwrap().fixtures.is_empty());
     }
 
     #[test]

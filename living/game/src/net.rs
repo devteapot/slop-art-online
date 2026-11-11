@@ -188,6 +188,8 @@ pub struct Net {
     pub attempts: u32,
     pub ever_live: bool,
     join_sent: bool,
+    /// The call `on_reply` just logged, for `report` (`actions.rs`).
+    last_call: std::cell::Cell<Option<crate::actions::Sent>>,
     base: Option<SubscriptionHandle>,
     near: Window,
     far: Window,
@@ -217,6 +219,7 @@ impl Default for Net {
             attempts: 0,
             ever_live: false,
             join_sent: false,
+            last_call: Default::default(),
             base: None,
             near: Window::default(),
             far: Window::default(),
@@ -292,16 +295,41 @@ pub fn find_doing(conn: &DbConnection, id: u32) -> Option<Doing> {
 }
 
 impl Net {
+    /// After a reducer call: the SDK's own refusal to queue it (it was not sent), for the HUD
+    /// and the action log. Every call goes out as `on_reply` then the call then this.
     pub fn report(&self, what: &str, r: Result<(), spacetimedb_sdk::Error>) {
+        let sent = self.last_call.take();
         if let Err(e) = r {
+            if let Some(s) = sent {
+                crate::actions::not_sent(s, e.to_string());
+            }
             self.errors.lock().unwrap().push(format!("{what}: {e}"));
         }
     }
 
-    /// Record a reducer's refusal (the authority's error text) for the HUD.
-    pub fn on_reply(&self, what: &'static str) -> impl FnOnce(&ReducerEventContext, Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) + Send + 'static {
+    /// The callback for a reducer call about to go out: `reducer` by its name, `args` by the
+    /// bindings' argument names (built only while the action log is on, `actions.rs`), `what`
+    /// the feature sending it. It logs the call and its reply (`actions.rs`), records the reply
+    /// for the session report (`record.rs`) and a refusal (the authority's error text) for the
+    /// HUD. Every reducer call this client sends goes through here.
+    pub fn on_reply(
+        &self,
+        what: &'static str,
+        reducer: &'static str,
+        args: impl FnOnce() -> serde_json::Value,
+    ) -> impl FnOnce(&ReducerEventContext, Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) + Send + 'static {
         let errors = self.errors.clone();
+        let sent = crate::actions::sent(reducer, what, args);
+        self.last_call.set(sent);
         move |ctx, r| {
+            if let Some(s) = sent {
+                let reply = match &r {
+                    Ok(Ok(())) => crate::actions::Reply::Ok,
+                    Ok(Err(e)) => crate::actions::Reply::Refused(e.clone()),
+                    Err(e) => crate::actions::Reply::Failed(e.to_string()),
+                };
+                crate::actions::replied(s, reply, Some(ctx.event.timestamp.to_micros_since_unix_epoch()));
+            }
             if let Ok(o) = &r {
                 crate::record::reply(what, &ctx.event.reducer, o.clone(), ctx.event.timestamp.to_micros_since_unix_epoch());
             }
@@ -430,7 +458,8 @@ impl Net {
             self.join_sent = true;
             if let Some(conn) = &self.conn {
                 info!("joining as {}", self.name);
-                let r = conn.reducers.join_then(self.name.clone(), self.on_reply("join"));
+                let name = self.name.clone();
+                let r = conn.reducers.join_then(self.name.clone(), self.on_reply("join", "join", || serde_json::json!({ "name": name })));
                 self.report("join", r);
             }
         }
@@ -575,6 +604,8 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
             }
             Signal::Disconnected(e) => {
                 warn!("offline: {e}");
+                // Calls still waiting will not be answered (the SDK drops their callbacks).
+                crate::actions::lost();
                 if let Some(c) = net.conn.take() {
                     let _ = c.disconnect();
                 }
