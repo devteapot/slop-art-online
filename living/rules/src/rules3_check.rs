@@ -3,7 +3,7 @@
 //! works from must be what it was (docs/CULLET_RULES.md, "The labs are unchanged").
 //!
 //! ```text
-//! git show 93019a37:living/scripts/skills.rhai > /tmp/old-skills.rhai
+//! git show 93019a37:living/scripts/skills.rhai > /tmp/old-skills.rhai   # or the main merged in, before rules-3
 //! LIVING_OLD_SKILLS=/tmp/old-skills.rhai cargo test -p living-rules rules3_is_bit_identical -- --ignored --nocapture
 //! ```
 //!
