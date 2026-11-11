@@ -15,6 +15,8 @@ use std::collections::HashMap;
 
 const PLATES: usize = 12;
 const BUBBLES: usize = 8;
+/// How far apart stacked bubbles are kept (px): the overlap test's 3 px margin and a gap.
+const BUBBLE_GAP: f32 = 7.0;
 /// Wrapper width (Val px) that plates and bubbles are centred in.
 const WRAP: f32 = 320.0;
 
@@ -253,7 +255,10 @@ pub fn bubbles(
         for _ in 0..placed.len() + 1 {
             let r = Rect::new(x - size.x / 2.0 - 3.0, base - lift - size.y - 3.0, x + size.x / 2.0 + 3.0, base - lift + 3.0);
             match placed.iter().find(|(id, o)| *id != Some(b.speaker) && !o.intersect(r).is_empty()) {
-                Some((_, o)) => lift = lift.max(base - o.min.y + 1.0),
+                // Clear of it by the test's margin and a gap: rising by a pixel left the same
+                // obstacle within the margin, so the passes ran out a pixel at a time and later
+                // bubbles landed on earlier ones in a crowd.
+                Some((_, o)) => lift = lift.max(base - o.min.y + BUBBLE_GAP),
                 None => break,
             }
         }
