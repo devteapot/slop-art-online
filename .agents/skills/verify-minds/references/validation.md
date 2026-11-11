@@ -1,5 +1,20 @@
 # Internal mind validation
 
+## 2026-11-11 speech-1: ways and the privacy of words (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `privacy.py` (new), with the trial stack's Neo4j under each run's own name (0 nodes left after):
+  - `minds-privacy-say2` passes: no violations, all positive controls, every mind consolidated after the lines.
+  - `minds-privacy-ctl2` (`--control`) passes: the check caught the bystander's words in experience rows, prompts and memory, and the near player's in `my_experience`.
+  - `-say1`/`-ctl1` failed on the driver's own defects: the fake fills placeholders only for rules marked `cite`; the prompt channel read the reply too; the wait could end on a consolidation from before the lines.
+- `speech` case (new): `minds-speech4` passes: a reply with `"way": "say"` spoken, `"shout"` said aloud, one `introduced` row, a `heard` row, the second talk prompt reads the mind's line "(heard by MindsTeller, …)", and the consolidation request carries the tagged introduction.
+- Earlier attempts:
+  - `minds-speech1` spoke before the mind's first deliberation (no turn).
+  - `minds-speech2` had the "heard by" assertion too narrow (residents nearby are listed too).
+  - **Possible race, not fixed:** in `minds-speech3` a player's line heard in the very second the mind's first deliberation was applied drew no talk turn and no "parked" note. The case now waits 3 s; the race itself (talk.rs parking around a deliberation's end) is unexamined.
+- Not run: the rest of the suite.
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.

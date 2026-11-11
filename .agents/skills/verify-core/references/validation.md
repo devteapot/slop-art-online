@@ -1,5 +1,15 @@
 # Core validation record
 
+## 2026-11-11 speech-1: ways of speaking (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `just living-check` passes (rules 156 tests, 0 failed; mind, viewer, game, observer built).
+- `speech.py regress`: on `a107fdf` (`core-speech-base`, `--baseline`, built in a worktree at the base commit) and on the change (`core-speech-regress`, 8 of 8). `speech.py diff`: identical except the new `introduced` rows: 65 speech-kind experience rows, `line_seen`, 11 chronicle lines, 10 acquaintances, `mind_state` marks, the calls' results.
+- The first branch launch (`core-speech-regress-failed-launch`) linked the base worktree's `living-rules` from the shared target dir. Cargo hashes path dependencies without their path, so a base build in the same target dir overwrites the branch's artifact. Build the base in its own target dir (`--target-dir`).
+- `speech.py ways`: `core-speech-ways` 20 of 21 (the one failure was the check's own: two hearers equally near, in either order). Fixed, then `core-speech-ways2` 21 of 21. `scenes.py say` on the same run: 34 PASS.
+- `speech.py crowd` (20 people, 10 m square, 120 lines/min, 60 lines): `core-speech-crowd` on the change, `core-speech-crowdbase` on `a107fdf` (`--baseline`). Numbers in docs/COMMUNICATION.md §13. `-crowd-try1`/`-try2` were the metric parser's own fixes.
+- Not run on this change: tick, needs, food, refusal, seize, sight, senses, doing, moves, death-names, skirmish, dealings, town, lives, laws, goods, infant; mechanics.
 
 ## 2026-11-11 drop-1: drops and low things are see-through (dev-box)
 

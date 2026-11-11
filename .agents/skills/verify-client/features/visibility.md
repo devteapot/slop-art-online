@@ -8,6 +8,7 @@
 - `thought` (raw model replies included) is refused anonymously in every build; the owner still reads the scripted raw markers (`owner-thought.json`).
 - `experience` is refused anonymously in a scoped build. In an open build (`LIVING_PERCEPTION=open`, diagnostics) it is public, and the driver records the known issue as `XFAIL` (`privacy-experience.json`); `open-build-tables.json` proves the nine tables are public there.
 - A world's own law values (`world_law`: its seed's `rules`, kept when the world is made; since `laws-2`, docs/WORLD_RULES.md) are private in every build; minds and players are told the laws in words, not the table.
+- Speech (docs/COMMUNICATION.md, since `speech-1`): `heard` (who heard each line: `line`, `speaker`, `way`, `hearers`, `at_ms`) is private in every build, and a speaker's person reads its own rows through the per-sender `my_heard` view (a point lookup on `heard.speaker`). The driver checks each player identity's `my_heard` holds only its own lines (`speaker` among its characters) and is not empty after it spoke, and that an anonymous client gets none. `speech_card`, the ways of speaking from the script, is public like `skill_card` (`speech-card-public.json`).
 - The world's records (`record`, `record_party`, `record_clock`, since `rules-2`, docs/WORLD_RULES.md) are private in every build: a player reads its own characters' records through the `my_records` view, and verify-player `deal.py` proves the view's rows; this driver proves the tables are refused.
 - Record the exact transport-specific refusal for each table.
 

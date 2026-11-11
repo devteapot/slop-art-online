@@ -20,7 +20,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked')
+         'takeover', 'sight', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked', 'speech')
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 
@@ -116,6 +116,8 @@ def run_case(run, case):
         return resident_case(run)
     if case == 'parked':
         return parked_case(run)
+    if case == 'speech':
+        return speech_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -856,6 +858,59 @@ def parked_case(run):
     assert len(talks()) == after_first, 'a talk turn repeated what the deliberation answered'
     assert 'in its deliberation' in run.log()
     return {'status': 'pass', 'talk_turns': len(talks())}
+
+
+def speech_case(run):
+    """Speech through a mind (docs/COMMUNICATION.md): a talk reply's `way` reaches `mind_say`
+    (a way the world does not have is said aloud), a name that is news reaches the mind as an
+    `introduced` row its consolidation sees tagged with the person (`{Name=#id}`, the anchor
+    `person:<id>`), and the mind's own line reads as heard by those it saw (`heard`)."""
+    people = prepare(run)
+    actor = people[0]['id']
+    run.harness('player', 'join', 'MindsTeller')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsTeller'", 'player')[0]['id']
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', player, actor)
+    gist = '$EXPTEXT:told you their name'
+    script = {'replies': {'think': {'thought': 'I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'I answer, aloud.', 'say': 'verify minds spoken in a way', 'way': 'say', 'end': False},
+                          'consolidate': {'summary': 'verify minds names', 'remember': [{'exp': '$EXP:told you their name', 'gist': gist, 'salience': 0.6, 'involves': ['$PERSON']}],
+                                          'nodes': [], 'edges': [], 'retract': [], 'merge': [], 'identity': None, 'relations': [], 'judgments': [], 'places': []}},
+              'rules': [{'purpose': 'talk', 'contains': 'shout it', 'times': -1,
+                         'reply': {'thought': 'I shout back.', 'say': 'verify minds shouted back', 'way': 'shout', 'end': True}},
+                        {'purpose': 'consolidate', 'cite': True, 'times': -1}]}
+    models = model(run, script)
+    # As in `conversation`: the mind's first deliberation is in before anyone speaks to it.
+    run.request(actor, 'speech')
+    run.start(models, [actor])
+    accepted(run, actor)
+    # A line heard in the very second a deliberation is applied drew no turn once (minds-speech3):
+    # leave the deliberation a moment to settle.
+    time.sleep(3)
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    text_of = lambda e: json.dumps(e, ensure_ascii=False).replace('\\"', '"')
+    spoken = lambda words: any(words in c['text'] and c['b'] == player for c in run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'mind-speech'))
+    run.harness('player', 'say', 'I am MindsTeller. Good day to you.', '--to', str(actor))
+    run.wait(lambda: spoken('verify minds spoken in a way'), 'a talk reply with "way": "say" is spoken through mind_say', 60)
+    intro = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'introduced') if e['kind'] == 'introduced']
+    assert len(intro) == 1 and intro[0]['subject'] == player and intro[0]['text'] == 'MindsTeller told you their name.', intro
+    heard = run.private(f'SELECT * FROM heard WHERE speaker = {actor}', 'mind-heard')
+    assert heard and all(player in h['hearers'] and h['way'] == 'say' for h in heard), heard
+    time.sleep(2.2)
+    run.harness('player', 'say', 'Can you shout it so the square hears?', '--to', str(actor))
+    run.wait(lambda: spoken('verify minds shouted back'), 'a reply in a way the world lacks is said aloud', 60)
+    talks = [e for e in requests() if e['purpose'] == 'talk']
+    assert any(re.search(r'verify minds spoken in a way” \(heard by [^)]*MindsTeller', text_of(e)) for e in talks[1:]), 'the second talk turn does not read the mind\'s own line as heard'
+    run.wait(lambda: any(e['purpose'] == 'consolidate' and 'MindsTeller told you their name.' in text_of(e) for e in requests()),
+             'consolidation sees the introduction', 150)
+    consolidation = next(e for e in requests() if e['purpose'] == 'consolidate' and 'MindsTeller told you their name.' in text_of(e))
+    tagged = f'MindsTeller told you their name. {{MindsTeller=#{player}}}' in text_of(consolidation)
+    assert tagged, 'the introduction is not tagged with the person (its anchor)'
+    run.wait(lambda: any(t['kind'] == 'consolidate' for t in run.thoughts(actor, 'thoughts-consolidated')), 'consolidation applied', 60)
+    replies = [json.loads(t['detail']).get('reply', {}) for t in run.thoughts(actor, 'thoughts-talk') if t['kind'] == 'talk']
+    return {'status': 'pass', 'talk_turns': len(talks), 'reply_ways': [r.get('way') for r in replies], 'introduced': intro[0]['text'],
+            'heard_rows': len(heard), 'consolidation_tagged': tagged}
 
 
 def main():

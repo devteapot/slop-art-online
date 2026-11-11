@@ -1,6 +1,6 @@
 ---
 name: verify-minds
-description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations, consolidation, reconnect handling, LIVING_ONLY, mind level of detail, the rethink gate (LIVING_RETHINK), or player memory (LIVING_PLAYER_MEMORY).
+description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations (and ways of speaking, mind_say), consolidation, reconnect handling, LIVING_ONLY, mind level of detail, the rethink gate (LIVING_RETHINK), or player memory (LIVING_PLAYER_MEMORY).
 ---
 
 # Verify internal minds
@@ -16,6 +16,14 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R"
 .agents/skills/verify-minds/scripts/paid_safety.py --run "minds-duel-safety-${R#minds-}"
 cat ".local/living/verify/$R/results.json"
+```
+
+Where a line's words may go (docs/COMMUNICATION.md §7) has its own driver with Neo4j, [features/privacy.md](features/privacy.md). Run it for every way of speaking on `speech_card`, and its control:
+
+```bash
+export LIVING_PRIVACY_NEO4J=slop-trials-neo4j:127.0.0.1:7699 LIVING_PRIVACY_NEO4J_ENV=<file with LIVING_NEO4J_PASSWORD=>
+.agents/skills/verify-minds/scripts/privacy.py --run minds-privacy-say-${R#minds-} --way say
+.agents/skills/verify-minds/scripts/privacy.py --run minds-privacy-ctl-${R#minds-} --way say --control
 ```
 
 The command builds the release mind, runs its non-ignored tests, then launches and doctors a separate `verify-minds-*` database for each case. It drives every mind case, stops its own processes, deletes each scratch database and confirms the evidence remains. The second command proves paid-wrapper safety with inert children and no model calls. Allow several minutes for the real timing gaps. It never starts or stops the shared container.

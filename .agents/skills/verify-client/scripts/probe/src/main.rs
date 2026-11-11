@@ -38,9 +38,9 @@ macro_rules! primary_tables {
             belief, judgment, place, thought, chronicle, stats, bond_offer, expecting,
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, script, community, membership, join_request, genome,
-            practice, land, settlement, lot, fighter, skill_card, act_card, doing, weather,
+            practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather,
             seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how);
+            my_experience, my_places, my_inventory, my_know_how, my_heard);
     };
 }
 
@@ -151,6 +151,7 @@ fn snapshot(c: &DbConnection) -> Value {
         fighter,
         skill_card,
         act_card,
+        speech_card,
         doing,
         weather,
         my_combat,
@@ -168,7 +169,8 @@ fn snapshot(c: &DbConnection) -> Value {
         my_experience,
         my_places,
         my_inventory,
-        my_know_how
+        my_know_how,
+        my_heard
     );
     // What the perception views returned to this identity (docs/PERCEPTION.md).
     let ids = |v: Vec<u32>| { let mut v = v; v.sort_unstable(); v };
@@ -186,6 +188,8 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_places": ids(c.db.my_places().iter().map(|r| r.actor).collect()),
         "my_inventory": c.db.my_inventory().iter().map(|r| r.owner).collect::<Vec<_>>(),
         "my_know_how": ids(c.db.my_know_how().iter().map(|r| r.actor).collect()),
+        // Who heard my own lines: speaker and line of each row (docs/COMMUNICATION.md §6).
+        "my_heard": c.db.my_heard().iter().map(|r| json!({"line":r.line,"speaker":r.speaker,"way":r.way,"hearers":r.hearers})).collect::<Vec<_>>(),
     });
     let characters: Vec<_> = c.db.character().iter().map(|r| json!({
         "id":r.id,"name":r.name,"kind":r.kind,"controller":r.controller.to_hex().to_string(),

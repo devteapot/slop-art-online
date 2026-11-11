@@ -1,5 +1,11 @@
 # Client protocol validation
 
+## 2026-11-11 speech-1: heard, my_heard, speech_card (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `run.py` (`client-speech1`): every check passes, including the new "speech_card is public (the ways of speaking)" and "my_heard holds each player's own lines, and none for an anonymous client" (each identity 2 lines). The reducer matrix had 221 calls, 0 mismatches: `human_speak` is accepted for a joined identity, refused for an unknown way, and refused for an anonymous one. Private table visibility covers 71 tables, `heard` among them. The probe's target dir was linked to the worker's own (`.local/living/verify/target-client` → `$CARGO_TARGET_DIR/client`).
+
 ## 2026-11-11 goods-1 (dev-box)
 
 Own container `goods1-stdb` (port 3313), `scoped`. `client-g1-11111438` (before merging rules-1) and `client-g3-11111529` (merged): 31 of 31 pass, including the new "fire and shared-stock signals public to anonymous SQL" (`fire-signal.json`: `structure.lit_until_ms` and `resource_node.pool` reach anonymous SQL) and the permission matrix with `place_resource` (admin only; 214 calls, no mismatch).

@@ -4,6 +4,8 @@
 | --- | --- | --- |
 | Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt) | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
 | Answer speech and close an exchange | `conversation` | [conversations.md](conversations.md) |
+| Speech through a mind: a talk reply's `way` reaches `mind_say` (one the world lacks is said aloud), an `introduced` row reaches consolidation tagged with the person, the mind's own line reads as heard by those it saw (`heard`) | `speech` | [conversations.md](conversations.md#ways-and-who-heard) |
+| Privacy of words: none of a line's words reach anyone who should not receive them (experience, prompts, client, memory), for any way on `speech_card` | `privacy.py` (Neo4j) | [privacy.md](privacy.md) |
 | No-store persona/cursor, patch-loss XFAIL | `consolidation` | [consolidation.md](consolidation.md) |
 | Validate graphs, restrict actors, recover connection | `prune`, `reject`, `only`, `reconnect` | [robustness.md](robustness.md) |
 | Wait off stage and resume on stage | `lod` | [level-of-detail.md](level-of-detail.md) |

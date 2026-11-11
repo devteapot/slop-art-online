@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | Ad-hoc query for client triage, initial rows and live changes | [triage.md](triage.md) | `adhoc-suite.jsonl`, query-specific `.jsonl` |
 | The observer's owner subscriptions and inspected-character queries | [subscriptions.md](subscriptions.md) | `observer-base.json`, `anonymous-base.json`, `inspected-character.json` |
-| Private-table refusals (anonymous and player), and the open (diagnostic) build's public tables | [visibility.md](visibility.md) | `visibility.json`, `privacy-*.json`, `open-build-tables.json` |
+| Private-table refusals (anonymous and player), and the open (diagnostic) build's public tables; speech: `heard` private, `my_heard` scoped to the speaker, `speech_card` public | [visibility.md](visibility.md) | `visibility.json`, `privacy-*.json`, `open-build-tables.json`, `own-*.json`, `speech-card-public.json` |
 | Perception: `seen_*` views in sight, beyond sight and behind a wall; `seen_characters` as the `perceived_of` projection; `my_*` own-state views | [perception.md](perception.md) | `sight.json`, `sight-*.json`, `seen-characters.json`, `own-*.json` |
 | Presence: connections counted, a takeover after `takeover_s` with no connection, the handback on a new connection; presence private | [presence.md](presence.md) | `presence.json`, `presence-*.json` |
 | Identity-scoped `my_deliberations` view | [deliberations.md](deliberations.md) | `view-*.json` |

@@ -51,6 +51,12 @@ A resident's mind made from the world's facts (docs/SEEDED_LIVES.md; every perso
 
 Its paid tier, `scripts/residents_real.py --allow-live --run knowledge-residents-real-<name>`, runs only after the user authorizes that run (the models file as shipped; the key from the main checkout's `.env`, into the mind's environment only).
 
+Names learned from a lived line, down to the memory graph ([features/names.md](features/names.md)), on any Neo4j given by `LIVING_PRIVACY_NEO4J=container:host:port` and `LIVING_PRIVACY_NEO4J_ENV` (a file with `LIVING_NEO4J_PASSWORD=`; on the Spark, the trial stack's `slop-trials-neo4j:127.0.0.1:7699`), nodes under the run's own name and deleted after:
+
+```bash
+.agents/skills/verify-knowledge/scripts/names.py --run minds-names-$(date +%Y%m%d-%H%M%S)
+```
+
 ## Doctor
 
 The run records the shared doctor result in `actions.log`, confirms `RETURN 1` against its scratch graph, records the image and mounts in `neo4j-doctor.log`, and checks the fake's `/health`. It requires the real mind's subscription and scratch Neo4j connection log before checking memory effects.

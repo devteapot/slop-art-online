@@ -1,5 +1,11 @@
 # Validation record (player)
 
+## 2026-11-11 speech-1: human_speak (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `speak.py` (new): `player-speak2` 8 of 8: `speech_card` read anonymously; `human_say`, `human_speak(…, "say")` and `human_speak(…, "")` spoken; their `said` rows in `my_experience`; `my_heard` rows joined by `line`, listing the resident; refused "no way of speaking called `shout`" and "speaking too fast", writing nothing. The shipped script has one way, so the card's `needs_to`, `reach` and gap loops had nothing to drive.
+- `player-speak1` failed only the too-fast check: the first line's row reached `my_experience` at the next frame, during the check's count. The check now waits 0.8 s before counting.
 
 ## 2026-11-11 drop-1: across a drop (dev-box)
 

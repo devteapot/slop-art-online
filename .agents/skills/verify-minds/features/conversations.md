@@ -35,3 +35,19 @@ The `parked` case delays the fake's deliberate reply by 8 s. A line said while t
 - Speech triggers a talk turn, not a new full deliberation.
 - An ended exchange can reopen for new matter. Repetition tests closure without claiming permanent silence.
 - The observer does not control a player. The shared player identity is the real command path.
+
+## Ways and who heard
+
+Since `speech-1` (docs/COMMUNICATION.md §13):
+
+- A talk reply may name `"way"`, beside or inside `say`. `talk.rs` `way_of` keeps it when the world's rules have it (`prompts::ways`, from the compiled script) and otherwise says the line aloud. `mind_say` takes the way as its fourth argument. A deliberation's say (`mind_install`) is `say`.
+- A line whose words hold the speaker's own name gives the listener an `introduced` row when the name is news, so the mind is told "<Name> told you their name.". Consolidation sees it tagged `{Name=#id}`.
+- The mind service subscribes `heard` as the owner. Every prompt and consolidation shows a mind's own `said` line with whom it saw hear it: "… (heard by Bram and a stranger)", or "(no one you saw heard it)" (`Minds::heard_by`).
+
+The `speech` case (`verify_minds.py --case speech`) checks:
+
+1. A player introduces itself and the talk reply names `"way": "say"`: the line is spoken.
+2. The mind has one `introduced` row with the player as subject, and a `heard` row of its own lines listing the player.
+3. A second line draws a reply in `"way": "shout"`, which the world lacks: it is said aloud.
+4. The second talk prompt shows the mind's first line "(heard by …)", the player among those it lists (residents nearby may be listed too).
+5. A consolidation request carries "MindsTeller told you their name. {MindsTeller=#id}".

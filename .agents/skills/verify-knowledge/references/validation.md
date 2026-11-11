@@ -1,5 +1,17 @@
 # Knowledge validation
 
+## 2026-11-11 speech-1: names (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `names.py` (new): `minds-names-1` 7 of 7 with the trial stack's Neo4j (0 nodes left):
+  - before the name, the graph knows the player as "a stranger";
+  - one `introduced` row, and the only acquaintance is the mind's;
+  - the consolidation prompt holds "Mercy told you their name. {Mercy=#id}", and the memory keeps it;
+  - the person's node is named "Mercy" afterwards;
+  - the mind 38 m away has no node naming the player.
+- Not run: the full `verify_knowledge.py` suite, player memory.
+
 ## 2026-11-11 every person a mind (lives-2, dev-box)
 
 On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
