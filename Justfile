@@ -119,6 +119,13 @@ living-game-assets:
     living/tools/blender/gen_city.sh
     living/tools/blender/gen_anim.sh
 
+# The asset board (docs/ASSET_BOARD.md): every generated family photographed in the game's own
+# renderer beside the version the owner accepted, with decisions and history in
+# living/assets/board/ and media in ~/archive/asset-board/. `just living-board publish ...`,
+# `decide`, `status`, `build`, `check`, `pack`.
+living-board *args:
+    python3 living/tools/board/board.py {{args}}
+
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
 # (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for
 # terrain.rs, `--set material` the model surfaces (bark, planks, plaster, stone, brick,
