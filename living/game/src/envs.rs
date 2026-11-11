@@ -590,6 +590,7 @@ pub fn cutaway(
     mut q: Query<(Entity, &Transform, &Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>, Has<Landmark>)>,
     mut held: Local<std::collections::HashMap<Entity, f32>>,
     mut under: Local<std::collections::HashSet<Entity>>,
+    others: Query<(Entity, &Transform, &Model, &Fitted), Without<Occluder>>,
 ) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
     if crate::perf::has("nocutaway") {
@@ -653,6 +654,24 @@ pub fn cutaway(
     }
     if held.len() > 4096 {
         held.retain(|_, t| now - *t < CUT_HOLD_S);
+    }
+    // For checks: what holds me up that the cutaway never fades, so never looks at (a structure
+    // a settlement's kit models, `world.rs`; a low fixture), named the same way. Only while debug
+    // logging is on: it costs nothing in play.
+    if bevy::log::tracing::enabled!(bevy::log::Level::DEBUG) {
+        for (e, t, model, f) in &others {
+            if f.size.x <= 0.0 || t.translation.xz().distance(me.xz()) > CUT_NEAR {
+                continue;
+            }
+            let (half, centre, inv) = (f.size * 0.5, t.translation + t.rotation * f.center, t.rotation.inverse());
+            if supports(&feet.map(|p| inv * (p - centre)), half) {
+                if under.insert(e) {
+                    debug!("cutaway: {} holds me up; not an occluder (me at {:.1}, {:.1}, {:.1})", model.file, me.x, me.y, me.z);
+                }
+            } else {
+                under.remove(&e);
+            }
+        }
     }
 }
 
