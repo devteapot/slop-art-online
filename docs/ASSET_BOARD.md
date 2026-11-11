@@ -52,7 +52,10 @@ living/assets/board/<kind>-<name>/
   decisions/<date>-<id>-<verdict>.json one accept or reject
 ```
 
-**Version id:** `YYYYMMDD-<source commit, 8>-<hash, 4>`. The hash covers the generator's sha256, the seed, the parameters, and each member's name, file sha256 and recipe. Publishing the same files again gives the same id, and replaces its photographs.
+**Version id:** `YYYYMMDD-<source commit, 8>-<hash, 6>`. The hash covers the generator's sha256, the seed, the parameters, and each member's name, role, file sha256 and recipe.
+- The same commit and content keeps its first id, even on another day. Publishing it again replaces its photographs, but only once the new set is complete.
+- A version that has a decision is not photographed again without `--force`, since that would change what was decided on.
+- An id that names different content (a hash collision) is refused.
 
 **Version record:**
 
@@ -69,7 +72,12 @@ living/assets/board/<kind>-<name>/
 
 **Decision record:** `family`, `version`, `verdict` (`accept` or `reject`), `date`, `by`, `words` (the owner's own words), `note`, `scope` (what an accept means, for example `base`: start from it, not the bar), `recorded`, `recorded_by`.
 
-The accepted version is the most recent accept that has not been followed by a reject of the same version. The latest version is shown beside it. When the latest is itself accepted, it is shown beside the version accepted before it.
+The accepted version is the most recent accept that has not been followed by a reject of the same version. Decisions are ordered by date, then by the UTC time they were recorded. Two decisions never share a file.
+
+The latest version is shown beside:
+- the accepted version;
+- when the latest is itself accepted, the version accepted before it;
+- with nothing accepted, the version published before it, labelled "previous".
 
 **Media:** `~/archive/asset-board/media/<family>/<id>/` holds:
 
@@ -85,6 +93,7 @@ The accepted version is the most recent accept that has not been followed by a r
 
 ```bash
 just living-board status                      # each family: accepted, latest, its state
+just living-board families                    # each family's kind and member names
 just living-board build                       # write the pages again
 just living-board check                       # every link and image on the pages resolves
 just living-board pack                        # ~/archive/deliverables/asset-board-YYYYMMDD.tar.gz
@@ -128,11 +137,16 @@ Paths are relative to the current directory. A family entry can override `genera
 
 How publishing works:
 
-- **Member names carry the comparison.** Keep the accepted version's names (below), so `row` is compared with `row`. A member that is new or missing is labelled as such.
+- **Member names carry the comparison.** Keep the accepted version's names (`board.py families`, or the table below), so `row` is compared with `row`. A member that is new or missing is labelled as such, and a pass that shares no name with the previous version gets a warning.
+- **Families must exist.** A family not yet on the board needs `--new-family` (or `"new": true` in the manifest entry), so a typo does not quietly start a new one.
+- **Every shot must be taken.** A model that fails to load, or a shot the view did not take, stops the publish and records nothing, unless `--allow-missing` is given.
+- **Commit the generator first.** The version records the commit and the generator's sha256. A generator that is modified or untracked is still recorded, with a warning and its state.
+- **The report must match the files.** A report entry whose `sha256` is not the file's is left out, with a warning.
 - **Then commit the new files in `living/assets/board/`** with the pass. Media goes to the shared home on its own.
 - **The renderer.** Files are photographed by the game of the repository that holds `board.py`. This matters while the tool is reached by absolute path from an older worktree, because that worktree's game lacks the night lighting. Recipes are photographed by the publishing repository's game, since only it has the characters and the recipe book.
-  - The build uses `CARGO_TARGET_DIR` if set, else `.local/target` if it exists, else `.local/board-target`, with at most 12 jobs. Set `CARGO_TARGET_DIR` to the worktree's existing release target to avoid a second ~4-minute build.
-  - `--game BIN` uses a binary you already have.
+  - The renderer repository's game is built with at most 12 jobs. `CARGO_TARGET_DIR` is used only when the renderer is the publishing repository itself, so a track's own binary is never overwritten by another tree's game. Otherwise the build uses the renderer repository's `.local/target` if it exists, else `.local/board-target`. For characters, set `CARGO_TARGET_DIR` to the worktree's existing release target to avoid a second ~4-minute build.
+  - `--game BIN` uses a binary you already have. It is identified by the binary's hash.
+  - The photographs ignore the caller's `LIVING_GAME_*` settings. The preset sets the environment, hour, day curve and weather (always clear).
 - **The accepted version is photographed again.** If it has kept files and was photographed by another renderer build, the publish photographs it again with this one, so the diff shows the models' change and not the renderer's. Imported versions and recipe characters cannot be photographed again: their page says the renderers differ.
 - **Quick looks.** `--shots three-quarter,game` takes only those shots; `--no-clips` or `--clips walk-tq` limits character clips. A full character pass takes about four minutes a character, mostly clips.
 - **Trial runs.** `ASSET_BOARD_HOME=… ASSET_BOARD_RECORDS=…` send the media and records elsewhere, to test without touching git or the real board.
@@ -148,7 +162,7 @@ python3 living/tools/board/board.py decide building:cone latest accept \
 git add living/assets/board && git commit -m "board: building:cone accepted"
 ```
 
-The version can be `latest`, a full id, or a unique part of one. `--date` defaults to today.
+The version is a full id or a unique part of one. Use the id on the page the owner looked at. `latest` takes the newest version, which may have arrived since. `--date` (YYYY-MM-DD) defaults to today. The page's command quotes the words for the shell.
 
 ## Families and their starting versions (2026-11-11)
 
