@@ -99,6 +99,8 @@ struct Item {
     /// A kit's fixture: the camera keeps out of it once fitted, if it is large
     /// (`envs::SolidIfLarge`).
     fixture: bool,
+    /// A landmark lot (`Lot::landmark`): it never fades for hiding you (`envs::Landmark`).
+    landmark: bool,
 }
 
 /// A planned settlement's open lot of no height (steps, a slip, a yard, root plots) with no
@@ -933,7 +935,8 @@ fn ready(assets: &AssetServer, scene: &Handle<WorldAsset>) -> bool {
 ///   sampled, `settle::env_of`), else a grey box when it has height; gardens and fields nothing.
 fn lot_item(envs: &HashMap<String, EnvDef>, land: &Land, lot: &LotRow) -> Option<Item> {
     let planned = land.lots.get(lot.id as usize).and_then(|l| land.settlements.get(l.settlement as usize)).is_some_and(|s| s.planned);
-    let base = Item { kind: lot.kind.id().to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), solid: true, ..default() };
+    let landmark = land.lots.get(lot.id as usize).is_some_and(|l| l.landmark);
+    let base = Item { kind: lot.kind.id().to_string(), at: lot.at, yaw: lot.yaw, height: lot.height_m, k: lot.id as usize, floor: Some(lot.floor_m), solid: true, landmark, ..default() };
     // The row's model names its folder (`steampunk_city/clocktower/...`): a town in its own
     // style uses its own assets.
     let env = lot.model.split('/').next().filter(|_| !lot.model.is_empty()).unwrap_or(lot.env);
@@ -980,6 +983,9 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
         if it.solid {
             e.insert(crate::envs::Solid);
         }
+        if it.landmark {
+            e.insert(crate::envs::Landmark);
+        }
         if it.marker {
             e.insert(bevy::light::NotShadowCaster);
         }
@@ -1000,6 +1006,9 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     }
     if it.fixture {
         e.insert(crate::envs::SolidIfLarge);
+    }
+    if it.landmark {
+        e.insert(crate::envs::Landmark);
     }
     let mut out = vec![e.id()];
     if let Some((light, tf)) = crate::envs::local_light(&it.kind, it.glow, it.height, it.k) {

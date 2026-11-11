@@ -48,6 +48,11 @@ pub struct Occluder {
     pub height: f32,
 }
 
+/// A landmark (Cullet's Cone, Watchglass, Counting House…): it is never faded for standing
+/// between the camera and you ([`cutaway`]), so it holds its place in the view.
+#[derive(Component)]
+pub struct Landmark;
+
 /// A building the camera may not enter (`camera::follow` pulls the eye in front of it).
 #[derive(Component)]
 pub struct Solid;
@@ -571,12 +576,18 @@ pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: us
 /// A thing's box is its fitted bounds turned with it (else a guess from its height). It fades to
 /// [`SEE_THROUGH`] while the sight lines from the eye to my head, chest and feet pass through it,
 /// and fully while the eye is inside it; it comes back [`CUT_HOLD_S`] after the last frame it
-/// was in the way, so a line grazing a corner doesn't flicker.
+/// was in the way, so a line grazing a corner doesn't flicker. Landmarks ([`Landmark`]) and
+/// anything farther than [`CUT_NEAR`] from the eye never fade for being in the way (the
+/// Watchglass seen from the mole stays solid); only the eye inside a thing fades it.
+///
+/// What I stand on or am stepping onto never fades, whatever the eye does ([`supports`]): a
+/// flight of stairs under my feet (the owner's Cullet walk: the line to my feet ended inside the
+/// flight's box, so the whole flight dithered away while I climbed it), a terrace, a wall's top.
 pub fn cutaway(
     target: Res<crate::controls::Target>,
     time: Res<Time>,
     cam: Query<&Transform, (With<Camera3d>, Without<Occluder>)>,
-    mut q: Query<(Entity, &Transform, &Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>)>,
+    mut q: Query<(Entity, &Transform, &Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>, Has<Landmark>)>,
     mut held: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
@@ -586,7 +597,8 @@ pub fn cutaway(
     let now = time.elapsed_secs();
     let eye = cam.translation;
     let points = [me + Vec3::Y * 1.6, me + Vec3::Y * 1.05, me + Vec3::Y * 0.25];
-    for (e, t, o, mut fade, model, fitted) in &mut q {
+    let feet = support_probes(me);
+    for (e, t, o, mut fade, model, fitted, landmark) in &mut q {
         // Models stay hidden until fitted (look-dev fit shows them).
         if model.is_some() && fitted.is_none() {
             continue;
@@ -601,9 +613,18 @@ pub fn cutaway(
         // Into the box's own frame.
         let inv = t.rotation.inverse();
         let local = |p: Vec3| inv * (p - centre);
+        if supports(&feet.map(local), half) {
+            if fade.target != 0.0 {
+                fade.target = 0.0;
+            }
+            held.remove(&e);
+            continue;
+        }
         let inside = { let l = local(eye).abs(); l.x < half.x + 0.6 && l.y < half.y + 0.6 && l.z < half.z + 0.6 };
         let pad = Vec3::splat(0.25);
-        let blocks = points.iter().any(|p| segment_hits_box(local(eye), local(*p), half + pad, 0.35));
+        // How far the eye is from the box's nearest point.
+        let near = (local(eye).abs() - half).max(Vec3::ZERO).length();
+        let blocks = !landmark && near <= CUT_NEAR && points.iter().any(|p| segment_hits_box(local(eye), local(*p), half + pad, 0.35));
         let want = if inside {
             1.0
         } else if blocks {
@@ -667,6 +688,29 @@ pub fn reach(target: Res<crate::controls::Target>, mut q: Query<(&Transform, &Re
 /// long it stays faded after it was last in the way (s).
 pub const SEE_THROUGH: f32 = 0.8;
 const CUT_HOLD_S: f32 = 0.35;
+/// Things in the way fade only within this distance of the eye (m, to their box).
+const CUT_NEAR: f32 = 30.0;
+
+/// Points round my feet that find what holds me up or what I am stepping onto: at my feet, a
+/// little under them, and a short step out on every side at ankle height.
+pub fn support_probes(feet: Vec3) -> [Vec3; 7] {
+    const OUT: f32 = 0.5;
+    [
+        feet + Vec3::Y * 0.15,
+        feet - Vec3::Y * 0.4,
+        feet + Vec3::new(OUT, 0.15, 0.0),
+        feet + Vec3::new(-OUT, 0.15, 0.0),
+        feet + Vec3::new(0.0, 0.15, OUT),
+        feet + Vec3::new(0.0, 0.15, -OUT),
+        feet - Vec3::Y * 0.8,
+    ]
+}
+
+/// Whether a box of half extents `h` round the origin (box space) holds any of the probes (also
+/// in box space): it is under me, or I am stepping onto it.
+pub fn supports(probes: &[Vec3], h: Vec3) -> bool {
+    probes.iter().any(|p| p.x.abs() <= h.x + 0.05 && p.y.abs() <= h.y + 0.05 && p.z.abs() <= h.z + 0.05)
+}
 
 /// Whether the segment from `a` to `b` (box space) passes through the box of half extents `h`
 /// round the origin, leaving out its last `tail` metres at `b` (what stands right behind me
@@ -1106,4 +1150,29 @@ pub fn tour(mut commands: Commands, mut envs: ResMut<Envs>, mut cam: ResMut<Cam>
         _ => return,
     };
     envs.tour = Some(t);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn what_i_stand_on_or_step_onto_supports_me() {
+        // A flight 3 m wide, 4 m high and 6.4 m long, its box centred 2 m up.
+        let h = Vec3::new(1.5, 2.0, 3.2);
+        let c = Vec3::new(0.0, 2.0, 0.0);
+        let at = |feet: Vec3| supports(&support_probes(feet).map(|p| p - c), h);
+        // On its lowest tread, half way up (inside its box), on its top.
+        assert!(at(Vec3::new(0.0, 0.2, -3.0)));
+        assert!(at(Vec3::new(0.3, 2.0, 0.0)));
+        assert!(at(Vec3::new(0.0, 4.1, 2.9)));
+        // About to step onto it, and just off its side.
+        assert!(at(Vec3::new(0.0, 0.0, -3.6)));
+        assert!(at(Vec3::new(1.9, 0.0, 0.0)));
+        // A step farther away, or well above or below it: not mine.
+        assert!(!at(Vec3::new(0.0, 0.0, -4.0)));
+        assert!(!at(Vec3::new(2.3, 0.0, 0.0)));
+        assert!(!at(Vec3::new(0.0, 5.3, 0.0)));
+        assert!(!at(Vec3::new(0.0, -1.0, 0.0)));
+    }
 }
