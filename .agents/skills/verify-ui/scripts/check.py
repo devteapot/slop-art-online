@@ -531,11 +531,21 @@ def fov_within(sight, f, off, dist, glow, kept):
 
 
 def heading_at(b, now_ms):
-    """The authority's heading_at on a body row."""
+    """The authority's heading_at on a body row (the travel heading)."""
     if not b.get("turn") or b.get("turn_s", 0) <= 0:
         return wrap(b["heading"])
     t = max(0, min(now_ms, b["next_ms"]) - b["t_ms"]) / 1000.0
     return wrap(b["heading"] + b["turn"] * min(t, b["turn_s"]))
+
+
+def facing_at(b, now_ms):
+    """The authority's facing_at: the travel heading plus the facing offset (look-2's
+    `face_off`, eased by `face_turn` over `face_turn_s`), the one facing sight reads."""
+    t = max(0, min(now_ms, b["next_ms"]) - b["t_ms"]) / 1000.0
+    off = b.get("face_off") or 0.0
+    if b.get("face_turn") and (b.get("face_turn_s") or 0) > 0:
+        off += b["face_turn"] * min(max(t, 0.0), b["face_turn_s"])
+    return wrap(heading_at(b, now_ms) + off)
 
 
 def field_dumps(d):
@@ -582,7 +592,7 @@ def compare_fov(snap, dumps, me):
     meta, pix = prior[-1]
     fc = meta["facing"]
     sight, f = fc["sight"], fc
-    h_auth = heading_at(mine, at)
+    h_auth = facing_at(mine, at)
     eye = (mine["x"], mine["y"])
     out = {"heading_client": math.degrees(fc["heading"]), "heading_authority": math.degrees(h_auth), "dump": meta["n"], "same": [], "differ": [], "margin": [], "moving": []}
     for bid, b in bodies.items():
@@ -627,8 +637,8 @@ def field(run, c):
     # Off at the start: the law as shipped (a re-run starts from it again).
     subprocess.run([sys.executable, V, "call", "--run", run, "--as-admin", "set_world_law", '["fov_on", "false"]'], capture_output=True, text=True)
     changes0 = sql(run, "SELECT id FROM law_change")
-    snap = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};sql|SELECT key, target, bearing, band FROM heard WHERE listener = {{me}}"
-    body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy FROM body WHERE id = {{me}}"
+    snap = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, face_off, face_turn, face_turn_s FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};sql|SELECT key, target, bearing, band FROM heard WHERE listener = {{me}}"
+    body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy, face_off, face_turn, face_turn_s FROM body WHERE id = {{me}}"
     # By day (`{epoch_at:12}`, a scratch fixture): at night side vision is left out of the
     # comparison for the lights the client can't know, and a day lasts 12 minutes.
     plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on;sync:senses"
@@ -723,7 +733,7 @@ def field(run, c):
     face_moving = re.search(r"pub const FACE_WHILE_MOVING: bool = (\w+);", open(os.path.join(ROOT, "living/game/src/controls.rs")).read())
     face_moving = face_moving and face_moving.group(1) == "true"
     if walk:
-        h = math.degrees(heading_at(walk, snaps["walk"][0]["wall_ms"]))
+        h = math.degrees(facing_at(walk, snaps["walk"][0]["wall_ms"]))
         off = abs(math.degrees(wrap(math.radians(h - north))))
         speed = math.hypot(walk["vx"], walk["vy"])
         if face_moving:
@@ -733,11 +743,11 @@ def field(run, c):
         moving_rel = re.search(r"look: human_face\(0\.000, 0\.000\)", L) is not None
         c.check(s, "…the release went as human_face(0, 0)", moving_rel or face_moving)
     if rel:
-        h = math.degrees(heading_at(rel, snaps["released"][0]["wall_ms"]))
+        h = math.degrees(facing_at(rel, snaps["released"][0]["wall_ms"]))
         c.check(s, "a release while walking snaps back to the travel (north)", abs(math.degrees(wrap(math.radians(h - north)))) < 4.0, f"heading {h:.1f}°")
     if looked and stood:
-        h1 = math.degrees(heading_at(looked, snaps["looked"][0]["wall_ms"]))
-        h2 = math.degrees(heading_at(stood, snaps["stood"][0]["wall_ms"]))
+        h1 = math.degrees(facing_at(looked, snaps["looked"][0]["wall_ms"]))
+        h2 = math.degrees(facing_at(stood, snaps["stood"][0]["wall_ms"]))
         c.check(s, "standing, a look west turns the body there and a release leaves it there", abs(abs(h1) - 180.0) < 4.0 and abs(math.degrees(wrap(math.radians(h2 - h1)))) < 2.0, f"looked {h1:.1f}°, after the release {h2:.1f}°")
     sends = len(re.findall(r"look: human_face\(", L))
     refusals = re.findall(r"(?:look|face) refused: ([^\n]+)", L)
