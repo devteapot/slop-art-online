@@ -142,6 +142,16 @@ pub struct Theme {
     /// The ground of what floats over the world on its own (tip pills, notes, a slot's tooltip),
     /// where a theme's surface is only a band meant to lie on a panel (none: the surface).
     pub float: Option<Color>,
+    /// A dark band under light text that lies straight on a panel (no row or button of its own
+    /// under it): what keeps it legible when the panel itself is light glass ([`shade_text`]).
+    pub text_band: Option<Color>,
+    /// The tallest a person's window grows, as a share of the screen's height (none: to the
+    /// anchor's bottom margin). Its conversation scrolls inside it.
+    pub person_cap: Option<f32>,
+    /// A line of mine in a conversation: its bubble's edge (none: the theme's edge).
+    pub mine_edge: Option<Color>,
+    /// A window's title bar: a ground of its own under the title (none: the frame's).
+    pub head: Option<Color>,
 }
 
 impl Theme {
@@ -189,46 +199,53 @@ impl Theme {
                 text_shadow: None,
                 density: 1.0,
                 float: None,
+                text_band: None,
+                person_cap: None,
+                mine_edge: None,
+                head: None,
             },
             Name::Glass => Theme {
                 name: n,
-                // Smoked glass: a cool slate top over a deeper bottom, both translucent. The tint
-                // is what keeps light text legible over a bright world (no backdrop blur in
-                // Bevy 0.20's UI): about a fifth of the world shows through, and
-                // `glass_keeps_contrast_over_a_bright_world` holds text to WCAG AA over the
-                // brightest ground measured by day (glass-1 stills).
-                panel: (hexa(0x222a37, 0.76), hexa(0x0b0e14, 0.84)),
-                edge: hexa(0xffffff, 0.16),
+                // Light glass: a cool slate tint, clearer at the top than at the bottom, so most of
+                // the world shows through (no backdrop blur in Bevy 0.20's UI). Contrast is carried
+                // where the text is, not by the whole panel: a band under text that lies on the
+                // glass (`text_band`), denser bands under rows and buttons, a dark drop under
+                // every light letter, and a 1 px light edge. `glass_keeps_contrast_over_a_bright_world`
+                // holds it to the brightest ground measured by day (glass-1 stills).
+                panel: (hexa(0x2a3344, 0.35), hexa(0x0e121a, 0.55)),
+                edge: hexa(0xffffff, 0.22),
                 edge_px: 0.5,
                 rim: None,
                 body: None,
                 body_edge: hexa(0xffffff, 0.08),
-                // Rows, chips, cells and fields are darker bands under their text.
-                surface: hexa(0x05070b, 0.26),
-                // A raised cell (a full pack cell, the Give list): lighter than the panel.
-                surface_hi: hexa(0x3a4456, 0.62),
-                surface_lo: hexa(0x05070b, 0.34),
+                // Rows, chips, cells and fields: darker bands under their text.
+                surface: hexa(0x05070b, 0.60),
+                // A raised cell (a full pack cell, the Give list): a lighter slate.
+                surface_hi: hexa(0x3a4456, 0.70),
+                surface_lo: hexa(0x05070b, 0.62),
                 text: hex(0xf6f7fa),
-                muted: hex(0xd0d5dd),
-                heading: hex(0xdfe3ea),
+                muted: hex(0xd6dae1),
+                heading: hex(0xe3e7ee),
                 title: hex(0xffffff),
-                on_panel: hex(0xdfe3ea),
-                accent: (hexa(0x6b97ff, 0.92), hexa(0x3f6fe0, 0.92)),
+                on_panel: hex(0xe3e7ee),
+                // Deep enough for white words on it (4.5:1 at the bottom, about that at the top).
+                accent: (hexa(0x3f6fe0, 0.95), hexa(0x2f5cc8, 0.95)),
                 accent_text: Color::WHITE,
-                plain: hexa(0xffffff, 0.09),
-                hot: (hexa(0x86aaff, 0.30), hexa(0x86aaff, 0.20)),
-                field: hexa(0x05070b, 0.34),
-                mine: hexa(0x6f9cff, 0.26),
-                name_mine: hex(0xb2caff),
-                talk: hex(0x5b8cff),
-                talk_ink: hex(0xb2caff),
-                close: hexa(0xffffff, 0.08),
-                close_glyph: hex(0xdfe3ea),
-                line: hexa(0xffffff, 0.10),
+                plain: hexa(0x05070b, 0.60),
+                hot: (hexa(0x86aaff, 0.42), hexa(0x86aaff, 0.32)),
+                // The others' bubbles and mine: faint tints; their words take the halo.
+                field: hexa(0x05070b, 0.22),
+                mine: hexa(0x6f9cff, 0.14),
+                name_mine: hex(0xa9c4ff),
+                talk: hex(0x3a68d8),
+                talk_ink: hex(0xffd88a),
+                close: hexa(0x05070b, 0.45),
+                close_glyph: hex(0xe3e7ee),
+                line: hexa(0xffffff, 0.14),
                 radius: 0.85,
-                shadow_y: 4.0,
-                shadow_blur: 14.0,
-                shadow_a: 0.18,
+                shadow_y: 3.0,
+                shadow_blur: 12.0,
+                shadow_a: 0.10,
                 shadow: hex(0x000000),
                 serif_titles: false,
                 title_scale: 0.72,
@@ -236,9 +253,13 @@ impl Theme {
                 grip: false,
                 help: false,
                 compass: (hexa(0x141a24, 0.55), hexa(0xffffff, 0.22)),
-                text_shadow: Some(hexa(0x000000, 0.80)),
+                text_shadow: Some(hexa(0x000000, 0.85)),
                 density: 0.72,
                 float: Some(hexa(0x141a24, 0.86)),
+                text_band: Some(hexa(0x05070b, 0.62)),
+                person_cap: Some(0.42),
+                mine_edge: Some(hexa(0x86aaff, 0.65)),
+                head: Some(hexa(0x05070b, 0.62)),
             },
             Name::Clear => Theme {
                 name: n,
@@ -282,6 +303,10 @@ impl Theme {
                 text_shadow: None,
                 density: 1.0,
                 float: None,
+                text_band: None,
+                person_cap: None,
+                mine_edge: None,
+                head: None,
             },
             Name::Night => Theme {
                 name: n,
@@ -325,6 +350,10 @@ impl Theme {
                 text_shadow: None,
                 density: 1.0,
                 float: None,
+                text_band: None,
+                person_cap: None,
+                mine_edge: None,
+                head: None,
             },
             Name::Linen => Theme {
                 name: n,
@@ -368,6 +397,10 @@ impl Theme {
                 text_shadow: None,
                 density: 1.0,
                 float: None,
+                text_band: None,
+                person_cap: None,
+                mine_edge: None,
+                head: None,
             },
         }
     }
@@ -475,13 +508,58 @@ pub fn d(px: f32) -> f32 {
 
 /// Light text spawned anywhere in the interface gets the theme's drop under it, if it has one
 /// (Glass): one rule for every widget's text, instead of a shadow written into each. Dark text
-/// (a cream bubble's, a light button's) is left as it is, and so is text that has its own.
-pub fn shade_text(mut commands: Commands, q: Query<(Entity, &TextColor), (Added<Text>, Without<bevy::ui::widget::TextShadow>)>) {
-    let Some(c) = t().text_shadow else { return };
-    for (e, tc) in &q {
-        if light(tc.0) {
-            commands.entity(e).try_insert(bevy::ui::widget::TextShadow { offset: Vec2::new(0.0, 1.0), color: c });
+/// (a cream bubble's, a light button's) is left as it is, and so is text with a drop of its own.
+///
+/// Light text that lies straight on the panel (the first node with a ground above it, itself
+/// included, is a [`Panel`], or nothing is) also gets the theme's band ([`Theme::text_band`]):
+/// a rounded dark ground under its own box, so it reads over a bright world behind light glass.
+/// (A box shadow on a text node, tried first as a soft halo, drew offset and partly missing in
+/// Bevy 0.20.) Text on a band, a button or a field of its own (a fill of 30% or more) relies on
+/// that fill.
+#[allow(clippy::type_complexity)]
+pub fn shade_text(
+    mut commands: Commands,
+    q: Query<(Entity, &TextColor, Option<&bevy::ui::widget::TextShadow>), Added<Text>>,
+    grounds: Query<(Option<&BackgroundColor>, Option<&BackgroundGradient>, Has<Panel>, Option<&ChildOf>)>,
+    mut nodes: Query<&mut Node>,
+) {
+    let th = t();
+    let Some(c) = th.text_shadow else { return };
+    let (mut shaded, mut haloed) = (0, 0);
+    for (e, tc, own) in &q {
+        // A widget's own drop stays (a nameplate's); a transparent one is no drop (titles).
+        if !light(tc.0) || own.is_some_and(|s| s.color.alpha() > 0.0) {
+            continue;
         }
+        let mut cmd = commands.entity(e);
+        cmd.try_insert(bevy::ui::widget::TextShadow { offset: Vec2::new(0.0, 1.0), color: c });
+        let Some(band) = th.text_band else { continue };
+        let mut at = Some(e);
+        let mut on_panel = true;
+        for _ in 0..16 {
+            let Some(n) = at else { break };
+            let Ok((bg, grad, panel, up)) = grounds.get(n) else { break };
+            if panel {
+                break;
+            }
+            if bg.is_some_and(|b| b.0.alpha() >= 0.3) || grad.is_some_and(|g| !g.0.is_empty()) {
+                on_panel = false;
+                break;
+            }
+            at = up.map(|u| u.parent());
+        }
+        if on_panel {
+            // The outline widens the band by a few px round the words without moving them.
+            cmd.try_insert((BackgroundColor(band), bevy::ui::Outline { width: Val::Px(3.0), offset: Val::ZERO, color: band }));
+            if let Ok(mut node) = nodes.get_mut(e) {
+                node.border_radius = BorderRadius::all(Val::Px(4.0));
+            }
+            haloed += 1;
+        }
+        shaded += 1;
+    }
+    if shaded > 0 {
+        debug!("ui: glass text: {shaded} shaded, {haloed} on the panel with a band");
     }
 }
 
@@ -507,7 +585,17 @@ pub fn flat(c: Color) -> BackgroundGradient {
 /// sets `b(3.0)` and `r(12.0)`.
 pub fn wood() -> impl Bundle {
     let th = t();
-    (down(&[(th.panel.0, 0.0), (th.panel.1, 100.0)]), BorderColor::all(th.edge), shadow(5.0, 1.0))
+    (down(&[(th.panel.0, 0.0), (th.panel.1, 100.0)]), BorderColor::all(th.edge), shadow(5.0, 1.0), Panel)
+}
+
+/// A node drawn with the theme's panel ([`wood`]): text that finds it before any band of its own
+/// lies straight on the panel ([`shade_text`]).
+#[derive(Component)]
+pub struct Panel;
+
+/// The edge of a bubble of mine in a conversation.
+pub fn mine_edge() -> Color {
+    t().mine_edge.unwrap_or(t().edge)
 }
 
 /// The ornament line inside a frame (nothing, in a theme without ornament).
@@ -680,8 +768,9 @@ mod tests {
 
     /// Glass over the brightest world measured behind a window by day (glass-1's day stills on
     /// Brackenford's square: pale paving, 95th percentile linear luminance 0.68–0.74), blended
-    /// in linear light as Bevy's UI is (the same stills' strips match that model): text keeps
-    /// WCAG AA (4.5) on the panel's mean, muted text 3.0, and a row's band only adds to it.
+    /// in linear light as Bevy's UI is (the same stills match that model): text straight on the
+    /// glass keeps WCAG AA (4.5) on its band, muted text 3.0, text on a
+    /// button or row band 4.5 too; and the glass alone lets at least 45% of the world through.
     #[test]
     fn glass_keeps_contrast_over_a_bright_world() {
         use super::*;
@@ -691,12 +780,23 @@ mod tests {
         let ratio = |a: f32, b: f32| (a.max(b) + 0.05) / (a.min(b) + 0.05);
         let mid = th.panel.0.mix(&th.panel.1, 0.5);
         let panel = over(mid, world);
-        let band = over(th.surface, panel);
-        assert!(ratio(luminance(th.text), panel) >= 4.5, "text on glass {:.2}", ratio(luminance(th.text), panel));
-        assert!(ratio(luminance(th.muted), panel) >= 3.0, "muted on glass {:.2}", ratio(luminance(th.muted), panel));
-        assert!(ratio(luminance(th.text), band) >= ratio(luminance(th.text), panel));
-        // And it is glass: some of the world shows through every part of a panel.
-        assert!(th.panel.0.alpha() < 0.9 && th.panel.1.alpha() < 0.9);
+        let band = over(th.text_band.unwrap(), panel);
+        let (text, muted) = (luminance(th.text), luminance(th.muted));
+        assert!(ratio(text, band) >= 4.5, "text on glass {:.2}", ratio(text, band));
+        assert!(ratio(muted, band) >= 3.0, "muted on glass {:.2}", ratio(muted, band));
+        // The title on its bar, at the panel's clearest (its top).
+        let top = over(th.panel.0, world);
+        let title = over(th.head.unwrap(), top);
+        assert!(ratio(luminance(th.title), title) >= 4.5, "title on its bar {:.2}", ratio(luminance(th.title), title));
+        for (what, band) in [("button", th.plain), ("row", th.surface), ("cell", th.surface_lo)] {
+            let l = over(band, panel);
+            assert!(ratio(text, l) >= 4.5, "text on a {what} {:.2}", ratio(text, l));
+        }
+        // White on the accent (a chosen button, the address chip) whatever is behind.
+        for c in [th.accent.0.mix(&th.accent.1, 0.5), th.talk] {
+            assert!(ratio(luminance(th.accent_text), over(c, panel)) >= 4.5, "white on {c:?}");
+        }
+        assert!(1.0 - mid.alpha() >= 0.45, "the glass shows {:.2} of the world", 1.0 - mid.alpha());
     }
 
     #[test]

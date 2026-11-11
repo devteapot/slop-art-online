@@ -299,7 +299,9 @@ fn spawn_frame(commands: &mut Commands, f: &Fonts, icons: &Icons, w: Win) -> Ent
         .with_children(|fr| {
             fr.spawn(wood::rim(9.0));
             // Title bar: grip, title, the window's key, ✕. Holding it moves the window.
-            fr.spawn((WinHead(w), Hot, super::hit::Tag(format!("win:{}:head", w.name())), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), padding: if wood::t().serif_titles { UiRect::new(Val::Px(16.0), Val::Px(12.0), Val::Px(8.0), Val::Px(6.0)) } else { UiRect::new(Val::Px(wood::d(18.0)), Val::Px(wood::d(10.0)), Val::Px(wood::d(12.0)), Val::Px(wood::d(8.0))) }, ..default() }))
+            // A theme's title bar ground (Glass), under the frame's rounded top corners.
+            let head_ground = (BackgroundColor(wood::t().head.unwrap_or(Color::NONE)),);
+            fr.spawn((WinHead(w), Hot, super::hit::Tag(format!("win:{}:head", w.name())), head_ground, Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), border_radius: BorderRadius::top(Val::Px((12.0 * wood::t().radius - 1.0).max(0.0))), padding: if wood::t().serif_titles { UiRect::new(Val::Px(16.0), Val::Px(12.0), Val::Px(8.0), Val::Px(6.0)) } else { UiRect::new(Val::Px(wood::d(18.0)), Val::Px(wood::d(10.0)), Val::Px(wood::d(12.0)), Val::Px(wood::d(8.0))) }, ..default() }))
                 .with_children(|h| {
                     h.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), flex_shrink: 1.0, overflow: Overflow::clip(), ..default() }, Pickable::IGNORE)).with_children(|l| {
                         if wood::t().grip {
@@ -448,7 +450,13 @@ pub fn place(mut ws: ResMut<Windows>, cams: Query<&Camera, With<Camera3d>>, ui_s
             Anchor::Centre => CENTRE_TOP,
         };
         let bottom = if o.anchor == Anchor::Centre { CLUSTER_H + 16.0 } else { MARGIN };
-        let max_h = Val::Px((screen.y - anchor_top - bottom).max(160.0));
+        let mut max_h = (screen.y - anchor_top - bottom).max(160.0);
+        // A theme may keep a person's window short (Glass: under half the screen); its
+        // conversation scrolls inside, so the world beside the anchor stays in view.
+        if let (Win::Person(_), Some(cap)) = (o.win, wood::t().person_cap) {
+            max_h = max_h.min((screen.y * cap).max(240.0));
+        }
+        let max_h = Val::Px(max_h);
         if n.left != left {
             n.left = left;
         }
