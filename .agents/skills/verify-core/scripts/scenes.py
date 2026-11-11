@@ -805,6 +805,48 @@ def senses(s):
         s.call("install_script", shipped)
 
 
+def doing(s):
+    """What one character perceives another doing, for AI bodies (docs/PERCEPTION.md, "Activity
+    derived from the body"): its activity's label, unchanged by the derivation from the body,
+    which applies only to a body moving under motion intent (a player's movement keys; no AI
+    body steers that way). On an open line an observer O stands at the west end; W1 walks to O
+    (goto), W2 walks in from 10 m to a spot near O (goto a point), F follows O, S stands by.
+    O's graph thinks (a `think` leaf), which writes O's deliberation scene: the `doing` of each
+    must be its activity's label, and none of their bodies steers by direction (`steer.goal`
+    3). About a minute: the observer can ask for a deliberation only 45 s after it arrives."""
+    line = open_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    obs, w1, w2, f, st = s.people(5)
+    born = time.monotonic()
+    s.call("place_at", obs, *line[0])
+    s.call("place_at", w1, *line[10])
+    s.call("place_at", w2, line[10][0], line[10][1] + 1.0)
+    s.call("place_at", f, line[9][0], line[9][1] - 1.0)
+    s.call("place_at", st, line[4][0], line[4][1] + 1.0)
+    # A `think` leaf asks only when the last deliberation is over 45 s old (`brain.rs`: a fresh
+    # decision is not second-guessed), and newcomers count from their arrival.
+    time.sleep(max(1.5, 47.0 - (time.monotonic() - born)))
+    near = list(line[1])
+    s.graph(w2, {"seq": [{"do": {"skill": "goto", "target": {"at": [near[0], near[1] + 1.0]}}}, {"wait": 300}]})
+    s.graph(f, {"seq": [{"do": {"skill": "follow", "target": {"id": obs}}}, {"wait": 300}]})
+    s.graph(w1, {"seq": [{"do": {"skill": "goto", "target": {"id": obs}}}, {"wait": 300}]})
+    stamp = lambda: next((d["updated_ms"] for d in s.rows(f"SELECT actor, updated_ms FROM deliberation WHERE actor = {obs}")), -1)
+    before = stamp()
+    s.call("set_behavior", obs, json.dumps({"seq": [{"think": "a look around"}, {"wait": 300}]}))
+    row = s.wait(lambda: next((d for d in s.rows(f"SELECT * FROM deliberation WHERE actor = {obs}") if d["updated_ms"] > before), None), 15)
+    acts = {a["id"]: a for a in s.rows("SELECT id, skill, label, phase FROM activity", "activities") if a["id"] in (w1, w2, f, st)}
+    steer = s.rows("SELECT id, goal FROM steer", "steer")
+    scene = json.loads(row["scene"])
+    (s.out / f"{s.name}-scene.json").write_text(json.dumps(scene, indent=1, ensure_ascii=False) + "\n")
+    seen = {c["id"]: c.get("doing") for c in scene.get("creatures", [])}
+    s.expect("the scene's doing is each AI body's activity label", all(seen.get(i) == a["label"] for i, a in acts.items() if i in seen) and len(seen.keys() & acts.keys()) >= 3, {"seen": seen, "labels": {i: a["label"] for i, a in acts.items()}})
+    s.expect("a walk to a place reads goto → (x,y)", (seen.get(w2) or "").startswith("goto → ("), seen.get(w2))
+    s.expect("a follow reads follow → person", seen.get(f) == "follow → person", seen.get(f))
+    s.expect("standing by reads wait", seen.get(st) == "wait", seen.get(st))
+    s.expect("a walk to the observer reads goto → person", seen.get(w1) == "goto → person", {"seen": seen.get(w1), "activity": acts.get(w1)}, fatal=False)
+    s.expect("no AI body steers by direction (motion intent)", not [r for r in steer if r["goal"] == 3 and r["id"] in (obs, w1, w2, f, st)], [r for r in steer if r["id"] in (w1, w2, f, st)])
+
+
 def moves(s):
     """How a creature moves besides its walk is the script's `motion(a)` law: a flight at 1.15
     times the walk, turning on the spot at 6 rad/s. A person walks off (its cruising speed is
@@ -1344,7 +1386,7 @@ def laws(s):
     s.expect("an ordinary night outside costs no health", night["hp_rate"] >= 0, night)
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing}
 
 
 def main():

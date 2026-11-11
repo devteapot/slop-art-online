@@ -58,7 +58,8 @@ def local_urls():
     if CONTAINER == SHARED:
         return {"http://127.0.0.1:3300", "http://localhost:3300"}
     r = subprocess.run(["docker", "port", CONTAINER, "3000/tcp"], capture_output=True, text=True)
-    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith("127.0.0.1:")}
+    # A port bound on every interface (0.0.0.0, as the trial stack's) is reachable on 127.0.0.1 too.
+    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith(("127.0.0.1:", "0.0.0.0:"))}
     return {f"http://{h}:{p}" for p in ports for h in ("127.0.0.1", "localhost")}
 
 
