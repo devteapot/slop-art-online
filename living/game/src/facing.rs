@@ -17,9 +17,9 @@
 //!   opens a second connection with it, used for nothing but that call. F5, or the toggle in
 //!   Settings › Play, asks it. Without the file (normal play), the switch is read-only and F5
 //!   only says so.
-//! - **The look input:** `human_face(dx, dy)` is not in the rules yet; until it is, the field
-//!   follows `body.heading` (the travel direction, or a `face` gesture), also when facing the
-//!   cursor. Settings says so beside the control scheme. It plugs in at `controls::look`.
+//! - **The look input:** `controls::look` sends `human_face(dx, dy)`: facing the cursor, always;
+//!   facing where I walk, only while a move is aimed. It turns `body.heading`, which the field
+//!   reads from my motion row, so the field follows the authority's facing.
 
 use crate::net::Net;
 use bevy::prelude::*;

@@ -407,7 +407,7 @@ pub fn my_heading(net: &Net, now_ms: f64) -> Option<f32> {
 /// My facing now, while my senses have a field; none without one (sight the same all round).
 pub fn facing_now(edge: &SightEdge, net: &Net, scene: &crate::world::Scene) -> Option<Facing> {
     let senses = edge.senses.filter(|s| s.field.is_some())?;
-    // Where the facing plugs in for `human_face` too: it sets `body.heading`, the same row.
+    // `human_face` (`controls::look`) sets `body.heading` too: the same row.
     Some(Facing { heading: my_heading(net, scene.mine_ms)?, senses })
 }
 
