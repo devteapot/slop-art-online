@@ -1198,7 +1198,7 @@ fn block_ui() { #{ label: "Block", place: "skill", order: 0, input: "hold", mark
 fn heal_ui() { #{ label: "Heal", place: "skill", order: 1, look: #{ icon: "heal", clip: "cast" }, running: #{ show: "windup" } } }
 fn firebolt_ui() { #{ label: "Fire bolt", place: "skill", order: 2, input: "aim_point", look: #{ icon: "fire", clip: "cast", effect: "bolt" }, running: #{ show: "windup" } } }
 fn dodge_ui() { #{ label: "Dodge", place: "dodge", look: #{ icon: "dodge", clip: "dash" } } }
-fn jump_ui() { #{ label: "Jump", place: "jump", look: #{ icon: "dodge", clip: "jump" } } }
+fn jump_ui() { #{ label: "Jump", place: "jump", look: #{ icon: "jump", clip: "jump" } } }
 // Accept is also an answer on an offer's card (its window): toward the offer's maker.
 fn accept_ui() { #{ on: ["person", "thing", "offer"] } }
 fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }

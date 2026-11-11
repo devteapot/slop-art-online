@@ -158,6 +158,7 @@ pub enum SkillIcon {
     Shield,
     Dodge,
     Heal,
+    Jump,
     Empty,
 }
 

@@ -230,7 +230,7 @@ vocab! {
 }
 
 /// Named icons for skills and acts (`look.icon`). The client's theme maps each to an image.
-pub const ICONS: &[&str] = &["sword", "bow", "fire", "shield", "dodge", "heal", "sheath", "give", "trade", "talk", "wave", "eye", "book", "hammer", "pot", "hand"];
+pub const ICONS: &[&str] = &["sword", "bow", "fire", "shield", "dodge", "heal", "sheath", "give", "trade", "talk", "wave", "eye", "book", "hammer", "pot", "hand", "jump"];
 /// Named icons for items (an item's `icon` trait). Not checked at install: the goods' icon ids
 /// are the dev-box's (docs/WORLD_RULES.md), and this list follows them when they land.
 pub const ITEM_ICONS: &[&str] = &["berries", "bread", "meat", "arrow", "spear", "wood", "stone", "herb", "torch", "cloth", "tablet", "tool", "vessel", "bundle"];

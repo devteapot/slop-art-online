@@ -293,6 +293,7 @@ fn icon_named(name: Option<&str>) -> SkillIcon {
         Some("shield") => SkillIcon::Shield,
         Some("dodge") => SkillIcon::Dodge,
         Some("heal") => SkillIcon::Heal,
+        Some("jump") => SkillIcon::Jump,
         _ => SkillIcon::Empty,
     }
 }

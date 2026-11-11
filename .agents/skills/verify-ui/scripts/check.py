@@ -122,11 +122,15 @@ def talk(run, c):
     s = "talk"
     a, b = residents(run)
     plan = ("ready;sync:scene;wait:2;shot:01_scene;cursor:0.5,0.12;wait:0.3;key:Enter:tap;wait:0.6;shot:02_room;dump:02;type:Good morning, all.;enter;wait:11.5;shot:03_room_note;dump:03;"
-            "point:{A};wait:0.4;shot:04_hover;key:Enter:tap;wait:0.6;shot:05_to_them;dump:05;type:Hello there, good morning.;enter;wait:1.2;shot:06_said;dump:06;"
+            "sync:hold;wait:0.8;point:{A};wait:0.4;shot:04_hover;key:Enter:tap;wait:0.6;shot:05_to_them;dump:05;type:Hello there, good morning.;enter;wait:1.2;shot:06_said;dump:06;"
             "key:Enter:tap;wait:0.4;tab;wait:0.4;dump:07a;tab;wait:0.4;dump:07b;tab;wait:0.4;dump:07c;tab;wait:0.4;dump:07d;tab;wait:0.4;dump:07e;tab;wait:0.4;dump:07f;tab;wait:0.4;dump:07g;tab;wait:0.4;dump:07h;shot:07_tab;key:Escape:tap;wait:0.4;dump:08;"
             "key:KeyL:tap;wait:0.4;click:@log:tab:1;wait:0.4;shot:09_people;click:@log:person:0;wait:0.6;shot:10_window;dump:10;"
             "menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.5;click:@person:more;wait:0.5;shot:11_more;click:@acts:0:introduce;wait:0.5;shot:11_intro;dump:11;quit").replace("{A}", str(a))
-    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"])
+    # Placed apart across the view, and placed again just before the cursor goes to A: in the
+    # 11 s of the room's note they may walk (town life), once onto one spot, stacked on screen.
+    wait = json.dumps(json.dumps({"wait": 600}))
+    hold = f"hold=place_at|{a}|(mx-2.5)|(my+2.0);set_behavior|{a}|{wait};place_at|{b}|(mx+2.0)|(my+2.5);set_behavior|{b}|{wait}"
+    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:2.0:2.5"], syncs=[hold])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["02", "03", "05", "06", "07a", "07b", "07c", "08", "10", "11"]}
     L = log(out)
@@ -321,8 +325,11 @@ def pick(run, c):
     # the view, where the ray through A's chest meets the ground.
     plan = ("ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
             "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:{LINE};enter;wait:1.2;dump:03;key:Escape:tap;wait:0.6;"
-            "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;quit").replace("{A}", str(a)).replace("{LINE}", line)
-    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"])
+            "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;"
+            "sync:stack;wait:1;point:{A}:1.0;wait:0.5;dump:05a;wait:0.5;dump:05b;wait:0.5;dump:05c;shot:05_stacked;quit").replace("{A}", str(a)).replace("{LINE}", line)
+    # Last, both on one spot (stacked exactly on screen): one answer every frame, the nearer the camera.
+    stack = f"stack=place_at|{a}|(mx-3.0)|(my-1.0);place_at|{b}|(mx-3.0)|(my-1.0)"
+    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"], syncs=[stack])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["01", "02", "03", "04"]}
     L = log(out)
@@ -336,6 +343,12 @@ def pick(run, c):
     c.check(s, "a tap on the one in front talks to them (combat's target is the same pick)", t4.get("to") == a, json.dumps(t4))
     rows = sql(run, f"SELECT kind, object, text FROM experience WHERE kind = 'said' AND object = {a}")
     c.check(s, "the authority's said row has to = the one in front", any(line in r.get("text", "") for r in rows), f"{len(rows)} said rows to #{a}")
+    st = [dump(out, f"05{k}") or {} for k in "abc"]
+    unders = [x.get("under") for x in st]
+    def front(x):
+        both = [b_ for b_ in (x.get("seen") or []) if b_["id"] in (a, b)]
+        return min(both, key=lambda b_: (b_["depth"], b_["id"]))["id"] if len(both) == 2 else None
+    c.check(s, "two bodies stacked on one spot: the same one every frame, the nearer the camera", len(set(unders)) == 1 and unders[0] in (a, b) and all(front(x) == unders[0] for x in st), f"under {unders}, front by depth {[front(x) for x in st]}")
 
 
 def bar(run, c):

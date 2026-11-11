@@ -174,7 +174,12 @@ fn defaults_reproduce_todays_looks() {
                 // A shown skill (tend) is drawn by how others see it (the town look), not as a blow.
                 Some(sh) => assert_eq!(u.look.clips, vec![name_in(CLIPS, &sh.look).expect("a family")], "{world}: `{skill}` plays its shown look"),
                 // A fight move (on the bar, or used against someone) looks as the client drew it.
-                None if fight => assert_eq!(as_today(&u.look), today_look(skill, shape.aim.as_str(), radius), "{world}: `{skill}` looks as the client drew it"),
+                None if fight => {
+                    // Step 2 gives the jump its own icon (today's client drew it with the dodge's).
+                    let today = today_look(skill, shape.aim.as_str(), radius);
+                    let today = if skill == "jump" { TodayLook { icon: "jump", ..today } } else { today };
+                    assert_eq!(as_today(&u.look), today, "{world}: `{skill}` looks as the client drew it")
+                }
                 // Any other combat shape (seize, yield) is no blow: no sword, no slash, no circle
                 // (the client drew them with the creature fallback only as a fighter's move,
                 // which an untimed shape never is).
