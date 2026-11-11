@@ -1177,6 +1177,9 @@ impl Minds {
 
     /// Keep the skills' takes and gives in prompts in step with the world's rule script.
     fn refresh_rules(&self) {
+        if let Some(w) = self.conn.db.world().id().find(&0) {
+            prompts::set_day_ms(w.day_ms);
+        }
         if let Some(s) = self.conn.db.script().iter().find(|s| s.name == "skills") {
             prompts::set_rules(s.revision, &s.source);
         }

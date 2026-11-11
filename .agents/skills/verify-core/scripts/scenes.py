@@ -805,6 +805,48 @@ def senses(s):
         s.call("install_script", shipped)
 
 
+def doing(s):
+    """What one character perceives another doing, for AI bodies (docs/PERCEPTION.md, "Activity
+    derived from the body"): its activity's label, unchanged by the derivation from the body,
+    which applies only to a body moving under motion intent (a player's movement keys; no AI
+    body steers that way). On an open line an observer O stands at the west end; W1 walks to O
+    (goto), W2 walks in from 10 m to a spot near O (goto a point), F follows O, S stands by.
+    O's graph thinks (a `think` leaf), which writes O's deliberation scene: the `doing` of each
+    must be its activity's label, and none of their bodies steers by direction (`steer.goal`
+    3). About a minute: the observer can ask for a deliberation only 45 s after it arrives."""
+    line = open_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    obs, w1, w2, f, st = s.people(5)
+    born = time.monotonic()
+    s.call("place_at", obs, *line[0])
+    s.call("place_at", w1, *line[10])
+    s.call("place_at", w2, line[10][0], line[10][1] + 1.0)
+    s.call("place_at", f, line[9][0], line[9][1] - 1.0)
+    s.call("place_at", st, line[4][0], line[4][1] + 1.0)
+    # A `think` leaf asks only when the last deliberation is over 45 s old (`brain.rs`: a fresh
+    # decision is not second-guessed), and newcomers count from their arrival.
+    time.sleep(max(1.5, 47.0 - (time.monotonic() - born)))
+    near = list(line[1])
+    s.graph(w2, {"seq": [{"do": {"skill": "goto", "target": {"at": [near[0], near[1] + 1.0]}}}, {"wait": 300}]})
+    s.graph(f, {"seq": [{"do": {"skill": "follow", "target": {"id": obs}}}, {"wait": 300}]})
+    s.graph(w1, {"seq": [{"do": {"skill": "goto", "target": {"id": obs}}}, {"wait": 300}]})
+    stamp = lambda: next((d["updated_ms"] for d in s.rows(f"SELECT actor, updated_ms FROM deliberation WHERE actor = {obs}")), -1)
+    before = stamp()
+    s.call("set_behavior", obs, json.dumps({"seq": [{"think": "a look around"}, {"wait": 300}]}))
+    row = s.wait(lambda: next((d for d in s.rows(f"SELECT * FROM deliberation WHERE actor = {obs}") if d["updated_ms"] > before), None), 15)
+    acts = {a["id"]: a for a in s.rows("SELECT id, skill, label, phase FROM activity", "activities") if a["id"] in (w1, w2, f, st)}
+    steer = s.rows("SELECT id, goal FROM steer", "steer")
+    scene = json.loads(row["scene"])
+    (s.out / f"{s.name}-scene.json").write_text(json.dumps(scene, indent=1, ensure_ascii=False) + "\n")
+    seen = {c["id"]: c.get("doing") for c in scene.get("creatures", [])}
+    s.expect("the scene's doing is each AI body's activity label", all(seen.get(i) == a["label"] for i, a in acts.items() if i in seen) and len(seen.keys() & acts.keys()) >= 3, {"seen": seen, "labels": {i: a["label"] for i, a in acts.items()}})
+    s.expect("a walk to a place reads goto → (x,y)", (seen.get(w2) or "").startswith("goto → ("), seen.get(w2))
+    s.expect("a follow reads follow → person", seen.get(f) == "follow → person", seen.get(f))
+    s.expect("standing by reads wait", seen.get(st) == "wait", seen.get(st))
+    s.expect("a walk to the observer reads goto → person", seen.get(w1) == "goto → person", {"seen": seen.get(w1), "activity": acts.get(w1)}, fatal=False)
+    s.expect("no AI body steers by direction (motion intent)", not [r for r in steer if r["goal"] == 3 and r["id"] in (obs, w1, w2, f, st)], [r for r in steer if r["id"] in (w1, w2, f, st)])
+
+
 def moves(s):
     """How a creature moves besides its walk is the script's `motion(a)` law: a flight at 1.15
     times the walk, turning on the spot at 6 rad/s. A person walks off (its cruising speed is
@@ -1165,7 +1207,186 @@ def remains(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains}
+
+def tile_grid(s):
+    """This world's tiles: (width, height, bytes), and whether a tile can be walked."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    return W, H, lambda x, y: 0 <= x < W and 0 <= y < H and tiles[int(y) * W + int(x)] not in (2, 4, 7)
+
+
+def open_ray(s, length):
+    """Points 0, 1, ..., `length` metres along a straight ray in any of 32 directions, over open
+    ground with nothing that blocks sight on it or beside it (a small map has no long east-west
+    line)."""
+    W, H, walk = tile_grid(s)
+    for k in range(32):
+        t = k * math.pi / 16
+        dx, dy = math.cos(t), math.sin(t)
+        for y in range(4, H - 4, 3):
+            for x in range(4, W - 4, 3):
+                pts = [(x + 0.5 + dx * i, y + 0.5 + dy * i) for i in range(length + 1)]
+                if all(walk(px + ox, py + oy) for px, py in pts for ox, oy in ((0, 0), (-dy, dx), (dy, -dx))):
+                    return pts
+    raise RuntimeError(f"no open {length} m ray on this map")
+
+
+def law_number(src, fn, key=None):
+    """A number a law gives, read from the overlay's source (`fn known_within() { 24.0 }`, or
+    one arm of `sight_in`)."""
+    body = re.search(r"fn " + fn + r"\([^)]*\) \{(.*?)\}\n", src, re.S).group(1)
+    arm = (r"_ => " if key == "_" else r'"' + key + r'" => ') if key else ""
+    m = re.search(arm + r"([0-9.]+)", body)
+    return float(m.group(1))
+
+
+def laws(s):
+    """A world created from a seed with its own laws (a `laws_file` overlay, docs/CULLET_RULES.md;
+    the `cullet-laws` seed): its day length is the seed's, its laws are the composed overlay, its
+    need rates are written per game hour and turned into real time for its day, and its sight is
+    the overlay's: by day far (figures seen to the day sight), names only within the knowing
+    distance, and at night the dark's sight, lamplight and a carried light. Then a body outside
+    on an ordinary night. Waits for the real night (no clock is changed)."""
+    w = s.rows("SELECT * FROM world", "world")[0]
+    seed = json.loads((ROOT / "living/seeds" / f"{json.loads((s.out / 'state.json').read_text())['seed']}.json").read_text())
+    src = (ROOT / "living/seeds" / seed["laws_file"]).read_text()
+    s.expect("the world's day is the seed's day_minutes", w["day_ms"] == round(seed["day_minutes"] * 60000), {"day_ms": w["day_ms"], "day_minutes": seed["day_minutes"]})
+    script = s.rows("SELECT name, revision, source FROM script")[0]
+    over = script["source"].split("// ---- floor overlay ----", 1)
+    s.expect("the installed script is the shipped one with the seed's laws composed over it",
+             len(over) == 2 and over[1].strip() == src.strip() and "fn base_rates(a)" in over[0] and "fn base_senses(a)" in over[0], {"revision": script["revision"]})
+    hour_ms = w["day_ms"] / 24
+    day, dark, torch = law_number(src, "sight_in", "day"), law_number(src, "sight_in", "_"), law_number(src, "sight_in", "torch")
+    known, lamp_seen, carried = law_number(src, "known_within"), law_number(src, "lamplight_seen"), law_number(src, "carried_light_seen")
+
+    # Rates: a person awake by day under the law's per-hour numbers, in real minutes.
+    a = s.people(1)[0]
+    s.wait(lambda: s.vitals(a)["hunger_rate"] > 0)
+    v = s.vitals(a, "awake-vitals")
+    g = s.rows(f"SELECT genes FROM genome WHERE id = {a}")
+    genes = json.loads(g[0]["genes"]) if g else {}
+    per_min = 60000 / hour_ms
+    want_h = law_number(src, "hunger_awake") * per_min * genes.get("appetite", 1.0)
+    want_e = -abs(law_number(src, "energy_awake")) * per_min / genes.get("endurance", 1.0)
+    s.expect("need rates are the law's per game hour, in real time for this day", abs(v["hunger_rate"] - want_h) < 0.02 and abs(v["energy_rate"] - want_e) < 0.02,
+             {"hunger_rate": v["hunger_rate"], "want": want_h, "energy_rate": v["energy_rate"], "want_energy": want_e, "genes": genes})
+
+    # A player and figures on one open line.
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    # A player of an earlier attempt on this run keeps its living character.
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "join", "Watcher"], check=False, capture_output=True)
+    st = json.loads((s.out / "state.json").read_text())
+    viewer = st["identity"]
+    # A call as the player hands back a character the world's minds took over meanwhile.
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
+    me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{viewer}")), None))["id"]
+    span = int(day) + 6
+    line = open_ray(s, span)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    near, mid, far, beyond = 10, int(known) + 6, int(day) - 2, int(day) + 4
+    figures = s.people(4)
+    for f in figures:
+        s.graph(f, {"wait": 300})
+    talker = figures[0]
+    name = s.rows(f"SELECT name FROM character WHERE id = {talker}")[0]["name"]
+
+    def place(at):
+        s.call("place_at", me, *line[0])
+        for f, d in zip(figures, at):
+            x, y = d if isinstance(d, tuple) else line[d]
+            s.call("place_at", f, x, y)
+
+    def scene(label, seconds=3):
+        # A call as the player keeps its person present: after the `takeover_s` law (30 s)
+        # without one the world's minds take the character over and nobody is swept for it.
+        subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
+        time.sleep(seconds)
+        seen = {r["body"] for r in s.rows(f"SELECT body FROM perceived WHERE viewer = 0x{viewer}", f"perceived-{label}")}
+        shown = {r["body"]: r for r in s.rows(f"SELECT body, name, label, band FROM projected WHERE viewer = 0x{viewer}", f"projected-{label}")}
+        return seen, shown
+
+    def hour():
+        return world_hour(s)[0]
+    dark_now = 21.0 <= hour() or hour() < 5.0
+    if dark_now:
+        # Started at night (a rerun): the day checks need the world's morning.
+        print("SKIP the day checks: it is night; launch afresh for them", flush=True)
+    else:
+        # The talker says its name beside the player: the player knows it from then on.
+        place([3, mid, far, beyond])
+        s.graph(talker, {"seq": [{"say": f"I am {name}."}, {"wait": 300}]})
+        s.wait(lambda: s.rows(f"SELECT * FROM acquaintance WHERE observer = {me} AND known = {talker}"), seconds=20)
+        seen, shown = scene("day")
+        s.expect(f"by day figures are seen to {day:g} m", {talker, figures[1], figures[2]} <= seen and figures[3] not in seen,
+                 {"seen": sorted(seen), "at": {figures[1]: mid, figures[2]: far, figures[3]: beyond}})
+        s.expect(f"a figure beyond {known:g} m is not known (no name, no health band)", shown.get(figures[1], {}).get("band") == 255 and not shown.get(figures[1], {}).get("name"), shown.get(figures[1]))
+        place([int(known) - 4, mid, far, beyond])
+        seen, shown = scene("known-near", 2)
+        s.expect(f"someone one knows is named within {known:g} m", shown.get(talker, {}).get("name") == name and shown.get(talker, {}).get("band", 255) != 255, shown.get(talker))
+        place([int(known) + 4, mid, far, beyond])
+        seen, shown = scene("known-far", 2)
+        s.expect(f"and only a figure beyond {known:g} m", talker in seen and shown.get(talker, {}).get("name") == "" and shown.get(talker, {}).get("label") != name, shown.get(talker))
+
+    # The night: fully dark an hour after dusk.
+    print("Waiting for full dark (21:00 by the world's clock); no clock is changed.", flush=True)
+    s.wait(lambda: 21.0 <= hour() or hour() < 5.0, seconds=int(16 * hour_ms / 1000) + 60, every=10)
+    # The lamp and an open line of sight from it.
+    lamp = next(iter(s.rows("SELECT x, y FROM structure WHERE kind = 'lamp'")), None)
+    W, H, walk = tile_grid(s)
+    def clear(a, b):
+        n = int(math.dist(a, b) * 2) + 1
+        return all(walk(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(n + 1))
+    lit = None
+    if lamp:
+        far_lit = (lamp_seen + dark) / 2
+        for k in range(32):
+            t = k * math.pi / 16
+            o = (lamp["x"] + 1.5 * math.cos(t), lamp["y"] + 1.5 * math.sin(t))
+            e = (o[0] + far_lit * math.cos(t), o[1] + far_lit * math.sin(t))
+            if clear(o, e) and walk(*o) and walk(*e):
+                lit = (o, e)
+                break
+    s.expect("the seed has a lamp with an open line of sight from it", lit is not None, lamp)
+    gap = int((dark + torch) / 2)
+    s.call("grant_items", figures[2], "torch", 1)
+    place([gap - 4, gap + 2, int(carried) - 4, beyond])
+    seen, shown = scene("night")
+    s.expect(f"in the dark one sees {dark:g} m: {gap - 4} m seen, {gap + 2} m not", figures[0] in seen and figures[1] not in seen, {"seen": sorted(seen)})
+    s.expect(f"a figure carrying a light is seen from {carried:g} m", figures[2] in seen, {"seen": sorted(seen), "at": int(carried) - 4})
+    (o, e) = lit
+    s.call("place_at", figures[3], *o)
+    s.call("place_at", me, *e)
+    seen, shown = scene("lamplight")
+    d = math.dist(o, e)
+    s.expect(f"someone standing in lamplight is seen from {lamp_seen:g} m ({d:.0f} m off, beyond the dark's {dark:g})", figures[3] in seen, {"seen": sorted(seen), "dist": d})
+    # The same distance from the player the other way, far from any light: not seen.
+    mirror = (2 * e[0] - o[0], 2 * e[1] - o[1])
+    if walk(*mirror) and clear(e, mirror):
+        s.call("place_at", figures[3], *mirror)
+        seen, shown = scene("dark-same-distance")
+        s.expect("the same distance off in the dark, away from the lamp, is not seen", figures[3] not in seen, {"seen": sorted(seen), "at": mirror})
+    else:
+        print("SKIP the mirrored dark spot is not open ground with a clear line", flush=True)
+
+    # An ordinary night outside: no cold harm and no cold tiring under these laws.
+    out = s.people(1)[0]
+    s.graph(out, {"first": [{"do": "rest"}]})
+    s.wait(lambda: s.vitals(out)["rate_key"] & 2, seconds=60)
+    night = s.vitals(out, "night-out")
+    s.expect("an ordinary night outside costs no health", night["hp_rate"] >= 0, night)
+
+
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing}
 
 
 def main():

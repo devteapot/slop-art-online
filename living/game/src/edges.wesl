@@ -45,11 +45,33 @@ struct Edges {
     sight_look: vec4<f32>,
     // rgb: fog colour (linear), a: flattening toward it (not seen now).
     sight_fog: vec4<f32>,
-    // x: fully fogged at this multiple of the radius (limited view).
+    // x: fully fogged at this multiple of the radius (limited view), y: how far what lies
+    // behind something fogs (limited view).
     sight_far: vec4<f32>,
+    // The sight field (sightfield.rs): xy the world x, z of its corner, z one over its size in
+    // metres, w 1 when it holds a field.
+    sight_field: vec4<f32>,
 }
 
 @group(0) @binding(4) var<uniform> edges: Edges;
+// Where my sight lines reach: 1 seen, 0 behind something (two texels a tile, filtered).
+@group(0) @binding(5) var field_texture: texture_2d<f32>;
+@group(0) @binding(6) var field_sampler: sampler;
+
+// How far a ground point (world x, z) lies behind something my sight lines don't pass: 0 seen,
+// 1 hidden; 0 outside the field (the radius covers that). The filtered texels give a soft edge
+// of about half a tile; the smoothstep keeps its middle where the authority's test flips.
+fn behind(xz: vec2<f32>) -> f32 {
+    if (edges.sight_field.w < 0.5) {
+        return 0.0;
+    }
+    let uv = (xz - edges.sight_field.xy) * edges.sight_field.z;
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+        return 0.0;
+    }
+    let seen = textureSampleLevel(field_texture, field_sampler, uv, 0.0).r;
+    return 1.0 - smoothstep(0.2, 0.8, seen);
+}
 
 // Distance from the camera (m) at a pixel; reverse-Z infinite perspective: depth = near / z.
 fn dist(px: vec2<i32>) -> f32 {
@@ -156,19 +178,23 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
 
     let raw_depth = textureLoad(depth_texture, clamp(px, vec2(0), vec2<i32>(edges.screen.xy) - vec2(1)), 0);
 
-    // The edge of my character's sight (sightedge.rs), a radius round me on the ground plane.
-    // Not seen now: beyond it, dimmer, greyer, flatter and a little cooler (the sky is left
-    // alone). Limited view: beyond it, into the fog's colour by sight_far × the radius; nothing
-    // is drawn past that, so the sky and what was not drawn are fog too.
+    // The edge of my character's sight (sightedge.rs): a radius round me on the ground plane,
+    // and what my sight lines don't reach within it (the sight field).
+    // Not seen now: there, dimmer, greyer, flatter and a little cooler (the sky is left alone).
+    // Limited view: beyond the radius, into the fog's colour by sight_far × the radius, and
+    // behind things most of the way; nothing is drawn past that, so the sky and what was not
+    // drawn are fog too.
     if (edges.sight.w > 0.5) {
         var reach = 1e9;
+        var hid = 0.0;
         if (raw_depth > 1e-7) {
             let p = unproject(in.uv, raw_depth);
             reach = length(p.xz - edges.sight.xy);
+            hid = behind(p.xz);
         }
         let r = edges.sight.z;
         if (edges.sight.w < 1.5) {
-            let t = smoothstep(r - edges.sight_look.x, r + edges.sight_look.y, reach) * step(1e-7, raw_depth);
+            let t = max(smoothstep(r - edges.sight_look.x, r + edges.sight_look.y, reach), hid) * step(1e-7, raw_depth);
             let l = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
             // Greyer; flatter toward the fog's colour (it follows the light, so night stays
             // dark); dimmer and a little cooler.
@@ -177,7 +203,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
             g = g * (1.0 - edges.sight_look.z) * vec3<f32>(0.95, 0.98, 1.05);
             color = mix(color, g, t);
         } else {
-            let t = smoothstep(r, r * edges.sight_far.x, reach);
+            let t = max(smoothstep(r, r * edges.sight_far.x, reach), hid * edges.sight_far.y);
             color = mix(color, edges.sight_fog.rgb, t);
         }
     }

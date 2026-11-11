@@ -36,6 +36,7 @@ python3 "$C/scenes.py" refusal --run "$R" > "$E/refusal.txt" 2>&1
 python3 "$C/scenes.py" seize --run "$R" > "$E/seize.txt" 2>&1
 python3 "$C/scenes.py" sight --run "$R" > "$E/sight.txt" 2>&1
 python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
+python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
@@ -70,6 +71,15 @@ mkdir -p ".local/living/verify/$L"
 python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.txt" 2>&1
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
+
+# A world's own day and laws (about 30 min; it waits for the world's own night):
+# day_minutes, the laws overlay, rates per game hour, sight, names, lamplight
+# (features/laws.md, docs/CULLET_RULES.md).
+W=$R-laws
+mkdir -p ".local/living/verify/$W"
+python3 "$V" launch --run "$W" --seed cullet-laws > ".local/living/verify/$W/launch.txt" 2>&1
+python3 "$C/scenes.py" laws --run "$W" > ".local/living/verify/$W/laws.txt" 2>&1
+python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
 
 # Infant assertions use their own small, long-lived family fixture.
 I=$R-infant

@@ -112,10 +112,16 @@ pub fn sees(ctx: &ReducerContext, id: u32, eye: (f32, f32), at: (f32, f32), w: &
     in_sight(map, eye, at, common::dist(eye, at), common::sight_for(ctx, id, w, now))
 }
 
-/// The creatures a character at `at` with sight `sight` sees (itself excluded), nearest first.
+/// The creatures a character at `at` with sight `sight` sees (itself excluded), nearest first:
+/// within its sight, or within the `glow` of a light on them (a carried torch, lamplight).
 pub fn visible(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> Vec<NearCreature> {
     let map = common::map(ctx);
-    common::creatures_near(ctx, at, sight, now).into_iter().filter(|c| c.id != id && map.sight_clear(at, c.pos)).collect()
+    let gather = common::gather_radius(ctx, sight);
+    if gather <= sight {
+        return common::creatures_near(ctx, at, sight, now).into_iter().filter(|c| c.id != id && map.sight_clear(at, c.pos)).collect();
+    }
+    let w = common::world(ctx);
+    common::creatures_near(ctx, at, gather, now).into_iter().filter(|c| c.id != id && (c.dist <= sight || c.dist <= common::glow_of(ctx, c.id, &w, now)) && map.sight_clear(at, c.pos)).collect()
 }
 
 /// The largest sight anyone has now (for gathering onlookers before each one's own test): the
@@ -231,6 +237,7 @@ fn known_techniques(ctx: &ReducerContext, id: u32) -> Vec<String> {
 /// The law's answer with the observer's know-how already read (one observer, several targets).
 fn regard_knowing(ctx: &ReducerContext, observer: &Character, knows: &[String], target: &Character, now: u64) -> Regard {
     let w = common::world(ctx);
+    let sc = common::scripts(ctx);
     let knows = knows.to_vec();
     let input = RegardIn {
         observer_kind: observer.kind.clone(),
@@ -239,9 +246,22 @@ fn regard_knowing(ctx: &ReducerContext, observer: &Character, knows: &[String], 
         known: knows_name(ctx, observer, target),
         revealed: revealed(ctx, observer.id, target.id, now),
         own: observer.id == target.id,
-        night: common::night(&w, now),
+        night: common::night(ctx, &w, now),
+        dist: regard_dist(ctx, &sc, observer.id, target.id, now),
     };
-    regard_of(&common::scripts(ctx), input)
+    regard_of(&sc, input)
+}
+
+/// How far `target` is from `observer` for the `perceived_of` law, in whole metres rounded up;
+/// 0 when the law does not read it (two body lookups otherwise).
+fn regard_dist(ctx: &ReducerContext, sc: &Scripts, observer: u32, target: u32, now: u64) -> u16 {
+    if observer == target || !sc.regard_reads_dist() {
+        return 0;
+    }
+    match (ctx.db.body().id().find(observer), ctx.db.body().id().find(target)) {
+        (Some(a), Some(b)) => common::dist(pos(&a, now), pos(&b, now)).ceil().clamp(0.0, u16::MAX as f32) as u16,
+        _ => 0,
+    }
 }
 
 /// How one refers to someone whose name one does not know.
@@ -322,6 +342,80 @@ impl Projection {
     }
 }
 
+// ---- what an observer perceives a target doing --------------------------------------------
+
+/// How near the line of a mover's heading something must be to be what it walks toward: within
+/// about 18° of it.
+const TOWARD_COS: f32 = 0.95;
+
+/// What a creature is perceived doing (a mind's scene, the first sight of someone): its
+/// activity's label, which is what anyone sees of it ("goto → person"), except when its body is
+/// moving under its controller's direct intent (`motion::GOAL_DIRECTION`: a player's movement
+/// keys) and its activity is none or `wait`. Then the motion is what is seen ([`moving_label`]).
+/// It reads the body and its steering, never who controls it, so the same body behaviour reads
+/// the same whoever plays it (docs/PERCEPTION.md, "Activity derived from the body").
+/// `observer` and `seen` (what it sees) are whom the walker can be heading toward. Point lookups
+/// on `activity`, `steer` and `body` only; nothing is written.
+pub fn doing_of(ctx: &ReducerContext, id: u32, observer: (u32, &str, (f32, f32)), seen: &[NearCreature], now: u64) -> Option<String> {
+    let a = ctx.db.activity().id().find(id);
+    if a.as_ref().is_some_and(|a| a.skill != "wait") {
+        return a.map(|a| a.label);
+    }
+    let st = ctx.db.steer().id().find(id).filter(|s| s.goal == crate::motion::GOAL_DIRECTION);
+    let b = st.as_ref().and_then(|_| ctx.db.body().id().find(id)).filter(|b| b.vx != 0.0 || b.vy != 0.0);
+    match (st, b) {
+        (Some(st), Some(b)) => {
+            let dt = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
+            let (x, y, heading) = living_rules::steer::pose(b.x, b.y, b.heading, b.vx.hypot(b.vy), b.turn, b.turn_s, dt);
+            let among = std::iter::once((observer.1, observer.2)).filter(|_| observer.0 != id).chain(seen.iter().filter(|c| c.id != id).map(|c| (&*c.kind, c.pos)));
+            Some(moving_label(st.flags & crate::motion::FLAG_RUN != 0, (x, y), heading, among))
+        }
+        _ => a.map(|a| a.label),
+    }
+}
+
+/// The motion seen of a body moving with no activity of its own, in the style of an activity's
+/// label: `walk` or `run` (the run input), then `→ <kind>` of the nearest creature its heading
+/// points at, else the compass way it goes ("walk east").
+pub fn moving_label<'a>(run: bool, at: (f32, f32), heading: f32, among: impl IntoIterator<Item = (&'a str, (f32, f32))>) -> String {
+    let gait = if run { "run" } else { "walk" };
+    let (hx, hy) = (heading.cos(), heading.sin());
+    let ahead = among
+        .into_iter()
+        .filter_map(|(kind, p)| {
+            let (dx, dy) = (p.0 - at.0, p.1 - at.1);
+            let d = dx.hypot(dy);
+            (d > 0.3 && (dx * hx + dy * hy) / d >= TOWARD_COS).then_some((d, kind))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    match ahead {
+        Some((_, kind)) => format!("{gait} → {kind}"),
+        None => format!("{gait} {}", common::direction(at, (at.0 + 2.0 * hx, at.1 + 2.0 * hy))),
+    }
+}
+
+#[cfg(test)]
+mod doing_tests {
+    use super::moving_label;
+
+    #[test]
+    fn a_walker_heading_at_someone_walks_toward_them() {
+        // Heading east (+x) at a person 6 m ahead, a wolf off to the side.
+        let l = moving_label(false, (0.0, 0.0), 0.0, [("wolf", (3.0, 4.0)), ("person", (6.0, 0.5))]);
+        assert_eq!(l, "walk → person");
+        // The nearest of those ahead.
+        assert_eq!(moving_label(true, (0.0, 0.0), 0.0, [("person", (9.0, 0.0)), ("deer", (4.0, 0.2))]), "run → deer");
+    }
+
+    #[test]
+    fn a_walker_heading_at_no_one_goes_a_compass_way() {
+        // +y is south; someone behind or well off the line is not what it walks toward.
+        let l = moving_label(false, (0.0, 0.0), std::f32::consts::FRAC_PI_2, [("person", (0.0, -5.0)), ("person", (4.0, 4.0))]);
+        assert_eq!(l, "walk south");
+        assert_eq!(moving_label(true, (10.0, 10.0), std::f32::consts::PI, []), "run west");
+    }
+}
+
 // ---- the perceived set ---------------------------------------------------------------------
 
 thread_local! {
@@ -386,11 +480,15 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
     let keep = common::laws(ctx).keep_seen_m;
-    for c in common::creatures_near(ctx, here, sight + keep, now) {
+    // Gathered within the viewer's sight, or the farthest glow when the world's laws light
+    // people (a carried torch, lamplight); each is then seen within its own reach.
+    let gather = common::gather_radius(ctx, sight);
+    for c in common::creatures_near(ctx, here, gather + keep, now) {
         if c.id == id {
             continue;
         }
-        let reach = if had.contains(&c.id) { sight + keep } else { sight };
+        let s = if gather > sight { common::sight_to(ctx, sight, c.id, w, now) } else { sight };
+        let reach = if had.contains(&c.id) { s + keep } else { s };
         if in_sight(map, here, c.pos, c.dist, reach) {
             seen.insert(c.id);
         }
@@ -432,6 +530,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             _ => (true, HashSet::new()),
         }
     });
+    // A law that reads how far the target is (names only within a distance) may answer
+    // otherwise as anyone moves: every row is projected again, and written only if it changed.
+    let all = all || common::scripts(ctx).regard_reads_dist();
     // The viewer's own row (its exact health drifting between blows) is projected again about
     // once a second; blows reach it at once through `health_moved`.
     let own_due = (now / SWEEP_MS) % 5 == id as u64 % 5;

@@ -78,7 +78,7 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
     let r = crate::perception::widest_sight(ctx, &w, now);
     for (c, d) in minds_near(ctx, at, r, now, exclude) {
         let Some(eye) = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)) else { continue };
-        if !crate::perception::in_sight(&map, eye, at, d, common::sight_for(ctx, c.id, &w, now)) {
+        if !crate::perception::in_sight(&map, eye, at, d, common::sight_to(ctx, common::sight_for(ctx, c.id, &w, now), subject, &w, now)) {
             continue;
         }
         // How this onlooker refers to the two (each projected once; the template's first `{a}`
@@ -515,12 +515,13 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let hour = common::hour(&w, now);
     let r = common::sight_for(ctx, id, &w, now);
-    let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": living_rules::is_night(hour), "season": common::season(ctx, now), "sight": r});
+    let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": common::scripts(ctx).is_night(hour), "season": common::season(ctx, now), "sight": r});
 
     let mut creatures = Vec::new();
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
-    for c in crate::perception::visible(ctx, id, at, r, now) {
+    let in_sight = crate::perception::visible(ctx, id, at, r, now);
+    for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
         let seen = crate::perception::project(ctx, &me, &ch, now);
         let mut o = JMap::new();
@@ -555,8 +556,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
         o.insert("dist".into(), json!(round(c.dist)));
         o.insert("dir".into(), json!(direction(at, c.pos)));
-        if let Some(a) = ctx.db.activity().id().find(c.id) {
-            o.insert("doing".into(), json!(a.label));
+        if let Some(doing) = crate::perception::doing_of(ctx, c.id, (id, &me.kind, at), &in_sight, now) {
+            o.insert("doing".into(), json!(doing));
         }
         if ch.kind == "person" {
             if let Some(s) = gave_in(c.id) {

@@ -76,7 +76,7 @@ fn compiled() -> Option<Arc<living_rules::script::Scripts>> {
                 return Some(s.clone());
             }
         }
-        let s = Arc::new(living_rules::script::Scripts::new(&src).ok()?);
+        let s = Arc::new(living_rules::script::Scripts::with_day(&src, day_ms()).ok()?);
         *c.borrow_mut() = Some((rev, s.clone()));
         Some(s)
     })
@@ -98,6 +98,19 @@ pub fn talk_acts() -> String {
     living_rules::catalog::skills().iter().filter(|s| s.talk && !TALK_SHOWN.contains(&s.name.as_str())).map(living_rules::catalog::skill_line).collect::<Vec<_>>().join("\n")
 }
 
+/// The world's day in real milliseconds (its `world` row; the shipped 12 minutes until read).
+/// The rules read it for laws written per game hour and for the calendar's words. It is set when
+/// the world is created and never changes after, so a rules revision's text holds it.
+static DAY_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(living_rules::DEFAULT_DAY_MS);
+
+pub fn set_day_ms(day_ms: u64) {
+    DAY_MS.store(day_ms.max(1), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn day_ms() -> u64 {
+    DAY_MS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// What each combat skill is under the world's rule script (`<skill>_combat()`): which skills
 /// are real-time behavior rather than acts.
 static SHAPES: std::sync::RwLock<Option<Arc<living_rules::combat::Shapes>>> = std::sync::RwLock::new(None);
@@ -108,7 +121,7 @@ pub fn set_rules(revision: u32, source: &str) {
     if *RULES_REV.read().unwrap() == Some(revision) {
         return;
     }
-    match living_rules::script::Scripts::new(source) {
+    match living_rules::script::Scripts::with_day(source, day_ms()) {
         Ok(s) => {
             log::info!("rules revision {revision}: {} skills", s.skills().len());
             living_rules::catalog::set_skills(s.skills().clone());

@@ -58,7 +58,8 @@ def local_urls():
     if CONTAINER == SHARED:
         return {"http://127.0.0.1:3300", "http://localhost:3300"}
     r = subprocess.run(["docker", "port", CONTAINER, "3000/tcp"], capture_output=True, text=True)
-    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith("127.0.0.1:")}
+    # A port bound on every interface (0.0.0.0, as the trial stack's) is reachable on 127.0.0.1 too.
+    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith(("127.0.0.1:", "0.0.0.0:"))}
     return {f"http://{h}:{p}" for p in ports for h in ("127.0.0.1", "localhost")}
 
 
@@ -173,7 +174,16 @@ def launch(a):
     keep = getattr(a, "keep_data", False)
     fresh = [] if keep else ["--delete-data"]
     stdb("publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y")
-    stdb("call", "-s", "local", st["db"], "install_script", json.dumps((LIVING / "scripts/skills.rhai").read_text()))
+    # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
+    # shipped script and installed when its world was created; installing the plain script now
+    # would drop them. Every other world gets the working tree's script, as before.
+    seed_file = Path(a.seed if a.seed.startswith("/") else LIVING / "seeds" / a.seed).with_suffix(".json") if a.seed != "none" else None
+    seed_json = json.loads(seed_file.read_text()) if seed_file and seed_file.exists() else {}
+    st["seed_laws"] = bool(str(seed_json.get("laws") or "").strip() or seed_json.get("laws_file"))
+    if st["seed_laws"]:
+        log(st, "the seed carries its own laws: kept as installed at creation (no install_script)")
+    else:
+        stdb("call", "-s", "local", st["db"], "install_script", json.dumps((LIVING / "scripts/skills.rhai").read_text()))
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)

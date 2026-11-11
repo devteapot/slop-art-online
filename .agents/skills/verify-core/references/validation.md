@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-11 rules-1: a world's own day and laws (dev-box)
+
+Branch `rules-1`, own container `rules1-stdb` (2.14.1, port 3312), private `CARGO_TARGET_DIR`, no minds. Baseline `core-rules1-base` (default seed): cargo checks (rules 138, authority 12, mind 82, viewer sync 5) and tick, needs, food, refusal, seize, sight, senses, moves: 45 of 45. New `laws` scene on `cullet-laws` (`core-rules1-cullet`): day and rates, 48 m by day, names within 24 m pass; the first night attempt saw nothing (`laws-attempt3.txt`: the HTTP player had been taken over by the world's minds after `takeover_s`), fixed by a player call before each snapshot; the night rerun passed (14 m, a torch at 44 m, lamplight at 21 m, no cold harm). Two earlier attempts failed on the scene itself (a regex for `sight_in`'s `_` arm; no 54-tile east-west line on the 96 m map, replaced by `open_ray`).
+
 ## 2026-11-11 plan-1 (dev-box)
 
 Branch `plan-1` (hand-authored plans, docs/AUTHORED_PLANS.md; it adds `lot:<id>` place kinds in `town::seat` and seed `homes`, unused by the island), own container `plan1-stdb` (2.14.1, port 3311), private `CARGO_TARGET_DIR`. `town.py` `core-plan1-town-20261111-135920` on the island: 22 of 23; the failure is the recorded flake "a resident faces someone who comes up behind them" (Cuth Marrow, player stopped 1.6 tiles away). Not run: the baseline scenes, skirmish, dealings, lives, infant, lifecycle, wildlife.
@@ -297,3 +301,7 @@ Shared container, laptop, island seed. `dealings` passed all 15 checks in `core-
 ## 2026-11-11, branch iter-11 (person needs paced to real time)
 
 Shared container, laptop. `needs` passed all 7 checks in `core-pace-095608`, with its thresholds scaled by `person_pace` (0.3), and `food` all 4. `infant` passed all 18 checks in `core-pacei2-100737-infant`, with its hunger waits divided by the pace (about 2 hours in all). The first `infant` attempt (`core-pacei-095616-infant`) failed its setup check "warm anchor lies outside crying hearing" at 15.6 m: the witness and anchor come from `spawn_crowd` at random spots, so that check can fail by chance; it passed on the rerun and on plain e6b7e698 (`core-maini2-095803-infant`, all 18). Rules: all 132 tests pass, the five that pinned the old person rates now expect them times the pace (animals still bit-exact).
+
+## 2026-11-11, branch fix-perceived-moving (activity derived from the body)
+
+Spark, the trial stack's own server (`slop-trials-stdb`, v2.14.1, :3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), worktree on `origin/main` 6a905c3 plus the change. Default seed, `core-fixperc-1`: launch and doctor passed. Cargo passed: rules 145, authority 14 (including `perception::doing_tests`), mind 82, viewer-sync 5. `tick` 6/6, `sight` 6/6, `senses` 7/7 and `moves` 5/5 passed. The new `doing` scene timed out there: a `think` leaf asks only when the last deliberation is over 45 s old, and the scene's people were newcomers. Fixed in the scene, which now waits 47 s after spawning, and walks W2 in from 10 m. Then `doing` passed 7/7 twice in `core-fixperc-4`: O's scene read `goto → person`, `goto → (10,10)`, `follow → person` and `wait`, each equal to its activity label, and no AI body had `steer.goal` 3. Evidence: `core-fixperc-1/` and `core-fixperc-4/` (`doing-scene-1.json`, `doing-2.txt`, `doing-activities.json`, `doing-steer.json`). Not run: `needs`, `food`, `refusal`, `seize`, and the island, infant, town, lives and laws runs. The change does not touch them; it touches the perception of activity only.

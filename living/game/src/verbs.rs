@@ -94,7 +94,9 @@ impl Rules {
             return;
         }
         self.revision = row.revision;
-        match Scripts::new(&row.source) {
+        // The world's day: laws written per game hour, and the day's words, follow it.
+        let day_ms = conn.db.world().iter().next().map(|w| w.day_ms).unwrap_or(living_rules::DEFAULT_DAY_MS);
+        match Scripts::with_day(&row.source, day_ms) {
             Ok(s) => {
                 self.skills = skills_of(&s);
                 info!("rules: skill script revision {} compiled ({} skills)", row.revision, self.skills.len());
@@ -275,7 +277,12 @@ fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &S
             items.extend(me.actor.inv.iter().map(|(i, _)| i.clone()));
         } else if checked {
             items.extend(me.actor.inv.iter().map(|(i, _)| i.clone()));
-            items.extend(me.actor.knows.iter().cloned());
+            // What I know is an item only to a person (teach spear) or myself; a thing holds
+            // items, never know-how (play-test 2: F offered "take wound tending" at remains, and
+            // the authority refused it three times).
+            if !on_thing {
+                items.extend(me.actor.knows.iter().cloned());
+            }
             if !matches!(aim, Aim::Me) {
                 items.extend(catalog::item_names());
             }
@@ -440,6 +447,9 @@ struct Pending {
     sent_ms: f64,
     /// Through the act path (an outcome row will come) or as my behavior (the body shows it).
     act: bool,
+    /// The kind of target it went to and the choice, so a refusal stops it being the tap's act.
+    key: String,
+    choice: Choice,
 }
 
 /// A short note over the hint: what the authority said of my act.
@@ -504,7 +514,7 @@ impl Plugin for VerbsPlugin {
 
 // ---- what I know of myself and of what I aim at ----------------------------------------
 
-fn stage_name(s: u8) -> &'static str {
+pub(crate) fn stage_name(s: u8) -> &'static str {
     match s {
         0 => "infant",
         1 => "child",
@@ -773,7 +783,8 @@ fn send(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, 
     info!("verbs: {} → {}", c.label, node);
     let r = conn.reducers.human_act_then(node.to_string(), net.on_reply("act"));
     net.report("act", r);
-    v.pending.push(Pending { sent_ms: now_ms, act });
+    let key = aim.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
+    v.pending.push(Pending { sent_ms: now_ms, act, key, choice: c.clone() });
     if !act {
         v.toasts.push(Toast { text: c.label.clone(), ok: None, at: now_ms / 1000.0 });
     }
@@ -1007,7 +1018,7 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
         v.errors_seen = 0;
     }
     for e in errs.iter().skip(v.errors_seen) {
-        if let Some(why) = e.strip_prefix("act refused: ") {
+        if let Some(why) = e.strip_prefix("act refused: ").or_else(|| e.strip_prefix("say refused: ")) {
             v.toasts.push(Toast { text: why.to_string(), ok: Some(false), at: now });
         }
     }
@@ -1024,7 +1035,11 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
         let (ok, text) = outcome_text(&e.text);
         v.toasts.push(Toast { text, ok, at: now });
         if let Some(i) = v.pending.iter().position(|p| p.act) {
-            v.pending.remove(i);
+            let p = v.pending.remove(i);
+            // Refused: a tap no longer repeats it on that kind of target.
+            if ok == Some(false) && v.last.get(&p.key) == Some(&p.choice) {
+                v.last.remove(&p.key);
+            }
         }
     }
     // What the world's rules tell me of my dealings (an agreement kept or broken, a demand paid),
@@ -1193,6 +1208,25 @@ mod tests {
 
     /// A skill the world's script adds is offered with no change here: declared by its spec,
     /// aimed by its check.
+    #[test]
+    fn at_remains_i_may_take_items_but_never_know_how() {
+        let sc = Scripts::new(SKILLS).unwrap();
+        let aim = Aim::Thing { class: "structure", kind: "remains".into(), at: Vec2::ZERO, id: 5, amount: 0.0, nearest: true };
+        let t = thing_facts("structure", "remains", 5, 0.0, 1.0);
+        // Play-test 2's newcomer: a bow, arrows and berries; fire, the fire bolt and wound tending.
+        let m = me(&[("bow", 1), ("arrow", 30), ("berries", 4)], &["fire", "fire_bolt", "wound_tending"]);
+        let c = choices(&sc, &m, &aim, Some(&t), &skills_of(&sc));
+        let takes: Vec<&str> = c.iter().filter(|c| c.skill == "take").filter_map(|c| c.item.as_deref()).collect();
+        assert!(takes.contains(&"berries") && takes.contains(&"bow"), "{takes:?}");
+        for k in ["fire", "fire_bolt", "wound_tending"] {
+            assert!(!takes.contains(&k), "take {k} offered: {takes:?}");
+        }
+        // To a person, what I know is still mine to teach.
+        let (aim, t) = person();
+        let c = choices(&sc, &m, &aim, Some(&t), &skills_of(&sc));
+        assert!(c.iter().any(|c| c.skill == "teach" && c.item.as_deref() == Some("fire")), "{:?}", skills(&c));
+    }
+
     #[test]
     fn a_skill_the_rules_add_is_offered() {
         let src = format!("{SKILLS}\nfn polish_spec() {{ #{{ target: true, reach: 1.3, about: \"polish a boulder\" }} }}\nfn polish_check(a) {{ if a.target.kind != \"boulder\" {{ return \"nothing to polish\"; }} \"\" }}\nfn polish_duration(a) {{ 2000 }}\nfn polish_done(a) {{ [] }}\n");
