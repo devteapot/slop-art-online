@@ -40,7 +40,340 @@
    74
   ],
   "radius": 0,
-  "relief": 0
+  "relief": 0,
+  "street:setts": {
+   "layer": "slate_setts",
+   "colour": [
+    92,
+    94,
+    99
+   ],
+   "note": "basalt setts, polished by feet"
+  },
+  "street:quay_flags": {
+   "layer": "quay_flags",
+   "colour": [
+    83,
+    85,
+    91
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ],
+   "note": "the ship-day quay's flags: pale basalt, wet"
+  },
+  "street:flags": {
+   "layer": "quay_flags",
+   "colour": [
+    87,
+    90,
+    95
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ],
+   "note": "the mole's flags"
+  },
+  "street:cinders": {
+   "layer": "cinders",
+   "colour": [
+    56,
+    40,
+    36
+   ],
+   "tint": [
+    84,
+    51,
+    43
+   ],
+   "note": "furnace cinders and ash, 83 years of them"
+  },
+  "street:earth": {
+   "layer": "dirt",
+   "colour": [
+    92,
+    83,
+    73
+   ],
+   "tint": [
+    133,
+    128,
+    71
+   ],
+   "note": "trodden earth"
+  },
+  "street:sand": {
+   "layer": "wet_sand",
+   "colour": [
+    171,
+    165,
+    148
+   ],
+   "tint": [
+    219,
+    209,
+    178
+   ],
+   "note": "sand the tide has just left"
+  },
+  "area:quay_flags": {
+   "layer": "quay_flags",
+   "colour": [
+    83,
+    85,
+    91
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ],
+   "note": "the ship-day quay's flags: pale basalt, wet"
+  },
+  "area:setts": {
+   "layer": "slate_setts",
+   "colour": [
+    92,
+    94,
+    99
+   ],
+   "note": "basalt setts, polished by feet"
+  },
+  "area:cinders": {
+   "layer": "cinders",
+   "colour": [
+    56,
+    40,
+    36
+   ],
+   "tint": [
+    84,
+    51,
+    43
+   ],
+   "note": "furnace cinders and ash, 83 years of them"
+  },
+  "area:earth": {
+   "layer": "dirt",
+   "colour": [
+    92,
+    83,
+    73
+   ],
+   "tint": [
+    133,
+    128,
+    71
+   ],
+   "note": "trodden earth"
+  },
+  "area:worked_soil": {
+   "layer": "worked_soil",
+   "colour": [
+    74,
+    63,
+    53
+   ],
+   "tint": [
+    76,
+    71,
+    31
+   ],
+   "note": "dug soil fed with kelp"
+  },
+  "area:peat": {
+   "layer": "peat",
+   "colour": [
+    59,
+    47,
+    37
+   ],
+   "note": "a cutting's bare peat"
+  },
+  "area:kelp_shingle": {
+   "layer": "kelp_shingle",
+   "colour": [
+    81,
+    78,
+    51
+   ],
+   "tint": [
+    76,
+    71,
+    31
+   ],
+   "note": "the wrack line"
+  },
+  "area:white_sand": {
+   "layer": "sand",
+   "colour": [
+    219,
+    209,
+    178
+   ],
+   "note": "the Sand Spit's white sand, the glass's"
+  },
+  "stamp:sand": {
+   "layer": "wet_sand",
+   "colour": [
+    171,
+    165,
+    148
+   ],
+   "tint": [
+    148,
+    140,
+    105
+   ],
+   "note": "the Wrack Strand: wet sand, kelp in it"
+  },
+  "class:Road": {
+   "layer": "quay_flags",
+   "colour": [
+    83,
+    85,
+    91
+   ],
+   "tint": [
+    61,
+    64,
+    71
+   ],
+   "note": "the ship-day quay's flags: pale basalt, wet"
+  },
+  "class:Sand": {
+   "layer": "wet_sand",
+   "colour": [
+    171,
+    165,
+    148
+   ],
+   "tint": [
+    219,
+    209,
+    178
+   ],
+   "note": "sand the tide has just left"
+  },
+  "class:Dirt": {
+   "layer": "peat",
+   "colour": [
+    62,
+    51,
+    41
+   ],
+   "note": "bare peat where the turf is broken"
+  },
+  "class:Rock": {
+   "layer": "rock",
+   "colour": [
+    70,
+    73,
+    80
+   ],
+   "note": "basalt outcrops"
+  },
+  "class:Drop": {
+   "layer": "rock",
+   "colour": [
+    61,
+    64,
+    71
+   ],
+   "note": "the island's own basalt"
+  },
+  "class:Wall": {
+   "layer": "rock",
+   "colour": [
+    61,
+    64,
+    71
+   ],
+   "note": "the island's own basalt"
+  },
+  "class:Low": {
+   "layer": "rock",
+   "colour": [
+    61,
+    64,
+    71
+   ],
+   "note": "the island's own basalt"
+  },
+  "class:Forest": {
+   "layer": "forest_floor",
+   "colour": [
+    88,
+    78,
+    48
+   ],
+   "tint": [
+    51,
+    38,
+    28
+   ],
+   "note": "the Hanger's floor: needles and peat"
+  },
+  "region:meadow": {
+   "layer": "thin_turf",
+   "colour": [
+    124,
+    120,
+    71
+   ],
+   "tint": [
+    92,
+    94,
+    99
+   ],
+   "note": "the island's thin turf, the rock showing through"
+  },
+  "region:highland": {
+   "layer": "heather",
+   "colour": [
+    100,
+    92,
+    54
+   ],
+   "tint": [
+    128,
+    87,
+    122
+   ],
+   "note": "the Moss: heather and moor grass over peat"
+  },
+  "region:beach": {
+   "layer": "kelp_shingle",
+   "colour": [
+    83,
+    81,
+    60
+   ],
+   "tint": [
+    76,
+    71,
+    31
+   ],
+   "note": "shingle above the tide, wrack thrown on it"
+  },
+  "region:forest": {
+   "layer": "thin_turf",
+   "colour": [
+    104,
+    96,
+    56
+   ],
+   "tint": [
+    51,
+    38,
+    28
+   ],
+   "note": "under the Hanger's trees"
+  }
  },
  "slots": [],
  "world": {

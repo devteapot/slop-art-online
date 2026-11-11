@@ -1462,17 +1462,26 @@ def gen_wall(k, rng, lot):
             if abs(a - wa) < 0.3 and z < wz:
                 c = mix(c, P.kelp, 0.22)
         return c
-    masonry(k, rng, pt, -Y, -L / 2, L / 2, -0.25, fall, P.basalt, shade)
+    # A parapet (the plan's `coping_m` of 1 m, where a street or lane runs along the top) is the
+    # wall carried up in the same courses, with a walk side, under a 0.14 m capping; a coping
+    # (0.4 m) is one course of capping stones to sit on.
+    parapet = cop > 0.6
+    cap = 0.14 if parapet else cop
+    top = fall + cop - cap
+    masonry(k, rng, pt, -Y, -L / 2, L / 2, -0.25, top, P.basalt, shade)
     raw(k, [([pt(a - 0.07, z), pt(a + 0.07, z), pt(a + 0.07, z + 0.1), pt(a - 0.07, z + 0.1)], P.tar) for a, z in weeps])
-    raw(k, [([Vector((-L / 2, -D / 2 + batter * fall, fall)), Vector((L / 2, -D / 2 + batter * fall, fall)), Vector((L / 2, D / 2, fall)), Vector((-L / 2, D / 2, fall))], jit(P.basalt, rng))])
-    yc = (-D / 2 + batter * fall + D / 2) / 2
-    coping(k, rng, (-L / 2, yc, fall), (L / 2, yc, fall), D - batter * fall + 0.03, cop, stone=1.15)
+    ytop = -D / 2 + batter * top
+    raw(k, [([Vector((-L / 2, ytop, top)), Vector((L / 2, ytop, top)), Vector((L / 2, D / 2, top)), Vector((-L / 2, D / 2, top))], jit(P.basalt, rng))])
+    if parapet:  # the walk's side: hands and shoulders have polished it paler
+        masonry(k, rng, lambda a, z: Vector((a, D / 2, z)), Y, -L / 2, L / 2, fall, top, P.basalt, lambda a, z, c: mix(c, P.pale, 0.3 if z > fall + 0.5 else 0.1))
+    yc = (ytop + D / 2) / 2
+    coping(k, rng, (-L / 2, yc, top), (L / 2, yc, top), D - batter * top + 0.05, cap, stone=1.15)
     for e, pier in zip((-1, 1), lot["ends"]):
         x = e * (L / 2 - 0.3)
         if pier:  # the pier at a flight's side: pale quoins
             put(k, box((x - 0.3, -D / 2 - 0.0, -0.25), (x + 0.3, D / 2, fall + cop + 0.06), bevel=0.02), lambda co, n, c=jit(P.pale, rng, 0.02), d=jit(P.basalt, rng): c if int(co.z / 0.45) % 2 == 0 else d)
-        raw(k, [(oriented([Vector((e * L / 2, -D / 2, -0.25)), Vector((e * L / 2, D / 2, -0.25)), Vector((e * L / 2, D / 2, fall)), Vector((e * L / 2, -D / 2 + batter * fall, fall))], X * e), jit(P.basalt, rng))])
-    return dict(ridge_m=fall + cop, fall_m=fall)
+        raw(k, [(oriented([Vector((e * L / 2, -D / 2, -0.25)), Vector((e * L / 2, D / 2, -0.25)), Vector((e * L / 2, D / 2, top)), Vector((e * L / 2, ytop, top))], X * e), jit(P.basalt, rng))])
+    return dict(ridge_m=fall + cop, fall_m=fall, coping_m=cop, parapet=parapet)
 
 
 def gen_stairs(k, rng, lot):
@@ -1749,7 +1758,7 @@ def roof_top(f, y, extra=0.0):
     return f.zr + extra - abs(y - f.YR) * math.tan(PITCH)
 
 
-def row_sides(k, rng, f, lot, env, lime):
+def row_sides(k, rng, f, lot, env, lime, flake=True):
     """The two side walls: half a party wall and half its stack where a neighbour stands, an end
     gable where the terrace ends. Returns the roof's span."""
     w, near = lot["wear"], lot["near"]
@@ -1793,12 +1802,11 @@ def row_sides(k, rng, f, lot, env, lime):
             u = -Y if sx < 0 else Y
             fg = Face((xg, f.YR, 0), u, f.YB - f.YF)
             put(k, fg.box(-f.half, f.half, f.z1 - 0.09, f.z1 + 0.05, 0.0, 0.05, back=False), jit(P.pale, rng, 0.02))
-            lit = lot.get("people", 0) >= 5
-            window(k, rng, fg, 0.0, f.E + 0.75, (2, 2, 0.36, 0.36), glazing(rng, P.smoke, P.aqua, 1, CELLS(2, 2)), lit=lit, recess=-0.02, sill=None)
+            window(k, rng, fg, 0.0, f.E + 0.75, (2, 2, 0.36, 0.36), glazing(rng, P.smoke, P.aqua, 1, CELLS(2, 2)), lit=False, recess=-0.02, sill=None)
             put(k, fg.box(-0.46, 0.46, f.E + 0.63, f.E + 0.75, 0.0, 0.07), jit(P.pale, rng))
             ex = env.weather(X * sx) * (0.5 + w["wind"])
             polys = []
-            for _ in range(round(16 * ex)):  # flaked lime, then lichen in colonies
+            for _ in range(round(16 * ex) if flake else 0):  # flaked lime, then lichen in colonies
                 a, z, r = rng.uniform(-f.half + 0.4, f.half - 0.4), f.z1 + 0.3 + (f.E - f.z1) * rng.random() ** 1.6, rng.uniform(0.2, 0.5)
                 if abs(a) < 0.9 and z > f.E:
                     continue
@@ -1812,7 +1820,7 @@ def row_sides(k, rng, f, lot, env, lime):
     return span[0], span[1]
 
 
-def row_roof(k, rng, f, lot, a0, a1, sag_m, patch, gone_at=(), lights=0, lit_light=False):
+def row_roof(k, rng, f, lot, a0, a1, sag_m, patch, gone_at=(), lights=0, lit_light=False, sooty=0.0, big=1.0):
     """Both slopes in the house's own state of repair, the ridge stones, the gutter and pipe."""
     w = lot["wear"]
     c_p, s_p = cos(PITCH), sin(PITCH)
@@ -1835,15 +1843,15 @@ def row_roof(k, rng, f, lot, a0, a1, sag_m, patch, gone_at=(), lights=0, lit_lig
             for xs in (a0, a1):  # soot settles downwind (north-east) of a stack
                 lee = max(0.0, 1 - math.hypot(a - xs - 0.4, (t - 0.8) * 0.8) / 1.6) if sgn > 0 and not empty else 0.0
                 c = mix(c, P.tar, 0.55 * lee)
-            if w["soot"] > 0.05:
-                c = mix(c, P.tar, 0.6 * w["soot"])
+            if w["soot"] > 0.05 or sooty:
+                c = mix(c, P.tar, min(0.75, 0.6 * w["soot"] + sooty * max(0.0, 1 - t / 3.0)))  # the Cone's soot; its own smoke, thickest by the ridge
             exposed = w["wind"] * (1.0 if west else 0.6) * (1.0 if sgn < 0 else 0.35)
             if nz(a * 0.7 + lot["at"][0] * 0.7, t * 0.9, 3.0 + sgn) + rng.uniform(-0.25, 0.25) > 0.62 - 0.5 * exposed and t > 1.2:
                 c = mix(c, P.lichen, rng.uniform(0.1, 0.24))
             if rng.random() < patch:
                 c = jit(P.newslate, rng, 0.04)  # a repair in whatever slate there was
             return c
-        slates(k, rng, fn, a0, a1, S, state)
+        slates(k, rng, fn, a0, a1, S, state, course=0.44 * big, cut=(0.55 * big, 1.0 * big))  # `big`: a warehouse's larger slates
         if sgn < 0:  # iron gutter and downpipe; rust runs under them where the air is salt
             ze = f.zr - S * s_p
             ga1 = a1 - 2.0 if empty else a1
@@ -1884,9 +1892,9 @@ def flakes(k, rng, f, lime, face, a0, a1, z0, z1, n, holes=()):
     raw(k, polys)
 
 
-def pavement(k, rng, f, w):
+def pavement(k, rng, f, w, flag=1.1):
     """The strip before the wall: flags at the street's level and a kerb."""
-    n = max(2, round(f.w / 1.1))
+    n = max(2, round(f.w / flag))
     for i in range(n):
         x0, x1 = -f.hw + f.w * i / n, -f.hw + f.w * (i + 1) / n
         put(k, box((x0 + 0.01, f.YP + 0.22, 0.0), (x1 - 0.01, f.YF, 0.04), bevel=0.008), jit(mix(P.basalt, P.pale, 0.55), rng, 0.03))
@@ -1998,6 +2006,11 @@ def keepsake(k, rng, f, lot, dx, gx, gz):
         put(k, tube([(bx, y0 - 0.55, 0.04), (bx, y0 - 0.55, 1.2)], 0.035, 5), jit(P.drift, rng))
         put(k, lathe([(0.07, 1.2), (0.07, 1.42)], 8, Matrix.Identity(4) @ Matrix.Translation((bx, y0 - 0.55, 0)), caps=(True, False)), jit(P.aqua, rng, 0.02), closed=False)
         put(k, lathe([(0.1, 1.42), (0.075, 1.36)], 8, Matrix.Translation((bx, y0 - 0.55, 0)), caps=(False, False)), mix(P.iron, P.rust, 0.3), closed=False)
+    elif h == "faro":  # a lamp-oil drum and a coil of wick
+        barrel(k, rng, (bx, y0 - 0.42, 0.04), 0.3, 0.8, wood=on(mix(P.iron, P.rust, 0.35), "metal"), hoops=(0.33, 0.66))
+        put(k, lathe([(0.05, 0.0), (0.05, 0.06)], 6, Matrix.Translation((bx + 0.12, y0 - 0.42, 0.84))), P.iron)
+        put(k, beam((bx + 0.75, y0, 1.5), (bx + 0.75, y0 - 0.14, 1.52), 0.03, 0.03), P.iron)
+        put(k, ring(0.16, 0.24, -0.04, 0.04, 10, Matrix.Translation((bx + 0.75, y0 - 0.1, 1.3)) @ Matrix.Rotation(PI / 2, 4, "X")), on(mix(P.sand, P.oldlime, 0.5), "cloth"), closed=False)
     elif h == "stannard":  # a stack of odd slates: every roof leaks and he is one man
         for i in range(9):
             c = P.newslate if i % 3 == 0 else P.slate
@@ -2013,7 +2026,8 @@ def gen_house(k, rng, lot):
     lived in, empty and sound (boarded, a dropped gutter, slates gone), or a roofless shell."""
     f, env, w, near = row_frame(lot), Env(lot), lot["wear"], lot["near"]
     fam, people = lot.get("family"), lot.get("people", 0)
-    n = int(lot["id"].rsplit("_", 1)[1])
+    tail = lot["id"].rsplit("_", 1)[-1]
+    n = int(tail) if tail.isdigit() else lot["seed"]
     empty, lived = w["empty"] >= 1.0, "household" in lot
     A = lambda x: x - f.hw  # noqa: E731  (metres from the west wall -> the face's own axis)
     ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
@@ -2025,7 +2039,7 @@ def gen_house(k, rng, lot):
     main, odd = {"kiln": (P.aqua, P.amber), "strand": (P.smoke, P.green), "ladder": (P.aqua, P.green)}.get(fam, (P.smoke, None))
     grid = {"kiln": FINE, "strand": WIDE, "ladder": BROAD}.get(fam, WIDE)
     n_odd = 0 if odd is None else 1 + round(2 * (1 - w["repair"]))
-    lit = set() if not lived else {"g"} if people <= 2 else {"g", "u1"} if people <= 4 else {"g", "u0", "u1"}
+    lit = set(lot.get("lit", {}).get("windows", []))  # the plan's: 0 to 2 windows, each for a cause it names
     # Doors pair at the party walls, as terraces are built: odd numbers hang theirs to the east.
     dx = f.w - 1.15 if n % 2 else 1.15
     gx = 1.6 if n % 2 else f.w - 1.6
@@ -2115,7 +2129,7 @@ def gen_house(k, rng, lot):
     bu = (A(bx[1]) - 0.45, A(bx[1]) + 0.45, f.z1 + 0.85, f.z1 + 2.2)
     wall(k, rng, fb, 0.0, f.z1, stone, [bg])
     wall(k, rng, fb, f.z1, f.E, lime, [bu])
-    for hole, lit_ in ((bg, False), (bu, people >= 4)):
+    for hole, lit_ in ((bg, False), (bu, False)):
         gone = {(0, 1), (1, 0)} if empty else set()
         window(k, rng, fb, (hole[0] + hole[1]) / 2, hole[2], WIDE, glazing(rng, main, odd, 0 if empty or odd is None else 1, CELLS(2, 3), gone=gone), lit=lit_, bars=P.drift if empty else None)
     put(k, fb.box(-f.hw, f.hw, f.z1 - 0.09, f.z1 + 0.05, 0.0, 0.05, back=False), jit(P.pale, rng, 0.02))
@@ -2123,7 +2137,7 @@ def gen_house(k, rng, lot):
     a0, a1 = row_sides(k, rng, f, lot, env, lime)
     gone_at = [(a0 + 1.0, 3.9), (a0 + 1.55, 3.9), (a0 + 1.3, 3.45), (a0 + 3.0, 1.6), (a0 + 3.3, 2.6), (a0 + 0.7, 1.2)] if empty else []
     row_roof(k, rng, f, lot, a0, a1, sag_m=0.03 + 0.1 * w["age"] * (1 - w["repair"]) + (0.08 if empty else 0.0), patch=0.02 + 0.22 * (1 - w["repair"]) * (0.0 if empty else 1.0),
-             gone_at=gone_at, lights=0 if empty else people // 3, lit_light=people >= 5)
+             gone_at=gone_at, lights=0 if empty else people // 3)
     keepsake(k, rng, f, lot, A(dx), A(gx), gz - 0.13)
     found(k, 1.8)
     return dict(ridge_m=f.H, state=lot.get("state", "lived in"), door_colour=lot.get("door_colour"), household=lot.get("household"), front_m=f.w, eave_m=round(f.E, 2),
@@ -2287,7 +2301,7 @@ def gen_marver(k, rng, lot):
     uholes = [(A(x) - nu * cu / 2, A(x) + nu * cu / 2, uz, uz + nv * cv) for x in ux]
     wall(k, rng, ff, f.z1, f.E, lime, uholes)
     for wi, x in enumerate(ux):
-        window(k, rng, ff, A(x), uz, FINE, glazing(rng, P.aqua, P.amber, 1 + wi % 2, CELLS(nu, nv)), lit=wi in (1, 2))
+        window(k, rng, ff, A(x), uz, FINE, glazing(rng, P.aqua, P.amber, 1 + wi % 2, CELLS(nu, nv)), lit=wi == 2 and "u1" in lot.get("lit", {}).get("windows", []))  # the one over the hearth
     put(k, ff.box(-f.hw, f.hw, f.z1 - 0.09, f.z1 + 0.05, 0.0, 0.05, back=False), jit(P.pale, rng, 0.02))
     flakes(k, rng, f, P.lime, ff, -f.hw, f.hw, f.z1, f.E, round((1.4 - w["repair"]) * (0.4 + w["wind"]) * f.w * 1.2), uholes)
     raw(k, [(blotch(ff, A(5.55 + 1.3) + rng.uniform(-0.6, 0.6), f.z1 + 0.25 + 0.3 * i, 0.5 - 0.1 * i, rng, n=10, tall=0.9), mix(lime, P.tar, 0.22 - 0.05 * i)) for i in range(3)])  # the hearth's smoke on the lime
@@ -2296,9 +2310,9 @@ def gen_marver(k, rng, lot):
     wall(k, rng, fb, f.z1, f.E, lime, [(-h1, -h0, zb, zt) for h0, h1, zb, zt in bholes])
     window(k, rng, fb, -A(f.w - 6.0), f.F + 1.0, WIDE, glazing(rng, P.aqua, P.amber, 1, CELLS(2, 3)))
     for h0, h1, zb, zt in bholes:
-        window(k, rng, fb, -(h0 + h1) / 2, zb, WIDE, glazing(rng, P.aqua, P.amber, 1, CELLS(2, 3)), lit=h0 < 0)
+        window(k, rng, fb, -(h0 + h1) / 2, zb, WIDE, glazing(rng, P.aqua, P.amber, 1, CELLS(2, 3)))
     a0, a1 = row_sides(k, rng, f, lot, env, lime)
-    row_roof(k, rng, f, lot, a0, a1, sag_m=0.05, patch=0.02 + 0.22 * (1 - w["repair"]), lights=2, lit_light=True)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.05, patch=0.02 + 0.22 * (1 - w["repair"]), lights=2)
     # The hearth's stack at the east gable: broad, sooted, two pots.
     xs, zc = f.hw - 1.0, f.zr + 1.5
     put(k, box((xs - 0.6, f.YR - 0.38, f.zr - 0.7), (xs + 0.6, f.YR + 0.38, zc)), lambda co, n, c=jit(P.brick, rng, 0.02): mix(c, P.tar, 0.6 * max(0.0, (co.z - zc + 1.1) / 1.1)))
@@ -2306,7 +2320,7 @@ def gen_marver(k, rng, lot):
     for e in (-0.3, 0.3):
         put(k, lathe([(0.13, 0.0), (0.15, 0.08), (0.11, 0.5), (0.13, 0.54), (0.09, 0.54), (0.09, 0.44)], 6, Matrix.Translation((xs + e, f.YR, zc + 0.09))), mix(jit(P.newbrick, rng, 0.03), P.tar, 0.4))
     found(k, 1.8)
-    return dict(ridge_m=f.H, hatches=3, household=lot.get("household"), keepsake=lot.get("keepsake"))
+    return dict(ridge_m=f.H, hatches=3, household=lot.get("household"), keepsake=lot.get("keepsake"), lit=lot.get("lit", {}).get("windows", []))
 
 
 def gen_marver_terrace(k, rng, lot):
@@ -2654,6 +2668,1317 @@ def gen_watchglass(k, rng, lot):
 
 
 # ---------------------------------------------------------------------------------------------
+# Pass 2. Shared parts of the working buildings: tarred plank walls, stacks, wheels, sacks
+
+
+def planked(k, rng, pt, n, a0, a1, z0, top, lot, env, holes=(), pw=0.26, bare=None, weather=None, two=False):
+    """A wall of tarred ship's planks, one quad a plank. pt(a, z) is a point of the face and n its
+    outward normal; top(a) the wall's head there; `holes` are openings (a0, a1, z0, z1). Planks
+    the plan's `repair` could not tar are bare driftwood; tar weathers grey where the
+    south-westerly strikes; salt pales the boards' feet."""
+    w = lot["wear"]
+    top = top if callable(top) else (lambda a, t=top: t)
+    bare = (1 - w["repair"]) * 0.22 if bare is None else bare
+    ex = (env.weather(n) if weather is None else weather) * (0.4 + w["wind"])
+    cnt = max(1, round((a1 - a0) / pw))
+    polys = []
+    for i in range(cnt):
+        x0, x1 = a0 + (a1 - a0) * i / cnt + 0.002, a0 + (a1 - a0) * (i + 1) / cnt - 0.002
+        xm = (x0 + x1) / 2
+        c = jit(P.drift, rng, 0.03) if rng.random() < bare else mix(jit(P.tar, rng, 0.03), P.drift, 0.4 * ex + 0.12 * rng.random())
+        spans, z = [], z0
+        for h0, h1, zb, zt in sorted((h for h in holes if h[0] < xm < h[1]), key=lambda h: h[2]):
+            if zb > z + 0.02:
+                spans.append((z, zb))
+            z = max(z, zt)
+        if top(xm) > z + 0.02:
+            spans.append((z, None))
+        for za, zb in spans:
+            ta, tb = (top(x0), top(x1)) if zb is None else (zb, zb)
+            polys.append((oriented([pt(x0, za), pt(x1, za), pt(x1, tb), pt(x0, ta)], n), c))
+            if za < 0.45 and w["salt"] > 0.2:  # salt low on the boards
+                polys.append((oriented([pt(x0, za) + n * 0.006, pt(x1, za) + n * 0.006, pt(x1, za + 0.3 + 0.25 * rng.random()) + n * 0.006, pt(x0, za + 0.3 + 0.25 * rng.random()) + n * 0.006], n), mix(c, P.pale, 0.4 * w["salt"])))
+    raw(k, polys, two=two)
+
+
+def stack(k, rng, x, y, z0, zc, w=0.9, d=0.6, pots=1, cold=False, soot=0.6):
+    """A brick stack from z0 to zc at (x, y): sooted towards its head, a pale cap, its pots (a
+    slate over the flue where no fire burns)."""
+    put(k, box((x - w / 2, y - d / 2, z0), (x + w / 2, y + d / 2, zc)), lambda co, n, c=jit(P.brick, rng, 0.02): mix(c, P.tar, soot * max(0.0, (co.z - zc + 1.1) / 1.1)))
+    put(k, box((x - w / 2 - 0.06, y - d / 2 - 0.06, zc), (x + w / 2 + 0.06, y + d / 2 + 0.06, zc + 0.09)), jit(P.pale, rng, 0.02))
+    for i in range(pots):
+        px = x + (i - (pots - 1) / 2) * 0.42
+        if cold:
+            put(k, box((px - 0.2, y - 0.2, zc + 0.09), (px + 0.2, y + 0.2, zc + 0.12)), jit(P.newslate, rng))
+        else:
+            put(k, lathe([(0.13, 0.0), (0.15, 0.08), (0.11, 0.46), (0.13, 0.5), (0.09, 0.5), (0.09, 0.4)], 6, Matrix.Translation((px, y, zc + 0.09))), mix(jit(P.newbrick, rng, 0.03), P.tar, 0.4))
+
+
+def ring(r0, r1, z0, z1, sides, M):
+    """A flat ring (a wheel's rim, a hoop) round +Z, placed by M."""
+    return lathe([(r0, z0), (r1, z0), (r1, z1), (r0, z1), (r0, z0)], sides, M, caps=(False, False))
+
+
+def sack(k, rng, at, r=0.26, h=0.62, lean=0.0, col=None, yaw=0.0):
+    """A filled sack standing (or lying, `lean` towards 1) at `at`, its neck tied."""
+    col = col if col is not None else on(mix(P.sand, P.drift, 0.5), "cloth")
+    M = Matrix.Translation(Vector(at)) @ Matrix.Rotation(yaw, 4, "Z") @ Matrix.Rotation(lean * 1.35, 4, "Y")
+    prof = [(r * 0.75, 0.0), (r, h * 0.2), (r * 0.98, h * 0.6), (r * 0.6, h * 0.86), (r * 0.22, h * 0.92), (r * 0.3, h)]
+    c = jit(col, rng, 0.03)
+    put(k, lathe(prof, 7, M), c, soft=M @ Vector((0, 0, h / 2)))
+    put(k, ring(r * 0.22, r * 0.27, h * 0.9, h * 0.94, 6, M), on(P.tar, "cloth"), closed=False)
+
+
+def crate(k, rng, lo, hi, fill=None, col=None):
+    """An open crate of driftwood slats; `fill(i)` gives the colour of what lies in it."""
+    lo, hi = Vector(lo), Vector(hi)
+    col = col if col is not None else P.drift
+    t = 0.03
+    for (a, b) in (((lo.x, lo.y), (hi.x, lo.y + t)), ((lo.x, hi.y - t), (hi.x, hi.y)), ((lo.x, lo.y), (lo.x + t, hi.y)), ((hi.x - t, lo.y), (hi.x, hi.y))):
+        put(k, box((a[0], a[1], lo.z), (b[0], b[1], hi.z)), jit(col, rng, 0.04))
+    put(k, box((lo.x, lo.y, lo.z), (hi.x, hi.y, lo.z + t)), jit(col, rng, 0.04))
+    if fill is not None:
+        nx, ny = max(2, round((hi.x - lo.x) / 0.13)), max(2, round((hi.y - lo.y) / 0.13))
+        polys = []
+        for i in range(nx):
+            for j in range(ny):
+                x0, x1 = lo.x + t + (hi.x - lo.x - 2 * t) * i / nx, lo.x + t + (hi.x - lo.x - 2 * t) * (i + 1) / nx
+                y0, y1 = lo.y + t + (hi.y - lo.y - 2 * t) * j / ny, lo.y + t + (hi.y - lo.y - 2 * t) * (j + 1) / ny
+                z = hi.z - 0.05 + 0.05 * rng.random()
+                tilt = rng.uniform(-0.03, 0.03)
+                polys.append(([Vector((x0, y0, z + tilt)), Vector((x1, y0, z - tilt)), Vector((x1, y1, z + tilt)), Vector((x0, y1, z - tilt))], jit(fill(i * ny + j), rng, 0.03)))
+        raw(k, polys)
+
+
+def flagged(k, rng, x0, x1, y0, y1, z=0.0, n=None, col=None):
+    """A floor of flags (a plinth's top, a shed's floor)."""
+    col = col if col is not None else mix(P.basalt, P.pale, 0.5)
+    nx, ny = n if n else (max(1, round((x1 - x0) / 1.2)), max(1, round((y1 - y0) / 1.2)))
+    for i in range(nx):
+        for j in range(ny):
+            put(k, lbox(Vector((x0 + (x1 - x0) * i / nx + 0.012, y0 + (y1 - y0) * j / ny + 0.012, z)), Vector((x0 + (x1 - x0) * (i + 1) / nx - 0.012, y0 + (y1 - y0) * (j + 1) / ny - 0.012, z + 0.04)), open_bottom=True), jit(col, rng, 0.03))
+
+
+def lit_set(lot):
+    """The windows the plan lights in this lot (`lit.windows`): 0 to 2, each for a cause."""
+    return set(lot.get("lit", {}).get("windows", []))
+
+
+# ---------------------------------------------------------------------------------------------
+# The Heron: the last landmark. A hunched crane house of tarred timber on its stage over the
+# water, the treadwheel in its open foot, and (a fixture, since it reaches out past the lot) the
+# long jib like a beak.
+
+HERON = dict(post_y=1.55, pivot_z=8.3, head_z=12.87)  # the king post, where the jib is stepped, its head
+
+
+def gen_heron(k, rng, lot):
+    """The crane house on its 7 x 5 m lot: a basalt stage, four leaning corner posts, tarred
+    plank walls that lean in to a hunched upper stage and a small cap, 13 m to the head of the
+    king post. The quay side stands open to 3.6 m on the treadwheel that still turns it. The
+    wall the south-westerly strikes is weathered grey; iron is rust; the post's cap is the
+    Strand's one piece of verdigris."""
+    W, D = lot["size"]
+    hw, hd, H, w, env = W / 2, D / 2, lot["height_m"], lot["wear"], Env(lot)
+    PL = 0.35
+    flagged(k, rng, -hw, hw, -hd, hd, 0.0, (5, 4))
+    blocks(k, rng, Face((0, -hd, 0), X, W), -hw, hw, 0.04, PL, 0.3, P.basalt, P.pale, 0.3 * w["salt"], course=0.31, cut=(0.7, 1.2))
+    put(k, box((-hw + 0.3, -hd + 0.3, 0.04), (hw - 0.3, hd - 0.02, PL)), jit(mix(P.basalt, P.pale, 0.35), rng))
+    # The frame: two stages. (x half-width, y front, y back) at each height; the upper stage
+    # leans to the sea, as a heron's shoulders do.
+    S0, S1, S2, S3 = (3.05, -2.0, 2.05), (2.45, -1.55, 1.95), (1.55, -0.75, 1.95), (0.5, 0.35, 1.95)
+    Z0, Z1, Z2, Z3 = PL, 6.1, 9.3, 10.9
+
+    def lerp(a, b, t):
+        return tuple(x + (y - x) * t for x, y in zip(a, b))
+
+    def sect(z):
+        if z <= Z1:
+            return lerp(S0, S1, (z - Z0) / (Z1 - Z0))
+        if z <= Z2:
+            return lerp(S1, S2, (z - Z1) / (Z2 - Z1))
+        return lerp(S2, S3, (z - Z2) / (Z3 - Z2))
+    OPEN = 3.6  # the quay side's opening on the wheel
+    for za, zb, pw in ((Z0, Z1, 0.27), (Z1, Z2, 0.25), (Z2, Z3, 0.22)):
+        a, b = sect(za + 1e-4), sect(zb)
+        faces = [  # (pt(a, z), normal, a0, a1): front (quay, -Y), back (sea), west, east
+            (lambda u, z: Vector((u, sect(z)[1], z)), -Y, None), (lambda u, z: Vector((-u, sect(z)[2], z)), Y, None),
+            (lambda u, z: Vector((-sect(z)[0], -u, z)), -X, "y"), (lambda u, z: Vector((sect(z)[0], u, z)), X, "y")]
+        for fi, (pt, n, ax) in enumerate(faces):
+            # A plank keeps its place along the wall as the wall narrows: u is a share of the width.
+            if ax is None:
+                span = lambda z: (-sect(z)[0], sect(z)[0])  # noqa: E731
+            elif fi == 2:
+                span = lambda z: (-sect(z)[2], -sect(z)[1])  # noqa: E731
+            else:
+                span = lambda z: (sect(z)[1], sect(z)[2])  # noqa: E731
+            lo_a, hi_a = span(za + 1e-4)
+            nn = (n + Z * 0.12).normalized()
+            cnt = max(2, round((hi_a - lo_a) / pw))
+            polys = []
+            for i in range(cnt):
+                t0, t1 = i / cnt, (i + 1) / cnt
+                if fi == 0 and za == Z0:
+                    zlo = OPEN if 0.12 < (t0 + t1) / 2 < 0.88 else Z0
+                else:
+                    zlo = za
+                q = []
+                for t, z in ((t0, zlo), (t1, zlo), (t1, zb), (t0, zb)):
+                    l, h = span(min(max(z, Z0 + 1e-4), Z3))
+                    q.append(pt(l + (h - l) * t + (0.002 if t == t0 else -0.002), z))
+                bare = rng.random() < (1 - w["repair"]) * 0.2
+                ex = env.weather(n) * (0.4 + w["wind"])
+                c = jit(P.drift, rng, 0.03) if bare else mix(jit(P.tar, rng, 0.03), P.drift, 0.45 * ex + 0.1 * rng.random())
+                polys.append((oriented(q, nn), c))
+            raw(k, polys)
+    # Corner posts, the girts at each stage, the lintel over the wheel's opening.
+    tar = lambda: jit(P.tar, rng, 0.02)  # noqa: E731
+    for sx in (-1, 1):
+        for sy in (1, 2):
+            pts = [Vector((sx * (sect(z)[0] + 0.02), sect(z)[sy] + (0.02 if sy == 2 else -0.02), z)) for z in (0.04, Z1, Z2, Z3)]
+            for p0, p1, t in zip(pts, pts[1:], (0.3, 0.24, 0.18)):
+                put(k, beam(p0, p1, t, t), tar())
+    for z in (Z1, Z2):
+        a = sect(z)
+        for p0, p1 in (((-a[0] - 0.06, a[1] - 0.06), (a[0] + 0.06, a[1] - 0.06)), ((-a[0] - 0.06, a[2] + 0.06), (a[0] + 0.06, a[2] + 0.06)),
+                       ((-a[0] - 0.06, a[1] - 0.06), (-a[0] - 0.06, a[2] + 0.06)), ((a[0] + 0.06, a[1] - 0.06), (a[0] + 0.06, a[2] + 0.06))):
+            put(k, beam((*p0, z), (*p1, z), 0.2, 0.22), tar())
+    a = sect(OPEN)
+    put(k, beam((-a[0], a[1] - 0.05, OPEN), (a[0], a[1] - 0.05, OPEN), 0.24, 0.3), tar())
+    for sx in (-1, 1):  # braces at the opening's head
+        put(k, beam((sx * a[0] * 0.88, a[1] - 0.05, OPEN - 0.9), (sx * a[0] * 0.55, a[1] - 0.05, OPEN - 0.05), 0.14, 0.16), tar())
+    # Iron: straps at the posts' feet, rust running from them in the salt air.
+    for sx in (-1, 1):
+        for sy in (1, 2):
+            b = sect(Z0 + 0.3)
+            c = Vector((sx * (b[0] + 0.02), b[sy] + (0.02 if sy == 2 else -0.02), Z0 + 0.3))
+            put(k, box(c - Vector((0.2, 0.2, 0.07)), c + Vector((0.2, 0.2, 0.07))), mix(P.iron, P.rust, 0.4 + 0.5 * w["salt"]))
+    # The treadwheel, 3.9 m across, its axle along the quay; seen through the open side.
+    wr, ww, wc = 1.95, 1.3, Vector((-0.55, 0.1, PL + 0.1 + 1.95))
+    M = Matrix.Translation(wc) @ Matrix.Rotation(PI / 2, 4, "Y")
+    wood = lambda: jit(mix(P.drift, P.tar, 0.35), rng, 0.03)  # noqa: E731
+    for e in (-1, 1):
+        put(k, ring(wr - 0.2, wr, e * ww / 2 - 0.06, e * ww / 2 + 0.06, 20, M), wood(), closed=False)
+        for i in range(6):
+            a_ = i / 6 * TAU + 0.26
+            put(k, beam(M @ Vector((0.16 * cos(a_), 0.16 * sin(a_), e * ww / 2)), M @ Vector(((wr - 0.1) * cos(a_), (wr - 0.1) * sin(a_), e * ww / 2)), 0.1, 0.12, up=X), wood())
+    for i in range(20):  # the treads, worn pale where feet climb them
+        a_ = (i + 0.5) / 20 * TAU
+        c0, c1 = M @ Vector(((wr - 0.25) * cos(a_), (wr - 0.25) * sin(a_), -ww / 2)), M @ Vector(((wr - 0.25) * cos(a_), (wr - 0.25) * sin(a_), ww / 2))
+        put(k, beam(c0, c1, 0.3, 0.04, up=(c0 - wc - X * (c0 - wc).x).normalized()), mix(wood(), P.pale, 0.3))
+    put(k, B.cyl(wc - X * (ww / 2 + 0.5), wc + X * (ww / 2 + 1.6), 0.19, 0.19, 8), jit(P.drift, rng, 0.02))
+    for e, off in ((-1, ww / 2 + 0.35), (1, ww / 2 + 1.45)):  # the axle's trestles
+        x = wc.x + e * off
+        for sy in (-1, 1):
+            put(k, beam((x, wc.y + sy * 0.95, PL), (x, wc.y + sy * 0.12, wc.z - 0.16), 0.16, 0.16), tar())
+    # The hoist rope: off the axle's drum, up inside the house to the jib.
+    drum = wc + X * (ww / 2 + 0.9)
+    put(k, B.cyl(drum - X * 0.4, drum + X * 0.4, 0.3, 0.3, 10), on(mix(P.sand, P.drift, 0.55), "cloth"))
+    put(k, tube([drum + Vector((0, 0.28, 0.1)), Vector((drum.x, HERON["post_y"] - 0.35, Z1 - 0.2))], 0.03, 4, caps=False), on(mix(P.sand, P.drift, 0.55), "cloth"), closed=False)
+    # The king post: one mast through the house, the jib stepped against it above the hunch.
+    py = HERON["post_y"]
+    put(k, beam((0, py, PL), (0, py, H - 0.25), 0.42, 0.42), lambda co, n, c=jit(P.tar, rng, 0.02): mix(c, P.drift, 0.3 * max(0.0, (co.z - Z3) / 2.0)))
+    put(k, lathe([(0.34, 0.0), (0.3, 0.12), (0.1, 0.25)], 8, Matrix.Translation((0, py, H - 0.25))), jit(P.verdigris, rng, 0.02))
+    for z in (Z3 + 0.25, H - 0.5):
+        put(k, box((-0.25, py - 0.25, z), (0.25, py + 0.25, z + 0.1)), mix(P.iron, P.rust, 0.5 + 0.4 * w["salt"]))
+    # The cap over the upper stage, slated in whatever there was; the post comes through it.
+    a = sect(Z3)
+    for sgn in (-1, 1):
+        raw(k, [(oriented([Vector((sgn * (a[0] + 0.12), a[1] - 0.12, Z3)), Vector((sgn * (a[0] + 0.12), a[2] + 0.12, Z3)), Vector((0, a[2] + 0.12, Z3 + 0.55)), Vector((0, a[1] - 0.12, Z3 + 0.55))], Vector((sgn, 0, 1))),
+                 jit(P.slate if sgn < 0 else P.newslate, rng, 0.03))])
+    for y in (a[1] - 0.12, a[2] + 0.12):
+        raw(k, [([Vector((-(a[0] + 0.12), y, Z3)), Vector((a[0] + 0.12, y, Z3)), Vector((0, y, Z3 + 0.55))], P.tar)], two=True)
+    # A hatch high on the sea side (the jib's ropes run through it), a window to the quay.
+    sb = sect(8.0)
+    put(k, box((-0.5, sb[2] - 0.02, 7.4), (0.5, sb[2] + 0.06, 8.6)), mix(P.tar, P.basalt, 0.4))
+    fq = Face((0, sect(7.6)[1] - 0.03, 0), X, 2.0)
+    window(k, rng, fq, 0.0, 7.1, (2, 3, 0.34, 0.34), glazing(rng, P.smoke, P.green, 1, CELLS(2, 3)), recess=-0.01, sill=None, bars=P.drift)
+    # A ladder up the east wall to the upper stage, and the wear of its place.
+    for i in range(14):
+        z = Z0 + 0.4 + i * 0.4
+        b = sect(z)
+        put(k, box((b[0] + 0.03, 0.2, z), (b[0] + 0.1, 0.75, z + 0.05)), mix(P.iron, P.rust, 0.6))
+    for _ in range(round(6 * w["salt"])):  # salt bloom on the stage
+        x = rng.uniform(-hw + 0.4, hw - 0.4)
+        raw(k, [([Vector((x - 0.3, -hd - 0.004, 0.08)), Vector((x + 0.3, -hd - 0.004, 0.06)), Vector((x + 0.25, -hd - 0.004, 0.3)), Vector((x - 0.2, -hd - 0.004, 0.28))], mix(P.basalt, P.pale, 0.7))])
+    found(k, 1.8)
+    return dict(ridge_m=H, wheel_m=round(2 * wr, 2), opening_m=round(OPEN - PL, 2), jib="a fixture: heron_jib")
+
+
+def gen_heron_jib(k, rng, lot):
+    """The Heron's jib: one long tarred spar like a beak, stepped against the king post above the
+    hunch and reaching 9 m out over the harbour, held by two stays from the post's head. Its
+    sheave is verdigris; the fall hangs a net of kelp over the water. The jib is fixed (a
+    turning one would be the client's). A fixture: it stands over the water outside the lot."""
+    W, L = lot["size"]
+    w = lot["wear"]
+    y0, y1 = -L / 2, L / 2  # the king post's face; the beak's tip
+    foot, tip = Vector((0, y0 + 0.12, lot["pivot_z"])), Vector((0, y1 - 0.95, lot["tip_z"]))
+    d = (tip - foot).normalized()
+    n = 9
+    for i in range(n):  # the spar, tapering, tar worn grey towards the tip
+        a, b = foot.lerp(tip, i / n), foot.lerp(tip, (i + 1) / n)
+        t = 0.46 - 0.2 * (i + 0.5) / n
+        put(k, beam(a, b, t, t * 1.15), mix(jit(P.tar, rng, 0.02), P.drift, 0.1 + 0.3 * (i / n) * (0.5 + w["wind"])))
+    for i in (1, 3, 5, 7):  # iron bands
+        c = foot.lerp(tip, i / n)
+        put(k, moved(box((-0.27, -0.06, -0.3), (0.27, 0.06, 0.3)), Matrix.Translation(c) @ d.to_track_quat("Y", "Z").to_matrix().to_4x4()), mix(P.iron, P.rust, 0.45 + 0.4 * w["salt"]))
+    # The strut under the spar's foot, and the two stays from the post's head.
+    put(k, beam(Vector((0, y0 + 0.1, lot["pivot_z"] - 1.9)), foot.lerp(tip, 0.3), 0.2, 0.22), jit(P.tar, rng, 0.02))
+    head = Vector((0, y0 + 0.05, lot["head_z"]))
+    rope = on(mix(P.sand, P.drift, 0.55), "cloth")
+    for t, sx in ((0.62, -1), (0.97, 1)):
+        q = foot.lerp(tip, t) + Z * 0.25
+        line = [head.lerp(q, j / 5) - Z * (0.18 * sin(PI * j / 5)) + X * (0.1 * sx * (1 - j / 5)) for j in range(6)]
+        put(k, tube(line, 0.035, 4, caps=False), rope, closed=False)
+    # The sheave at the tip, the fall, the hook and its load.
+    sh = tip - Z * 0.32
+    put(k, B.cyl(sh - X * 0.09, sh + X * 0.09, 0.3, 0.3, 10), jit(P.verdigris, rng, 0.02))
+    for sx in (-1, 1):
+        put(k, box((sx * 0.13 - 0.02, sh.y - 0.12, sh.z - 0.1), (sx * 0.13 + 0.02, sh.y + 0.12, tip.z + 0.1)), mix(P.iron, P.rust, 0.6))
+    hook = Vector((0, sh.y + 0.26, lot["load_z"] + 1.25))
+    put(k, tube([sh + Y * 0.26, hook], 0.03, 4, caps=False), rope, closed=False)
+    put(k, tube([foot + Z * 0.5 + Y * 0.3, sh + Z * 0.28 - Y * 0.2], 0.028, 3, caps=False), rope, closed=False)  # the fall, back along the spar
+    put(k, lathe([(0.09, 0.0), (0.12, 0.1), (0.05, 0.22)], 6, Matrix.Translation(hook - Z * 0.22)), mix(P.iron, P.rust, 0.5))
+    c = Vector((0, hook.y, lot["load_z"] + 0.45))
+    bm = sphere((0, 0, 0), 1.0, 2)
+    for v in bm.verts:
+        b = 1 + 0.2 * nz(v.co.x * 2.2, v.co.y * 2.2, v.co.z * 2.2)
+        v.co = c + Vector((v.co.x * 0.55 * b, v.co.y * 0.55 * b, v.co.z * 0.5 * b * (1.25 if v.co.z > 0 else 1.0)))
+    put(k, bm, lambda co, n: mix(P.kelp, P.tar, 0.25 + 0.25 * nz(co.x * 6, co.y * 6, co.z * 6)), soft=c)
+    net = on(P.tar, "cloth")
+    polys = []
+    for m in range(6):  # the sling's ropes gathered to the hook
+        a = m / 6 * TAU
+        line = [c + Vector((0.6 * cos(a), 0.6 * sin(a), 0.0)) * s_ + Z * z_ for s_, z_ in ((0.55, -0.42), (1.0, 0.0), (0.7, 0.42))] + [hook - Z * 0.2]
+        polys += [(oriented(q, Vector((cos(a), sin(a), 0.2))), net) for q in ribbon(line, 0.035, Vector((-sin(a), cos(a), 0)))]
+    raw(k, polys, two=True)
+    polys = []
+    for m in range(7):  # fronds hanging through the sling
+        a = m / 7 * TAU + 0.3
+        q0 = c + Vector((0.45 * cos(a), 0.45 * sin(a), -0.3))
+        s_ = Vector((-sin(a), cos(a), 0)) * 0.06
+        L_ = rng.uniform(0.5, 1.0)
+        polys.append(([q0 - s_, q0 + s_, q0 + s_ * 0.6 - Z * L_ + Vector((cos(a), sin(a), 0)) * 0.1, q0 - s_ * 0.6 - Z * L_ + Vector((cos(a), sin(a), 0)) * 0.1], jit(P.kelp, rng)))
+    raw(k, polys, two=True)
+    return dict(ridge_m=round(tip.z + 0.1, 2), reach_m=L)
+
+
+# ---------------------------------------------------------------------------------------------
+# Pass 2. The working buildings. Each stands on its lot as a row house does (the same section:
+# a strip before the wall, basalt below, lime above where there is an upper floor, slate over),
+# and each front is a list of what it is for: doors, small-paned windows, and the openings that
+# decision 7 gives every working building, with the room behind them and what is kept in it.
+
+LIGHT["GlowEmber"] = ((1.0, 0.45, 0.12), 110.0)  # a banked fire seen deep in a room: the lehr, an oven at rest
+
+
+def hall_frame(lot, stoop=0.6, z1=None, F=0.2):
+    """A free-standing building's section from its lot, as `row_frame`: the plan's height is the
+    ridge, the pitch is the Rows' 47 degrees, so the eaves follow."""
+    w, d = lot["size"]
+    f = NS(w=w, hw=w / 2, YP=-d / 2, YF=-d / 2 + stoop, YB=d / 2 - 0.05, H=lot["height_m"], F=F, shell=False)
+    f.YR, f.half = (f.YF + f.YB) / 2, (f.YB - f.YF) / 2
+    f.rise = f.half * math.tan(PITCH)
+    f.zr = f.H - 0.13
+    f.E = f.zr - f.rise
+    f.z1 = z1 if z1 is not None else f.E
+    return f
+
+
+def room(k, ff, a0, a1, z0, z1, depth, wallc, floorc, w0=0.0):
+    """The space behind an opening in wall face ff: its back, sides, floor and ceiling, seen
+    from outside."""
+    q = ff.p
+    z0 = max(z0, 0.035)  # above the ground's own surface
+    raw(k, [([q(a0, z0, -depth), q(a1, z0, -depth), q(a1, z1, -depth), q(a0, z1, -depth)], wallc),
+            ([q(a0, z0, w0), q(a0, z0, -depth), q(a0, z1, -depth), q(a0, z1, w0)], mix(wallc, P.tar, 0.15)),
+            ([q(a1, z0, -depth), q(a1, z0, w0), q(a1, z1, w0), q(a1, z1, -depth)], mix(wallc, P.tar, 0.15)),
+            ([q(a0, z0, w0), q(a1, z0, w0), q(a1, z0, -depth), q(a0, z0, -depth)], floorc),
+            ([q(a0, z1, -depth), q(a1, z1, -depth), q(a1, z1, w0), q(a0, z1, w0)], mix(wallc, P.tar, 0.3))])
+
+
+def lintel(k, rng, ff, a0, a1, z, col=None, h=0.3):
+    put(k, ff.box(a0 - 0.3, a1 + 0.3, z, z + h, -0.12, 0.06), jit(col if col is not None else mix(P.tar, P.drift, 0.25), rng, 0.02))
+
+
+def step(k, rng, ff, a, z1, w=1.5, d=0.5):
+    """A door's step up to the floor at z1 (one tread of at most 0.2 m), worn pale on top."""
+    put(k, ff.box(a - w / 2, a + w / 2, 0.0, z1, 0.0, d), lambda co, n, c=jit(P.basalt, rng): mix(c, P.pale, 0.6) if n.z > 0.5 else c)
+
+
+def quoins(k, rng, ff, a, z0, z1, side, col=None):
+    """Pale long-and-short corner stones at wall face ff's end a (side -1 or 1)."""
+    n = max(2, round((z1 - z0) / 0.42))
+    for i in range(n):
+        L = 0.55 if i % 2 else 0.32
+        za, zb = z0 + (z1 - z0) * i / n, z0 + (z1 - z0) * (i + 1) / n
+        a0, a1 = (a, a + L) if side < 0 else (a - L, a)
+        put(k, ff.box(a0, a1, za + 0.01, zb - 0.01, 0.0, 0.035, back=False), jit(col if col is not None else P.pale, rng, 0.025))
+
+
+def soot_fan(k, rng, ff, a, z, r, strength=0.3, n=3):
+    """Soot above a mouth or flue on wall face ff: darker blotches, the wider the higher."""
+    raw(k, [(blotch(ff, a + rng.uniform(-0.2, 0.2) * r, z + 0.3 * r * i, r * (0.55 + 0.2 * i), rng, n=10, tall=1.2), mix(P.basalt, P.tar, strength + 0.1 * (n - i))) for i in range(n)])
+
+
+def gable_bell(k, rng, x, y, z):
+    """A small iron bell on a bracket (the school's)."""
+    put(k, beam((x, y, z + 0.5), (x, y - 0.5, z + 0.55), 0.06, 0.06), P.iron)
+    put(k, lathe([(0.17, 0.0), (0.15, 0.1), (0.08, 0.24), (0.03, 0.28)], 8, Matrix.Translation((x, y - 0.45, z + 0.22))), mix(P.iron, P.verdigris, 0.0))
+    put(k, tube([(x, y - 0.45, z + 0.22), (x, y - 0.45, z - 0.5)], 0.01, 3, caps=False), on(P.sand, "cloth"), closed=False)
+
+
+def plain_back(k, rng, f, fb, stone, lime, wins=(), two=False):
+    """A building's back: basalt, lime above where there is an upper floor, small windows."""
+    holes_g = [(a - 0.45, a + 0.45, f.F + 1.0, f.F + 2.35) for a, up in wins if not up]
+    holes_u = [(a - 0.45, a + 0.45, f.z1 + 0.85, f.z1 + 2.2) for a, up in wins if up]
+    wall(k, rng, fb, 0.0, f.z1, stone, holes_g)
+    if f.E - f.z1 > 0.05:
+        wall(k, rng, fb, f.z1, f.E, lime, holes_u)
+        put(k, fb.box(-f.hw, f.hw, f.z1 - 0.09, f.z1 + 0.05, 0.0, 0.05, back=False), jit(P.pale, rng, 0.02))
+    for h in holes_g + holes_u:
+        window(k, rng, fb, (h[0] + h[1]) / 2, h[2], WIDE, glazing(rng, P.smoke, P.green, 1, CELLS(2, 3)))
+
+
+def gable_windows(k, rng, f, sx, at, main=None, odd=None):
+    """Small windows on an end gable (sx -1 west, 1 east): [(s, sill)], s from the roof's middle."""
+    fg = Face((sx * f.hw, f.YR, 0), -Y if sx < 0 else Y, f.YB - f.YF)
+    for s_, z in at:
+        window(k, rng, fg, s_ * (-1 if sx < 0 else 1), z, WIDE, glazing(rng, main if main is not None else P.smoke, odd if odd is not None else P.green, 1, CELLS(2, 3)), recess=-0.02)
+
+
+def peat_face(k, rng, ff, a0, a1, depth, z1, top_depth=None):
+    """The cut face of a peat stack across a bay: turves in courses, the stack's top behind."""
+    n = max(1, round(z1 / 0.14))
+    polys = []
+    for i in range(n):
+        za, zb = z1 * i / n, z1 * (i + 1) / n
+        a = a0 - (0.3 if i % 2 else 0.0)
+        while a < a1 - 1e-6:
+            b = a + rng.uniform(0.5, 0.7)
+            lo, hi = max(a, a0), min(b, a1)
+            a = b
+            c = mix(jit(P.peat, rng, 0.04), P.grass, 0.22) if rng.random() < 0.07 else jit(P.peat, rng, 0.045)
+            d = depth + rng.uniform(0.0, 0.03)
+            polys.append(([ff.p(lo + 0.01, za + 0.035 + 0.006, -d), ff.p(hi - 0.01, za + 0.035 + 0.006, -d), ff.p(hi - 0.01, zb + 0.035 - 0.006, -d), ff.p(lo + 0.01, zb + 0.035 - 0.006, -d)], c))
+    polys.append(([ff.p(a0, z1 + 0.035, -depth), ff.p(a1, z1 + 0.035, -depth), ff.p(a1, z1 + 0.035, -(top_depth or depth + 3.0)), ff.p(a0, z1 + 0.035, -(top_depth or depth + 3.0))], mix(P.peat, P.tar, 0.2)))
+    polys.append(([ff.p(a0, 0.035, -depth - 0.02), ff.p(a1, 0.035, -depth - 0.02), ff.p(a1, z1 + 0.035, -depth - 0.02), ff.p(a0, z1 + 0.035, -depth - 0.02)], mix(P.peat, P.tar, 0.4)))
+    raw(k, polys)
+
+
+def worn(c):
+    return lambda co, n: mix(c, P.pale, 0.55) if n.z > 0.5 else c
+
+
+def gen_cottage(k, rng, lot):
+    """A free-standing home (the lamp house on the mole's root): the Rows' house on its own, a
+    stack at its lee gable, what its household keeps by the door. Its lit windows are the plan's."""
+    lot["near"] = {}
+    out = gen_house(k, rng, lot)
+    f, w = row_frame(lot), lot["wear"]
+    if not f.shell:
+        stack(k, rng, f.hw - 0.5, f.YR, f.zr - 0.7, f.zr + 1.35, w=0.7, d=0.6, pots=2 if lot.get("people", 1) > 1 else 1, cold="household" not in lot)
+    return out
+
+
+def gen_lehr_house(k, rng, lot):
+    """The lehr house: the ship days' bonded warehouse, 24 x 14 m, where the glass cools for a
+    day and a night. Three round-arched cart doors stand open on the lehr's own arches, banked
+    and dull red deep inside; the loading doors above them are boarded, their hoist beam kept.
+    Carved lintel stones over the doors; three flues on the ridge, soot below each; the wall
+    grey with the Cone's soot on its east end."""
+    f, env, w = hall_frame(lot, stoop=0.7, z1=4.3), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone = jit(P.basalt, rng, 0.02)
+    lime = mix(jit(P.oldlime, rng, 0.02), P.smoke, min(0.6, 0.25 + w["soot"]))
+    pavement(k, rng, f, w, flag=2.4)
+    AX, R, ZS = (-7.4, 0.0, 7.4), 1.5, 1.9
+    ztop = ZS + R + 0.02
+    arches = [(a - R, a + R, 0.0, ztop) for a in AX]
+    doors = [(-10.9, 10.9)]
+    dholes = [(a - 0.45, a + 0.45, f.F, f.F + 2.0) for a in (-10.9, 10.9)]
+    wins = [(a - 0.45, a + 0.45, 1.5, 2.85) for a in (-3.7, 3.7)]
+    wall(k, rng, ff, 0.0, f.z1, stone, arches + dholes + wins, depth=0.35)
+    brick = mix(P.brick, P.tar, 0.35)
+    for i, (a0, a1, _, _) in enumerate(arches):
+        am = (a0 + a1) / 2
+        arch_bay(k, rng, ff.o, ff.u, ff.n, a0, a1, ZS, ztop, 0.35, P.basalt, soot=0.25)
+        room(k, ff, a0, a1, 0.0, ztop, 4.6, brick, mix(P.basalt, P.tar, 0.35), w0=-0.35)
+        # The lehr inside: a long brick tunnel, its own arch at the back of the room, banked.
+        fi = Face(ff.p(0, 0, -4.55), X, f.w)
+        eye = [(am + 1.0 * cos(PI * j / 8), 0.95 + 1.0 * sin(PI * j / 8)) for j in range(9)]
+        raw(k, [([fi.p(am + 1.0, 0.25, 0.0)] + [fi.p(x, z, 0.0) for x, z in eye] + [fi.p(am - 1.0, 0.25, 0.0)], P.amber)], glow="GlowEmber")
+        for j in range(8):
+            t0, t1 = PI * j / 8, PI * (j + 1) / 8
+            put(k, lbox(Vector((t0 + 0.01, 1.0, 0.0)), Vector((t1 - 0.01, 1.3, 0.12)), fn=lambda q, am=am: fi.p(am + q.y * cos(q.x), 0.95 + q.y * sin(q.x), q.z), open_bottom=True), jit(P.newbrick if j in (2, 5) else P.brick, rng, 0.03))
+        for e in (-1, 1):
+            put(k, fi.box(am + e * 1.15 - 0.15, am + e * 1.15 + 0.15, 0.0, 0.95, 0.0, 0.12, back=False), jit(P.brick, rng, 0.03))
+        # Trays of cooling glass on a trolley in the doorway's shade.
+        tx = am + (0.5 if i != 1 else -0.4)
+        put(k, ff.box(tx - 0.7, tx + 0.7, 0.55, 0.62, -2.6, -1.5), jit(P.iron, rng))
+        for e in (-0.6, 0.6):
+            put(k, ff.box(tx + e - 0.04, tx + e + 0.04, 0.0, 0.55, -2.55, -1.55), mix(P.iron, P.rust, 0.5))
+        for j in range(4):
+            c = (P.green, P.aqua, P.amber, P.aqua, P.smoke, P.green)[(j + i) % 6]
+            put(k, lathe([(0.08, 0.0), (0.1, 0.16), (0.04, 0.26), (0.04, 0.32)], 5, Matrix.Translation(ff.p(tx - 0.45 + 0.3 * j, 0.62, -2.05 + 0.25 * (j % 2)))), jit(c, rng, 0.03))
+        # The carved lintel stone of the ship days, and the boarded loading door above.
+        put(k, ff.box(am - 1.1, am + 1.1, ztop + 0.2, ztop + 0.62, 0.0, 0.06, back=False), jit(P.pale, rng, 0.02))
+        raw(k, [([ff.p(am - 0.9 + 0.2 * j, ztop + 0.3, 0.064), ff.p(am - 0.78 + 0.2 * j, ztop + 0.3, 0.064), ff.p(am - 0.78 + 0.2 * j, ztop + 0.52, 0.064), ff.p(am - 0.9 + 0.2 * j, ztop + 0.52, 0.064)], mix(P.pale, P.basalt, 0.5)) for j in range(9) if j != 4])
+    for a in (-10.9, 10.9):
+        plank_door(k, rng, ff, a, f.F, mix(P.tar, P.drift, 0.2))
+        step(k, rng, ff, a, f.F)
+    for h in wins:
+        window(k, rng, ff, (h[0] + h[1]) / 2, h[2], WIDE, glazing(rng, P.smoke, P.green, 2, CELLS(2, 3)), recess=0.3)
+        for j in range(3):  # iron bars: it was a bonded store
+            put(k, ff.box(h[0] + 0.2 + 0.25 * j, h[0] + 0.24 + 0.25 * j, h[2], h[3], -0.06, -0.02, back=False), mix(P.iron, P.rust, 0.5))
+    # The upper floor: loading doors over each arch (boarded), small windows between.
+    lz = f.z1 + 0.5
+    loads = [(a - 0.8, a + 0.8, lz, lz + 2.0) for a in AX]
+    uw = [(a - 0.45, a + 0.45, f.z1 + 0.9, f.z1 + 2.25) for a in (-10.4, -3.7, 3.7, 10.4)]
+    wall(k, rng, ff, f.z1, f.E, lime, loads + uw)
+    for i, (a0, a1, z0, z1) in enumerate(loads):
+        for j in range(5):
+            x0 = a0 + (a1 - a0) * j / 5
+            put(k, ff.box(x0 + 0.006, x0 + (a1 - a0) / 5 - 0.006, z0, z1, -0.2, -0.14, back=False), jit(P.drift if (i + j) % 4 == 0 else mix(P.tar, P.drift, 0.3), rng, 0.03))
+        put(k, ff.box(a0 - 0.12, a1 + 0.12, z0 - 0.12, z0, -0.2, 0.12), jit(P.pale, rng))
+        put(k, beam(ff.p((a0 + a1) / 2, z1 + 0.5, -0.3), ff.p((a0 + a1) / 2, z1 + 0.55, 0.55), 0.16, 0.2), jit(P.tar, rng))  # the hoist beam
+        put(k, box(Vector(ff.p((a0 + a1) / 2 - 0.05, z1 + 0.25, 0.4)), Vector(ff.p((a0 + a1) / 2 + 0.05, z1 + 0.45, 0.5))), mix(P.iron, P.rust, 0.7))
+    for h in uw:
+        window(k, rng, ff, (h[0] + h[1]) / 2, h[2], WIDE, glazing(rng, P.smoke, P.aqua, 1, CELLS(2, 3)))
+    put(k, ff.box(-f.hw, f.hw, f.z1 - 0.1, f.z1 + 0.08, 0.0, 0.06, back=False), jit(P.pale, rng, 0.02))
+    for sx in (-1, 1):
+        quoins(k, rng, ff, sx * f.hw, 0.0, f.E, sx)
+    flakes(k, rng, f, P.oldlime, ff, -f.hw, f.hw, f.z1, f.E, round((1.4 - w["repair"]) * (0.4 + w["wind"]) * 10), loads + uw)
+    for a in AX:  # the lehr's heat and smoke have marked the lime over each door
+        raw(k, [(blotch(ff, a + rng.uniform(-0.3, 0.3), f.z1 + 0.15 + 0.2 * i, 0.9 - 0.2 * i, rng, n=10, tall=0.5), mix(lime, P.tar, 0.3 - 0.07 * i)) for i in range(2)])
+    plain_back(k, rng, f, fb, stone, lime, [(-8.0, True), (0.0, True), (8.0, True)])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.12 + 0.1 * w["age"] * (1 - w["repair"]), patch=0.03 + 0.25 * (1 - w["repair"]), lights=1, big=2.3)
+    for sx in (-1, 1):
+        gable_windows(k, rng, f, sx, [(0.0, f.z1 + 0.9)])
+    for x in (-7.4, 0.0, 7.4):  # the lehr's flues
+        stack(k, rng, x, f.YR, f.zr - 0.8, f.zr + 1.7, w=1.0, d=0.8, pots=1, soot=0.75)
+    found(k, 1.8)
+    return dict(ridge_m=f.H, arches=3, eave_m=round(f.E, 2))
+
+
+def crucible(k, rng, at, r=0.22, h=0.42, fired=True):
+    """A clay melting pot."""
+    c = jit(mix(P.sand, P.newbrick, 0.3) if fired else mix(P.sand, P.pale, 0.35), rng, 0.03)
+    put(k, lathe([(r * 0.7, 0.0), (r, h * 0.35), (r * 0.95, h), (r * 0.8, h), (r * 0.75, h * 0.45)], 6, Matrix.Translation(Vector(at)), caps=(True, False)), on(c, "earth"), closed=False)
+
+
+def gen_pot_house(k, rng, lot):
+    """The pot house, where Otto Brandt makes the crucibles: a low basalt workshop under a big
+    roof, its front open in two bays on the drying shelves and the wheel, a door between them,
+    the pot kiln's stack at the east gable."""
+    f, env, w = hall_frame(lot, stoop=0.7), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone = mix(jit(P.basalt, rng, 0.02), P.tar, 0.3 * w["soot"])
+    lime = mix(jit(P.oldlime, rng, 0.02), P.smoke, min(0.6, w["soot"]))
+    pavement(k, rng, f, w)
+    zt = 2.55
+    bays = [(-5.2, -1.3, 0.0, zt), (1.3, 5.2, 0.0, zt)]
+    dh = (-0.45, 0.45, f.F, f.F + 2.0)
+    wall(k, rng, ff, 0.0, f.E, stone, bays + [dh], depth=0.3)
+    plank_door(k, rng, ff, 0.0, f.F, mix(P.seagreen, P.drift, 0.3))
+    step(k, rng, ff, 0.0, f.F)
+    clay = mix(P.sand, P.pale, 0.4)
+    for i, (a0, a1, _, _) in enumerate(bays):
+        room(k, ff, a0, a1, 0.0, zt, 3.2, mix(P.basalt, P.tar, 0.4), mix(P.basalt, clay, 0.3), w0=-0.3)
+        lintel(k, rng, ff, a0, a1, zt)
+        put(k, ff.box((a0 + a1) / 2 - 0.1, (a0 + a1) / 2 + 0.1, 0.0, zt, -0.3, -0.1), jit(P.tar, rng, 0.02))
+        if i == 0:  # drying shelves: three boards of unfired pots
+            for j in range(3):
+                z = 0.5 + 0.7 * j
+                put(k, ff.box(a0 + 0.15, a1 - 0.15, z, z + 0.05, -3.15, -2.6), jit(P.drift, rng))
+                for m in range(5):
+                    crucible(k, rng, ff.p(a0 + 0.5 + (a1 - a0 - 1.0) * m / 4, z + 0.05, -2.88), 0.22, 0.36, fired=False)
+        else:  # the wheel, a tub of clay, a board of pots just thrown
+            c = ff.p(a0 + 1.2, 0.0, -1.6)
+            put(k, lathe([(0.5, 0.0), (0.5, 0.1), (0.06, 0.12), (0.06, 0.8), (0.32, 0.82), (0.32, 0.88)], 10, Matrix.Translation(c)), jit(P.drift, rng))
+            crucible(k, rng, c + Z * 0.88, 0.2, 0.38, fired=False)
+            barrel(k, rng, ff.p(a1 - 0.8, 0.0, -2.3), 0.36, 0.7, wood=mix(P.drift, P.tar, 0.3), head=False)
+            put(k, ff.box(a0 + 2.0, a1 - 0.2, 0.75, 0.8, -3.1, -2.5), jit(P.drift, rng))
+            for m in range(3):
+                crucible(k, rng, ff.p(a0 + 2.3 + 0.55 * m, 0.8, -2.8), 0.2, 0.36, fired=False)
+            raw(k, [(oriented([ff.p(a0 + 0.3, 0.012, -0.5), ff.p(a0 + 2.6, 0.012, -0.4), ff.p(a0 + 2.9, 0.012, -2.6), ff.p(a0 + 0.2, 0.012, -2.9)], Z), mix(clay, P.basalt, 0.35))])
+    for sx in (-1, 1):
+        quoins(k, rng, ff, sx * f.hw, 0.0, f.E, sx)
+    # Fired pots stacked against the front, a slip stain under them.
+    for m in range(3):
+        crucible(k, rng, ff.p(-6.0 + 0.24 + 0.0 * m, 0.04 + 0.4 * m, 0.4), 0.21, 0.4)
+    plain_back(k, rng, f, fb, stone, lime, [(-3.0, False), (3.0, False)])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.05 + 0.1 * w["age"] * (1 - w["repair"]), patch=0.03 + 0.25 * (1 - w["repair"]), lights=1)
+    stack(k, rng, f.hw - 0.9, f.YR + 1.2, f.E - 0.2, f.zr + 1.2, w=1.1, d=0.9, pots=1, soot=0.8)
+    found(k, 1.8)
+    return dict(ridge_m=f.H, bays=2, eave_m=round(f.E, 2))
+
+
+def gen_ash_house(k, rng, lot):
+    """The ash house: kelp ash in sacks, kept dry. Basalt, no window low down, one wide doorway
+    whose leaves stand open on the stacked sacks; pale ash trodden out over the sill; slatted
+    vents under the eaves."""
+    f, env, w = hall_frame(lot, stoop=0.7), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone = mix(jit(P.basalt, rng, 0.02), P.tar, 0.3 * w["soot"])
+    lime = mix(jit(P.oldlime, rng, 0.02), P.smoke, min(0.6, w["soot"]))
+    pavement(k, rng, f, w)
+    zt = 2.2
+    bay = (-0.9, 0.9, 0.0, zt)
+    vents = [(a - 0.5, a + 0.5, f.E - 0.75, f.E - 0.3) for a in (-3.4, 3.4)]
+    wall(k, rng, ff, 0.0, f.E, stone, [bay] + vents, depth=0.3)
+    room(k, ff, bay[0], bay[1], 0.0, zt, 3.0, mix(P.basalt, P.tar, 0.4), mix(P.pale, P.smoke, 0.5), w0=-0.3)
+    lintel(k, rng, ff, bay[0], bay[1], zt, P.pale, 0.34)
+    DOORS.append(dict(at=[round(x, 3) for x in ff.p(-0.45, 1.0, -0.3)], along=[1, 0, 0], width_m=0.9, height_m=2.0, open=True))
+    DOORS.append(dict(at=[round(x, 3) for x in ff.p(0.45, 1.0, -0.3)], along=[1, 0, 0], width_m=0.9, height_m=2.0, open=True))
+    for e in (-1, 1):  # the two leaves, 0.9 x 2.0 m each, folded back against the wall
+        for j in range(3):
+            x0 = e * (0.95 + 0.3 * j)
+            put(k, ff.box(min(x0, x0 + e * 0.29), max(x0, x0 + e * 0.29), 0.0, 2.0, 0.02, 0.07, back=False), jit(mix(P.tar, P.drift, 0.25), rng, 0.03))
+        put(k, ff.box(e * 0.97 if e > 0 else e * 1.83, e * 1.83 if e > 0 else e * 0.97, 1.5, 1.56, 0.07, 0.1, back=False), mix(P.iron, P.rust, 0.5))
+    ash = on(mix(P.sand, P.smoke, 0.5), "cloth")
+    for row in range(3):  # the sacks inside, stacked to the lintel
+        for m in range(3 - row):
+            sack(k, rng, ff.p(-0.5 + 0.5 * m + 0.25 * row, 0.04 + 0.55 * row, -1.2 - 0.3 * (row % 2)), 0.26, 0.62, col=ash)
+    raw(k, [(oriented([ff.p(-1.2, 0.045, 0.75), ff.p(1.3, 0.045, 0.9), ff.p(0.9, 0.045, -0.4), ff.p(-0.8, 0.045, -0.4)], Z), mix(P.pale, P.smoke, 0.5))])  # ash trodden out
+    for h in vents:
+        for j in range(4):
+            put(k, ff.box(h[0], h[1], h[2] + 0.11 * j, h[2] + 0.11 * j + 0.07, -0.25, -0.12, back=False), jit(P.drift, rng, 0.03))
+    for sx in (-1, 1):
+        quoins(k, rng, ff, sx * f.hw, 0.0, f.E, sx)
+    sack(k, rng, ff.p(2.2, 0.04, 0.35), 0.24, 0.62, col=ash)
+    sack(k, rng, ff.p(2.75, 0.04, 0.3), 0.24, 0.62, lean=0.9, col=ash, yaw=0.4)
+    plain_back(k, rng, f, fb, stone, lime, [])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.05 + 0.1 * w["age"] * (1 - w["repair"]), patch=0.03 + 0.25 * (1 - w["repair"]))
+    found(k, 1.8)
+    return dict(ridge_m=f.H, eave_m=round(f.E, 2))
+
+
+def gen_store(k, rng, lot):
+    """The Store, the common store: shut, as a store is. Double doors of two 0.9 x 2.0 m leaves
+    under a carved lintel, a loading door and its cathead above, small barred windows, the
+    tally slate by the door."""
+    f, env, w = hall_frame(lot, stoop=0.7, z1=3.2), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone, lime = jit(P.basalt, rng, 0.02), jit(P.lime if w["repair"] >= 0.7 else P.oldlime, rng, 0.02)
+    pavement(k, rng, f, w)
+    dh = (-0.9, 0.9, f.F, f.F + 2.0)
+    gw = [(a - 0.45, a + 0.45, 1.45, 2.8) for a in (-4.2, 4.2)]
+    wall(k, rng, ff, 0.0, f.z1, stone, [dh] + gw, depth=0.3)
+    for e in (-1, 1):
+        DOORS.append(dict(at=[round(x, 3) for x in ff.p(e * 0.45, f.F + 1.0, -0.3)], along=[1, 0, 0], width_m=0.9, height_m=2.0))
+        for j in range(3):
+            x0 = e * 0.3 * j
+            put(k, ff.box(min(x0, x0 + e * 0.3) + 0.006, max(x0, x0 + e * 0.3) - 0.006, f.F, f.F + 2.0, -0.35, -0.27 + rng.uniform(0, 0.01), back=False), jit(mix(P.tar, P.drift, 0.2), rng, 0.03))
+        for zz in (0.35, 1.6):
+            put(k, ff.box(min(e * 0.08, e * 0.86), max(e * 0.08, e * 0.86), f.F + zz, f.F + zz + 0.06, -0.27, -0.24, back=False), mix(P.iron, P.rust, 0.4 + 0.4 * w["salt"]))
+    put(k, ff.box(-0.2, 0.2, f.F + 0.95, f.F + 1.15, -0.27, -0.2, back=False), mix(P.iron, P.rust, 0.5))  # the lock bar
+    put(k, ff.box(-1.3, 1.3, f.F + 2.0, f.F + 2.4, 0.0, 0.06, back=False), jit(P.pale, rng, 0.02))
+    step(k, rng, ff, 0.0, f.F, w=2.4)
+    for h in gw:
+        window(k, rng, ff, (h[0] + h[1]) / 2, h[2], WIDE, glazing(rng, P.smoke, P.green, 1, CELLS(2, 3)), recess=0.3)
+        for j in range(3):
+            put(k, ff.box(h[0] + 0.2 + 0.25 * j, h[0] + 0.24 + 0.25 * j, h[2], h[3], -0.06, -0.02, back=False), mix(P.iron, P.rust, 0.5))
+    # The tally slate: what is in, what is owed.
+    put(k, ff.box(1.5, 2.2, 1.0, 1.9, 0.0, 0.04, back=False), jit(P.slate, rng, 0.02))
+    raw(k, [([ff.p(1.58 + 0.07 * i, 1.6 - 0.2 * r, 0.045), ff.p(1.6 + 0.07 * i, 1.6 - 0.2 * r, 0.045), ff.p(1.6 + 0.07 * i, 1.74 - 0.2 * r, 0.045), ff.p(1.58 + 0.07 * i, 1.74 - 0.2 * r, 0.045)], on(P.lime, "shingles")) for r in range(3) for i in range(3 + 2 * r)])
+    lz = f.z1 + 0.45
+    load = (-0.8, 0.8, lz, lz + 2.0)
+    uw = [(a - 0.45, a + 0.45, f.z1 + 0.85, f.z1 + 2.2) for a in (-4.2, 4.2)]
+    wall(k, rng, ff, f.z1, f.E, lime, [load] + uw)
+    for j in range(5):
+        x0 = load[0] + 1.6 * j / 5
+        put(k, ff.box(x0 + 0.006, x0 + 0.314, load[2], load[3], -0.2, -0.14, back=False), jit(mix(P.tar, P.drift, 0.25), rng, 0.03))
+    put(k, ff.box(-0.92, 0.92, lz - 0.12, lz, -0.2, 0.12), jit(P.pale, rng))
+    put(k, beam(ff.p(0, load[3] + 0.5, -0.3), ff.p(0, load[3] + 0.56, 0.5), 0.16, 0.2), jit(P.tar, rng))
+    put(k, tube([ff.p(0, load[3] + 0.4, 0.42), ff.p(0, lz + 0.3, 0.42)], 0.015, 3, caps=False), on(P.sand, "cloth"), closed=False)
+    for h in uw:
+        window(k, rng, ff, (h[0] + h[1]) / 2, h[2], WIDE, glazing(rng, P.smoke, P.aqua, 1, CELLS(2, 3)))
+    put(k, ff.box(-f.hw, f.hw, f.z1 - 0.09, f.z1 + 0.05, 0.0, 0.05, back=False), jit(P.pale, rng, 0.02))
+    for sx in (-1, 1):
+        quoins(k, rng, ff, sx * f.hw, 0.0, f.E, sx)
+    flakes(k, rng, f, P.oldlime, ff, -f.hw, f.hw, f.z1, f.E, round((1.4 - w["repair"]) * (0.4 + w["wind"]) * 12), [load] + uw)
+    bloom = [(blotch(ff, rng.uniform(-f.hw + 0.4, f.hw - 0.4), rng.uniform(0.15, 0.7), rng.uniform(0.2, 0.4), rng, tall=0.6), mix(P.basalt, P.pale, 0.7)) for _ in range(round(w["salt"] * 8))]
+    raw(k, [b for b in bloom if abs((b[0][0] - ff.o).dot(X)) > 1.6])
+    plain_back(k, rng, f, fb, stone, lime, [(-3.0, True), (3.0, True)])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.06 + 0.1 * w["age"] * (1 - w["repair"]), patch=0.03 + 0.25 * (1 - w["repair"]), lights=1, big=1.25)
+    for sx in (-1, 1):
+        gable_windows(k, rng, f, sx, [(0.0, f.z1 + 0.85)])
+    found(k, 1.8)
+    return dict(ridge_m=f.H, eave_m=round(f.E, 2))
+
+
+def gen_readers_house(k, rng, lot):
+    """The Readers' House on the Crown: the school and the ship-day tablets. Tall small-paned
+    windows for the light to read by; the one by the door holds Benedikt Orme's shelf of
+    tablets, and is lit while he reads. A chalk-blue door, a bench beside it, the school's bell
+    on the west gable, his stack on the east."""
+    f, env, w = hall_frame(lot, stoop=0.95, z1=0.36 + 2.9, F=0.36), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone, lime = jit(P.basalt, rng, 0.02), jit(P.lime if w["repair"] >= 0.7 else P.oldlime, rng, 0.02)
+    lit = lit_set(lot)
+    pavement(k, rng, f, w)
+    TALL = (3, 5, 0.32, 0.34)
+    dx = 0.0
+    dh = (dx - 0.45, dx + 0.45, f.F, f.F + 2.0)
+    gx = (-4.3, -2.2, 2.2, 4.3)
+    gh = [(a - 0.48, a + 0.48, f.F + 0.85, f.F + 0.85 + 1.7) for a in gx]
+    wall(k, rng, ff, 0.0, f.z1, stone, [dh] + gh)
+    plank_door(k, rng, ff, dx, f.F, DOOR[lot.get("door_colour", "chalk_blue")])
+    put(k, ff.box(dx - 0.8, dx + 0.8, 0.0, 0.18, 0.0, 0.62), worn(jit(P.basalt, rng)))
+    put(k, ff.box(dx - 0.62, dx + 0.62, 0.18, 0.36, 0.0, 0.32), lambda co, nn, c=jit(P.basalt, rng), t=jit(P.lime, rng, 0.02): t if nn.z > 0.5 else c)
+    for i, h in enumerate(gh):
+        window(k, rng, ff, (h[0] + h[1]) / 2, h[2], TALL, glazing(rng, P.aqua, P.amber, 1, CELLS(3, 5)), lit=i == 2 and "g" in lit)
+    # The shelf of ship-day tablets in the lit window: pale slabs on edge.
+    h = gh[2]
+    put(k, ff.box(h[0] + 0.04, h[1] - 0.04, h[2] + 0.02, h[2] + 0.06, -0.19, -0.04, back=False), jit(P.drift, rng))
+    for j in range(6):
+        put(k, ff.box(h[0] + 0.1 + 0.135 * j, h[0] + 0.14 + 0.135 * j, h[2] + 0.06, h[2] + 0.3 + 0.05 * (j % 3), -0.17, -0.05, back=False), jit(mix(P.sand, P.pale, 0.4 + 0.1 * (j % 2)), rng, 0.03))
+    # The bench by the door (the plan's spot), a thwart on two stones.
+    bx = dx + 1.55
+    for e in (-0.5, 0.5):
+        put(k, box((bx + e - 0.09, f.YF - 0.45, 0.04), (bx + e + 0.09, f.YF - 0.08, 0.42)), jit(P.basalt, rng))
+    put(k, box((bx - 0.75, f.YF - 0.5, 0.42), (bx + 0.75, f.YF - 0.04, 0.49), bevel=0.015), worn(jit(P.drift, rng)))
+    uz = f.z1 + 0.75
+    ux = (-4.3, -1.45, 1.45, 4.3)
+    uh = [(a - 0.48, a + 0.48, uz, uz + 1.36) for a in ux]
+    wall(k, rng, ff, f.z1, f.E, lime, uh)
+    for i, h in enumerate(uh):
+        window(k, rng, ff, (h[0] + h[1]) / 2, h[2], (3, 4, 0.32, 0.34), glazing(rng, P.aqua, P.amber, 1 + i % 2, CELLS(3, 4)), lit=f"u{0 if i < 2 else 1}" in lit and i in (0, 3))
+    put(k, ff.box(-f.hw, f.hw, f.z1 - 0.09, f.z1 + 0.05, 0.0, 0.05, back=False), jit(P.pale, rng, 0.02))
+    for sx in (-1, 1):
+        quoins(k, rng, ff, sx * f.hw, 0.0, f.E, sx)
+    flakes(k, rng, f, P.lime if w["repair"] >= 0.7 else P.oldlime, ff, -f.hw, f.hw, f.z1, f.E, round((1.4 - w["repair"]) * (0.4 + w["wind"]) * 12), uh)
+    plain_back(k, rng, f, fb, stone, lime, [(-3.0, False), (3.0, True), (-3.0, True)])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.05 + 0.1 * w["age"] * (1 - w["repair"]), patch=0.03 + 0.22 * (1 - w["repair"]), lights=2)
+    stack(k, rng, f.hw - 0.55, f.YR, f.zr - 0.7, f.zr + 1.35, w=0.8, d=0.6, pots=1)
+    for sx in (-1, 1):
+        gable_windows(k, rng, f, sx, [(-2.0, f.F + 0.95), (2.0, f.z1 + 0.85)], P.aqua, P.amber)
+    gable_bell(k, rng, -f.hw + 0.02, f.YF - 0.0, f.E + 0.5)
+    found(k, 1.8)
+    return dict(ridge_m=f.H, eave_m=round(f.E, 2), household=lot.get("household"), keepsake=lot.get("keepsake"), lit=sorted(lit))
+
+
+def fish_rack(k, rng, ff, a0, a1, z, depth, n=7):
+    """A pole of split fish hung to smoke."""
+    put(k, tube([ff.p(a0, z, depth), ff.p(a1, z, depth)], 0.02, 4), jit(P.drift, rng))
+    polys = []
+    for i in range(n):
+        a = a0 + (a1 - a0) * (i + 0.5) / n
+        c = jit(on(mix(P.drift, P.rust, 0.55), "cloth"), rng, 0.04)
+        polys.append(([ff.p(a - 0.05, z, depth), ff.p(a + 0.05, z, depth), ff.p(a + 0.09, z - 0.3, depth), ff.p(a, z - 0.42, depth), ff.p(a - 0.09, z - 0.3, depth)], c))
+    raw(k, polys, two=True)
+
+
+def gen_smokehouse(k, rng, lot):
+    """A smokehouse on the Strand: basalt to the waist and tarred boards above, black with its
+    own smoke, a louvred vent along the ridge and one in each gable. The door is in two halves;
+    the upper stands open on the fish hung inside. Petra Tarn's (the first) has her barrels at
+    the door, which are their own fixture."""
+    f, env, w = hall_frame(lot, stoop=0.6), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    n = int(lot["id"].rsplit("_", 1)[1])
+    stone = jit(P.basalt, rng, 0.02)
+    pavement(k, rng, f, w)
+    dx = -0.9 if n % 2 else 0.9
+    WAIST = 1.1
+    dh = (dx - 0.45, dx + 0.45, f.F, f.F + 2.0)
+    wall(k, rng, ff, 0.0, WAIST, stone, [(dh[0], dh[1], f.F, WAIST)], depth=0.25)
+    planked(k, rng, lambda a, z: ff.p(a, z, -0.03), ff.n, -f.hw + 0.02, f.hw - 0.02, WAIST, f.E, lot, env, holes=[dh], bare=0.04)
+    put(k, ff.box(-f.hw, f.hw, WAIST - 0.06, WAIST + 0.04, -0.03, 0.05, back=False), jit(P.pale, rng, 0.02))
+    # The half door: the lower leaf shut, the upper swung in; smoke-dark inside, fish on poles.
+    DOORS.append(dict(at=[round(x, 3) for x in ff.p(dx, f.F + 1.0, -0.25)], along=[1, 0, 0], width_m=0.9, height_m=2.0))
+    for j in range(3):
+        x0 = dx - 0.45 + 0.3 * j
+        put(k, ff.box(x0 + 0.006, x0 + 0.294, f.F, f.F + 1.0, -0.3, -0.22 + rng.uniform(0, 0.01), back=False), jit(mix(P.tar, P.drift, 0.3), rng, 0.03))
+    put(k, ff.box(dx - 0.42, dx + 0.3, f.F + 0.8, f.F + 0.86, -0.22, -0.19, back=False), mix(P.iron, P.rust, 0.5))
+    dark = mix(P.tar, P.brick, 0.25)
+    room(k, ff, dh[0], dh[1], f.F + 1.0, f.F + 2.0, 1.6, dark, dark, w0=-0.25)
+    for j, d in enumerate((-0.7, -1.2)):
+        fish_rack(k, rng, ff, dh[0] + 0.03, dh[1] - 0.03, f.F + 1.9 - 0.06 * j, d, 5)
+    raw(k, [([ff.p(dh[0], f.F + 1.0, -0.25), ff.p(dh[0], f.F + 2.0, -0.25), ff.p(dh[0] + 0.25, f.F + 2.0, -1.05), ff.p(dh[0] + 0.25, f.F + 1.0, -1.05)], mix(P.tar, P.drift, 0.3))], two=True)  # the upper leaf, swung in
+    lintel(k, rng, ff, dh[0], dh[1], f.F + 2.0, h=0.2)
+    step(k, rng, ff, dx, f.F)
+    soot_fan(k, rng, ff, dx, f.F + 2.4, 0.6, 0.35, 2)
+    # Sides and back: the same waist and boards. The gables carry a louvre each.
+    a0, a1 = row_sides(k, rng, f, lot, env, mix(P.tar, P.drift, 0.2), flake=False)
+    wall(k, rng, fb, 0.0, WAIST, stone, [])
+    planked(k, rng, lambda a, z: fb.p(a, z, -0.03), fb.n, -f.hw + 0.02, f.hw - 0.02, WAIST, f.E, lot, env, bare=0.04)
+
+    def state_patch():
+        return 0.03 + 0.25 * (1 - w["repair"])
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.04, patch=state_patch(), sooty=0.5)
+    # The ridge louvre: a boarded lantern along the ridge with slatted sides, smoke-black.
+    L0, L1 = a0 + 0.9, a1 - 0.9
+    for sgn in (-1, 1):
+        for j in range(3):
+            y = f.YR + sgn * (0.32 + 0.07 * j)
+            put(k, box((L0, min(y, y + sgn * 0.05), f.zr + 0.1 + 0.13 * j), (L1, max(y, y + sgn * 0.05), f.zr + 0.2 + 0.13 * j)), mix(jit(P.tar, rng, 0.02), P.drift, 0.1))
+    for x in (L0, L1 - 0.1, (L0 + L1) / 2 - 0.05):
+        put(k, box((x, f.YR - 0.42, f.zr + 0.0), (x + 0.1, f.YR + 0.42, f.zr + 0.5)), jit(P.tar, rng, 0.02))
+    put(k, prism([(-0.6, f.zr + 0.5), (0.6, f.zr + 0.5), (0.0, f.zr + 0.86)], L0 - 0.15, L1 + 0.15, lambda a, s, z: Vector((a, f.YR + s, z))), mix(jit(P.slate, rng, 0.03), P.tar, 0.5))
+    found(k, 1.8)
+    return dict(ridge_m=f.H + 0.0, eave_m=round(f.E, 2), louvre_top_m=round(f.zr + 0.86, 2))
+
+
+def gen_cistern_house(k, rng, lot):
+    """The cistern house: the pump, and the slates on which Hobb chalks the cistern's level each
+    dusk. A small basalt house: one door, one window, the pump's iron arm through the west
+    wall and its lead pipe running to the cistern."""
+    f, env, w = hall_frame(lot, stoop=0.6), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone, lime = jit(P.basalt, rng, 0.02), jit(P.oldlime, rng, 0.02)
+    pavement(k, rng, f, w)
+    dx = 1.1
+    dh = (dx - 0.45, dx + 0.45, f.F, f.F + 2.0)
+    gh = (-1.45, -0.55, f.F + 0.95, f.F + 2.3)
+    wall(k, rng, ff, 0.0, f.E, stone, [dh, gh])
+    plank_door(k, rng, ff, dx, f.F, mix(P.chalkblue, P.drift, 0.5))
+    step(k, rng, ff, dx, f.F)
+    window(k, rng, ff, -1.0, gh[2], WIDE, glazing(rng, P.smoke, P.aqua, 1, CELLS(2, 3)))
+    # The level slates: one a year, the newest by the door with this year's marks.
+    for i in range(3):
+        x = -0.35 + 0.34 * i
+        put(k, ff.box(x, x + 0.3, 1.0, 1.75, 0.0, 0.035, back=False), jit(P.slate if i < 2 else P.newslate, rng, 0.02))
+        raw(k, [([ff.p(x + 0.05, 1.12 + 0.07 * j, 0.04), ff.p(x + 0.25 - 0.02 * ((j * (i + 2)) % 5), 1.12 + 0.07 * j, 0.04), ff.p(x + 0.25 - 0.02 * ((j * (i + 2)) % 5), 1.14 + 0.07 * j, 0.04), ff.p(x + 0.05, 1.14 + 0.07 * j, 0.04)], on(P.lime, "shingles")) for j in range(4 + 2 * i)])
+    # The pump's arm and spout on the west side (towards the cistern), the pipe along the ground.
+    px = -f.hw
+    put(k, beam((px + 0.1, f.YR - 0.3, 1.5), (px - 0.02, f.YR - 0.3, 1.5), 0.2, 0.2), mix(P.iron, P.rust, 0.5))
+    put(k, beam((px - 0.02, f.YR - 0.3, 1.55), (px - 0.02, f.YR + 0.7, 1.1), 0.05, 0.07), mix(P.iron, P.rust, 0.4))
+    put(k, tube([(px - 0.02, f.YR - 0.6, 0.9), (px - 0.02, f.YR - 0.6, 0.12), (px - 0.02, f.YF + 0.3, 0.1)], 0.05, 5), mix(P.iron, P.pale, 0.4))
+    for sx in (-1, 1):
+        quoins(k, rng, ff, sx * f.hw, 0.0, f.E, sx)
+    plain_back(k, rng, f, fb, stone, lime, [])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.03, patch=0.03 + 0.25 * (1 - w["repair"]))
+    found(k, 1.8)
+    return dict(ridge_m=f.H, eave_m=round(f.E, 2))
+
+
+def gen_peat_barn(k, rng, lot):
+    """The peat barn at the top of the Moss road: dry-stone walls, three open bays between
+    timber posts, the winter's peat stacked to the wall plate in two of them and the third
+    half drawn down; a sledge by the post."""
+    f, env, w = hall_frame(lot, stoop=0.5), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone, lime = jit(P.basalt, rng, 0.02), jit(mix(P.oldlime, P.basalt, 0.3), rng, 0.02)
+    pavement(k, rng, f, w)
+    zt = 2.7
+    bays = [(-5.5 + 3.75 * i, -5.5 + 3.75 * i + 3.5, 0.0, zt) for i in range(3)]
+    wall(k, rng, ff, 0.0, f.E, stone, bays, depth=0.3)
+    for i, (a0, a1, _, _) in enumerate(bays):
+        room(k, ff, a0, a1, 0.0, zt, 4.4, mix(P.basalt, P.tar, 0.45), mix(P.peat, P.basalt, 0.4), w0=-0.3)
+        # Peat stacked from the back wall forward; the east bay is drawn down in steps.
+        if i < 2:
+            peat_face(k, rng, ff, a0 + 0.02, a1 - 0.02, 0.75, 2.45, 4.35)
+        else:  # the bay in use: three steps down to the floor
+            for j in range(3):
+                peat_face(k, rng, ff, a0 + 0.02, a1 - 0.02, 1.3 + 0.9 * j, 0.6 + 0.6 * j, 1.3 + 0.9 * (j + 1) if j < 2 else 4.35)
+    lintel(k, rng, ff, bays[0][0], bays[2][1], zt, h=0.32)
+    for a in (bays[0][1] + 0.125, bays[1][1] + 0.125):
+        put(k, ff.box(a - 0.14, a + 0.14, 0.0, zt, -0.3, 0.04), jit(P.tar, rng, 0.02))
+    # The sledge peat comes down the Moss road on, and loose turves by it.
+    sx0 = bays[2][0] + 0.6
+    for e in (0.0, 0.7):
+        put(k, beam(ff.p(sx0 + e, 0.1, 0.25), ff.p(sx0 + e, 0.1, -1.5), 0.08, 0.14), jit(P.drift, rng))
+    for d in (0.0, -0.6, -1.2):
+        put(k, beam(ff.p(sx0 - 0.08, 0.2, d), ff.p(sx0 + 0.78, 0.2, d), 0.3, 0.04), jit(mix(P.drift, P.tar, 0.2), rng))
+    for i in range(5):
+        c = ff.p(sx0 + 0.1 + 0.14 * i, 0.22 + 0.13 * (i % 2), -0.3 - 0.2 * i)
+        put(k, moved(box((-0.3, -0.11, 0), (0.3, 0.11, 0.12)), Matrix.Translation(c) @ Matrix.Rotation(0.3 * i, 4, "Z")), jit(P.peat, rng, 0.04))
+    for sx in (-1, 1):
+        quoins(k, rng, ff, sx * f.hw, 0.0, f.E, sx)
+    plain_back(k, rng, f, fb, stone, lime, [])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.08 + 0.1 * w["age"] * (1 - w["repair"]), patch=0.03 + 0.25 * (1 - w["repair"]))
+    found(k, 1.8)
+    return dict(ridge_m=f.H, bays=3, eave_m=round(f.E, 2))
+
+
+def gen_batch(k, rng, lot):
+    """The Batch, the common oven, at the east end of Low Row's west terrace: one tall storey
+    under the row's roof. The oven's brick breast stands out of the front, its arched mouth to
+    the street (it glows from 03:00, when Pieter Achterberg fires it); the bakers' door beside
+    it, a shelf of loaves under a shutter, peels against the wall, the bench by the warmth."""
+    f, env, w = row_frame(lot), Env(lot), lot["wear"]
+    f.z1 = f.E
+    A = lambda x: x - f.hw  # noqa: E731
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone, lime = jit(P.basalt, rng, 0.02), jit(P.oldlime, rng, 0.02)
+    pavement(k, rng, f, w)
+    ox, dx = 0.0, 2.7 - 0.0  # the oven's middle (the plan's spot), the door west of it
+    dx = -2.7
+    dh = (dx - 0.45, dx + 0.45, f.F, f.F + 2.0)
+    sh = (1.9, 3.5, f.F + 0.9, f.F + 1.9)
+    wall(k, rng, ff, 0.0, f.E, stone, [dh, sh])
+    plank_door(k, rng, ff, dx, f.F, mix(P.mustard, P.drift, 0.6))
+    put(k, ff.box(dx - 0.8, dx + 0.8, 0.0, 0.18, 0.0, 0.62), worn(jit(P.basalt, rng)))
+    put(k, ff.box(dx - 0.62, dx + 0.62, 0.18, 0.36, 0.0, 0.32), worn(jit(P.basalt, rng)))
+    # The oven breast: brick, 2.6 m wide, 0.55 m out of the wall, sooted above its mouth.
+    bw, bo, bh = 1.3, 0.55, 2.9
+    put(k, ff.box(ox - bw, ox + bw, 0.0, bh, 0.0, bo), lambda co, n, c=jit(P.brick, rng, 0.02): mix(c, P.tar, 0.55 * max(0.0, min(1.0, (co.z - 1.2) / 1.4)) * max(0.0, 1 - abs(co.x - ox) / 1.2)))
+    put(k, ff.box(ox - bw - 0.06, ox + bw + 0.06, bh, bh + 0.1, 0.0, bo + 0.06), jit(P.pale, rng, 0.02))
+    put(k, ff.box(ox - bw + 0.1, ox + bw - 0.1, bh + 0.1, f.E, 0.0, 0.3), lambda co, n, c=jit(P.brick, rng, 0.02): mix(c, P.tar, 0.35))
+    mz, mr = 0.95, 0.5
+    eye = [(ox + mr * cos(PI * j / 10), mz + 0.25 + mr * sin(PI * j / 10)) for j in range(11)]
+    raw(k, [([ff.p(ox + mr, mz, bo + 0.004)] + [ff.p(x, z, bo + 0.004) for x, z in eye] + [ff.p(ox - mr, mz, bo + 0.004)], P.amber)], glow="GlowAmber")
+    for j in range(8):  # the mouth's arch in newer brick, the hearth stone under it
+        t0, t1 = PI * j / 8, PI * (j + 1) / 8
+        put(k, lbox(Vector((t0 + 0.012, mr, 0.0)), Vector((t1 - 0.012, mr + 0.2, 0.05)), fn=lambda q: ff.p(ox + q.y * cos(q.x), mz + 0.25 + q.y * sin(q.x), bo + q.z), open_bottom=True), jit(P.newbrick, rng, 0.03))
+    put(k, ff.box(ox - 0.75, ox + 0.75, mz - 0.12, mz, bo - 0.1, bo + 0.18, bevel=0.015), worn(jit(P.pale, rng, 0.02)))
+    put(k, ff.box(ox - 0.5, ox - 0.02, mz, mz + 0.68, bo + 0.02, bo + 0.06), mix(P.iron, P.rust, 0.35))  # the iron door, half drawn
+    soot_fan(k, rng, Face(ff.p(0, 0, bo), X, f.w), ox, mz + 1.0, 0.55, 0.3, 2)
+    # The loaf shelf: a hatch with its shutter up, the morning's bread on the board.
+    room(k, ff, sh[0], sh[1], sh[2], sh[3], 0.7, mix(P.brick, P.tar, 0.45), mix(P.drift, P.tar, 0.3), w0=-0.2)
+    put(k, ff.box(sh[0] - 0.08, sh[1] + 0.08, sh[2] - 0.08, sh[2], -0.25, 0.2, bevel=0.012), worn(jit(P.drift, rng)))
+    for j in range(5):
+        c = ff.p(sh[0] + 0.2 + 0.3 * j, sh[2] + 0.07, 0.0 - 0.1 * (j % 2))
+        put(k, sphere(c, 0.13, 1, squash=0.6), jit(on(mix(P.amber, P.sand, 0.45), "earth"), rng, 0.03), soft=c)
+    shutter = [ff.p(sh[0], sh[3] + 0.02, 0.03), ff.p(sh[1], sh[3] + 0.02, 0.03), ff.p(sh[1], sh[3] - 0.25, 0.6), ff.p(sh[0], sh[3] - 0.25, 0.6)]
+    raw(k, [([shutter[0].lerp(shutter[1], i / 5 + 0.004), shutter[0].lerp(shutter[1], (i + 1) / 5 - 0.004), shutter[3].lerp(shutter[2], (i + 1) / 5 - 0.004), shutter[3].lerp(shutter[2], i / 5 + 0.004)], jit(mix(P.tar, P.drift, 0.25), rng, 0.03)) for i in range(5)], two=True)
+    for a in (sh[0] + 0.12, sh[1] - 0.12):
+        put(k, beam(ff.p(a, sh[2], 0.16), ff.p(a, sh[3] - 0.25, 0.56), 0.03, 0.03), jit(P.drift, rng))
+    # Two peels against the wall, and the bench by the oven (the plan's spot).
+    for i in range(2):
+        a = -1.75 + 0.22 * i
+        put(k, beam(ff.p(a, 0.05, 0.3 + 0.1 * i), ff.p(a + 0.1, 2.7, 0.03), 0.035, 0.035), jit(P.drift, rng))
+        put(k, moved(box((-0.16, -0.012, 0.0), (0.16, 0.012, 0.42)), Matrix.Translation(ff.p(a + 0.1, 2.7, 0.03))), jit(P.drift, rng))
+    bx = -f.hw + 0.95
+    for e in (-0.45, 0.45):
+        put(k, box((bx + e - 0.07, f.YF - 0.45, 0.04), (bx + e + 0.07, f.YF - 0.08, 0.42)), jit(P.tar, rng))
+    put(k, box((bx - 0.7, f.YF - 0.5, 0.42), (bx + 0.7, f.YF - 0.04, 0.49), bevel=0.015), worn(jit(P.drift, rng)))
+    put(k, ff.box(-f.hw, f.hw, f.E - 0.14, f.E, 0.0, 0.05, back=False), jit(P.pale, rng, 0.02))
+    plain_back(k, rng, f, fb, stone, lime, [(1.5, False)])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.05, patch=0.02 + 0.22 * (1 - w["repair"]), sooty=0.3)
+    stack(k, rng, ox, f.YR - 0.5, f.zr - 1.3, f.zr + 1.3, w=1.0, d=0.8, pots=2, soot=0.8)
+    found(k, 1.8)
+    return dict(ridge_m=f.H, eave_m=round(f.E, 2), oven_mouth_m=[round(ox, 2), round(mz, 2)])
+
+
+# ---------------------------------------------------------------------------------------------
+# Pass 2. The wash-house against the Cone, the cullet shed, the boatshed, the dry dock with the
+# hull of the Second Thought, the cistern; the Crown's thorn and bench
+
+
+def lean_roof(k, rng, lot, env, x0, x1, y0, z0, y1, z1, sooty=0.0, big=1.0):
+    """A lean-to's one slope of slates from its eave (y0, z0) up to the wall it leans on (y1, z1)."""
+    w = lot["wear"]
+    S = math.hypot(y1 - y0, z1 - z0)
+    D, N = Vector((0, (y0 - y1) / S, (z0 - z1) / S)), Vector((0, (z0 - z1) / S, (y1 - y0) / S))
+
+    def state(a, t):
+        c = jit(P.slate, rng, 0.04)
+        if w["soot"] > 0.05 or sooty:
+            c = mix(c, P.tar, min(0.75, 0.6 * w["soot"] + sooty * max(0.0, 1 - t / 3.0)))
+        if nz(a * 0.7 + lot["at"][0] * 0.7, t * 0.9, 3.0) + rng.uniform(-0.25, 0.25) > 0.62 - 0.5 * w["wind"] * env.weather(N) and t > 1.0:
+            c = mix(c, P.lichen, rng.uniform(0.1, 0.24))
+        return jit(P.newslate, rng, 0.04) if rng.random() < 0.03 + 0.25 * (1 - w["repair"]) else c
+    slates(k, rng, lambda a, t, hh: Vector((a, y1, z1)) + D * t + N * hh, x0, x1, S, state, course=0.44 * big, cut=(0.55 * big, 1.0 * big))
+    return S
+
+
+def gen_wash_house(k, rng, lot):
+    """The wash-house, built against the Cone's warm north wall: a lean-to whose back is the
+    warm wall itself, sooted brick, rising above its slates. The front stands open in four bays
+    between tarred posts on the stone troughs, the copper at the east end, and linen drying in
+    the warmth under the roof."""
+    W, D = lot["size"]
+    hw, hd, H, w, env = W / 2, D / 2, lot["height_m"], lot["wear"], Env(lot)
+    YF, YB, ZE = -hd + 0.55, hd - 0.05, 3.0
+    flagged(k, rng, -hw, hw, -hd, hd, 0.0, (8, 4))
+    # The warm wall: brick, blacker towards its head; the one band of newer brick is a mend.
+    fbk = Face((0, YB - 0.4, 0), X, W)
+    put(k, box((-hw, YB - 0.4, 0.0), (hw, YB, H - 0.1)), lambda co, n, c=jit(P.brick, rng, 0.02), nb=jit(P.newbrick, rng, 0.02): (nb if 1.6 < co.z < 2.3 and -1.5 < co.x < 2.5 else mix(c, P.tar, min(0.7, w["soot"] * 0.5 + 0.5 * max(0.0, (co.z - 3.0) / 3.0)))))
+    put(k, box((-hw - 0.0, YB - 0.46, H - 0.1), (hw, YB, H)), jit(P.pale, rng, 0.02))
+    for sx in (-1, 1):  # side walls of basalt under the slope
+        xa, xb = (-hw, -hw + 0.32) if sx < 0 else (hw - 0.32, hw)
+        put(k, prism([(YF, 0.0), (YB - 0.4, 0.0), (YB - 0.4, H - 0.45), (YF, ZE)], xa, xb, lambda a, s, z: Vector((a, s, z))), mix(jit(P.basalt, rng, 0.02), P.tar, 0.3 * w["soot"]))
+    lean_roof(k, rng, lot, env, -hw + 0.02, hw - 0.02, YF - 0.3, ZE - 0.15, YB - 0.4, H - 0.5, sooty=0.25)
+    # Posts and the wall plate; the bays stand open.
+    ff = Face((0, YF, 0), X, W)
+    lintel(k, rng, ff, -hw + 0.3, hw - 0.3, ZE - 0.38, h=0.26)
+    for i in range(5):
+        a = -hw + 0.45 + (W - 0.9) * i / 4
+        put(k, ff.box(a - 0.11, a + 0.11, 0.04, ZE - 0.38, -0.2, 0.02), jit(P.tar, rng, 0.02))
+    # Troughs along the warm wall, water in them; the copper and its flue at the east end.
+    for i in range(3):
+        x0 = -hw + 0.7 + 3.0 * i
+        put(k, box((x0, YB - 1.25, 0.04), (x0 + 2.5, YB - 0.45, 0.75), bevel=0.02), jit(mix(P.basalt, P.pale, 0.5), rng, 0.03))
+        raw(k, [([Vector((x0 + 0.12, YB - 1.13, 0.752)), Vector((x0 + 2.38, YB - 1.13, 0.752)), Vector((x0 + 2.38, YB - 0.57, 0.752)), Vector((x0 + 0.12, YB - 0.57, 0.752))], on(mix(P.smoke, P.seagreen, 0.35), "glass"))])
+        put(k, box((x0 + 0.5, YB - 1.75, 0.3), (x0 + 1.9, YB - 1.4, 0.36)), jit(P.drift, rng))  # the washing board's stand
+    cx = hw - 1.25
+    put(k, lathe([(0.62, 0.0), (0.62, 0.95), (0.5, 1.0)], 10, Matrix.Translation((cx, YB - 1.1, 0.04))), jit(P.brick, rng, 0.03))
+    put(k, lathe([(0.45, 0.0), (0.42, 0.1)], 10, Matrix.Translation((cx, YB - 1.1, 1.0))), jit(mix(P.iron, P.rust, 0.3), rng))
+    raw(k, [([Vector((cx - 0.2, YB - 1.725, 0.2)), Vector((cx + 0.2, YB - 1.725, 0.2)), Vector((cx + 0.2, YB - 1.725, 0.5)), Vector((cx - 0.2, YB - 1.725, 0.5))], P.amber)], glow="GlowEmber")
+    # Linen on two lines under the roof: smoke-grey, sand, one piece the washer's own blue.
+    cloth = [on(mix(P.oldlime, P.smoke, 0.5), "cloth"), on(mix(P.sand, P.oldlime, 0.5), "cloth"), on(P.lime, "cloth"), on(mix(P.chalkblue, P.oldlime, 0.4), "cloth")]
+    for j, (y, z) in enumerate(((YF + 0.9, ZE - 0.15), (YF + 2.2, ZE + 0.5))):
+        put(k, tube([(-hw + 0.4, y, z), (0, y, z - 0.12), (hw - 0.4, y, z)], 0.008, 3, caps=False), on(P.sand, "cloth"), closed=False)
+        for i in range(9):
+            x = -hw + 1.0 + (W - 2.0) * i / 8 + 0.2 * j
+            ww, L = (0.5, 0.9) if (i + j) % 3 else (0.9, 1.25)
+            zz = z - 0.12 * (1 - abs(x) / hw) - 0.01
+            raw(k, [([Vector((x - ww / 2, y, zz)), Vector((x + ww / 2, y, zz)), Vector((x + ww / 2 - 0.03, y + 0.02, zz - L)), Vector((x - ww / 2 + 0.03, y - 0.02, zz - L + 0.05))], jit(cloth[(i * 2 + j) % 4], rng, 0.03))], two=True)
+    # A tub and a basket of wrung linen at the front.
+    barrel(k, rng, (-hw + 1.4, YF + 0.7, 0.04), 0.42, 0.5, head=False, hoops=(0.2, 0.8))
+    creel(k, rng, Matrix.Translation((2.3, YF + 0.6, 0.04)), 0.3, 0.42)
+    found(k, 1.8)
+    return dict(ridge_m=H, eave_m=ZE, bays=4, leans_on=lot.get("leans_on"))
+
+
+CULLET = (("green", P.green), ("amber", P.amber), ("aqua", P.aqua), ("smoke", P.smoke))
+
+
+def gen_cullet_shed(k, rng, lot):
+    """The cullet shed: broken glass, sorted by colour, waiting to be melted again. A tarred
+    plank shed on a basalt footing, gable to the yard and open below the tie beam; crates of
+    green, amber, aqua and smoke on its shelves and before its door, Ode Pontil's sorting table
+    in the middle."""
+    W, D = lot["size"]
+    hw, hd, H, w, env = W / 2, D / 2, lot["height_m"], lot["wear"], Env(lot)
+    p = rad(40)
+    YF, YB, zr = -hd + 0.5, hd - 0.05, H - 0.1
+    E = zr - (hw - 0.05) * math.tan(p)
+    top = lambda x: E + (hw - 0.05 - abs(x)) * math.tan(p)  # noqa: E731
+    flagged(k, rng, -hw, hw, -hd, hd, 0.0, (4, 5))
+    for sx in (-1, 1):  # the long sides and the back: a footing, then boards
+        x = sx * (hw - 0.05)
+        put(k, box((min(x, x - sx * 0.3), YF, 0.0), (max(x, x - sx * 0.3), YB, 0.5)), jit(P.basalt, rng, 0.02))
+        planked(k, rng, lambda a, z, x=x, sx=sx: Vector((x, YF + (a if sx > 0 else YB - YF - a), z)), X * sx, 0.0, YB - YF, 0.5, E, lot, env)
+        put(k, box((min(x, x - sx * 0.16), YF - 0.02, 0.0), (max(x, x - sx * 0.16), YF + 0.16, E)), jit(P.tar, rng, 0.02))
+    put(k, box((-hw + 0.05, YB - 0.3, 0.0), (hw - 0.05, YB, 0.5)), jit(P.basalt, rng, 0.02))
+    planked(k, rng, lambda a, z: Vector((-a, YB, z)), Y, -hw + 0.05, hw - 0.05, 0.5, lambda a: top(a), lot, env)
+    # The front: open to the tie beam at 2.5 m, boards in the gable above it.
+    TB = 2.5
+    put(k, beam((-hw + 0.05, YF + 0.06, TB + 0.12), (hw - 0.05, YF + 0.06, TB + 0.12), 0.16, 0.24), jit(P.tar, rng, 0.02))
+    planked(k, rng, lambda a, z: Vector((a, YF, z)), -Y, -hw + 0.05, hw - 0.05, TB + 0.24, lambda a: top(a), lot, env, bare=0.2)
+    dark = mix(P.tar, P.basalt, 0.3)
+    raw(k, [([Vector((-hw + 0.3, YB - 0.32, 0.5)), Vector((hw - 0.3, YB - 0.32, 0.5)), Vector((hw - 0.3, YB - 0.32, TB)), Vector((-hw + 0.3, YB - 0.32, TB))], dark),
+            ([Vector((-hw + 0.3, YF, TB + 0.1)), Vector((hw - 0.3, YF, TB + 0.1)), Vector((hw - 0.3, YB - 0.3, TB + 0.1)), Vector((-hw + 0.3, YB - 0.3, TB + 0.1))][::-1], dark)])
+    for sx in (-1, 1):
+        x = sx * (hw - 0.36)
+        raw(k, [(oriented([Vector((x, YF, 0.5)), Vector((x, YB - 0.3, 0.5)), Vector((x, YB - 0.3, TB)), Vector((x, YF, TB))], -X * sx), dark)])
+    # Shelves down both sides, each crate one colour; the amber is nearly out.
+    n_cr = 0
+    for sx in (-1, 1):
+        for lv, z in enumerate((0.55, 1.35)):
+            x0, x1 = (sx * (hw - 0.45), sx * (hw - 1.2))
+            put(k, box((min(x0, x1), YF + 0.4, z - 0.05), (max(x0, x1), YB - 0.4, z)), jit(P.drift, rng))
+            for j in range(4):
+                name, col = CULLET[(j + lv + (0 if sx < 0 else 2)) % 4]
+                y = YF + 0.6 + 1.6 * j
+                full = name != "amber" or (lv == 0 and sx < 0)
+                crate(k, rng, (min(x0, x1) + 0.04, y, z), (max(x0, x1) - 0.04, y + 1.2, z + 0.4), fill=(lambda i, col=col: col) if full else None)
+                n_cr += 1
+    # The sorting table: a board on trestles, four small heaps, the hammer; her stool.
+    put(k, box((-0.75, 0.4, 0.82), (0.75, 1.6, 0.88), bevel=0.012), worn(jit(P.drift, rng)))
+    for x in (-0.6, 0.6):
+        for y in (0.55, 1.45):
+            put(k, beam((x, y, 0.04), (x * 0.8, y, 0.82), 0.07, 0.07), jit(P.drift, rng))
+    for i, (name, col) in enumerate(CULLET):
+        c = Vector((-0.5 + 0.33 * i, 1.0 + 0.2 * (i % 2), 0.88))
+        put(k, sphere(c, 0.16, 1, squash=0.45), lambda co, n, col=col: jit(col, k.pr, 0.035), soft=c)
+    put(k, lathe([(0.18, 0.0), (0.18, 0.42), (0.2, 0.46)], 8, Matrix.Translation((0.0, 0.05, 0.04))), jit(P.drift, rng))
+    # Before the door: a crate of each colour come down from the Rows, not yet sorted in.
+    for i, (name, col) in enumerate(CULLET[:3]):
+        x = -hw + 0.5 + 1.75 * i
+        crate(k, rng, (x, -hd + 0.03, 0.04), (x + 1.1, -hd + 0.42, 0.42), fill=lambda j, col=col: col if j % 5 else CULLET[(i + 1) % 4][1])
+    # The roof: slate, gable to the yard, barge boards.
+    S = (hw - 0.05) / cos(p) + 0.12
+    for sgn in (-1, 1):
+        Dv, Nv = Vector((sgn * cos(p), 0, -sin(p))), Vector((sgn * sin(p), 0, cos(p)))
+
+        def state(a, t, sgn=sgn):
+            c = mix(jit(P.slate, rng, 0.04), P.tar, 0.6 * w["soot"])
+            if nz(a * 0.8 + lot["at"][0], t, 5.0 + sgn) + rng.uniform(-0.2, 0.2) > 0.7 - 0.5 * env.weather(X * sgn) * (0.4 + w["wind"]) and t > 0.8:
+                c = mix(c, P.lichen, rng.uniform(0.1, 0.24))
+            return jit(P.newslate, rng, 0.04) if rng.random() < 0.3 * (1 - w["repair"]) else c
+        slates(k, rng, lambda a, t, hh, Dv=Dv, Nv=Nv: Vector((0, a, zr)) + Dv * t + Nv * hh, YF - 0.3, YB + 0.03, S, state, course=0.56, cut=(0.7, 1.2))
+        for y in (YF - 0.3, YB + 0.01):
+            put(k, beam((sgn * (hw + 0.02), y, E - 0.1), (0, y, zr + 0.02), 0.05, 0.16, up=Y), jit(P.tar, rng, 0.02))
+    put(k, box((-0.07, YF - 0.32, zr - 0.02), (0.07, YB + 0.03, H)), jit(P.tar, rng, 0.02))
+    found(k, 1.8)
+    return dict(ridge_m=H, crates=n_cr + 3, colours=[n for n, _ in CULLET])
+
+
+def ship(k, rng, M, L, beam_, depth, sheer, strakes, done, frames, n_st=14, gone=(), new=(), post=0.0, rib=0.07):
+    """A wooden hull right way up, placed by M (its keel along local X, on z = 0): the keel,
+    stem and stern posts (`post` above the sheer), `frames` ribs a side, and the lowest `done` of
+    `strakes` strakes of planking (panels (strake, station) in `gone` are off; `new` are fresh
+    wood). A hull in frame shows its ribs above the planking."""
+    def sec(s, u, e, out=0.0):
+        b = beam_ / 2 * (1 - abs(s) ** 2.5) ** 0.55 + 0.03
+        zs = depth + sheer * s * s
+        return M @ Vector((L / 2 * s * (1 + 0.07 * u), e * (b + out) * sin(u * PI / 2) ** 0.72, zs * (1 - cos(u * PI / 2) ** 1.25)))
+    polys = []
+    for e in (-1, 1):
+        for j in range(done):
+            u0, u1 = j / strakes, (j + 1) / strakes
+            for i in range(n_st):
+                if (j, i) in gone:
+                    continue
+                s0, s1 = -1 + 2 * i / n_st, -1 + 2 * (i + 1) / n_st
+                c = jit(P.drift, rng, 0.03) if (j, i) in new else mix(jit(P.tar, rng, 0.03), P.drift, 0.15 + 0.3 * rng.random())
+                q = [sec(s0, u0, e, 0.03), sec(s1, u0, e, 0.03), sec(s1, u1, e), sec(s0, u1, e)]
+                mid = M @ Vector((0, 0, depth))
+                polys.append((oriented(q, (q[0] + q[2]) / 2 - mid), c))
+    raw(k, polys, two=True)
+    wood = lambda: jit(mix(P.drift, P.tar, 0.15), rng, 0.035)  # noqa: E731
+    for fi in range(frames):
+        s = -0.93 + 1.86 * fi / (frames - 1)
+        for e in (-1, 1):
+            put(k, tube([sec(s, u, e, -0.02) for u in (0.0, 0.25, 0.5, 0.75, 1.0)], rib, 4), jit(P.drift, rng, 0.03) if fi in new else wood())
+    keel = [M @ Vector((L / 2 * (-1 + 2 * i / n_st), 0, -0.02)) for i in range(n_st + 1)]
+    for a, b in zip(keel, keel[1:]):
+        put(k, beam(a, b, rib * 2.4, rib * 2.8), wood())
+    tops = []
+    for e in (-1, 1):
+        pts = [sec(e, u, 1) for u in (0.0, 0.35, 0.7, 1.0)]
+        pts = [M @ Vector(((M.inverted() @ q).x, 0, (M.inverted() @ q).z)) for q in pts]
+        pts.append(pts[-1] + (pts[-1] - pts[-2]).normalized() * post)
+        put(k, tube(pts, [rib * 1.6, rib * 1.5, rib * 1.4, rib * 1.3, rib * 1.1], 5), wood())
+        tops.append(pts[-1])
+    return sec, tops
+
+
+def gen_boatshed(k, rng, lot):
+    """The boatshed: basalt, a big slate roof, the whole front open onto the slipway lane
+    between two piers and a post. Inside, a clinker boat on her cradle with three planks off
+    and a new one in; Bram Calloway's bench, his timber on the wall, the pitch pot."""
+    f, env, w = hall_frame(lot, stoop=0.5), Env(lot), lot["wear"]
+    ff, fb = Face((0, f.YF, 0), X, f.w), Face((0, f.YB, 0), -X, f.w)
+    stone, lime = jit(P.basalt, rng, 0.02), jit(mix(P.oldlime, P.basalt, 0.15), rng, 0.02)
+    pavement(k, rng, f, w)
+    zt = 3.7
+    bays = [(-5.0, -0.2, 0.0, zt), (0.2, 5.0, 0.0, zt)]
+    wall(k, rng, ff, 0.0, f.E, stone, bays, depth=0.4)
+    dark = mix(P.basalt, P.tar, 0.45)
+    room(k, ff, -5.0, 5.0, 0.0, zt, 9.5, dark, mix(P.basalt, P.drift, 0.25), w0=-0.4)
+    lintel(k, rng, ff, -5.0, 5.0, zt, h=0.36)
+    put(k, ff.box(-0.2, 0.2, 0.0, zt, -0.4, 0.03), jit(P.tar, rng, 0.02))
+    for e in (-1, 1):
+        put(k, beam(ff.p(e * 0.2, zt - 0.9, -0.18), ff.p(e * 1.1, zt, -0.18), 0.14, 0.16), jit(P.tar, rng, 0.02))
+    # The boat on her cradle, bow to the door.
+    M = Matrix.Translation(ff.p(-2.5, 0.75, -4.3)) @ Matrix.Rotation(PI / 2, 4, "Z")
+    sec, _ = ship(k, rng, M, 6.2, 2.1, 0.95, 0.25, 6, 6, 9, n_st=10, gone={(4, 3), (5, 3), (5, 4), (4, 4)}, new={(3, 3), (3, 4), (2, 6)}, post=0.25, rib=0.04)
+    for d in (-2.6, -6.0):
+        for e in (-1, 1):
+            put(k, beam(ff.p(-2.5 + e * 1.0, 0.035, d), ff.p(-2.5 + e * 0.45, 0.9, d), 0.12, 0.12), jit(P.drift, rng))
+        put(k, beam(ff.p(-3.6, 0.1, d), ff.p(-1.4, 0.1, d), 0.14, 0.14), jit(P.drift, rng))
+    # The bench along the east wall, timber racked over it, the pitch pot on its brazier.
+    put(k, ff.box(3.4, 4.9, 0.85, 0.92, -8.5, -3.0), worn(jit(P.drift, rng)))
+    for d in (-3.2, -5.7, -8.3):
+        put(k, ff.box(3.5, 4.8, 0.035, 0.85, d - 0.06, d + 0.06), jit(mix(P.drift, P.tar, 0.3), rng))
+    for j in range(5):
+        put(k, ff.box(4.3 + 0.03 * j, 4.88, 1.9 + 0.09 * j, 1.96 + 0.09 * j, -8.6 + 0.2 * j, -2.4 - 0.3 * j), jit(P.drift, rng, 0.05))
+    pc = ff.p(1.6, 0.035, -2.2)
+    put(k, lathe([(0.3, 0.0), (0.26, 0.45), (0.34, 0.5)], 8, Matrix.Translation(pc), caps=(True, False)), mix(P.iron, P.rust, 0.6), closed=False)
+    put(k, lathe([(0.2, 0.5), (0.3, 0.7), (0.26, 0.9)], 8, Matrix.Translation(pc), caps=(True, True)), P.tar)
+    for sx in (-1, 1):
+        quoins(k, rng, ff, sx * f.hw, 0.0, f.E, sx)
+    bloom = [(blotch(ff, e * rng.uniform(5.2, 5.8), rng.uniform(0.15, 0.8), rng.uniform(0.2, 0.35), rng, tall=0.6), mix(P.basalt, P.pale, 0.7)) for e in (-1, 1) for _ in range(round(w["salt"] * 3))]
+    raw(k, bloom)
+    plain_back(k, rng, f, fb, stone, lime, [])
+    a0, a1 = row_sides(k, rng, f, lot, env, lime)
+    row_roof(k, rng, f, lot, a0, a1, sag_m=0.1 + 0.1 * w["age"] * (1 - w["repair"]), patch=0.03 + 0.25 * (1 - w["repair"]), big=1.5)
+    found(k, 1.8)
+    return dict(ridge_m=f.H, eave_m=round(f.E, 2), opening_m=[10.0, zt])
+
+
+def gen_dry_dock(k, rng, lot):
+    """The ship days' dry dock and, on its stocks, the hull of the Second Thought: a keel, a
+    stem and a sternpost, twenty ribs a side and the planking four strakes up, begun in old
+    ship's timber and carried on in whatever has come ashore since. Stepped basalt altars on
+    three sides, shores from them to her ribs, a staging and a ladder; the gate end stands open
+    to the slip. The plan's `stage` is how far she has got."""
+    W, D = lot["size"]
+    hw, hd, H, w, env = W / 2, D / 2, lot["height_m"], lot["wear"], Env(lot)
+    stage = lot.get("stage", 0.4)
+    # The dock's floor of setts and its altars: two steps of 0.6 m up the west, north and east.
+    put(k, box((-hw + 2.0, -hd, 0.0), (hw - 2.0, hd - 2.0, 0.04)), jit(mix(P.basalt, P.pale, 0.35), rng, 0.02))
+    for i, (inset, z) in enumerate(((0.0, 1.2), (1.0, 0.6))):
+        for sx in (-1, 1):
+            xa, xb = sorted((sx * (hw - inset), sx * (hw - inset - 1.0)))
+            put(k, box((xa, -hd, 0.0), (xb, hd - inset, z)), lambda co, n, c=jit(P.basalt, rng, 0.02), t=jit(mix(P.basalt, P.pale, 0.55), rng, 0.02): t if n.z > 0.5 else c)
+            fa = Face((sx * (hw - inset - 1.0), -inset / 2, 0), Y * sx, D - inset)
+            masonry(k, rng, lambda a, z_, fa=fa: fa.p(a, z_, 0.004), fa.n, -(D - inset) / 2, (D - inset) / 2, z - 0.6, z, P.basalt, lambda a, z_, c: mix(c, P.pale, 0.5 * w["salt"]) if nz(a * 0.8, z_ * 2.0, 3.0) > 0.2 else c, course=0.3, cut=(0.9, 1.6))
+        put(k, box((-hw + inset + 1.0, hd - inset - 1.0, 0.0), (hw - inset - 1.0, hd - inset, z)), lambda co, n, c=jit(P.basalt, rng, 0.02), t=jit(mix(P.basalt, P.pale, 0.55), rng, 0.02): t if n.z > 0.5 else c)
+        fa = Face((0, hd - inset - 1.0, 0), X, W - 2 * inset - 2.0)
+        masonry(k, rng, lambda a, z_, fa=fa: fa.p(a, z_, 0.004), fa.n, -(W - 2 * inset - 2.0) / 2, (W - 2 * inset - 2.0) / 2, z - 0.6, z, P.basalt, None, course=0.3, cut=(0.9, 1.6))
+    for sx in (-1, 1):  # the gate's piers, and its sill
+        put(k, box((sx * (hw - 2.0) - 0.5, -hd, 0.0), (sx * (hw - 2.0) + 0.5, -hd + 1.0, 2.2), bevel=0.03), lambda co, n, c=jit(P.pale, rng, 0.02), d=jit(P.basalt, rng): c if int(co.z / 0.45) % 2 == 0 else d)
+    # The hull on her keel blocks, bow to the land.
+    KB = 0.7
+    for i in range(7):
+        y = -6.0 + 2.0 * i
+        put(k, box((-0.45, y - 0.2, 0.04), (0.45, y + 0.2, KB), bevel=0.02), jit(mix(P.drift, P.tar, 0.4), rng))
+    Lh, depth, sheer = 14.6, 3.9, 0.7
+    M = Matrix.Translation((0, 0.4, KB)) @ Matrix.Rotation(PI / 2, 4, "Z")
+    frames = 20
+    done = max(1, round(10 * stage))
+    post = 0.9
+    sec, tops = ship(k, rng, M, Lh, 4.3, depth, sheer, 10, done, frames, n_st=14, new={(done - 1, i) for i in range(4, 9)} | {fi for fi in (13, 14, 15, 16, 17, 18, 19)}, post=post, rib=0.085)
+    bow = max(tops, key=lambda q: q.y)
+    put(k, beam(bow - Z * 0.2, Vector((bow.x, bow.y, H - 0.02)), 0.2, 0.22), jit(mix(P.drift, P.tar, 0.15), rng))  # the stem's head: the plan's 8 m
+    tops.append(Vector((bow.x, bow.y, H - 0.02)))
+    # Ribbands hold the ribs in line; a deck beam or two, in the middle.
+    for u in (0.55, 0.92):
+        for e in (-1, 1):
+            put(k, tube([sec(-0.93 + 1.86 * i / 7, u, e, 0.08) for i in range(8)], 0.045, 4), jit(P.drift, rng, 0.03))
+    for s in (-0.25, 0.1, 0.4):
+        put(k, beam(sec(s, 0.97, -1), sec(s, 0.97, 1), 0.14, 0.16), jit(mix(P.drift, P.tar, 0.2), rng))
+    # Shores from the altars to her bilge, six a side.
+    for e in (-1, 1):
+        for i in range(6):
+            s = -0.7 + 1.4 * i / 5
+            q = sec(s, 0.5, e, 0.1)
+            put(k, beam(Vector((e * (hw - 2.4), q.y, 0.62)), q, 0.14, 0.14), jit(mix(P.drift, P.tar, 0.3), rng))
+    # Staging down the east side on two trestles, a ladder to it; planks stacked on the altar.
+    sx_ = 3.3
+    put(k, box((sx_ - 0.35, -3.0, 2.2), (sx_ + 0.35, 4.0, 2.26)), worn(jit(P.drift, rng)))
+    for y in (-2.6, 3.6):
+        for e in (-1, 1):
+            put(k, beam((sx_ + e * 0.6, y, 0.04), (sx_ + e * 0.15, y, 2.2), 0.09, 0.09), jit(P.drift, rng))
+    for e in (-0.22, 0.22):
+        put(k, beam((sx_ + 1.3, 0.6 + e, 0.04), (sx_ + 0.4, 0.6 + e, 2.4), 0.05, 0.05), jit(P.drift, rng))
+    for j in range(6):
+        t = (j + 0.5) / 6.5
+        put(k, beam((sx_ + 1.3 - 0.9 * t, 0.38, 0.04 + 2.36 * t), (sx_ + 1.3 - 0.9 * t, 0.82, 0.04 + 2.36 * t), 0.04, 0.04), jit(P.drift, rng))
+    for j in range(5):
+        put(k, box((-hw + 0.15 + 0.02 * j, -1.5 - 0.2 * j, 1.2 + 0.07 * j), (-hw + 0.85, 4.5 - 0.4 * j, 1.26 + 0.07 * j)), jit(P.drift, rng, 0.05))
+    # Weeds in the dock's corners: she has been long in building.
+    for _ in range(round(10 * (1 - w["repair"]))):
+        tuft(k, rng, (rng.choice([-1, 1]) * rng.uniform(hw - 2.6, hw - 2.1), rng.uniform(-hd + 1, hd - 2.4), 0.04), rng.uniform(0.12, 0.22), rng.uniform(0.25, 0.5), P.grass, 5)
+    found(k, 1.8)
+    return dict(ridge_m=round(max(q.z for q in tops) + 0.02, 2), stage=stage, strakes_done=done, frames=frames, hull_m=[Lh, 4.3])
+
+
+def gen_cistern(k, rng, lot):
+    """The cistern on the Crown: a round basalt tank 9 m across, rain-fed, its water dark and
+    still below a pale coping. Two channels bring the Crown's rain in; steps climb to the rim
+    where Hobb reads the staff each dusk. Round means water."""
+    W, D = lot["size"]
+    H, w, env = lot["height_m"], lot["wear"], Env(lot)
+    R, T, HW = W / 2 - 0.08, 0.55, 1.25
+    sides = 28
+    arc = TAU * R
+    # The drum, stone by stone (each stone a quad of the circle), then its inside and its coping.
+    rows = 4
+    polys = []
+    for i in range(rows):
+        za, zb = HW * i / rows, HW * (i + 1) / rows
+        a = 0.3 * (i % 2)
+        while a < arc + 0.3 * (i % 2) - 1e-6:
+            b = min(a + rng.uniform(0.8, 1.3), arc + 0.3 * (i % 2))
+            if arc + 0.3 * (i % 2) - b < 0.4:
+                b = arc + 0.3 * (i % 2)
+            t0, t1 = a / R, b / R
+            nvec = Vector((cos((t0 + t1) / 2), sin((t0 + t1) / 2), 0))
+            c = jit(P.basalt, rng, 0.03)
+            if nz(nvec.x * 3, nvec.y * 3, za * 1.5) > 0.5 - 0.45 * w["wind"] * max(0.0, nvec.dot(env.sw)):
+                c = mix(c, P.lichen, 0.22)
+            if i == 0 and nz(a * 0.5, 1.0, 7.0) > 0.0:
+                c = mix(c, P.kelp, 0.25)  # damp at the foot
+            polys.append(([Vector((R * cos(t0), R * sin(t0), za)), Vector((R * cos(t1), R * sin(t1), za)), Vector((R * cos(t1), R * sin(t1), zb)), Vector((R * cos(t0), R * sin(t0), zb))], c))
+            a = b
+    raw(k, polys)
+    put(k, lathe([(R - T, HW), (R - T, 0.5)], sides, None, caps=(False, False)), mix(P.basalt, P.kelp, 0.3), closed=False)
+    for i in range(sides):  # coping stones
+        t0, t1 = i / sides * TAU + 0.004, (i + 1) / sides * TAU - 0.004
+        put(k, lbox(Vector((t0, R - T - 0.04, HW)), Vector((t1, R + 0.04, HW + 0.14)), fn=lambda q: Vector((q.y * cos(q.x), q.y * sin(q.x), q.z)), open_bottom=True), jit(P.pale, rng, 0.03))
+    water = on(mix(P.seagreen, P.basalt, 0.55), "glass")
+    raw(k, [([Vector(((R - T) * cos(i / sides * TAU), (R - T) * sin(i / sides * TAU), 0.92)) for i in range(sides)], water)])
+    raw(k, [([Vector((1.6 * cos(i / 10 * TAU) - 1.0, 1.2 * sin(i / 10 * TAU) + 0.8, 0.924)) for i in range(10)], on(mix(P.smoke, P.seagreen, 0.4), "glass"))])  # the sky in it
+    # The steps to the rim on the south (the plan's spot), worn; the staff with its marks.
+    sx0 = -1.9
+    for i in range(6):  # a straight flight against the drum's south side, inside the lot
+        z = 0.2 * (i + 1)
+        x0 = sx0 + 0.3 * i
+        put(k, box((x0, -R + 0.02, 0.0), (x0 + 0.3 if i < 5 else x0 + 1.1, -R + 0.9, z)), worn(jit(P.basalt, rng)))
+    sp = Vector((0.6, -R + T + 0.5, 0.0))
+    for i in range(8):
+        z0 = 0.3 + (H - 0.32) * i / 8
+        put(k, box((sp.x - 0.05, sp.y - 0.05, z0), (sp.x + 0.05, sp.y + 0.05, z0 + (H - 0.32) / 8)), jit(on(P.lime, "wood") if i % 2 else P.tar, rng, 0.02))
+    put(k, box((sp.x - 0.08, sp.y - 0.08, H - 0.03), (sp.x + 0.08, sp.y + 0.08, H)), mix(P.iron, P.rust, 0.5))
+    put(k, beam(sp + Z * 1.3, Vector((0.6, -R + 0.1, 1.3)), 0.06, 0.06), jit(P.drift, rng))
+    # Two rain channels: stone gutters running in from the west and the north-east.
+    for t in (PI, 0.9):
+        d = Vector((cos(t), sin(t), 0))
+        s_ = Vector((-sin(t), cos(t), 0))
+        a_, b_ = d * (R - 0.5), d * (R + 0.02)
+        put(k, moved(box((-0.3, -0.3, HW - 0.25), (0.3, 0.3, HW + 0.16)), Matrix.Translation(d * (R - 0.27)) @ Matrix.Rotation(t, 4, "Z")), jit(P.pale, rng, 0.03))
+        raw(k, [(oriented([a_ - s_ * 0.12 + Z * (HW + 0.165), b_ - s_ * 0.12 + Z * (HW + 0.165), b_ + s_ * 0.12 + Z * (HW + 0.165), a_ + s_ * 0.12 + Z * (HW + 0.165)], Z), mix(P.basalt, P.kelp, 0.4))])
+    found(k, 1.8)
+    return dict(ridge_m=H, rim_m=round(HW + 0.14, 2), across_m=round(2 * R, 2))
+
+
+def bent_tree(k, rng, base, h, lean, crown=1.0, r0=0.16, leaf=None, bare=0.0, reach=None):
+    """A tree the south-westerly has bent: its trunk leans along `lean` (the lot's north-east),
+    more with height; its crown is clipped flat on the weather side and streams to leeward in a
+    few flattened masses, the lowest and largest furthest out. `reach` limits how far it may
+    lean (a lot's half-width); `bare` leaves some limbs leafless."""
+    base, lean = Vector(base), Vector(lean).normalized()
+    side = Z.cross(lean)
+    n = 6
+    reach = reach if reach is not None else h * 0.32
+    trunk = [base + lean * (reach * 0.55 * (i / n) ** 1.8) + side * (0.05 * h * sin(i * 1.3 + base.x)) * (i / n) + Z * (h * 0.62 * i / n) for i in range(n + 1)]
+    bark = jit(on(mix(P.peat, P.drift, 0.4), "bark"), rng)
+    put(k, tube(trunk, [r0 * (1 - 0.7 * i / n) for i in range(n + 1)], 6), bark)
+    leaf = leaf if leaf is not None else mix(P.grass, on(P.green, "leaves"), 0.45)
+    top = trunk[-1]
+    masses = [(0.0, 0.0, 0.95), (0.45, -0.1, 0.8), (0.85, -0.22, 0.6), (-0.2, 0.12, 0.6), (0.3, 0.2, 0.55)]
+    for i, (dq, dz, r) in enumerate(masses):
+        r_ = r * crown * h * 0.2
+        c = top + lean * (dq * reach * 0.8) + Z * (h * 0.22 + dz * h) + side * (0.1 * r_ * (-1) ** i)
+        limb = [trunk[n - 2 + (i % 2)], (trunk[-1] + c) / 2 - Z * 0.1 * r_, c - Z * 0.3 * r_]
+        put(k, tube(limb, [r0 * 0.35, r0 * 0.25, r0 * 0.12], 4), bark)
+        if rng.random() < bare:
+            continue
+        bm = sphere((0, 0, 0), 1.0, 2)
+        for v in bm.verts:
+            wsw = max(0.0, -v.co.dot(lean))  # clipped on the weather side
+            v.co = c + lean * (v.co.dot(lean) * r_ * (1.35 - 0.6 * wsw)) + side * (v.co.dot(side) * r_) + Z * (v.co.z * r_ * (0.72 if v.co.z > 0 else 0.4))
+        put(k, bm, jit(leaf, rng, 0.04), soft=c)
+    return trunk
+
+
+def gen_thorn(k, rng, lot):
+    """The Crown's one thorn: wind-bent, leaning north-east, its crown clipped by the weather."""
+    H, env = lot["height_m"], Env(lot)
+    hw = lot["size"][0] / 2
+    tr = bent_tree(k, rng, (-0.45 * env.ne.x, -0.45 * env.ne.y, 0.0), H / 1.13, env.ne, crown=0.85, r0=0.17, reach=hw * 1.3, bare=0.0)
+    for i in range(3):  # roots gripping the rock
+        a = i / 3 * TAU + 0.5
+        put(k, beam(tr[0] + Z * 0.25, tr[0] + Vector((cos(a) * 0.4, sin(a) * 0.4, 0.0)), 0.1, 0.1), jit(on(mix(P.peat, P.drift, 0.4), "bark"), rng))
+    vs = k.b.bm.verts
+    top = max(v.co.z for v in vs)
+    for v in vs:  # the plan's height, and inside its small lot
+        v.co.z *= H / top
+        v.co.x, v.co.y = max(-hw + 0.02, min(hw - 0.02, v.co.x)), max(-hw + 0.02, min(hw - 0.02, v.co.y))
+    found(k, 0.4)
+    return dict(ridge_m=H, leans="north-east")
+
+
+def gen_crown_bench(k, rng, lot):
+    """The Crown bench, the whole town below it: a ship's thwart on two basalt blocks, its two
+    seats polished pale, an anchor's fluke for an arm."""
+    W, D = lot["size"]
+    hw, hd, H = W / 2, D / 2, lot["height_m"]
+    for e in (-1, 1):
+        put(k, box((e * (hw - 0.4) - 0.12, -hd + 0.08, 0.0), (e * (hw - 0.4) + 0.12, hd - 0.08, H - 0.07), bevel=0.02), jit(P.basalt, rng))
+    put(k, box((-hw + 0.02, -hd + 0.03, H - 0.07), (hw - 0.02, hd - 0.03, H), bevel=0.015), lambda co, n, c=jit(P.drift, rng): mix(c, P.pale, 0.4) if n.z > 0.5 and 0.25 < abs(co.x) < 0.85 else c)
+    found(k, 0.4)
+    return dict(ridge_m=H, seats=2)
+
+
+# ---------------------------------------------------------------------------------------------
 # Export and report
 
 # folder -> (generator, triangle budget). SMALL_CITY §6's budgets; ground pieces and dressing
@@ -2663,6 +3988,12 @@ GEN = dict(
     retaining_wall=(gen_wall, 1500), stairs=(gen_stairs, 1500), quay=(gen_quay, 1500), mole=(gen_mole, 6000), plot_wall=(gen_plot_wall, 1500), fish_steps=(gen_fish_steps, 2500),
     net_rack=(gen_net_rack, 1500), barrels=(gen_barrels, 1500), creels=(gen_creels, 1500), bollard=(gen_bollard, 1500), quay_lamp=(gen_quay_lamp, 1500), boat=(gen_boat, 2500),
     peat_stack=(gen_peat_stack, 1500), floats=(gen_floats, 1500),
+    # Pass 2.
+    heron=(gen_heron, 9000), heron_jib=(gen_heron_jib, 1500), lamp_house=(gen_cottage, 3500),
+    lehr_house=(gen_lehr_house, 8000), pot_house=(gen_pot_house, 6000), ash_house=(gen_ash_house, 5000), store=(gen_store, 6000), readers_house=(gen_readers_house, 6000),
+    smokehouse=(gen_smokehouse, 3500), cistern_house=(gen_cistern_house, 3000), peat_barn=(gen_peat_barn, 6000), batch=(gen_batch, 4000),
+    wash_house=(gen_wash_house, 4000), cullet_shed=(gen_cullet_shed, 5000), boatshed=(gen_boatshed, 6000), dry_dock=(gen_dry_dock, 6000), cistern=(gen_cistern, 3000),
+    thorn=(gen_thorn, 1500), crown_bench=(gen_crown_bench, 600),
 )
 PALETTE = [tuple(v) for v in vars(P).values()]
 

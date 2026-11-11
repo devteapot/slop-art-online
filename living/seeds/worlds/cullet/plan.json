@@ -1841,7 +1841,9 @@
     "empty": 0.0,
     "cause": "+2 m above the sea; 261 m from the Cone at bearing 267; front faces 180"
    },
-   "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings"
+   "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings",
+   "stage": 0.4,
+   "stage_cause": "the hull's stage of building, 0 to 1: in frame, planked four strakes of ten"
   },
   {
    "id": "slip",
@@ -2195,7 +2197,14 @@
    "people": 2,
    "door_colour": "sea_green",
    "keepsake": "a lamp-oil drum and a coil of wick",
-   "address": "the lamp house on the mole"
+   "address": "the lamp house on the mole",
+   "lit": {
+    "windows": [
+     "g",
+     "u0"
+    ],
+    "cause": "Anselm Faro keeps the Watchglass: the lamp house is awake all night, below and above"
+   }
   },
   {
    "id": "watchglass",
@@ -2289,7 +2298,11 @@
    "family": "strand",
    "people": 2,
    "door_colour": "chalk_blue",
-   "keepsake": "a lamp hook and a creel"
+   "keepsake": "a lamp hook and a creel",
+   "lit": {
+    "windows": [],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 16841)"
+   }
   },
   {
    "id": "low_2",
@@ -2329,7 +2342,13 @@
    "family": "strand",
    "people": 4,
    "door_colour": "sea_green",
-   "keepsake": "a ship's knee of timber propped by the door"
+   "keepsake": "a ship's knee of timber propped by the door",
+   "lit": {
+    "windows": [
+     "u1"
+    ],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 33811); a full house (4): someone is still up above"
+   }
   },
   {
    "id": "low_3",
@@ -2365,7 +2384,11 @@
    "terrace": "Low Row east",
    "front_cause": "an original 5 m plot, empty",
    "state": "empty, sound",
-   "door_colour": "faded"
+   "door_colour": "faded",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "low_4",
@@ -2405,7 +2428,11 @@
    "family": "strand",
    "people": 7,
    "door_colour": "oxblood",
-   "keepsake": "a row of glass floats; the Tarns have always painted their door so"
+   "keepsake": "a row of glass floats; the Tarns have always painted their door so",
+   "lit": {
+    "windows": [],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 28134); a full house (7), all abed (seed 28134)"
+   }
   },
   {
    "id": "low_5",
@@ -2445,7 +2472,14 @@
    "family": "strand",
    "people": 4,
    "door_colour": "mustard",
-   "keepsake": "a string of sea-glass, each colour from a known wreck"
+   "keepsake": "a string of sea-glass, each colour from a known wreck",
+   "lit": {
+    "windows": [
+     "g",
+     "u0"
+    ],
+    "cause": "a Strand house, one in four (seed 14192): someone mends by lamplight; a full house (4): someone is still up above"
+   }
   },
   {
    "id": "batch",
@@ -2539,7 +2573,11 @@
    "family": "strand",
    "people": 2,
    "door_colour": "chalk_blue",
-   "keepsake": "a counters board chalked on the step"
+   "keepsake": "a counters board chalked on the step",
+   "lit": {
+    "windows": [],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 32458)"
+   }
   },
   {
    "id": "low_7",
@@ -2579,7 +2617,13 @@
    "family": "strand",
    "people": 2,
    "door_colour": "oxblood",
-   "keepsake": "a caged gull"
+   "keepsake": "a caged gull",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Strand house, one in four (seed 23388): someone mends by lamplight"
+   }
   },
   {
    "id": "low_8",
@@ -2619,7 +2663,11 @@
    "family": "strand",
    "people": 3,
    "door_colour": "sea_green",
-   "keepsake": "a sack of kelp ash and a smoke-grey line of washing"
+   "keepsake": "a sack of kelp ash and a smoke-grey line of washing",
+   "lit": {
+    "windows": [],
+    "cause": "a Strand house: asleep, they rise with the tide (seed 3949)"
+   }
   },
   {
    "id": "low_9",
@@ -2656,7 +2704,11 @@
    "front_cause": "an original plot, its roof stripped for fuel in the lean years",
    "state": "roofless shell",
    "door_colour": "none",
-   "note": "a tree grows inside the walls"
+   "note": "a tree grows inside the walls",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "low_10",
@@ -2696,7 +2748,14 @@
    "family": "kiln",
    "people": 2,
    "door_colour": "mustard",
-   "keepsake": "wind chimes of cullet"
+   "keepsake": "wind chimes of cullet",
+   "lit": {
+    "windows": [
+     "g",
+     "u1"
+    ],
+    "cause": "Thessaly Marl stokes the Cone by night: the kitchen lamp is left for her, and a night light burns above for Wick, who is five"
+   }
   },
   {
    "id": "marver",
@@ -2750,7 +2809,13 @@
    "keepsake": "a ship's figurehead over the door",
    "address": "over the Marver, Mid Row",
    "note": "the cookshop: open front, figurehead over the door; the Achterbergs live over it",
-   "terrace": "Mid Row east"
+   "terrace": "Mid Row east",
+   "lit": {
+    "windows": [
+     "u1"
+    ],
+    "cause": "Pieter Achterberg rises at 02:30 to fire the Batch: one window over the hearth"
+   }
   },
   {
    "id": "marver_terrace",
@@ -2863,7 +2928,14 @@
    "family": "ladder",
    "people": 4,
    "door_colour": "sea_green",
-   "keepsake": "seedling trays on the sill"
+   "keepsake": "seedling trays on the sill",
+   "lit": {
+    "windows": [
+     "g",
+     "u0"
+    ],
+    "cause": "a Ladder house, every second one (seed 19180): done at 16:00, they sit up; a full house (4): someone is still up above"
+   }
   },
   {
    "id": "mid_2",
@@ -2903,7 +2975,13 @@
    "family": "ladder",
    "people": 4,
    "door_colour": "mustard",
-   "keepsake": "a rain gauge on a post"
+   "keepsake": "a rain gauge on a post",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Ladder house, every second one (seed 82518): done at 16:00, they sit up; a full house (4), all abed (seed 82518)"
+   }
   },
   {
    "id": "mid_3",
@@ -2939,7 +3017,11 @@
    "terrace": "Mid Row east",
    "front_cause": "an original plot, its roof stripped for fuel in the lean years",
    "state": "roofless shell",
-   "door_colour": "none"
+   "door_colour": "none",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "mid_4",
@@ -2979,7 +3061,11 @@
    "family": "ladder",
    "people": 2,
    "door_colour": "oxblood",
-   "keepsake": "a stack of odd slates"
+   "keepsake": "a stack of odd slates",
+   "lit": {
+    "windows": [],
+    "cause": "a Ladder house: early to bed (seed 83427)"
+   }
   },
   {
    "id": "mid_5",
@@ -3019,7 +3105,13 @@
    "family": "kiln",
    "people": 2,
    "door_colour": "chalk_blue",
-   "keepsake": "a pontil rod hung over the door"
+   "keepsake": "a pontil rod hung over the door",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Kiln house, two in three (seed 55189): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+   }
   },
   {
    "id": "mid_6",
@@ -3055,7 +3147,11 @@
    "terrace": "Mid Row west",
    "front_cause": "an original 5 m plot, empty",
    "state": "empty, sound",
-   "door_colour": "faded"
+   "door_colour": "faded",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "mid_7",
@@ -3095,7 +3191,13 @@
    "family": "kiln",
    "people": 3,
    "door_colour": "sea_green",
-   "keepsake": "a hen coop against the front"
+   "keepsake": "a hen coop against the front",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Kiln house, two in three (seed 93433): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+   }
   },
   {
    "id": "high_1",
@@ -3135,7 +3237,11 @@
    "family": "kiln",
    "people": 3,
    "door_colour": "chalk_blue",
-   "keepsake": "a sill of cullet, one piece of every colour Ode has kept"
+   "keepsake": "a sill of cullet, one piece of every colour Ode has kept",
+   "lit": {
+    "windows": [],
+    "cause": "a Kiln house off the watch tonight (seed 53250): dark"
+   }
   },
   {
    "id": "high_2",
@@ -3175,7 +3281,14 @@
    "family": "kiln",
    "people": 4,
    "door_colour": "sea_green",
-   "keepsake": "a bucket of off-cuts the children play with by the step"
+   "keepsake": "a bucket of off-cuts the children play with by the step",
+   "lit": {
+    "windows": [
+     "g",
+     "u0"
+    ],
+    "cause": "a Kiln house, two in three (seed 52568): someone is on the evening watch at the Cone, and the kitchen lamp waits; a full house (4): someone is still up above"
+   }
   },
   {
    "id": "high_3",
@@ -3215,7 +3328,13 @@
    "family": "kiln",
    "people": 3,
    "door_colour": "mustard",
-   "keepsake": "a slate tally board by the door"
+   "keepsake": "a slate tally board by the door",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Kiln house, two in three (seed 93998): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+   }
   },
   {
    "id": "high_4",
@@ -3251,7 +3370,11 @@
    "terrace": "High Row east",
    "front_cause": "an original 5 m plot, empty",
    "state": "empty, sound",
-   "door_colour": "faded"
+   "door_colour": "faded",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "high_5",
@@ -3291,7 +3414,13 @@
    "family": "kiln",
    "people": 3,
    "door_colour": "chalk_blue",
-   "keepsake": "a bench made from a boat's thwart"
+   "keepsake": "a bench made from a boat's thwart",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "a Kiln house, two in three (seed 76987): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+   }
   },
   {
    "id": "high_6",
@@ -3327,7 +3456,11 @@
    "terrace": "High Row west",
    "front_cause": "an original 5 m plot, empty",
    "state": "empty, sound",
-   "door_colour": "faded"
+   "door_colour": "faded",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "high_7",
@@ -3363,7 +3496,11 @@
    "terrace": "High Row west",
    "front_cause": "an original plot, its roof stripped for fuel in the lean years",
    "state": "roofless shell",
-   "door_colour": "none"
+   "door_colour": "none",
+   "lit": {
+    "windows": [],
+    "cause": "empty: dark"
+   }
   },
   {
    "id": "glasshouse_1",
@@ -4693,7 +4830,13 @@
    "door_colour": "chalk_blue",
    "keepsake": "a shelf of ship-day tablets in the window",
    "address": "the Readers' House",
-   "note": "the school and the ship-day tablets; Benedikt Orme lives here"
+   "note": "the school and the ship-day tablets; Benedikt Orme lives here",
+   "lit": {
+    "windows": [
+     "g"
+    ],
+    "cause": "Benedikt Orme reads the ship-day tablets by lamp: the window with the shelf"
+   }
   },
   {
    "id": "graveyard",
@@ -4865,7 +5008,11 @@
    "people": 3,
    "door_colour": "oxblood",
    "keepsake": "a stack of drying peat by the door",
-   "address": "the turf house on the Moss"
+   "address": "the turf house on the Moss",
+   "lit": {
+    "windows": [],
+    "cause": "asleep"
+   }
   },
   {
    "id": "hanger_cottage",
@@ -4901,7 +5048,11 @@
    "people": 1,
    "door_colour": "sea_green",
    "keepsake": "a seedling bed of thorn and rowan",
-   "address": "the Hanger cottage"
+   "address": "the Hanger cottage",
+   "lit": {
+    "windows": [],
+    "cause": "asleep"
+   }
   },
   {
    "id": "lintel",
@@ -7252,7 +7403,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 48021,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7265,7 +7416,8 @@
     "cause": "+2 m above the sea; 266 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row walk runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7287,7 +7439,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 2159,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7300,7 +7452,8 @@
     "cause": "+2 m above the sea; 254 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row walk runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7322,7 +7475,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 80633,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7335,7 +7488,8 @@
     "cause": "+2 m above the sea; 240 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7357,7 +7511,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 82298,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7370,7 +7524,8 @@
     "cause": "+2 m above the sea; 229 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7392,7 +7547,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 74092,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7405,7 +7560,8 @@
     "cause": "+2 m above the sea; 218 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7427,7 +7583,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 67414,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7440,7 +7596,8 @@
     "cause": "+2 m above the sea; 206 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7462,7 +7619,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 73376,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7475,7 +7632,8 @@
     "cause": "+2 m above the sea; 195 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7497,7 +7655,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 16369,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7510,7 +7668,8 @@
     "cause": "+2 m above the sea; 184 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7532,7 +7691,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 24743,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7545,7 +7704,8 @@
     "cause": "+2 m above the sea; 170 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7567,7 +7727,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 35682,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7580,7 +7740,8 @@
     "cause": "+2 m above the sea; 160 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7602,7 +7763,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 78964,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7615,7 +7776,8 @@
     "cause": "+2 m above the sea; 150 m from the Cone at bearing 270; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7637,7 +7799,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 89966,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7650,7 +7812,8 @@
     "cause": "+2 m above the sea; 140 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7672,7 +7835,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 2712,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7685,7 +7848,8 @@
     "cause": "+2 m above the sea; 130 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7707,7 +7871,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 61243,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7720,7 +7884,8 @@
     "cause": "+2 m above the sea; 117 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7742,7 +7907,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 76973,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7755,7 +7920,8 @@
     "cause": "+2 m above the sea; 107 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7777,7 +7943,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 83287,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7790,7 +7956,8 @@
     "cause": "+2 m above the sea; 97 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7812,7 +7979,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 70241,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7825,7 +7992,8 @@
     "cause": "+2 m above the sea; 87 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7847,7 +8015,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 54992,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7860,7 +8028,8 @@
     "cause": "+2 m above the sea; 76 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7882,7 +8051,7 @@
    ],
    "facing": "south",
    "floor_m": 2.0,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 2726,
    "cause": "the drop from the low level to the strand level (3.5 m)",
    "wear": {
@@ -7895,7 +8064,8 @@
     "cause": "+2 m above the sea; 70 m from the Cone at bearing 269; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Low Row runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7931,6 +8101,7 @@
    },
    "fall_m": 3.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -7966,6 +8137,7 @@
    },
    "fall_m": 3.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -8001,6 +8173,7 @@
    },
    "fall_m": 3.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "strand",
    "upper": "low",
    "ends": [
@@ -8036,6 +8209,7 @@
    },
    "fall_m": 7.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "strand",
    "upper": "mid",
    "ends": [
@@ -8057,7 +8231,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 76120,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8070,7 +8244,8 @@
     "cause": "+5.5 m above the sea; 308 m from the Cone at bearing 275; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8092,7 +8267,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 51374,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8105,7 +8280,8 @@
     "cause": "+5.5 m above the sea; 297 m from the Cone at bearing 275; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8127,7 +8303,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 6804,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8140,7 +8316,8 @@
     "cause": "+5.5 m above the sea; 287 m from the Cone at bearing 275; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8162,7 +8339,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 70626,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8175,7 +8352,8 @@
     "cause": "+5.5 m above the sea; 276 m from the Cone at bearing 276; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8197,7 +8375,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 2259,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8210,7 +8388,8 @@
     "cause": "+5.5 m above the sea; 266 m from the Cone at bearing 276; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8232,7 +8411,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 69797,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8245,7 +8424,8 @@
     "cause": "+5.5 m above the sea; 255 m from the Cone at bearing 276; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row walk runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8267,7 +8447,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 84960,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8280,7 +8460,8 @@
     "cause": "+5.5 m above the sea; 241 m from the Cone at bearing 276; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8302,7 +8483,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 60630,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8315,7 +8496,8 @@
     "cause": "+5.5 m above the sea; 230 m from the Cone at bearing 277; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8337,7 +8519,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 10028,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8350,7 +8532,8 @@
     "cause": "+5.5 m above the sea; 219 m from the Cone at bearing 277; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8372,7 +8555,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 48058,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8385,7 +8568,8 @@
     "cause": "+5.5 m above the sea; 208 m from the Cone at bearing 277; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8407,7 +8591,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 50297,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8420,7 +8604,8 @@
     "cause": "+5.5 m above the sea; 197 m from the Cone at bearing 278; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8442,7 +8627,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 64719,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8455,7 +8640,8 @@
     "cause": "+5.5 m above the sea; 186 m from the Cone at bearing 278; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8477,7 +8663,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 74965,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8490,7 +8676,8 @@
     "cause": "+5.5 m above the sea; 172 m from the Cone at bearing 279; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8512,7 +8699,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 20899,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8525,7 +8712,8 @@
     "cause": "+5.5 m above the sea; 160 m from the Cone at bearing 280; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8547,7 +8735,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 54706,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8560,7 +8748,8 @@
     "cause": "+5.5 m above the sea; 148 m from the Cone at bearing 280; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8582,7 +8771,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 28260,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8595,7 +8784,8 @@
     "cause": "+5.5 m above the sea; 137 m from the Cone at bearing 281; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8617,7 +8807,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 45511,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8630,7 +8820,8 @@
     "cause": "+5.5 m above the sea; 125 m from the Cone at bearing 282; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8652,7 +8843,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 11377,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8665,7 +8856,8 @@
     "cause": "+5.5 m above the sea; 112 m from the Cone at bearing 284; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8687,7 +8879,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 80811,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8700,7 +8892,8 @@
     "cause": "+5.5 m above the sea; 102 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8736,6 +8929,7 @@
    },
    "fall_m": 4.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping: the Marver's terrace has its own rail here",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8757,7 +8951,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 77438,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8770,7 +8964,8 @@
     "cause": "+5.5 m above the sea; 81 m from the Cone at bearing 289; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8792,7 +8987,7 @@
    ],
    "facing": "south",
    "floor_m": 5.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 53064,
    "cause": "the drop from the mid level to the low level (4 m)",
    "wear": {
@@ -8805,7 +9000,8 @@
     "cause": "+5.5 m above the sea; 75 m from the Cone at bearing 291; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: Mid Row runs along the top",
    "lower": "low",
    "upper": "mid",
    "ends": [
@@ -8827,7 +9023,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 30066,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -8840,7 +9036,8 @@
     "cause": "+9.5 m above the sea; 322 m from the Cone at bearing 280; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -8862,7 +9059,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 52196,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -8875,7 +9072,8 @@
     "cause": "+9.5 m above the sea; 311 m from the Cone at bearing 280; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -8897,7 +9095,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 64917,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -8910,7 +9108,8 @@
     "cause": "+9.5 m above the sea; 301 m from the Cone at bearing 281; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -8932,7 +9131,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 8547,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -8945,7 +9144,8 @@
     "cause": "+9.5 m above the sea; 291 m from the Cone at bearing 281; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -8967,7 +9167,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 47302,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -8980,7 +9180,8 @@
     "cause": "+9.5 m above the sea; 281 m from the Cone at bearing 282; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9002,7 +9203,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 90384,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9015,7 +9216,8 @@
     "cause": "+9.5 m above the sea; 270 m from the Cone at bearing 282; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9037,7 +9239,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 20554,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9050,7 +9252,8 @@
     "cause": "+9.5 m above the sea; 260 m from the Cone at bearing 283; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row walk runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9072,7 +9275,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 33500,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9085,7 +9288,8 @@
     "cause": "+9.5 m above the sea; 247 m from the Cone at bearing 283; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9107,7 +9311,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 7295,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9120,7 +9324,8 @@
     "cause": "+9.5 m above the sea; 236 m from the Cone at bearing 284; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9142,7 +9347,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 6857,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9155,7 +9360,8 @@
     "cause": "+9.5 m above the sea; 225 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9177,7 +9383,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 95027,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9190,7 +9396,8 @@
     "cause": "+9.5 m above the sea; 214 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9212,7 +9419,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 98149,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9225,7 +9432,8 @@
     "cause": "+9.5 m above the sea; 203 m from the Cone at bearing 286; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9247,7 +9455,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 54452,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9260,7 +9468,8 @@
     "cause": "+9.5 m above the sea; 193 m from the Cone at bearing 287; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9282,7 +9491,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 37442,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9295,7 +9504,8 @@
     "cause": "+9.5 m above the sea; 180 m from the Cone at bearing 288; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9317,7 +9527,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 6373,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9330,7 +9540,8 @@
     "cause": "+9.5 m above the sea; 171 m from the Cone at bearing 289; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9352,7 +9563,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 21619,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9365,7 +9576,8 @@
     "cause": "+9.5 m above the sea; 158 m from the Cone at bearing 291; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9387,7 +9599,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 53161,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9400,7 +9612,8 @@
     "cause": "+9.5 m above the sea; 147 m from the Cone at bearing 293; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9422,7 +9635,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 23775,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9435,7 +9648,8 @@
     "cause": "+9.5 m above the sea; 136 m from the Cone at bearing 295; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9457,7 +9671,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 80796,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9470,7 +9684,8 @@
     "cause": "+9.5 m above the sea; 126 m from the Cone at bearing 297; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9492,7 +9707,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 74954,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9505,7 +9720,8 @@
     "cause": "+9.5 m above the sea; 115 m from the Cone at bearing 299; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9527,7 +9743,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 48528,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9540,7 +9756,8 @@
     "cause": "+9.5 m above the sea; 105 m from the Cone at bearing 303; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9562,7 +9779,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 93446,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9575,7 +9792,8 @@
     "cause": "+9.5 m above the sea; 95 m from the Cone at bearing 307; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9597,7 +9815,7 @@
    ],
    "facing": "south",
    "floor_m": 9.5,
-   "height_m": 4.4,
+   "height_m": 5.0,
    "seed": 57623,
    "cause": "the drop from the high level to the mid level (4 m)",
    "wear": {
@@ -9610,7 +9828,8 @@
     "cause": "+9.5 m above the sea; 90 m from the Cone at bearing 309; front faces 180"
    },
    "fall_m": 4.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: High Row runs along the top",
    "lower": "mid",
    "upper": "high",
    "ends": [
@@ -9632,7 +9851,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 92641,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9645,7 +9864,8 @@
     "cause": "+13.5 m above the sea; 337 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9667,7 +9887,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 3396,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9680,7 +9900,8 @@
     "cause": "+13.5 m above the sea; 326 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9702,7 +9923,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 11090,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9715,7 +9936,8 @@
     "cause": "+13.5 m above the sea; 314 m from the Cone at bearing 286; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9737,7 +9959,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 45192,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9750,7 +9972,8 @@
     "cause": "+13.5 m above the sea; 303 m from the Cone at bearing 287; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9772,7 +9995,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 51198,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9785,7 +10008,8 @@
     "cause": "+13.5 m above the sea; 292 m from the Cone at bearing 287; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9807,7 +10031,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 5885,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9820,7 +10044,8 @@
     "cause": "+13.5 m above the sea; 280 m from the Cone at bearing 288; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9842,7 +10067,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 39211,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9855,7 +10080,8 @@
     "cause": "+13.5 m above the sea; 269 m from the Cone at bearing 289; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9877,7 +10103,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 65777,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9890,7 +10116,8 @@
     "cause": "+13.5 m above the sea; 255 m from the Cone at bearing 290; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9912,7 +10139,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 92807,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9925,7 +10152,8 @@
     "cause": "+13.5 m above the sea; 244 m from the Cone at bearing 291; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9947,7 +10175,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 60982,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9960,7 +10188,8 @@
     "cause": "+13.5 m above the sea; 232 m from the Cone at bearing 292; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -9982,7 +10211,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 2016,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -9995,7 +10224,8 @@
     "cause": "+13.5 m above the sea; 221 m from the Cone at bearing 293; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10017,7 +10247,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 97067,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -10030,7 +10260,8 @@
     "cause": "+13.5 m above the sea; 211 m from the Cone at bearing 294; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10052,7 +10283,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 77853,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -10065,7 +10296,8 @@
     "cause": "+13.5 m above the sea; 200 m from the Cone at bearing 296; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10087,7 +10319,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 81319,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -10100,7 +10332,8 @@
     "cause": "+13.5 m above the sea; 189 m from the Cone at bearing 297; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10122,7 +10355,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 7217,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -10135,7 +10368,8 @@
     "cause": "+13.5 m above the sea; 179 m from the Cone at bearing 299; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10157,7 +10391,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 31186,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -10170,7 +10404,8 @@
     "cause": "+13.5 m above the sea; 168 m from the Cone at bearing 301; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10192,7 +10427,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 75556,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -10205,7 +10440,8 @@
     "cause": "+13.5 m above the sea; 158 m from the Cone at bearing 303; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10227,7 +10463,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 83230,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -10240,7 +10476,8 @@
     "cause": "+13.5 m above the sea; 148 m from the Cone at bearing 306; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10262,7 +10499,7 @@
    ],
    "facing": "south",
    "floor_m": 13.5,
-   "height_m": 3.9,
+   "height_m": 4.5,
    "seed": 74472,
    "cause": "the drop from the upper level to the high level (3.5 m)",
    "wear": {
@@ -10275,7 +10512,8 @@
     "cause": "+13.5 m above the sea; 137 m from the Cone at bearing 309; front faces 180"
    },
    "fall_m": 3.5,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the upper walk runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10311,6 +10549,7 @@
    },
    "fall_m": 3.5,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "high",
    "upper": "upper",
    "ends": [
@@ -10332,7 +10571,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 12303,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10345,7 +10584,8 @@
     "cause": "+17 m above the sea; 414 m from the Cone at bearing 284; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10367,7 +10607,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 97834,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10380,7 +10620,8 @@
     "cause": "+17 m above the sea; 403 m from the Cone at bearing 284; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10402,7 +10643,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 93692,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10415,7 +10656,8 @@
     "cause": "+17 m above the sea; 392 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10437,7 +10679,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 89926,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10450,7 +10692,8 @@
     "cause": "+17 m above the sea; 381 m from the Cone at bearing 285; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10472,7 +10715,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 87952,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10485,7 +10728,8 @@
     "cause": "+17 m above the sea; 370 m from the Cone at bearing 286; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10507,7 +10751,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 97875,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10520,7 +10764,8 @@
     "cause": "+17 m above the sea; 359 m from the Cone at bearing 286; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10542,7 +10787,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 28325,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10555,7 +10800,8 @@
     "cause": "+17 m above the sea; 348 m from the Cone at bearing 287; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10577,7 +10823,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 54911,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10590,7 +10836,8 @@
     "cause": "+17 m above the sea; 337 m from the Cone at bearing 287; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10612,7 +10859,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 89289,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10625,7 +10872,8 @@
     "cause": "+17 m above the sea; 327 m from the Cone at bearing 288; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10647,7 +10895,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 42936,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10660,7 +10908,8 @@
     "cause": "+17 m above the sea; 316 m from the Cone at bearing 289; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10682,7 +10931,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 5390,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10695,7 +10944,8 @@
     "cause": "+17 m above the sea; 305 m from the Cone at bearing 289; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10717,7 +10967,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 11668,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10730,7 +10980,8 @@
     "cause": "+17 m above the sea; 295 m from the Cone at bearing 290; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10752,7 +11003,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 44738,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10765,7 +11016,8 @@
     "cause": "+17 m above the sea; 284 m from the Cone at bearing 291; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10787,7 +11039,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 20632,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10800,7 +11052,8 @@
     "cause": "+17 m above the sea; 273 m from the Cone at bearing 292; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10822,7 +11075,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 23182,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10835,7 +11088,8 @@
     "cause": "+17 m above the sea; 260 m from the Cone at bearing 293; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10857,7 +11111,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 13389,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10870,7 +11124,8 @@
     "cause": "+17 m above the sea; 250 m from the Cone at bearing 294; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10892,7 +11147,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 81115,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10905,7 +11160,8 @@
     "cause": "+17 m above the sea; 240 m from the Cone at bearing 295; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10927,7 +11183,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 52801,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10940,7 +11196,8 @@
     "cause": "+17 m above the sea; 230 m from the Cone at bearing 296; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10962,7 +11219,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 91767,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -10975,7 +11232,8 @@
     "cause": "+17 m above the sea; 220 m from the Cone at bearing 297; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -10997,7 +11255,7 @@
    ],
    "facing": "south",
    "floor_m": 17.0,
-   "height_m": 3.4,
+   "height_m": 4.0,
    "seed": 91270,
    "cause": "the drop from the crown level to the upper level (3 m)",
    "wear": {
@@ -11010,7 +11268,8 @@
     "cause": "+17 m above the sea; 210 m from the Cone at bearing 299; front faces 180"
    },
    "fall_m": 3.0,
-   "coping_m": 0.4,
+   "coping_m": 1.0,
+   "coping_cause": "a 1 m parapet: the Crown path runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11046,6 +11305,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11081,6 +11341,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11116,6 +11377,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11151,6 +11413,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11186,6 +11449,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11221,6 +11485,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11256,6 +11521,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11291,6 +11557,7 @@
    },
    "fall_m": 3.0,
    "coping_m": 0.4,
+   "coping_cause": "a 0.4 m coping to sit on: no street or lane runs along the top",
    "lower": "upper",
    "upper": "crown",
    "ends": [
@@ -11880,6 +12147,38 @@
     "cause": "+9.5 m above the sea; 94 m from the Cone at bearing 289; front faces 180"
    },
    "lot": "marver_terrace"
+  },
+  {
+   "id": "heron_jib",
+   "kind": "heron_jib",
+   "model": "cullet/heron_jib/heron_jib.glb",
+   "at": [
+    -17.0,
+    -9.51
+   ],
+   "size": [
+    1.6,
+    9.0
+   ],
+   "facing": "north",
+   "floor_m": 2.0,
+   "height_m": 13.0,
+   "seed": 15236,
+   "cause": "the Heron's jib, like a beak: 9 m out over the water from the king post, fixed; it still lifts boats and kelp loads",
+   "wear": {
+    "salt": 1.0,
+    "soot": 0.0,
+    "wind": 0.03,
+    "age": 1.0,
+    "repair": 0.5,
+    "empty": 0.0,
+    "cause": "+2 m above the sea; 169 m from the Cone at bearing 255; front faces 0"
+   },
+   "lot": "heron",
+   "pivot_z": 8.3,
+   "tip_z": 12.2,
+   "head_z": 12.87,
+   "load_z": 2.4
   },
   {
    "id": "plot_wall_1",
@@ -13160,6 +13459,1587 @@
    "dressing": true
   }
  ],
+ "grounds": [
+  {
+   "id": "the quay",
+   "surface": "quay_flags",
+   "area": [
+    [
+     -125,
+     0
+    ],
+    [
+     -21.5,
+     0
+    ],
+    [
+     -21.5,
+     -6.0
+    ],
+    [
+     -12.5,
+     -6.0
+    ],
+    [
+     -12.5,
+     0
+    ],
+    [
+     -4,
+     0
+    ],
+    [
+     -4,
+     -3
+    ],
+    [
+     4,
+     -3
+    ],
+    [
+     4,
+     0
+    ],
+    [
+     80,
+     0
+    ],
+    [
+     80,
+     32
+    ],
+    [
+     -125,
+     32
+    ]
+   ],
+   "cause": "the ship-day quay: flags from the edge to the wall behind the strand's buildings"
+  },
+  {
+   "id": "the slip and the dock yard",
+   "surface": "setts",
+   "area": [
+    [
+     -125,
+     0
+    ],
+    [
+     -99,
+     0
+    ],
+    [
+     -99,
+     32
+    ],
+    [
+     -125,
+     32
+    ]
+   ],
+   "cause": "where hulls are hauled: setts for the grip, not flags"
+  },
+  {
+   "id": "Cinder Row",
+   "surface": "cinders",
+   "area": [
+    [
+     80,
+     0
+    ],
+    [
+     175,
+     0
+    ],
+    [
+     175,
+     62
+    ],
+    [
+     80,
+     62
+    ]
+   ],
+   "cause": "the Cone's cinders, spread over the whole yard since the ship days"
+  },
+  {
+   "id": "the mole",
+   "surface": "quay_flags",
+   "area": [
+    [
+     126,
+     0
+    ],
+    [
+     126,
+     -14
+    ],
+    [
+     132,
+     -14
+    ],
+    [
+     132,
+     -54
+    ],
+    [
+     129,
+     -54
+    ],
+    [
+     129,
+     -67
+    ],
+    [
+     142,
+     -67
+    ],
+    [
+     142,
+     -54
+    ],
+    [
+     139,
+     -54
+    ],
+    [
+     139,
+     -14
+    ],
+    [
+     146,
+     -14
+    ],
+    [
+     146,
+     0
+    ]
+   ],
+   "cause": "the ship-day mole"
+  },
+  {
+   "id": "Low Row's walk",
+   "surface": "setts",
+   "area": [
+    [
+     -30,
+     32
+    ],
+    [
+     80,
+     32
+    ],
+    [
+     80,
+     38.5
+    ],
+    [
+     -30,
+     38.5
+    ]
+   ],
+   "cause": "Low Row: setts from the street to the parapet over the drop, where the houses stand"
+  },
+  {
+   "id": "Low Row's kerb",
+   "surface": "setts",
+   "area": [
+    [
+     -30,
+     43.5
+    ],
+    [
+     80,
+     43.5
+    ],
+    [
+     80,
+     44.1
+    ],
+    [
+     -30,
+     44.1
+    ]
+   ],
+   "cause": "Low Row: the strip before the doors"
+  },
+  {
+   "id": "Low Row's yards",
+   "surface": "earth",
+   "area": [
+    [
+     -30,
+     51.3
+    ],
+    [
+     80,
+     51.3
+    ],
+    [
+     80,
+     59.4
+    ],
+    [
+     -30,
+     59.4
+    ]
+   ],
+   "cause": "Low Row: back yards, trodden earth"
+  },
+  {
+   "id": "Mid Row's walk",
+   "surface": "setts",
+   "area": [
+    [
+     -30,
+     60
+    ],
+    [
+     80,
+     60
+    ],
+    [
+     80,
+     66.5
+    ],
+    [
+     -30,
+     66.5
+    ]
+   ],
+   "cause": "Mid Row: setts from the street to the parapet over the drop, where the houses stand"
+  },
+  {
+   "id": "Mid Row's kerb",
+   "surface": "setts",
+   "area": [
+    [
+     -30,
+     71.5
+    ],
+    [
+     80,
+     71.5
+    ],
+    [
+     80,
+     72.1
+    ],
+    [
+     -30,
+     72.1
+    ]
+   ],
+   "cause": "Mid Row: the strip before the doors"
+  },
+  {
+   "id": "Mid Row's yards",
+   "surface": "earth",
+   "area": [
+    [
+     -30,
+     79.3
+    ],
+    [
+     80,
+     79.3
+    ],
+    [
+     80,
+     89.4
+    ],
+    [
+     -30,
+     89.4
+    ]
+   ],
+   "cause": "Mid Row: back yards, trodden earth"
+  },
+  {
+   "id": "High Row's walk",
+   "surface": "setts",
+   "area": [
+    [
+     -30,
+     90
+    ],
+    [
+     80,
+     90
+    ],
+    [
+     80,
+     96.5
+    ],
+    [
+     -30,
+     96.5
+    ]
+   ],
+   "cause": "High Row: setts from the street to the parapet over the drop, where the houses stand"
+  },
+  {
+   "id": "High Row's kerb",
+   "surface": "setts",
+   "area": [
+    [
+     -30,
+     101.5
+    ],
+    [
+     80,
+     101.5
+    ],
+    [
+     80,
+     102.1
+    ],
+    [
+     -30,
+     102.1
+    ]
+   ],
+   "cause": "High Row: the strip before the doors"
+  },
+  {
+   "id": "High Row's yards",
+   "surface": "earth",
+   "area": [
+    [
+     -30,
+     109.3
+    ],
+    [
+     80,
+     109.3
+    ],
+    [
+     80,
+     119.4
+    ],
+    [
+     -30,
+     119.4
+    ]
+   ],
+   "cause": "High Row: back yards, trodden earth"
+  },
+  {
+   "id": "the bed before glasshouse 1",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -44.4,
+     51.4
+    ],
+    [
+     -33.6,
+     51.4
+    ],
+    [
+     -33.6,
+     53.9
+    ],
+    [
+     -44.4,
+     53.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 1, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 2",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -58.4,
+     51.4
+    ],
+    [
+     -47.6,
+     51.4
+    ],
+    [
+     -47.6,
+     53.9
+    ],
+    [
+     -58.4,
+     53.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 2, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 3",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -114.4,
+     51.4
+    ],
+    [
+     -103.6,
+     51.4
+    ],
+    [
+     -103.6,
+     53.9
+    ],
+    [
+     -114.4,
+     53.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 3, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 4",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -44.4,
+     81.4
+    ],
+    [
+     -33.6,
+     81.4
+    ],
+    [
+     -33.6,
+     83.9
+    ],
+    [
+     -44.4,
+     83.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 4, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 5",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -58.4,
+     81.4
+    ],
+    [
+     -47.6,
+     81.4
+    ],
+    [
+     -47.6,
+     83.9
+    ],
+    [
+     -58.4,
+     83.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 5, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 6",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -114.4,
+     81.4
+    ],
+    [
+     -103.6,
+     81.4
+    ],
+    [
+     -103.6,
+     83.9
+    ],
+    [
+     -114.4,
+     83.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 6, gone to weed since the storm"
+  },
+  {
+   "id": "the bed before glasshouse 7",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -44.4,
+     111.4
+    ],
+    [
+     -33.6,
+     111.4
+    ],
+    [
+     -33.6,
+     113.9
+    ],
+    [
+     -44.4,
+     113.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 7, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 8",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -72.4,
+     111.4
+    ],
+    [
+     -61.6,
+     111.4
+    ],
+    [
+     -61.6,
+     113.9
+    ],
+    [
+     -72.4,
+     113.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 8, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 9",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -114.4,
+     111.4
+    ],
+    [
+     -103.6,
+     111.4
+    ],
+    [
+     -103.6,
+     113.9
+    ],
+    [
+     -114.4,
+     113.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 9, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 10",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -44.4,
+     125.4
+    ],
+    [
+     -33.6,
+     125.4
+    ],
+    [
+     -33.6,
+     127.9
+    ],
+    [
+     -44.4,
+     127.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 10, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 11",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -58.4,
+     125.4
+    ],
+    [
+     -47.6,
+     125.4
+    ],
+    [
+     -47.6,
+     127.9
+    ],
+    [
+     -58.4,
+     127.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 11, gone to weed since the storm"
+  },
+  {
+   "id": "the bed before glasshouse 12",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -114.4,
+     125.4
+    ],
+    [
+     -103.6,
+     125.4
+    ],
+    [
+     -103.6,
+     127.9
+    ],
+    [
+     -114.4,
+     127.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 12, fed with kelp"
+  },
+  {
+   "id": "the bed before glasshouse 13",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -136.4,
+     187.4
+    ],
+    [
+     -125.6,
+     187.4
+    ],
+    [
+     -125.6,
+     189.9
+    ],
+    [
+     -136.4,
+     189.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 13, gone to weed since the storm"
+  },
+  {
+   "id": "the bed before glasshouse 14",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -150.4,
+     187.4
+    ],
+    [
+     -139.6,
+     187.4
+    ],
+    [
+     -139.6,
+     189.9
+    ],
+    [
+     -150.4,
+     189.9
+    ]
+   ],
+   "cause": "the outdoor bed before glasshouse 14, fed with kelp"
+  },
+  {
+   "id": "root plot 1",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -239.55,
+     144.45
+    ],
+    [
+     -232.45,
+     144.45
+    ],
+    [
+     -232.45,
+     149.55
+    ],
+    [
+     -239.55,
+     149.55
+    ]
+   ],
+   "cause": "root plot 1: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 2",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -229.55,
+     144.45
+    ],
+    [
+     -222.45,
+     144.45
+    ],
+    [
+     -222.45,
+     149.55
+    ],
+    [
+     -229.55,
+     149.55
+    ]
+   ],
+   "cause": "root plot 2: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 3",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -219.55,
+     144.45
+    ],
+    [
+     -212.45,
+     144.45
+    ],
+    [
+     -212.45,
+     149.55
+    ],
+    [
+     -219.55,
+     149.55
+    ]
+   ],
+   "cause": "root plot 3: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 4",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -209.55,
+     144.45
+    ],
+    [
+     -202.45,
+     144.45
+    ],
+    [
+     -202.45,
+     149.55
+    ],
+    [
+     -209.55,
+     149.55
+    ]
+   ],
+   "cause": "root plot 4: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 5",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -199.55,
+     144.45
+    ],
+    [
+     -192.45,
+     144.45
+    ],
+    [
+     -192.45,
+     149.55
+    ],
+    [
+     -199.55,
+     149.55
+    ]
+   ],
+   "cause": "root plot 5: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 6",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -189.55,
+     144.45
+    ],
+    [
+     -182.45,
+     144.45
+    ],
+    [
+     -182.45,
+     149.55
+    ],
+    [
+     -189.55,
+     149.55
+    ]
+   ],
+   "cause": "root plot 6: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 7",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -239.55,
+     152.95
+    ],
+    [
+     -232.45,
+     152.95
+    ],
+    [
+     -232.45,
+     158.05
+    ],
+    [
+     -239.55,
+     158.05
+    ]
+   ],
+   "cause": "root plot 7: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 8",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -229.55,
+     152.95
+    ],
+    [
+     -222.45,
+     152.95
+    ],
+    [
+     -222.45,
+     158.05
+    ],
+    [
+     -229.55,
+     158.05
+    ]
+   ],
+   "cause": "root plot 8: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 9",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -219.55,
+     152.95
+    ],
+    [
+     -212.45,
+     152.95
+    ],
+    [
+     -212.45,
+     158.05
+    ],
+    [
+     -219.55,
+     158.05
+    ]
+   ],
+   "cause": "root plot 9: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 10",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -209.55,
+     152.95
+    ],
+    [
+     -202.45,
+     152.95
+    ],
+    [
+     -202.45,
+     158.05
+    ],
+    [
+     -209.55,
+     158.05
+    ]
+   ],
+   "cause": "root plot 10: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 11",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -199.55,
+     152.95
+    ],
+    [
+     -192.45,
+     152.95
+    ],
+    [
+     -192.45,
+     158.05
+    ],
+    [
+     -199.55,
+     158.05
+    ]
+   ],
+   "cause": "root plot 11: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 12",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -189.55,
+     152.95
+    ],
+    [
+     -182.45,
+     152.95
+    ],
+    [
+     -182.45,
+     158.05
+    ],
+    [
+     -189.55,
+     158.05
+    ]
+   ],
+   "cause": "root plot 12: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 13",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -239.55,
+     161.45
+    ],
+    [
+     -232.45,
+     161.45
+    ],
+    [
+     -232.45,
+     166.55
+    ],
+    [
+     -239.55,
+     166.55
+    ]
+   ],
+   "cause": "root plot 13: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 14",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -229.55,
+     161.45
+    ],
+    [
+     -222.45,
+     161.45
+    ],
+    [
+     -222.45,
+     166.55
+    ],
+    [
+     -229.55,
+     166.55
+    ]
+   ],
+   "cause": "root plot 14: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 15",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -219.55,
+     161.45
+    ],
+    [
+     -212.45,
+     161.45
+    ],
+    [
+     -212.45,
+     166.55
+    ],
+    [
+     -219.55,
+     166.55
+    ]
+   ],
+   "cause": "root plot 15: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 16",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -209.55,
+     161.45
+    ],
+    [
+     -202.45,
+     161.45
+    ],
+    [
+     -202.45,
+     166.55
+    ],
+    [
+     -209.55,
+     166.55
+    ]
+   ],
+   "cause": "root plot 16: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 17",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -199.55,
+     161.45
+    ],
+    [
+     -192.45,
+     161.45
+    ],
+    [
+     -192.45,
+     166.55
+    ],
+    [
+     -199.55,
+     166.55
+    ]
+   ],
+   "cause": "root plot 17: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "root plot 18",
+   "surface": "worked_soil",
+   "area": [
+    [
+     -189.55,
+     161.45
+    ],
+    [
+     -182.45,
+     161.45
+    ],
+    [
+     -182.45,
+     166.55
+    ],
+    [
+     -189.55,
+     166.55
+    ]
+   ],
+   "cause": "root plot 18: dug and fed with kelp, inside its wall"
+  },
+  {
+   "id": "the Sand Spit",
+   "surface": "white_sand",
+   "area": [
+    [
+     346,
+     92
+    ],
+    [
+     384,
+     110
+    ],
+    [
+     390,
+     210
+    ],
+    [
+     352,
+     212
+    ],
+    [
+     342,
+     150
+    ]
+   ],
+   "cause": "white sand for the glass"
+  },
+  {
+   "id": "the wrack line",
+   "surface": "kelp_shingle",
+   "area": [
+    [
+     -128,
+     4
+    ],
+    [
+     -200,
+     2
+    ],
+    [
+     -258,
+     24
+    ],
+    [
+     -312,
+     46
+    ],
+    [
+     -309,
+     55
+    ],
+    [
+     -255,
+     33
+    ],
+    [
+     -197,
+     11
+    ],
+    [
+     -125,
+     13
+    ]
+   ],
+   "cause": "the tide's wrack line along the Wrack Strand: kelp to gather"
+  },
+  {
+   "id": "a peat cutting at -150, 360",
+   "surface": "peat",
+   "area": [
+    [
+     -156,
+     357.8
+    ],
+    [
+     -144,
+     357.8
+    ],
+    [
+     -144,
+     362.2
+    ],
+    [
+     -156,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -90, 360",
+   "surface": "peat",
+   "area": [
+    [
+     -96,
+     357.8
+    ],
+    [
+     -84,
+     357.8
+    ],
+    [
+     -84,
+     362.2
+    ],
+    [
+     -96,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -30, 360",
+   "surface": "peat",
+   "area": [
+    [
+     -36,
+     357.8
+    ],
+    [
+     -24,
+     357.8
+    ],
+    [
+     -24,
+     362.2
+    ],
+    [
+     -36,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 30, 360",
+   "surface": "peat",
+   "area": [
+    [
+     24,
+     357.8
+    ],
+    [
+     36,
+     357.8
+    ],
+    [
+     36,
+     362.2
+    ],
+    [
+     24,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 90, 360",
+   "surface": "peat",
+   "area": [
+    [
+     84,
+     357.8
+    ],
+    [
+     96,
+     357.8
+    ],
+    [
+     96,
+     362.2
+    ],
+    [
+     84,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 150, 360",
+   "surface": "peat",
+   "area": [
+    [
+     144,
+     357.8
+    ],
+    [
+     156,
+     357.8
+    ],
+    [
+     156,
+     362.2
+    ],
+    [
+     144,
+     362.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -150, 400",
+   "surface": "peat",
+   "area": [
+    [
+     -156,
+     397.8
+    ],
+    [
+     -144,
+     397.8
+    ],
+    [
+     -144,
+     402.2
+    ],
+    [
+     -156,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -90, 400",
+   "surface": "peat",
+   "area": [
+    [
+     -96,
+     397.8
+    ],
+    [
+     -84,
+     397.8
+    ],
+    [
+     -84,
+     402.2
+    ],
+    [
+     -96,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -30, 400",
+   "surface": "peat",
+   "area": [
+    [
+     -36,
+     397.8
+    ],
+    [
+     -24,
+     397.8
+    ],
+    [
+     -24,
+     402.2
+    ],
+    [
+     -36,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 30, 400",
+   "surface": "peat",
+   "area": [
+    [
+     24,
+     397.8
+    ],
+    [
+     36,
+     397.8
+    ],
+    [
+     36,
+     402.2
+    ],
+    [
+     24,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 90, 400",
+   "surface": "peat",
+   "area": [
+    [
+     84,
+     397.8
+    ],
+    [
+     96,
+     397.8
+    ],
+    [
+     96,
+     402.2
+    ],
+    [
+     84,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 150, 400",
+   "surface": "peat",
+   "area": [
+    [
+     144,
+     397.8
+    ],
+    [
+     156,
+     397.8
+    ],
+    [
+     156,
+     402.2
+    ],
+    [
+     144,
+     402.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -150, 440",
+   "surface": "peat",
+   "area": [
+    [
+     -156,
+     437.8
+    ],
+    [
+     -144,
+     437.8
+    ],
+    [
+     -144,
+     442.2
+    ],
+    [
+     -156,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -90, 440",
+   "surface": "peat",
+   "area": [
+    [
+     -96,
+     437.8
+    ],
+    [
+     -84,
+     437.8
+    ],
+    [
+     -84,
+     442.2
+    ],
+    [
+     -96,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at -30, 440",
+   "surface": "peat",
+   "area": [
+    [
+     -36,
+     437.8
+    ],
+    [
+     -24,
+     437.8
+    ],
+    [
+     -24,
+     442.2
+    ],
+    [
+     -36,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 30, 440",
+   "surface": "peat",
+   "area": [
+    [
+     24,
+     437.8
+    ],
+    [
+     36,
+     437.8
+    ],
+    [
+     36,
+     442.2
+    ],
+    [
+     24,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 90, 440",
+   "surface": "peat",
+   "area": [
+    [
+     84,
+     437.8
+    ],
+    [
+     96,
+     437.8
+    ],
+    [
+     96,
+     442.2
+    ],
+    [
+     84,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  },
+  {
+   "id": "a peat cutting at 150, 440",
+   "surface": "peat",
+   "area": [
+    [
+     144,
+     437.8
+    ],
+    [
+     156,
+     437.8
+    ],
+    [
+     156,
+     442.2
+    ],
+    [
+     144,
+     442.2
+    ]
+   ],
+   "cause": "a bank cut to bare peat: the Moss's fuel"
+  }
+ ],
  "features": {
   "kelp_kilns": {
    "note": "four round stone pits on the Wrack Strand, upwind (south-west) of Low Row; P2 props",
@@ -13263,6 +15143,7 @@
    "creels": 2,
    "fish_steps": 1,
    "floats": 2,
+   "heron_jib": 1,
    "marver_terrace": 1,
    "mole": 5,
    "net_rack": 3,

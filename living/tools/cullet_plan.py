@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Cullet's grey city: write the hand-authored plan and the land seed (docs/SMALL_CITY.md, phase 2).
 
-    python3 living/tools/cullet_plan.py            # writes both files below
-    python3 living/tools/cullet_plan.py --check    # exits 1 if either file differs from what it would write
+    python3 living/tools/cullet_plan.py            # writes the three files below
+    python3 living/tools/cullet_plan.py --check    # exits 1 if any of them differs from what it would write
 
 Writes
 - `living/seeds/worlds/cullet/plan.json`: the town as SMALL_CITY §1 and §2 describe it, in the
@@ -11,7 +11,10 @@ Writes
   asset generator's inputs per lot (wear, household, door colour, keepsake), which the engine
   ignores;
 - `living/seeds/cullet.json`: the land seed, the Wrack (an authored coastline and relief stamps,
-  `docs/AUTHORED_PLANS.md`) with the plan merged into `map.params.plans`.
+  `docs/AUTHORED_PLANS.md`) with the plan merged into `map.params.plans`;
+- the `ground` map of `living/game/assets/envs/cullet.json` (GROUND_MAP below): which painted
+  layer and colour the game's terrain takes for each street surface, area, terrain class and
+  region. The rest of that file is kept as it is.
 
 Every number that varies has a cause written beside it: a front's width comes from its household's
 size and family, a lot's wear from where it stands (height above the sea, distance and bearing
@@ -28,6 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PLAN_OUT = ROOT / "living/seeds/worlds/cullet/plan.json"
 SEED_OUT = ROOT / "living/seeds/cullet.json"
+ENV_OUT = ROOT / "living/game/assets/envs/cullet.json"
 
 SEED = 83  # year 83 since the Last Sail
 SIZE = 1024
@@ -284,7 +288,8 @@ c, s = south_front(-97, -85, 12.0, 12)
 lot("boatshed", "workshop", "the boatshed", c, s, "south", "strand", pitched(1, 4.2, 12, 45), age=0.8, repair=0.5, district=STRAND, note="open front onto the slipway lane")
 c, s = south_front(-124, -104, 12.0, 19)
 lot("dry_dock", "workshop", "the dry dock", c, s, "south", "strand", 8.0, building=False, age=1.0, repair=0.3, district=STRAND,
-    note="the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings")
+    note="the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings",
+    stage=0.4, stage_cause="the hull's stage of building, 0 to 1: in frame, planked four strakes of ten")
 lot("slip", "lamp", "the slip", (-119, 5), (10, 10), "south", "strand", 0, building=False, age=1.0, repair=0.4, district=STRAND, note="a stone slip into the harbour")
 
 # Cinder Row (quay level, east): the Cone and its yard, the lehr house, the pot house, the
@@ -444,6 +449,77 @@ lot("hanger_cottage", "house", "the Hanger cottage", (207.0, 207.5), (7, 6), "so
     household="sedge", household_name="Sedge", family="other", people=1, door_colour="sea_green", keepsake="a seedling bed of thorn and rowan", address="the Hanger cottage")
 lot("lintel", "tower", "the Lintel", (-25.0, 528.0), (6.0, 2.0), "south", "headland", 9.0, building=False, age=1.0, repair=0.0, district="the north headland",
     note="two standing stones and a capstone; a slab of dark glass fills the opening. It is shut. A fact with no purpose")
+
+# ---------------------------------------------------------------------------------------------
+# Lit windows (the dev-box coordinator's decision for pass 2): a window is a static model, so each
+# house shows one fixed evening, and it shows 0 to 2 lit windows for a cause its household gives,
+# not one to three on every lived-in house. Empty houses are dark. The causes, in order:
+# - a night worker: Thessaly Marl (Low Row 10) stokes the Cone by night, Anselm Faro keeps the
+#   Watchglass; their houses keep a lamp when the others are asleep;
+# - the bakers: Pieter Achterberg rises at 02:30, so the Marver shows one window over the hearth;
+# - a Kiln house has someone on a watch at the Cone two evenings in three (three watches: it never
+#   goes dark), and then a lamp waits in the kitchen; a Strand house rises with the tide and is
+#   dark by now, save one in four where someone mends by lamplight; a Ladder house, done at 16:00,
+#   sits up in every second one;
+# - a full house (four or more) has someone still up above, two times in three.
+# "One in four" and the like are the lot's recorded seed, never a roll.
+NIGHT_WORK = {
+    "marl": ("g", "u1"), "faro": ("g", "u0"),
+}
+LIT_CAUSE = {
+    "marl": "Thessaly Marl stokes the Cone by night: the kitchen lamp is left for her, and a night light burns above for Wick, who is five",
+    "faro": "Anselm Faro keeps the Watchglass: the lamp house is awake all night, below and above",
+    "achterberg": "Pieter Achterberg rises at 02:30 to fire the Batch: one window over the hearth",
+    "orme": "Benedikt Orme reads the ship-day tablets by lamp: the window with the shelf",
+}
+
+
+def lit_windows(l):
+    """Which of a home's windows are lit, and why: {'windows': [...], 'cause': str}. Windows are
+    `g` (ground, front), `u0` and `u1` (upper, front: west and east)."""
+    h = l.get("household")
+    if not h:
+        return {"windows": [], "cause": "empty: dark"}
+    if h in NIGHT_WORK:
+        return {"windows": list(NIGHT_WORK[h]), "cause": LIT_CAUSE[h]}
+    if h == "achterberg":
+        return {"windows": ["u1"], "cause": LIT_CAUSE[h]}
+    if h == "orme":
+        return {"windows": ["g"], "cause": LIT_CAUSE[h]}
+    seed, fam, people = l["seed"], l.get("family"), l.get("people", 1)
+    win, why = [], []
+    if fam == "kiln":
+        if seed % 3 != 0:
+            win.append("g")
+            why.append(f"a Kiln house, two in three (seed {seed}): someone is on the evening watch at the Cone, and the kitchen lamp waits")
+        else:
+            why.append(f"a Kiln house off the watch tonight (seed {seed}): dark")
+    elif fam == "strand":
+        if seed % 4 == 0:
+            win.append("g")
+            why.append(f"a Strand house, one in four (seed {seed}): someone mends by lamplight")
+        else:
+            why.append(f"a Strand house: asleep, they rise with the tide (seed {seed})")
+    elif fam == "ladder":
+        if seed % 2 == 0:
+            win.append("g")
+            why.append(f"a Ladder house, every second one (seed {seed}): done at 16:00, they sit up")
+        else:
+            why.append(f"a Ladder house: early to bed (seed {seed})")
+    else:
+        why.append("asleep")
+    if people >= 4:
+        if seed % 3 != 0:
+            win.append("u1" if seed % 2 else "u0")
+            why.append(f"a full house ({people}): someone is still up above")
+        else:
+            why.append(f"a full house ({people}), all abed (seed {seed})")
+    return {"windows": win[:2], "cause": "; ".join(why)}
+
+
+for l in lots:
+    if l["kind"] == "house" or "household" in l:
+        l["lit"] = lit_windows(l)
 
 # ---------------------------------------------------------------------------------------------
 # Streets: the quay 10 m, the Rows 5 m, lanes 2.5 to 3.5 m; paths out of town 2 m.
@@ -626,7 +702,27 @@ fixture("mole_tip", "mole", ((mt[0] + mt[1]) / 2, (mt[2] + ma[2]) / 2), (mt[1] -
 # between the wynds' flights. The wall stands in the lower level's 0.6 m drop strip and rises
 # 0.4 m above the upper level as a coping (a low wall to sit on). The same walls the engine
 # derives as 4 m grey pieces (`settle::plan::retaining`), built here for their places.
-WALL_D, COPING = 0.6, 0.4
+WALL_D, COPING, PARAPET = 0.6, 0.4, 1.0
+ALONG_M = 10.0  # a street or lane whose middle runs within this of a drop's edge runs along its top
+
+
+def street_along(level, axis, edge, u0, u1):
+    """The street or lane on `level` that runs along the top of a drop (its middle parallel to the
+    edge and within ALONG_M of it) over more than half of u0..u1: its id, or None."""
+    k, o = (0, 1) if axis == "x" else (1, 0)
+    for st in streets:
+        if st.get("level") != level or st.get("class") not in ("street", "lane"):
+            continue
+        covered = 0.0
+        for q0, q1 in zip(st["points"], st["points"][1:]):
+            if abs(q0[o] - q1[o]) > 0.5 or not (0.0 < abs(q0[o] - edge) <= ALONG_M):
+                continue
+            covered += max(0.0, min(u1, max(q0[k], q1[k])) - max(u0, min(q0[k], q1[k])))
+        if covered > 0.5 * (u1 - u0):
+            return st["id"]
+    return None
+
+
 DROPS = [  # (lower, upper, axis, edge, from, to, facing)
     ("strand", "low", "x", 32.0, -125.0, 80.0, "south"),
     ("strand", "low", "y", 80.0, 32.0, 60.0, "east"),
@@ -660,8 +756,19 @@ for lo, hi, axis, edge, a, b, facing in DROPS:
             wn += 1
             mid = (u0 + u1) / 2
             at_ = (mid, edge - WALL_D / 2) if axis == "x" else (edge + WALL_D / 2, mid)
-            fixture(f"wall_{wn:03d}", "retaining_wall", at_, (u1 - u0, WALL_D), facing, H[lo], fall + COPING,
-                    f"the drop from the {hi} level to the {lo} level ({fall:g} m)", age=0.9, repair=0.6, fall_m=fall, coping_m=COPING,
+            # A 1 m parapet where a street or lane runs along the top (the dev-box coordinator's
+            # decision for pass 2: the edge must read as one people would not step off); the 0.4 m
+            # coping, a wall to sit on, elsewhere. The Marver's terrace keeps the coping: it has
+            # its own iron rail above the drop.
+            along = street_along(hi, axis, edge, u0, u1)
+            terr = next((l for l in lots if l["id"] == "marver_terrace"), None)
+            railed = bool(terr and axis == "x" and hi == terr["level"] and abs(edge - (terr["at"][1] - terr["size"][1] / 2)) < 0.1
+                          and u0 >= terr["at"][0] - terr["size"][0] / 2 - 0.5 and u1 <= terr["at"][0] + terr["size"][0] / 2 + 0.5)
+            cop = PARAPET if along and not railed else COPING
+            why = (f"a 1 m parapet: {along} runs along the top" if cop == PARAPET else
+                   "a 0.4 m coping: the Marver's terrace has its own rail here" if railed else "a 0.4 m coping to sit on: no street or lane runs along the top")
+            fixture(f"wall_{wn:03d}", "retaining_wall", at_, (u1 - u0, WALL_D), facing, H[lo], fall + cop,
+                    f"the drop from the {hi} level to the {lo} level ({fall:g} m)", age=0.9, repair=0.6, fall_m=fall, coping_m=cop, coping_cause=why,
                     lower=lo, upper=hi, ends=[bool(stair_w and k == 0), bool(stair_e and k == len(secs) - 1)])
 
 # The wynds' flights: one model for each of the plan's stairs, its treads the client's own
@@ -679,6 +786,14 @@ for st in stairs:
 for l in [l for l in lots if l["id"] in WALKED_ON]:
     f = fixture(l["id"], l["id"], l["at"], l["size"], l["facing"], H[l["level"]], WALKED_ON[l["id"]], f"{l['name']}: {l['note']}", lot=l["id"])
     f["wear"] = l["wear"]
+
+# The Heron's jib: it reaches 9 m out over the harbour from the king post, past the lot, so it
+# is a fixture (a lot's model must stand inside its lot). The numbers are the crane house's own
+# (cullet.py HERON): the king post stands 1.55 m south of the lot's middle, 0.42 m thick.
+_h = next(l for l in lots if l["id"] == "heron")
+fixture("heron_jib", "heron_jib", (_h["at"][0], _h["at"][1] - 1.76 - _h["jib_m"] / 2), (1.6, _h["jib_m"]), "north", H["strand"], _h["height_m"],
+        "the Heron's jib, like a beak: 9 m out over the water from the king post, fixed; it still lifts boats and kelp loads",
+        age=1.0, repair=0.5, lot="heron", pivot_z=8.3, tip_z=12.2, head_z=12.87, load_z=2.4)
 
 # Plot walls: dry stone round each root plot, 0.45 m thick and 1.0 m high, with a gate gap on the
 # side of the Crown path (south).
@@ -768,6 +883,114 @@ LAND_PARAMS = {
 }
 
 # ---------------------------------------------------------------------------------------------
+# The ground (docs/CULLET_KIT.md "The ground"). Two things, both for the game client only:
+# - GROUND_MAP, written into `living/game/assets/envs/cullet.json` as the keys of its `ground`
+#   object that hold a colon: which painted layer (living/tools/textures/paint.py) and which base
+#   colour the terrain takes for a street's `surface`, an area below, a relief stamp's `ground`,
+#   a terrain class of the rules or a region, most specific first;
+# - `grounds`, the areas: polygons of the plan with a surface and a cause, later ones on top.
+#   The kit's generator writes them in land metres to `envs/cullet/ground.json`. They are kept
+#   out of the seed, as the fixtures are: the rules know nothing of them.
+# Every colour is a palette colour of SMALL_CITY §1 or a mix of two, as the models' are.
+
+PAL = {
+    "basalt": (0.24, 0.25, 0.28), "pale basalt": (0.36, 0.37, 0.39), "tar": (0.13, 0.12, 0.12), "sooted brick": (0.33, 0.20, 0.17),
+    "kelp": (0.30, 0.28, 0.12), "sand": (0.86, 0.82, 0.70), "peat": (0.20, 0.15, 0.11), "moor grass": (0.52, 0.50, 0.28), "heather": (0.50, 0.34, 0.48),
+    "driftwood": (0.52, 0.50, 0.46),
+}
+
+
+def rgb(a, b=None, t=0.0):
+    """A palette colour, or a mix of two (t of the second), as sRGB 0-255."""
+    c = PAL[a] if b is None else tuple(x + (y - x) * t for x, y in zip(PAL[a], PAL[b]))
+    return [round(v * 255) for v in c]
+
+
+def ground(layer, colour, tint=None, why=""):
+    g = {"layer": layer, "colour": colour}
+    if tint is not None:
+        g["tint"] = tint
+    g["note"] = why
+    return g
+
+
+FLAGS = ground("quay_flags", rgb("pale basalt", "basalt", 0.3), rgb("basalt"), "the ship-day quay's flags: pale basalt, wet")
+SETTS = ground("slate_setts", rgb("pale basalt"), None, "basalt setts, polished by feet")
+CINDERS = ground("cinders", rgb("tar", "sooted brick", 0.45), rgb("sooted brick"), "furnace cinders and ash, 83 years of them")
+WET_SAND = ground("wet_sand", rgb("sand", "pale basalt", 0.38), rgb("sand"), "sand the tide has just left")
+EARTH = ground("dirt", rgb("peat", "driftwood", 0.5), rgb("moor grass"), "trodden earth")
+ROCK = ground("rock", rgb("basalt"), None, "the island's own basalt")
+GROUND_MAP = {
+    # A street's surface (the plan's `streets[].surface`).
+    "street:setts": SETTS,
+    "street:quay_flags": FLAGS,
+    "street:flags": ground("quay_flags", rgb("pale basalt", "basalt", 0.15), rgb("basalt"), "the mole's flags"),
+    "street:cinders": CINDERS,
+    "street:earth": EARTH,
+    "street:sand": WET_SAND,
+    # An area (`grounds` below).
+    "area:quay_flags": FLAGS,
+    "area:setts": SETTS,
+    "area:cinders": CINDERS,
+    "area:earth": EARTH,
+    "area:worked_soil": ground("worked_soil", rgb("peat", "driftwood", 0.28), rgb("kelp"), "dug soil fed with kelp"),
+    "area:peat": ground("peat", rgb("peat", "driftwood", 0.1), None, "a cutting's bare peat"),
+    "area:kelp_shingle": ground("kelp_shingle", rgb("kelp", "pale basalt", 0.3), rgb("kelp"), "the wrack line"),
+    "area:white_sand": ground("sand", rgb("sand"), None, "the Sand Spit's white sand, the glass's"),
+    # A relief stamp's ground (the rules allow grass, sand, dirt, rock and forest there).
+    "stamp:sand": ground("wet_sand", rgb("sand", "pale basalt", 0.38), rgb("sand", "kelp", 0.5), "the Wrack Strand: wet sand, kelp in it"),
+    # The rules' terrain classes. Grass and Water are left to the regions and to today's rules.
+    "class:Road": FLAGS,
+    "class:Sand": WET_SAND,
+    "class:Dirt": ground("peat", rgb("peat", "driftwood", 0.14), None, "bare peat where the turf is broken"),
+    "class:Rock": ground("rock", rgb("basalt", "pale basalt", 0.3), None, "basalt outcrops"),
+    "class:Drop": ROCK,
+    "class:Wall": ROCK,
+    "class:Low": ROCK,
+    "class:Forest": ground("forest_floor", rgb("moor grass", "peat", 0.55), rgb("peat"), "the Hanger's floor: needles and peat"),
+    # Regions (for Grass tiles).
+    "region:meadow": ground("thin_turf", rgb("moor grass", "basalt", 0.12), rgb("pale basalt"), "the island's thin turf, the rock showing through"),
+    "region:highland": ground("heather", rgb("moor grass", "peat", 0.4), rgb("heather"), "the Moss: heather and moor grass over peat"),
+    "region:beach": ground("kelp_shingle", rgb("kelp", "pale basalt", 0.42), rgb("kelp"), "shingle above the tide, wrack thrown on it"),
+    "region:forest": ground("thin_turf", rgb("moor grass", "peat", 0.35), rgb("peat"), "under the Hanger's trees"),
+}
+
+grounds = []
+
+
+def area(id, surface, poly, cause):
+    assert f"area:{surface}" in GROUND_MAP, surface
+    grounds.append({"id": id, "surface": surface, "area": [[r2(q[0]), r2(q[1])] for q in poly], "cause": cause})
+
+
+_quay_west = [[-125, 0], [HERON_STAGE[0], 0], [HERON_STAGE[0], HERON_STAGE[2]], [HERON_STAGE[1], HERON_STAGE[2]], [HERON_STAGE[1], 0], *FISH_STEPS, [80, 0], [80, 32], [-125, 32]]
+area("the quay", "quay_flags", _quay_west, "the ship-day quay: flags from the edge to the wall behind the strand's buildings")
+area("the slip and the dock yard", "setts", rect(-125, 0, -99, 32), "where hulls are hauled: setts for the grip, not flags")
+area("Cinder Row", "cinders", rect(80, 0, 175, 62), "the Cone's cinders, spread over the whole yard since the ship days")
+area("the mole", "quay_flags", LEVELS[1]["area"], "the ship-day mole")
+for row in ("low", "mid", "high"):
+    b0, b1 = BAND[row]
+    fy = ROW_Y[row] + FRONT_GAP
+    area(f"{ROW_NAME[row]}'s walk", "setts", rect(-30, b0, 80, ROW_Y[row] - 2.5), f"{ROW_NAME[row]}: setts from the street to the parapet over the drop, where the houses stand")
+    area(f"{ROW_NAME[row]}'s kerb", "setts", rect(-30, ROW_Y[row] + 2.5, 80, fy + 0.3), f"{ROW_NAME[row]}: the strip before the doors")
+    area(f"{ROW_NAME[row]}'s yards", "earth", rect(-30, fy + HOUSE_DEPTH, 80, b1 - WALL_D), f"{ROW_NAME[row]}: back yards, trodden earth")
+for l in [l for l in lots if l["id"].startswith("glasshouse_")]:
+    n = int(l["id"].rsplit("_", 1)[1])
+    x, y = l["at"]
+    area(f"the bed before glasshouse {n}", "worked_soil", rect(x - 5.4, y - 2.25 - 3.4, x + 5.4, y - 2.25 - 0.9),
+         f"the outdoor bed before glasshouse {n}" + (", gone to weed since the storm" if n in BROKEN else ", fed with kelp"))
+for l in [l for l in lots if l["id"].startswith("root_plot_")]:
+    x, y = l["at"]
+    area(l["name"], "worked_soil", rect(x - 3.55, y - 2.55, x + 3.55, y + 2.55), f"{l['name']}: dug and fed with kelp, inside its wall")
+area("the Sand Spit", "white_sand", STAMPS[8]["area"], "white sand for the glass")
+assert STAMPS[8]["id"] == "the Sand Spit" and STAMPS[7]["id"] == "the Wrack Strand"
+_ws = STAMPS[7]["area"][:4]
+area("the wrack line", "kelp_shingle", _ws + [[q[0] + 3, q[1] + 9] for q in reversed(_ws)], "the tide's wrack line along the Wrack Strand: kelp to gather")
+for r in [r for r in resources if r["kind"] == "peat"]:
+    x, y = r["at"]
+    area(f"a peat cutting at {x:g}, {y:g}", "peat", rect(x - 6, y - 2.2, x + 6, y + 2.2), "a bank cut to bare peat: the Moss's fuel")
+
+# ---------------------------------------------------------------------------------------------
 # Output
 
 
@@ -789,6 +1012,7 @@ def plan():
         "lots": lots,
         "resources": resources,
         "fixtures": fixtures,
+        "grounds": grounds,
         "features": FEATURES,
         "terraces": terrace_lots,
         "count": count(),
@@ -820,7 +1044,7 @@ def count():
 
 
 def seed(p):
-    rough = {k: v for k, v in p.items() if k not in ("fixtures", "features", "terraces", "count")}
+    rough = {k: v for k, v in p.items() if k not in ("fixtures", "grounds", "features", "terraces", "count")}
     return {
         "run": "cullet",
         "seed": SEED,
@@ -852,6 +1076,16 @@ def dump(v):
     return json.dumps(v, indent=1, ensure_ascii=False) + "\n"
 
 
+def env_text():
+    """Cullet's environment file with its `ground` map set from GROUND_MAP: the keys of `ground`
+    that hold a colon are this script's, everything else in the file is kept as it is."""
+    env = json.loads(ENV_OUT.read_text())
+    g = {k: v for k, v in env["ground"].items() if ":" not in k}
+    g.update({k: {kk: vv for kk, vv in v.items()} for k, v in GROUND_MAP.items()})
+    env["ground"] = g
+    return json.dumps(env, indent=1, ensure_ascii=False)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
@@ -866,7 +1100,7 @@ def main():
             for k in ("residents", "homes"):
                 if k in old.get(t["name"], {}):
                     t[k] = old[t["name"]][k]
-    out = {PLAN_OUT: dump(p), SEED_OUT: dump(s)}
+    out = {PLAN_OUT: dump(p), SEED_OUT: dump(s), ENV_OUT: env_text()}
     if a.check:
         bad = [str(k) for k, v in out.items() if not k.exists() or k.read_text() != v]
         if bad:

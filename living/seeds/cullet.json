@@ -2472,7 +2472,9 @@
         "empty": 0.0,
         "cause": "+2 m above the sea; 261 m from the Cone at bearing 267; front faces 180"
        },
-       "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings"
+       "note": "the ship-day dry dock with the hull of the Second Thought on its stocks (8 m to the top of the frames); not one of the 65 buildings",
+       "stage": 0.4,
+       "stage_cause": "the hull's stage of building, 0 to 1: in frame, planked four strakes of ten"
       },
       {
        "id": "slip",
@@ -2826,7 +2828,14 @@
        "people": 2,
        "door_colour": "sea_green",
        "keepsake": "a lamp-oil drum and a coil of wick",
-       "address": "the lamp house on the mole"
+       "address": "the lamp house on the mole",
+       "lit": {
+        "windows": [
+         "g",
+         "u0"
+        ],
+        "cause": "Anselm Faro keeps the Watchglass: the lamp house is awake all night, below and above"
+       }
       },
       {
        "id": "watchglass",
@@ -2920,7 +2929,11 @@
        "family": "strand",
        "people": 2,
        "door_colour": "chalk_blue",
-       "keepsake": "a lamp hook and a creel"
+       "keepsake": "a lamp hook and a creel",
+       "lit": {
+        "windows": [],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 16841)"
+       }
       },
       {
        "id": "low_2",
@@ -2960,7 +2973,13 @@
        "family": "strand",
        "people": 4,
        "door_colour": "sea_green",
-       "keepsake": "a ship's knee of timber propped by the door"
+       "keepsake": "a ship's knee of timber propped by the door",
+       "lit": {
+        "windows": [
+         "u1"
+        ],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 33811); a full house (4): someone is still up above"
+       }
       },
       {
        "id": "low_3",
@@ -2996,7 +3015,11 @@
        "terrace": "Low Row east",
        "front_cause": "an original 5 m plot, empty",
        "state": "empty, sound",
-       "door_colour": "faded"
+       "door_colour": "faded",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "low_4",
@@ -3036,7 +3059,11 @@
        "family": "strand",
        "people": 7,
        "door_colour": "oxblood",
-       "keepsake": "a row of glass floats; the Tarns have always painted their door so"
+       "keepsake": "a row of glass floats; the Tarns have always painted their door so",
+       "lit": {
+        "windows": [],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 28134); a full house (7), all abed (seed 28134)"
+       }
       },
       {
        "id": "low_5",
@@ -3076,7 +3103,14 @@
        "family": "strand",
        "people": 4,
        "door_colour": "mustard",
-       "keepsake": "a string of sea-glass, each colour from a known wreck"
+       "keepsake": "a string of sea-glass, each colour from a known wreck",
+       "lit": {
+        "windows": [
+         "g",
+         "u0"
+        ],
+        "cause": "a Strand house, one in four (seed 14192): someone mends by lamplight; a full house (4): someone is still up above"
+       }
       },
       {
        "id": "batch",
@@ -3170,7 +3204,11 @@
        "family": "strand",
        "people": 2,
        "door_colour": "chalk_blue",
-       "keepsake": "a counters board chalked on the step"
+       "keepsake": "a counters board chalked on the step",
+       "lit": {
+        "windows": [],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 32458)"
+       }
       },
       {
        "id": "low_7",
@@ -3210,7 +3248,13 @@
        "family": "strand",
        "people": 2,
        "door_colour": "oxblood",
-       "keepsake": "a caged gull"
+       "keepsake": "a caged gull",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Strand house, one in four (seed 23388): someone mends by lamplight"
+       }
       },
       {
        "id": "low_8",
@@ -3250,7 +3294,11 @@
        "family": "strand",
        "people": 3,
        "door_colour": "sea_green",
-       "keepsake": "a sack of kelp ash and a smoke-grey line of washing"
+       "keepsake": "a sack of kelp ash and a smoke-grey line of washing",
+       "lit": {
+        "windows": [],
+        "cause": "a Strand house: asleep, they rise with the tide (seed 3949)"
+       }
       },
       {
        "id": "low_9",
@@ -3287,7 +3335,11 @@
        "front_cause": "an original plot, its roof stripped for fuel in the lean years",
        "state": "roofless shell",
        "door_colour": "none",
-       "note": "a tree grows inside the walls"
+       "note": "a tree grows inside the walls",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "low_10",
@@ -3327,7 +3379,14 @@
        "family": "kiln",
        "people": 2,
        "door_colour": "mustard",
-       "keepsake": "wind chimes of cullet"
+       "keepsake": "wind chimes of cullet",
+       "lit": {
+        "windows": [
+         "g",
+         "u1"
+        ],
+        "cause": "Thessaly Marl stokes the Cone by night: the kitchen lamp is left for her, and a night light burns above for Wick, who is five"
+       }
       },
       {
        "id": "marver",
@@ -3381,7 +3440,13 @@
        "keepsake": "a ship's figurehead over the door",
        "address": "over the Marver, Mid Row",
        "note": "the cookshop: open front, figurehead over the door; the Achterbergs live over it",
-       "terrace": "Mid Row east"
+       "terrace": "Mid Row east",
+       "lit": {
+        "windows": [
+         "u1"
+        ],
+        "cause": "Pieter Achterberg rises at 02:30 to fire the Batch: one window over the hearth"
+       }
       },
       {
        "id": "marver_terrace",
@@ -3494,7 +3559,14 @@
        "family": "ladder",
        "people": 4,
        "door_colour": "sea_green",
-       "keepsake": "seedling trays on the sill"
+       "keepsake": "seedling trays on the sill",
+       "lit": {
+        "windows": [
+         "g",
+         "u0"
+        ],
+        "cause": "a Ladder house, every second one (seed 19180): done at 16:00, they sit up; a full house (4): someone is still up above"
+       }
       },
       {
        "id": "mid_2",
@@ -3534,7 +3606,13 @@
        "family": "ladder",
        "people": 4,
        "door_colour": "mustard",
-       "keepsake": "a rain gauge on a post"
+       "keepsake": "a rain gauge on a post",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Ladder house, every second one (seed 82518): done at 16:00, they sit up; a full house (4), all abed (seed 82518)"
+       }
       },
       {
        "id": "mid_3",
@@ -3570,7 +3648,11 @@
        "terrace": "Mid Row east",
        "front_cause": "an original plot, its roof stripped for fuel in the lean years",
        "state": "roofless shell",
-       "door_colour": "none"
+       "door_colour": "none",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "mid_4",
@@ -3610,7 +3692,11 @@
        "family": "ladder",
        "people": 2,
        "door_colour": "oxblood",
-       "keepsake": "a stack of odd slates"
+       "keepsake": "a stack of odd slates",
+       "lit": {
+        "windows": [],
+        "cause": "a Ladder house: early to bed (seed 83427)"
+       }
       },
       {
        "id": "mid_5",
@@ -3650,7 +3736,13 @@
        "family": "kiln",
        "people": 2,
        "door_colour": "chalk_blue",
-       "keepsake": "a pontil rod hung over the door"
+       "keepsake": "a pontil rod hung over the door",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Kiln house, two in three (seed 55189): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+       }
       },
       {
        "id": "mid_6",
@@ -3686,7 +3778,11 @@
        "terrace": "Mid Row west",
        "front_cause": "an original 5 m plot, empty",
        "state": "empty, sound",
-       "door_colour": "faded"
+       "door_colour": "faded",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "mid_7",
@@ -3726,7 +3822,13 @@
        "family": "kiln",
        "people": 3,
        "door_colour": "sea_green",
-       "keepsake": "a hen coop against the front"
+       "keepsake": "a hen coop against the front",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Kiln house, two in three (seed 93433): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+       }
       },
       {
        "id": "high_1",
@@ -3766,7 +3868,11 @@
        "family": "kiln",
        "people": 3,
        "door_colour": "chalk_blue",
-       "keepsake": "a sill of cullet, one piece of every colour Ode has kept"
+       "keepsake": "a sill of cullet, one piece of every colour Ode has kept",
+       "lit": {
+        "windows": [],
+        "cause": "a Kiln house off the watch tonight (seed 53250): dark"
+       }
       },
       {
        "id": "high_2",
@@ -3806,7 +3912,14 @@
        "family": "kiln",
        "people": 4,
        "door_colour": "sea_green",
-       "keepsake": "a bucket of off-cuts the children play with by the step"
+       "keepsake": "a bucket of off-cuts the children play with by the step",
+       "lit": {
+        "windows": [
+         "g",
+         "u0"
+        ],
+        "cause": "a Kiln house, two in three (seed 52568): someone is on the evening watch at the Cone, and the kitchen lamp waits; a full house (4): someone is still up above"
+       }
       },
       {
        "id": "high_3",
@@ -3846,7 +3959,13 @@
        "family": "kiln",
        "people": 3,
        "door_colour": "mustard",
-       "keepsake": "a slate tally board by the door"
+       "keepsake": "a slate tally board by the door",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Kiln house, two in three (seed 93998): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+       }
       },
       {
        "id": "high_4",
@@ -3882,7 +4001,11 @@
        "terrace": "High Row east",
        "front_cause": "an original 5 m plot, empty",
        "state": "empty, sound",
-       "door_colour": "faded"
+       "door_colour": "faded",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "high_5",
@@ -3922,7 +4045,13 @@
        "family": "kiln",
        "people": 3,
        "door_colour": "chalk_blue",
-       "keepsake": "a bench made from a boat's thwart"
+       "keepsake": "a bench made from a boat's thwart",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "a Kiln house, two in three (seed 76987): someone is on the evening watch at the Cone, and the kitchen lamp waits"
+       }
       },
       {
        "id": "high_6",
@@ -3958,7 +4087,11 @@
        "terrace": "High Row west",
        "front_cause": "an original 5 m plot, empty",
        "state": "empty, sound",
-       "door_colour": "faded"
+       "door_colour": "faded",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "high_7",
@@ -3994,7 +4127,11 @@
        "terrace": "High Row west",
        "front_cause": "an original plot, its roof stripped for fuel in the lean years",
        "state": "roofless shell",
-       "door_colour": "none"
+       "door_colour": "none",
+       "lit": {
+        "windows": [],
+        "cause": "empty: dark"
+       }
       },
       {
        "id": "glasshouse_1",
@@ -5324,7 +5461,13 @@
        "door_colour": "chalk_blue",
        "keepsake": "a shelf of ship-day tablets in the window",
        "address": "the Readers' House",
-       "note": "the school and the ship-day tablets; Benedikt Orme lives here"
+       "note": "the school and the ship-day tablets; Benedikt Orme lives here",
+       "lit": {
+        "windows": [
+         "g"
+        ],
+        "cause": "Benedikt Orme reads the ship-day tablets by lamp: the window with the shelf"
+       }
       },
       {
        "id": "graveyard",
@@ -5496,7 +5639,11 @@
        "people": 3,
        "door_colour": "oxblood",
        "keepsake": "a stack of drying peat by the door",
-       "address": "the turf house on the Moss"
+       "address": "the turf house on the Moss",
+       "lit": {
+        "windows": [],
+        "cause": "asleep"
+       }
       },
       {
        "id": "hanger_cottage",
@@ -5532,7 +5679,11 @@
        "people": 1,
        "door_colour": "sea_green",
        "keepsake": "a seedling bed of thorn and rowan",
-       "address": "the Hanger cottage"
+       "address": "the Hanger cottage",
+       "lit": {
+        "windows": [],
+        "cause": "asleep"
+       }
       },
       {
        "id": "lintel",

@@ -29,8 +29,11 @@ Sets:
   there): grass, lush_grass, dry_grass, forest_floor, dirt, sand, rock, cobble, flagstone, mud,
   spirit_moss, pavers (a cyberpunk town's large square panels), and for arid lands (the client's
   `Climate::Arid`, `island.rs`) dry_earth (sun-baked crust and grit), cracked_mud (a dried pan's
-  curling plates) and gravel (packed stones and grit); then cliff (the rock that blocks walking:
-  bedded slabs with deep joints, darker and harder than the walkable slopes' rock), always last.
+  curling plates) and gravel (packed stones and grit); then Cullet's nine (CULLET_GROUND below:
+  slate_setts, quay_flags, cinders, kelp_shingle, wet_sand, peat, heather, worked_soil and
+  thin_turf, which an environment's `ground` map picks by street surface, terrain class and
+  region); then cliff (the rock that blocks walking: bedded slabs with deep joints, darker and
+  harder than the walkable slopes' rock), always last.
 - `material` (scenery models through the toon shader, `living/game/src/style.rs`; layer order is
   `surfaces.py`'s SURFACES, which the Blender generators tag each part with): bark, leaves, wood
   (beams and posts), planks, plaster, stone (ashlar), boulder (natural rock), brick, shingles, tiles (clay barrel
@@ -53,7 +56,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-GROUND = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers", "dry_earth", "cracked_mud", "gravel", "cliff"]
+# Cullet's ground (docs/CULLET_KIT.md "The ground"): chosen per environment by the `ground` map of
+# `living/game/assets/envs/cullet.json`. TILE_M is the size each was painted for (a sett is a
+# third of a metre at 3.2 m a tile); the client's tile table (`terrain.rs` TILE) should match.
+CULLET_GROUND = ["slate_setts", "quay_flags", "cinders", "kelp_shingle", "wet_sand", "peat", "heather", "worked_soil", "thin_turf"]
+TILE_M = {"slate_setts": 3.2, "quay_flags": 4.8, "cinders": 2.6, "kelp_shingle": 3.4, "wet_sand": 5.0, "peat": 4.0, "heather": 3.6, "worked_soil": 3.2, "thin_turf": 4.0}
+GROUND = ["grass", "lush_grass", "dry_grass", "forest_floor", "dirt", "sand", "rock", "cobble", "flagstone", "mud", "spirit_moss", "pavers", "dry_earth", "cracked_mud", "gravel", *CULLET_GROUND, "cliff"]
 from surfaces import SURFACES as MATERIAL
 
 # Typical vertex colours (sRGB), only for the preview sheet.
@@ -62,6 +70,9 @@ TINT = {
     "dirt": (132, 112, 80), "sand": (214, 196, 146), "rock": (128, 122, 116), "cobble": (178, 160, 120),
     "flagstone": (176, 160, 128), "mud": (100, 104, 80), "spirit_moss": (52, 92, 100), "pavers": (60, 62, 72), "cliff": (86, 80, 76),
     "dry_earth": (176, 146, 104), "cracked_mud": (184, 162, 128), "gravel": (150, 138, 120),
+    # Cullet's: the base colours of its `ground` map (cullet_plan.py GROUND_MAP).
+    "slate_setts": (92, 94, 99), "quay_flags": (82, 85, 91), "cinders": (62, 54, 52), "kelp_shingle": (92, 88, 62), "wet_sand": (168, 158, 130),
+    "peat": (62, 47, 35), "heather": (104, 92, 78), "worked_soil": (74, 58, 42), "thin_turf": (120, 118, 72),
     "bark": (110, 84, 62), "planks": (150, 112, 74), "plaster": (220, 210, 190), "stone": (150, 144, 134),
     "brick": (160, 84, 62), "shingles": (120, 70, 60), "metal": (120, 126, 130), "leaves": (90, 140, 70),
     "boulder": (128, 122, 116), "wood": (110, 76, 52), "tiles": (190, 92, 62), "thatch": (190, 160, 100), "copper": (90, 160, 140),
@@ -559,6 +570,253 @@ def pavers(p: Painter):
         p.blob(x, y, s * p.rng.uniform(6, 16), c(0.44, 0.44, 0.45), alpha=0.2, soft=0.9, squash=0.7, angle=p.rng.random() * 6)
 
 
+# --- Cullet's ground (docs/SMALL_CITY.md §1: basalt, kelp, peat; nothing warm but brick and rust) --
+def slate_setts(p: Painter):
+    """Basalt setts a third of a metre deep and up to half a metre long, in courses across the
+    street: squarer and tighter than cobbles, cool, their crowns polished paler by feet."""
+    s = p.n / 512
+    masonry(p, rows=9, widths=(0.09, 0.155), gap_px=3.2 * s, round_px=5 * s, bevel_px=8 * s, var=0.12, mortar=(0.27, 0.27, 0.28), hue=(0.98, 1.0, 1.04), wobble=0.004)
+    # Feet: a worn, paler path wanders along the courses.
+    path = np.clip(1 - np.abs(((p.v + 0.06 * np.sin(2 * math.pi * p.u) + 0.5) % 1.0) - 0.5) / 0.22, 0, 1)
+    p.tone(1.0 + 0.07 * p.blur(path.astype(np.float32), 6 * s) * (p.h > 0.5), hue=(1.0, 1.0, 1.03))
+    # Moss in a few joints (a muted olive), where no one treads.
+    for _ in range(int(p.n * p.n / 5200)):
+        x, y = p.rng.random(2) * p.n
+        if path[int(y) % p.n, int(x) % p.n] > 0.3 or p.h[int(y) % p.n, int(x) % p.n] > 0.45:
+            continue
+        p.blob(x, y, s * p.rng.uniform(2, 4.5), c(0.40, 0.42, 0.33), alpha=0.5, soft=0.8)
+
+
+def quay_flags(p: Painter):
+    """The ship days' quay: basalt flags a metre deep and up to a metre and a half long, some
+    split, worn hollow where water stands (the height channel: puddles gather there), a rust
+    stain under where iron stood."""
+    n, s = p.n, p.n / 512
+    masonry(p, rows=5, widths=(0.17, 0.33), gap_px=3.5 * s, round_px=4 * s, bevel_px=9 * s, var=0.10, mortar=(0.26, 0.27, 0.29), hue=(0.97, 1.0, 1.05), wobble=0.003, split=0.22)
+    stone = p.h.copy()
+    # Wet: the hollows are darker and bluer, with a paler rim where they dry.
+    low = p.posterise(p.noise(4, 2, 0.55), 4, 5 * s)
+    wet = np.clip((0.42 - low) / 0.2, 0, 1) * (stone > 0.4)
+    rim = np.clip(1 - np.abs(low - 0.44) / 0.05, 0, 1) * (stone > 0.4)
+    p.tone(1.0 - 0.13 * wet + 0.05 * rim, hue=(0.9, 1.0, 1.14))
+    # Scuffs, salt bloom.
+    for _ in range(int(n * n / 2600)):
+        x, y = p.rng.random(2) * n
+        L = s * p.rng.uniform(16, 40)
+        p.dab(x, y, L, L * 0.35, p.rng.random() * 6.28, c(0.56, 0.56, 0.57), alpha=0.14, bristle=0.6)
+    # Rust: a few streaks, all running the way the quay drains (down the tile).
+    for _ in range(max(2, int(5 * s * s))):
+        x, y = p.rng.random(2) * n
+        for k in range(5):
+            p.dab(x + p.rng.normal(0, 2 * s), y + k * 7 * s, s * 16, s * p.rng.uniform(3, 6), math.pi / 2, c(0.60, 0.47, 0.38), alpha=0.22 * (1 - k / 6), bristle=0.5)
+    crack = p.voronoi(p.rng.random((7, 2)))[2] * n
+    p.tone(1 - 0.18 * np.clip(1 - crack / 1.2, 0, 1) * (p.noise(5) > 0.6))
+    p.h = np.clip(stone * (1 - 0.35 * wet), 0, 1)
+
+
+def cinders(p: Painter):
+    """Cinder Row underfoot: furnace clinker and ash trodden flat, sharp dark crumbs over grey
+    ash, crumbs of burnt brick, and glints of broken glass (the sparkle underfoot)."""
+    n, s = p.n, p.n / 512
+    p.tone(0.9 + 0.2 * p.posterise(p.noise(6, 2, 0.55), 4, 2.5), hue=(1.04, 1.0, 0.96))
+    for _ in range(int(n * n / 110)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.36, 0.6)
+        p.blob(x, y, s * p.rng.uniform(0.8, 1.7), c(v, v, v * 1.01), alpha=0.6, soft=0.5, height=0.4)
+    # Clinker: angular lumps with a pitted dark side.
+    for r0, r1, count in ((3.0, 5.5, 900), (5.5, 9.0, 170)):
+        for _ in range(int(count * s * s)):
+            x, y = p.rng.random(2) * n
+            r = s * p.rng.uniform(r0, r1)
+            brick = p.rng.random() < 0.12
+            v = p.rng.choice([0.3, 0.36, 0.44, 0.52])
+            col = c(v * 1.45, v * 1.02, v * 0.88) if brick else c(v * 1.02, v, v * 1.0)
+            p.blob(x + r * 0.2, y + r * 0.3, r, c(0.22, 0.21, 0.22), alpha=0.5, soft=0.6, squash=0.8)
+            p.blob(x, y, r, col, alpha=0.95, soft=0.18, squash=p.rng.uniform(0.5, 0.9), angle=p.rng.random() * 6.28, dome=0.3, height=0.75)
+    # Glass: small bright chips, pale aqua and green, each with a hard edge.
+    for _ in range(int(n * n / 1500)):
+        x, y = p.rng.random(2) * n
+        col = (c(0.70, 0.84, 0.82), c(0.56, 0.74, 0.60), c(0.84, 0.74, 0.52))[int(p.rng.integers(0, 3))]
+        p.blob(x, y, s * p.rng.uniform(1.0, 2.2), col, alpha=0.95, soft=0.15, squash=p.rng.uniform(0.4, 0.8), angle=p.rng.random() * 6.28, height=0.95)
+
+
+def kelp_shingle(p: Painter):
+    """The wrack line: wet shingle with straps of kelp thrown across it, all lying the way the
+    last tide left them, and their round bladders."""
+    n, s = p.n, p.n / 512
+    p.tone(0.92 + 0.14 * p.posterise(p.noise(5, 2), 3, 2.5), hue=(1.02, 1.0, 0.96))
+    for _ in range(int(n * n / 150)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.4, 0.62)
+        p.blob(x, y, s * p.rng.uniform(0.8, 1.6), c(v, v, v * 0.99), alpha=0.55, soft=0.5, height=0.4)
+    for r0, r1, count in ((3.5, 6.0, 520), (6.0, 10.0, 130)):
+        for _ in range(int(count * s * s)):
+            x, y = p.rng.random(2) * n
+            r = s * p.rng.uniform(r0, r1)
+            v = p.rng.choice([0.44, 0.5, 0.56, 0.64, 0.7])
+            p.blob(x + r * 0.2, y + r * 0.3, r * 1.05, c(0.28, 0.28, 0.3), alpha=0.5, soft=0.6, squash=0.8)
+            p.blob(x, y, r, c(v, v, v * 1.03), alpha=0.95, soft=0.25, squash=p.rng.uniform(0.55, 0.9), angle=p.rng.random() * 6.28, dome=0.35, height=0.7)
+    # Kelp: long dark straps in drifts, a wavering line of dabs each, olive with a wet highlight.
+    drift = p.noise(3, 2)
+    for _ in range(int(46 * s * s)):
+        x, y = p.rng.random(2) * n
+        if drift[int(y) % n, int(x) % n] < 0.42:
+            continue
+        a = 0.35 + p.rng.normal(0, 0.3)
+        v = p.rng.uniform(0.2, 0.3)
+        w = s * p.rng.uniform(4, 7)
+        for k in range(int(p.rng.integers(5, 11))):
+            a += p.rng.normal(0, 0.22)
+            x, y = x + math.cos(a) * 9 * s, y + math.sin(a) * 9 * s
+            p.dab(x, y, 14 * s, w, a, c(v * 1.12, v * 1.06, v * 0.6), alpha=0.92, bristle=0.25, taper=0.2, height=0.85)
+            p.dab(x, y - w * 0.2, 11 * s, w * 0.25, a, c(0.5, 0.5, 0.34), alpha=0.45, bristle=0.0, taper=0.2)
+        p.blob(x, y, w * 0.7, c(0.34, 0.31, 0.16), alpha=0.9, soft=0.3, dome=0.4, height=0.95)
+
+
+def wet_sand(p: Painter):
+    """Sand the tide has just left: firm ripples, dark where it is still wet with a cool sheen,
+    worm casts and a few shell flecks."""
+    n, s = p.n, p.n / 512
+    warp = p.noise(3, 2) * 1.3
+    ripple = 0.5 + 0.5 * np.sin((p.v * 9 + p.u * 1 + warp) * 2 * math.pi)
+    p.tone(0.95 + 0.1 * p.posterise(ripple, 3, 2.5 * s), hue=(1.04, 1.0, 0.93))
+    # Wet in the ripples' troughs, more in some places than others.
+    wet = np.clip(p.blur(p.noise(6, 2, 0.6), 8.0 * s) * 1.6 - 0.3, 0, 1)
+    p.tone(1.0 - 0.14 * (1 - wet) * p.blur(1 - ripple, 2.0 * s), hue=(0.9, 1.0, 1.16))
+    for _ in range(int(n * n / 320)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.42, 0.6)
+        p.blob(x, y, s * p.rng.uniform(0.8, 1.6), c(v, v, v), alpha=0.45, soft=0.6)
+    # Worm casts: small coiled heaps.
+    for _ in range(int(n * n / 5500)):
+        x, y = p.rng.random(2) * n
+        for k in range(5):
+            a = k * 1.4
+            p.blob(x + math.cos(a) * 2.2 * s, y + math.sin(a) * 2.2 * s, s * 2.2, c(0.42, 0.41, 0.38), alpha=0.8, soft=0.4, dome=0.3, height=0.9)
+    # Shell flecks.
+    for _ in range(int(n * n / 4200)):
+        x, y = p.rng.random(2) * n
+        p.blob(x, y, s * p.rng.uniform(1.2, 2.4), c(0.72, 0.71, 0.68), alpha=0.9, soft=0.25, squash=0.6, angle=p.rng.random() * 6.28, height=0.8)
+    p.h = np.clip(np.maximum(p.h - 0.5, 0) + 0.25 + 0.3 * ripple + 0.3 * wet, 0, 1)
+
+
+def peat(p: Painter):
+    """Bare peat: a dark crumbling face cut by the spade into blocks, fibrous with old roots,
+    standing water in the lowest cracks."""
+    n, s = p.n, p.n / 512
+    p.tone(0.86 + 0.28 * p.posterise(p.noise(7, 2, 0.55), 4, 2.0 * s), hue=(1.1, 1.0, 0.88))
+    # Root fibres, mostly one way (the bed of the bog).
+    for _ in range(int(n * n / 380)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.4, 0.62)
+        L = s * p.rng.uniform(8, 22)
+        p.dab(x, y, L, max(1.2, L * 0.1), p.rng.normal(0.1, 0.3), c(v * 1.08, v, v * 0.86), alpha=0.5, bristle=0.4, height=0.5 + 0.3 * (v - 0.4))
+    # Crumbs.
+    for _ in range(int(n * n / 900)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.36, 0.54)
+        p.blob(x, y, s * p.rng.uniform(2, 5), c(v * 1.05, v, v * 0.9), alpha=0.8, soft=0.4, squash=p.rng.uniform(0.6, 0.9), angle=p.rng.random() * 6, dome=0.3, height=0.8)
+    # Drying cracks, wide and dark, wet at the bottom.
+    # The spade's cuts: a few straight banks across the tile, each a dark step with a lit lip.
+    cuts = np.sort(p.rng.random(3))
+    vv = (p.v + 0.02 * np.sin(2 * math.pi * (p.u + p.noise(2)))) % 1.0
+    dist = np.stack([((vv - q + 0.5) % 1.0 - 0.5) for q in cuts])
+    near = np.take_along_axis(dist, np.abs(dist).argmin(0)[None], 0)[0] * n
+    bank = np.clip(1 - np.abs(near - 2 * s) / (3 * s), 0, 1)
+    lip = np.clip(1 - np.abs(near + 3 * s) / (2.5 * s), 0, 1)
+    p.tone(1.0 - 0.3 * bank + 0.1 * lip)
+    # Drying cracks: fine, broken, only here and there.
+    edge = p.voronoi(p.rng.random((40, 2)), aniso=(1.0, 1.4))[2] * n
+    gap = np.clip(1 - edge / (1.6 * s), 0, 1) * np.clip((p.noise(5, 2) - 0.45) * 5, 0, 1)
+    p.rgb = p.rgb * (1 - 0.45 * gap[..., None])
+    p.h = np.clip(p.h * (1 - 0.7 * gap) * (1 - 0.5 * bank), 0, 1)
+
+
+def heather(p: Painter):
+    """The Moss: cushions of heather, each a dome of fine sprigs (some in purple bloom), with
+    pale moor grass and bog cotton between them and dark peat showing in the gaps."""
+    n, s = p.n, p.n / 512
+    p.tone(0.8 + 0.2 * p.posterise(p.noise(6, 2), 3, 2.0 * s), hue=(1.08, 1.0, 0.86))
+    # Moor grass between the cushions: pale straw blades, wind-combed one way (north-east).
+    for _ in range(int(n * n / 240)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.5, 0.68)
+        L = s * p.rng.uniform(9, 18)
+        p.dab(x, y, L, L * 0.2, -0.75 + p.rng.normal(0, 0.25), c(v * 1.08, v * 1.02, v * 0.72), alpha=0.6, height=0.45)
+    # Cushions.
+    for _ in range(int(150 * s * s)):
+        x, y = p.rng.random(2) * n
+        r = s * p.rng.uniform(13, 30)
+        bloom = p.rng.random() < 0.55
+        v = p.rng.uniform(0.36, 0.48)
+        base = c(v * 1.08, v * 0.9, v * 1.08) if bloom else c(v * 0.94, v * 1.02, v * 0.86)
+        p.blob(x + r * 0.12, y + r * 0.2, r * 1.05, c(0.22, 0.2, 0.2), alpha=0.6, soft=0.5, squash=0.85)
+        p.blob(x, y, r, base, alpha=0.95, soft=0.3, squash=p.rng.uniform(0.7, 0.95), angle=p.rng.random() * 6.28, dome=0.35, height=0.9)
+        # Sprigs over the dome.
+        for _ in range(int(r * r / (10 * s * s))):
+            a = p.rng.random() * 6.28
+            d = r * 0.85 * math.sqrt(p.rng.random())
+            sv = p.rng.uniform(0.46, 0.7)
+            col = c(sv * 1.16, sv * 0.86, sv * 1.14) if bloom and p.rng.random() < 0.7 else c(sv * 0.92, sv * 1.02, sv * 0.8)
+            p.dab(x + math.cos(a) * d, y + math.sin(a) * d * 0.85, s * p.rng.uniform(4, 7), s * 1.8, -math.pi / 2 + p.rng.normal(0, 0.5), col, alpha=0.8, bristle=0.2)
+    # Bog cotton: a few white tufts.
+    for _ in range(int(n * n / 9000)):
+        x, y = p.rng.random(2) * n
+        p.blob(x, y, s * p.rng.uniform(1.8, 3.0), c(0.8, 0.8, 0.76), alpha=0.9, soft=0.5, height=1.0)
+
+
+def worked_soil(p: Painter):
+    """A root plot's bed: dark soil in spade-wide ridges, clods, and the kelp dug into it (olive
+    scraps), with shell grit from the strand."""
+    n, s = p.n, p.n / 512
+    warp = 0.02 * (p.noise(4, 2) - 0.5)
+    ridge = 0.5 + 0.5 * np.sin((p.v + warp) * 8 * 2 * math.pi)
+    p.tone(0.84 + 0.3 * p.blur(ridge, 2 * s), hue=(1.08, 1.0, 0.9))
+    p.tone(0.92 + 0.16 * p.posterise(p.noise(7, 2), 3, 2.0 * s))
+    for _ in range(int(n * n / 420)):
+        x, y = p.rng.random(2) * n
+        v = p.rng.uniform(0.38, 0.6)
+        r = s * p.rng.uniform(2, 5.5)
+        p.blob(x + r * 0.2, y + r * 0.3, r, c(0.26, 0.25, 0.25), alpha=0.45, soft=0.6)
+        p.blob(x, y, r, c(v * 1.06, v, v * 0.9), alpha=0.85, soft=0.35, squash=p.rng.uniform(0.6, 0.95), angle=p.rng.random() * 6, dome=0.3, height=0.55 + 0.35 * ridge[int(y) % n, int(x) % n])
+    for _ in range(int(n * n / 2600)):
+        x, y = p.rng.random(2) * n
+        L = s * p.rng.uniform(8, 18)
+        p.dab(x, y, L, L * 0.3, p.rng.random() * 6.28, c(0.36, 0.36, 0.2), alpha=0.75, bristle=0.3, taper=0.3)
+    for _ in range(int(n * n / 3600)):
+        x, y = p.rng.random(2) * n
+        p.blob(x, y, s * p.rng.uniform(1.0, 2.0), c(0.74, 0.73, 0.7), alpha=0.9, soft=0.3)
+    p.h = np.clip(0.6 * p.h + 0.4 * ridge, 0, 1)
+
+
+def thin_turf(p: Painter):
+    """The island's own cover: short wind-combed moor grass, cropped close, thin enough that the
+    basalt shows through in flat lichened patches."""
+    n, s = p.n, p.n / 512
+    p.tone(0.9 + 0.2 * p.posterise(p.noise(8, 2, 0.55), 4, 2.5 * s), hue=(1.06, 1.0, 0.86))
+    for _ in range(int(n * n / 105)):
+        x, y = p.rng.random(2) * n
+        light = p.rng.random()
+        v = 0.4 + 0.24 * light
+        L = s * p.rng.uniform(6, 13)
+        # Combed north-east by the south-westerly.
+        p.dab(x, y, L, L * 0.26, -0.75 + p.rng.normal(0, 0.3), c(v * (1.04 + 0.1 * light), v * 1.0, v * (0.84 - 0.1 * light)), alpha=p.rng.uniform(0.5, 0.85), height=0.45 + 0.4 * light)
+    # Stone showing through: flat, cool, a little paler, with a dark rim of soil and lichen.
+    bare = p.blur((p.noise(6, 3, 0.6) > 0.64).astype(np.float32), 1.6 * s)
+    m = np.clip((bare - 0.35) / 0.3, 0, 1)
+    rim = np.clip(1 - np.abs(bare - 0.35) / 0.2, 0, 1)
+    facet = 0.5 * (1.0 + 0.16 * (p.posterise(p.noise(14, 2), 3, 1.0) - 0.5))
+    stone = np.dstack([facet * 0.9, facet * 0.96, facet * 1.2]) * 1.12
+    p.rgb = p.rgb * (1 - m[..., None]) + stone * m[..., None]
+    p.rgb *= (1 - 0.16 * rim * (1 - m))[..., None]
+    p.h = p.h * (1 - m) + 0.2 * m
+    for _ in range(int(n * n / 2400)):
+        x, y = p.rng.random(2) * n
+        if m[int(y) % n, int(x) % n] < 0.6:
+            continue
+        p.blob(x, y, s * p.rng.uniform(2.5, 6), c(0.6, 0.57, 0.36), alpha=0.6, soft=0.6)
+
+
 # --- material (phase 2) --------------------------------------------------------------------------
 def bark(p: Painter):
     n = p.n
@@ -840,6 +1098,15 @@ PAINT = {
     "dry_earth": dry_earth,
     "cracked_mud": cracked_mud,
     "gravel": gravel,
+    "slate_setts": slate_setts,
+    "quay_flags": quay_flags,
+    "cinders": cinders,
+    "kelp_shingle": kelp_shingle,
+    "wet_sand": wet_sand,
+    "peat": peat,
+    "heather": heather,
+    "worked_soil": worked_soil,
+    "thin_turf": thin_turf,
     "cliff": cliff,
     "bark": bark,
     "planks": planks,
@@ -862,7 +1129,7 @@ PAINT = {
 }
 
 # How far each texture's luminance spreads (the narrow band), by kind.
-SPREAD = {"dry_earth": 0.07, "cracked_mud": 0.12, "gravel": 0.12, "cliff": 0.13, "pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09, "plastic": 0.035, "earth": 0.07,
+SPREAD = {"slate_setts": 0.085, "quay_flags": 0.075, "cinders": 0.11, "kelp_shingle": 0.12, "wet_sand": 0.05, "peat": 0.1, "heather": 0.11, "worked_soil": 0.1, "thin_turf": 0.085, "dry_earth": 0.07, "cracked_mud": 0.12, "gravel": 0.12, "cliff": 0.13, "pavers": 0.06, "spirit_moss": 0.085, "sand": 0.045, "plaster": 0.05, "metal": 0.05, "mud": 0.07, "cobble": 0.09, "flagstone": 0.08, "rock": 0.09, "brick": 0.09, "shingles": 0.09, "plastic": 0.035, "earth": 0.07,
           "boulder": 0.08, "wood": 0.07, "tiles": 0.09, "thatch": 0.085, "copper": 0.065, "concrete": 0.06, "cloth": 0.05, "glass": 0.07}
 
 
