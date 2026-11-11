@@ -19,6 +19,12 @@
 //!   authority's next sweep (every 200 ms) and its delivery drop them. Nobody is drawn who isn't
 //!   sent: this only fades earlier those it still sends.
 //!
+//! - **Memory** (the `memory` look under trial, `sightedge::Look`): when each field is shown,
+//!   every texel seen within my radius records the time; a second texture of the same texels
+//!   holds how recently each was seen (1 now, 0 [`crate::sightedge::MEMORY_S`] ago or never),
+//!   uploaded about 15 times a second while that look is on. It follows the field's corner, so
+//!   it remembers only within the field (±64 m).
+//!
 //! `LIVING_SIGHT_FIELD_DUMP=DIR` writes the field and where it was worked out, once a second when
 //! it changed (`field-<n>.pgm` and `.json`), for checks against the authority's perceived set.
 //! `LIVING_GAME_PERF=sightfield` logs the recompute cost every 5 s.
@@ -61,11 +67,24 @@ pub struct Cost {
     pub last_ms: f64,
     /// Tiles tested in the last run.
     pub tiles: u32,
+    /// The memory look's work on the frame: recording each new field, and building each upload
+    /// (count, total ms).
+    pub remember: (u64, f64),
+    pub memory_upload: (u64, f64),
 }
 
 #[derive(Resource)]
 pub struct SightField {
     pub image: Handle<Image>,
+    /// How recently each texel was seen (the memory look), at the same corner as the field.
+    pub memory_image: Handle<Image>,
+    /// Whether the memory texture is current (the memory look is on and has uploaded it).
+    pub memory_live: bool,
+    /// When each texel was last seen within my radius (s of app time; -inf never), and the
+    /// corner they are kept at.
+    last_seen: Vec<f32>,
+    memory_origin: IVec2,
+    next_memory: f32,
     /// The corner of texel (0, 0) (sim metres, on a tile corner).
     pub origin: IVec2,
     /// Whether the texture holds a field for where I am.
@@ -128,12 +147,20 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let mut image = Image::new(size, TextureDimension::D2, vec![255; (SIZE * SIZE) as usize], TextureFormat::R8Unorm, RenderAssetUsages::default());
     image.sampler = ImageSampler::linear();
     let handle = images.add(image);
+    let mut memory = Image::new(size, TextureDimension::D2, vec![0; (SIZE * SIZE) as usize], TextureFormat::R8Unorm, RenderAssetUsages::default());
+    memory.sampler = ImageSampler::linear();
+    let memory_image = images.add(memory);
     let dump = std::env::var("LIVING_SIGHT_FIELD_DUMP").ok().filter(|d| !d.is_empty()).map(std::path::PathBuf::from);
     if let Some(d) = &dump {
         let _ = std::fs::create_dir_all(d);
     }
     commands.insert_resource(SightField {
         image: handle,
+        memory_image,
+        memory_live: false,
+        last_seen: vec![f32::NEG_INFINITY; (SIZE * SIZE) as usize],
+        memory_origin: IVec2::ZERO,
+        next_memory: 0.0,
         origin: IVec2::ZERO,
         valid: false,
         eye: None,
@@ -158,7 +185,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 fn attach(mut commands: Commands, field: Option<Res<SightField>>, cams: Query<Entity, (With<crate::post::Edges>, Without<crate::post::SightTexture>)>) {
     let Some(field) = field else { return };
     for cam in &cams {
-        commands.entity(cam).insert(crate::post::SightTexture(field.image.clone()));
+        commands.entity(cam).insert(crate::post::SightTexture(field.image.clone(), field.memory_image.clone()));
     }
 }
 
@@ -249,6 +276,27 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
             img.data = Some(done.seen.clone());
         }
         field.seen = done.seen;
+        let t0 = std::time::Instant::now();
+        remember(field, edge.radius, time.elapsed_secs());
+        field.cost.remember.0 += 1;
+        field.cost.remember.1 += t0.elapsed().as_secs_f64() * 1000.0;
+    }
+    // The memory look: how recently each texel was seen, about 15 times a second.
+    let wants_memory = edge.mode == Mode::Unseen && edge.look == crate::sightedge::Look::Memory;
+    field.next_memory -= dt;
+    if wants_memory && field.next_memory <= 0.0 && field.valid {
+        field.next_memory = 1.0 / 15.0;
+        let t0 = std::time::Instant::now();
+        let now = time.elapsed_secs();
+        let bytes: Vec<u8> = field.last_seen.iter().map(|t| ((1.0 - (now - t) / crate::sightedge::MEMORY_S).clamp(0.0, 1.0) * 255.0) as u8).collect();
+        if let Some(mut img) = images.get_mut(&field.memory_image) {
+            img.data = Some(bytes);
+        }
+        field.memory_live = true;
+        field.cost.memory_upload.0 += 1;
+        field.cost.memory_upload.1 += t0.elapsed().as_secs_f64() * 1000.0;
+    } else if !wants_memory {
+        field.memory_live = false;
     }
     let due = field.asked.is_none_or(|(e, r)| e.distance(eye) >= MOVE_M || (reach - r).abs() > 0.01);
     if due && field.task.is_none() {
@@ -268,6 +316,7 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
             field.next_report = 5.0;
             let c = field.cost;
             info!("sight field: {} recomputes, mean {:.3} ms, max {:.3} ms, last {:.3} ms over {} tiles (reach {:.1} m)", c.runs, c.total_ms / c.runs.max(1) as f64, c.max_ms, c.last_ms, c.tiles, field.reach);
+            info!("sight field: memory on the frame: {} records, mean {:.3} ms; {} uploads built, mean {:.3} ms", c.remember.0, c.remember.1 / c.remember.0.max(1) as f64, c.memory_upload.0, c.memory_upload.1 / c.memory_upload.0.max(1) as f64);
         }
     }
     field.next_dump -= dt;
@@ -276,6 +325,39 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
             field.next_dump = 1.0;
             field.fresh = false;
             write_dump(field, &dir, edge.radius, want);
+        }
+    }
+}
+
+/// Record the texels the field shows seen within my radius as seen now, after moving what is
+/// remembered to the field's corner.
+fn remember(field: &mut SightField, radius: f32, now: f32) {
+    let (Some(eye), origin) = (field.eye, field.origin) else { return };
+    if origin != field.memory_origin {
+        let shift = (origin - field.memory_origin) * (1.0 / TEXEL) as i32;
+        let old = std::mem::replace(&mut field.last_seen, vec![f32::NEG_INFINITY; (SIZE * SIZE) as usize]);
+        for j in 0..SIZE {
+            for i in 0..SIZE {
+                let (oi, oj) = (i + shift.x, j + shift.y);
+                if (0..SIZE).contains(&oi) && (0..SIZE).contains(&oj) {
+                    field.last_seen[(j * SIZE + i) as usize] = old[(oj * SIZE + oi) as usize];
+                }
+            }
+        }
+        field.memory_origin = origin;
+    }
+    let r2 = radius * radius;
+    for j in 0..SIZE {
+        let y = origin.y as f32 + (j as f32 + 0.5) * TEXEL - eye.y;
+        if y * y > r2 {
+            continue;
+        }
+        for i in 0..SIZE {
+            let x = origin.x as f32 + (i as f32 + 0.5) * TEXEL - eye.x;
+            let k = (j * SIZE + i) as usize;
+            if x * x + y * y <= r2 && field.seen[k] >= 128 {
+                field.last_seen[k] = now;
+            }
         }
     }
 }
@@ -399,9 +481,12 @@ fn people(
         let Some(&(p, _)) = scene.shown.get(&id) else { continue };
         let clear = map.sight_clear((me.x, me.y), (p.x, p.y));
         if !clear {
+            // The memory look leaves a faint figure where they were last seen (`live.rs` holds
+            // it once the authority stops sending them); the others fade them out.
+            let to = if edge.ghosts() { crate::sightedge::GHOST_LEVEL } else { 1.0 };
             if let Ok(mut f) = fades.get_mut(entity) {
-                if f.target < 1.0 {
-                    f.target = 1.0;
+                if f.target < to {
+                    f.target = to;
                 }
             }
             if let std::collections::hash_map::Entry::Vacant(e) = broke.entry(id) {

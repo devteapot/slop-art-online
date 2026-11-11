@@ -902,6 +902,15 @@ How it works (`sightfield.rs`, `sightedge.rs`, `edges.wesl`, `post.rs`):
 - Terrain edits are known only within the client's `terrain_chunk` window: 7 × 7 chunks, re-centred as you walk, so at least about 24 m round you. Edits made since world creation farther out, within a 48 m sight, are not in the field.
 - No settings menu; that comes with the interface redesign.
 
+**Looks under trial (branch `sight-look`, 2026-11-11; not merged).** After play-test 3 the owner liked the idea but not the grey. Five other ways to draw "not seen now" are behind `LIVING_SIGHT_LOOK`; they are not in F2's cycle, and the default stays grey until the owner picks:
+- `wash`: a faded watercolour with a dry-brush edge;
+- `lantern`: sight as light, with darkness beyond;
+- `shadows`: sight shadows cast from the eye in the toon shadow's hue;
+- `hatch`: pencil hatching on toned paper;
+- `memory`: seen ground drains to a pencil sketch over 10 s, and someone who leaves sight stays 3 s as a faint figure where they were last seen.
+
+All five are in the same finishing pass, from the same sight field. `memory` adds a texture of when each texel was last seen within the radius, and `live.rs` holds the departed body for its figure. No frame cost was measurable against grey (paired switches, shared GPU). The comparison page is `.local/living/sight-look/index.html` in the main checkout.
+
 ## Talking and tapping (2026-11-11)
 
 Branch `talk-1`, after play-test 2. In that session the residents answered every line within 3–28 s, yet the owner found them "not interactive". Evidence is in `.local/living/talk-1/` (git-ignored). Client only: no table, reducer, view, subscription, rule or mind change. The client calls the existing `human_say(text, to)` with `to` set, and reads `silence` rows from the existing `my_experience` view. No SpacetimeDB feature is used in a new way, so no new documentation was consulted.

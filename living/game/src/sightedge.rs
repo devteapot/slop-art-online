@@ -27,6 +27,21 @@
 //! F2 cycles the modes, with a note naming the new one and the key. The same note shows once on
 //! arrival, so the key can be found. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting
 //! mode (headless captures).
+//!
+//! **Looks under trial** (branch `sight-look`, for the owner to pick from; not in F2's cycle, and
+//! the default is unchanged): `LIVING_SIGHT_LOOK=wash|lantern|shadows|hatch|memory` changes how
+//! "not seen now" draws what my character doesn't see (`edges.wesl`); the live script's
+//! `sightlook:NAME` step switches it for captures (`sightlook:` or `sightlook:grey` is today's).
+//! - **wash:** a warm paper wash with a dry-brush edge, pigment pooling along it.
+//! - **lantern:** my sight as light: what I don't see is in darkness, with a wide soft penumbra
+//!   and a warm rim; lighter by day.
+//! - **shadows:** sight shadows cast from my eye by what blocks it, in the toon shadow's cool
+//!   hue, sharp near the blocker and softening with distance.
+//! - **hatch:** pencil hatching on paper, denser where the scene is darker; chalk on dark paper
+//!   at night.
+//! - **memory:** ground I saw keeps its colour and fades to a pencil sketch over
+//!   [`MEMORY_S`]; ground never seen is the sketch. Someone who leaves sight stays as a faint
+//!   figure where I last saw them for [`GHOST_S`] (what my character remembers, not updated).
 
 use crate::net::Net;
 use bevy::prelude::*;
@@ -92,6 +107,51 @@ impl Mode {
     }
 }
 
+/// How "not seen now" is drawn: today's grey, or one of the looks under trial.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Look {
+    #[default]
+    Grey,
+    Wash,
+    Lantern,
+    Shadows,
+    Hatch,
+    Memory,
+}
+
+impl Look {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "" | "grey" | "gray" | "default" => Some(Look::Grey),
+            "wash" | "paint" | "painted" => Some(Look::Wash),
+            "lantern" | "light" => Some(Look::Lantern),
+            "shadows" | "shadow" => Some(Look::Shadows),
+            "hatch" | "hatching" => Some(Look::Hatch),
+            "memory" => Some(Look::Memory),
+            _ => None,
+        }
+    }
+
+    /// The finishing pass's code for it (`edges.wesl`).
+    fn code(self) -> f32 {
+        match self {
+            Look::Grey => 0.0,
+            Look::Wash => 1.0,
+            Look::Lantern => 2.0,
+            Look::Shadows => 3.0,
+            Look::Hatch => 4.0,
+            Look::Memory => 5.0,
+        }
+    }
+}
+
+/// Memory: how long ground I saw keeps some colour (s), and how long someone who left sight
+/// stays as a faint figure where I last saw them (s).
+pub const MEMORY_S: f32 = 10.0;
+pub const GHOST_S: f32 = 3.0;
+/// The ghost's fade level (0 drawn, 1 gone).
+pub const GHOST_LEVEL: f32 = 0.55;
+
 /// Where the fully fogged view ends, as a multiple of the sight radius (Limited view).
 pub const LIMIT: f32 = 1.3;
 /// The soft band of "not seen now" (m): from 1.5 m inside the radius to this much beyond it.
@@ -114,6 +174,8 @@ const SHADOW_FOG: f32 = 0.8;
 #[derive(Resource)]
 pub struct SightEdge {
     pub mode: Mode,
+    /// How "not seen now" is drawn (`LIVING_SIGHT_LOOK`).
+    pub look: Look,
     /// The radius shown (m), eased.
     pub radius: f32,
     /// The rules' answer for me now (m), once known.
@@ -129,11 +191,17 @@ pub struct SightEdge {
 impl Default for SightEdge {
     fn default() -> Self {
         let mode = std::env::var("LIVING_SIGHT_EDGE").ok().and_then(|v| Mode::parse(&v)).unwrap_or_default();
-        Self { mode, radius: 11.0, want: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
+        let look = std::env::var("LIVING_SIGHT_LOOK").ok().and_then(|v| Look::parse(&v)).unwrap_or_default();
+        Self { mode, look, radius: 11.0, want: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
     }
 }
 
 impl SightEdge {
+    /// Whether people leaving sight stay a moment as a faint figure where they were last seen.
+    pub fn ghosts(&self) -> bool {
+        self.mode == Mode::Unseen && self.look == Look::Memory
+    }
+
     /// In limited view, outlines are drawn only within this ground distance of me (half way into
     /// the fog band), since the finishing pass's fog does not cover them: where I stand and the
     /// distance.
@@ -148,7 +216,7 @@ pub struct SightEdgePlugin;
 impl Plugin for SightEdgePlugin {
     fn build(&self, app: &mut App) {
         let edge = SightEdge::default();
-        info!("sight edge: starting in {:?}", edge.mode);
+        info!("sight edge: starting in {:?}, look {:?}", edge.mode, edge.look);
         app.insert_resource(edge)
             .add_systems(Update, (update, far).chain().in_set(crate::phase::Phase::Camera).after(crate::camera::follow))
             .add_systems(PostUpdate, shade.after(crate::post::update));
@@ -291,6 +359,12 @@ fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>
         Some(f) => Vec4::new(f.origin.x as f32, f.origin.y as f32, 1.0 / crate::sightfield::EXTENT, 1.0),
         None => Vec4::ZERO,
     };
+    // The look, how light the scene is (the fog's luminance: 0 at night, 1 by day), and whether
+    // the memory texture is current (it shares the field's corner).
+    let light = ((fog.dot(Vec3::new(0.2126, 0.7152, 0.0722)) - 0.02) / 0.3).clamp(0.0, 1.0);
+    let light = light * light * (3.0 - 2.0 * light);
+    let memory = field.as_deref().is_some_and(|f| f.valid && f.memory_live);
+    e.sight_extra = Vec4::new(edge.look.code(), light, if memory { 1.0 } else { 0.0 }, 0.0);
 }
 
 #[cfg(test)]
@@ -306,6 +380,10 @@ mod tests {
         assert_eq!(Mode::parse("unseen"), Some(Mode::Unseen));
         assert_eq!(Mode::parse(" Limited "), Some(Mode::Limited));
         assert_eq!(Mode::parse("other"), None);
+        assert_eq!(Look::default(), Look::Grey, "today's grey stays the default");
+        assert_eq!(Look::parse("Lantern"), Some(Look::Lantern));
+        assert_eq!(Look::parse(""), Some(Look::Grey));
+        assert_eq!(Look::parse("other"), None);
     }
 
     /// The radius is the shipped law's answer: day, night, and a torch at night.
