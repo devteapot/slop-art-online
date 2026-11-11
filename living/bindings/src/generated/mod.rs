@@ -17,6 +17,8 @@ pub mod activity_table;
 pub mod activity_type;
 pub mod artifact_table;
 pub mod artifact_type;
+pub mod audience_table;
+pub mod audience_type;
 pub mod background_table;
 pub mod background_type;
 pub mod belief_in_type;
@@ -85,6 +87,7 @@ pub mod heard_sound_type;
 pub mod heard_sounds_table;
 pub mod heard_table;
 pub mod heard_type;
+pub mod hearer_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_face_reducer;
@@ -290,6 +293,8 @@ pub use activity_table::*;
 pub use activity_type::Activity;
 pub use artifact_table::*;
 pub use artifact_type::Artifact;
+pub use audience_table::*;
+pub use audience_type::Audience;
 pub use background_table::*;
 pub use background_type::Background;
 pub use belief_in_type::BeliefIn;
@@ -358,6 +363,7 @@ pub use heard_sound_type::HeardSound;
 pub use heard_sounds_table::*;
 pub use heard_table::*;
 pub use heard_type::Heard;
+pub use hearer_type::Hearer;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_face_reducer::human_face;
@@ -1067,6 +1073,7 @@ pub struct DbUpdate {
     act_queue: __sdk::TableUpdate<PlannedAct>,
     activity: __sdk::TableUpdate<Activity>,
     artifact: __sdk::TableUpdate<Artifact>,
+    audience: __sdk::TableUpdate<Audience>,
     background: __sdk::TableUpdate<Background>,
     belief: __sdk::TableUpdate<Belief>,
     body: __sdk::TableUpdate<Body>,
@@ -1200,6 +1207,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "artifact" => db_update
                     .artifact
                     .append(artifact_table::parse_table_update(table_update)?),
+                "audience" => db_update
+                    .audience
+                    .append(audience_table::parse_table_update(table_update)?),
                 "background" => db_update
                     .background
                     .append(background_table::parse_table_update(table_update)?),
@@ -1565,6 +1575,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.artifact = cache
             .apply_diff_to_table::<Artifact>("artifact", &self.artifact)
             .with_updates_by_pk(|row| &row.id);
+        diff.audience = cache
+            .apply_diff_to_table::<Audience>("audience", &self.audience)
+            .with_updates_by_pk(|row| &row.id);
         diff.background = cache
             .apply_diff_to_table::<Background>("background", &self.background)
             .with_updates_by_pk(|row| &row.id);
@@ -1903,6 +1916,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "artifact" => db_update
                     .artifact
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "audience" => db_update
+                    .audience
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "background" => db_update
                     .background
@@ -2256,6 +2272,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "artifact" => db_update
                     .artifact
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "audience" => db_update
+                    .audience
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "background" => db_update
                     .background
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2598,6 +2617,7 @@ pub struct AppliedDiff<'r> {
     act_queue: __sdk::TableAppliedDiff<'r, PlannedAct>,
     activity: __sdk::TableAppliedDiff<'r, Activity>,
     artifact: __sdk::TableAppliedDiff<'r, Artifact>,
+    audience: __sdk::TableAppliedDiff<'r, Audience>,
     background: __sdk::TableAppliedDiff<'r, Background>,
     belief: __sdk::TableAppliedDiff<'r, Belief>,
     body: __sdk::TableAppliedDiff<'r, Body>,
@@ -2728,6 +2748,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<PlannedAct>("act_queue", &self.act_queue, event);
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
         callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
+        callbacks.invoke_table_row_callbacks::<Audience>("audience", &self.audience, event);
         callbacks.invoke_table_row_callbacks::<Background>("background", &self.background, event);
         callbacks.invoke_table_row_callbacks::<Belief>("belief", &self.belief, event);
         callbacks.invoke_table_row_callbacks::<Body>("body", &self.body, event);
@@ -3585,6 +3606,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         act_queue_table::register_table(client_cache);
         activity_table::register_table(client_cache);
         artifact_table::register_table(client_cache);
+        audience_table::register_table(client_cache);
         background_table::register_table(client_cache);
         belief_table::register_table(client_cache);
         body_table::register_table(client_cache);
@@ -3700,6 +3722,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "act_queue",
         "activity",
         "artifact",
+        "audience",
         "background",
         "belief",
         "body",

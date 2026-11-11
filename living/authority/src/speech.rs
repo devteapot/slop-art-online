@@ -17,6 +17,9 @@ use spacetimedb::{ReducerContext, Table, ViewContext};
 /// `gap_s` can only make it longer.
 pub const SPEAK_GAP_MS: u64 = 2_000;
 
+/// How long a line's `audience` row is kept (`speech_audience`).
+const AUDIENCE_KEEP_MS: u64 = 60_000;
+
 /// The way a name stands for (`""` is `say`).
 fn way_name(way: &str) -> &str {
     if way.is_empty() {
@@ -149,8 +152,22 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
         };
         percept(ctx, &me, now, "silence", to, speaker, at, text, 0.35);
     }
-    let address = common::laws(ctx).address_m;
+    let laws = common::laws(ctx);
+    let address = laws.address_m;
     let close = hearers.iter().filter(|(_, d, _)| *d <= address).count();
+    // Who received the words and how they stood toward the speaker, for the minds' turn-taking
+    // (`LIVING_GREET`): one `audience` row per line, where the world keeps it (`speech_audience`).
+    if laws.speech_audience {
+        let face = common::heading_at(&b, now);
+        let people: Vec<Hearer> = hearers
+            .iter()
+            .map(|(c, d, p)| Hearer { id: c.id, d: *d, off: if *d < 0.01 { 0.0 } else { living_rules::steer::wrap((p.1 - at.1).atan2(p.0 - at.0) - face).abs() } })
+            .collect();
+        for old in ctx.db.audience().at_ms().filter(..now.saturating_sub(AUDIENCE_KEEP_MS)).map(|a| a.id).collect::<Vec<_>>() {
+            ctx.db.audience().id().delete(old);
+        }
+        ctx.db.audience().insert(Audience { id: 0, speaker, to, at_ms: now, hearers: people });
+    }
     // Saying one's own name tells it to everyone who receives the words (an introduction).
     let introduces = w.introduces && mentions(&text, &me.name);
     // Words to someone that hold their name tell it to those who receive them and see whom it

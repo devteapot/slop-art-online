@@ -213,7 +213,7 @@ The root plots are open lots now, not `garden` lots: a garden is planted with be
 | The Cone's peat store | a storage in the Cone yard | 824 peat | with the furnace's, 864: 12 days of full firing (§2) |
 | The Batch's oven | the oven mouth | 8 (full) | 8 game hours |
 | The Marver's hearth | the hearth bench | 12 (full) | a game day |
-| 21 home hearths | the door of every home lived in | 12 each (full) | a game day |
+| 21 home hearths | inside every home lived in, on the floor behind its door, owned by its household (since `hearth-1`; before, at the door in the street) | 12 each (full) | a game day |
 | 2 smokehouses | their doors | 8 each (full) | 16 game hours |
 | 7 lamps | the top of the Fish Steps, the quay by the net lofts, the quay by the Store, the Counting House yard, the Marver's door, the mole by the lamp house, the Watchglass | 8 oil each (full) | 32 game hours: about three nights |
 
@@ -242,7 +242,7 @@ Built on branch `rules-3`, 2026-11-11, at the coordinator's three decisions. Eac
 ### 2. Household stores
 
 - **The rule.** A plan structure may say `owner: "household:<key>"`. It is placed after the residents and given to the owner of that household's house (its first member, who owns the house; `seed::authored_households` records them by key). `floor::check` refuses a household the seed's residents do not have, naming the households it has; the plan's validation refuses any other form of owner. A plan lot may name its door's structure kind (`lots[].structure`), which is how the Store and the peat barn are Cullet's own kinds.
-- **Cullet's** (`living/tools/cullet_plan.py`, from the plan's `household_stores` note): 22 `house_store`s, one at the door of each household's home, `owner: "household:<key>"`, holding three days of food for its people (4 smoked fish and 5 roots a person, rounded up per household: 221 smoked fish and 306 roots in all) and 24 peat (a hearth's three days, 36, beyond its first fill of 12). With the Store's 212 and 297 that is 433 smoked fish and 603 roots: the six days of §2 for 64 residents (422 and 593 needed). The theft law already reads a store's owner: a resident of Cullet takes from any of them (one community), a player not of the town takes from someone's house store as theft.
+- **Cullet's** (`living/tools/cullet_plan.py`, from the plan's `household_stores` note): 22 `house_store`s, one in each household's home (at its door until `hearth-1`; since then inside the house beside its hearth, [authored plans](AUTHORED_PLANS.md#a-households-own-things-stand-inside-its-lot)), `owner: "household:<key>"`, holding three days of food for its people (4 smoked fish and 5 roots a person, rounded up per household: 221 smoked fish and 306 roots in all) and 24 peat (a hearth's three days, 36, beyond its first fill of 12). With the Store's 212 and 297 that is 433 smoked fish and 603 roots: the six days of §2 for 64 residents (422 and 593 needed). The theft law already reads a store's owner: a resident of Cullet takes from any of them (one community), a player not of the town takes from someone's house store as theft.
 - `verify-core`'s `rhythm.py` builds a Cullet seed with 8 of the cast; it now keeps only those households' stores (a seed naming a household with nobody in it is refused).
 
 ### 3. Regrowth by season, by kind

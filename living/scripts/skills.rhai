@@ -56,6 +56,10 @@ fn laws() {
         // sets this in its seed's `rules`, like any law here. Every person has a mind: no law
         // turns minds off (docs/SEEDED_LIVES.md, "Every person a mind").
         cry_prompts_carers: true,
+        // Speech records who heard each line, how far and how far off the speaker's facing
+        // (the private `audience` table, kept a minute), for the minds' conversation rules
+        // (LIVING_GREET, `nearest` by default). Off: nothing is written.
+        speech_audience: true,
         // A grown person longs for a child this many real minutes after its own birth or its
         // youngest child's (the most nurturing sooner, down to a sixth of it), and only while
         // carrying at least `longing_food` food (0: whatever it carries).
@@ -2479,6 +2483,7 @@ fn laws_about(l) {
         spawn_energy: `and energy ${short(l.spawn_energy)}`,
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
+        speech_audience: if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
