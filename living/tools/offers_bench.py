@@ -2,7 +2,8 @@
 """What `my_offers` costs (docs/PERCEPTION.md "Offers"): M players subscribed to it while K
 residents and the players keep making trade offers.
 
-On a scratch `verify-*` world launched with `.agents/skills/verify/scripts/verify.py launch`:
+On a scratch `verify-client-*` world (the probe connects only to those) launched with
+`.agents/skills/verify/scripts/verify.py launch --run client-…`:
 joins M player identities near one another, places K adult residents beside them, and holds
 one real SDK subscription per player (`SELECT * FROM my_offers`, the verify-client probe at
 `.local/living/verify/target-client/debug/verify-client-probe`). It then measures two windows
@@ -87,8 +88,8 @@ def main():
     a = ap.parse_args()
     st = V.load(a.run)
     db, admin = st["db"], V.admin_token()
-    if not db.startswith("verify-"):
-        sys.exit("only verify-* databases")
+    if not db.startswith("verify-client-"):
+        sys.exit("only verify-client-* databases (the probe connects only to those)")
     dbid = json.loads(V.http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
 
     def sql(q, token=admin):
@@ -123,15 +124,20 @@ def main():
         call("grant_items", [r, "wood", 30])
 
     # One real subscription per player for the whole bench.
-    hold = a.rest + a.seconds + 30
+    hold = int(a.rest + a.seconds + 30)
     procs = []
+    logs = V.run_dir(a.run) / "offers-bench-probes"
+    logs.mkdir(exist_ok=True)
     for me, tok in players:
         req = {"uri": V.URL, "db": db, "token": tok, "queries": ["SELECT * FROM my_offers"], "seconds": hold, "drop_file": None, "until_actor": None}
-        p = subprocess.Popen([str(PROBE)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+        p = subprocess.Popen([str(PROBE)], stdin=subprocess.PIPE, stdout=(logs / f"{me}.jsonl").open("w"), stderr=(logs / f"{me}.log").open("w"), text=True)
         p.stdin.write(json.dumps(req))
         p.stdin.close()
         procs.append(p)
     time.sleep(8)
+    dead = [p.poll() for p in procs if p.poll() is not None]
+    if dead:
+        sys.exit(f"{len(dead)} of {len(procs)} subscriptions ended early (exit {dead[:3]})")
 
     m0, t0 = metrics(dbid), time.time()
     time.sleep(a.rest)
@@ -161,6 +167,7 @@ def main():
         time.sleep(max(0.0, interval - (time.time() - tick0)))
     m3, t3 = metrics(dbid), time.time()
     load = window(m2, m3, t3 - t2)
+    alive = sum(p.poll() is None for p in procs)
 
     offers = sql("SELECT * FROM trade_offer")
     per_player = [len([o for o in offers if o["to"] == p or o["from"] == p]) for p, _ in players]
@@ -171,7 +178,7 @@ def main():
         "db": db, "players": a.players, "residents": len(residents), "rate_target": a.rate,
         "offers_made": made, "standing_offers_at_end": len(offers),
         "my_offers_rows_per_player_at_end": {"min": min(per_player), "max": max(per_player), "mean": round(sum(per_player) / len(per_player), 1)},
-        "sample_player_rows": len(sample), "rest": rest, "load": load,
+        "sample_player_rows": len(sample), "subscriptions_alive_at_end": alive, "rest": rest, "load": load,
         "characters": len(sql("SELECT id FROM character")),
     }
     out = V.run_dir(a.run) / "offers-bench.json"

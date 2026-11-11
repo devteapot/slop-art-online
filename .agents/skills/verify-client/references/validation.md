@@ -1,6 +1,10 @@
 # Client protocol validation
 
 
+## 2026-11-11 rules-offers: `my_offers` (Spark)
+
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. The driver's view inventory and own-state set gained `my_offers`, and the probe reads it. A new offers step runs after `in-sight` ([perception.md](../features/perception.md)). `client-offers-20261111-184207` (scoped): 34 rows, all PASS. `client-offers-open-20261111-184616` (open): `my_offers` PASS, but "combat feed scoped to its viewer" FAILED: player-2's `my_combat` rows (kept 4 s) were gone before its probe, while a cargo build ran beside the suite. `client-offers-open2-20261111-184926` (open, rerun alone): all PASS but the known open-build `experience` XFAIL.
+
 ## 2026-11-11 eye-2: tile classes a client receives; presence timing (dev-box)
 
 Branch `eye-2` (from main `eead7a29`), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
