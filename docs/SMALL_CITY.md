@@ -1,6 +1,6 @@
 # The small city: Cullet
 
-Started 2026-11-11, after the owner's first real play-test. This is a design target, not an implementation report. Nothing here is built. It replaces the island as the game's test world; the island seed stays for the labs.
+Started 2026-11-11, after the owner's first real play-test. This is a design target, not an implementation report. The owner answered the decisions on 2026-11-11 ([answers](#the-owners-answers-2026-11-11)), and phases 2 and 4 are being built. It replaces the island as the game's test world; the island seed stays for the labs.
 
 **The owner's verdict.** The world feels bad. The city has no character and looks slopped together. The NPCs feel like NPCs, not like players run by AI. Survival dominates everything.
 
@@ -734,3 +734,17 @@ Each phase ends with something the owner can look at. "Touches" names what chang
 | 12 | The A/B: is the brief right, and will the owner score it blind? | Run it as written |
 | 13 | Fog of war: which option to try first | A (soft edge), then B as a slider |
 | 14 | Does Cullet replace the island as the game's test world? | Yes. The island stays for the labs. |
+
+### The owner's answers (2026-11-11)
+
+Given through the general coordinator. The owner's words on the recommendations: "I kind of agree with the recommendations". So they are accepted, and anything that turns out wrong in practice is raised again.
+
+| # | Answer |
+|---|---|
+| 1, 3, 4, 5, 7, 8, 9, 10, 11, 14 | Accepted as recommended. For 9: goods and fuel now, decay and tide later. For 11: each paid run is authorised when its phase is reached, through the general coordinator. |
+| 2 | Not accepted yet. The owner asked whether characters can be made wholly from our own Blender scripts, so the project no longer depends on VRoid Studio. A spike answers it first. |
+| 6 | Accepted with a requirement. The distances stand as Cullet's law values: 48 m by day, 14 m in the dark, 28 m in lamplight, names at 24 m. What the screen shows of the ground and what it shows of people must agree; today you see the whole place clearly while people pop in and out. Sight stays as law values, so it can change without code. Longer sight wakes more minds, so it is measured at 64 residents before the values are called settled. |
+| 12 | Fable 5.2 builds the asset kit, starting from the Fable arm (branch `ab-arm1`). The owner liked Fable's results more in general. That is a general preference; no sheet-by-sheet scores were given. The Opus arm (`ab-arm2`) is kept for the record. |
+| 13 | Replaced. How the view shows the edge of sight is being prototyped in the client for the owner's next play-test. What the owner picks there replaces options A to D. |
+
+**Decisions 4 and 5 against the current rules.** Section 4's "Now" column was written before the change that paces people's needs to real time (`person_pace` 0.3 in `skills.rhai`, on the island's 12-minute day). With that law, hunger already rises about 1.2 a real minute, not 5. Phase 4 derives Cullet's law values again from the current script, for a 48-minute day, and keeps the outcomes in the targets table. Where the two differ, it records which it chose.
