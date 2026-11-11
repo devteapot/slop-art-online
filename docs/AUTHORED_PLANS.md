@@ -118,6 +118,17 @@ The plan rides in `land.params` and the existing rows; no table, column, reducer
 
 Phase 2 of [the small city](SMALL_CITY.md#8-build-plan) (2026-11-11, branch `plan-2`). The source is [`living/tools/cullet_plan.py`](../living/tools/cullet_plan.py): it computes every lot, its height and its asset generator inputs, and writes [`living/seeds/worlds/cullet/plan.json`](../living/seeds/worlds/cullet/plan.json) (the plan, with the fields the engine ignores) and [`living/seeds/cullet.json`](../living/seeds/cullet.json) (seed 83 at 1024 m: the land, the plan merged into `map.params.plans`, a town with five named buildings and no people). Edit the script, not the files; `--check` says whether they are current. `living/game/assets/envs/cullet.json`'s `world` names seed 83 at 1024 m.
 
+**Layout pass 1 (2026-11-11, branch `layout-1`): [Cullet's layout](CULLET_LAYOUT.md).** The plan below was redrawn after the owner's first walk. What is current, where it differs from the grey city's paragraphs that follow:
+
+- **Levels.** 13: the Strand, the mole, Low, Mid and High Row, the upper terrace and the Crown as before, but ending at x −84 in the west (High Row's at x 70 in the east; the Crown with a 12 m ledge over the Ladder); three new ones, `lad_1` (+7.5), `lad_2` (+11.5) and `lad_3` (+15.5), the back halves of the Rows' bands between x −84 and −19.5; and the three outlying pads. Levelled ground is 3.6 ha (was 5.9 ha).
+- **Rows.** Streets 4.5 m into each band (y 36.5, 64.5, 94.5), from the Net Wynd to their ends; house fronts at y 39.3, 67.3 and 97.3. West terraces stand on the Net Wynd (x −15.5), east terraces on the Store Wynd (x 64). Behind each row a back court, a 2.5 m back lane and a plot under the wall above. The Marver's terrace is the corner bastion at Mid Row's end (x 68–80).
+- **Wynds.** The Ladder Wynd at x −52 (seven flights, to the top walk), the Net Wynd at x −17, the Tally Wynd at x 24, 34.7, 2.2, 39.7 and 0, the Store Wynd at x 66, the Cinder Steps. 19 flights rising 1.5 to 4 m.
+- **The Ladder.** Two glasshouses and two or three root plots against each of seven walls (y 47, 60, 75, 90, 105, 120, 134), x −84 to −19.5.
+- **Fixtures.** 315 (was 213): 102 lengths of retaining wall along 16 drops, and 114 enclosures (back courts, plots, tofts, walled gardens, the oven court, drying greens, the wind wall and others), each a rectangle with the walls and contents the plan writes for it.
+- **As a city.** The Fish Steps to the Crown bench 227 m, 87 s; to the Readers' House 94 s; to the Lintel 235 s; the quay and the other routes as before. `cullet_check.py` now counts `Drop` and `Low` tiles as blocked, as the rules do.
+
+The lot ids, the 65 buildings, the landmarks, the frame, the land, the resources at named places and the wear rules are unchanged.
+
 **The frame.** Origin at the Fish Steps, x east, y north (uphill), rotation 0; `origin` (510, 784) puts the island's middle on the map's middle.
 
 **Levels.** The Strand at +2 m (the quay, x −75 to 75 and y 0 to 10, the strand buildings behind it, the slip and dry dock west, Cinder Row east up to y 62), the mole at +2 m (with its 13 m tip 60 m out), Low, Mid and High Row at +5.5, +9.5 and +13.5 m (bands 28 to 30 m deep, streets 9 m into each, so a 6.5 m walk overlooks the drop), an upper terrace at +17 m, and the Crown level at +20 m (the Crown east of x −55, the root plots west of it). Three outlying pads at their stamped ground: the turf house's yard on the Moss (+32), the Hanger cottage's (+14) and the Lintel's on the north headland (+46).

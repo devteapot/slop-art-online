@@ -386,7 +386,10 @@ def check_cast(world, s, cast, taken, notes):
 
 def carry_graph(out, back, n, reach=90):
     """The starting routine of someone who carries goods between two markets along a known way:
-    `work 1` .. `work n-1` are stages along the roads to `work`, the far market; `square` is home.
+    `work 1` .. `work n-1` are stages along the roads to `work`, the far market's store; `store`
+    (a `town_life` place) is the store at home. Both ends are stores, not squares: one takes from
+    and stores into a storage beside one, found by sight (11 m by day), and a big square's spot
+    can be farther than that from its stores (Highshelf's giants' plaza: 43 m).
     Graphs are weighed again while a walk goes on, so each rule must stay true for a whole leg:
     within `reach` metres of a stage, walk to it, the furthest such stage first (outbound) or the
     nearest to home first (inbound). With stages closer together than `reach`, but two stages
@@ -399,8 +402,8 @@ def carry_graph(out, back, n, reach=90):
     outbound = [{"if": near("work", 6), "then": {"do": "store", "target": {"nearest": "storage"}, "item": out, "qty": 3}}]
     outbound += [{"if": near(stage(k), reach), "then": goto(stage(k))} for k in range(n, 0, -1)]
     outbound.append(goto(stage(1)))
-    inbound = [{"if": near("square", 6), "then": {"do": "store", "target": {"nearest": "storage"}, "item": back, "qty": 3}}]
-    inbound.append({"if": near("square", reach), "then": goto("square")})
+    inbound = [{"if": near("store", 6), "then": {"do": "store", "target": {"nearest": "storage"}, "item": back, "qty": 3}}]
+    inbound.append({"if": near("store", reach), "then": goto("store")})
     inbound += [{"if": near(stage(k), reach), "then": goto(stage(k))} for k in range(1, n)]
     inbound.append(goto(stage(n - 1)))
     # A composite holds at most 12 children (living_rules::graph): long ways nest their stages,
@@ -416,8 +419,8 @@ def carry_graph(out, back, n, reach=90):
         {"if": has(out, 3), "then": {"first": outbound}},
         {"if": {"all": [near("work", 8), {"not": has(back, 3)}]}, "then": {"do": "take", "target": {"nearest": "storage"}, "item": back, "qty": 3}},
         {"if": has(back, 3), "then": {"first": inbound}},
-        {"if": near("square", 8), "then": {"do": "take", "target": {"nearest": "storage"}, "item": out, "qty": 3}},
-        goto("square"),
+        {"if": near("store", 8), "then": {"do": "take", "target": {"nearest": "storage"}, "item": out, "qty": 3}},
+        goto("store"),
     ]}
 
 
@@ -772,7 +775,7 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
                 if m["occupation"] in route_of:
                     ro = route_of[m["occupation"]]
                     inv[ro["out"]] = inv.get(ro["out"], 0) + 3
-                    r["places"] = [{"name": "work", "in": ro["to"], "kinds": ["plaza"], "stages": ro.get("stages", 6)}]
+                    r["places"] = [{"name": "work", "in": ro["to"], "kinds": ["storage"], "stages": ro.get("stages", 6)}]
                 elif m["occupation"] == outlaws.get("occupation"):
                     r["places"] = [{"name": "work", "between": outlaws["road"]}]
                 r["inventory"] = inv

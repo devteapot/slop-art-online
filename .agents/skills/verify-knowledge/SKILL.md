@@ -32,6 +32,16 @@ The database is `verify-$R`. The container is `sao-verify-neo4j-$R`, labeled wit
 
 Never use Neo4j A on 7689 or Neo4j B on 7690. Never change the shared fake model server or runner. All model profiles in this proof point to the run's loopback fake endpoint.
 
+## A world's own technique
+
+Teaching a technique only a world's laws add (Cullet's glassmaking) has its own action, authority only, on a `cullet-laws` world ([feature](features/know-how.md)); it uses no Neo4j and no mind, and cleans up the same way:
+
+```bash
+.agents/skills/verify-knowledge/scripts/verify_knowledge.py world-know-how --run knowledge-glass-$(date +%Y%m%d-%H%M%S)
+```
+
+`--target-dir DIR` builds the module in `DIR` (the shared harness's option), so it can share a worker's one build tree. Both actions read `LIVING_STDB_URL` (and the shared harness `LIVING_STDB_CONTAINER`) for a worker's own server.
+
 ## Player memory
 
 What a human-played character lives, internalized into its own graph (player memory, on by default) ([feature](features/player-memory.md), design in `docs/PLAYER_MEMORY.md`), has its own runner on an island world, with the same scratch Neo4j, fake model and cleanup:
@@ -50,6 +60,12 @@ A resident's mind made from the world's facts (docs/SEEDED_LIVES.md; every perso
 ```
 
 Its paid tier, `scripts/residents_real.py --allow-live --run knowledge-residents-real-<name>`, runs only after the user authorizes that run (the models file as shipped; the key from the main checkout's `.env`, into the mind's environment only).
+
+Names learned from a lived line, down to the memory graph ([features/names.md](features/names.md)), on any Neo4j given by `LIVING_PRIVACY_NEO4J=container:host:port` and `LIVING_PRIVACY_NEO4J_ENV` (a file with `LIVING_NEO4J_PASSWORD=`; on the Spark, the trial stack's `slop-trials-neo4j:127.0.0.1:7699`), nodes under the run's own name and deleted after:
+
+```bash
+.agents/skills/verify-knowledge/scripts/names.py --run minds-names-$(date +%Y%m%d-%H%M%S)
+```
 
 ## Doctor
 

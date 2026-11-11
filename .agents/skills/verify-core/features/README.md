@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | Tick, housekeeping, pause and resume | `scenes.py tick` | [tick.md](tick.md) |
 | Graph parsing, normalization, evaluation and routines; a refused start counted and told; `say` to an id in every form, waiting out the speaking limit, told when it cannot be said | Cargo, mechanics, steering, `scenes.py refusal` and `scenes.py say` | [graphs.md](graphs.md) |
+| Speech: ways of speaking as script (`<way>_speech()`), the one primitive (`speech::speak`), `introduced` rows, `heard`/`my_heard`, `speech_card`, `human_speak`; whisper, call, truthful silence, overheard names; the shipped `say` unchanged (a row diff against the pre-change module); the cost of a line in a talking crowd | `speech.py regress`, `ways`, `channels`, `crowd`, `diff` | [speech.md](speech.md) |
 | Rhai skills, laws, crafting and exchanges | Cargo and 23 mechanics checks | [mechanics.md](mechanics.md) |
 | Hunger, energy, eating, infant appearance and cry routing | `scenes.py needs` and `scenes.py infant` | [needs.md](needs.md) |
 | "food" as anything with nutrition: eat and give of `food`, the most nourishing first | `scenes.py food` | [needs.md](needs.md) |
@@ -13,6 +14,7 @@
 | Blows, threaten, yield and seize | Mechanics and `scenes.py seize` | [combat.md](combat.md) |
 | One-off acts, graph coexistence and feedback | Mechanics and Cargo | [acts.md](acts.md) |
 | Dealings on records: agreements kept, broken, lapsed and not taken; demands met and unpaid; regard read by a relation filter; hooks and install checks | `scenes.py dealings` on an island run, and Cargo | [dealings.md](dealings.md) |
+| Answers by id: accept/decline naming a trade offer or a proposal, the refusals, decline told to the maker and witnessed, the unnamed order unchanged | `scenes.py answers` (any seed), and Cargo | [dealings.md](dealings.md) |
 | Steering and `living/viewer/src/sync.rs` display-sync math | Five steering checks and three sync tests | [steering.md](steering.md) |
 | Moving as a per-creature law (`motion(a)`): flight share of the walk, turning on the spot; an installed law changes both | `scenes.py moves` | [steering.md](steering.md#moving-as-a-law) |
 | Flight from a creature: steering runs from the threat until `flee_clear` farther | `scenes.py flee` on a `stage1-acts` run | [steering.md](steering.md#flight) |

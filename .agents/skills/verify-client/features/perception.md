@@ -38,7 +38,7 @@ LIVING_PERCEPTION=scoped .agents/skills/verify-client/scripts/run.py --run "$R"
 
 ## The field of view
 
-Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (sixth change)"). `drive.py`'s `field_of_view` runs after the wall checks: two players 5 m apart on open ground (`sight_spots`' `field` pair, with open rows beside it), the admin's `set_world_law fov_on true`, and the primary player turning with the `face` act (`human_act`). Each look is a real subscription to `seen_*` and `heard_sounds` with the player's token.
+Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (seventh change)"). `drive.py`'s `field_of_view` runs after the wall checks: two players 5 m apart on open ground (`sight_spots`' `field` pair, with open rows beside it), the admin's `set_world_law fov_on true`, and the primary player turning with the `face` act (`human_act`). Each look is a real subscription to `seen_*` and `heard_sounds` with the player's token.
 
 - Facing away: the other is in neither `seen_bodies` nor `seen_characters`; `heard_sounds` holds a row to the east (bearing 2), near (band 0), kind `person`, with only `key`, `kind`, `bearing`, `band` and a key that is neither player's id.
 - Facing it: seen, and no longer heard to the east.

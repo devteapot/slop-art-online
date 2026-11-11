@@ -118,7 +118,7 @@ Recorded: "I know how to coax a fire and mend what's torn". Renamed: "nothing bu
 
 A declaration without `about` or `cadence` is refused when the script compiles.
 
-**Senses** (`senses(a)`, hot): how far a creature sees and hears, a map of `sight` and `hearing` in metres. The shipped law keeps the values the engine had as constants (`SIGHT`, `NIGHT_SIGHT`, `TORCH_SIGHT`, `HEARING`, now gone): 11 m by day, 6 at night, 9 at night with a torch in the pack, hearing 9 m. Its description: "By day one sees 11 m; at night 6 m, or 9 m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries 9 m." The numbers in it come from the same functions as the law (`sight_in`, `hearing_of_people`), so the text follows the law. A passive is a line of the law (`+ if knows(a, "…") { 2.0 }`); `reach` must still bound it. Since 2026-11-11 (`fov-1`) the law may also return a `field` (how the view narrows away from facing): the shipped law does when the world's `fov_on` law is on, reading its values through `law(name)`, a primitive that gives any `laws()` constant with the world's own value over it ([perception](PERCEPTION.md#the-field-of-view-sixth-change)).
+**Senses** (`senses(a)`, hot): how far a creature sees and hears, a map of `sight` and `hearing` in metres. The shipped law keeps the values the engine had as constants (`SIGHT`, `NIGHT_SIGHT`, `TORCH_SIGHT`, `HEARING`, now gone): 11 m by day, 6 at night, 9 at night with a torch in the pack, hearing 9 m. Its description: "By day one sees 11 m; at night 6 m, or 9 m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries 9 m." The numbers in it come from the same functions as the law (`sight_in`, `hearing_of_people`), so the text follows the law. A passive is a line of the law (`+ if knows(a, "…") { 2.0 }`); `reach` must still bound it. Since 2026-11-11 (`fov-1`) the law may also return a `field` (how the view narrows away from facing): the shipped law does when the world's `fov_on` law is on, reading its values through `law(name)`, a primitive that gives any `laws()` constant with the world's own value over it ([perception](PERCEPTION.md#the-field-of-view-seventh-change)).
 
 **How it stays cheap.**
 
@@ -382,6 +382,108 @@ All of this is in `skills.rhai`. It is the same for players, minds and graphs: t
 - A skill whose spec reads `want` offers one choice per thing to ask for, from what the player carries and the skill's `items`: `offer`, and now `offer_terms`.
 - What the rules tell the player (experiences of kind `record`) shows as a toast.
 
+### Answering: accept and decline by id
+
+**Status:** built on branch `rules-offers-2`, 2026-11-11. Before it, `accept` toward a person took their oldest standing terms first and only then their trade offer, so a player who pressed accept on the trade the window showed could agree to different terms instead. It also had no way to say no.
+
+**The acts** are the same for both controllers: `human_act`, `mind_act` and graph leaves. They are parsed by the shared grammar (`graph::Action` `offer`/`record`, `normalize.rs`):
+
+```json
+{"do": "accept",  "target": {"id": 4}, "offer": 17}
+{"do": "accept",  "target": {"id": 4}, "record": 12}
+{"do": "decline", "target": {"id": 4}, "offer": 17}
+{"do": "decline", "target": {"id": 4}, "record": 12}
+{"do": "accept",  "target": {"id": 4}}
+{"do": "decline", "target": {"id": 4}}
+```
+
+- `offer` is a `trade_offer` id, as a player reads it in `my_offers` and a mind in its scene. `record` is a record id, as in `my_records` and a mind's dealings.
+- Without either, `accept` is what it always was: the person's oldest standing terms, then their trade. `decline` takes the one `accept` would take. A mind's existing acts parse and behave as before, and the stored act is byte-identical (test `answers_carry_what_they_name`).
+- `offer_id` and `record_id` are accepted as aliases, and so is a number written as text. 0 or null means none. Anything else is refused: "the id of the trade offer you answer". A skill whose spec does not list the argument ignores the word, as before.
+- The client's `ui::act_node` sends `"offer"` for `ActTarget::Offer` (left out when the id is 0).
+
+**Rules.** Both are ordinary skills in `skills.rhai`:
+
+- `accept_spec` and `decline_spec` (`args: ["offer", "record"]`, `talk`, reach 3);
+- `accept_check` and `decline_check` share `answer_refused`; `decline_duration` is 1 s;
+- `decline_ui()` declares only a look, the trade icon.
+
+The context gains `a.offer_id`, `a.record_id` and `a.offer`. `a.offer` is the trade offer at hand: the named one, read by id, or, when that one is gone or none is named, the target's standing offer to the actor. The engine fills it only for a law that reads it (`Scripts::skill_reads`), as it does `a.records`. A named record is found among `a.records`.
+
+Refused, with these words, at the start and again at completion:
+
+| Case | Refusal |
+| --- | --- |
+| a named offer that no longer exists | "that offer is gone" |
+| it is gone, and another offer from them stands | "they have changed their offer: now their 2 fish for your 1 hide" |
+| addressed to someone else, or not theirs | "that offer is not addressed to you" |
+| past its window | "that offer has expired" |
+| a named record not among the actor's | "that proposal is gone", or "they have changed their terms: now you give …, they give …" while other terms of theirs stand |
+| the actor's own proposal, or someone else's | "that proposal is not addressed to you" |
+| agreed already | "you have already agreed to it" |
+| run out (`not taken`) | "that proposal has expired" |
+| otherwise closed | "that proposal was declined" (or its status) |
+| a demand or a regard named | "that is not a proposal of terms" |
+| both named | "name one thing to answer: the offer or the proposal" |
+
+**Effects.**
+
+- `accept` with an offer returns the op `#{ op: "accept", offer: id }`. The engine takes only that offer, and only from the target to the actor while it stands. With a record, the agreement is made as before.
+- `decline` with a proposal closes it as `declined`, readable for 1 world hour. With a trade offer it returns `#{ op: "decline", offer: id }`, which ends that offer and nothing else. The engine refuses an offer not addressed to the actor, and with nothing standing: "they have no standing offer for you".
+- A decline tells the maker with `tell`, as kind `record`, salience 0.7, without asking its mind to think:
+  - "Bram declined your offer of 2 fish for 1 hide."
+  - "Bram declined your terms: you give 3 berries, they give 10 wood."
+- Onlookers witness "{a} turned down {b}'s offer." or "{a} turned down what {b} proposed."
+- The decliner's own outcome is the rules' line: "declined Bram's offer of 2 fish for 1 hide".
+- There is no cost and no limit on declining. Anything of the kind would be a law of the script.
+
+**What minds see:**
+
+- the scene's "asked of you" and "you are waiting on" entries carry `"offer": id`;
+- a proposal to them reads "…; accept or decline (toward them, record N)" in their dealings (`record_text`);
+- the talk turn's "between" lines name the offer ("(offer 17: accept to exchange, or decline)");
+- a trade offer's deliberation request names it ("You may accept or decline it (offer 17), or let it pass.");
+- the act forms (`prompts::ACTS`) and the talk examples show `accept` with `"offer"` and `decline`.
+
+The deliberation grammar lists both skills from their specs. `decline` is in `TALK_SHOWN`.
+
+**SpacetimeDB check** (consulted 2026-11-11; the docs' version selector reads 2.0.0; checked against the 2.14.1 crates pinned in `living/Cargo.toml`):
+
+| Source | What it says | What follows here |
+| --- | --- | --- |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) | New columns only "to the end of a table with a default value"; "Adding columns without a default value" and "Removing or modifying existing columns", including changing their type, are forbidden. | The act's reference is two columns at the end of `activity` with `#[default(0u64)]` (`offer`, `record`). `activity` is no other table's column type, so no embedded row type changes (unlike `line_seen.line`, [COMMUNICATION.md](COMMUNICATION.md#10-spacetimedb-documentation-and-data-paths)). `trade_offer` and `record` are unchanged. |
+| `spacetimedb-lib-2.14.1/src/db/raw_def/v9.rs` | `RawMiscModuleExportV9::ColumnDefaultValue`: "A default value for a column added during a supervised automigration." | The macro's `#[default]` is the migration's default. |
+| [Tables](https://spacetimedb.com/docs/tables/) | "Tables can be private (default) or public". | `activity` stays private. Clients never read it; they read their own offers through `my_offers` and records through `my_records`, unchanged. |
+| [Performance](https://spacetimedb.com/docs/tables/performance/) | "Use the smallest integer type that fits"; "Be mindful of unbounded table growth". | Ids are `u64`, as `trade_offer.id` and `record.id` are. `activity` holds one row per acting creature, so 16 bytes a row and no growth. |
+
+Migration proven on the trial server (`slop-trials-stdb`, v2.14.1). Main's module (`b004e6e`) ticked on a fresh world. The world was then updated in place to this branch's module (`verify.py launch --keep-data`). It kept ticking from tick 6,012, its 233 existing `activity` rows read `offer = 0, record = 0`, and accept and decline then worked on it.
+
+**Data paths.**
+
+- An answer reads the named `trade_offer` by primary key, or the target's offers by the `from` index (a maker holds one at a time).
+- It reads the actor's records by `record_party.party`, as `accept` already did at completion. Its check now reads them at the start too.
+- It writes:
+  - a trade: two inventory moves and one row deleted, as before;
+  - a declined trade: one row deleted;
+  - a declined proposal: one record closed;
+  - for the maker: one experience row;
+  - for onlookers in sight: one witnessed row each.
+- Nothing is read or written per tick. Recipients are the parties' own `my_experience` rows, the mind service (owner) and the onlookers' perception. No benchmarks were run; this change adds no per-tick or per-subscriber work.
+
+**Verification** (Spark, trial server, fake model, 2026-11-11):
+
+- `just living-check` ok;
+- rules tests `answers_take_what_they_name`, `answers_carry_what_they_name` and `an_act_toward_an_offer_names_it`;
+- verify-core `scenes.py answers` 17 of 17, `dealings` 13 of 14 (regard needs the island);
+- verify-player `answers.py` 9 of 9, `offers.py` 17 of 17, `deal.py` 13 of 13;
+- verify-minds `answers` and `acts` pass. `dealings` failed 2 of 11 runs (cause not established; see verify-minds' validation record).
+
+Records are in each skill's `references/validation.md`. Not covered:
+
+- the game client drawing and sending these acts;
+- a real model choosing to decline;
+- `verify-client`: no view or public table changed, and `activity` is private.
+
 ## Goods, recipes and fuel
 
 **Status:** built on branch `goods-1`, 2026-11-11, for Cullet's phase 4 ([small city](SMALL_CITY.md#the-land-that-feeds-it), decision 9: goods and fire that eats fuel now; pane decay and the tide later). The owner's standing decisions it follows: items satisfy requirements by traits, not lists; the world is self-sufficient; world rules are Rhai laws over Rust primitives; no hard-coded guardrails and no engine behaviour for tests.
@@ -442,6 +544,47 @@ A structure kind with a `burns` trait is a fire that eats fuel:
 
 The shipped world has no recipes and no fires that burn fuel, so `make` and `feed` are not offered to its people (`listed` is computed from the tables), and its minds' world text is unchanged. A world with them gets a "Fires that burn fuel" and "Made at workplaces" sentence in its making section (`workplaces_law`), built from the same tables.
 
+### What a client shows (goods-2)
+
+**Status:** built on branch `goods-2`, 2026-11-11: the rules' side of the interface design (branch `design-interface`, `docs/INTERFACE.md` §1 and §7). Data only: no rule reads these traits, so no behaviour changes.
+
+**Items.** Every item in `items()` carries three traits, in the shipped script and in Cullet's goods, so the pack and a recipe grid stop guessing by name:
+
+| Trait | What it is |
+| --- | --- |
+| `icon` | a short stable id the client maps to an image; it does not change when a label does |
+| `label` | the player-facing name, lower case as in a sentence ("lamp oil"); the client capitalises it where it starts a line |
+| `group` | where a pack or a recipe grid sorts it: `food`, `fuel`, `material`, `tool`, `weapon`, `garment`, `glass`, `money` |
+
+Each kind's own entry is the source; there is no list in Rust. An install refuses an `icon`, `label` or `group` that is not text (`script::ITEM_LOOK`). The names are in `living_rules::ui` (`ITEM_ICONS`, `ITEM_GROUPS`, append-only; ui-decl-1's step 1 does not refuse others yet, and a rules test keeps the shipped and Cullet items within them). An item without them (a world's own, from before) looks like its name: the name as its icon, with spaces as its label, and no group (`item_look`).
+
+The icon ids, for the client. Today every id is the item's name; a world's new item may reuse an id (a world's soda could draw as `ash`) or name a new one, and the client draws an id it has no image for with its fallback.
+
+| Group | Item: `icon` (label) |
+| --- | --- |
+| food | `berries`, `fish`, `meat`, `cooked_fish` (cooked fish), `cooked_meat` (cooked meat), `smoked_fish` (smoked fish), `smoked_meat` (smoked meat); Cullet: `roots`, `baked_roots` (baked roots), `greens` |
+| fuel | Cullet: `peat`, `lamp_oil` (lamp oil) |
+| material | `wood`, `stone`, `fiber`, `hide`, `clay`, `leather`; Cullet: `kelp`, `ash`, `sand` |
+| tool | `torch`, `tablet`, `axe`, `pick`, `net`, `basket`, `salve` |
+| weapon | `spear`, `bow`, `arrow` |
+| garment | `cloak`, `armor` |
+| glass | Cullet: `glass` |
+| money | `mark` |
+
+The label is the item's name with spaces for every item listed. Wood burns (`fuel: 1.0`) but is grouped as a material: `group` is where it is shown, not what it can do; the rules ask the traits.
+
+**A recipe's look.** What a recipe makes looks like its product item: its `icon`, `label` and `group`. A recipe may set its own `icon` or `label`, which stand over the product's for what it makes (`recipe_look(product)`); a recipe that `turns` items looks like each product it makes (smoking: smoked fish, smoked meat). `make` does not read them. A client asks `Scripts::item_look_of("recipe_look", product)` or `item_look_of("item_look", item)` (`living_rules::script::ItemLook`). `craft`, `cook` and `smoke` are not folded into `recipes()` here; that is a separate, later branch, and the rule is meant to carry over to it unchanged.
+
+**Showing work.** `make_shows()` and `feed_shows()` are `#{ look: "work" }`, like `cook` and `craft`: while someone makes at a workplace or feeds a fire, anyone in view sees a `doing` row at it (`doing.x/y` is the workplace or fire), players and minds alike. `act_card` gains two rows (`make`, `feed`); the authority keeps the other skills' presentation codes (`codes.rs`).
+
+**Teaching a world's techniques.** `teach_check` checked the item against `techniques()`, which was what experimenting with eight materials can reveal (`discoveries`), not the know-how table. So Cullet's glassmaking, and the shipped fire_bolt and wound_tending, could not be taught. `techniques()` is now `names_of("know_how")` (the same fix reached main concurrently from rules-offers, `04dc7c07`, with a verify-core `teach` scene; goods-2 adds the comparison below and the glassmaking proofs); `discoveries`, `learn_how` and `experiment` keep the materials' lists (what experimenting reveals is only part of what there is to know). The refusal for a name that is no technique now lists the table in its order, so its text changed: before "(the techniques are: spear, fire, masonry, …, cooking, smoking)", after "(the techniques are: fire, cooking, spear, …, fire_bolt, wound_tending, toolmaking)" (and "…, glassmaking" in Cullet). For the 20 techniques of the old list every answer is the same: a comparison of main's script against this branch over every technique, three states of the teacher's knowledge and five targets gave 300 of 300 identical answers in each world, and differences only for fire_bolt, wound_tending, glassmaking and names that are no technique. `teach_check`'s heaviest sample fell from 635 to 282 operations (shipped) and 293 (Cullet).
+
+**What minds are told of know-how.** `know_how_law()`'s text was a hand-written list of twelve shipped techniques, so Cullet's minds were not told of glassmaking, nor anyone of fishing, smoking, basketry, archery, tanning, medicine, trapping, bridging, fire_bolt or wound_tending. It is now built from the table (`know_how_text`): each technique by name, with its `brief` in brackets where the entry has one. The shipped entries' briefs are the old text's brackets, so the shipped text is the old one with the ten missing names inserted in table order before toolmaking; Cullet's ends "toolmaking (axe, pick), glassmaking (glass from ash and sand at the furnace)." The cached world text of each world changes once, at its next install.
+
+**Make at a fuel-burning workplace (the design's §1).** The authority's check sees the fire: a player's act toward a structure runs as a one-off behaviour, and its target facts come from `act::target_facts`, which reads `lit` and `fuel` from the row's `lit_until_ms` (`fire_state`). The game client builds its own facts to choose what to offer (`living/game/src/verbs.rs` `thing_facts`) and leaves `lit` false and `fuel` 0, so `make_check` says "is out: feed it first" there and the F list never offers `make` at a hearth, oven, furnace or smokehouse. To match the authority, a client sets, for a structure target:
+- `lit`, `fuel` = `rules.structure(kind).fire_state(row.lit_until_ms, now_ms, world.day_ms)`, from the public `structure` row, the public `world` row and the server clock it already estimates. The authority computes the same through the same function.
+- (also wrong, for `cook` and `experiment`, not `make`) the actor's `near_fire`: the authority counts any burning structure within its `burns.warmth`, or a fire that needs no feeding within `fire_warmth`; the client counts only a kind named `campfire`.
+
 ### Cullet's goods, as data
 
 They are the goods section of Cullet's laws, [`living/seeds/worlds/cullet/laws.rhai`](../living/seeds/worlds/cullet/laws.rhai) (the seed's `laws_file`, composed over the shipped script when the world is created; [Cullet's rules](CULLET_RULES.md)). It adds no rule. Its numbers are first guesses for the soak.
@@ -495,7 +638,7 @@ No whole-World scan was added. A fire costs nothing while it burns: no per-tick 
 
 ### Costs (measured)
 
-- **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
+- **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest; 282 since goods-2), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
 - **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here. After merging rules-1 and plan-1 (main `6a905c31`): rates 8,566, rates-law 212,202 (still the only law over budget), strike 274,209, cooldown 1,704, perceived 70,038, hook 450,841, senses 3,143, senses-law 41,866, moves 1,956.
 - **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
 

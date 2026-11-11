@@ -11,11 +11,19 @@ path = "src/main.rs"
 [[bin]]
 name = "sb-native"
 path = "src/native.rs"
+required-features = ["engines"]
+
+# Every engine natively, for sb-native and run.sh. The fuel gate (gate.py, `just living-check`)
+# builds sb-host alone with --no-default-features: it runs engines only inside the module, so it
+# needs neither Lua's C build nor the wasmi guest (guest.wasm, git-ignored).
+[features]
+default = ["engines"]
+engines = ["sb-bench/all", "sb-bench/mlua"]
 
 [dependencies]
 # SpacetimeDB 2.14.1's wasmtime: version "39" (Cargo.lock 39.0.1), same features
 # (SpacetimeDB-2.14.1/Cargo.toml [workspace.dependencies.wasmtime]).
 wasmtime = { version = "=39.0.1", default-features = false, features = ["addr2line", "async", "cache", "cranelift", "demangle", "parallel-compilation", "runtime", "std"] }
-sb-bench = { path = "../bench", features = ["all", "mlua"] }
+sb-bench = { path = "../bench" }
 anyhow = "1"
 living-rules = { path = "../../../rules" }

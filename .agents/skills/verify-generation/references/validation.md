@@ -1,5 +1,15 @@
 # Validation record (generation)
 
+## 2026-11-11 layout-1: Cullet's plan redrawn (dev-box)
+
+Branch `layout-1` (origin/main `6caebe20` merged: rates-2, lives-3, ground-1), own container `layout1-stdb` (2.14.1, port 3324, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. The seed changed in its plan's geometry only ([Cullet's layout](../../../../docs/CULLET_LAYOUT.md)): 13 levels (three new), 46 streets, 19 stairs, 59 of the 93 lots moved; the lot ids, kinds, resources' kinds and structures are as they were, so no shape changed and no maintain pass was run.
+
+- `generation-layout1b-20261111-194848` (`--feature worlds --seeds cullet,plan-test`): plan-test 78 checks pass. Cullet 313 of 317 pass, with every plan check among them: its 93 lots in order with their kinds, sizes, models, heights and level floors; doors walkable; blocking lots on wall, low or drop tiles; its drops drop tiles; 158 authored resources and 34 authored structures where written; the 22 households own and live at their lots; `land` digests equal `floor_preview`'s; original seeds unchanged.
+- **The four Cullet failures are the harness's, not the plan's**: `the seed's laws are composed over the shipped script`, `seeded rhythms are as given` (Anselm Faro, Greta Dunmore, Halvard Dunmore and Ode Pontil have no row), `authored relations are relation rows` and `authored relations across communities are introductions`. The snapshot's `script` row is revision 4 and holds the shipped `skills.rhai` (133,739 characters) with no `// ---- floor overlay ----`. `verify.py launch` installs `living/scripts/skills.rhai` over HTTP after publishing (since the merge of `exp-player-frame`, `b7328bc0`), which replaces the script `init` composed with Cullet's laws. Under the shipped life law the four elders then die of old age within 8 s (`character.cause`), and their rhythms and relations go with them. Not fixed here (it is the shared harness's; a launch should install the composed script, or none, for a seed with `laws`). Not rerun on plain `origin/main` to show the same four there.
+- An earlier run (`generation-layout1-20261111-193401`) had the same result and also failed "original seeds unchanged", because I regenerated `plan.json` while it ran.
+- `cargo test -p living-rules`: 171 passed, 9 ignored, with `settle::plan::tests::the_cullet_seed_is_valid_and_reachable`; that test refused three earlier drafts of the plan (a lot on a new lane each time), which `land_dump` alone had let through.
+- Not rerun: every other seed, `authored`, `guards`.
+
 
 ## 2026-11-11 rules-3: household stores owned, lots' own door structures (dev-box)
 

@@ -28,7 +28,7 @@ Start it right after launch: the day checks need the world's morning, then the s
 
 - The player is an HTTP identity: after the `takeover_s` law (30 s) without a call the world's minds take its character over and nobody is swept for it (the first attempt's night checks saw nothing). The scene makes a player call (`move 0 0`) before each snapshot, which hands the character back.
 - Started at night (a rerun on the same database), the scene skips the day checks and says so; launch afresh for them. The mirrored dark spot is skipped when it is not open ground with a clear line.
-- `launch` does not install the plain `skills.rhai` on a seed with its own laws (it would drop them); `state.json` records `seed_laws`.
+- `launch` does not install the plain `skills.rhai` on a seed with its own laws (it would drop them); `state.json` records `seed_laws`. It reads the `script` row back against `install_script.py`'s `seed_script` (the seed's laws composed over the shipped script) and stops on a difference, and `doctor` checks the laws (verify skill, Launch and Doctor).
 - `install_script` installs a whole script: installing the shipped one on such a world removes its laws until it is created again.
 - The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it". Since `goods-1` the lamp burns oil and lights only while lit: the seed gives it 8 units (32 game hours, past the scene's night at 21:00); a lamp seeded without fuel is dark and the lamplight check fails.
 - These checks do not measure cost: longer sight and re-projection every sweep cost more per player (docs/CULLET_RULES.md, "Costs").

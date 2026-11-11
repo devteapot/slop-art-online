@@ -152,7 +152,8 @@ fn structures() {
 }
 
 // ---- goods, fires and recipes (docs/WORLD_RULES.md, "Goods, recipes and fuel") ------------
-// Data only: the rules that read these traits are the shipped script's. The chain: kelp is
+// Data only (each item's icon, label and group are what a client shows; a recipe looks like its
+// product): the rules that read these traits are the shipped script's. The chain: kelp is
 // gathered on the Wrack Strand and burnt to ash at any fire; ash and sand are melted into glass
 // at the Cone, a furnace that burns peat; fish are smoked over peat at a smokehouse; roots are
 // baked at an oven; lamp oil is rendered from fish at a fire and burnt in lamps. The numbers are
@@ -162,19 +163,19 @@ fn structures() {
 fn items() {
     base_items() + [
         // Gathered on the shore; burnt to ash (4 to 1).
-        #{ name: "kelp" },
+        #{ name: "kelp", icon: "kelp", label: "kelp", group: "material" },
         // Ash is an alkali: glass takes any alkali.
-        #{ name: "ash", alkali: true },
-        #{ name: "sand" },
-        #{ name: "glass" },
+        #{ name: "ash", alkali: true, icon: "ash", label: "ash", group: "material" },
+        #{ name: "sand", icon: "sand", label: "sand", group: "material" },
+        #{ name: "glass", icon: "glass", label: "glass", group: "glass" },
         // The staple, eaten raw or baked.
-        #{ name: "roots", bakes_to: "baked_roots" },
-        #{ name: "baked_roots" },
-        #{ name: "greens" },
+        #{ name: "roots", bakes_to: "baked_roots", icon: "roots", label: "roots", group: "food" },
+        #{ name: "baked_roots", icon: "baked_roots", label: "baked roots", group: "food" },
+        #{ name: "greens", icon: "greens", label: "greens", group: "food" },
         // Cut on the Moss; what hearths, ovens, smokehouses and the Cone burn.
-        #{ name: "peat", fuel: 1.0 },
+        #{ name: "peat", fuel: 1.0, icon: "peat", label: "peat", group: "fuel" },
         // Rendered from fish; what lamps burn.
-        #{ name: "lamp_oil", oil: 1.0 },
+        #{ name: "lamp_oil", oil: 1.0, icon: "lamp_oil", label: "lamp oil", group: "fuel" },
     ]
 }
 
@@ -288,7 +289,7 @@ fn cullet_resources() {
 
 fn know_how() {
     base_know_how() + [
-        #{ name: "glassmaking", help: "melt ash and sand into glass at a burning furnace", requires: ["fire"] },
+        #{ name: "glassmaking", help: "melt ash and sand into glass at a burning furnace", brief: "glass from ash and sand at the furnace", requires: ["fire"] },
     ]
 }
 
