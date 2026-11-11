@@ -128,6 +128,9 @@ fn rgb_of(c: vec3<f32>) -> vec3<f32> {
 const SHADE_DAY: f32 = 0.30;
 const SHADE_NIGHT: f32 = 0.22;
 const SHADE_NIGHT_COOL: f32 = 0.5;
+// By night, how much brighter it is round me, and out to where (m).
+const NIGHT_LIFT: f32 = 0.8;
+const NIGHT_LIFT_M: f32 = 2.6;
 
 // Shade (the default since play-test 5: "more similar to the shadows than this grey overlay"):
 // what I don't see lies in shadow, in the scene's own shadow tone (the toon shader's hue shift,
@@ -503,6 +506,11 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
             color = look_hatch(color, p, n0, t0, d0, light);
         } else if (edges.sight.w < 1.5 && look == 6) {
             color = look_shade(color, p, reach, r, ground, light);
+            // By night, a little more light round where I stand (my body and the ground at my
+            // feet), so I'm the easiest thing to find in my pool. Presentation only: nothing
+            // is lit for the world.
+            let near = (1.0 - smoothstep(0.6, NIGHT_LIFT_M, length(p.xz - edges.sight.xy))) * ground * (1.0 - light);
+            color = color * (1.0 + NIGHT_LIFT * near);
         } else if (edges.sight.w < 1.5 && look == 5) {
             color = look_memory(color, p, t0, ground, edge * edges.line.a * fade, light);
         } else if (edges.sight.w < 1.5) {

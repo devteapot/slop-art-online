@@ -671,7 +671,9 @@ def field(run, c):
     c.check(s, "F5 turns it on: the field has the law's five values", on.get("on") and all(abs(fv.get(k, -1) - v) < 1e-3 for k, v in want.items() if v is not None) and fv.get("near_m") in (2.0, 3.0), json.dumps(on))
     c.check(s, "the readout shows the five values when it changes", re.search(r"facing: Facing sight on — Focal ±70° · side ±110° at 33% of sight · near [23] m all round · margin 10°", L) is not None)
     toasts = (d["02_on"] or {}).get("toasts") or []
-    c.check(s, "…on screen, as two notes", any(t.startswith("Facing sight on") for t in toasts) and any(t.startswith("Focal ±70°") for t in toasts), str(toasts))
+    note = ((d["02_on"] or {}).get("extra") or {}).get("facing_note") or ""
+    pill = "facing:pill" in ((d["02_on"] or {}).get("tags") or {}) or note.startswith("Facing sight on")
+    c.check(s, "…on screen as a short note at the top (not over my character), the values off the play view", note.startswith("Facing sight on") and pill and not any(t.startswith("Focal ±") for t in toasts), f"note {note!r}; toasts {toasts}")
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     snaps = sc.get("snaps") or {}

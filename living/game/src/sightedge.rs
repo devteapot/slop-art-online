@@ -457,8 +457,7 @@ fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>
     };
     // The look, how light the scene is (the fog's luminance: 0 at night, 1 by day), and whether
     // the memory texture is current (it shares the field's corner).
-    let light = ((fog.dot(Vec3::new(0.2126, 0.7152, 0.0722)) - 0.02) / 0.3).clamp(0.0, 1.0);
-    let light = light * light * (3.0 - 2.0 * light);
+    let light = light_of(fog);
     let memory = field.as_deref().is_some_and(|f| f.valid && f.memory_live);
     e.sight_extra = Vec4::new(edge.look.code(), light, if memory { 1.0 } else { 0.0 }, 0.0);
     // The scene's shadow tone, as `toon_light.wesl`'s `scene()` and `shadow_of` take it: the
@@ -468,6 +467,17 @@ fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>
     e.sight_shade = Vec4::new(hue, style.hue_shift, style.shadow_saturation, style.shadow_depth);
     let [r, g, b] = style.shadow_tint;
     e.sight_tint = Vec4::new(r, g, b, 0.0);
+}
+
+/// How light the scene is (0 night, 1 day), from the fog's luminance, as the finishing pass takes it.
+pub fn light_of(fog: Vec3) -> f32 {
+    let l = ((fog.dot(Vec3::new(0.2126, 0.7152, 0.0722)) - 0.02) / 0.3).clamp(0.0, 1.0);
+    l * l * (3.0 - 2.0 * l)
+}
+
+/// The same from the atmosphere (day when it isn't driving the scene).
+pub fn scene_light(atmo: Option<&crate::daylight::Atmo>) -> f32 {
+    atmo.filter(|a| a.active).map_or(1.0, |a| light_of(a.fog))
 }
 
 /// The hue (0..1) of a colour with some saturation (over 0.02), as the toon shader's

@@ -21,8 +21,10 @@ use std::collections::HashMap;
 /// How long a mark takes to fade in, and out after its row goes (s).
 const FADE_IN: f32 = 0.4;
 const FADE_OUT: f32 = 1.5;
-/// The strongest a mark gets (alpha).
-const ALPHA: f32 = 0.42;
+/// The strongest a mark gets (alpha) and its colour (a cool, faint light): a subtle mark, not a
+/// lamp; it is also dimmed with the scene's light, so it stays faint at night.
+const ALPHA: f32 = 0.2;
+const TINT: [f32; 3] = [0.78, 0.86, 1.0];
 /// The mark eases toward its place at this rate (1/s).
 const EASE: f32 = 4.0;
 
@@ -97,6 +99,7 @@ fn update(
     edge: Res<crate::sightedge::SightEdge>,
     target: Res<crate::controls::Target>,
     island: Option<Res<crate::island::Island>>,
+    atmo: Option<Res<crate::daylight::Atmo>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut tfs: Query<&mut Transform>,
     (time, mut laws): (Res<Time>, Local<Option<(u32, f32, f32)>>),
@@ -114,6 +117,7 @@ fn update(
         }
     }
     let (near_m, close_m) = laws.map_or((5.0, 15.0), |(_, n, c)| (n, c));
+    let light = crate::sightedge::scene_light(atmo.as_deref());
     let hearing = edge.senses.map_or(9.0, |s| s.hearing);
     let Some(me) = target.0.map(|t| Vec2::new(t.x, t.z)) else { return };
     let (mesh, texture) = (marks.mesh.clone(), marks.texture.clone());
@@ -133,7 +137,7 @@ fn update(
                 m.band = r.band;
             }
             None => {
-                let material = mats.add(StandardMaterial { base_color: Color::srgba(1.0, 0.97, 0.9, 0.0), base_color_texture: Some(texture.clone()), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 50.0, ..default() });
+                let material = mats.add(StandardMaterial { base_color: Color::srgba(TINT[0], TINT[1], TINT[2], 0.0), base_color_texture: Some(texture.clone()), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 50.0, ..default() });
                 let entity = commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone()), Transform::from_xyz(want.x, 0.0, want.y), Visibility::Visible, bevy::light::NotShadowCaster)).id();
                 info!("heard: mark {:016x} ({}) to the {}, band {} (~{d:.0} m)", r.key, r.kind, living_rules::sight::COMPASS8[(r.bearing % 8) as usize], r.band);
                 marks.marks.insert(r.key, Mark { kind: r.kind.clone(), bearing: r.bearing, band: r.band, at: want, level: 0.0, live: true, entity, material });
@@ -163,7 +167,8 @@ fn update(
         if let Some(mut mat) = mats.get_mut(&m.material) {
             // Farther, fainter.
             let a = ALPHA * m.level * [1.0, 0.8, 0.6][m.band.min(2) as usize];
-            mat.base_color = Color::srgba(1.0, 0.97, 0.9, a);
+            let k = 0.35 + 0.65 * light;
+            mat.base_color = Color::srgba(TINT[0] * k, TINT[1] * k, TINT[2] * k, a * (0.6 + 0.4 * light));
         }
     }
     for k in gone {
