@@ -800,6 +800,29 @@ A diagnosis came first. Its stills, logs and measurements are in `.local/living/
 - the zoom band, and whether a flick should coast;
 - jump and strafe takes in the clip pipeline would replace the procedural jump and the upper-body twist.
 
+## Feel pass 3 (2026-11-11)
+
+Branch `feel-3`. Evidence and before/after stills are in `.local/living/feel-3/` (git-ignored). Client only; the authority and the rules are unchanged.
+
+- **Moves:**
+  - `living/tools/oneshot_beats.py` finds when a one-shot clip's hands start, peak and settle in the baked take.
+  - The move clips (cast, bow, the three sword takes) now play only their motion. Each starts 0.15 s before its motion, at the rate (0.8–2.2×) that lands the peak on the rules' windup, and fades 0.35 s after it settles. Before, they played whole at 2.2–3.4×.
+- **Guard:** a guard let go comes down at once.
+  - The fighter row keeps its 8 s `release_ms` after a let-go; only `until_ms` is shortened.
+  - The client now treats a row whose end comes before its release as cut short. Before, a guard released after 1 s stayed drawn for 8 s.
+  - The heal "never played" because the rules refused it: "you are not hurt".
+- **Dodge through a bench:** this is the rules' design, not a dash bug. Benches are props that `PropKind::blocks()` leaves passable ("low things"), so walking passes through them too. Making them block would change every world's hosted tiles: a rules decision.
+- **Camera:**
+  - Buildings (lots) are `Solid`. Where the eye would fall inside one, it comes in along its line to the focus until it is clear, at once, and eases back out. A building merely in the way still fades.
+  - Opening the text box no longer frames the nearest person at 8 m; an answer does.
+- **Connection:** until the first connection gets through, the first-load cover says "Can't reach the world", with the server, why, and when it is tried again. It no longer lifts after 30 s onto an empty sky.
+- **Interface:**
+  - Rules names read as words, with a capital.
+  - A list's title is in the title face, over a rule.
+  - Know-how reads "You know  …".
+  - A plate sits behind the bars and the skill bar, and the health bar shows its value.
+  - The pack lists each item's name, its worth as food (muted) and its count (gold), with a carry bar.
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
