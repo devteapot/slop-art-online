@@ -25,7 +25,6 @@ Cullet's speech) of the newcomer at some position sample during a stand:
   once;
 - `thinks`: thoughts during the stands, and `in_prompt` how many of them, and of the
   resident's talk turns, had the newcomer in the prompt (its id in the scene or an experience);
-  `marked`: how many showed the newcomer's scene entry with `"new to you"` (`newcomer_scene_min`);
 - `mention`: replies (thought, intentions, speech; talk replies) naming the newcomer by id;
   `words`: replies with stranger/newcomer/traveller words (noisy: neighbours whose names are out
   of range are "a stranger" too; read the examples);
@@ -197,7 +196,7 @@ def journal_columns(jdir, sid, windows, exp_texts=None):
     out = {}
     for f in sorted(Path(jdir).glob("*.jsonl")):
         name = f.stem.replace("_", " ")
-        col = {"thinks": 0, "in_prompt": 0, "marked": 0, "asked": 0, "mention": 0, "words": 0, "talk": 0, "examples": [], "reasons": []}
+        col = {"thinks": 0, "in_prompt": 0, "asked": 0, "mention": 0, "words": 0, "talk": 0, "examples": [], "reasons": []}
         for e in jl(f):
             at = e.get("at_ms") or 0
             if not any(a <= at <= b for a, b in windows) or e.get("purpose") not in ("think", "talk"):
@@ -216,8 +215,6 @@ def journal_columns(jdir, sid, windows, exp_texts=None):
             else:
                 col["talk"] += 1
             col["in_prompt"] += seen
-            # The scene's own mark (`newcomer_scene_min`): "new to you" in the newcomer's entry.
-            col["marked"] += bool(re.search(r'\{[^{}]*"id": ?%d\b[^{}]*"new to you"|\{[^{}]*"new to you"[^{}]*"id": ?%d\b' % (sid, sid), u))
             m = names_id(rep, sid)
             col["mention"] += m
             if m and e["purpose"] == "think" and "first_mention_ms" not in col:
@@ -423,7 +420,7 @@ def run_report(d):
             "id": i, "name": name, "seen": len(mine),
             "first_s": round((first["at_ms"] - t0) / 1000, 1) if first else None,
             "first_sal": first["salience"] if first else None, "crowd": first is None,
-            "asked": ja.get("asked", 0), "thinks": jc.get("thinks", 0), "in_prompt": jc.get("in_prompt", 0), "marked": jc.get("marked", 0),
+            "asked": ja.get("asked", 0), "thinks": jc.get("thinks", 0), "in_prompt": jc.get("in_prompt", 0),
             "mention": jc.get("mention", 0), "words": jc.get("words", 0),
             "approach": appr, "aimed": len(aim), "aimed_skills": sorted({x[1] for x in aim}), "close": close, "gesture": len(g), "to_them": len(to_them), "about_them": len(about),
             "gazes": len(gazes.get(i, [])), "contact": kind[1] if kind else None, "contact_s": round((kind[0] - t_arrive) / 1000, 1) if kind else None,
@@ -495,7 +492,7 @@ def run_report(d):
         "first_contact": contacts[0][1] + " by " + names.get(contacts[0][2], "?") if contacts else None,
         "first_close_s": round((passes[0][0] - t_arrive) / 1000, 1) if passes else None,
         "first_sight": sum(1 for r in rows if not r["crowd"]), "asked": sum(1 for r in rows if r["asked"]),
-        "in_prompt": sum(r["in_prompt"] for r in rows), "marked": sum(r["marked"] for r in rows), "mention": sum(r["mention"] for r in rows),
+        "in_prompt": sum(r["in_prompt"] for r in rows), "mention": sum(r["mention"] for r in rows),
         "thinks_per_res_min": round(thinks / max(1, len(rows)) / max(minutes, 1e-9), 2),
         "approaches": sum(r["approach"] for r in rows), "aimed": sum(1 for r in rows if r["aimed"]), "gestures": sum(r["gesture"] for r in rows),
         "lines_to": sum(r["to_them"] for r in rows), "lines_about": sum(r["about_them"] for r in rows),
@@ -513,7 +510,7 @@ def run_report(d):
     }
 
 
-COLS = ["run", "variant", "stand_min", "in_range", "first_sight", "asked", "in_prompt", "marked", "mention", "thinks_per_res_min",
+COLS = ["run", "variant", "stand_min", "in_range", "first_sight", "asked", "in_prompt", "mention", "thinks_per_res_min",
         "approaches", "aimed", "gestures", "lines_to", "lines_about", "acted", "acted_share", "first_contact_s", "first_contact", "first_close_s", "calls_min", "tok_min", "usd_h"]
 
 
@@ -564,12 +561,12 @@ def main():
     agg = []
     for (b, v), rs in sorted(groups.items()):
         row = {"batch": b, "variant": v, "n": len(rs)}
-        for c in ["in_range", "first_sight", "asked", "in_prompt", "marked", "mention", "approaches", "aimed", "gestures", "lines_to", "lines_about", "acted_share", "first_contact_s", "thinks_per_res_min", "usd_h"]:
+        for c in ["in_range", "first_sight", "asked", "in_prompt", "mention", "approaches", "aimed", "gestures", "lines_to", "lines_about", "acted_share", "first_contact_s", "thinks_per_res_min", "usd_h"]:
             xs = [r[c] for r in rs if r.get(c) is not None]
             row[c] = f"{statistics.mean(xs):.2f} ({min(xs)}–{max(xs)})" if xs else None
         row["no_contact"] = sum(1 for r in rs if r["first_contact_s"] is None)
         agg.append(row)
-    print(table(agg, ["batch", "variant", "n", "in_range", "first_sight", "asked", "in_prompt", "marked", "mention", "approaches", "aimed", "gestures", "lines_to", "lines_about", "acted_share", "first_contact_s", "no_contact", "thinks_per_res_min", "usd_h"]))
+    print(table(agg, ["batch", "variant", "n", "in_range", "first_sight", "asked", "in_prompt", "mention", "approaches", "aimed", "gestures", "lines_to", "lines_about", "acted_share", "first_contact_s", "no_contact", "thinks_per_res_min", "usd_h"]))
 
     # 1. First contact, by class.
     print("\n## First contact per resident, by class (residents in range, and any who spoke to the newcomer)\n")
@@ -615,7 +612,7 @@ def main():
     print("\n## Residents in range\n")
     for r in runs:
         print(f"### {r['batch']} {r['run']}\n")
-        print(table(r["residents"], ["id", "name", "seen", "first_s", "first_sal", "crowd", "asked", "thinks", "in_prompt", "marked", "mention", "words", "approach", "aimed", "close", "gazes", "gesture", "to_them", "about_them", "contact", "contact_s"]))
+        print(table(r["residents"], ["id", "name", "seen", "first_s", "first_sal", "crowd", "asked", "thinks", "in_prompt", "mention", "words", "approach", "aimed", "close", "gazes", "gesture", "to_them", "about_them", "contact", "contact_s"]))
         for x in r["residents"]:
             for e in x["examples"][:a.examples]:
                 print(f"- {x['name']}: {e}")

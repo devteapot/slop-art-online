@@ -1,10 +1,12 @@
 {
  "extends": "arrive",
  "title": "A stranger arrives, says nothing, and answers once the first who speaks to it: does a conversation follow?",
- "about": "The arrival trial (`arrive`), except that the player answers the first resident who addresses it with one short line (`human.answer`: \"Hello. I'm new here.\", said `to` that resident) and is silent again after it. It runs only with the control and `arrive-all` (`variants`).",
+ "about": "The arrival trial (`arrive`), except that the player answers the first resident who addresses it with one short line (`human.answer`: \"Hello. I'm new here.\", said `to` that resident) and is silent again after it. It runs only with the control (`variants`).",
  "gradient": "When a resident makes contact with a silent newcomer and the newcomer answers once, does a conversation follow (turns, seconds to each reply), or does contact stay a single line? (docs/TRIALS.md, \"Arrivals\")",
  "human": {
   "answer": "Hello. I'm new here."
  },
- "variants": ["arrive-control", "arrive-all"]
+ "variants": [
+  "arrive-control"
+ ]
 }

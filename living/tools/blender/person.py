@@ -63,6 +63,8 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "characters"))  # face_types: the types' data
+import cage_head  # noqa: E402
 import face_paint  # noqa: E402
 import hair  # noqa: E402
 import head_form  # noqa: E402
@@ -121,6 +123,7 @@ SKIN_WARM = (0.80, 0.48, 0.40)
 SKIN_SHADE = (0.66, 0.45, 0.37)
 HAIR = (0.115, 0.09, 0.08)
 HAIR_TIP = (0.20, 0.155, 0.125)
+WHOLE_HEAD = False  # keep the scalp the hair's cap would cover (--parts head)
 RECEDE = 0.0  # how far the front hairline has moved back, m
 BALD = 0.0  # 0 a full head of hair to 1 a bald crown from the forehead back
 STRANDS_PATH = ""  # where the strands' picture is written
@@ -129,7 +132,8 @@ GIRTH = 1.0  # girth of the torso
 BELLY = 0.0  # how far a belly stands forward (a share of the torso's depth)
 CHEST = 0.0  # how much wider and deeper a strong chest is
 LONG = 0.07  # how far a bob hangs below the hairline, m
-HF = None  # the head's form (head_form.Head)
+HF = None  # the head's form (head_form.Head, or cage_head.CageHead for a person of a face type)
+TYPED = False  # the head is a face type's cage, with the identity bones in it
 
 # Materials, by shading kind (the game picks the toon kind from VRoid's name tags): a person is
 # six meshes, one each. Cloth, skin and the face's lines are white with colour per vertex, so
@@ -222,8 +226,13 @@ def make_armature():
     # one slides that iris over the white.
     if HF is not None:
         for side, n in ((-1, "J_Adj_L_FaceEye"), (1, "J_Adj_R_FaceEye")):
-            JOINTS[n] = tuple(hw(head_mesh.eye_ball(HF, side)))
-            PARENT[n] = "J_Bip_C_Head"
+            JOINTS[n] = tuple(hw(HF.eye_pivot(side) if TYPED else head_mesh.eye_ball(HF, side)))
+            PARENT[n] = f"J_Id_Orbit_{'L' if side < 0 else 'R'}" if TYPED else "J_Bip_C_Head"
+    if TYPED:
+        # The identity bones (docs/CHARACTERS.md, "The rig"): under the head, keyed by no clip.
+        for n, pos in cage_head.rig_pivots(HF).items():
+            JOINTS[n] = tuple(hw(pos))
+            PARENT[n] = cage_head.RIG_PARENT[n]
     for n in [n for n in JOINTS if n.startswith("J_Bip_L_")]:
         x, y, z = JOINTS[n]
         JOINTS[mirror_name(n)] = (-x, y, z)
@@ -237,6 +246,8 @@ def make_armature():
     # the file and a pose quaternion is the glTF local rotation (animate.py checks this).
     frame = Matrix.Rotation(math.radians(90), 4, "X")
     order = ["Root"] + [n for n in JOINTS if n != "Root"]
+    # A bone comes after its parent (the eyes' bones hang under the orbits on a typed head).
+    order.sort(key=lambda n: (0 if n == "Root" else 1 if n.startswith("J_Bip") else 2 if n.startswith("J_Id") else 3))
     for n in order:
         eb = data.edit_bones.new(n)
         eb.head = (0, 0, 0)
@@ -939,16 +950,29 @@ def make_face(arm, spec, atlas_path):
     head's surface (positions relative to HEAD, quads) for hair, beards and headwear."""
     look = spec["look"]
     # The scalp is dropped where the hair's cap covers it (well inside the hairline).
-    face = head_mesh.Face(HF, look, keep=lambda c: c[2] < hairline(az_of(c)) + 0.016 or bald_depth(c) > -0.012)
+    # A face type's own file keeps the whole skull: every hair style shares it.
+    keep = lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.016 or bald_depth(c) > -0.012
+    face = cage_head.CageFace(HF, look, keep=keep) if TYPED else head_mesh.Face(HF, look, keep=keep)
     m = face.mesh
     # The iris shares the eye's material (the atlas); highlights are plain colour, as the lines are.
     # The lash lines, brows, highlights and the mouth's inside are one material (plain colour).
-    fm = [dict(iris="eye", face="face", eye="eye").get(k, "line") for k in m.fm]
-    order = [k for k in ("face", "eye", "line") if k in set(fm)]
+    fm = [dict(iris="eye", face="face", eye="eye", under="skin").get(k, "line") for k in m.fm]
+    order = [k for k in ("face", "eye", "line", "skin") if k in set(fm)]
     base = np.array(HEAD)[None, :]
     world = base + np.array(m.v) * HEAD_SCALE
     eye_bone = {-1: "J_Adj_L_FaceEye", 1: "J_Adj_R_FaceEye"}
     weights = [{"J_Bip_C_Head": 1.0} if e is None else ({eye_bone[e[0]]: e[1], "J_Bip_C_Head": 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}) for e in m.eye]
+    if TYPED:
+        # Each vertex's share of the identity bones, by where it lies; an eye's own parts ride its orbit.
+        shares = cage_head.identity_weights(HF, np.array(m.v))
+        for i, e in enumerate(m.eye):
+            if e is None:
+                weights[i] = shares[i]
+            else:
+                orbit = f"J_Id_Orbit_{'L' if e[0] < 0 else 'R'}"
+                weights[i] = {eye_bone[e[0]]: e[1], orbit: 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}
+        for i in face.under_neck:  # the neck's ring turns with the neck
+            weights[i] = {"J_Bip_C_Neck": 0.75, "J_Bip_C_Head": 0.25}
     ob = raw_object("Face", world, m.f, weights, m.col, None, arm, uvs=m.uv, materials=[MAT[k] for k in order], face_mats=[order.index(k) for k in fm])
     ob.shape_key_add(name="Basis", from_mix=False)
     for name, delta in face.morphs.items():
@@ -973,7 +997,7 @@ def make_far_head(arm, spec, picture_path):
     openings; the eyes, lash lines and brows are painted on its skin (face_paint.paint_far).
     Returns the object and the head's surface for hair and headwear."""
     look = spec["look"]
-    face = head_mesh.FarFace(HF, look, keep=lambda c: c[2] < hairline(az_of(c)) + 0.030 or bald_depth(c) > -0.012)
+    face = head_mesh.FarFace(HF, look, keep=lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.030 or bald_depth(c) > -0.012)
     m = face.mesh
     world = np.array(HEAD)[None, :] + np.array(m.v) * HEAD_SCALE
     ob = raw_object("FarHead", world, m.f, [{"J_Bip_C_Head": 1.0}] * len(m.v), m.col, MAT["far"], arm, uvs=m.uv)
@@ -998,6 +1022,9 @@ def make_neck(arm):
         (1.590, -0.016, 0.050, blend(("J_Bip_C_Neck", 0.2), ("J_Bip_C_Head", 0.8))),
         (1.630, -0.012, 0.046, {"J_Bip_C_Head": 1.0}),
     ]
+    if TYPED:
+        # A typed head brings the neck's top with it: the tube ends where the head's ring begins.
+        stations = stations[:2]
     prev = None
     for i, (z, cy, r, w) in enumerate(stations):
         cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), r, r * 1.04, 10, w)
@@ -1564,13 +1591,24 @@ def configure(spec):
     """Set the generator's numbers for a person (person_params.resolve's result)."""
     g = globals()
     look = spec["look"]
+    typed = spec.get("type") is not None
+    if typed:
+        # A person of a face type: the type's cage head, in a character file's own size. Their
+        # values are left to the identity bones, or with `baked` built into the head itself.
+        import face_types
+
+        t = face_types.load()["types"][spec["type"]]
+        head = cage_head.CageHead(face_types.apply(t, {}), masc=spec["masc"], child=spec["child"], elder=spec["elder"])
+    else:
+        head = head_form.Head(masc=spec["masc"], child=spec["child"], elder=spec["elder"], face=spec["face"], style=spec["style"])
     g.update(
-        HF=head_form.Head(masc=spec["masc"], child=spec["child"], elder=spec["elder"], face=spec["face"], style=spec["style"]), HEAD_SCALE=spec["head_scale"], SKIN=look["skin"], SKIN_SHADE=look["skin_shade"], SKIN_WARM=look["skin_warm"],
+        HF=head, TYPED=typed, HEAD_SCALE=1.0 if typed else spec["head_scale"], SKIN=look["skin"], SKIN_SHADE=look["skin_shade"], SKIN_WARM=look["skin_warm"],
         HAIR=look["hair"], HAIR_TIP=look["hair_tip"], RECEDE=spec["recede"], BALD=spec["bald"], LIMB_K=spec["limb"], GIRTH=spec["girth"], BELLY=spec["belly"], CHEST=spec["chest"], LONG=spec["hair_length"],
         TORSO=WOMAN_TORSO if spec["woman_torso"] else MAN_TORSO,
     )
     # The chin stays where the neck expects it, whatever the face's length.
     g["HEAD"] = Vector((0, -0.004, 1.535 - HF.chin_z * HEAD_SCALE))
+
 
 
 def build_person(arm, spec, atlas_path, body=False, bones=None):
@@ -1682,7 +1720,8 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
     obs.append(head)
     obs.append(make_neck(arm))
     covered = dict(kerchief=lambda p: min(kerchief_depth(p), (p[2] + 0.070) * 2), cap=cap_depth).get(spec["headwear"])
-    obs += make_hair(arm, spec, pos, quads, covered, bones)
+    if not WHOLE_HEAD:  # a face type's own file has no hair: a style brings its own, with its spring bones
+        obs += make_hair(arm, spec, pos, quads, covered, bones)
     if spec["headwear"] == "kerchief":
         obs += make_kerchief(arm, pos, quads, spec["headwear_colour"])
     elif spec["headwear"] == "cap":
@@ -1749,6 +1788,75 @@ def bake_shade(obs, strength=0.50, reach=0.11):
         data[:, 1] *= k
         data[:, 2] *= k ** 1.05
         attr.data.foreach_set("color", data.ravel())
+
+
+def spread_head_weights(obs):
+    """On a typed head, what hangs on the head (hair, headwear, the neck's top, the far head)
+    follows the identity bones as the face does: each vertex's weight to `J_Bip_C_Head` is
+    shared out by where the vertex lies."""
+    for ob in obs:
+        g = ob.vertex_groups.get("J_Bip_C_Head")
+        if g is None or ob.name.split(".")[0] == "Face":
+            continue
+        me = ob.data
+        idx, share = [], []
+        for v in me.vertices:
+            w = next((x.weight for x in v.groups if x.group == g.index), 0.0)
+            if w > 1e-4:
+                idx.append(v.index)
+                share.append(w)
+        if not idx:
+            continue
+        pts = np.array([(np.array(me.vertices[i].co) - np.array(HEAD)) / HEAD_SCALE for i in idx])
+        groups = {}
+        for i, w, parts in zip(idx, share, cage_head.identity_weights(HF, pts)):
+            g.remove([i])
+            for n, x in parts.items():
+                vg = groups.get(n) or ob.vertex_groups.get(n) or ob.vertex_groups.new(name=n)
+                groups[n] = vg
+                vg.add([i], w * x, "ADD")
+
+
+def bake_identity(obs, values):
+    """Build a person's identity values into the meshes themselves: every vertex (and every
+    expression's) is moved as the identity bones would move it, by the same rule the client
+    uses (compose.transforms) and the weights the file carries. The bones stay at rest. The
+    result is the same person as the type's file composed by bones, as plain geometry."""
+    mats = cage_head.bone_matrices(HF, values)
+    origin = np.array(HEAD)
+    for ob in obs:
+        me = ob.data
+        names = {g.index: g.name for g in ob.vertex_groups}
+        n = len(me.vertices)
+        # Each vertex's matrix: the bones' own, by weight; what is not an identity bone's stays put.
+        M = np.zeros((n, 4, 4))
+        left = np.ones(n)
+        total = np.zeros(n)
+        for v in me.vertices:
+            for g in v.groups:
+                total[v.index] += g.weight
+        for v in me.vertices:
+            for g in v.groups:
+                name = names[g.group]
+                if name in mats and name != "J_Bip_C_Head" and total[v.index] > 0:
+                    w = g.weight / total[v.index]
+                    M[v.index] += w * mats[name]
+                    left[v.index] -= w
+        M += left[:, None, None] * np.eye(4)[None, :, :]
+
+        def moved(co):
+            p = np.concatenate([co - origin, np.ones((n, 1))], axis=1)
+            return np.einsum("nij,nj->ni", M, p)[:, :3] + origin
+
+        if me.shape_keys:
+            for key in me.shape_keys.key_blocks:
+                co = np.empty(n * 3)
+                key.data.foreach_get("co", co)
+                key.data.foreach_set("co", moved(co.reshape(-1, 3)).ravel())
+        co = np.empty(n * 3)
+        me.vertices.foreach_get("co", co)
+        me.vertices.foreach_set("co", moved(co.reshape(-1, 3)).ravel())
+        me.update()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1888,6 +1996,10 @@ def add_vrm(path, title, springs=None):
     return j
 
 
+CLIENT_MORPHS = ("Fcl_EYE_Close", "Fcl_MTH_A")  # what the game drives (living/game/src/lookdev.rs): the blink and the open mouth
+TYPE_PARTS = ("Face", "Hands", "Neck", "FarHead")  # a face type's file: its head and skin, near and far
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -1897,8 +2009,15 @@ def main():
     ap.add_argument("--look", default="", help="turn the eyes in the file, to look at it: `yaw,pitch` in degrees of the eyes' bones (about 6 is fully aside)")
     ap.add_argument("--body", action="store_true", help="the unclothed form instead of the clothes")
     ap.add_argument("--no-shade", action="store_true", help="leave out the painted shade (bake_shade)")
+    ap.add_argument("--type", dest="face_type", help="a face type (living/tools/characters/types.json): the head is that type's cage, with the identity bones in it")
+    ap.add_argument("--identity", default="", help="the person's identity values, `jaw_width=0.4,eye_size=-0.3` or a JSON object; with --type")
+    ap.add_argument("--loft", action="store_true", help="pass 2's head (head_form's loft with the 34 face values), in place of the person's face type")
+    ap.add_argument("--bake", action="store_true", help="build the identity values into the head itself (the bones stay at rest), to compare with the same person composed by bones")
     ap.add_argument("--lod", default="near", choices=("near", "far", "both"), help="`near` the full model (the default); `far` the far model alone (about 6,000 triangles, for beyond 10 m); "
                     "`both` one file with the two on one skeleton, the far model's meshes named Far*")
+    ap.add_argument("--parts", default="all", choices=("all", "head", "face"), help="`head`: only what a face type's file holds (the whole head, the neck and hands, and the far head with --lod both): no hair, no clothes; "
+                    "`face`: the whole head and neck alone, to photograph a type")
+    ap.add_argument("--morphs", default="all", choices=("all", "client"), help=f"`client`: keep only the expressions the game drives ({', '.join(CLIENT_MORPHS)}); every expression costs each vertex of the face again")
     ap.add_argument("--blend")
     a = ap.parse_args(argv)
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -1913,6 +2032,13 @@ def main():
         raise SystemExit(f"--expression: {sorted(unknown)} not among {sorted(head_mesh.EXPRESSIONS)}")
     if a.look:
         spec["look"]["gaze"] = tuple(float(x) for x in a.look.split(","))
+    if a.loft:
+        spec["type"] = None
+    elif a.face_type or spec.get("type"):
+        ident = {} if a.face_type and not a.identity and a.face_type != params.get("type") else dict(spec.get("identity") or {})
+        if a.identity:
+            ident = json.loads(a.identity) if a.identity.strip().startswith("{") else {k: float(v) for k, v in (x.split("=") for x in a.identity.split(",") if x)}
+        spec.update(type=a.face_type or spec["type"], identity=ident, baked=bool(a.bake))
     configure(spec)
     out = os.path.abspath(a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -1920,9 +2046,10 @@ def main():
     # Beside the model: the person's full parameters (edit and pass back with --params) and the
     # game recipe's height and proportions.
     with open(stem + ".params.json", "w") as f:
-        json.dump(dict(params=params, recipe=spec["recipe"]), f, indent=1)
+        json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"]} if spec.get("type") else {})), f, indent=1)
     g = globals()
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
+    g["WHOLE_HEAD"] = a.parts != "all"
     arm = make_armature()
     obs, tris = [], {}
     for far in (False, True):
@@ -1930,6 +2057,21 @@ def main():
             continue
         g["FAR"] = far
         parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
+        if a.parts != "all":
+            keep = [ob for ob in parts if ob.name.split(".")[0] in (TYPE_PARTS if a.parts == "head" else ("Face", "Neck"))]
+            for ob in parts:
+                if ob not in keep:
+                    bpy.data.objects.remove(ob, do_unlink=True)
+            parts = keep
+        if a.morphs == "client":
+            for ob in parts:
+                if ob.data.shape_keys:
+                    for key in [k for k in ob.data.shape_keys.key_blocks if k.name != "Basis" and k.name not in CLIENT_MORPHS]:
+                        ob.shape_key_remove(key)
+        if TYPED:
+            spread_head_weights(parts)
+            if spec.get("baked") and spec.get("identity"):
+                bake_identity(parts, spec["identity"])
         if not a.no_shade:
             bake_shade(parts)
         for ob in parts:

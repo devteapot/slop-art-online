@@ -1195,45 +1195,6 @@ pub fn name_of(ctx: &ReducerContext, id: u32) -> String {
     ctx.db.character().id().find(id).map(|c| c.name).unwrap_or_else(|| format!("#{id}"))
 }
 
-/// A newcomer came into the world, and was first seen, at least this long after the one who
-/// sees them: those there from one's first moments (a seeded world's people, who all begin
-/// together and have no shared past in the rows) are not newcomers to one.
-pub const NEWCOMER_AFTER_MS: u64 = 10_000;
-
-/// Whether `other` is a newcomer to `observer` (the `newcomer_*` laws, docs/TRIALS.md,
-/// "Arrivals"): a person who came into the world (joined, arrived or was born) and was first
-/// seen (`first_ms`, the observer's bodily familiarity) more than [`NEWCOMER_AFTER_MS`] after the
-/// observer came into it, and who is not of the observer's community. Two or three indexed
-/// reads.
-pub fn newcomer(ctx: &ReducerContext, observer: &Character, other: u32, first_ms: u64) -> bool {
-    let after = observer.born_ms.saturating_add(NEWCOMER_AFTER_MS);
-    if other == observer.id || first_ms < after {
-        return false;
-    }
-    if ctx.db.character().id().find(other).map_or(true, |o| &*o.kind != "person" || o.born_ms < after) {
-        return false;
-    }
-    let mine = ctx.db.membership().member().find(observer.id).map(|m| m.community);
-    mine.is_none() || ctx.db.membership().member().find(other).map(|m| m.community) != mine
-}
-
-/// When `observer` first saw `other` (its bodily familiarity), if it has.
-pub fn first_seen(ctx: &ReducerContext, observer: u32, other: u32) -> Option<u64> {
-    ctx.db.familiar().by_actor_thing().filter((observer, FAM_CREATURE | other as u64)).next().map(|f| f.first_ms)
-}
-
-/// "2 minutes", "40 seconds", "a moment": how long ago, in words for a mind.
-pub fn ago_words(ms: u64) -> String {
-    let s = ms / 1000;
-    if s < 5 {
-        "a moment".to_string()
-    } else if s < 90 {
-        format!("{s} seconds")
-    } else {
-        format!("{} minutes", (s + 30) / 60)
-    }
-}
-
 /// How `observer` refers to `id`: by name when it knows it, otherwise as a stranger or by
 /// kind (`crate::perception::label`: the `perceived_of` law's projection).
 pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String {

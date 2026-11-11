@@ -1720,7 +1720,7 @@ class Instance:
         subj = self.trial["subject"]
         if subj.get("join"):
             # `after_s`: the world lives that long before the player joins (the residents have
-            # seen each other first; a newcomer is someone first seen later, docs/TRIALS.md).
+            # seen each other first, and the player is the one stranger among them).
             time.sleep(subj["join"].get("after_s", 0))
             self.player = Player(self, subj["join"]["name"])
             self.roles["subject"] = [self.player.join()]

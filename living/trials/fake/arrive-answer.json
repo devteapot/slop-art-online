@@ -1,5 +1,5 @@
 {
- "about": "Proof only, for the arrival trial's follow-through (arrive_report.py): latency.json, plus every thought whose prompt marks someone \"new to you\" (newcomer_scene_min) say a line to #13, the joined player of a hamlet world (12 seeded people, so the player is the 13th character). Real minds decide for themselves; this only makes a resident address the newcomer so that the player's one answer and the exchange after it can be measured with fakes.",
+ "about": "Proof only, for the arrival trial's follow-through (arrive_report.py): latency.json, plus every thought whose prompt's scene has #13 in sight (the joined player of a hamlet world: 12 seeded people, so the player is the 13th character) says a line to #13. Real minds decide for themselves; this only makes a resident address the player so that the player's one answer and the exchange after it can be measured with fakes. (Until 2026-11-12 it keyed on the scene's \"new to you\" mark, which came with the rejected newcomer laws.)",
  "replies": {
   "talk": {
    "thought": "I heard you.",
@@ -13,13 +13,13 @@
  "rules": [
   {
    "purpose": "think",
-   "contains": "new to you",
+   "contains": "\\\"id\\\":13,",
    "delay_s": 5.0,
    "times": -1,
    "reply": {
     "thought": "verify fake: someone new is here.",
     "intend": [
-     "greet the newcomer"
+     "greet the stranger"
     ],
     "say": {
      "text": "Hello there. Are you new here?",

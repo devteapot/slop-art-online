@@ -248,7 +248,18 @@ fn link(mut admin: NonSendMut<AdminLink>, mut st: ResMut<FovState>, net: NonSend
         info!("laws: asking set_world_law(\"{name}\", \"{value}\")");
         let inbox = admin.inbox.clone();
         let (n, v) = (name.clone(), value.clone());
-        let r = conn.reducers.set_world_law_then(name, value, move |_, r| {
+        // In the session's action log (`actions.rs`) like every other call: the law and its
+        // value, never the admin token (it is the connection's, not an argument).
+        let sent = crate::actions::sent("set_world_law", "law", || serde_json::json!({"name": name, "value": value, "link": "admin"}));
+        let r = conn.reducers.set_world_law_then(name, value, move |ctx, r| {
+            if let Some(s) = sent {
+                let reply = match &r {
+                    Ok(Ok(())) => crate::actions::Reply::Ok,
+                    Ok(Err(e)) => crate::actions::Reply::Refused(e.clone()),
+                    Err(e) => crate::actions::Reply::Failed(e.to_string()),
+                };
+                crate::actions::replied(s, reply, Some(ctx.event.timestamp.to_micros_since_unix_epoch()));
+            }
             let r = match r {
                 Ok(o) => o,
                 Err(e) => Err(e.to_string()),
@@ -256,6 +267,9 @@ fn link(mut admin: NonSendMut<AdminLink>, mut st: ResMut<FovState>, net: NonSend
             inbox.lock().unwrap().push(Signal::Reply(n, v, r));
         });
         if let Err(e) = r {
+            if let Some(s) = sent {
+                crate::actions::not_sent(s, e.to_string());
+            }
             warn!("laws: set_world_law could not be sent: {e}");
         }
     }

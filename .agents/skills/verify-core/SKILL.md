@@ -123,13 +123,15 @@ python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.t
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
 
-# Goods, fires that eat fuel and recipes over Cullet's goods (about 7 min), and a seeded
+# Goods, fires that eat fuel and recipes over Cullet's goods (about 9 min), and a seeded
 # fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).
 G=$R-goods
 mkdir -p ".local/living/verify/$G"
 python3 "$V" launch --run "$G" --seed "$PWD/$C/goods" > ".local/living/verify/$G/launch.txt" 2>&1
 python3 "$C/scenes.py" goods --run "$G" > ".local/living/verify/$G/goods.txt" 2>&1
 python3 "$C/scenes.py" stock --run "$G" > ".local/living/verify/$G/stock.txt" 2>&1
+# Crafting, cooking and smoking as recipes, by acts and by an old graph (features/goods.md).
+python3 "$C/scenes.py" making --run "$G" > ".local/living/verify/$G/making.txt" 2>&1
 python3 "$V" cleanup --run "$G" > ".local/living/verify/$G/cleanup.txt" 2>&1
 
 # A world's own day and laws (about 30 min; it waits for the world's own night):
@@ -140,14 +142,6 @@ mkdir -p ".local/living/verify/$W"
 python3 "$V" launch --run "$W" --seed cullet-laws > ".local/living/verify/$W/launch.txt" 2>&1
 python3 "$C/scenes.py" laws --run "$W" > ".local/living/verify/$W/laws.txt" 2>&1
 python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
-
-# The newcomer laws (about 3 min on a hamlet world; off in the shipped rules): a crowd, a
-# first sight near home, the scene's "new to you", wondering (features/sight.md, docs/TRIALS.md).
-N=$R-newcomers
-mkdir -p ".local/living/verify/$N"
-python3 "$V" launch --run "$N" --seed hamlet > ".local/living/verify/$N/launch.txt" 2>&1
-python3 "$C/scenes.py" newcomers --run "$N" > ".local/living/verify/$N/newcomers.txt" 2>&1
-python3 "$V" cleanup --run "$N" > ".local/living/verify/$N/cleanup.txt" 2>&1
 
 # Spoiling and regrowth in game time on a world's own day (features/laws.md#decay; a whole
 # Cullet game day is 48 real minutes, `--game-hours 2` about 5 minutes): raw fish carried and

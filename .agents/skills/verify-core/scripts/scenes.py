@@ -98,23 +98,6 @@ class Scene:
     def act(self, actor, node):
         self.call("mind_act", actor, [json.dumps(node)], "verify-core")
 
-    def install(self, source):
-        """`install_script` over HTTP with the owner's token (kept in memory): a world's
-        composed script (a seed's laws overlay over the shipped file) is longer than one
-        command-line argument may be (128 KiB)."""
-        import os
-        import urllib.request
-        out = self.command("login", "show", "--token").stdout
-        token = next(l.split(" is ", 1)[1].strip() for l in out.splitlines() if "auth token" in l and " is " in l)
-        base = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
-        req = urllib.request.Request(f"{base}/v1/database/{self.db}/call/install_script", data=json.dumps([source]).encode(), method="POST",
-                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=120) as r:
-            with self.log.open("a") as f:
-                f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": ["install_script (http)", len(source)], "exit": 0 if r.status == 200 else r.status}) + "\n")
-            if r.status != 200:
-                raise RuntimeError(f"install_script: {r.status}")
-
     def people(self, n):
         before = {c["id"] for c in self.rows("SELECT id FROM character")}
         self.call("spawn_crowd", n, True)
@@ -1861,122 +1844,6 @@ def family_laws(s):
         s.call("install_script", shipped)
 
 
-def newcomers(s):
-    """The newcomer laws (docs/TRIALS.md, "Arrivals") on a hamlet world, whose residents have
-    homes and communities. A watcher stands at its home door with seven neighbours around it (a
-    crowd: more than `crowd` people in sight), all waiting. Shipped laws: a newcomer
-    (`spawn_newcomer`, no community) placed 4 m away is hidden by the crowd; once the crowd has
-    gone, the watcher's first sight of them is 0.45, without "near your home", asks for no
-    thought, and the scene marks no one new. Laws on (the installed script's
-    `newcomer_salience` 0.5, `newcomer_scene_min` 30, `newcomer_drive_s` 20): a second
-    newcomer placed 4 m away in the crowd is seen at once, "near your home", at 0.45 + 0.5 x 0.5
-    = 0.7 (the watcher has no persona, so curiosity and sociability are 50), which asks for a
-    thought; the request's scene marks them "new to you" and no neighbour; about 20 s after the
-    first sight the watcher wonders about them, and about no neighbour. The world's script is
-    installed again at the end."""
-    src = s.rows("SELECT * FROM script WHERE name = 'skills'")[0]["source"]
-    for fn, v in (("newcomer_salience", "0.0"), ("newcomer_scene_min", "0.0"), ("newcomer_drive_s", "0.0")):
-        s.expect(f"the shipped {fn} is {v}", src.count(f"fn {fn}(kind) {{ {v} }}") == 1)
-    people = s.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true", "people")
-    member = {m["member"]: m["community"] for m in s.rows("SELECT * FROM membership", "membership")}
-    homed = [c for c in people if c["stage"] == 2 and c["id"] in member and (c["home_x"], c["home_y"]) != (0, 0)]
-    s.expect("an adult with a home and a community", bool(homed), [c["id"] for c in people])
-    w = homed[0]
-    crowd = [c["id"] for c in people if c["id"] != w["id"] and c["stage"] >= 1][:7]
-    s.expect("seven neighbours for a crowd", len(crowd) == 7, crowd)
-    home = (w["home_x"], w["home_y"])
-    thought = {"kind": "verify", "summary": "scripted acknowledgement, no model", "detail": "", "latency_ms": 0, "tokens": 0, "model": "none", "reference": "verify-core-newcomers"}
-
-    def clear():
-        for d in s.rows(f"SELECT * FROM deliberation WHERE actor = {w['id']}"):
-            s.call("mind_skip", d["actor"], d["updated_ms"], thought)
-
-    def gather():
-        s.call("place_at", w["id"], *home)
-        for k, c in enumerate(crowd):
-            ang = 2 * math.pi * k / len(crowd)
-            s.call("place_at", c, home[0] + 2.5 * math.cos(ang), home[1] + 2.5 * math.sin(ang))
-
-    def disperse():
-        # Far out of the watcher's sight (Cullet's 48 m by day): the crowd is over.
-        for k, c in enumerate(crowd):
-            s.call("place_at", c, *far[k % len(far)])
-
-    for c in [w["id"], *crowd]:
-        s.graph(c, {"wait": 600})
-    # Everyone else (the rest of the hamlet, newcomers an earlier attempt left) out of sight.
-    rest = [c["id"] for c in s.rows("SELECT * FROM character WHERE alive = true", "everyone") if c["id"] not in [w["id"], *crowd]]
-    # Spots far from the watcher's home for the crowd to go to.
-    far = []
-    for ring in (70, 60, 55):
-        for k in range(16):
-            p = (home[0] + ring * math.cos(k * math.pi / 8), home[1] + ring * math.sin(k * math.pi / 8))
-            if 2 < p[0] < 94 and 2 < p[1] < 94:
-                far.append(p)
-    s.expect("room far from the watcher", len(far) >= 3, far)
-    for k, c in enumerate(rest):
-        s.graph(c, {"wait": 600})
-        s.call("place_at", c, *far[(k + 3) % len(far)])
-
-    def newcomer(name):
-        before = {c["id"] for c in s.rows("SELECT id FROM character")}
-        s.call("spawn_newcomer", name)
-        made = [c["id"] for c in s.rows("SELECT id FROM character") if c["id"] not in before]
-        s.expect(f"newcomer {name} arrives", len(made) == 1, made)
-        s.graph(made[0], {"wait": 600})
-        return made[0]
-
-    def sights(of, label=None):
-        return [e for e in s.rows(f"SELECT * FROM experience WHERE observer = {w['id']}", label) if e["subject"] == of and e["kind"] == "saw"]
-
-    try:
-        # ---- shipped laws
-        gather()
-        clear()
-        time.sleep(22)  # past the species' think_min_s (20 s) after the cleared request
-        n1 = newcomer("Arden")
-        s.call("place_at", n1, home[0] + 4.0, home[1])
-        time.sleep(8)
-        s.expect("shipped: the crowd hides the newcomer", not sights(n1, "shipped-crowd"), sights(n1))
-        disperse()
-        first = s.wait(lambda: sights(n1), seconds=20)
-        s.expect("shipped: first sight at 0.45, not near home", abs(first[0]["salience"] - 0.45) < 1e-4 and "near your home" not in first[0]["text"], first[0])
-        d = s.rows(f"SELECT * FROM deliberation WHERE actor = {w['id']}", "shipped-deliberation")
-        s.expect("shipped: the sight asks for no thought", not any(first[0]["text"] in x["reason"] for x in d), d)
-        if d:
-            scene = json.loads(d[0]["scene"])
-            s.expect("shipped: the scene marks no one new", not any("new to you" in c for c in scene.get("creatures", [])), scene.get("creatures"))
-        # ---- laws on
-        on = src.replace("fn newcomer_salience(kind) { 0.0 }", "fn newcomer_salience(kind) { 0.5 }") \
-                .replace("fn newcomer_scene_min(kind) { 0.0 }", "fn newcomer_scene_min(kind) { 30.0 }") \
-                .replace("fn newcomer_drive_s(kind) { 0.0 }", "fn newcomer_drive_s(kind) { 20.0 }")
-        s.install(on)
-        s.call("place_at", n1, *far[-1])
-        gather()
-        clear()
-        time.sleep(22)
-        n2 = newcomer("Brin")
-        s.call("place_at", n2, home[0] + 4.0, home[1])
-        seen = s.wait(lambda: sights(n2, "on-crowd"), seconds=20)
-        t_seen = seen[0]["at_ms"]
-        s.expect("on: a newcomer near home is seen in a crowd, near your home", "near your home" in seen[0]["text"], seen[0])
-        s.expect("on: at 0.45 + 0.5 x 0.5 = 0.7", abs(seen[0]["salience"] - 0.7) < 1e-4, seen[0]["salience"])
-        d = s.wait(lambda: [x for x in s.rows(f"SELECT * FROM deliberation WHERE actor = {w['id']}", "on-deliberation") if seen[0]["text"] in x["reason"]], seconds=10)
-        s.expect("on: the sight asks for a thought about it", bool(d), d)
-        scene = json.loads(d[0]["scene"])
-        (s.out / "newcomers-on-scene.json").write_text(json.dumps(scene, indent=2) + "\n")
-        marked = {c["id"]: c.get("new to you") for c in scene.get("creatures", []) if "new to you" in c}
-        s.expect("on: the scene marks the newcomer new to you, and no neighbour", n2 in marked and not (set(marked) & set(crowd)), marked)
-        felt = s.wait(lambda: [e for e in s.rows(f"SELECT * FROM experience WHERE observer = {w['id']}") if e["kind"] == "feeling" and "wondering about" in e["text"]], seconds=60, every=2)
-        s.rows(f"SELECT * FROM experience WHERE observer = {w['id']}", "on-experiences")
-        s.expect("on: the watcher wonders about the newcomer", felt[0]["subject"] == n2, felt)
-        after = (felt[0]["at_ms"] - t_seen) / 1000
-        s.expect("on: about 20 s after the first sight", 18 <= after <= 40, after)
-        s.expect("on: and about no neighbour", not [e for e in felt if e["subject"] in crowd], felt)
-    finally:
-        s.install(src)
-
-
 def tile_grid(s):
     """This world's tiles: (width, height, bytes), and whether a tile can be walked."""
     w = s.rows("SELECT width, height FROM world")[0]
@@ -2459,13 +2326,13 @@ def placement(s):
              {"request": deep, "exit": r.returncode, "error": out[-300:]})
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "newcomers": newcomers}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience}
 
 
 def goods(s):
     """Goods are script data matched by trait, and fires eat fuel (docs/WORLD_RULES.md, "Goods,
-    recipes and fuel"), on the goods fixture: Cullet's goods (living/scripts/cullet_goods.rhai)
-    installed over the shipped rules; kelp, peat and sand gathered from nodes placed beside a
+    recipes and fuel"), on the goods fixture: Cullet's goods (the goods section of
+    living/seeds/worlds/cullet/laws.rhai) composed over the shipped rules; kelp, peat and sand gathered from nodes placed beside a
     person; kelp burnt to ash at a hearth fed with peat; ash and sand melted to glass at a
     furnace, drawing a unit of its fuel; the hearth going out on its own, refusing what needs it
     burning, and lit again only by someone who knows fire; warmth only while it burns; a seeded
@@ -2831,7 +2698,67 @@ def winter(s):
              {"heard": heard(a, "", t0), "row": rrow, "would_have_grown_at_full_rate": grown_full, "winter_left_ms": winter1 - now()})
 
 
+def making(s):
+    """Crafting, cooking and smoking are recipes of one table made by one mechanism (recipes-1,
+    docs/WORLD_RULES.md "One table of what is made"), on the goods fixture (Cullet's laws, whose
+    recipes() is base_recipes() + its own): a person cooks fish at the seeded hearth that burns
+    peat, by an act and by an old behaviour graph naming `cook`; is refused smoking and crafting
+    a spear in the old words until they know how; then smokes meat and crafts a spear. Cooking at
+    a fire that eats fuel draws none of it."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    s.expect("the world was made with Cullet's laws over the shipped recipes", "base_recipes() +" in src and "fn craft_making()" in src)
+    hearth = next(r for r in s.rows("SELECT * FROM structure", "seeded-structures") if r["kind"] == "hearth")
+
+    def now():
+        return s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def heard(actor, words, since):
+        return [r["text"] for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {actor}") if r["at_ms"] >= since and words in r["text"]]
+
+    people = [c["id"] for c in s.rows("SELECT id, kind FROM character") if c["kind"] == "person"]
+    a = people[0]
+    for p in people:
+        s.graph(p, {"wait": 120})
+    s.call("place_at", a, hearth["x"] - 1.0, hearth["y"])
+    s.call("grant_know_how", a, "cooking")
+    for item, n in (("fish", 2), ("meat", 1), ("wood", 2), ("stone", 1)):
+        s.call("grant_items", a, item, n)
+    before = s.inventory(a, "before")
+    lit_before = s.rows(f"SELECT lit_until_ms FROM structure WHERE id = {hearth['id']}")[0]["lit_until_ms"]
+    s.expect("the seeded hearth burns", lit_before > now(), {"lit_until_ms": lit_before, "now": now()})
+
+    # Cooking by an act, then by an old graph naming the skill as before.
+    s.act(a, {"do": "cook", "item": "fish", "target": {"nearest": "hearth"}})
+    s.wait(lambda: s.inventory(a).get("cooked_fish", 0) >= 1, seconds=30)
+    inv = s.inventory(a, "cooked-by-act")
+    s.expect("cook fish at a burning hearth makes cooked fish from one fish", inv.get("cooked_fish") == 1 and inv.get("fish") == before["fish"] - 1, inv)
+    s.graph(a, {"seq": [{"do": "cook", "item": "fish", "target": {"nearest": "hearth"}}, {"wait": 120}]})
+    s.wait(lambda: s.inventory(a).get("cooked_fish", 0) >= 2, seconds=30)
+    inv = s.inventory(a, "cooked-by-graph")
+    s.expect("an old graph naming cook still cooks", inv.get("cooked_fish") == 2 and inv.get("fish", 0) == 0, inv)
+    lit_after = s.rows(f"SELECT lit_until_ms FROM structure WHERE id = {hearth['id']}", "hearth-after-cooking")[0]["lit_until_ms"]
+    s.expect("cooking draws no fuel from the hearth", lit_after == lit_before, {"before": lit_before, "after": lit_after})
+
+    # Refused in the old words until known.
+    t0 = now()
+    s.graph(a, {"wait": 120})
+    s.act(a, {"do": "smoke", "item": "meat", "target": {"nearest": "hearth"}})
+    s.act(a, {"do": "craft", "item": "spear"})
+    s.wait(lambda: len(heard(a, "did not work out", t0)) >= 2, seconds=30)
+    s.expect("smoking unknown is refused as before", heard(a, "you don't know how to smoke food", t0), heard(a, "", t0))
+    s.expect("crafting a spear unknown is refused as before", heard(a, "you don't know how to make a spear", t0), heard(a, "", t0))
+
+    s.call("grant_know_how", a, "smoking")
+    s.call("grant_know_how", a, "spear")
+    s.act(a, {"do": "smoke", "item": "meat", "target": {"nearest": "hearth"}})
+    s.act(a, {"do": "craft", "item": "spear"})
+    s.wait(lambda: s.inventory(a).get("spear", 0) >= 1 and s.inventory(a).get("smoked_meat", 0) >= 1, seconds=60)
+    inv = s.inventory(a, "after")
+    s.expect("smoke meat makes smoked meat; craft spear uses 2 wood and 1 stone", inv.get("smoked_meat") == 1 and inv.get("meat", 0) == 0 and inv.get("spear") == 1 and inv.get("wood", 0) == before.get("wood", 0) - 2 and inv.get("stone", 0) == before.get("stone", 0) - 1, {"before": before, "after": inv})
+
+
 SCENES["goods"] = goods
+SCENES["making"] = making
 SCENES["stock"] = stock
 SCENES["decay"] = decay
 SCENES["winter"] = winter

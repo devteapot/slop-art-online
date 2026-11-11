@@ -424,7 +424,6 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
     let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, r, now);
-    let newcomer_min = common::scripts(ctx).newcomers(&me.kind).scene_min;
     for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
         let seen = crate::perception::project(ctx, &me, &ch, now);
@@ -437,14 +436,6 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
         if my_community.is_some() && ctx.db.membership().member().find(c.id).map(|m| m.community) == my_community {
             o.insert("community".into(), json!("yours"));
-        }
-        // `newcomer_scene_min` (0, the shipped value, marks no one): a newcomer first seen
-        // within so many minutes is new to you, with how long ago one first saw them.
-        if newcomer_min > 0.0 && ch.kind == "person" {
-            let first = common::first_seen(ctx, id, c.id).unwrap_or(now);
-            if now.saturating_sub(first) as f32 <= newcomer_min * 60_000.0 && common::newcomer(ctx, &me, c.id, first) {
-                o.insert("new to you".into(), json!(format!("first seen {} ago", common::ago_words(now.saturating_sub(first)))));
-            }
         }
         o.insert("kind".into(), json!(ch.kind));
         match ch.stage {
