@@ -42,7 +42,8 @@ python3 living/tools/characters/town.py x --write-town cullet.json      # save t
 
 # What a crowd of them costs in the game: frame time, triangles, materials, draws and memory.
 python3 living/tools/characters/crowd.py .local/town .local/crowd      # 64 of ours, 64 VRoid, and the empty scene
-python3 living/tools/characters/crowd.py .local/town .local/crowd --runs ours --perf nooutlines --tag -nooutlines
+python3 living/tools/characters/crowd.py .local/town .local/crowd --runs ours --perf nooutlines --tag=-nooutlines
+python3 living/tools/characters/crowd.py .local/town .local/crowd --runs same --tag=-one                   # 64 people, all one file
 
 # The eyes turned in the file, to photograph a look (degrees of the eyes' bones; about 6 is fully aside).
 blender -b -P living/tools/blender/person.py -- --variant woman --look 6,0 --out x.glb
@@ -58,11 +59,14 @@ python3 living/tools/characters/media.py .local/cap .local/page .local/town .loc
 python3 living/tools/characters/page.py .local/page
 ```
 
-A pass is also published through the asset board, the record of which version the owner accepted (`docs/ASSET_BOARD.md` and `living/tools/board/board.py`, on branch `tool-6` at the time of writing). Pass 1 is there as the `character:*` families' versions `20261111-0df94138-…`, each beside the spike's accepted version and the VRoid control; its records are in `living/assets/board/`.
+A pass is also published through the asset board, the record of which version the owner accepted (`docs/ASSET_BOARD.md` and `living/tools/board/board.py`). Its records are in `living/assets/board/`.
+
+- Pass 1 is the `character:*` families' versions `20261111-0df94138-…`, which the owner accepted as the base.
+- Pass 2 is their versions `20261111-f32f73f9-…`, each beside pass 1 and the VRoid control `vroid=recipe:shino`, photographed with the same shots and clips.
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
-`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes (`KIMODO_DIR`, default `.local/kimodo/outputs/library`); it bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes the entries whose takes are all there, for a machine whose copy of the library is behind `clips.json` (on 2026-11-11 the dev-box had 30 of 67: the takes of the re-made town motions and of the new locomotion clips had not reached it). The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and the whole library (34 clips) about a minute. 64 people with `idle` and `walk` and their photographs took under 4 minutes on eight cores (dev-box, 2026-11-11).
+`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes (`KIMODO_DIR`, default `.local/kimodo/outputs/library`); it bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes the entries whose takes are all there, for a machine whose copy of the library is behind `clips.json` (on 2026-11-11 the dev-box had 30 of 67: the takes of the re-made town motions and of the new locomotion clips had not reached it). The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person).
 
 ## A person's parameters
 
@@ -290,6 +294,45 @@ The controls `lookdev/vroid-Sendagaya_Shino.glb` and `vroid-Vivi.glb` were taken
 | 41 morph targets `Fcl_ALL_*`, `Fcl_BRW_*`, `Fcl_EYE_*`, `Fcl_MTH_*` | Expressions and visemes | 15, built from five controls (each lid, a joyful close, jaw, mouth width, corners, brow ends) |
 | Face normals come sculpted; the game flattens them and shades from a map (`face_normals.py`) | A clean shadow edge that sweeps the face | Unchanged; our UVs wrap the whole head, so faces across the seam at the back have their own vertices |
 | 30 textures, 10.7 MiB a character | | 1 texture, 0.1 to 0.3 MiB |
+
+## Crowd cost
+
+Measured in pass 2 (2026-11-11), before Cullet is built with these people, with `living/tools/characters/crowd.py`.
+
+- **What was run.** 64 generated people from `town.py`'s stand-in town, each a different file, in the game's own crowd (`LIVING_GAME_CROWD`) in the open `meadow` environment at the default game camera (22 m, 28° down), every one playing `idle`. Headless, uncapped, 1600×900, `LIVING_GAME_PERF=frames,diag`. Beside it: the empty scene, 64 of the VRoid bases the game used before, and 64 of ours that are all one file.
+- **The machine.** The dev-box, AMD Radeon 8060S integrated graphics, building for other workers throughout (load average 12 to 35 on 32 threads). The same run varied by a factor of two between rounds, so each frame time is the median of 4 interleaved rounds with the least and the most. The counts and the process memory do not depend on load.
+- **How the people get into the crowd.** The crowd draws its bases from `recipes.json`'s `bases`. For the run the tool writes a temporary `recipes.json` whose list puts a different person at each index the crowd's seeded draws land on, and restores the file afterwards. The game is not changed.
+
+| At the game camera, 1600×900, uncapped | Empty meadow (you alone) | 64 VRoid bases (2 files) | 64 of ours, all one file | 64 of ours, 64 files |
+|---|---|---|---|---|
+| Different character files | 1 | 2 | 2 | 65 |
+| Frame time, mean: median of 4 rounds (least to most) | 8.13 ms (5.32 to 13.52) | 23.34 ms (13.01 to 38.97) | 18.86 ms (8.32 to 23.55) | 27.09 ms (12.79 to 44.77) |
+| GPU time of the render passes: median (least to most) | 1.8 ms (1.13 to 3.74) | 3.76 ms (2.31 to 7.64) | 2.74 ms (2.02 to 6.91) | 5.38 ms (4.07 to 12.49) |
+| Load average while measuring: median (least to most) | 27.4 (9.5 to 31.8) | 25.9 (10.7 to 54.5) | 25.0 (11.8 to 70.7) | 27.8 (13.2 to 72.4) |
+| Triangles in the camera's view, people only | 31k | 1,846k | 2,210k | 2,085k |
+| Meshes drawn in the camera's view, people only | 18 | 1,136 | 850 | 816 |
+| Materials on people in view | 17 | 33 | 23 | 212 |
+| Each shadow cascade: meshes / triangles | 228 / 60k | 228 / 60k | 228 / 60k | 248 / 123k |
+| Spring bones: joints simulated | 65 | 3,738 | 79 | 256 |
+| Process memory, peak resident: median (least to most) | 2455 MiB (2142 to 2840) | 2387 MiB (2039 to 2585) | 2346 MiB (1858 to 2451) | 5416 MiB (5211 to 5612) |
+| Graphics memory of the process: median (least to most) | 3714 MiB (2919 to 4204) | 3274 MiB (2485 to 3286) | 3759 MiB (2686 to 4574) | 4970 MiB (4357 to 6173) |
+
+What it says:
+
+- **Frame time.** 64 different files cost more than 64 of one file in every round (medians 27.09 ms against 18.86 ms), and more than the VRoid crowd in three rounds of four; the two crowds' ranges overlap (12.79 to 44.77 ms ours, 13.01 to 38.97 ms VRoid). In the quietest round (load average about 10 to 13) the figures were: empty 5.8 ms, VRoid 13.0 ms, ours from one file 8.6 ms, ours from 64 files 19.2 ms. This does not establish the 60 FPS target either way: that needs a quiet machine, Cullet's buildings and the town running.
+- **Triangles are not the difference:** 2.1 million in view for ours, 1.8 million for the VRoid crowd, and fewer meshes (816 against 1,136).
+- **Materials are:** 212 on 64 different people, 23 when they are one file, 33 for the VRoid crowd. Each person's face, eye and hair materials are their own, because each file carries its own textures. `living/game/src/perf.rs` notes that each distinct material and mesh is a batch set per view and pass, and that this per-batch work usually limits the frame.
+- **Memory is:** about 49 MiB of process memory and 19 MiB of graphics memory for each different person (5,416 MiB peak with 64 files against 2,346 MiB with one). Not split into textures, meshes, morph targets and clips.
+- **Spring bones are small:** 256 hair joints simulated for ours, 3,738 for the VRoid crowd.
+
+What level of detail and atlasing Cullet needs, in order of gain:
+
+1. **Shared materials.** Ship the strand texture once (it is the same file for everyone) or have the loader join identical images: 64 hair materials become one. Put the town's faces on shared pages: 64 atlases at 512² fit one 4096² page or a texture array, so the face, eye and hair materials of everyone not close to the camera become three. `town.py` can build the page and rewrite the UVs; the face shadow maps go the same way.
+2. **A far model** beyond about 10 m, written by the generator beside the full one: about 6,000 triangles in place of 29,000 to 37,000 (the face 10,000 to about 1,200, hands 4,500 to 600, the hair's cap 2,700 to 700, locks at half their segments).
+3. **Fewer meshes a person:** 12.6 now; 6 when joined by shading kind (cloth, skin, face lines, face, eyes, hair). The clothes' separate materials exist for the VRoid recipe colour slots, which generated people do not use.
+4. **Memory:** the full 1024² atlas only near the camera; clips stored once and shared (every file carries the same clips on the same skeleton); and a split of the 49 MiB a person before choosing more.
+
+Not established: 64 people walking Cullet with its buildings, lamps and weather, a player moving and minds running.
 
 ## What still separates ours from the reference
 

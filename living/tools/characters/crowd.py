@@ -3,7 +3,7 @@
 and memory, with every person a different file, at the game camera.
 
     python3 living/tools/characters/crowd.py TOWN_DIR OUT_DIR [--count 64] [--seconds 24] [--size 1600x900]
-                                             [--runs ours,vroid,empty] [--perf FLAGS] [--springs 0|1]
+                                             [--runs empty,vroid,ours[,same]] [--perf FLAGS] [--springs 0|1] [--tag=-NAME]
 
 TOWN_DIR is a town made by town.py (its `town.json` names the people; their models are
 lookdev/anim/own-<name>.glb). The people stand in the game's own crowd (`LIVING_GAME_CROWD`,
@@ -12,6 +12,8 @@ people are what is measured; `cullet` is the grey city with its own walkers), se
 default game camera (22 m, 28° down), each playing its idle clip. Three runs, each in a fresh process, uncapped:
 
 - `ours`: --count generated people, each a different file;
+- `same` (not run by default): --count generated people, all one file, to tell what many
+  different files cost from what many people cost;
 - `vroid`: the same count of the VRoid bases the game used before (two files, recoloured);
 - `empty`: the same scene with no crowd.
 
@@ -122,7 +124,7 @@ def gpu_memory(pid):
     return total // (1 << 20)
 
 
-def run_game(out, name, env, seconds, size, place="meadow"):
+def run_game(out, name, env, seconds, size, place="meadow", photo=True):
     """Run the game headless on the line-up for `seconds`, logging; returns what was measured."""
     log = os.path.join(out, f"{name}.log")
     shots = os.path.join(out, name)
@@ -195,6 +197,8 @@ def run_game(out, name, env, seconds, size, place="meadow"):
     except (OSError, IndexError, ValueError):
         pass
     shutil.rmtree(shots, ignore_errors=True)
+    if not photo:
+        return res
     # The photograph: the same scene once more, left to take its one shot and quit.
     e2 = dict(e, LIVING_GAME_TOUR_SHOTS="default", LIVING_GAME_PERF="", LIVING_GAME_FPS_CAP="60", RUST_LOG="warn")
     e2.pop("LIVING_GAME_FRAMES", None)
@@ -221,6 +225,7 @@ def main():
     ap.add_argument("--runs", default="empty,vroid,ours")
     ap.add_argument("--perf", default="", help="more LIVING_GAME_PERF flags for every run (e.g. nooutlines)")
     ap.add_argument("--springs", default="", help="LIVING_GAME_SPRINGS for every run (0 turns spring bones off)")
+    ap.add_argument("--repeat", type=int, default=1, help="run the whole list this many times, interleaved; frame times are then reported as median, least and most (a shared machine's load moves them)")
     ap.add_argument("--tag", default="", help="a suffix for this set of runs' names")
     ap.add_argument("--env", default="meadow", help="the environment the crowd stands in (envs/<id>.json; `lineup` is the look-dev line-up, which also shows every file in lookdev/)")
     a = ap.parse_args()
@@ -233,28 +238,52 @@ def main():
     if a.springs:
         extra["LIVING_GAME_SPRINGS"] = a.springs
     original = open(RECIPES).read()
-    results = []
-    try:
-        for name in a.runs.split(","):
-            if name == "empty":
-                results.append(run_game(out, name + a.tag, extra, a.seconds, a.size, a.env))
-            elif name == "vroid":
-                results.append(run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:1"), a.seconds, a.size, a.env))
-            elif name == "ours":
-                book = json.loads(original)
-                bases, seed = book_for(people, a.count)
-                one = dict(height=[1.72, 1.72], **{k: [1.0, 1.0] for k in ("legs", "arms", "torso", "neck", "head", "shoulders", "hips", "build", "hands", "feet")})
-                small = dict(one, height=[1.25, 1.25], head=[1.2, 1.2])
-                book.update(bases=bases, folks=dict(adult=one, giant=one, small=small), palettes={k: [] for k in book["palettes"]})
-                with open(RECIPES, "w") as f:
-                    json.dump(book, f)
-                results.append(run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:{seed}"), a.seconds, a.size, a.env))
+    results, rounds = [], {}
+
+    def one(name, photo):
+        if name == "empty":
+            return run_game(out, name + a.tag, extra, a.seconds, a.size, a.env, photo)
+        if name == "vroid":
+            return run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:1"), a.seconds, a.size, a.env, photo)
+        if name in ("ours", "same"):
+            book = json.loads(original)
+            bases, seed = book_for(people, a.count)
+            if name == "same":
+                # Everyone the same file: what the people cost when nothing differs between them.
+                grown = next(p for p in people if p["params"]["age"] >= 18)
+                bases = [f"lookdev/own-{grown['name']}.glb"]
+            one_ = dict(height=[1.72, 1.72], **{k: [1.0, 1.0] for k in ("legs", "arms", "torso", "neck", "head", "shoulders", "hips", "build", "hands", "feet")})
+            small = dict(one_, height=[1.25, 1.25], head=[1.2, 1.2])
+            book.update(bases=bases, folks=dict(adult=one_, giant=one_, small=small), palettes={k: [] for k in book["palettes"]})
+            with open(RECIPES, "w") as f:
+                json.dump(book, f)
+            try:
+                return run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:{seed}"), a.seconds, a.size, a.env, photo)
+            finally:
                 with open(RECIPES, "w") as f:
                     f.write(original)
-            else:
-                raise SystemExit(f"--runs: {name!r} is not one of empty, vroid, ours")
-            r = results[-1]
-            print(json.dumps(r))
+        raise SystemExit(f"--runs: {name!r} is not one of empty, vroid, ours, same")
+
+    def load():
+        return float(open("/proc/loadavg").read().split()[0])
+
+    try:
+        for k in range(a.repeat):
+            for name in a.runs.split(","):
+                before = load()
+                r = one(name, photo=k == a.repeat - 1)
+                r["load_average"] = round((before + load()) / 2, 1)
+                rounds.setdefault(name, []).append(r)
+                print(json.dumps({x: r.get(x) for x in ("run", "frame_ms", "interval_ms_p50", "gpu_ms", "people_materials", "people_meshes", "people_ktris", "rss_mb", "gpu_mb", "load_average")}))
+        for name, rs in rounds.items():
+            r = dict(rs[-1])
+            for key in ("frame_ms", "interval_ms_p50", "interval_ms_p95", "interval_ms_p99", "gpu_ms", "rss_mb", "gpu_mb", "springs_us", "anim_us", "load_average"):
+                vals = sorted(x[key] for x in rs if x.get(key) is not None)
+                if vals:
+                    r[key] = vals[len(vals) // 2]
+                    r[key + "_range"] = [vals[0], vals[-1]]
+            r["rounds"] = len(rs)
+            results.append(r)
     finally:
         with open(RECIPES, "w") as f:
             f.write(original)
