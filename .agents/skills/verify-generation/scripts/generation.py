@@ -403,9 +403,11 @@ def check_land(seed, rows, side, tiles):
     present("no structure on open lots", all(l["structure"] == 0 for l in lots if l["kind"] not in DOOR_KINDS))
     present("doors are walkable", all(tile(l["door_x"], l["door_y"]) in WALKABLE for l in lots if l["structure"]), [l["id"] for l in lots if l["structure"] and tile(l["door_x"], l["door_y"]) not in WALKABLE][:20])
     blocking = [l for l in lots if l["kind"] in BLOCKING]
-    # Wall under what rises above the eye, low (9) under what does not (`LandParams.sight`).
-    walled = [l["id"] for l in blocking if tile(l["x"], l["y"]) in (7, 9)]
-    present("blocking lots stand on wall or low tiles", len(walled) == len(blocking), {"blocking": len(blocking), "wall_at_centre": len(walled), "open": [l["id"] for l in blocking if l["id"] not in walled][:20]})
+    # Wall where a model is solid at eye height, low (9) where it is not (`LandParams.sight`,
+    # the table's `eye_cells`; eye-2); over a drop's edge, a part that does not hide stays a
+    # drop (8). Never walkable.
+    walled = [l["id"] for l in blocking if tile(l["x"], l["y"]) in (7, 8, 9)]
+    present("blocking lots stand on wall, low or drop tiles", len(walled) == len(blocking), {"blocking": len(blocking), "unwalkable_at_centre": len(walled), "wall_at_centre": sum(tile(l["x"], l["y"]) == 7 for l in blocking), "open": [l["id"] for l in blocking if l["id"] not in walled][:20]})
     # Drops between ground levels are `drop` (8), not `wall` (7): people see across them
     # (docs/PERCEPTION.md). A planned settlement always has some; terraced towns usually do.
     drops = sum(t.count(8) for t in tiles)

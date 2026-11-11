@@ -117,7 +117,7 @@ Run cleanup after failed attempts too.
 - Neo4j: `:7689` (A) is full and holds the paused worlds' minds; never write to it. Mind-side checks use run names starting with `verify-`, and their cleanup removes only nodes with that run.
 - The public observer (`sao-observer-web`, `sao-tunnel`, `https://sos.carlid.dev`) was retired on 2026-11-09; its services are stopped and disabled on the dev-box. Do not start them again during verification.
 - Concurrent runs share the SpacetimeDB server and the observer. Cleanup stops the container only if its own run started it and no other `verify-*` database is live. It stops the observer only when it is the last run using it.
-- `LIVING_STDB_URL` may only name the local container (`http://127.0.0.1:3300`). Publishing goes through the container's CLI, so any other URL would split one proof across two servers; the helper refuses it.
+- `LIVING_STDB_URL` may only name a local container: the shared one (`http://127.0.0.1:3300`) or a worker's own, named with `LIVING_STDB_CONTAINER` ("Your own server" above). Publishing goes through that container's CLI, so the URL must be the same server's port on 127.0.0.1; any other URL would split one proof across two servers.
 
 ## Evidence
 

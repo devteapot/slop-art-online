@@ -770,8 +770,9 @@ def drop(s):
     authority keeps for it (`body.path`, from where it is) never crosses one; it goes round (by a
     stair or the drop's end) or is refused. On a world with
     drops (`--seed plan-test` or `island`). Admin `place_at` and `set_behavior` set the scene.
-    As the `low` scene the same is driven over a low thing (tile 9: a cart, below eye height,
-    `LandParams.sight`) on an `island` run."""
+    As the `low` scene the same is driven over low tiles (9: a cart, an open stall, a well, a
+    building's overhang: open at eye height, `LandParams.sight` and the table's `eye_cells`) on
+    an `island` run."""
     what = "drop" if s.name == "drop" else "low thing"
     spots, at = drop_geometry(s, 8 if s.name == "drop" else 9)
     (s.out / f"{s.name}-spots.json").write_text(json.dumps(spots, indent=2) + "\n")

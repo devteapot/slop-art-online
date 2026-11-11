@@ -710,17 +710,25 @@ class Run:
             t.start()
             return t
 
-        one = hold('presence-one', 8)
-        time.sleep(3.0)
+        def settle(n, secs=15.0):
+            # A probe's hold counts from its own start, and starting one takes seconds on a busy
+            # host: wait for the count rather than for a fixed time (it stays wrong only if
+            # presence is wrong).
+            deadline = time.monotonic() + secs
+            while time.monotonic() < deadline and row()['connections'] != n:
+                time.sleep(0.25)
+
+        one = hold('presence-one', 30)
+        settle(1)
         r1, _ = step('one connection')
-        two = hold('presence-two', 3)
-        time.sleep(2.0)
+        two = hold('presence-two', 6)
+        settle(2)
         r2, _ = step('two connections')
-        two.join(timeout=20)
-        time.sleep(0.5)
+        two.join(timeout=30)
+        settle(1)
         r3, _ = step('one closed')
-        one.join(timeout=20)
-        time.sleep(0.5)
+        one.join(timeout=40)
+        settle(0)
         r4, c4 = step('both closed')
         self.check('presence counts each open connection of the person', r1['present'] and r1['connections'] == 1 and r2['connections'] == 2 and r3['present'] and r3['connections'] == 1,
                    'presence.json', f"{r1['connections']} → {r2['connections']} → {r3['connections']}")
