@@ -73,9 +73,14 @@ fn laws() {
         // look at most `look_walk_deg` off the way it is told to go (the walk bends with it).
         look_slack_deg: 10.0, look_walk_deg: 30.0,
         // Moving and breath (docs/STAMINA.md). A grown person's walk (m/s, before age, genes and
-        // tiredness: `walk_base()`), a person's run as a share of its walk, and the fastest a road
-        // takes anyone (m/s). An exhausted body (energy below 10) walks at `tired_pace` of its pace.
-        walk_base: 2.6, run_share: 1.85, run_top: 5.5, tired_pace: 0.8,
+        // tiredness: `walk_base()`; a player's Settings offer 3.0 and 3.4), a person's run as a
+        // share of its walk, and the fastest a road takes anyone (m/s; a body faster on its own,
+        // a wolf at 5.1, keeps its speed: no one outruns a wolf, even on a road). An exhausted
+        // body (energy below 10) walks at `tired_pace` of its pace.
+        walk_base: 2.6, run_share: 1.65, run_top: 4.6, tired_pace: 0.8,
+        // A wolf's and a deer's run as shares of their walks (3.4 and 3.7 m/s): paired with
+        // `run_share`, they decide whether a running person outruns a wolf (docs/STAMINA.md).
+        wolf_run: 1.5, deer_run: 1.5,
         // Breath (`stamina`, real seconds, the `pools` law): the most one has rested, what comes
         // back a second from `stamina_delay_s` after the last effort, what a run and a held guard
         // take a second, what a run needs to start (or start again), and the tiredness (energy)
@@ -85,14 +90,17 @@ fn laws() {
         // back a second, from how long after the last use.
         focus_max: 100.0, focus_regen: 3.0, focus_delay_s: 2.0,
         // What each move takes from its pool (`combat_pool`), paid at its release.
-        cost_strike: 10.0, cost_bowshot: 6.0, cost_firebolt: 30.0, cost_heal: 35.0, cost_dodge: 20.0, cost_jump: 10.0, cost_block: 5.0,
-        cost_attack: 8.0, cost_throw: 10.0, cost_shoot: 6.0, cost_threaten: 3.0,
+        cost_strike: 20.0, cost_bowshot: 6.0, cost_firebolt: 30.0, cost_heal: 35.0, cost_dodge: 20.0, cost_jump: 10.0, cost_block: 5.0,
+        cost_attack: 20.0, cost_throw: 10.0, cost_shoot: 6.0, cost_threaten: 3.0,
         // Health and blows (docs/STAMINA.md, "Fight length"): a grown, whole body's health by
         // kind (read when a body comes into the world), a bare blow by kind, and what each
         // weapon or skill does before strength, skill and armor. Every blow does its full damage.
-        hp_person: 100.0, hp_deer: 40.0, hp_wolf: 55.0,
-        blow_person: 7.0, blow_deer: 4.0, blow_wolf: 13.0,
-        dmg_spear: 18.0, dmg_strike: 10.0, dmg_strike_spear: 15.0, dmg_bowshot: 14.0, dmg_firebolt: 24.0, dmg_throw: 24.0, dmg_shoot: 16.0,
+        // A fight between equals lasts tens of seconds, paced by breath: blows about half what they
+        // were (strike 10, wolf 13), a wolf sturdier (55) and a deer as many bites from death as
+        // before (40 at 13 a bite).
+        hp_person: 100.0, hp_deer: 22.0, hp_wolf: 80.0,
+        blow_person: 4.0, blow_deer: 2.0, blow_wolf: 7.0,
+        dmg_spear: 9.0, dmg_strike: 5.0, dmg_strike_spear: 8.0, dmg_bowshot: 7.0, dmg_firebolt: 12.0, dmg_throw: 12.0, dmg_shoot: 8.0,
     }
 }
 
@@ -229,12 +237,13 @@ fn call_speech() {
 // (metres) and how strongly that bends its way; how far a wander may turn from the way it was
 // heading (radians) and for how long after stopping it still keeps that way (seconds). Asked per creature at every steering step and
 // kept per state, like senses: the shipped law reads nothing, so every creature shares it.
-// A person runs `run_share` times its walk (a placeholder until the run's look is measured in
-// the game: the clips set how fast a run still reads as a run); animals keep their own
+// A person runs `run_share` times its walk: 1.65, about 4.3 m/s at the 2.6 walk, the fastest the
+// run still reads as a natural run in the game (the laptop's look-dev, 2026-11-11; at 4.8 it
+// scurries); animals keep their own
 // run (a wolf 5.1 m/s, a deer 5.55). A road speeds no one past `run_top` (m/s), and a run costs
 // breath (`pools`).
 fn motion(a) {
-    #{ run: if a.actor.kind == "person" { law("run_share") } else { 1.5 }, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: law("run_top"), charge: a.actor.kind == "wolf" }
+    #{ run: switch a.actor.kind { "person" => law("run_share"), "wolf" => law("wolf_run"), "deer" => law("deer_run"), _ => 1.5 }, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: law("run_top"), charge: a.actor.kind == "wolf" }
 }
 
 // A grown, rested body of a kind at its normal pace (for descriptions).
@@ -246,7 +255,7 @@ fn motion_law() {
         cadence: "hot",
         topic: "moving",
         covers: ["move_speed", "slowed"],
-        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. A person runs ${short(m.run)} times its walk (animals 1.5 times; no road takes anyone past ${short(m.top)} m/s), at a cost of breath: running is for hurry, flight and fights. A flight runs while breath lasts, else goes ${short(m.flee)} times one's walk; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can. A stroll (wander) keeps roughly the way it was going, turning at most about ${short(m.wander_turn)} radians, even after a stop of up to ${short(m.wander_keep_s)} s.`,
+        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. A person runs ${short(m.run)} times its walk (a wolf ${short(law("wolf_run"))} times, a deer ${short(law("deer_run"))}; no road takes anyone past ${short(m.top)} m/s), at a cost of breath: running is for hurry, flight and fights. A flight runs while breath lasts, else goes ${short(m.flee)} times one's walk; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can. A stroll (wander) keeps roughly the way it was going, turning at most about ${short(m.wander_turn)} radians, even after a stop of up to ${short(m.wander_keep_s)} s.`,
     }
 }
 
@@ -2572,6 +2581,8 @@ fn laws_about(l) {
         run_share: `and runs ${l.run_share} times that`,
         run_top: `no road takes anyone past ${l.run_top} m/s`,
         tired_pace: `the exhausted walk at ${l.tired_pace} of their pace`,
+        wolf_run: `a wolf runs ${l.wolf_run} times its walk`,
+        deer_run: `a deer ${l.deer_run} times its`,
         stamina_max: `stamina holds ${l.stamina_max} rested`,
         stamina_regen: `and comes back ${l.stamina_regen} a second`,
         stamina_delay_s: `from ${l.stamina_delay_s} s after the last effort`,

@@ -471,6 +471,7 @@ def scene_breath(st):
     with no time to get it back is refused "out of breath" (`my_combat` REFUSED, the use's
     outcome). Everything is read through the player's own `my_vitals` view."""
     cid = me(st)
+    home = body(st, cid)
     time.sleep(2.5)
     v0 = my_vitals(st)
     check(st, "my_vitals carries breath and focus, rested and full", v0 and v0["stamina_max"] > 0 and abs(breath_of(v0, int(time.time() * 1000)) - v0["stamina_max"]) < 1.0 and v0["focus_max"] > 0, v0)
@@ -487,7 +488,8 @@ def scene_breath(st):
     check(st, "a player's run is the run_share law times its walk and drains 4 breath a second from the row's anchor", walk and abs(run / walk - share) < 0.02 and abs(v1["stamina_rate"] + 4.0) < 1e-3 and v1["stamina_from_ms"] == v1["at_ms"], {"walk": walk, "run": run, "row": v1})
     time.sleep(1.5)
     v1b = my_vitals(st)
-    check(st, "a held run writes no row while it lasts", v1b == v1, {"first": v1["at_ms"], "later": v1b["at_ms"]})
+    # The needs may re-anchor the row meanwhile; the drain goes on from the new anchor.
+    check(st, "a held run keeps draining while it lasts (no write of its own)", abs(v1b["stamina_rate"] + 4.0) < 1e-3 and v1b["stamina_from_ms"] == v1b["at_ms"], {"first": v1["at_ms"], "later": v1b["at_ms"]})
     call(st, "human_move", [0.0, 0.0, False])
     time.sleep(0.6)
     v2 = my_vitals(st)
@@ -497,6 +499,9 @@ def scene_breath(st):
     v3 = my_vitals(st)
     check(st, "standing, breath comes back with no row written (the client projects it)", v3 == v2 and breath_of(v3, int(time.time() * 1000)) > v2["stamina"] + 5, {"row": v3, "now": breath_of(v3, int(time.time() * 1000))})
     time.sleep(3.0)
+    # Back where the scene began (the run carried the body on; a dodge needs room).
+    call(st, "place_at", [cid, home[0], home[1]], "admin")
+    time.sleep(0.5)
     p = body(st, cid)
     full = breath_of(my_vitals(st), int(time.time() * 1000))
     ready(st, "dodge")

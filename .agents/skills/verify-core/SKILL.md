@@ -42,6 +42,10 @@ python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
+# Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run
+# with set_world_law first to measure another pairing).
+python3 "$C/scenes.py" fights --run "$R" > "$E/fights.txt" 2>&1
+python3 "$C/scenes.py" chase --run "$R" > "$E/chase.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
 # Another's health in fight reports and health_of: the band, exact only while appraised (features/combat.md).
 python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1

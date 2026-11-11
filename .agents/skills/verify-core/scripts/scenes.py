@@ -1650,15 +1650,18 @@ def fights(s):
 
 
 def chase(s):
-    """A bold wolf charges a person 5 m away who runs (`flee`, a run while breath lasts) or walks
-    away (`flee` with `run: false`): the time to the wolf's first blow that lands, or none in
-    `CHASE_S` (30) seconds. `CHASES` (4) of each; `chase-results.json`. The wolf and the person
-    run at their `motion` laws (a person's `run_share`, an animal's 1.5): set `run_share` with
-    `set_world_law` to measure another run."""
+    """A bold wolf charges a person 5 m away who goes straight off along an open line, running
+    (`goto` with `run: true`, while breath lasts) or walking: the time until the gap is down to
+    the wolf's catch distance (its attack's reach and its lunge, 3.2 m), or the gap at 30 s
+    (`CHASE_S`) if never. Timed on the distance, not on a blow landing, so the time of day (a
+    wolf losing its prey beyond its night sight) does not decide it. `CHASES` (4) of each;
+    `chase-results.json`. The runner and the wolf go at their `motion` laws (`run_share`,
+    `wolf_run`): set them with `set_world_law` to measure another pairing."""
     import statistics
     n = int(os.environ.get("CHASES", "4"))
     limit = float(os.environ.get("CHASE_S", "30"))
-    line = open_line(s, length=16)
+    catch = 3.2
+    line = open_line(s, length=64)
     wolves = [c["id"] for c in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if c["stage"] >= 2]
     out = []
     for mode in ("run", "walk"):
@@ -1668,32 +1671,33 @@ def chase(s):
                 continue
             p, = s.people(1)
             w = wolves[k]
-            # A bold wolf (a seed's hostile pack): it attacks a healthy adult.
             s.call("set_background", w, json.dumps({"pack": "verify chase", "bold": True}, separators=(",", ":")))
             s.graph(w, {"wait": 300})
-            s.call("place_at", p, *line[10])
-            s.call("place_at", w, *line[5])
+            s.call("place_at", p, *line[8])
+            s.call("place_at", w, *line[3])
             time.sleep(1.0)
-            v0 = s.vitals(p)
-            s.graph(p, {"do": {"skill": "flee", "target": {"id": w}, **({"run": False} if mode == "walk" else {})}})
+            s.graph(p, {"do": {"skill": "goto", "target": {"at": list(line[63])}, "run": mode == "run"}})
             s.graph(w, {"do": {"skill": "attack", "target": {"id": p}}})
             t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
-            caught, speeds = None, []
+            caught, d, speeds, gaps = None, None, [], []
             while True:
                 now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
                 b = {r["id"]: r for r in s.rows(f"SELECT id, vx, vy FROM body WHERE id = {p} OR id = {w}")}
                 speeds.append({x: round(math.hypot(b[x]["vx"], b[x]["vy"]), 2) for x in b})
-                v = s.vitals(p)
-                if v["hp"] < v0["hp"] - 1 or v["hurt_by"] == w and v["hurt_ms"] >= t0:
-                    caught = round((v["hurt_ms"] - t0) / 1000, 1)
+                d = apart(s, p, w)
+                gaps.append((now - t0, d))
+                if d <= catch:
+                    caught = round((now - t0) / 1000, 1)
                     break
                 if now - t0 > limit * 1000:
                     break
-                time.sleep(0.2)
+                time.sleep(0.15)
             s.graph(p, {"wait": 300})
             s.graph(w, {"wait": 300})
             moving = lambda x: [sp[x] for sp in speeds if sp.get(x, 0) > 0.3]
-            r = {"mode": mode, "person": p, "wolf": w, "caught_s": caught, "person_speed_max": max(moving(p), default=0), "wolf_speed_max": max(moving(w), default=0)}
+            med = lambda v: round(statistics.median(v), 2) if v else 0
+            r = {"mode": mode, "person": p, "wolf": w, "caught_s": caught, "gap_end": d, "gap_max": max(g for _, g in gaps),
+                 "person_speed_med": med(moving(p)), "wolf_speed_med": med(moving(w))}
             print(json.dumps(r), flush=True)
             out.append(r)
             time.sleep(3)

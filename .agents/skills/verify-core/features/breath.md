@@ -23,7 +23,7 @@ Since `stamina-1` (2026-11-11, [docs/STAMINA.md](../../../../docs/STAMINA.md)) a
     - the run at the `run_share` law times the walk, capped at `run_top` on a road, and 1.65 when the law is set to it.
   - `pools::tests` (level, refill after the delay, run out, resume at 2.2 s).
   - `steer::tests::a_road_speeds_a_run_only_up_to_the_top_speed`.
-  - `moves_are_a_law_per_creature` (the `run_share` law for people, 1.5 and `charge` for wolves, `top` 5.5).
+  - `moves_are_a_law_per_creature` (the `run_share` law for people, 1.5 and `charge` for wolves, `top` the `run_top` law).
 - **Live, `scenes.py stamina` on a default-seed run (about 2 min):**
   - **The run.** A person's run is the `run_share` law times its walk (`body.speed`; the scene reads the law in force). The row's rate is −`stamina_run` from its anchor. The scene sets `stamina_run` to 10 with `set_world_law`, so a 64 m line holds a run to empty and a second run.
     - Out of breath, it walks, and the row says the refill starts at `at_ms + 1000`.
@@ -41,6 +41,23 @@ Since `stamina-1` (2026-11-11, [docs/STAMINA.md](../../../../docs/STAMINA.md)) a
   - **Animals.** A wolf's attack approach runs at 1.5 times its walk (`charge`). A deer flees at a run.
   - Every law is set back at the end.
 - **`scenes.py moves`:** a flight with `run: false` is 1.15 times the walk. A flight by default runs at `run_share` times the walk.
+
+## Fight length and the chase
+
+- `scenes.py fights` (default seed, about 15 min). Graph-driven 1v1s, the same graphs on any module, so a world built from main measures the before.
+  - **Three types.**
+    - `pp-dodge`: each person strikes the other, dodges a windup at 0.15 a graph look, and flees below 20% of its health.
+    - `pp-trade`: the same without the dodge.
+    - `pw`: such a person against a bold wolf that attacks it and flees below 20%.
+  - **The span.** A fight runs from the first blow to a death or the first flight, else `FIGHT_S` (90). After a flight the scene watches 20 s: caught, clear (12 m), or neither.
+  - **The record.** `fights-results.json` holds per fight its length, blows made and landed by each side, dodges and how it ended. `FIGHTS` (5) of each; `FIGHT_TYPES` picks types.
+- `scenes.py chase` (about 5 min). A bold wolf charges a person 5 m away, who goes straight off along a 64 m line, running (`goto` with `run: true`) or walking.
+  - **The measure.** The time until the gap is down to 3.2 m (the wolf's reach and lunge), else the gap at 30 s. It is timed on the distance, so the time of day (a wolf losing prey beyond its night sight) does not decide it.
+  - **Pairings.** Set `run_share` and `wolf_run` with `set_world_law` to measure another pairing.
+- **Gotchas.**
+  - **Wolves are reused.** A wolf hurt in an earlier fight comes to the next hurt, so a world's later `pw` fights are shorter. Compare fresh worlds.
+  - **Health comes at spawn.** `hp_*` laws apply only to bodies spawned after the change.
+  - **Uses roll over.** `skill_use` keeps each actor's newest 24, so the scene gathers uses as the fight goes.
 
 ## Gotchas
 

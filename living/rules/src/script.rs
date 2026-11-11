@@ -2908,7 +2908,7 @@ mod tests {
         assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
         assert_eq!((s.num_of("kept_spoil", "storage", 0.0), s.num_of("planted_max", "berry_bush", 0.0)), (1.0 / 3.0, 5.0));
-        assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.remains_ms("deer"), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 1_800_000.0, 5.2));
+        assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.remains_ms("deer"), s.num_of("dodge_speed", "person", 0.0)), (s.law_value("hp_wolf").and_then(|v| v.as_f64()).unwrap(), 1.8, 1_800_000.0, 5.2), "a wolf's health is the hp_wolf law");
         // The words minds and players read are the ones the lists gave.
         assert_eq!(s.text_of("source_of", "food").unwrap(), "gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt");
         let cook = |s: &Scripts, item: &str| {
@@ -2935,7 +2935,7 @@ mod tests {
     /// How a creature moves besides its walk is a law per creature: a person runs `run_share`
     /// times its walk (a world law), animals 1.5 times (charging at a hunt's approach), a flight
     /// 1.15, stepping aside 0.8, turning 6 rad/s keeping 0.4 of its speed in the sharpest turns,
-    /// keeping 0.8 m from others at weight 0.9; no road takes anyone past 5.5 m/s.
+    /// keeping 0.8 m from others at weight 0.9; no road takes anyone past `run_top`.
     #[test]
     fn moves_are_a_law_per_creature() {
         let s = scripts();
@@ -2943,15 +2943,16 @@ mod tests {
         person.actor.kind = "person".into();
         let m = s.moves(&person).unwrap();
         let share = s.law_value("run_share").and_then(|v| v.as_f64()).unwrap() as f32;
-        assert_eq!(m, Moves { run: share, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: 5.5, charge: false });
+        let top = s.law_value("run_top").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert_eq!(m, Moves { run: share, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top, charge: false });
         assert_eq!(s.law_plan("motion").describe(), vec!["actor.kind".to_string()], "the shipped law reads only the kind");
         let mut wolf = creature(false, false);
         wolf.actor.kind = "wolf".into();
         let w = s.moves(&wolf).unwrap();
-        assert_eq!((w.run, w.charge, w.top), (1.5, true, 5.5));
+        assert_eq!((w.run, w.charge, w.top), (1.5, true, top));
         let spec = &s.law_specs()["motion"];
         assert_eq!(spec.cadence, Cadence::Hot);
-        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains(&format!("A person runs {} times its walk", share)) && spec.about.contains("past 5.5 m/s"), "{}", spec.about);
+        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains(&format!("A person runs {} times its walk", share)) && spec.about.contains(&format!("past {} m/s", top)), "{}", spec.about);
         // A floor where wolves run harder: the law reads the kind, and only wolves change.
         let src = include_str!("../../scripts/skills.rhai").replace("fn motion(a)", "fn base_motion(a)");
         let f = Scripts::new(&format!("{src}\nfn motion(a) {{ let m = base_motion(a); if a.actor.kind == \"wolf\" {{ m.run = 2.0; }} m }}")).unwrap();
@@ -3174,8 +3175,9 @@ mod tests {
     #[test]
     fn moves_cost_breath_or_focus_and_too_little_refuses_them() {
         let s = scripts();
-        for (skill, pool, cost) in [("strike", "stamina", 10.0), ("bowshot", "stamina", 6.0), ("dodge", "stamina", 20.0), ("jump", "stamina", 10.0), ("block", "stamina", 5.0), ("attack", "stamina", 8.0), ("throw", "stamina", 10.0), ("shoot", "stamina", 6.0), ("threaten", "stamina", 3.0), ("firebolt", "focus", 30.0), ("heal", "focus", 35.0)] {
-            assert_eq!(s.num_of("combat_cost", skill, -1.0), cost, "{skill}");
+        for (skill, pool) in [("strike", "stamina"), ("bowshot", "stamina"), ("dodge", "stamina"), ("jump", "stamina"), ("block", "stamina"), ("attack", "stamina"), ("throw", "stamina"), ("shoot", "stamina"), ("threaten", "stamina"), ("firebolt", "focus"), ("heal", "focus")] {
+            let cost = s.law_value(&format!("cost_{skill}")).and_then(|v| v.as_f64()).unwrap();
+            assert_eq!(s.num_of("combat_cost", skill, -1.0), cost, "{skill}: its cost is its law");
             assert_eq!(s.text_of("combat_pool", skill).as_deref(), Some(pool), "{skill}");
         }
         assert_eq!(s.text_of("pool_word", "focus").as_deref(), Some("mana"), "the screen word is the world's");
@@ -3220,8 +3222,9 @@ mod tests {
         w.skill = "attack".into();
         w.target = TargetFacts { class: "creature".into(), id: 2, kind: "deer".into(), alive: true, hp: 40.0, max_hp: 40.0, dist: 1.0, ..Default::default() };
         assert!(s.check("attack", &w).is_ok());
-        assert!(s.done("attack", &w).unwrap().contains(&Effect::Spend { pool: "stamina".into(), amount: 8.0 }));
-        w.actor.stamina = 7.0;
+        let bite = s.law_value("cost_attack").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert!(s.done("attack", &w).unwrap().contains(&Effect::Spend { pool: "stamina".into(), amount: bite }));
+        w.actor.stamina = bite - 1.0;
         assert_eq!(s.check("attack", &w).unwrap_err(), "out of breath");
         // Holding a guard no longer tires (the rates of a guard are those of being awake).
         let mut g = ctx();
@@ -3303,7 +3306,14 @@ mod tests {
         let share = island.law_value("run_share").and_then(|v| v.as_f64()).unwrap() as f32;
         assert!(close(m.run, share));
         let run = 2.6 * m.run;
-        assert_eq!(crate::steer::road_pace(run, 1.0, &m.tuning(1.4)), (run * 1.4).min(5.5).max(run));
+        assert_eq!(crate::steer::road_pace(run, 1.0, &m.tuning(1.4)), (run * 1.4).min(m.top).max(run));
+        // A wolf runs past the top on its own (5.1 against 4.6): a road does not slow it, and no
+        // person outruns it, even on a road (intended).
+        let mut w = ctx();
+        w.actor.kind = "wolf".into();
+        let wm = island.moves(&w).unwrap();
+        let wolf = 3.4 * wm.run;
+        assert!(wolf > m.top && crate::steer::road_pace(wolf, 1.0, &wm.tuning(1.4)) == wolf && crate::steer::road_pace(run, 1.0, &m.tuning(1.4)) < wolf);
         let slower = Scripts::new(&with_world_laws(src, &[("run_share".into(), serde_json::json!(1.65))])).unwrap();
         assert!(close(slower.moves(&c).unwrap().run, 1.65));
         assert!(close(crate::steer::road_pace(2.6, 1.0, &m.tuning(1.4)), 3.64), "a road walk is as fast as before");
@@ -3321,15 +3331,16 @@ mod tests {
         assert!(s.check("strike", &c).is_ok());
         assert_eq!(s.duration_ms("strike", &c).unwrap(), 350);
         let fx = s.done("strike", &c).unwrap();
-        assert!(fx.iter().any(|e| matches!(e, Effect::Damage { amount } if *amount > 5.0)), "{fx:?}");
-        assert!(fx.contains(&Effect::Spend { pool: "stamina".into(), amount: 10.0 }), "{fx:?}");
+        let (dmg, cost) = (s.law_value("dmg_strike").and_then(|v| v.as_f64()).unwrap() as f32, s.law_value("cost_strike").and_then(|v| v.as_f64()).unwrap() as f32);
+        assert!(fx.iter().any(|e| matches!(e, Effect::Damage { amount } if (*amount - dmg).abs() < 1e-3)), "{fx:?}");
+        assert!(fx.contains(&Effect::Spend { pool: "stamina".into(), amount: cost }), "{fx:?}");
         assert!(!fx.iter().any(|e| matches!(e, Effect::Vitals { .. })), "{fx:?}");
         // Tiredness does not refuse a blow; breath does.
         c.actor.energy = 1.0;
         assert!(s.check("strike", &c).is_ok());
-        c.actor.stamina = 9.9;
+        c.actor.stamina = cost - 0.1;
         assert_eq!(s.check("strike", &c).unwrap_err(), "out of breath");
-        c.actor.stamina = 10.0;
+        c.actor.stamina = cost;
         assert!(s.check("strike", &c).is_ok());
         c.actor.energy = 80.0;
         c.actor.stamina = 100.0;
@@ -3966,13 +3977,15 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         // badly hurt the target already is.
         assert!(s.check("attack", &c).is_ok());
         let full = damage(&s.done("attack", &c).unwrap());
-        assert!((full - 18.0).abs() < 1e-3, "a spear blow: {full}");
+        let spear = s.law_value("dmg_spear").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert!((full - spear).abs() < 1e-3, "a spear blow is the dmg_spear law: {full}");
         c.target.hp = 5.0;
         assert!(s.check("attack", &c).is_ok(), "no beating stops short of the badly hurt");
         assert_eq!(damage(&s.done("attack", &c).unwrap()), full, "a blow that exceeds health is not held back");
         c.skill = "strike".into();
         assert!(s.check("strike", &c).is_ok());
-        assert!((damage(&s.done("strike", &c).unwrap()) - 15.0).abs() < 1e-3, "the starter strike too");
+        let spear_strike = s.law_value("dmg_strike_spear").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert!((damage(&s.done("strike", &c).unwrap()) - spear_strike).abs() < 1e-3, "the starter strike too");
         c.skill = "attack".into();
         // A word about force on the item changes nothing.
         for word in ["hurt", "kill"] {
