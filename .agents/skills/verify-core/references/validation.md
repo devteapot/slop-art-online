@@ -1,5 +1,26 @@
 # Core validation record
 
+## 2026-11-11 who heard a line (exp-greet, Spark)
+
+Branch `exp-greet`, the trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`. New scene `audience` (`features/laws.md`), run `core-audience-150613`: all 8 checks pass. Law off: no row. Law on: one row, the two hearers within the shipped 9 m and not the one at 13 m, distances about 1 and 4 m, both ahead of the speaker. A line 61 s later deleted the first row. Only `speak` changed in the authority (`speech_audience`, off by default). The other scenes were not rerun.
+
+## 2026-11-11 hearth-1: households' hearths and stores inside their houses (dev-box)
+
+Branch `hearth-1`, own container `hearth1-stdb` (2.14.1, port 3331), `scoped`, no minds. `rhythm.py` gained `household_things` (two households' own hearth and store, used from the door by deliberate acts).
+
+- `core-hearth1-rhythm-223954` (before the merge of origin/main `d124c0f7`) and `core-hearth1m-rhythm-225209` (merged): **34 of 34** each. Halvard Dunmore's hearth 1.0 m and store 1.41 m from his door, Bram Calloway's the same; each fed the hearth (`lit_until_ms` up by 60 s, one unit at Cullet's 0.5 a game hour on a 12-minute day), cooked a fish there, took a smoked fish from and stored a peat in his own store (`peat` 24 to 25), and ate it; no act failed.
+- `core-hearth1-goods-224440`: `goods` 24 of 24, `stock` 4 of 4 (before the merge).
+- Not run: `decay`, `town`, the other scenes.
+
+## 2026-11-11 look-2: facing separate from travel (dev-box)
+
+Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.
+
+- Before the merge (`core-look2-a`): `cargo_checks.py` rules 225, authority 20, mind 93, viewer-sync 5; `sight` 6, `senses` 7, `fov` 18, `moves` 5, `doing` 7; `skirmish` 8 on an island world; steering 5 of 5; mechanics 21 of 23 (a net and the chained smoking failed: "your pack is full", 33 wood in the walker's pack).
+- After merging origin/main (`core-look2-m`): `sight` 6, `fov` 18, `moves` 5, `doing` 7; mechanics 23, 22 ("tending wounds") and 23 of 23 on three fresh worlds; steering 4 (the follower ended 3.55 m behind against 3.5, slow walkers at 1.04 m/s), 5 and 5 of 5. Bodies with no held look keep a zero facing offset, so their sight and steering read what they read before.
+- After merging origin/main again (`core-look2-f`, `dfc8bcec`): `fov` 18, `moves` 5, `sight` 6.
+- `just living-check` passes before the first merge, after it, and after the second.
+
 ## 2026-11-11 fix-health-leak: another's health as perceived in fight reports and `health_of` (Spark)
 
 Branch `fix-health-leak` (from `e3f0527f`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, no minds. A maintain pass scoped to this change (combat.md, the README row, SKILL.md's baseline), not a source wave.

@@ -117,10 +117,13 @@ impl Rules {
         self.revision = row.revision;
         // The world's day: laws written per game hour, and the day's words, follow it.
         let day_ms = conn.db.world().iter().next().map(|w| w.day_ms).unwrap_or(living_rules::DEFAULT_DAY_MS);
+        // On the frame (a law switched mid-play recompiles too): its cost is logged, since it is
+        // a hitch of that much.
+        let t0 = std::time::Instant::now();
         match Scripts::with_day(&row.source, day_ms) {
             Ok(s) => {
                 self.skills = skills_of(&s);
-                info!("rules: skill script revision {} compiled ({} skills)", row.revision, self.skills.len());
+                info!("rules: skill script revision {} compiled ({} skills) in {:.1} ms on the frame", row.revision, self.skills.len(), t0.elapsed().as_secs_f64() * 1000.0);
                 catalog::set_skills(s.skills().clone());
                 self.scripts = Some(s);
                 self.error = None;

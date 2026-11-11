@@ -103,6 +103,8 @@ The file also holds folk ranges (`adult`, `giant`, `small`) and palettes for see
 | `LIVING_GAME_VIEW=recipe:<name>` or `recipe:<folk>:<seed>` | the asset view shows a recipe |
 | `LIVING_GAME_SPRINGS=0` | springs off |
 | `LIVING_GAME_SPRING_BUDGET` / `LIVING_GAME_SPRING_NEAR` | the most characters simulated in a frame (nearest first; default 48), and the distance limit in metres for a 1.75 m character (default 40, scaled by height) |
+| `LIVING_GAME_FAR` / `LIVING_GAME_FAR_BAND` | a character whose file holds a far model (`Far*` mesh nodes, `person.py --lod both`) shows it beyond this many metres from the camera (default 10, for a 1.75 m character, scaled by height; `0` never), and its full model again once it is the band nearer (default 1.5 m), so it does not flicker at the edge (`lookdev::far_models`) |
+| `LIVING_GAME_SHARED_CLIPS=0` | generated people (`own-*` files, `lookdev/types/`) play their own file's clips instead of the shared clip file `lookdev/anim/own-clips.glb` (`anim::clip_file`) |
 
 Environment slots of kind `person` with no asset folder are filled with random recipes of the slot's height.
 

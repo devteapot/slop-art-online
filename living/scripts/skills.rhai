@@ -51,6 +51,10 @@ fn laws() {
         // sets this in its seed's `rules`, like any law here. Every person has a mind: no law
         // turns minds off (docs/SEEDED_LIVES.md, "Every person a mind").
         cry_prompts_carers: true,
+        // Speech records who heard each line, how far and how far off the speaker's facing
+        // (the private `audience` table, kept a minute), for the minds' conversation rules
+        // (LIVING_GREET, `nearest` by default). Off: nothing is written.
+        speech_audience: true,
         // A grown person longs for a child this many real minutes after its own birth or its
         // youngest child's (the most nurturing sooner, down to a sixth of it), and only while
         // carrying at least `longing_food` food (0: whatever it carries).
@@ -68,10 +72,11 @@ fn laws() {
         // near within `heard_near_m`, close within `heard_close_m`, far out to hearing; it
         // lingers `heard_linger_s` after it was last heard.
         heard_near_m: 5.0, heard_close_m: 15.0, heard_linger_s: 2.0,
-        // A player's look (`human_face`): a change within `look_slack_deg` of the look held (or
-        // of where the body stands facing) is nothing new; walking, the body turns toward the
-        // look at most `look_walk_deg` off the way it is told to go (the walk bends with it).
-        look_slack_deg: 10.0, look_walk_deg: 30.0,
+        // A held look (`human_face`): a change within `look_slack_deg` of the look held (or
+        // of where the body stands facing) is nothing new; walking, the body still goes where it
+        // is told at full speed, and only its facing (head and chest: what it sees by, where a
+        // guard faces) turns toward the look, at most `look_walk_deg` off its way.
+        look_slack_deg: 10.0, look_walk_deg: 75.0,
     }
 }
 
@@ -2495,6 +2500,7 @@ fn laws_about(l) {
         spawn_energy: `and energy ${short(l.spawn_energy)}`,
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
+        speech_audience: if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
@@ -2508,6 +2514,6 @@ fn laws_about(l) {
         heard_close_m: `within ${short(l.heard_close_m)} m it is close, farther it is far`,
         heard_linger_s: `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
         look_slack_deg: `a player's look within ${short(l.look_slack_deg)} degrees of the last is the same look`,
-        look_walk_deg: `walking, one turns toward where one looks at most ${short(l.look_walk_deg)} degrees off one's way`,
+        look_walk_deg: `walking, one goes where one is going and faces where one looks, at most ${short(l.look_walk_deg)} degrees off one's way`,
     }
 }

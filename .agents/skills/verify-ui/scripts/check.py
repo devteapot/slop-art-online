@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: windows talk items themes pick turns look-walk bar offers wheel wheel-workplace support (default: all but support and wheel-workplace, which need a Cullet world)
+  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes pick turns look-walk bar offers wheel wheel-workplace support (default: all but support and wheel-workplace, which need a Cullet world)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -13,7 +13,7 @@ and writes `.local/living/verify/RUN/ui/checks.json`. Exit 1 when any check fail
 Two residents are placed beside the player and held still for the talk and items scenarios
 (admin `place_at` and `set_behavior`: scene setup, not player acts).
 """
-import argparse, json, os, re, subprocess, sys, time
+import argparse, json, math, os, re, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
@@ -39,16 +39,15 @@ def residents(run, n=2):
 THEME = os.environ.get("LIVING_GAME_THEME", "")
 
 
-def drive(run, name, plan, places=(), syncs=(), token=None):
+def drive(run, name, plan, places=(), syncs=(), extra=()):
     # A run per theme keeps its own evidence (`LIVING_GAME_THEME=night check.py …`).
     name = f"{name}-{THEME}" if THEME else name
     cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "420"]
-    if token:
-        cmd += ["--token", token]
     for p in places:
         cmd += ["--place", p]
     for s in syncs:
         cmd += ["--sync", s]
+    cmd += list(extra)
     r = subprocess.run(cmd, capture_output=True, text=True)
     out = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
     return out, r.returncode, r.stdout + r.stderr
@@ -506,6 +505,245 @@ def turns(run, c):
     c.check(s, "left drag: the view turned", ok, det)
 
 
+# ---- facing sight (fov) --------------------------------------------------------------------
+
+def wrap(a):
+    a = math.fmod(a, 2 * math.pi)
+    if a > math.pi:
+        a -= 2 * math.pi
+    elif a <= -math.pi:
+        a += 2 * math.pi
+    return a
+
+
+def fov_within(sight, f, off, dist, glow, kept):
+    """living_rules::sight::within (distance and angle; no sight line), ported for the check."""
+    keep = kept or 0.0
+    floor = min(f["near_m"], sight) + keep
+    if dist <= floor:
+        return True
+    margin = f["margin_deg"] if kept is not None else 0.0
+    deg = abs(math.degrees(wrap(off)))
+    lit = max(sight, glow)
+    if deg <= f["focal_deg"] + margin:
+        ahead = lit
+    elif deg <= f["side_deg"] + margin:
+        ahead = max(sight * f["side_share"], glow)
+    else:
+        ahead = 0.0
+    return dist <= max(ahead, min(f["near_m"], sight)) + keep
+
+
+def heading_at(b, now_ms):
+    """The authority's heading_at on a body row."""
+    if not b.get("turn") or b.get("turn_s", 0) <= 0:
+        return wrap(b["heading"])
+    t = max(0, min(now_ms, b["next_ms"]) - b["t_ms"]) / 1000.0
+    return wrap(b["heading"] + b["turn"] * min(t, b["turn_s"]))
+
+
+def field_dumps(d):
+    """The client's field dumps (`LIVING_SIGHT_FIELD_DUMP`): (meta, pgm bytes) in order."""
+    out = []
+    for n in sorted(f for f in os.listdir(d) if f.endswith(".json")):
+        meta = json.load(open(os.path.join(d, n)))
+        raw = open(os.path.join(d, n[:-5] + ".pgm"), "rb").read()
+        out.append((meta, raw[-meta["size"] * meta["size"]:]))
+    return out
+
+
+def texel(meta, pix, x, y):
+    i = int((x - meta["origin"][0]) / meta["texel"])
+    j = int((y - meta["origin"][1]) / meta["texel"])
+    n = meta["size"]
+    return pix[j * n + i] if 0 <= i < n and 0 <= j < n else None
+
+
+# The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
+# residents stand round the player (dx, dy metres; +y south; `place_at` puts them on tile
+# centres): north and south at 5 m, east and west at 5.5 m (past the near ring's and side
+# vision's reach and their keep metre, so behind or to the side they are clearly unseen), one at
+# 1.4 m (the near ring), one 8 m to the south-east.
+FOV_LOOKS = [0, 90, 180, 270]
+FOV_PLACES = [(0.0, -5.0), (5.5, 0.0), (0.0, 5.0), (-5.5, 0.0), (1.0, -1.0), (5.7, 5.7)]
+LIT = 100.0   # a light on someone (`glow`) the client can't know, at night: a comparison it could flip is left out
+DAY_SIGHT = 11.0  # the shipped senses law's sight by day: no one is lit by day
+
+
+def compare_fov(snap, dumps, me):
+    """The authority's perceived set against the client's field at one look: per creature within
+    15 m, whether the authority perceives it and whether the client's field shows its spot seen.
+    Creatures the margins or a light could decide (the rule's answer differs with the keep margins
+    or a glow) are counted apart, not compared."""
+    rows = {r["query"].split(" FROM ")[1].split()[0]: r for r in snap}
+    bodies = {b["id"]: b for b in rows["body"]["rows"]}
+    seen = {p["body"] for p in rows["perceived"]["rows"]}
+    at = rows["body"]["wall_ms"]
+    mine = bodies.get(me)
+    prior = [d for d in dumps if d[0]["wall_ms"] <= at + 300 and d[0].get("facing")]
+    if not mine or not prior:
+        return None
+    meta, pix = prior[-1]
+    fc = meta["facing"]
+    sight, f = fc["sight"], fc
+    h_auth = heading_at(mine, at)
+    eye = (mine["x"], mine["y"])
+    out = {"heading_client": math.degrees(fc["heading"]), "heading_authority": math.degrees(h_auth), "dump": meta["n"], "same": [], "differ": [], "margin": []}
+    for bid, b in bodies.items():
+        if bid == me:
+            continue
+        d = math.hypot(b["x"] - eye[0], b["y"] - eye[1])
+        if d > 15.0:
+            continue
+        off = wrap(math.atan2(b["y"] - eye[1], b["x"] - eye[0]) - h_auth)
+        glows = (0.0,) if sight >= DAY_SIGHT else (0.0, LIT)
+        answers = {fov_within(sight, f, off, d, g, k) for g in glows for k in (None, 1.0)}
+        v = texel(meta, pix, b["x"], b["y"])
+        # What the screen shows seen: the field there, within the radius (the field reaches on
+        # past it along the focal angle, for the radius's soft band to draw that edge).
+        shown = None if v is None else (v >= 128 and d <= sight)
+        row = {"id": bid, "dist": round(d, 2), "off_deg": round(math.degrees(off), 1), "authority": bid in seen, "field": shown}
+        if len(answers) > 1:
+            out["margin"].append(row)
+        elif row["field"] == row["authority"]:
+            out["same"].append(row)
+        else:
+            out["differ"].append(row)
+    return out
+
+
+def field(run, c):
+    """Facing sight (`fov_on`): off, the client draws no field (its dumps have no facing); on (F5
+    through the admin link), the field and its readout appear, and at four looks the authority's
+    perceived set matches the client's field; a walking look is held at `look_walk_deg`; a
+    release snaps a walk back to its travel and leaves a standing body facing where it was; the
+    Settings switch turns it off again; each switch is a law_change row."""
+    s = "field"
+    ids = residents(run, len(FOV_PLACES))
+    if len(ids) < len(FOV_PLACES):
+        c.check(s, f"{len(FOV_PLACES)} residents to place", False, f"only {ids}")
+        return
+    # Off at the start: the law as shipped (a re-run starts from it again).
+    subprocess.run([sys.executable, V, "call", "--run", run, "--as-admin", "set_world_law", '["fov_on", "false"]'], capture_output=True, text=True)
+    changes0 = sql(run, "SELECT id FROM law_change")
+    snap = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};sql|SELECT key, target, bearing, band FROM heard WHERE listener = {{me}}"
+    body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy FROM body WHERE id = {{me}}"
+    # By day (`{epoch_at:12}`, a scratch fixture): at night side vision is left out of the
+    # comparison for the lights the client can't know, and a day lasts 12 minutes.
+    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on"
+    for deg in FOV_LOOKS:
+        plan += f";look:{deg};wait:2.5;sync:h{deg};dump:h{deg};shot:h{deg}"
+    # Walking north with the look east (90° off): held at look_walk_deg; F3 (to "where you walk")
+    # releases it while walking, then standing.
+    plan += (";look:90;hold:0;wait:2;sync:walk;key:F3:tap;wait:1.5;sync:released;stop;wait:1.5;key:F3:tap;look:270;wait:2;sync:looked;key:F3:tap;wait:1.5;sync:stood;"
+             "click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;shot:03_settings_on;dump:03;click:@settings:facing_sight;wait:2.5;shot:04_settings_off;dump:04;quit")
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
+    places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, FOV_PLACES)]
+    env = {"LIVING_GAME_CONTROL": "cursor", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::controls=debug"}
+    old = {k: os.environ.get(k) for k in list(env) + ["LIVING_SIGHT_FIELD_DUMP"]}
+    name = f"{s}-{THEME}" if THEME else s
+    fdir = os.path.join(ROOT, ".local/living/verify", run, "ui", name, "fields")
+    if os.path.isdir(fdir):
+        for f in os.listdir(fdir):
+            os.remove(os.path.join(fdir, f))
+    os.environ.update(env, LIVING_SIGHT_FIELD_DUMP=fdir)
+    try:
+        out, code, text = drive(run, s, plan, places=places, syncs=syncs, extra=["--admin-link"])
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    c.check(s, "the admin token file was deleted after the drive", "admin token file deleted" in text and not any(os.scandir(os.path.join(ROOT, ".local/living/verify", run, "private"))))
+    L = log(out)
+    d = {k: dump(out, k) for k in ["01_off", "02_on", "03", "04"] + [f"h{x}" for x in FOV_LOOKS]}
+    fs = lambda k: ((d[k] or {}).get("extra") or {}).get("facing_sight") or {}
+    dumps = field_dumps(fdir) if os.path.isdir(fdir) else []
+    before_on = [m for m, _ in dumps if m["wall_ms"] < min([m["wall_ms"] for m, _ in dumps if m.get("facing")] or [1 << 62])]
+    c.check(s, "off: the client knows facing sight is off and draws no field", fs("01_off").get("known") and fs("01_off").get("on") is False and before_on and all(m.get("facing") is None for m in before_on), json.dumps(fs("01_off")))
+    c.check(s, "the admin link opened (a play scene's law_toggle)", "facing: admin link open" in L)
+    on = fs("02_on")
+    want = {"focal_deg": 70.0, "side_deg": 110.0, "side_share": 1 / 3, "near_m": None, "margin_deg": 10.0}
+    fv = on.get("field") or {}
+    c.check(s, "F5 turns it on: the field has the law's five values", on.get("on") and all(abs(fv.get(k, -1) - v) < 1e-3 for k, v in want.items() if v is not None) and fv.get("near_m") in (2.0, 3.0), json.dumps(on))
+    c.check(s, "the readout shows the five values when it changes", re.search(r"facing: Facing sight on — Focal ±70° · side ±110° at 33% of sight · near [23] m all round · margin 10°", L) is not None)
+    toasts = (d["02_on"] or {}).get("toasts") or []
+    c.check(s, "…on screen, as two notes", any(t.startswith("Facing sight on") for t in toasts) and any(t.startswith("Focal ±70°") for t in toasts), str(toasts))
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    snaps = sc.get("snaps") or {}
+    results = {}
+    for deg in FOV_LOOKS:
+        r = compare_fov(snaps.get(f"h{deg}") or [], dumps, me) if snaps.get(f"h{deg}") else None
+        results[deg] = r
+        if r is None:
+            c.check(s, f"look {deg}°: a snapshot and a field dump", False)
+            continue
+        want_h = math.degrees(wrap(math.radians(deg - 90)))
+        dh = abs(math.degrees(wrap(math.radians(r["heading_client"] - r["heading_authority"]))))
+        dl = abs(math.degrees(wrap(math.radians(r["heading_authority"] - want_h))))
+        c.check(s, f"look {deg}°: human_face turned the authority's body (within 3°), the field follows it (within 3°)", dl < 3.0 and dh < 3.0, f"authority {r['heading_authority']:.1f}°, client {r['heading_client']:.1f}°, wanted {want_h:.1f}°")
+        seen_n = sum(1 for x in r["same"] if x["authority"])
+        unseen_n = sum(1 for x in r["same"] if not x["authority"])
+        c.check(s, f"look {deg}°: the authority's perceived set matches the client's field", not r["differ"] and seen_n >= 2 and unseen_n >= 2, f"differ {r['differ']}; {seen_n} seen and {unseen_n} unseen agree; {len(r['margin'])} at a margin")
+    json.dump(results, open(os.path.join(out, "fov_compare.json"), "w"), indent=1)
+    # Heard, not seen: the authority's heard rows at each look against the client's marks then.
+    heard_ok, heard_n, stray = 0, 0, []
+    for deg in FOV_LOOKS:
+        rows = {r["query"].split(" FROM ")[1].split()[0]: r for r in snaps.get(f"h{deg}") or []}
+        if "heard" not in rows:
+            continue
+        seen_ids = {p["body"] for p in rows["perceived"]["rows"]}
+        marks = {int(m["key"], 16): m for m in (((d[f"h{deg}"] or {}).get("extra") or {}).get("heard") or []) if m.get("live")}
+        for h in rows["heard"]["rows"]:
+            heard_n += 1
+            m = marks.get(int(h["key"]))
+            heard_ok += bool(m and m["bearing"] == h["bearing"] and m["band"] == h["band"])
+            if h["target"] in seen_ids:
+                stray.append(h)
+    c.check(s, "heard, not seen: a mark per heard row, by its key, its way and band", heard_n >= 3 and heard_ok >= 0.8 * heard_n, f"{heard_ok} of {heard_n} matched")
+    c.check(s, "…and none of them is someone in sight", not stray, str(stray[:3]))
+    c.check(s, "…marks fade after their rows go", re.search(r"heard: mark [0-9a-f]{16} \(\w+\) faded", L) is not None)
+    def b(n):
+        rows = (snaps.get(n) or [{}])[0].get("rows") or []
+        return rows[0] if rows else None
+    walk, rel, looked, stood = b("walk"), b("released"), b("looked"), b("stood")
+    north = -90.0
+    # The client releases its look while a direction is held (controls::FACE_WHILE_MOVING off,
+    # until look-2): walking north with the cursor east, the body faces and walks north. With it
+    # on, the authority would hold the body 30° toward the look (look_walk_deg).
+    face_moving = re.search(r"pub const FACE_WHILE_MOVING: bool = (\w+);", open(os.path.join(ROOT, "living/game/src/controls.rs")).read())
+    face_moving = face_moving and face_moving.group(1) == "true"
+    if walk:
+        h = math.degrees(heading_at(walk, snaps["walk"][0]["wall_ms"]))
+        off = abs(math.degrees(wrap(math.radians(h - north))))
+        speed = math.hypot(walk["vx"], walk["vy"])
+        if face_moving:
+            c.check(s, "walking north with the look east: the body turns 30° toward it, not more (look_walk_deg)", abs(off - 30.0) < 4.0 and speed > 0.5, f"heading {h:.1f}°, speed {speed:.2f}")
+        else:
+            c.check(s, "walking north with the cursor east: the look is released while moving, the body faces its travel", off < 4.0 and speed > 0.5, f"heading {h:.1f}°, speed {speed:.2f}")
+        moving_rel = re.search(r"look: human_face\(0\.000, 0\.000\)", L) is not None
+        c.check(s, "…the release went as human_face(0, 0)", moving_rel or face_moving)
+    if rel:
+        h = math.degrees(heading_at(rel, snaps["released"][0]["wall_ms"]))
+        c.check(s, "a release while walking snaps back to the travel (north)", abs(math.degrees(wrap(math.radians(h - north)))) < 4.0, f"heading {h:.1f}°")
+    if looked and stood:
+        h1 = math.degrees(heading_at(looked, snaps["looked"][0]["wall_ms"]))
+        h2 = math.degrees(heading_at(stood, snaps["stood"][0]["wall_ms"]))
+        c.check(s, "standing, a look west turns the body there and a release leaves it there", abs(abs(h1) - 180.0) < 4.0 and abs(math.degrees(wrap(math.radians(h2 - h1)))) < 2.0, f"looked {h1:.1f}°, after the release {h2:.1f}°")
+    sends = len(re.findall(r"look: human_face\(", L))
+    refusals = re.findall(r"face refused: ([^\n]+)", L)
+    c.check(s, "looks went through human_face, none refused for anything but the input bucket", sends >= 6 and all("too many movement inputs" in x for x in refusals), f"{sends} sends; refusals {refusals[:3]}")
+    c.check(s, "Settings › Play shows facing sight on, its switch and the values", fs("03").get("on") and "settings:facing_sight" in ((d["03"] or {}).get("tags") or {}))
+    c.check(s, "the Settings switch turns it off; the field goes", fs("04").get("on") is False and dumps and dumps[-1][0].get("facing") is None, json.dumps(fs("04")))
+    c.check(s, "…and the readout says so", re.search(r"facing: Facing sight off", L) is not None)
+    changes = sql(run, "SELECT id, name, old, new, revision FROM law_change")
+    new = [r for r in changes if r["id"] not in {x["id"] for x in changes0}]
+    c.check(s, "each switch is a law_change row (fov_on false → true → false)", [(r["name"], r["new"]) for r in sorted(new, key=lambda r: r["id"])] == [("fov_on", "true"), ("fov_on", "false")], str(new))
+
+
 # The look-walk presets (`living/game/src/twist.rs` `LookWalk::preset`): head and chest limits,
 # the body's limit and time constant (s). Kept in step with the client by hand.
 LOOK_WALK = {"head": (60, 0, 45, 0.22), "chest": (50, 40, 45, 0.35), "loose": (60, 55, 45, 0.6)}
@@ -561,7 +799,7 @@ def look_walk_one(run, c, preset):
             # Check the last drive's log again (iterating on the checks).
             out, code, text = out_dir, 0, "reused"
         else:
-            out, code, text = drive(run, name, plan, syncs=[f"spot=place_at|{{me}}|{LOOK_WALK_SPOT[0]}|{LOOK_WALK_SPOT[1]}"], token=os.environ.get("LOOK_WALK_TOKEN"))
+            out, code, text = drive(run, name, plan, syncs=[f"spot=place_at|{{me}}|{LOOK_WALK_SPOT[0]}|{LOOK_WALK_SPOT[1]}"], extra=["--token", os.environ["LOOK_WALK_TOKEN"]] if os.environ.get("LOOK_WALK_TOKEN") else ())
     finally:
         for k, v in env_keep.items():
             if v is None:
@@ -570,6 +808,12 @@ def look_walk_one(run, c, preset):
                 os.environ[k] = v
     c.check(s, "client ran and joined", code == 0, text[-300:])
     rows = feet_log(out)
+    # Only the scenario's own frames: from its first scripted look (after the spot and the preset
+    # are set). Before that the body stands wherever the last drive left it, and the first-time
+    # tip's click can strike; since fov-client, `human_face` turns a standing body to the
+    # cursor, so those frames turn and twist for reasons this scenario doesn't set up.
+    first = next((i for i, r in enumerate(rows) if r.get("look") is not None), len(rows))
+    rows = rows[first:]
     c.check(s, "the feet log recorded the walk", len(rows) > 300, f"{len(rows)} frames")
     if len(rows) < 300:
         return {}
@@ -809,7 +1053,7 @@ def wheel_workplace(run, c):
     c.check(s, "and the authority's words are noted", len((d["03"] or {}).get("notes") or []) > 0, str((d["03"] or {}).get("notes")))
 
 
-SCENARIOS = {"windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "support": support}
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "support": support}
 
 
 def main():

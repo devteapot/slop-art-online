@@ -33,7 +33,16 @@ files is checked and reported.
 Read from the game's log: `people perf` (frame time, LIVING_GAME_PERF=frames), `view … meshes`
 (LIVING_GAME_PERF=diag: meshes, distinct meshes and materials, triangles per view) and the spring
 bones' cost. Memory is the process's peak resident size (/proc), and the GPU's memory in use
-(the kernel's per-process DRM counters). OUT_DIR gets `crowd.json`, the logs and a photograph of each run.
+(the kernel's per-process DRM counters). On macOS the resident size is `ps`'s and the graphics
+memory the process's IOAccelerator memory from `footprint` (sampled every few seconds; the peak
+of the samples), and its physical footprint is reported too. OUT_DIR gets `crowd.json`, the logs
+and a photograph of each run.
+
+`lod` and `NAME-lod` runs (not by default) use the people's files holding the full and the far
+model (lookdev/lod/own-<name>.glb, town.py --lod both), which a client that switches by
+distance (lookdev.rs `far_models`) draws as one or the other. `--binary NAME=PATH` runs a set
+with another build of the game (`--runs before:ours,lod`: the `before` binary for `ours`), and
+`--game-env K=V` sets a variable for every run.
 """
 
 import argparse
@@ -131,24 +140,46 @@ def gpu_memory(pid):
     return total // (1 << 20)
 
 
-def run_game(out, name, env, seconds, size, place="meadow", photo=True):
+def mac_memory(pid):
+    """A process's physical footprint and its IOAccelerator (graphics) memory in MiB, from
+    macOS's `footprint`."""
+    try:
+        text = subprocess.run(["footprint", "-p", str(pid)], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return 0, 0
+    mib = lambda v, u: float(v) * dict(B=1 / (1 << 20), KB=1 / 1024, MB=1, GB=1024).get(u, 0)
+    total = re.search(r"Footprint:\s*([\d.]+)\s*(B|KB|MB|GB)", text)
+    gpu = sum(mib(v, u) for v, u, cat in re.findall(r"^\s*([\d.]+)\s*(B|KB|MB|GB)\s+[\d.]+\s*(?:B|KB|MB|GB)\s+[\d.]+\s*(?:B|KB|MB|GB)\s+\d+\s+(.*)$", text, re.M) if "IOAccelerator" in cat)
+    return int(mib(*total.groups())) if total else 0, int(gpu)
+
+
+def run_game(out, name, env, seconds, size, place="meadow", photo=True, binary=None):
     """Run the game headless on the line-up for `seconds`, logging; returns what was measured."""
     log = os.path.join(out, f"{name}.log")
     shots = os.path.join(out, name)
     shutil.rmtree(shots, ignore_errors=True)
     target = os.environ.get("CARGO_TARGET_DIR", os.path.join(REPO, "living", "target"))
-    binary = os.path.join(target if os.path.isabs(target) else os.path.join(REPO, target), "release", "living-game")
+    binary = binary or os.path.join(target if os.path.isabs(target) else os.path.join(REPO, target), "release", "living-game")
     # The tour photographs once per shot; each shot waits for the scene to settle, so a list of
     # shots keeps the run going while the log gathers its two-second reports.
     e = dict(os.environ, LIVING_GAME_LOOKDEV="1", LIVING_GAME_TOUR=shots, LIVING_GAME_TOUR_ONLY=place, LIVING_GAME_TOUR_SHOTS=",".join(["default"] * 400), LIVING_GAME_SIZE=size,
              LIVING_GAME_FPS_CAP="0", LIVING_GAME_FRAMES=os.path.join(out, f"{name}.frames.csv"), RUST_LOG="warn,living_game=debug", **env)
     e.setdefault("LIVING_GAME_PERF", "frames,diag")
-    peak = dict(rss=0, gpu=0)
+    peak = dict(rss=0, gpu=0, footprint=0)
     with open(log, "w") as f:
         p = subprocess.Popen([binary], cwd=os.path.join(REPO, "living", "game"), env=e, stdout=f, stderr=subprocess.STDOUT)
 
         def watch():
             while p.poll() is None:
+                if sys.platform == "darwin":
+                    try:
+                        peak["rss"] = max(peak["rss"], int(subprocess.run(["ps", "-o", "rss=", "-p", str(p.pid)], capture_output=True, text=True).stdout.strip() or 0) // 1024)
+                    except ValueError:
+                        pass
+                    fp, gpu = mac_memory(p.pid)
+                    peak["footprint"], peak["gpu"] = max(peak["footprint"], fp), max(peak["gpu"], gpu)
+                    time.sleep(2.0)
+                    continue
                 try:
                     for line in open(f"/proc/{p.pid}/status"):
                         if line.startswith("VmRSS:"):
@@ -170,7 +201,12 @@ def run_game(out, name, env, seconds, size, place="meadow", photo=True):
                 p.kill()
         t.join(timeout=3)
     text = open(log, errors="replace").read()
-    res = dict(run=name, rss_mb=peak["rss"], gpu_mb=peak["gpu"])
+    res = dict(run=name, rss_mb=peak["rss"], gpu_mb=peak["gpu"], binary=binary)
+    if peak["footprint"]:
+        res["footprint_mb"] = peak["footprint"]
+    lods = re.findall(r"(\d+) of (\d+) with a far model show it", re.sub(r"\x1b\[[0-9;]*m", "", text))
+    if lods:
+        res.update(far_shown=int(lods[-1][0]), with_far=int(lods[-1][1]))
     perf = [(float(a), float(b), int(c)) for a, b, c in re.findall(r"people perf: mean ([\d.]+) ms \([\d.]+ fps\), worst ([\d.]+) ms; (\d+) characters", text)]
     # The first reports include loading; the settled ones are the second half.
     settled = perf[len(perf) // 2 :] if len(perf) >= 4 else perf
@@ -235,17 +271,20 @@ def main():
     ap.add_argument("--springs", default="", help="LIVING_GAME_SPRINGS for every run (0 turns spring bones off)")
     ap.add_argument("--repeat", type=int, default=1, help="run the whole list this many times, interleaved; frame times are then reported as median, least and most (a shared machine's load moves them)")
     ap.add_argument("--tag", default="", help="a suffix for this set of runs' names")
+    ap.add_argument("--binary", action="append", default=[], metavar="NAME=PATH", help="a build of the game a run can name (`--runs NAME:set`)")
+    ap.add_argument("--game-env", action="append", default=[], metavar="K=V", help="an environment variable for every run")
     ap.add_argument("--env", default="meadow", help="the environment the crowd stands in (envs/<id>.json; `lineup` is the look-dev line-up, which also shows every file in lookdev/)")
     a = ap.parse_args()
     people = json.load(open(os.path.join(a.town, "town.json")))["people"]
-    sets = {"ours": (people, ""), "same": (people, ""), "far": (people, "far/")}
+    sets = {"ours": (people, ""), "same": (people, ""), "far": (people, "far/"), "lod": (people, "lod/")}
     for item in a.set:
         name, town = item.split("=", 1)
         other = json.load(open(os.path.join(town, "town.json")))["people"]
-        sets[name], sets[name + "-far"] = (other, ""), (other, "far/")
+        sets[name], sets[name + "-far"], sets[name + "-lod"] = (other, ""), (other, "far/"), (other, "lod/")
+    binaries = dict(b.split("=", 1) for b in a.binary)
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
-    extra = {}
+    extra = dict(kv.split("=", 1) for kv in a.game_env)
     if a.perf:
         extra["LIVING_GAME_PERF"] = "frames,diag," + a.perf
     if a.springs:
@@ -253,11 +292,16 @@ def main():
     original = open(RECIPES).read()
     results, rounds = [], {}
 
-    def one(name, photo):
+    def one(run, photo):
+        build, _, name = run.rpartition(":")
+        if build and build not in binaries:
+            raise SystemExit(f"--runs {run}: no --binary {build}=PATH")
+        binary = binaries.get(build)
+        label = run.replace(":", "-") + a.tag
         if name == "empty":
-            return run_game(out, name + a.tag, extra, a.seconds, a.size, a.env, photo)
+            return run_game(out, label, extra, a.seconds, a.size, a.env, photo, binary)
         if name == "vroid":
-            return run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:1"), a.seconds, a.size, a.env, photo)
+            return run_game(out, label, dict(extra, LIVING_GAME_CROWD=f"{a.count}:1"), a.seconds, a.size, a.env, photo, binary)
         if name in sets:
             book = json.loads(original)
             who, sub = sets[name]
@@ -275,14 +319,14 @@ def main():
             with open(RECIPES, "w") as f:
                 json.dump(book, f)
             try:
-                return run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:{seed}"), a.seconds, a.size, a.env, photo)
+                return run_game(out, label, dict(extra, LIVING_GAME_CROWD=f"{a.count}:{seed}"), a.seconds, a.size, a.env, photo, binary)
             finally:
                 with open(RECIPES, "w") as f:
                     f.write(original)
         raise SystemExit(f"--runs: {name!r} is not one of empty, vroid, {', '.join(sets)}")
 
     def load():
-        return float(open("/proc/loadavg").read().split()[0])
+        return round(os.getloadavg()[0], 2)
 
     try:
         for k in range(a.repeat):
@@ -291,17 +335,17 @@ def main():
                 r = one(name, photo=name not in rounds)  # each set is photographed once, on its first run
                 r["load_average"] = round((before + load()) / 2, 1)
                 rounds.setdefault(name, []).append(r)
-                print(json.dumps({x: r.get(x) for x in ("run", "frame_ms", "interval_ms_p50", "gpu_ms", "people_materials", "people_meshes", "people_ktris", "rss_mb", "gpu_mb", "load_average")}), flush=True)
+                print(json.dumps({x: r.get(x) for x in ("run", "frame_ms", "interval_ms_p50", "gpu_ms", "people_materials", "people_meshes", "people_ktris", "rss_mb", "footprint_mb", "gpu_mb", "far_shown", "load_average")}), flush=True)
         for name, rs in rounds.items():
             r = dict(rs[-1])
-            for key in ("frame_ms", "interval_ms_p50", "interval_ms_p95", "interval_ms_p99", "gpu_ms", "rss_mb", "gpu_mb", "springs_us", "anim_us", "load_average"):
+            for key in ("frame_ms", "interval_ms_p50", "interval_ms_p95", "interval_ms_p99", "gpu_ms", "rss_mb", "footprint_mb", "gpu_mb", "springs_us", "anim_us", "load_average"):
                 vals = sorted(x[key] for x in rs if x.get(key) is not None)
                 if vals:
                     r[key] = vals[len(vals) // 2]
                     r[key + "_range"] = [vals[0], vals[-1]]
             r["rounds"] = len(rs)
             # Every run of this set in the order it was made, to compare sets round by round.
-            r["each"] = [{k: x.get(k) for k in ("frame_ms", "interval_ms_p50", "gpu_ms", "rss_mb", "gpu_mb", "load_average")} for x in rs]
+            r["each"] = [{k: x.get(k) for k in ("frame_ms", "interval_ms_p50", "gpu_ms", "rss_mb", "footprint_mb", "gpu_mb", "load_average")} for x in rs]
             results.append(r)
     finally:
         with open(RECIPES, "w") as f:

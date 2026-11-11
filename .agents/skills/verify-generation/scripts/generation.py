@@ -667,6 +667,54 @@ def check_plans(seed, rows, plans, tile):
             c = land_pt(spec["at"])
             return (c[0] + f[1] * sp["at"][0] + f[0] * sp["at"][1], c[1] - f[0] * sp["at"][0] + f[1] * sp["at"][1])
 
+        def lot_tiles(spec):
+            """A lot's footprint tiles on the land (`host::footprint_tiles`: tile centres inside its
+            rectangle; a planned lot has no margin)."""
+            fc = spec["facing"]
+            b = math.radians({"north": 0.0, "n": 0.0, "east": 90.0, "e": 90.0, "south": 180.0, "s": 180.0, "west": 270.0, "w": 270.0}[fc] if isinstance(fc, str) else fc)
+            fx, fy = math.sin(b), math.cos(b)
+            f = (e[0] * fx + nv[0] * fy, e[1] * fx + nv[1] * fy)
+            c = land_pt(spec["at"])
+            hw, hd = spec["size"][0] * 0.5, spec["size"][1] * 0.5
+            r = int(math.ceil(math.hypot(hw, hd))) + 1
+            out = set()
+            for j in range(int(c[1] // 1) - r, int(c[1] // 1) + r + 1):
+                for i in range(int(c[0] // 1) - r, int(c[0] // 1) + r + 1):
+                    dx, dy = i + 0.5 - c[0], j + 0.5 - c[1]
+                    if abs(-dx * f[1] + dy * f[0]) <= hw and abs(dx * f[0] + dy * f[1]) <= hd:
+                        out.add((i, j))
+            return out
+
+        footprints = {spec["id"]: lot_tiles(spec) for spec in want}
+
+        def own_tiles(lid):
+            """The lot's own tiles (docs/AUTHORED_PLANS.md, "A household's own things stand inside
+            its lot"): its footprint less street (road, 6) and water (2) tiles and tiles under
+            another of the plan's lots."""
+            others = set().union(*(t for k, t in footprints.items() if k != lid))
+            return {t for t in footprints[lid] if t not in others and tile(t[0] + 0.5, t[1] + 0.5) not in (2, 6)}
+
+        def stands_near(lid, at, reach=1.5):
+            """The nearest tile one can stand on within `reach` of `at` that is joined to the lot's
+            door by walkable tiles (4-connected, within 12 tiles of the door; doors are reachable:
+            hosting refuses a plan otherwise). None when there is none."""
+            row = lot_of[lid]
+            start = (int(row["door_x"] // 1), int(row["door_y"] // 1))
+            if tile(*start) not in WALKABLE:
+                return None
+            seen, todo = {start}, [start]
+            while todo:
+                x, y = todo.pop()
+                for q in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if q not in seen and abs(q[0] - start[0]) <= 12 and abs(q[1] - start[1]) <= 12 and tile(q[0] + 0.5, q[1] + 0.5) in WALKABLE:
+                        seen.add(q)
+                        todo.append(q)
+            d = min((math.dist((x + 0.5, y + 0.5), at) for x, y in seen), default=None)
+            return d if d is not None and d <= reach else None
+
+        # A structure a household owns placed for a lot without a spot stands inside the lot
+        # (since hearth-1): on one of the lot's own tiles.
+        inside_of = lambda st: st.get("owner") and st.get("lot") and not st.get("spot") and "at" not in st
         laws_src = seed.get("laws") or ((ROOT / "living/seeds" / seed["laws_file"]).read_text() if seed.get("laws_file") else "")
         rate = {m.group(1): float(m.group(2)) for m in re.finditer(r'name:\s*"(\w+)"[^\n]*?burns:\s*#\{[^}]*?rate:\s*([\d.]+)', laws_src)}
         held = {}
@@ -677,9 +725,18 @@ def check_plans(seed, rows, plans, tile):
         for st in rows["structure"]:
             by_kind.setdefault(st["kind"], []).append(st)
         absent, unlit, unstocked, taken, placed, used = [], [], [], set(), {}, []
+        outside = []
         for i, st in enumerate(plan.get("structures", [])):
             at = land_pt(st["at"]) if "at" in st else lot_pt(st["lot"], st.get("spot"))
-            near = [x for x in by_kind.get(st["kind"], []) if x["id"] not in taken and math.dist(at, (x["x"], x["y"])) < 2.5]
+            if inside_of(st):
+                own = own_tiles(st["lot"])
+                near = [x for x in by_kind.get(st["kind"], []) if x["id"] not in taken and (int(x["x"] // 1), int(x["y"] // 1)) in own]
+                if not near:
+                    by = min(by_kind.get(st["kind"], []), key=lambda x: math.dist(at, (x["x"], x["y"])), default=None)
+                    outside.append({"kind": st["kind"], "lot": st["lot"], "nearest": by and {"at": [round(by["x"], 2), round(by["y"], 2)], "tile": tile(by["x"], by["y"]), "of_lot": [k for k, t in footprints.items() if (int(by["x"] // 1), int(by["y"] // 1)) in t]}})
+                    continue
+            else:
+                near = [x for x in by_kind.get(st["kind"], []) if x["id"] not in taken and math.dist(at, (x["x"], x["y"])) < 2.5]
             if not near:
                 absent.append({"kind": st["kind"], "at": [round(at[0], 1), round(at[1], 1)], "lot": st.get("lot")})
                 continue
@@ -729,6 +786,22 @@ def check_plans(seed, rows, plans, tile):
                     badly.append({"kind": st["kind"], "household": hh, "owner": x["owner"], "house_owner": house.get("owner")})
             n = sum(1 for st in plan.get("structures", []) if st.get("owner"))
             present(f"plan {pid}: its {n} household structures are placed and owned by their household's house owner", len(owned) == n and not badly, {"placed": len(owned), "wrong": badly[:10]})
+            # Since hearth-1: those placed for a lot stand inside it, never on a street's tile or
+            # another lot's, and each within act reach (1.5 m) of a tile one stands on that is
+            # joined to the lot's door.
+            ins = [(st, x) for st, x in owned if inside_of(st)]
+            if any(inside_of(st) for st in plan.get("structures", [])):
+                m = sum(1 for st in plan.get("structures", []) if inside_of(st))
+                kinds = Counter(st["kind"] for st in plan["structures"] if inside_of(st))
+                present(f"plan {pid}: its {m} household structures placed for a lot stand inside it, on its own tiles, not a street's or another lot's ({dict(kinds)})", len(ins) == m and not outside, {"inside": len(ins), "outside": outside[:10]})
+                far = []
+                on_floor = 0
+                for st, x in ins:
+                    d = stands_near(st["lot"], (x["x"], x["y"]))
+                    on_floor += tile(x["x"], x["y"]) not in WALKABLE
+                    if d is None:
+                        far.append({"kind": st["kind"], "lot": st["lot"], "at": [round(x["x"], 2), round(x["y"], 2)]})
+                present(f"plan {pid}: each of them is within 1.5 m (act reach) of a tile one stands on, joined to its lot's door ({on_floor} on a building's floor)", ins and not far, far[:10])
         if plan.get("structures"):
             kinds = Counter(st["kind"] for st in plan["structures"])
             present(f"plan {pid}: its {len(plan['structures'])} authored structures stand where written ({dict(kinds)})", not absent, absent[:10])
@@ -795,6 +868,28 @@ def check_plans(seed, rows, plans, tile):
             present(f"plan {pid}: household {hh} owns the house on lot {lot_id}", row and owner in names, {"owner": owner, "household": sorted(names)})
             homes = {(round(by_name[n]["home_x"], 1), round(by_name[n]["home_y"], 1)) for n in members.get(hh, []) if n in by_name}
             present(f"plan {pid}: household {hh} lives at lot {lot_id}'s door", row and homes == {(round(row["door_x"], 1), round(row["door_y"], 1))}, {"homes": sorted(homes), "door": row and [row["door_x"], row["door_y"]]})
+        # Every household keeps its house and, where the plan gives its home a store of its own
+        # and a fire (its own, or one at a spot of its lot: the Marver's public hearth), that
+        # store and fire, standing at its home lot (since hearth-1).
+        fires = set(rate) | {"campfire", "hearth"}
+        stores = lambda k: k == "storage" or k.endswith("store")
+        lacking = []
+        for hh, lot_id in town.get("homes", {}).items():
+            row = key.get(lot_id)
+            if not row:
+                continue
+            house = structures.get(row["structure"], {})
+            names = {by_name[n]["id"] for n in members.get(hh, []) if n in by_name}
+            at_home = [st for st in plan.get("structures", []) if st.get("lot") == lot_id and (st.get("owner") in (None, f"household:{hh}"))]
+            want_fire = any(st["kind"] in fires for st in at_home)
+            here = lambda x: (int(x["x"] // 1), int(x["y"] // 1)) in footprints[lot_id] or math.dist((x["x"], x["y"]), (row["door_x"], row["door_y"])) <= 6.0
+            fire = [x for x in rows["structure"] if x["kind"] in fires and (x["owner"] in names or not x["owner"]) and here(x)]
+            store = [x for x in rows["structure"] if stores(x["kind"]) and x["owner"] in names and here(x)]
+            want_store = any(stores(st["kind"]) and st.get("owner") for st in at_home)
+            if house.get("owner") not in names or (want_store and not store) or (want_fire and not fire):
+                lacking.append({"household": hh, "lot": lot_id, "house_owner": house.get("owner"), "store": len(store), "fire": len(fire), "plan_gives": {"store": want_store, "fire": want_fire}})
+        if town.get("homes"):
+            present(f"plan {pid}: each of its {len(town['homes'])} households has its house, and the store and fire its plan gives its home", not lacking, lacking[:10])
         signs = {a["topic"]: a for a in rows["artifact"] if a["kind"] == "sign"}
         for b in town.get("buildings", []):
             if not b.get("lot"):

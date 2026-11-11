@@ -12055,128 +12055,149 @@
       {
        "kind": "hearth",
        "lot": "lamp_house",
+       "owner": "household:faro",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "low_1",
+       "owner": "household:dunlin",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "low_2",
+       "owner": "household:calloway",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "low_4",
+       "owner": "household:tarn",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "low_5",
+       "owner": "household:okoro",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "low_6",
+       "owner": "household:vane",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "low_7",
+       "owner": "household:morrow",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "low_8",
+       "owner": "household:sato",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "low_10",
+       "owner": "household:marl",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "mid_1",
+       "owner": "household:greave",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "mid_2",
+       "owner": "household:fenwick",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "mid_4",
+       "owner": "household:stannard",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "mid_5",
+       "owner": "household:sarro",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "mid_7",
+       "owner": "household:brandt",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "high_1",
+       "owner": "household:pontil",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "high_2",
+       "owner": "household:hollin",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "high_3",
+       "owner": "household:quill",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "high_5",
+       "owner": "household:dunmore",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "readers_house",
+       "owner": "household:orme",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "turf_house",
+       "owner": "household:roon",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "hearth",
        "lot": "hanger_cottage",
+       "owner": "household:sedge",
        "fuel": 12.0,
-       "note": "the household's hearth, full (a game day)"
+       "note": "the household's hearth, inside its house, full (a game day)"
       },
       {
        "kind": "lamp",

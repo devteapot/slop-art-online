@@ -19,6 +19,12 @@
 //!   authority's next sweep (every 200 ms) and its delivery drop them. Nobody is drawn who isn't
 //!   sent: this only fades earlier those it still sends.
 //!
+//! - **Memory** (the `memory` look under trial, `sightedge::Look`): when each field is shown,
+//!   every texel seen within my radius records the time; a second texture of the same texels
+//!   holds how recently each was seen (1 now, 0 [`crate::sightedge::MEMORY_S`] ago or never),
+//!   uploaded about 15 times a second while that look is on. It follows the field's corner, so
+//!   it remembers only within the field (±64 m).
+//!
 //! `LIVING_SIGHT_FIELD_DUMP=DIR` writes the field and where it was worked out, once a second when
 //! it changed (`field-<n>.pgm` and `.json`), for checks against the authority's perceived set.
 //! `LIVING_GAME_PERF=sightfield` logs the recompute cost every 5 s.
@@ -32,6 +38,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::tasks::{futures::check_ready, AsyncComputeTaskPool, Task};
 use living_bindings::*;
 use living_rules::map::Map;
+use living_rules::script::Senses;
 use spacetimedb_sdk::Table;
 use std::collections::{HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -61,11 +68,24 @@ pub struct Cost {
     pub last_ms: f64,
     /// Tiles tested in the last run.
     pub tiles: u32,
+    /// The memory look's work on the frame: recording each new field, and building each upload
+    /// (count, total ms).
+    pub remember: (u64, f64),
+    pub memory_upload: (u64, f64),
 }
 
 #[derive(Resource)]
 pub struct SightField {
     pub image: Handle<Image>,
+    /// How recently each texel was seen (the memory look), at the same corner as the field.
+    pub memory_image: Handle<Image>,
+    /// Whether the memory texture is current (the memory look is on and has uploaded it).
+    pub memory_live: bool,
+    /// When each texel was last seen within my radius (s of app time; -inf never), and the
+    /// corner they are kept at.
+    last_seen: Vec<f32>,
+    memory_origin: IVec2,
+    next_memory: f32,
     /// The corner of texel (0, 0) (sim metres, on a tile corner).
     pub origin: IVec2,
     /// Whether the texture holds a field for where I am.
@@ -73,7 +93,9 @@ pub struct SightField {
     eye: Option<Vec2>,
     reach: f32,
     /// Where the field was last asked for (the running or last task), and the running task.
-    asked: Option<(Vec2, f32)>,
+    asked: Option<(Vec2, f32, Option<Facing>)>,
+    /// The facing the shown field was worked out for (none: sight the same all round).
+    pub facing: Option<Facing>,
     task: Option<Task<Computed>>,
     /// The tiles sight is tested on: the hosted land, with the window's edits and shut gates.
     map: Option<Arc<Map>>,
@@ -128,17 +150,26 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let mut image = Image::new(size, TextureDimension::D2, vec![255; (SIZE * SIZE) as usize], TextureFormat::R8Unorm, RenderAssetUsages::default());
     image.sampler = ImageSampler::linear();
     let handle = images.add(image);
+    let mut memory = Image::new(size, TextureDimension::D2, vec![0; (SIZE * SIZE) as usize], TextureFormat::R8Unorm, RenderAssetUsages::default());
+    memory.sampler = ImageSampler::linear();
+    let memory_image = images.add(memory);
     let dump = std::env::var("LIVING_SIGHT_FIELD_DUMP").ok().filter(|d| !d.is_empty()).map(std::path::PathBuf::from);
     if let Some(d) = &dump {
         let _ = std::fs::create_dir_all(d);
     }
     commands.insert_resource(SightField {
         image: handle,
+        memory_image,
+        memory_live: false,
+        last_seen: vec![f32::NEG_INFINITY; (SIZE * SIZE) as usize],
+        memory_origin: IVec2::ZERO,
+        next_memory: 0.0,
         origin: IVec2::ZERO,
         valid: false,
         eye: None,
         reach: 0.0,
         asked: None,
+        facing: None,
         task: None,
         map: None,
         hosted: None,
@@ -158,7 +189,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 fn attach(mut commands: Commands, field: Option<Res<SightField>>, cams: Query<Entity, (With<crate::post::Edges>, Without<crate::post::SightTexture>)>) {
     let Some(field) = field else { return };
     for cam in &cams {
-        commands.entity(cam).insert(crate::post::SightTexture(field.image.clone()));
+        commands.entity(cam).insert(crate::post::SightTexture(field.image.clone(), field.memory_image.clone()));
     }
 }
 
@@ -214,6 +245,7 @@ fn tiles(mut field: Option<ResMut<SightField>>, live: Res<crate::live::Live>, ne
 /// A field worked out off the frame.
 struct Computed {
     seen: Vec<u8>,
+    facing: Option<Facing>,
     origin: IVec2,
     eye: Vec2,
     reach: f32,
@@ -222,8 +254,12 @@ struct Computed {
 }
 
 /// Work the field out again when I moved, my sight changed or the tiles did.
-fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: Res<crate::controls::Target>, mut images: ResMut<Assets<Image>>, time: Res<Time>) {
+#[allow(clippy::too_many_arguments)]
+fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: Res<crate::controls::Target>, net: NonSend<Net>, scene: NonSend<crate::world::Scene>, mut images: ResMut<Assets<Image>>, time: Res<Time>) {
     let Some(field) = field.as_deref_mut() else { return };
+    // While the world's `fov_on` law gives my senses a field: which way my body faces, by the
+    // authority's own motion row, at the instant my body is drawn.
+    let facing = facing_now(&edge, &net, &scene);
     let dt = time.delta_secs();
     let (Some(map), Some(me), Some(want)) = (field.map.clone(), target.0, edge.want) else {
         field.valid = false;
@@ -243,23 +279,45 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
         field.origin = done.origin;
         field.eye = Some(done.eye);
         field.reach = done.reach;
+        field.facing = done.facing;
         field.valid = true;
         field.fresh = true;
         if let Some(mut img) = images.get_mut(&field.image) {
             img.data = Some(done.seen.clone());
         }
         field.seen = done.seen;
+        let t0 = std::time::Instant::now();
+        remember(field, edge.radius, time.elapsed_secs());
+        field.cost.remember.0 += 1;
+        field.cost.remember.1 += t0.elapsed().as_secs_f64() * 1000.0;
     }
-    let due = field.asked.is_none_or(|(e, r)| e.distance(eye) >= MOVE_M || (reach - r).abs() > 0.01);
+    // The memory look: how recently each texel was seen, about 15 times a second.
+    let wants_memory = edge.mode == Mode::Unseen && edge.look == crate::sightedge::Look::Memory;
+    field.next_memory -= dt;
+    if wants_memory && field.next_memory <= 0.0 && field.valid {
+        field.next_memory = 1.0 / 15.0;
+        let t0 = std::time::Instant::now();
+        let now = time.elapsed_secs();
+        let bytes: Vec<u8> = field.last_seen.iter().map(|t| ((1.0 - (now - t) / crate::sightedge::MEMORY_S).clamp(0.0, 1.0) * 255.0) as u8).collect();
+        if let Some(mut img) = images.get_mut(&field.memory_image) {
+            img.data = Some(bytes);
+        }
+        field.memory_live = true;
+        field.cost.memory_upload.0 += 1;
+        field.cost.memory_upload.1 += t0.elapsed().as_secs_f64() * 1000.0;
+    } else if !wants_memory {
+        field.memory_live = false;
+    }
+    let due = field.asked.is_none_or(|(e, r, f)| e.distance(eye) >= MOVE_M || (reach - r).abs() > 0.01 || turned(&f, facing));
     if due && field.task.is_none() {
-        field.asked = Some((eye, reach));
+        field.asked = Some((eye, reach, facing));
         let half = (EXTENT * 0.5) as i32;
         let origin = IVec2::new(eye.x.floor() as i32 - half, eye.y.floor() as i32 - half);
         field.task = Some(AsyncComputeTaskPool::get().spawn(async move {
             let t0 = std::time::Instant::now();
             let mut seen = vec![0u8; (SIZE * SIZE) as usize];
-            let tested = compute(&map, eye, reach, origin, &mut seen);
-            Computed { seen, origin, eye, reach, ms: t0.elapsed().as_secs_f64() * 1000.0, tested }
+            let tested = compute(&map, eye, reach, origin, &mut seen, facing.as_ref());
+            Computed { seen, facing, origin, eye, reach, ms: t0.elapsed().as_secs_f64() * 1000.0, tested }
         }));
     }
     if crate::perf::has("sightfield") {
@@ -268,6 +326,7 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
             field.next_report = 5.0;
             let c = field.cost;
             info!("sight field: {} recomputes, mean {:.3} ms, max {:.3} ms, last {:.3} ms over {} tiles (reach {:.1} m)", c.runs, c.total_ms / c.runs.max(1) as f64, c.max_ms, c.last_ms, c.tiles, field.reach);
+            info!("sight field: memory on the frame: {} records, mean {:.3} ms; {} uploads built, mean {:.3} ms", c.remember.0, c.remember.1 / c.remember.0.max(1) as f64, c.memory_upload.0, c.memory_upload.1 / c.memory_upload.0.max(1) as f64);
         }
     }
     field.next_dump -= dt;
@@ -280,11 +339,90 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
     }
 }
 
+/// Record the texels the field shows seen within my radius as seen now, after moving what is
+/// remembered to the field's corner.
+fn remember(field: &mut SightField, radius: f32, now: f32) {
+    let (Some(eye), origin) = (field.eye, field.origin) else { return };
+    if origin != field.memory_origin {
+        let shift = (origin - field.memory_origin) * (1.0 / TEXEL) as i32;
+        let old = std::mem::replace(&mut field.last_seen, vec![f32::NEG_INFINITY; (SIZE * SIZE) as usize]);
+        for j in 0..SIZE {
+            for i in 0..SIZE {
+                let (oi, oj) = (i + shift.x, j + shift.y);
+                if (0..SIZE).contains(&oi) && (0..SIZE).contains(&oj) {
+                    field.last_seen[(j * SIZE + i) as usize] = old[(oj * SIZE + oi) as usize];
+                }
+            }
+        }
+        field.memory_origin = origin;
+    }
+    let r2 = radius * radius;
+    for j in 0..SIZE {
+        let y = origin.y as f32 + (j as f32 + 0.5) * TEXEL - eye.y;
+        if y * y > r2 {
+            continue;
+        }
+        for i in 0..SIZE {
+            let x = origin.x as f32 + (i as f32 + 0.5) * TEXEL - eye.x;
+            let k = (j * SIZE + i) as usize;
+            if x * x + y * y <= r2 && field.seen[k] >= 128 {
+                field.last_seen[k] = now;
+            }
+        }
+    }
+}
+
+/// Which way my body faces and how my view narrows away from it, while the world's `fov_on` law
+/// gives my senses a field (`sight::Field`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Facing {
+    /// `body.heading` (radians, sim: +x east, +y south), by `steer::pose` on my motion row.
+    pub heading: f32,
+    /// My senses now (`senses(a)`), the field among them.
+    pub senses: Senses,
+}
+
+/// Work the field out again when my heading turns this far (or the field's values change).
+pub const TURN_DEG: f32 = 2.0;
+
+fn turned(was: &Option<Facing>, now: Option<Facing>) -> bool {
+    match (was, now) {
+        (None, None) => false,
+        (Some(a), Some(b)) => a.senses.field != b.senses.field || a.senses.sight != b.senses.sight || living_rules::steer::wrap(a.heading - b.heading).abs() > TURN_DEG.to_radians(),
+        _ => true,
+    }
+}
+
+/// My body's heading now (`body.heading`, eased through its turn by `steer::pose`, as the
+/// authority's `heading_at`), from my own motion row, at `now_ms` on the display clock.
+pub fn my_heading(net: &Net, now_ms: f64) -> Option<f32> {
+    let (conn, me) = (net.conn.as_ref()?, net.my_id?);
+    let m = conn.db.my_body().id().find(&me)?;
+    let end = (m.next_ms as f64).max(m.t_ms as f64);
+    let dt = ((now_ms.min(end) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
+    let (_, _, h) = living_rules::steer::pose(m.x, m.y, m.heading, m.vx.hypot(m.vy), m.turn, m.turn_s, dt);
+    Some(living_rules::steer::wrap(h))
+}
+
+/// My facing now, while my senses have a field; none without one (sight the same all round).
+pub fn facing_now(edge: &SightEdge, net: &Net, scene: &crate::world::Scene) -> Option<Facing> {
+    let senses = edge.senses.filter(|s| s.field.is_some())?;
+    // `human_face` (`controls::look`) sets `body.heading` too: the same row.
+    Some(Facing { heading: my_heading(net, scene.mine_ms)?, senses })
+}
+
 /// The field round `eye` (sim metres) within `reach`, texel (0, 0) at `origin`: 255 where the
 /// line from `eye` to the texel's centre is clear (`Map::sight_clear`, the authority's test),
 /// then every texel on a blocking tile joined to a seen one (one building, one rock) is seen
 /// too. Returns the texels tested.
-pub fn compute(map: &Map, eye: Vec2, reach: f32, origin: IVec2, seen: &mut [u8]) -> u32 {
+///
+/// With a `facing` (the world's `fov_on` law), a texel must also lie within what the eye sees in
+/// its direction (`sight::reach`, the rules' one sight rule): full sight within the focal angle
+/// (out to `reach`, as without a field, so the radius's soft band draws that edge), the side
+/// share out to the side angle, and the near ring all round. Ground has no glow, and the
+/// margins for someone already seen don't apply to ground. Without one, the field is exactly
+/// what it was before facing sight.
+pub fn compute(map: &Map, eye: Vec2, reach: f32, origin: IVec2, seen: &mut [u8], facing: Option<&Facing>) -> u32 {
     seen.fill(0);
     let r2 = reach * reach;
     let e = (eye.x, eye.y);
@@ -301,8 +439,16 @@ pub fn compute(map: &Map, eye: Vec2, reach: f32, origin: IVec2, seen: &mut [u8])
             if c.0 < 0.0 || c.1 < 0.0 || c.0 >= map.w as f32 || c.1 >= map.h as f32 {
                 continue;
             }
-            if (c.0 - e.0).powi(2) + (c.1 - e.1).powi(2) > r2 {
+            let d2 = (c.0 - e.0).powi(2) + (c.1 - e.1).powi(2);
+            if d2 > r2 {
                 continue;
+            }
+            if let Some(f) = facing {
+                let r = living_rules::sight::reach(&f.senses, living_rules::sight::off_facing(e, f.heading, c), 0.0, None);
+                // Full sight that way (the focal angle): the field reaches as far as without one.
+                if r < f.senses.sight && d2 > r * r {
+                    continue;
+                }
             }
             tested += 1;
             if map.sight_clear(e, c) {
@@ -330,6 +476,17 @@ pub fn compute(map: &Map, eye: Vec2, reach: f32, origin: IVec2, seen: &mut [u8])
     tested
 }
 
+/// A facing for the dump: `null`, or its heading and the field's five values.
+fn facing_json(f: Option<&Facing>) -> String {
+    match f.and_then(|f| f.senses.field.map(|v| (f, v))) {
+        None => "null".into(),
+        Some((f, v)) => format!(
+            "{{\"heading\": {:.5}, \"sight\": {:.3}, \"focal_deg\": {}, \"side_deg\": {}, \"side_share\": {}, \"near_m\": {}, \"margin_deg\": {}}}",
+            f.heading, f.senses.sight, v.focal_deg, v.side_deg, v.side_share, v.near_m, v.margin_deg
+        ),
+    }
+}
+
 fn write_dump(field: &mut SightField, dir: &std::path::Path, radius: f32, want: f32) {
     let n = field.dumped;
     field.dumped += 1;
@@ -338,8 +495,8 @@ fn write_dump(field: &mut SightField, dir: &std::path::Path, radius: f32, want: 
     let eye = field.eye.unwrap_or_default();
     let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
     let json = format!(
-        "{{\"n\": {n}, \"wall_ms\": {ms}, \"origin\": [{}, {}], \"size\": {SIZE}, \"texel\": {TEXEL}, \"eye\": [{:.3}, {:.3}], \"radius\": {radius:.3}, \"sight\": {want:.3}, \"reach\": {:.3}, \"cost_ms\": {:.4}, \"tiles\": {}}}\n",
-        field.origin.x, field.origin.y, eye.x, eye.y, field.reach, field.cost.last_ms, field.cost.tiles
+        "{{\"n\": {n}, \"wall_ms\": {ms}, \"origin\": [{}, {}], \"size\": {SIZE}, \"texel\": {TEXEL}, \"eye\": [{:.3}, {:.3}], \"radius\": {radius:.3}, \"sight\": {want:.3}, \"reach\": {:.3}, \"cost_ms\": {:.4}, \"tiles\": {}, \"facing\": {}}}\n",
+        field.origin.x, field.origin.y, eye.x, eye.y, field.reach, field.cost.last_ms, field.cost.tiles, facing_json(field.facing.as_ref())
     );
     let _ = std::fs::write(dir.join(format!("field-{n:04}.pgm")), pgm);
     let _ = std::fs::write(dir.join(format!("field-{n:04}.json")), json);
@@ -378,6 +535,7 @@ fn people(
         let off: Vec<String> = rows.iter().filter(|r| !r.2 || (0.0..0.5).contains(&r.3)).map(|r| format!("{}@{:.1}m line {} field {:.2}", r.1, r.0, r.2, r.3)).collect();
         info!("sight field check: {} sent and drawn; {} with the line blocked or the field under 0.5 here: {:?}", rows.len(), off.len(), off);
     }
+    let facing = facing_now(&edge, &net, &scene);
     if edge.mode == Mode::Fade || edge.want.is_none() {
         broke.clear();
         return;
@@ -397,11 +555,22 @@ fn people(
             continue;
         }
         let Some(&(p, _)) = scene.shown.get(&id) else { continue };
-        let clear = map.sight_clear((me.x, me.y), (p.x, p.y));
+        let mut clear = map.sight_clear((me.x, me.y), (p.x, p.y));
+        // With facing sight, the angle too: someone who leaves my field (past its side edge and
+        // its margin, outside the near ring and its keep metre) fades as they leave it. The
+        // distance stays the authority's (a light on them, which the client can't see, may show
+        // them further), so this tests the angle only: a glow as far as they are.
+        if let (true, Some(f)) = (clear, facing) {
+            let d = p.distance(me);
+            clear = living_rules::sight::within((me.x, me.y), f.heading, (p.x, p.y), d, &f.senses, d, Some(edge.keep_m));
+        }
         if !clear {
+            // The memory look leaves a faint figure where they were last seen (`live.rs` holds
+            // it once the authority stops sending them); the others fade them out.
+            let to = if edge.ghosts() { crate::sightedge::GHOST_LEVEL } else { 1.0 };
             if let Ok(mut f) = fades.get_mut(entity) {
-                if f.target < 1.0 {
-                    f.target = 1.0;
+                if f.target < to {
+                    f.target = to;
                 }
             }
             if let std::collections::hash_map::Entry::Vacant(e) = broke.entry(id) {
@@ -440,7 +609,7 @@ mod tests {
         let eye = Vec2::new(64.5, 62.0);
         let origin = IVec2::new(0, 0);
         let mut seen = vec![0u8; (SIZE * SIZE) as usize];
-        compute(&m, eye, 30.0, origin, &mut seen);
+        compute(&m, eye, 30.0, origin, &mut seen, None);
         // The texel whose centre is at (x, y) (sim metres, on a quarter).
         let texel = |x: f32, y: f32| (((y / TEXEL) as i32) * SIZE + (x / TEXEL) as i32) as usize;
         for j in 80..168 {
@@ -459,6 +628,92 @@ mod tests {
         assert_eq!(seen[texel(64.25, 95.25)], 0, "beyond the reach");
     }
 
+    fn day_field(heading: f32) -> Facing {
+        let field = living_rules::sight::Field { focal_deg: 70.0, side_deg: 110.0, side_share: 1.0 / 3.0, near_m: 3.0, margin_deg: 10.0 };
+        Facing { heading, senses: Senses { sight: 11.0, hearing: 9.0, field: Some(field) } }
+    }
+
+    /// With facing sight, every texel within sight is the rules' own answer (`sight::sees`, the
+    /// authority's test) at four headings; past sight only the focal angle reaches on (to the
+    /// radius's soft band), and a wall still hides inside the field.
+    #[test]
+    fn facing_field_is_the_rules_answer() {
+        let mut m = open(128);
+        for y in 60..64 {
+            m.set(70, y, Terrain::Wall);
+        }
+        let eye = Vec2::new(64.5, 62.0);
+        let reach = 11.0 + MARGIN;
+        let mut seen = vec![0u8; (SIZE * SIZE) as usize];
+        for heading in [0.0f32, 1.3, -2.2, std::f32::consts::PI] {
+            let f = day_field(heading);
+            compute(&m, eye, reach, IVec2::ZERO, &mut seen, Some(&f));
+            let (mut n, mut front, mut back) = (0, 0, 0);
+            for j in 80..170 {
+                for i in 80..180 {
+                    let c = ((i as f32 + 0.5) * TEXEL, (j as f32 + 0.5) * TEXEL);
+                    if !m.passable_missile(c.0, c.1) {
+                        continue;
+                    }
+                    let d = ((c.0 - eye.x).powi(2) + (c.1 - eye.y).powi(2)).sqrt();
+                    let got = seen[(j * SIZE + i) as usize] == 255;
+                    let off = living_rules::sight::off_facing((eye.x, eye.y), heading, c);
+                    if d <= 11.0 {
+                        let want = living_rules::sight::sees(&m, (eye.x, eye.y), heading, c, d, &f.senses, 0.0, None);
+                        assert_eq!(got, want, "heading {heading}: texel {i},{j} at {d:.2} m, {:.1}° off", off.to_degrees());
+                        n += 1;
+                    } else if d <= reach {
+                        // The band past sight: drawn only within the focal angle.
+                        let want = off.abs().to_degrees() <= 70.0 && m.sight_clear((eye.x, eye.y), c);
+                        assert_eq!(got, want, "heading {heading}: band texel {i},{j}");
+                    } else {
+                        assert!(!got);
+                    }
+                    if got && off.abs().to_degrees() > 110.0 {
+                        back += 1;
+                        assert!(d <= 3.0, "behind, only the near ring");
+                    }
+                    if got && off.abs().to_degrees() <= 70.0 {
+                        front += 1;
+                    }
+                }
+            }
+            assert!(n > 1000 && front > 400 && back > 20, "heading {heading}: {n} compared, {front} ahead, {back} behind");
+        }
+    }
+
+    /// A field that sees all round (focal 180°) draws exactly what no field draws.
+    #[test]
+    fn a_round_field_is_the_old_field() {
+        let mut m = open(128);
+        for y in 60..64 {
+            for x in 70..72 {
+                m.set(x, y, Terrain::Wall);
+            }
+        }
+        let eye = Vec2::new(64.5, 62.0);
+        let (mut a, mut b) = (vec![0u8; (SIZE * SIZE) as usize], vec![0u8; (SIZE * SIZE) as usize]);
+        let mut f = day_field(0.7);
+        f.senses.field.as_mut().unwrap().focal_deg = 180.0;
+        let na = compute(&m, eye, 15.0, IVec2::ZERO, &mut a, None);
+        let nb = compute(&m, eye, 15.0, IVec2::ZERO, &mut b, Some(&f));
+        assert_eq!((na, a), (nb, b));
+    }
+
+    /// The field is worked out again when the heading turns past 2° or the field changes.
+    #[test]
+    fn turning_recomputes() {
+        let f = day_field(0.0);
+        assert!(!turned(&None, None));
+        assert!(turned(&None, Some(f)) && turned(&Some(f), None));
+        assert!(!turned(&Some(f), Some(Facing { heading: 1.9f32.to_radians(), ..f })));
+        assert!(turned(&Some(f), Some(Facing { heading: 2.1f32.to_radians(), ..f })));
+        assert!(!turned(&Some(Facing { heading: 3.13, ..f }), Some(Facing { heading: -3.13, ..f })), "across ±π is a small turn");
+        let mut g = f;
+        g.senses.field.as_mut().unwrap().near_m = 2.0;
+        assert!(turned(&Some(f), Some(g)));
+    }
+
     /// A shut gate blocks the field as it blocks the authority's sight.
     #[test]
     fn shut_gate_blocks() {
@@ -470,11 +725,11 @@ mod tests {
         }
         let eye = Vec2::new(64.5, 62.5);
         let mut seen = vec![0u8; (SIZE * SIZE) as usize];
-        compute(&m, eye, 30.0, IVec2::ZERO, &mut seen);
+        compute(&m, eye, 30.0, IVec2::ZERO, &mut seen, None);
         let k = (125 * SIZE + 150) as usize; // (75.25, 62.75)
         assert_eq!(seen[k], 255, "through the open gate");
         m.set_blocked([62 * 128 + 70].into_iter().collect());
-        compute(&m, eye, 30.0, IVec2::ZERO, &mut seen);
+        compute(&m, eye, 30.0, IVec2::ZERO, &mut seen, None);
         assert_eq!(seen[k], 0, "the gate shut");
     }
 }

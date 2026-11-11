@@ -123,8 +123,21 @@ pub struct Input {
     pub face: Option<Vec2>,
     /// The scheme's note was shown on arrival.
     hinted: bool,
-    /// The look last given to [`look`] (`Some(None)`: released).
-    pub look_sent: Option<Option<Vec2>>,
+    /// What [`look`] sent to the authority, and its refusals.
+    pub looks: LookSend,
+}
+
+/// The look's sends (`human_face`): the last look sent (`Some(None)`: released), when, and the
+/// latest one the input bucket refused (retried as soon as it allows, as a move is).
+#[derive(Default)]
+pub struct LookSend {
+    pub last: Option<Option<Vec2>>,
+    pub at: f64,
+    pub sends: u64,
+    pub refused: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// A refusal other than the bucket's: not retried (the same look would be refused again).
+    pub failed: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    retry_at: Option<f64>,
 }
 
 impl Input {
@@ -218,11 +231,13 @@ pub fn movement(
     ui: Res<crate::hud::UiWants>,
     time: Res<Time>,
     binds: Res<crate::keys::Binds>,
+    combat: Option<Res<crate::combat::Combat>>,
 ) {
     if net.my_id != input.sent_for {
         input.sent_for = net.my_id;
         input.sent = Some(RESEND);
         input.retry_at = None;
+        input.looks = LookSend::default();
     }
     let Some(conn) = &net.conn else { return };
     if net.my_id.is_none() {
@@ -272,6 +287,23 @@ pub fn movement(
     input.dir = dir;
     let (qx, qy) = quantize(dir);
     let intent = (qx, qy, run && (qx, qy) != (0, 0));
+    // My look, to the authority (`human_face`): facing the cursor, its direction, standing and
+    // walking; facing where I walk, the cursor's only while a move is aimed (a skill key held,
+    // a guard up), then released (the body faces its travel again).
+    let aims = combat.as_deref().is_some_and(|c| c.aims);
+    let dir = match input.control {
+        Control::Cursor => input.look,
+        Control::Travel if aims => input.look,
+        Control::Travel => None,
+    };
+    // While moving, the look is released unless [`FACE_WHILE_MOVING`] (see there). It goes
+    // before this frame's move, so a walk that starts reaches the authority after the release,
+    // while the body still stands: a release then keeps the facing and the walk turns on its
+    // eased curve, where a release mid-walk snaps the heading to the travel (a leg jump).
+    let dir = dir.filter(|_| FACE_WHILE_MOVING || !input.moving);
+    let mut looks = std::mem::take(&mut input.looks);
+    look(&net, dir, &mut looks, now);
+    input.looks = looks;
     // Release of all keys sends one stop; idle frames send nothing.
     let changed = input.sent != Some(intent) && !(input.sent.is_none() && intent.0 == 0 && intent.1 == 0);
     if changed && input.retry_at.is_none() {
@@ -289,42 +321,80 @@ pub fn movement(
         net.report("move", r);
         input.moved_at = Some(std::time::Instant::now());
     }
-    // My look, to the authority once it takes one (`look`, a no-op today): the cursor's
-    // direction facing the cursor; facing where I walk, none (the body faces its travel).
-    let dir = match input.control {
-        Control::Cursor => input.look,
-        Control::Travel => None,
-    };
-    let mut last = input.look_sent;
-    look(&net, dir, &mut last);
-    input.look_sent = last;
     // A move the authority held back while I was rooted is re-sent by the authority itself
     // (`combat::resume_move`); RMB is the bow shot (combat.rs), so there is no click-to-move.
     let _ = (&mouse, &ui, &time);
 }
 
 /// Where my character looks, toward the authority: the one place the client's look direction
-/// goes (interface D, agreed 2026-11-11). The reducer is `human_face(dx, dy)` (dev-box's fov-1
-/// is building it): rate-limited by the authority, a change under about 10° writes nothing, and
-/// `None` is sent as `human_face(0, 0)`, which releases the look (the body faces its travel).
-///
-/// **A no-op until `human_face` is on main and the bindings are regenerated with
-/// `just living-generate`.** Then this sends it as it is called now: "cursor" with the
-/// cursor's direction, "travel" with `None` (an aimed move reaches the authority with its own
-/// aim point).
-pub fn look(net: &Net, dir: Option<Vec2>, last: &mut Option<Option<Vec2>>) {
-    // Unchanged (within the authority's ~10°): nothing to send.
-    let same = match (*last, dir) {
-        (Some(None), None) => true,
-        (Some(Some(a)), Some(b)) => a.normalize_or_zero().dot(b.normalize_or_zero()) > 10f32.to_radians().cos(),
-        _ => false,
-    };
-    if same || net.conn.is_none() {
+/// goes (interface D, agreed 2026-11-11). The reducer is `human_face(dx, dy)` (dev-box's fov-1,
+/// on main at d0918462): screen axes as `human_move` (+x east, +y south, any length), `(0, 0)`
+/// releases the look. It turns `body.heading`, the one facing the authority's sight (`fov_on`)
+/// and everyone else's see: standing, the body turns in place; walking, the walk bends toward
+/// the look by at most the `look_walk_deg` law and holds there; a release while walking snaps
+/// back to the travel. A look within `look_slack_deg` (10°) of the held one writes nothing and
+/// spends no input token, so this sends on any change over [`LOOK_DEG`], at most every
+/// [`LOOK_S`]; a look the input bucket refused ("too many movement inputs") goes again as soon
+/// as it allows ([`RETRY_S`]), any other refusal is not retried. The field of view follows the
+/// authority's heading on my motion row (`sightfield::my_heading`, by `steer::pose`), so it never
+/// runs ahead of what the authority sees.
+pub fn look(net: &Net, dir: Option<Vec2>, st: &mut LookSend, now: f64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let dir = dir.filter(|d| d.length_squared() > 1e-6).map(|d| d.normalize());
+    let Some(conn) = net.conn.as_ref().filter(|_| net.my_id.is_some()) else { return };
+    // The latest look was refused by the bucket: send what is wanted again soon.
+    if st.sends > 0 && st.refused.load(Relaxed) == st.sends && st.retry_at.is_none() {
+        st.retry_at = Some(now + RETRY_S);
+        st.refused.store(0, Relaxed);
+        st.last = None;
+    }
+    if st.retry_at.is_some_and(|t| now < t) {
         return;
     }
-    *last = Some(dir);
-    // No `human_face` in the bindings yet: nothing is sent.
+    st.retry_at = None;
+    let same = match (st.last, dir) {
+        (Some(None), None) => true,
+        (Some(Some(a)), Some(b)) => a.dot(b) > LOOK_DEG.to_radians().cos(),
+        _ => false,
+    };
+    if same || (now - st.at < LOOK_S && dir.is_some()) {
+        return;
+    }
+    // Nothing was ever looked: no release to send.
+    if st.last.is_none() && dir.is_none() && st.sends == 0 {
+        st.last = Some(None);
+        return;
+    }
+    st.last = Some(dir);
+    st.at = now;
+    st.sends += 1;
+    let d = dir.unwrap_or(Vec2::ZERO);
+    debug!("look: human_face({:.3}, {:.3})", d.x, d.y);
+    let (seq, refused, failed, report) = (st.sends, st.refused.clone(), st.failed.clone(), net.on_reply("look", "human_face", || serde_json::json!({"dx": d.x, "dy": d.y})));
+    let r = conn.reducers.human_face_then(d.x, d.y, move |ctx, r| {
+        if let Ok(Err(e)) = &r {
+            if e.contains("too many movement inputs") {
+                refused.fetch_max(seq, Relaxed);
+            } else {
+                failed.fetch_max(seq, Relaxed);
+            }
+        }
+        report(ctx, r);
+    });
+    net.report("look", r);
 }
+
+/// Whether a look is sent while a direction is held. Off until dev-box's look-2 is on main: on
+/// main a look while walking bends the travel itself up to 30° toward it (`look_walk_deg`), so
+/// the owner walked at 0.87× speed with a sideways drift (play-test 5). look-2 makes the velocity
+/// follow the keys and turns only the facing; then this is the one line to change. Off, a look
+/// is sent standing and released (`human_face(0, 0)`) as soon as a direction is held.
+pub const FACE_WHILE_MOVING: bool = false;
+
+/// A look is sent again when it turns this far (degrees; the authority's own slack is 10°)…
+pub const LOOK_DEG: f32 = 4.0;
+/// …and at most this often (s), except a release.
+pub const LOOK_S: f64 = 0.1;
 
 /// Send a chat line to whoever is in earshot, addressed to `to` (0: no one in particular).
 /// Returns whether it was sent.
