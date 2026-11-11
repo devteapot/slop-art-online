@@ -714,7 +714,24 @@ The shared clips are within the spread of the other two arms for all three heigh
 
 `.agents/skills/verify-ui/features/crowd.md` is the recipe to check it again.
 
-**Seen in every run, before as after:** a few crowd members' scenes are rebuilt after they are shaped (`scene was rebuilt; its proportions and outfit are lost`, 0 to 6 of 64 a run). crowd-1 rebinds their clips, but their proportions are lost, as before. Not fixed here.
+**Seen in every run, before as after:** a few crowd members' scenes are rebuilt after they are shaped (`scene was rebuilt; its proportions and outfit are lost`, 0 to 6 of 64 a run). crowd-1 rebinds their clips, but their proportions are lost, as before. Fixed in rebuild-keep (below).
+
+### Scenes rebuilt (rebuild-keep, 2026-11-11)
+
+**The cause.** Bevy 0.20 loads a label (`own-x.glb#Scene0`) by force-loading its root (`HandleLoadingMode::Force` in `AssetServer::load_internal`) even when a load of the root itself is under way (bevy#10549). `characters::spawn` asked for both in the same frame: the scene's label for the `WorldAssetRoot`, and the root for the clips (`kept`). So a new file was read twice. The second read replaced the scene asset (`AssetEvent::Modified`), and Bevy respawned every instance already made from the first read, on new bone entities: the shaped skeleton, the outfit and the springs were left on bones that no longer existed. A probe of the asset events showed it on each rebuilt person: the glTF `LoadedWithDependencies` twice, then `Modified` on it and on its scene. In look-dev the line-up's own load of the same files, dropped when the tour switches environment, did it too. The island waits for a scene to load before it spawns a person there, so it does not race.
+
+**The fix.**
+- `characters::SceneOf`: a character, an animal (`bodies::spawn_beast`), the look-dev line-up and the asset view ask for the root alone. The scene is the root's own `scenes[0]` once it is in (`place_scenes`), so a file is read once.
+- If a scene is spawned again anyway (a changed file, a hot reload), `characters::on_ready` counts each character's spawns (`WorldInstanceReady`). On the second it lets go of what was built on the old bones, hiding the person until fitted again: the fit, the proportions (`Shaped`), the rig, springs, outfit and its pieces, the far model's lists, the clips' player binding, the look's and the feet's bones. Each is then built again by its usual system.
+- It sends `characters::Rebuilt`. A type's identity bones belong in `shape`, which runs again; anything else that sets a person's bones once listens to that message.
+- `LIVING_GAME_PERF=rebuild=S` spawns every character's scene again S seconds after the cover lifts, through Bevy's own respawn; `nokeep` skips the letting go, to compare.
+
+**What was measured** (the laptop, Cullet's 64 in the meadow at the game camera):
+- **Before:** 9 of 13 runs of the 64 lost some people's proportions (1 to 10 people a run).
+- **After:** 0 rebuilds and 64 of 64 people shaped, in 6 of 6 runs: 3 with the both-files, 3 with the full files.
+- **Forced** (`rebuild=4`, all 65 characters, you as wick-marl, 1.03 m: legs 0.80, head 1.39): with `nokeep` all 65 were left unshaped, and the child became an adult-proportioned figure at its height. With the fix all 65 were fitted, shaped and bound again: wick-marl `1.03 m (×0.607), hips ×0.827, stride 0.53` before and after, and the far switch rebuilt (64 of 65 far, you near).
+- **Unit test:** `characters::tests::a_second_spawn_of_a_characters_scene_lets_go_of_what_was_built_on_the_old_one`.
+- **Evidence:** `.local/living/rebuild-keep/`.
 
 ### Pass 2's measurement (2026-11-11)
 
