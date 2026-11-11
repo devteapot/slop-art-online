@@ -21,6 +21,9 @@
 //!   size, which is real size for our generated assets).
 //! - `LIVING_GAME_VIEW_ENV=<environment id>` lights the view with that environment's mood.
 //! - `LIVING_GAME_HOUR=<h>` puts the sun at that hour's place (east at 6, west at 18).
+//! - `LIVING_GAME_VIEW_ATMO=1` lights the view by the environments' day curve at that hour, as
+//!   the game does (daylight.rs): light, sky, fog, grading and glow, so a night shot is night.
+//!   Without it the view keeps its fixed mood and the hour only moves the sun.
 //! - `LIVING_GAME_VIEW_CLIP=<name>[,<name>…]`: the clips to play and photograph (default: the
 //!   first four).
 //!
@@ -40,6 +43,13 @@ use std::path::{Path, PathBuf};
 
 pub fn enabled() -> bool {
     std::env::var("LIVING_GAME_VIEW").is_ok_and(|v| !v.is_empty())
+}
+
+/// Whether the view is lit by the day curve (`LIVING_GAME_VIEW_ATMO=1`, with the asset view on).
+pub fn day_curve() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| enabled() && std::env::var("LIVING_GAME_VIEW_ATMO").is_ok_and(|v| v == "1"))
 }
 
 /// Named camera angles for photographs: (name, yaw°, pitch°). Yaw 0 looks at a model's front
@@ -147,6 +157,9 @@ pub struct ViewState {
     /// photographed, as the game moves a body for its clip: a turn take turns along its curve,
     /// a take with its own track moves along it, a gait on its belt moves at its speed.
     shift: (f32, Vec3),
+    /// The mood's fog distances: the day curve scales them every frame, and in the game the
+    /// camera resets them first (camera::follow), so the view does that here.
+    fog: Option<bevy::pbr::FogFalloff>,
 }
 
 /// Resolve the requested files to paths under the asset folder.
@@ -302,6 +315,7 @@ pub fn setup(
         reports: vec![],
         started: 0.0,
         shift: (0.0, Vec3::ZERO),
+        fog: cams.iter().next().map(|f| f.falloff.clone()),
     });
 }
 
@@ -338,7 +352,12 @@ pub fn clips(
 
 /// Lay the models out in a row by their measured widths, and show only the one in focus in batch
 /// mode.
-pub fn layout(state: Res<ViewState>, mut items: Query<(&Item, &Fitted, &mut Transform, &mut Visibility)>) {
+pub fn layout(state: Res<ViewState>, mut items: Query<(&Item, &Fitted, &mut Transform, &mut Visibility)>, mut fogs: Query<&mut bevy::pbr::DistanceFog, With<Camera3d>>) {
+    if let (true, Some(base)) = (day_curve(), state.fog.as_ref()) {
+        for mut f in &mut fogs {
+            f.falloff = base.clone();
+        }
+    }
     let mut order: Vec<_> = items.iter_mut().collect();
     order.sort_by_key(|(it, ..)| it.index);
     let batch = state.out.is_some();
@@ -472,7 +491,9 @@ pub fn batch(
         if now - state.started > 30.0 {
             warn!("view: {file} did not load");
             state.reports.push(serde_json::json!({ "file": file, "error": "did not load within 30 s" }));
-            state.batch = (i + 1, 0, now);
+            // As after a finished model: the next one starts at its own first step (which
+            // makes its folder).
+            state.batch = (i + 1, 0, 0.0);
             state.started = now;
         }
         return;

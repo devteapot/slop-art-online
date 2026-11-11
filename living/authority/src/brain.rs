@@ -152,7 +152,10 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let night = common::night(ctx, w, now);
     // How dark it is matters to the key only when the rates law reads it (an eased dusk).
     let dark = if common::scripts(ctx).reads("rates", "daylight") { common::dark(ctx, w, now) } else if night { 1.0 } else { 0.0 };
-    let (near_fire, near_shelter) = act::warmth(ctx, at);
+    // A fire that goes out changes this on the next look (its `lit_until_ms` passes): nothing
+    // has to be told when it burns down.
+    let warm = act::warmth(ctx, at, now);
+    let (near_fire, near_shelter) = (warm.fire, warm.shelter);
     let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
     let season = common::season(ctx, now);
     let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
@@ -455,20 +458,31 @@ impl<'a> Ev<'a> {
             }
             Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
             Node::Say(s) => {
+                // Pacing: a say node speaks at most once per 45 s, so a looping graph does not
+                // chatter. The mark is set only when the line is actually spoken.
                 if self.mark_recent(id, 45_000) {
                     return St::Ok;
                 }
                 let to = match &s.to {
                     Some(t) => match self.resolve(t) {
                         Some(r) if r.class == 3 => r.id as u32,
-                        _ => return St::Fail,
+                        Some(_) => return self.say_failed(id, n, &format!("{} is not someone to speak to", graph::describe_target(t))),
+                        None => return self.say_failed(id, n, &format!("no {} in sight", graph::describe_target(t))),
                     },
                     None => 0,
                 };
-                self.set_mark(id);
+                // Within the speaking limit the line waits its turn (a second line right after
+                // the first, or a graph installed just after one spoke) instead of being lost.
+                if perceive::too_soon_to_speak(self.ctx, self.me.id, self.now) {
+                    self.status = format!("about to {}", graph::describe(n));
+                    return St::Run;
+                }
                 match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
-                    Ok(()) => St::Ok,
-                    Err(_) => St::Fail,
+                    Ok(()) => {
+                        self.set_mark(id);
+                        St::Ok
+                    }
+                    Err(why) => self.say_failed(id, n, &why),
                 }
             }
             Node::Think(reason) => {
@@ -482,6 +496,17 @@ impl<'a> Ev<'a> {
                 St::Ok
             }
         }
+    }
+
+    /// A say that cannot be spoken is a failure the body is told about, like a refused leaf
+    /// (once per repeat window for the same line and reason), not a silent skip.
+    fn say_failed(&mut self, id: u16, n: &Node, why: &str) -> St {
+        let desc = graph::describe(n);
+        if act::refused(self.ctx, self.me.id, id, self.st.revision, &desc, why, self.now) {
+            self.st.fails = self.st.fails.saturating_add(1);
+        }
+        self.last_fail = format!("say: {why}");
+        St::Fail
     }
 
     fn leaf_fail(&mut self, id: u16, why: &str) -> St {

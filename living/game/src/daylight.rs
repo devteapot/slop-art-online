@@ -415,7 +415,7 @@ fn compose(
     target: Res<crate::controls::Target>,
     mut atmo: ResMut<Atmo>,
 ) {
-    let active = defs.0.is_some() && (island.is_some() || net.conn.is_some());
+    let active = defs.0.is_some() && (island.is_some() || net.conn.is_some() || crate::view::day_curve());
     atmo.active = active;
     let Some(def) = defs.0.as_ref().filter(|_| active) else { return };
     let hour = clock.hour();
