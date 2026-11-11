@@ -13,8 +13,9 @@ score. The fit's in-sample window ridge applied to every thinking character's wi
 per arm, ALWAYS beside three guards over the same lives: false replies per minute (greet_report.py's
 false_replies, loaded from the batch's own checkout when it has one; n/a otherwise), the share of
 own lines that repeat an own line of the last 10 minutes, and the share of addressed lines that led
-to something within 180 s (a trade, lesson, gift, help, hosting or agreement in its percepts, or a
-plan of its own or of the addressee naming the other: lenient, an upper bound). Against a baseline
+to something within 180 s (an outcome it is part of: trade, lesson, gift, help, hosting, agreement;
+or a new plan of its own or of the addressee naming the other), beside a placebo (the same test with
+every line moved 6 minutes earlier). Runs without final.json are left out unless --include-running. Against a baseline
 arm (a "control" arm, else "default", else the first), an arm whose score rises while any guard gets
 worse is reported "LOST". The score is never printed alone. A proxy-fitted model prints the PROXY
 banner and CIRCULARITY: the proxy said being answered mattered most, so a proxy-tuned score resting
@@ -824,34 +825,41 @@ def kind_section(key, eids, ys, X, cols, W, result):
 
 # ---- score -----------------------------------------------------------------------------
 
-OUTCOME = re.compile(r"taught you|^You taught|gave you|^You gave|\bgave .* to you|agree|accepted your terms|takes you in|took you in|"
-                     r"tended your|^You tended|hosts? you|\bheal", re.I)
-LED_S, REPEAT_S = 180, 600
+# Outcomes the character is part of ("you"); third parties' agreements do not count.
+OUTCOME = re.compile(r"taught you|^You taught|gave you|^You gave|\bgave .* to you|your terms|accepted your|agreed with you|^You agreed|"
+                     r"takes you in|took you in|tended your|^You tended|hosts? you|^You host", re.I)
+LED_S, REPEAT_S, PLACEBO_S = 180, 600, 360
 
 
 def greet_report_for(bd):
     """greet_report.py from the batch's own checkout (read-only), when it has one; else None."""
-    p = Path(bd).resolve().parents[3] / "living/tools/greet_report.py"
-    if not p.is_file():
-        p = ROOT / "living/tools/greet_report.py"
+    parents = Path(bd).resolve().parents
+    if len(parents) < 4:
+        return None
+    p = parents[3] / "living/tools/greet_report.py"
     if not p.is_file():
         return None
     import importlib.util
     spec = importlib.util.spec_from_file_location(f"greet_report_{abs(hash(str(p)))}", p)
     mod = importlib.util.module_from_spec(spec)
-    try:
+    path0 = list(sys.path)
+    try:  # it imports trials (prices only; this checkout's copy is the one already loaded)
         spec.loader.exec_module(mod)
     except Exception as e:  # its imports may not resolve here; then false replies are n/a
         print(f"greet_report.py at {p} did not load ({type(e).__name__}); false replies n/a", file=sys.stderr)
         return None
+    finally:
+        sys.path[:] = path0
     return mod
 
 
-def guards(life, by_name):
-    """Over the run so far: own lines, the share that repeat an own line of the last 10 minutes (word
-    Jaccard 0.6+), and of lines addressed to someone, the share that led to something within LED_S:
-    a trade, lesson, gift, help, hosting or agreement in its own percepts, or a plan of its own or of
-    the addressee (when the addressee thinks) that names the other."""
+def guards(life, by_name, shift_s=0):
+    """Over the given life: its own lines, the share that repeat an own line of the last 10 minutes
+    (word Jaccard 0.6+), and of lines addressed to someone, the share that led to something within
+    LED_S after the line (moved shift_s earlier for the placebo): an outcome it is part of (a trade,
+    lesson, gift, help, hosting or agreement, OUTCOME) in its own percepts, or a NEW plan (installed in
+    that span, different from the plan held before it) of its own or of the addressee (when the
+    addressee thinks) that names the other."""
     said = []
     for ms, kind, raw in life.percepts:
         if kind == "said" or raw.startswith("You said"):
@@ -862,15 +870,23 @@ def guards(life, by_name):
         if any(ms - REPEAT_S * 1000 <= o <= ms and ws | ow and len(ws & ow) / len(ws | ow) >= 0.6 for o, _, ow in said[:i]):
             rep += 1
     events = [ms for ms, _, raw in life.percepts if OUTCOME.search(raw) and not raw.startswith("You said") and "said to" not in raw]
+
+    def new_plans(plans, a_, b_):
+        out, prev = [], None
+        for t, p in plans:
+            if a_ <= t <= b_ and p != prev:
+                out.append(p)
+            prev = p
+        return out
     me = life.name.split()[0]
-    addressed = [(ms, to) for ms, to, _ in said if to and not to.startswith(("a ", "an ", "someone"))] + \
-                [(ms, to) for ms, to, _ in said if to.startswith(("a ", "an ", "someone"))]
+    addressed = [(ms, to) for ms, to, _ in said if to]
     led = 0
     for ms, to in addressed:
-        win = lambda t: ms <= t <= ms + LED_S * 1000
-        first = to.split()[0] if to and not to.startswith(("a ", "an ", "someone")) else None
-        if any(win(t) for t in events) or (first and any(win(t) and re.search(rf"\b{re.escape(first)}\b", p) for t, p in life.plans)) \
-                or (to in by_name and any(win(t) and re.search(rf"\b{re.escape(me)}\b", p) for t, p in by_name[to].plans)):
+        a_, b_ = ms - shift_s * 1000, ms - shift_s * 1000 + LED_S * 1000
+        first = None if to.startswith(("a ", "an ", "someone")) else to.split()[0]
+        if any(a_ <= t <= b_ for t in events) \
+                or (first and any(re.search(rf"\b{re.escape(first)}\b", p) for p in new_plans(life.plans, a_, b_))) \
+                or (to in by_name and any(re.search(rf"\b{re.escape(me)}\b", p) for p in new_plans(by_name[to].plans, a_, b_))):
             led += 1
     return {"lines": len(said), "repeated": rep, "addressed": len(addressed), "led": led}
 
@@ -898,12 +914,20 @@ def cmd_score(a):
             bd = Path(bd).expanduser()
             label = bd.name
             lives = FE.lives_of(label, [bd], random.Random(0))
+            if not a.include_running:  # a run still going, or one that failed before writing its rows, is left out
+                skipped = sorted({l.run for l in lives if not (l.d / "final.json").exists()})
+                if skipped:
+                    print(f"{label}: {len(skipped)} runs without final.json left out (running or failed): {', '.join(skipped)}", file=sys.stderr)
+                lives = [l for l in lives if (l.d / "final.json").exists()]
             gr = greet_report_for(bd)
             runs_seen = set()
             for life in lives:
                 arm = arms[(label, life.variant)]
                 by_name = {l.name: l for l in lives if l.run == life.run}
-                for start in FE.windows(life, w_ms, a.windows):
+                starts = FE.windows(life, w_ms, a.windows)
+                if not starts:
+                    continue  # the guards cover exactly the lives the score covers
+                for start in starts:
                     f = FE.feel(FE.feel_dir(life, start, start + w_ms, tmp / "x" / "y"))
                     sc = m["intercept"] + sum(t["beta"] * (((num(f.get(t["column"])) if num(f.get(t["column"])) is not None else t["median"])
                                                              - t["mean"]) / t["sd"]) for t in m["terms"])
@@ -911,6 +935,7 @@ def cmd_score(a):
                 g = guards(life, by_name)
                 for k2 in ("lines", "repeated", "addressed", "led"):
                     arm[k2] += g[k2]
+                arm["placebo"] = arm.get("placebo", 0) + guards(life, by_name, shift_s=PLACEBO_S)["led"]
                 arm["lives"] += 1
                 if life.run not in runs_seen:
                     runs_seen.add(life.run)
@@ -929,9 +954,10 @@ def cmd_score(a):
         rows[(b, v)] = {"score": mean(x["scores"]) if x["scores"] else None, "windows": len(x["scores"]), "lives": x["lives"],
                         "runs": len(x["runs"]), "false_min": (sum(x["false"]) / x["minutes"]) if x["false"] and x["minutes"] else None,
                         "repeated": x["repeated"] / x["lines"] if x["lines"] else None, "led": x["led"] / x["addressed"] if x["addressed"] else None,
-                        "lines": x["lines"], "addressed": x["addressed"]}
-    out = head + ["", "| batch | arm | score (mean over windows) | windows | lives | false replies / min | repeated lines | talk that led to something | vs baseline |",
-                  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
+                        "lines": x["lines"], "addressed": x["addressed"],
+                        "placebo": x.get("placebo", 0) / x["addressed"] if x["addressed"] else None}
+    out = head + ["", "| batch | arm | score (mean over windows) | windows | lives | false replies / min | repeated lines | talk that led to something | same, 6 min earlier (placebo) | vs baseline |",
+                  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
     for b in sorted({b for b, _ in rows}):
         vs = sorted(v for bb, v in rows if bb == b)
         base = a.baseline if a.baseline in vs else next((v for v in vs if "control" in v), next((v for v in vs if v == "default"), vs[0]))
@@ -943,16 +969,21 @@ def cmd_score(a):
             elif R_["score"] is None or B["score"] is None or R_["score"] <= B["score"]:
                 verdict = "no score gain"
             else:
-                worse = [n for n, k2, bad in (("false replies", "false_min", 1), ("repeated lines", "repeated", 1), ("talk that led to something", "led", -1))
-                         if R_[k2] is not None and B[k2] is not None and (R_[k2] - B[k2]) * bad > 1e-9]
-                verdict = f"LOST: score up but {', '.join(worse)} worse" if worse else "score up; false replies, repeats and outcomes held"
+                G = (("false replies", "false_min", 1), ("repeated lines", "repeated", 1), ("talk that led to something", "led", -1))
+                worse = [n for n, k2, bad in G if R_[k2] is not None and B[k2] is not None and (R_[k2] - B[k2]) * bad > 1e-9]
+                unmeasured = [n for n, k2, _ in G if R_[k2] is None or B[k2] is None]
+                verdict = (f"LOST: score up but {', '.join(worse)} worse" if worse else "score up; the measured guards held") + \
+                          (f" ({', '.join(unmeasured)} unmeasured)" if unmeasured else "")
             out.append(f"| {b} | {v} | {f2(R_['score'])} | {R_['windows']} | {R_['lives']} | {f2(R_['false_min'], 3) if R_['false_min'] is not None else 'n/a'} | "
-                       f"{f2(R_['repeated'])} of {R_['lines']} | {f2(R_['led'])} of {R_['addressed']} | {verdict} |")
+                       f"{f2(R_['repeated'])} of {R_['lines']} | {f2(R_['led'])} of {R_['addressed']} | {f2(R_['placebo'])} | {verdict} |")
     out += ["", f"Score: {a.windows} windows of {a.window:g} real minutes per thinking character (residents: up to {a.residents} per run), "
             "columns as life_feel defines them, clipped to 1..5. False replies: greet_report.py's false_replies over the runs' minutes "
             "(n/a without it). Repeated lines: own lines that repeat one of its own from the last 10 minutes. Talk that led to "
-            f"something: addressed lines followed within {LED_S} s by a trade, lesson, gift, help, hosting or agreement in its percepts, "
-            "or by a plan of its own or of the addressee that names the other.", "", *head[:2]]
+            f"something: addressed lines followed within {LED_S} s by a trade, lesson, gift, help, hosting or agreement it is part of, "
+            "or by a new plan of its own or of the addressee that names the other. The placebo column runs the same test with every "
+            f"line moved {PLACEBO_S // 60} minutes earlier: what it still finds is not caused by the line, so read the difference. "
+            "Runs without final.json (running, or failed before writing rows) are left out unless --include-running. The fit was "
+            "trained on windows of 5 or more rendered lines; quieter windows are extrapolations.", "", *head[:2]]
     report = "\n".join(out) + "\n"
     od = Path(a.out)
     od.mkdir(parents=True, exist_ok=True)
@@ -1325,6 +1356,7 @@ def main():
     sc.add_argument("--window", type=float, default=10.0)
     sc.add_argument("--windows", type=int, default=6, help="windows per character")
     sc.add_argument("--residents", type=int, default=12, help="thinking residents per run")
+    sc.add_argument("--include-running", action="store_true", help="also score runs without final.json")
     sc.add_argument("--out", default=str(FEEL))
     c = sub.add_parser("compare", help="the owner's ratings against the proxy's, on the excerpts both rated")
     c.add_argument("--owner", required=True, help="ratings (file or dump directory); proxy documents in it are ignored")

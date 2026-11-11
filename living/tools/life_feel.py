@@ -333,7 +333,7 @@ def run(d, variants):
     ex["silence"] = unanswered[:: max(1, len(unanswered) // 2)][:2]
 
     # 7. Own project.
-    texts = [(g["t"], g.get("plan") or "") for g in all_graphs]
+    texts = [(g["t"], g.get("plan") or "") for g in all_graphs if g.get("t") is not None]
     for r in journal:  # what the mind said it intends, beside the plans it installed
         it = reply(r).get("intend")
         if isinstance(it, list) and it and r.get("at_ms"):
@@ -377,9 +377,14 @@ def run(d, variants):
     }
 
 
-PROJECT_STOP = set("""gather walk sleep rest back light dawn dark night morni eveni midda noon until stay watch carry bring
-store place spot near close north south east west there where while ready first later today tonig every along small large
-whate someo anyon anyth thing other again still offer quiet plain asked answe speak greet wave words word better""".split())
+PROJECT_STOP = {w[:5] for w in """gather walk sleep rest back light dawn dark night morni eveni midda noon until stay watch carry bring
+place spot near close north south east west there where while ready first later today tonig every along small large
+whate someo anyon anyth thing other again still offer quiet plain asked answe speak greet wave words word better
+pack full work worki down over look might secon cente stand livin push deepe towar show till turn pass besid throu
+reach start begin want need take give hold hand hands time long more less most some many much good well true right
+plan their them they your mine yours self around past head side road path ground groun""".split()}
+# Warmth for the project's sake is the fire and the cold itself; a cloak or a shelter can be a craft project.
+WARM_STRICT = re.compile(r"\b(warm\w*|cold|fire|campfire|freez\w*)\b", re.I)
 SENSES = {"gather": {"wood", "timbe", "tree", "logs", "fiber", "reeds", "stone"}, "build": {"build", "house", "home", "shelt", "stora", "frame", "raise", "walls", "hut"},
           "write": {"write", "writi", "table", "lette", "recor"}, "teach": {"teach", "lesso", "learn", "taugh"}, "read": {"read", "readi", "lette"},
           "experiment": {"work", "learn", "craft"}, "craft": {"craft", "make"}, "fish": {"fish", "fishi"}, "plant": {"plant", "field", "seed"}}
@@ -388,7 +393,7 @@ SENSES = {"gather": {"wood", "timbe", "tree", "logs", "fiber", "reeds", "stone"}
 # Words that serve one project: a stem in a class matches any stem of the class.
 CLASSES = [{"timbe", "wood", "woods", "logs", "tree", "trees", "lumbe"}, {"house", "home", "hut", "shelt", "frame", "walls", "roof", "cabin"},
            {"write", "writi", "wrote", "table", "lette", "recor", "sign"}, {"teach", "lesso", "taugh", "learn", "train"},
-           {"fish", "fishi", "nets", "net"}, {"trap", "traps", "snare"}, {"stora", "store", "granar"}, {"plant", "field", "seed", "seeds", "sow"}]
+           {"fish", "fishi", "nets", "net"}, {"trap", "traps", "snare"}, {"stora", "store", "grana"}, {"plant", "field", "seed", "seeds", "sow"}]
 
 
 def widen(ws):
@@ -398,15 +403,18 @@ def widen(ws):
 def project(plans, acts, exps, chron, S):
     """(project words, share of plans holding them, acts serving them, 1 if one was done) -- see 7."""
     plans = [p for p in plans if p]
-    pw = [{w for w in words(p) if w not in PROJECT_STOP and not FOOD.search(w) and not WARM.search(w) and len(w) >= 4} for p in plans]
-    # Candidate words come only from plans about neither food nor warmth (as plans_other): wood for a
+    # Names and places (capitalised words inside a sentence) are who and where, not the project.
+    names = {w[:5].lower() for p in plans for w in re.findall(r"(?<![.!?;:]\s)(?<!^)\b[A-Z][a-z]+", p)}
+    pw = [{w for w in words(p) if w not in PROJECT_STOP and w not in names and not FOOD.search(w) and not WARM.search(w) and len(w) >= 4}
+          for p in plans]
+    # Candidate words come only from plans about neither food nor the fire and the cold: wood for a
     # house can be a project, wood for the night's fire cannot.
-    other = [ws for p, ws in zip(plans, pw) if not FOOD.search(p) and not WARM.search(p)]
+    other = [ws for p, ws in zip(plans, pw) if not FOOD.search(p) and not WARM_STRICT.search(p)]
     if len(other) < 2:
         return [], 0.0, 0, 0
     third = max(1, len(pw) // 3)
     count = Counter(w for ws in other for w in ws)
-    held = [w for w, n in count.most_common() if n >= max(2, len(other) / 2)
+    held = [w for w, n in sorted(count.items(), key=lambda wn: (-wn[1], wn[0])) if n >= max(2, len(other) / 2)
             and any(w in ws for ws in pw[:third]) and any(w in ws for ws in pw[-third:])][:3]
     if not held:
         return [], 0.0, 0, 0
@@ -420,11 +428,20 @@ def project(plans, acts, exps, chron, S):
         if do == "gather" and not re.search(r"tree|wood|fiber|reeds|stone|boulder", text, re.I):
             return w
         return w | SENSES.get(do, set())
-    senses = lambda t: set(words(t)) | {s for k, v in SENSES.items() if re.search(rf"\b{k}\b", t) for s in v}
+    def senses(t):
+        t2 = FAIL.sub("", t).replace("You did what you had decided:", "")  # the message's own wording is not the act
+        w = set(words(t2))
+        for k, v in SENSES.items():
+            if re.search(rf"\b{k}\b", t2) and (k != "gather" or re.search(r"tree|wood|fiber|reeds|stone|boulder", t2, re.I)):
+                w |= v
+        return w
     own = [e["text"] for e in exps if e.get("observer", S) == S and (FAIL.match(e.get("text", "")) or e.get("text", "").startswith("You did what you had decided:"))]
     said = [c.get("text", "") for c in chron if c.get("kind") == "speech" and c.get("a") == S]
-    # Acts toward it: decided acts, attempts it perceived (done or failed) and its own lines (asking for it) that name it.
-    n_acts = sum(1 for _, a, _ in acts if act_words(a) & P) + sum(1 for t in own if senses(t) & P) + sum(1 for t in said if set(words(t)) & P)
+    # Acts toward it, each counted once: decided acts (spoken ones are its lines, counted there) or, when it
+    # decided none toward it, the attempts it perceived (done or failed); plus its own lines that name it.
+    decided = sum(1 for _, a, _ in acts if a.get("do") not in ("say",) and "say" not in a and act_words(a) & P)
+    tried = sum(1 for t in own if senses(t) & P)
+    n_acts = (decided or tried) + sum(1 for t in said if set(words(t)) & P)
     done = [t for t in own if t.startswith("You did what you had decided:")] + \
            [c.get("text", "") for c in chron if c.get("kind") in ("build", "learn", "write") and c.get("a") == S]
     prog = 1 if any(senses(t) & P for t in done) else 0
