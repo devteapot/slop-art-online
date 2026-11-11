@@ -10,6 +10,7 @@ Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-
   - `player-speak4` failed only the second call: its facts and SQL took 5.7 s before the second call was sent, past the 6 s gap, so the reducer accepted it. It now sends at once and asks the client's check about the same moment.
 - After merging origin/main (`93019a3`): `player-speak6` 15 of 15.
 - After merging origin/main (`48cd022`): `player-speak9` 15 of 15.
+- `speech::check_way`, origin/main `601d1f6` merged: `player-speak11` 15 of 15 (the `way_check` example now calls `check_way`, as the authority does).
 
 ## 2026-11-11 speech-1: human_speak (Spark)
 
@@ -17,6 +18,15 @@ Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-s
 
 - `speak.py` (new): `player-speak2` 8 of 8: `speech_card` read anonymously; `human_say`, `human_speak(…, "say")` and `human_speak(…, "")` spoken; their `said` rows in `my_experience`; `my_heard` rows joined by `line`, listing the resident; refused "no way of speaking called `shout`" and "speaking too fast", writing nothing. The shipped script has one way, so the card's `needs_to`, `reach` and gap loops had nothing to drive.
 - `player-speak1` failed only the too-fast check: the first line's row reached `my_experience` at the next frame, during the check's count. The check now waits 0.8 s before counting.
+
+## 2026-11-11 rules-offers-2: answers by id (Spark)
+
+Branch `rules-offers-2` (origin/main merged at `5f7ba5b`), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. Scoped maintain pass on offers (offers.md, README, SKILL.md): "Declining: there is no act" was drift and is replaced; `answers.py` added.
+
+- `answers.py` (new): 9 of 9 on `player-offers2-a`, `-b` and the final code (`player-offers2-final-answers`). On `-a` the outcome of a decline was said twice (the engine's note and the rules' line); the engine's note is gone.
+- `offers.py` 17 of 17 and `deal.py` 13 of 13 on fresh worlds (`player-offers2-b`, `-c`; final code `player-offers2-final-offers`, `-final-deal`). Run after `answers.py` on one world they failed 4 and 2 checks on its leftovers (berries in the pack, a declined record first in `my_records`): an order dependence of the drivers, noted in offers.md.
+- Not covered: the game client sending these acts (the laptop's ui-1; `ui::act_node` is covered by Cargo).
+- After merging main `f047f04f` (`c63c372d`): `offers.py` 17 of 17, `answers.py` 9 of 9 (`player-offers2-m3-*`).
 
 ## 2026-11-11 goods-2: making glass at a furnace that burns fuel (dev-box)
 

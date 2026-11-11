@@ -14,6 +14,7 @@
 | Blows, threaten, yield and seize | Mechanics and `scenes.py seize` | [combat.md](combat.md) |
 | One-off acts, graph coexistence and feedback | Mechanics and Cargo | [acts.md](acts.md) |
 | Dealings on records: agreements kept, broken, lapsed and not taken; demands met and unpaid; regard read by a relation filter; hooks and install checks | `scenes.py dealings` on an island run, and Cargo | [dealings.md](dealings.md) |
+| Answers by id: accept/decline naming a trade offer or a proposal, the refusals, decline told to the maker and witnessed, the unnamed order unchanged | `scenes.py answers` (any seed), and Cargo | [dealings.md](dealings.md) |
 | Steering and `living/viewer/src/sync.rs` display-sync math | Five steering checks and three sync tests | [steering.md](steering.md) |
 | Moving as a per-creature law (`motion(a)`): flight share of the walk, turning on the spot; an installed law changes both | `scenes.py moves` | [steering.md](steering.md#moving-as-a-law) |
 | Flight from a creature: steering runs from the threat until `flee_clear` farther | `scenes.py flee` on a `stage1-acts` run | [steering.md](steering.md#flight) |

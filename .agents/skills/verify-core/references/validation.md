@@ -14,6 +14,7 @@ Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-
 - After merging origin/main again (`b004e6e`, the rules' UI declarations): `just living-check` passes; `core-speech8-regress` is identical to the base except the `introduced` rows; `core-speech8-channels` 22 of 22; verify-player `player-speak8` 15 of 15. The UI test `a_way_of_speaking_is_presented_in_the_box` declared its own `whisper_speech()` over the shipped script; it now presents the shipped whisper (its assertions unchanged).
 - After merging origin/main (`48cd022`, with fov-1): my table `heard` is now `line_heard` (fov-1's heard-not-seen sounds took `heard`), and the hearer list, noticing, overheard names and the truthful silence see by fov-1's `perception::in_sight` (facing, when the world's law gives a field). `just living-check` passes; `core-speech9-regress` is identical to the base except the `introduced` rows; `core-speech9-ways` 21 of 21; `core-speech9-channels` 22 of 22. verify-player `player-speak9` 15 of 15.
 - After merging origin/main (`b11855e`): `just living-check` passes (with the script fuel gate); bindings unchanged; `core-speech10-regress` identical to the base except the `introduced` rows; `core-speech10-channels` 22 of 22; verify-player `player-speak10` 15 of 15. The minds, privacy and client suites were last run at `48cd022` (above); nothing they drive changed since.
+- `speech::check_way` (the one call for a way's refusal) and origin/main `601d1f6` merged: `just living-check` passes (pipefail); bindings unchanged; `core-speech11-regress` identical to the base except the `introduced` rows; `core-speech11-channels` 22 of 22.
 
 ## 2026-11-11 speech-1: ways of speaking (Spark)
 
@@ -25,6 +26,17 @@ Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-s
 - `speech.py ways`: `core-speech-ways` 20 of 21 (the one failure was the check's own: two hearers equally near, in either order). Fixed, then `core-speech-ways2` 21 of 21. `scenes.py say` on the same run: 34 PASS.
 - `speech.py crowd` (20 people, 10 m square, 120 lines/min, 60 lines): `core-speech-crowd` on the change, `core-speech-crowdbase` on `a107fdf` (`--baseline`). Numbers in docs/COMMUNICATION.md §13. `-crowd-try1`/`-try2` were the metric parser's own fixes.
 - Not run on this change: tick, needs, food, refusal, seize, sight, senses, doing, moves, death-names, skirmish, dealings, town, lives, laws, goods, infant; mechanics.
+
+## 2026-11-11 rules-offers-2: accept and decline by id; decline (Spark)
+
+Branch `rules-offers-2` (from `rules-offers` `de0faea`, origin/main merged at `37ce159` and `5f7ba5b`), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. A maintain pass scoped to dealings (features/dealings.md, README, SKILL.md): read against the changed source, not a source wave.
+
+- `scenes.py answers` (new, default seed): the first attempt (`core-offers2-a`) stopped at its fifth check, which expected "that proposal is gone" for a record id that does not exist while other terms stood; the rules answer "they have changed their terms: now …", which is the designed reply, so the scene now expects it and checks "gone" once nothing stands. `core-offers2-b`: 17 of 17. Final code (`core-offers2-final-answers`): 17 of 17.
+- `scenes.py dealings` on `core-offers2-b` (default seed): 13 of 14, the regard check failing as the map says it must off the island (no seeded records).
+- Migration: main's module (`b004e6e`) published fresh as `core-offers2-mig`, then this branch's updated in place (`launch --keep-data`): it kept ticking from tick 6,012 and its 233 `activity` rows read `offer = 0, record = 0` (`migrated.json`). `answers` on the migrated world passed 9 checks, then stopped on the driver's case-sensitive match of the decliner's outcome ("Declined …"), fixed since.
+- A shared `CARGO_TARGET_DIR` between two checkouts (a temporary main worktree and this one) linked the other checkout's `living-rules` as fresh; touching the sources rebuilt it. Keep one checkout per target dir.
+- Cargo: `cargo test -p living-rules` 210 pass with `answers_take_what_they_name`, `answers_carry_what_they_name`, `ui::tests::an_act_toward_an_offer_names_it`; `just living-check` ok.
+- After merging main `f047f04f` (`c63c372d`): `just living-check` ok, bindings regenerate identical, `answers` 17 of 17 (`core-offers2-m3-answers`).
 
 ## 2026-11-11 fix-lives-tavvik: carriers take and store at stores, not squares (Spark)
 

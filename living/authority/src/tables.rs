@@ -398,6 +398,12 @@ pub struct Activity {
     pub want: String,
     #[default(0u32)]
     pub want_qty: u32,
+    /// An answer (accept, decline): the trade offer or the record it names (0: none, the rules
+    /// take what stands). Added at the end with defaults, so the table migrates in place.
+    #[default(0u64)]
+    pub offer: u64,
+    #[default(0u64)]
+    pub record: u64,
 }
 
 /// Items held by a creature (`owner = id`) or a structure (`owner = STRUCTURE_BIT | id`).

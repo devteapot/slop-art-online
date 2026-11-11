@@ -29,6 +29,14 @@ Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-s
   - `minds-speech3` (and on `speech-2` `-4b` and `-6`): the player's first line drew no talk turn. The cause is not a race in the mind. The line ("I am MindsTeller. Good day to you.") asks nothing, and talk.rs answers a remark that asks nothing with probability 0.3 + 0.65 × sociability/100, as designed; it logs the skip only at debug level. The case's first line is now a question.
 - Not run: the rest of the suite.
 
+## 2026-11-11 rules-offers-2: a mind answers by id (Spark)
+
+Branch `rules-offers-2`, on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. Scoped maintain pass on dealings (dealings.md, README, SKILL.md).
+
+- `answers` (new) passes on `minds-offers2-a` and on the final code (`minds-offers2-final`): the deliberation showed `"offer": 1` in "asked of you" and "record 1)" in the dealings, the fake reply's `accept` (offer) and `decline` (record) were executed: "traded with Femi: 2 wood for 1 berries", the record `declined`, the proposer told "Datha declined your terms: you give 2 wood, they give 2 berries.".
+- `acts` passes on both. `dealings` passed on `minds-offers2-a` (before the main merge) and failed twice, then passed nine times on the final code (`minds-offers2-final`, `-final2` failed; `-final3`…`-final11` passed): in the failures the demander's `demand` act through admin `mind_act` made no record within 60 s. Its cause is not established: the driver did not keep what the demander was told, and now keeps `demander-experiences.json` either way.
+- After merging main `f047f04f` (`c63c372d`): `answers`, `acts` and `dealings` pass (`minds-offers2-m3`).
+
 ## 2026-11-11 fov-1: hearing what one cannot see (dev-box)
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).

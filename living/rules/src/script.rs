@@ -153,6 +153,27 @@ pub struct SkillCtx {
     pub records: Vec<crate::records::RecordFacts>,
     /// The record at hand: the one falling due (`on_expire`).
     pub record: Option<crate::records::RecordFacts>,
+    /// What an answer (accept, decline) names: a trade offer's id, a record's id (0: none).
+    pub offer_id: u64,
+    pub record_id: u64,
+    /// The trade offer at hand (filled only for a law that reads it): the one the act names, or,
+    /// when that one is gone or none is named, the target's standing offer to the actor.
+    pub offer: Option<OfferFacts>,
+}
+
+/// A trade offer as the rules see it (`a.offer`): `#{ id, from, to, give, give_qty, want,
+/// want_qty, open, left_s }`. `open` is false once it can no longer be accepted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OfferFacts {
+    pub id: u64,
+    pub from: u32,
+    pub to: u32,
+    pub give: String,
+    pub give_qty: u32,
+    pub want: String,
+    pub want_qty: u32,
+    pub open: bool,
+    pub left_s: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -299,8 +320,12 @@ pub enum Effect {
     Plant,
     /// Propose a trade to the target.
     Offer,
-    /// Accept the target's standing offer.
-    Accept,
+    /// Accept the target's trade offer to the actor: the one with this id, or (0) the one
+    /// standing.
+    Accept { offer: u64 },
+    /// End the target's trade offer to the actor without a trade: the one with this id, or (0)
+    /// the one standing.
+    Decline { offer: u64 },
     Found,
     Join,
     Welcome,
@@ -1835,8 +1860,14 @@ impl Scripts {
     /// Whether a skill's rules read the actor's records: on its way (`performing` false) its
     /// check and duration; once performed, its check, effects and hook too.
     pub fn skill_reads_records(&self, skill: &str, performing: bool) -> bool {
+        self.skill_reads(skill, "records", performing)
+    }
+
+    /// Whether a skill's rules read a top-level field of the context (`records`, `offer`): on its
+    /// way its check and duration; once performed, its check, effects and hook too.
+    pub fn skill_reads(&self, skill: &str, field: &str, performing: bool) -> bool {
         let parts: &[&str] = if performing { &["_check", "_duration", "_done"] } else { &["_check", "_duration"] };
-        parts.iter().any(|p| self.reads(&format!("{skill}{p}"), "records")) || (performing && self.reads(&format!("on_{skill}"), "records"))
+        parts.iter().any(|p| self.reads(&format!("{skill}{p}"), field)) || (performing && self.reads(&format!("on_{skill}"), field))
     }
 
     fn effects(&self, f: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
@@ -2476,7 +2507,8 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "read" => Effect::Read,
         "plant" => Effect::Plant,
         "offer" => Effect::Offer,
-        "accept" => Effect::Accept,
+        "accept" => Effect::Accept { offer: n("offer").max(0.0) as u64 },
+        "decline" => Effect::Decline { offer: n("offer").max(0.0) as u64 },
         "found" => Effect::Found,
         "join" => Effect::Join,
         "welcome" => Effect::Welcome,
@@ -3278,7 +3310,7 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         assert!(matches!(&fx[0], Effect::Amend { id: 5, status: Some(st), due_h: Some(h), .. } if st == "agreed" && (*h - 30.0).abs() < 1e-3), "{fx:?}");
         assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t.ends_with("by dusk tomorrow.")), "{fx:?}");
         // Without terms standing it is an ordinary trade's accept.
-        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..c.clone() }).unwrap(), vec![Effect::Accept]);
+        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..c.clone() }).unwrap(), vec![Effect::Accept { offer: 0 }]);
         // The newcomer stores 10 wood in the resident's household store: its part is done and the
         // resident is told what it owes.
         let store = TargetFacts { class: "structure".into(), kind: "storage".into(), id: 77, owner: 3, home: "10,10".into(), dist: 1.0, ..Default::default() };
@@ -3317,6 +3349,69 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         // How a party reads its records.
         let regard = RecordFacts { kind: "regard".into(), parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: "holder".into(), terms: serde_json::json!({"label": "rival town", "value": -35, "why": "the broken match"}).as_object().unwrap().clone(), ..Default::default() };
         assert_eq!(s.record_text(&regard).unwrap(), format!("your people hold {{id:{}}} as rival town (the broken match)", crate::records::COMMUNITY | 3));
+    }
+
+    /// An answer (accept, decline) takes exactly what it names, a trade offer or a proposal, or
+    /// is refused with the reason; without a name, accept takes what it always took (terms
+    /// first, then the trade) and decline ends that same one. The maker is told of a decline.
+    #[test]
+    fn answers_take_what_they_name() {
+        use crate::records::RecordFacts;
+        let s = scripts();
+        let person = |id: u64| TargetFacts { class: "creature".into(), id, kind: "person".into(), alive: true, dist: 1.0, stage: "adult".into(), ..Default::default() };
+        let tells = |fx: &[Effect]| fx.iter().filter_map(|e| if let Effect::Tell { to, text, .. } = e { Some((*to, text.clone())) } else { None }).collect::<Vec<_>>();
+        let terms = serde_json::json!({"from_gives": "berries", "from_qty": 3, "to_gives": "wood", "to_qty": 10, "from_done": 0, "to_done": 0, "from_home": "", "to_home": "", "words": ""}).as_object().unwrap().clone();
+        let proposal = |id: u64, status: &str, open: bool, from: u64, me: &str| RecordFacts { id, kind: "agreement".into(), status: status.into(), open, terms: terms.clone(), parties: vec![("from".into(), from), ("to".into(), if me == "to" { 9 } else { 1 })], me: me.into(), by: from as u32, ..Default::default() };
+        let offer = |id: u64, to: u32, open: bool| Some(OfferFacts { id, from: 1, to, give: "fish".into(), give_qty: 2, want: "hide".into(), want_qty: 1, open, left_s: 60.0 });
+        // 9 is asked by 1: terms (record 5) and a trade (offer 41).
+        let base = SkillCtx { actor: ActorFacts { id: 9, kind: "person".into(), stage: "adult".into(), ..Default::default() }, target: person(1), hour: 7.0, records: vec![proposal(5, "offered", true, 1, "to")], offer: offer(41, 9, true), ..Default::default() };
+        for skill in ["accept", "decline"] {
+            let c = SkillCtx { skill: skill.into(), ..base.clone() };
+            let refused = |offer_id: u64, record_id: u64, records: Vec<RecordFacts>, at_hand: Option<OfferFacts>| s.check(skill, &SkillCtx { offer_id, record_id, records, offer: at_hand, ..c.clone() }).err().unwrap_or_default();
+            assert_eq!(s.check(skill, &c), Ok(()), "{skill} with no name");
+            assert_eq!(refused(41, 0, c.records.clone(), c.offer.clone()), "", "{skill} offer 41");
+            assert_eq!(refused(0, 5, c.records.clone(), None), "", "{skill} record 5");
+            // Refusals: gone, changed, not addressed to you, expired, already agreed, both named.
+            assert_eq!(refused(41, 0, vec![], None), "that offer is gone");
+            assert_eq!(refused(41, 0, vec![], offer(42, 9, true)), "they have changed their offer: now their 2 fish for your 1 hide");
+            assert_eq!(refused(41, 0, vec![], offer(41, 7, true)), "that offer is not addressed to you");
+            assert_eq!(refused(41, 0, vec![], offer(41, 9, false)), "that offer has expired");
+            assert_eq!(refused(0, 6, vec![], None), "that proposal is gone");
+            assert_eq!(refused(0, 6, vec![proposal(5, "offered", true, 1, "to")], None), "they have changed their terms: now you give 10 wood, they give 3 berries");
+            assert_eq!(refused(0, 5, vec![proposal(5, "offered", true, 1, "from")], None), "that proposal is not addressed to you");
+            assert_eq!(refused(0, 5, vec![proposal(5, "offered", true, 4, "to")], None), "that proposal is not addressed to you");
+            assert_eq!(refused(0, 5, vec![proposal(5, "agreed", true, 1, "to")], None), "you have already agreed to it");
+            assert_eq!(refused(0, 5, vec![proposal(5, "not taken", false, 1, "to")], None), "that proposal has expired");
+            assert_eq!(refused(0, 5, vec![proposal(5, "declined", false, 1, "to")], None), "that proposal was declined");
+            assert_eq!(refused(41, 5, c.records.clone(), c.offer.clone()), "name one thing to answer: the offer or the proposal");
+        }
+        // accept: the named offer is taken even with terms standing (before, the terms won).
+        let acc = SkillCtx { skill: "accept".into(), ..base.clone() };
+        assert_eq!(s.done("accept", &SkillCtx { offer_id: 41, ..acc.clone() }).unwrap(), vec![Effect::Accept { offer: 41 }]);
+        assert!(matches!(&s.done("accept", &SkillCtx { record_id: 5, ..acc.clone() }).unwrap()[0], Effect::Amend { id: 5, status: Some(st), .. } if st == "agreed"));
+        // Without a name, as before: the terms, then (none standing) the trade.
+        assert!(matches!(&s.done("accept", &acc).unwrap()[0], Effect::Amend { id: 5, .. }));
+        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..acc.clone() }).unwrap(), vec![Effect::Accept { offer: 0 }]);
+        // decline: a proposal is closed as declined and its maker told; onlookers see it.
+        let dec = SkillCtx { skill: "decline".into(), ..base.clone() };
+        for c in [SkillCtx { record_id: 5, ..dec.clone() }, dec.clone()] {
+            let fx = s.done("decline", &c).unwrap();
+            assert!(matches!(&fx[0], Effect::Close { id: 5, status, .. } if status == "declined"), "{fx:?}");
+            assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} declined your terms: you give 3 berries, they give 10 wood."), "{fx:?}");
+            assert!(fx.iter().any(|e| matches!(e, Effect::Witness { .. })), "{fx:?}");
+        }
+        // ... a trade offer is ended, its maker told what was declined.
+        for c in [SkillCtx { offer_id: 41, ..dec.clone() }, SkillCtx { records: vec![], ..dec.clone() }] {
+            let fx = s.done("decline", &c).unwrap();
+            assert_eq!(fx[0], Effect::Decline { offer: 41 }, "{fx:?}");
+            assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} declined your offer of 2 fish for 1 hide."), "{fx:?}");
+        }
+        // ... and with nothing standing the engine is asked, and refuses.
+        assert_eq!(s.done("decline", &SkillCtx { records: vec![], offer: None, ..dec.clone() }).unwrap(), vec![Effect::Decline { offer: 0 }]);
+        // The rules read the offer only for the skills that answer.
+        assert!(s.skill_reads("accept", "offer", false) && s.skill_reads("decline", "offer", true) && !s.skill_reads("give", "offer", true));
+        // A proposal to the reader names its id, for the answer.
+        assert!(s.record_text(&proposal(5, "offered", true, 1, "to")).unwrap().ends_with("accept or decline (toward them, record 5)"));
     }
 
     #[test]

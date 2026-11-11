@@ -20,7 +20,7 @@ spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skil
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'parked',
+         'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
          'death-names', 'frame', 'reasons', 'speech')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
@@ -187,6 +187,8 @@ def run_case(run, case):
         return takeover_case(run)
     if case == 'dealings':
         return dealings_case(run)
+    if case == 'answers':
+        return answers_case(run)
     if case == 'sight':
         return sight_case(run)
     if case == 'fov':
@@ -564,8 +566,11 @@ def dealings_case(run):
     # mind would decide.
     run.admin('set_behavior', other, json.dumps({'wait': 120}))
     run.admin('mind_act', other, [json.dumps({'do': 'demand', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'text': 'verify dealing'})], 'verify-minds')
-    demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 60)[0]
-    run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-experiences')
+    try:
+        demand = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-demand') if r['kind'] == 'demand'], 'demand record', 60)[0]
+    finally:
+        # What the demander was told of its act (an outcome or a refusal), kept either way.
+        run.private(f'SELECT * FROM experience WHERE observer = {other}', 'demander-experiences')
     told = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told') if e['kind'] == 'record' and 'demands 1 stone of you' in e['text']], 'told the demand', 30)
     # The rules' `ask` goes through the authority's thinking cadence (`think_min_s`): a mind that
     # thought moments ago is not asked again. Its next thought sees the demand among its dealings.
@@ -581,6 +586,47 @@ def dealings_case(run):
     assert inv.get('stone') == 1, inv
     return {'status': 'pass', 'told': told[0]['text'], 'record': met[0]['status'], 'demander_told': paid[0]['text'],
             'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before, 'asked_by_the_rules': asked}
+
+
+def answers_case(run):
+    """A mind answers by id (docs/WORLD_RULES.md, "Answering"): another character proposes terms
+    to it and offers it a trade. Its deliberation shows the trade's id in "asked of you" and the
+    proposal's record id among its dealings; the (fake) model's acts accept the trade by its id
+    (though terms stand) and decline the terms by their record id. The goods move, the record is
+    declined and the proposer is told."""
+    people = prepare(run)
+    actor, other = [p['id'] for p in people]
+    run.admin('set_behavior', other, json.dumps({'wait': 120}))
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', other, actor)
+    run.admin('grant_items', actor, 'berries', 3)
+    run.admin('grant_items', other, 'wood', 4)
+    run.admin('mind_act', other, [json.dumps({'do': 'offer_terms', 'target': {'id': actor}, 'item': 'wood', 'qty': 2, 'want': 'berries', 'want_qty': 2})], 'verify-minds')
+    rec = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-offered') if r['kind'] == 'agreement' and r['status'] == 'offered'], 'proposal', 60)[0]
+    run.admin('mind_act', other, [json.dumps({'do': 'offer', 'target': {'id': actor}, 'item': 'wood', 'qty': 2, 'want': 'berries', 'want_qty': 1})], 'verify-minds')
+    offer = run.wait(lambda: [o for o in run.private('SELECT * FROM trade_offer', 'trade-offer') if o['to'] == actor], 'trade offer', 60)[0]
+    answer = basic_reply(acts=[{'do': 'accept', 'target': {'id': other}, 'offer': offer['id']},
+                               {'do': 'decline', 'target': {'id': other}, 'record': rec['id']}])
+    script = {'replies': {'think': {'thought': 'I am asked to trade.', 'intend': ['answer them'], 'say': None},
+                          'deliberate': basic_reply()},
+              'rules': [{'purpose': 'deliberate', 'contains': f"toward them, record {rec['id']})", 'reply': answer, 'times': 1}]}
+    models = model(run, script)
+    wood0 = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {actor}', 'inventory-before')}.get('wood', 0)
+    run.start(models, [actor])
+    if not run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'asked'):
+        run.request(actor, 'answers')
+    declined = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-declined') if r['id'] == rec['id'] and r['status'] == 'declined'], 'proposal declined', 120)
+    inv = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {actor}', 'inventory-after')}
+    assert inv.get('wood', 0) == wood0 + 2, ('the named trade was taken', wood0, inv)
+    assert not [o for o in run.private('SELECT * FROM trade_offer', 'trade-offer-after') if o['id'] == offer['id']], 'the accepted offer is gone'
+    told = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {other}', 'proposer-told') if e['kind'] == 'record' and 'declined your terms' in e['text']], 'proposer told', 30)
+    sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    blob = [json.dumps(e) for e in sent]
+    with_ids = [b for b in blob if f"record {rec['id']})" in b and re.search(r'\\"offer\\": ?%d\b' % offer['id'], b)]
+    assert with_ids, 'the deliberation showed the offer id in asked-of-you and the record id in the dealings'
+    outcomes = [e['text'] for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'actor-experiences') if e['kind'] == 'act']
+    return {'status': 'pass', 'offer': offer['id'], 'record': rec['id'], 'record_status': declined[0]['status'],
+            'proposer_told': told[0]['text'], 'outcomes': outcomes[-4:], 'deliberations_with_ids': len(with_ids)}
 
 
 def sight_case(run):

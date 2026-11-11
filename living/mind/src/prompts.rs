@@ -173,7 +173,7 @@ pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {
 
 /// The acts a conversation turn's examples show (`talk_system`); every one must appear there as
 /// `"do": "<name>"`, or the turn neither shows nor lists it (test `talk_examples_show_every_shown_act`).
-const TALK_SHOWN: [&str; 6] = ["conceive", "accept", "give", "offer", "teach", "host"];
+const TALK_SHOWN: [&str; 7] = ["conceive", "accept", "decline", "give", "offer", "teach", "host"];
 
 /// The acts a conversation turn may carry that the rules mark for it (`talk` in a skill's
 /// spec) and the turn's examples do not show already, one line each.
@@ -379,7 +379,8 @@ the body walks to the target, does it by the same rules as anything else (checks
 While an act is under way your graph's work waits; only its reflexes (flee, dodge, block, attack, throw, yield) break it off. \
 Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
 {\"do\": \"give\", \"target\": {\"id\": 4}, \"item\": \"berries\", \"qty\": 3}, \
-{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}} (take a trade offered to you), \
+{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}, \"offer\": 17} (take what they offered you: \"offer\" names their trade offer, \"record\" their proposed terms, by the id you were shown; without one, their terms come first, then their trade), \
+{\"do\": \"decline\", \"target\": {\"id\": 4}, \"offer\": 17} (say no to it: it ends, and they are told), \
 {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"fire\"}, {\"do\": \"tend\", \"target\": {\"id\": 6}}, \
 {\"do\": \"host\", \"target\": {\"id\": 6}} (take someone in as your household's guest until morning: a bed in your house, food from its store), \
 {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know\"}, {\"do\": \"read\"}, \
@@ -962,7 +963,8 @@ the conversation for now; don't restate what was already agreed or keep saying g
 silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
 \"say\": \"your words\" or null, \"to\": id of who you speak to, {}\
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
-{{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}}} to take a trade they offered, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
+{{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to take a trade they offered (\"record\": id of their proposal, for terms), \
+{{\"do\": \"decline\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to say no to it, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
 {{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}}, \
 {{\"do\": \"host\", \"target\": {{\"id\": id of who you speak to}}}} to take them in as your household's guest until morning \
 (words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \

@@ -429,7 +429,51 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         routine,
         raining: crate::town::raining(ctx),
         record: None,
+        offer_id: a.offer,
+        record_id: a.record,
+        offer: if sc.skill_reads(&a.skill, "offer", a.phase == 1) { offer_at_hand(ctx, id, &a.target, a.offer, now) } else { None },
     }
+}
+
+/// The trade offer an act has at hand (`a.offer`): the one it names, or, when that one is gone
+/// or none is named, the target person's standing offer to the actor. A point read by id, or by
+/// the `from` index (a maker holds one offer at a time).
+fn offer_at_hand(ctx: &ReducerContext, me: u32, target: &TargetRef, named: u64, now: u64) -> Option<living_rules::script::OfferFacts> {
+    let window_s = common::laws(ctx).trade_window_s;
+    let facts = |o: TradeOffer| {
+        let ends = o.ends_ms(window_s);
+        living_rules::script::OfferFacts { id: o.id, from: o.from, to: o.to, give: o.give_item, give_qty: o.give_qty, want: o.want_item, want_qty: o.want_qty, open: now <= ends, left_s: ends.saturating_sub(now) as f32 / 1000.0 }
+    };
+    if named != 0 {
+        if let Some(o) = ctx.db.trade_offer().id().find(named) {
+            return Some(facts(o));
+        }
+    }
+    if target.class != 3 {
+        return None;
+    }
+    let from = target.id as u32;
+    let mut theirs: Vec<TradeOffer> = ctx.db.trade_offer().from().filter(from).filter(|o| o.to == me).collect();
+    theirs.sort_by_key(|o| (now <= o.ends_ms(window_s), o.id));
+    theirs.pop().map(facts)
+}
+
+/// The trade offer an answer (accept, decline) is to: `named` (0: the standing one) from `from`
+/// to `me`, while it can be accepted. Whatever a script names, only the addressee answers an
+/// offer, and only its maker's.
+fn answered_offer(ctx: &ReducerContext, me: u32, from: u32, named: u64, now: u64) -> Result<TradeOffer, String> {
+    let window_s = common::laws(ctx).trade_window_s;
+    if named == 0 {
+        return ctx.db.trade_offer().from().filter(from).find(|o| o.to == me && now <= o.ends_ms(window_s)).ok_or_else(|| "they have no standing offer for you".to_string());
+    }
+    let o = ctx.db.trade_offer().id().find(named).ok_or("that offer is gone")?;
+    if o.to != me || o.from != from {
+        return Err("that offer is not addressed to you".into());
+    }
+    if now > o.ends_ms(window_s) {
+        return Err("that offer has expired".into());
+    }
+    Ok(o)
 }
 
 fn label(skill: &str, item: &str, t: &Resolved) -> String {
@@ -509,11 +553,15 @@ pub fn can(ctx: &ReducerContext, id: u32, skill: &str, target: Resolved, item: &
         victim: 0,
         want: String::new(),
         want_qty: 0,
+        offer: 0,
+        record: 0,
     };
     common::scripts(ctx).check(skill, &skill_ctx(ctx, id, &act, now)).is_ok()
 }
 
-pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), now: u64) -> Result<(), String> {
+/// `answers` is what an answer (accept, decline) names: a trade offer's id and a record's id
+/// (0: none).
+pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), now: u64) -> Result<(), String> {
     let sc = common::scripts(ctx);
     let shape = shape_of(&sc, skill);
     let aim = shape.map_or(Aim::None, |s| s.aim);
@@ -717,6 +765,8 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         topic: topic.to_string(),
         want: want.0.to_string(),
         want_qty: want.1,
+        offer: answers.0,
+        record: answers.1,
         victim: if shape.is_some_and(|s| s.hostile) && target.class == 3 && target.id as u32 != id { target.id as u32 } else { 0 },
     };
     // A threat is made once: menacing the same person again within 30 s is refused (a
@@ -1455,20 +1505,19 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     ctx.db.trade_offer().id().delete(o);
                 }
                 let until_ms = now + (common::laws(ctx).trade_window_s * 1000.0) as u64;
-                ctx.db.trade_offer().insert(TradeOffer { id: 0, from: me, to, give_item: a.item.clone(), give_qty, want_item: a.want.clone(), want_qty: a.want_qty.max(1), at_ms: now, until_ms });
+                let made = ctx.db.trade_offer().insert(TradeOffer { id: 0, from: me, to, give_item: a.item.clone(), give_qty, want_item: a.want.clone(), want_qty: a.want_qty.max(1), at_ms: now, until_ms });
                 if let Some(c) = ctx.db.character().id().find(to) {
                     let text = format!("{} offers you {give_qty} {} for {} {}.", common::label_cap(ctx, &c, me), a.item, a.want_qty.max(1), a.want);
                     percept(ctx, &c, now, "offer", me, to, at, text.clone(), 0.85);
                     if c.ai {
-                        perceive::request_deliberation(ctx, to, &format!("{text} You may accept or not."), now);
+                        perceive::request_deliberation(ctx, to, &format!("{text} You may accept or decline it (offer {}), or let it pass.", made.id), now);
                     }
                 }
                 notes.push(format!("offered {give_qty} {} for {} {}", a.item, a.want_qty.max(1), a.want));
             }
-            Effect::Accept => {
+            Effect::Accept { offer } => {
                 let from = a.target.id as u32;
-                let window_s = common::laws(ctx).trade_window_s;
-                let offer = ctx.db.trade_offer().from().filter(from).find(|o| o.to == me && now <= o.ends_ms(window_s)).ok_or("they have no standing offer for you")?;
+                let offer = answered_offer(ctx, me, from, offer, now)?;
                 if common::inv_count(ctx, from as u64, &offer.give_item) < offer.give_qty {
                     return Err(format!("they no longer have {} {}", offer.give_qty, offer.give_item));
                 }
@@ -1490,6 +1539,12 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 }
                 witnessed(ctx, now, at, "trade", from, me, &format!("{{a}} and {{b}} traded {deal}"), 0.4, &[me, from]);
                 notes.push(format!("traded with {}: {deal}", seen_as(from)));
+            }
+            Effect::Decline { offer } => {
+                // This only ends it: the rules word the outcome and tell its maker and onlookers
+                // (`tell`, `witness`).
+                let o = answered_offer(ctx, me, a.target.id as u32, offer, now)?;
+                ctx.db.trade_offer().id().delete(o.id);
             }
             Effect::Found => {
                 if ctx.db.membership().member().find(me).is_some() {
@@ -2135,6 +2190,8 @@ pub fn missile_effects(ctx: &ReducerContext, owner: u32, skill: &str, victim: u3
         victim,
         want: String::new(),
         want_qty: 0,
+        offer: 0,
+        record: 0,
     };
     let sctx = if ctx.db.character().id().find(owner).is_some_and(|c| c.alive) {
         skill_ctx(ctx, owner, &a, now)
