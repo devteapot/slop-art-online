@@ -977,6 +977,9 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
             log::warn!("{unplaced} seeded settlements found no site of their kind on this land");
         }
     }
+    if let Some(h) = hosted {
+        plan_resources(ctx, map, &h.resources, now);
+    }
     for (t, layout) in &settlements {
         settlement_resources(ctx, &map, t, layout.center, now);
     }
@@ -1296,6 +1299,39 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     id
 }
 
+/// A fresh node's amount by kind, for resources an author places.
+fn resource_max(kind: &str) -> f32 {
+    match kind {
+        "tree" => 8.0,
+        "boulder" => 6.0,
+        "clay_bank" => 6.0,
+        "reeds" => 4.0,
+        _ => 5.0,
+    }
+}
+
+/// A planned settlement's authored resources (`PlanSpec::resources`), at the nearest walkable
+/// tile to each point. Kinds the rules do not know yet are left for when they exist, and logged.
+fn plan_resources(ctx: &ReducerContext, map: &living_rules::map::Map, at: &[(String, (f32, f32))], now: u64) {
+    let sc = common::scripts(ctx);
+    let mut waiting: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
+    let mut placed = 0;
+    for (kind, p) in at {
+        if living_rules::catalog::kind_class(kind) != Some(living_rules::catalog::KindClass::Resource) {
+            *waiting.entry(kind.as_str()).or_default() += 1;
+            continue;
+        }
+        let Some(q) = map.nearest_walkable(p.0, p.1) else { continue };
+        let max = resource_max(kind);
+        common::invalidate_resources(ctx, None);
+        ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: q.0, y: q.1, chunk: chunk_of(q.0, q.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now });
+        placed += 1;
+    }
+    if placed > 0 || !waiting.is_empty() {
+        log::info!("plan resources: {placed} placed; waiting for their kinds: {waiting:?}");
+    }
+}
+
 /// How far "within reach" of a settlement goes for its promised resources.
 const SETTLEMENT_REACH: f32 = 24.0;
 
@@ -1315,13 +1351,7 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
             _ => false,
         }
     };
-    let max_of = |kind: &str| match kind {
-        "tree" => 8.0,
-        "boulder" => 6.0,
-        "clay_bank" => 6.0,
-        "reeds" => 4.0,
-        _ => 5.0,
-    };
+    let max_of = resource_max;
     let (cx, cy) = (center.0 as i32, center.1 as i32);
     for (kind, want) in &t.resources {
         let mut spots: Vec<(f32, f32)> = ctx
@@ -2103,6 +2133,17 @@ mod tests {
     use super::*;
 
     const AUTHORED: &str = include_str!("../../seeds/authored-test.json");
+
+    /// Cullet's seed passes the checks `init` makes (`island::params_of`'s plan and relief
+    /// refusals, and hosting's reachable doors): a refused seed leaves no world behind.
+    #[test]
+    fn the_cullet_seed_is_hosted() {
+        let s: Seed = serde_json::from_str(include_str!("../../seeds/cullet.json")).expect("cullet seed");
+        let m = s.map.as_ref().unwrap();
+        if let Err(e) = crate::island::generate(s.seed, m) {
+            panic!("cullet: {e}");
+        }
+    }
 
     #[test]
     fn older_seeds_still_parse() {
