@@ -62,7 +62,7 @@ python3 living/tools/characters/page.py .local/page
 A pass is also published through the asset board, the record of which version the owner accepted (`docs/ASSET_BOARD.md` and `living/tools/board/board.py`). Its records are in `living/assets/board/`.
 
 - Pass 1 is the `character:*` families' versions `20261111-0df94138-…`, which the owner accepted as the base.
-- Pass 2 is their versions `20261111-f32f73f9-…`, each beside pass 1 and the VRoid control `vroid=recipe:shino`, photographed with the same shots and clips.
+- Pass 2 is their versions `20261111-f32f73f9-…` (`adult-woman`, `adult-man`) and `20261111-27e84b1a-…` (`elder-man`, `youth`, `boy`, `heavy-man`, `cast-64`), each beside pass 1 and the VRoid control `vroid=recipe:shino`, photographed with the same shots and clips. The generator and the models are the same for both commits; the second only added documentation and the crowd tool.
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -300,7 +300,7 @@ The controls `lookdev/vroid-Sendagaya_Shino.glb` and `vroid-Vivi.glb` were taken
 Measured in pass 2 (2026-11-11), before Cullet is built with these people, with `living/tools/characters/crowd.py`.
 
 - **What was run.** 64 generated people from `town.py`'s stand-in town, each a different file, in the game's own crowd (`LIVING_GAME_CROWD`) in the open `meadow` environment at the default game camera (22 m, 28° down), every one playing `idle`. Headless, uncapped, 1600×900, `LIVING_GAME_PERF=frames,diag`. Beside it: the empty scene, 64 of the VRoid bases the game used before, and 64 of ours that are all one file.
-- **The machine.** The dev-box, AMD Radeon 8060S integrated graphics, building for other workers throughout (load average 12 to 35 on 32 threads). The same run varied by a factor of two between rounds, so each frame time is the median of 4 interleaved rounds with the least and the most. The counts and the process memory do not depend on load.
+- **The machine.** The dev-box, AMD Radeon 8060S integrated graphics, building for other workers throughout (load average 10 to 72 on 32 threads over the rounds). The same run varied by a factor of two between rounds, so each frame time is the median of 4 interleaved rounds with the least and the most. The counts and the process memory do not depend on load.
 - **How the people get into the crowd.** The crowd draws its bases from `recipes.json`'s `bases`. For the run the tool writes a temporary `recipes.json` whose list puts a different person at each index the crowd's seeded draws land on, and restores the file afterwards. The game is not changed.
 
 | At the game camera, 1600×900, uncapped | Empty meadow (you alone) | 64 VRoid bases (2 files) | 64 of ours, all one file | 64 of ours, 64 files |
@@ -362,6 +362,7 @@ New weak points of pass 2:
 - **A wide lock can cross a cheek** in the three-quarter view on some seeds (the side locks of `long` and `bob`).
 - **The eyes' corners.** The white lies on a ball, so at the outer corner it sits a few millimetres behind the lid; from a low side angle a dark gap can show.
 - **The look is not driven by the game yet.** The bones, weights and the file's look-at block are there, and `--look` shows it; the client has to turn the two bones.
+- **Stray strands in some fixed shots.** The asset view photographs 0.6 s after posing a figure, and a spring chain can still be settling; the reference shows the same. In play the hair hangs and swings.
 - **Grey goes lock by lock,** which can read as patches at middle values on fair hair.
 - **Greying brows, beards and hair** are still three separate colours.
 
