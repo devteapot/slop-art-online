@@ -190,6 +190,8 @@ Silence is information: addressing someone out of earshot (far away, or dead wit
 
 ### Conversations (checkpoint 4, item 6, first part)
 
+How characters speak beyond what this section covers (to the room, to one person in public, whispering, calling out, skill-granted channels such as mindspeech), what each hearer receives, what a speaker can know afterwards, and the gap list: [communication](COMMUNICATION.md) (design, 2026-11-11).
+
 A conversation is an exchange of turns between two minds, not one line per deliberation ([talk.rs](../living/mind/src/mind/talk.rs)):
 
 - When a person hears speech addressed to them (`to`, their name, or being the only one close by), their mind service gets a **reply turn**: a small model call (purpose `talk`, the person's own model profile; no world rules or graph grammar) with who they are (narrative, values, goals, mood), how they feel about the speaker (relation) and what they hold about them (`Store::around` on `person:<id>`), their recent non-speech experiences involving the speaker, a one-line scene (time of day, nearest remembered place, current plan) and the conversation so far. The reply is `{"thought", "say" or null, "to", "end"}`, delivered through `mind_say` with thought kind `talk`: the behavior graph is kept, and a talk turn neither clears pending deliberation reasons nor resets the deliberation clock. The other side hears the line as an ordinary experience, which gives them a turn in return.
