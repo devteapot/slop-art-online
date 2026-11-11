@@ -20,7 +20,9 @@
   mx, my (the player's position) and me. Admin calls set scenes only; they are not player acts.
 - A `--sync` call `sql|QUERY` instead snapshots the authority (owner SQL through verify.py) at
   that moment: the rows and the wall time go into scene.json under "snaps" by NAME. `{me}` is
-  the player's character id and `{ident}` its identity (hex).
+  the player's character id, `{ident}` its identity (hex), and `{epoch_at:HOUR}` the world
+  epoch that makes the world's hour HOUR now, keeping its day count (for a scratch fixture
+  `UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0`: the hour by day or night).
 - `--admin-link` gives the client the world admin's token in a private file
   (LIVING_GAME_ADMIN_TOKEN_FILE, `.local/living/verify/RUN/private/`, mode 600, deleted when the
   drive ends), as the play launcher does for a scene with `"law_toggle": true`: the client's
@@ -54,6 +56,15 @@ def sql(run, q):
         return json.loads(r.stdout[i:]) if i >= 0 else []
     except ValueError:
         return []
+
+
+def epoch_at(run, hour):
+    """The world epoch (ms) under which `living_rules::hour_of` gives `hour` now, keeping the
+    world's day count (the world starts at 07:00)."""
+    w = sql(run, "SELECT epoch_ms, day_ms FROM world")[0]
+    day, now = int(w["day_ms"]), int(time.time() * 1000)
+    days = (now - int(w["epoch_ms"]) + day * 7 // 24) // day
+    return now + day * 7 // 24 - int(hour / 24.0 * day) - days * day
 
 
 def admin_token():
@@ -165,6 +176,8 @@ def run_client(a, db, out, client, env, places, syncs):
                             ident = str(ident[0] if isinstance(ident, list) and ident else ident)
                             ident = ident[2:] if ident.startswith("0x") else ident
                         q = "|".join(c[1:]).replace("{me}", str(me)).replace("{ident}", ident)
+                        for m in re.finditer(r"\{epoch_at:([\d.]+)\}", q):
+                            q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)))))
                         scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": int(time.time() * 1000), "rows": sql(a.run, q)})
                         continue
                     scene["calls"].append(call(db, c[0], *[sub(x) for x in c[1:]]))
