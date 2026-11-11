@@ -23,8 +23,6 @@ const MAX_VISITS: u32 = 160;
 const ROOT_MARK: u16 = u16::MAX - 1;
 const FAIL_MARK: u16 = u16::MAX - 2;
 pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
-/// When a person last began a new day (at its own rising, `rhythm.rise_h`).
-const NEWDAY_MARK: u16 = u16::MAX - 4;
 thread_local! {
     /// When each person last checked for, and last felt, knowing something alone (kept here:
     /// evaluator marks are reset when a new plan is installed).
@@ -893,12 +891,13 @@ impl<'a> Ev<'a> {
         // A person's new day begins at its own rising (its rhythm), once a day: its mind is
         // asked to think about the day ahead, each at their own hour.
         if self.me.kind == "person" && self.me.stage >= 1 {
-            if let Some(r) = self.ctx.db.rhythm().id().find(self.me.id) {
+            if let Some(mut r) = self.ctx.db.rhythm().id().find(self.me.id) {
                 let hour = common::hour(&self.w, self.now);
                 let since = (hour - r.rise_h).rem_euclid(24.0);
-                if since < 3.0 && !common::day_phase(self.ctx, self.me.id, hour).0 && !self.mark_recent(NEWDAY_MARK, self.w.day_ms * 3 / 4) {
-                    self.set_mark(NEWDAY_MARK);
-                    let day = living_rules::day_of(self.now, self.w.epoch_ms, self.w.day_ms);
+                let day = living_rules::day_of(self.now, self.w.epoch_ms, self.w.day_ms) as u32;
+                if since < 3.0 && r.last_day < day && !common::day_phase(self.ctx, self.me.id, hour).0 {
+                    r.last_day = day;
+                    self.ctx.db.rhythm().id().update(r);
                     let season = common::season(self.ctx, self.now);
                     let text = format!("A new day begins for you: day {day} ({season}).");
                     percept(self.ctx, &self.me, self.now, "feeling", self.me.id, 0, self.at, text.clone(), 0.3);

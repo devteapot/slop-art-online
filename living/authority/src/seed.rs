@@ -143,7 +143,8 @@ pub fn give_repertoire(ctx: &ReducerContext, id: u32, occupation: &str, now: u64
 
 /// A person's daily rhythm when the seed gives none: rising about 06:00 (±0.8 h), up about
 /// 16 hours (±1 h), an evening of 1.5–4.5 hours before bed. Drawn from the person alone.
-pub fn drawn_rhythm(id: u32) -> Rhythm {
+/// `day`: the world day it is born into (its new day has begun).
+pub fn drawn_rhythm(id: u32, day: u32) -> Rhythm {
     let mut u = common::hashed_draws(id, 2);
     let mut normal = || {
         let (a, b) = (u().max(1e-6), u());
@@ -152,7 +153,7 @@ pub fn drawn_rhythm(id: u32) -> Rhythm {
     let rise_h = (6.0 + 0.8 * normal()).clamp(4.0, 9.0);
     let bed_h = (rise_h + 16.0 + normal()).clamp(19.5, 26.5);
     let evening_h = 1.5 + 3.0 * common::hashed_draws(id, 4)();
-    Rhythm { id, rise_h, bed_h, evening_h }
+    Rhythm { id, rise_h, bed_h, evening_h, last_day: day }
 }
 
 /// A newborn's inheritance of ways: its parents' routines (each from one parent or the other)
@@ -1094,7 +1095,8 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         }
     };
     if kind == "person" {
-        ctx.db.rhythm().insert(drawn_rhythm(id));
+        let w = common::world(ctx);
+        ctx.db.rhythm().insert(drawn_rhythm(id, living_rules::day_of(now, w.epoch_ms, w.day_ms) as u32));
     }
     ctx.db.genome().insert(Genome { id, genes: serde_json::to_string(&genes).unwrap_or_default(), ways: String::new() });
     let max_hp = common::scripts(ctx).num_of("max_hp", kind, 100.0) as f32 * living_rules::genes::gene(&genes, "vitality");
@@ -1744,7 +1746,10 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
             }
         }
         if let Some(given) = &r.rhythm {
-            let mut row = ctx.db.rhythm().id().find(id).unwrap_or_else(|| drawn_rhythm(id));
+            let mut row = ctx.db.rhythm().id().find(id).unwrap_or_else(|| {
+                let w = common::world(ctx);
+                drawn_rhythm(id, living_rules::day_of(now, w.epoch_ms, w.day_ms) as u32)
+            });
             row.rise_h = given.rises.unwrap_or(row.rise_h).clamp(0.0, 12.0);
             row.bed_h = given.sleeps.map(|b| if b < 12.0 { b + 24.0 } else { b }).unwrap_or(row.bed_h).clamp(row.rise_h + 8.0, row.rise_h + 22.0);
             row.evening_h = given.evening_hours.unwrap_or(row.evening_h).clamp(0.0, 8.0);

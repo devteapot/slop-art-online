@@ -342,7 +342,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         } else if hour == 6 {
             common::chronicle(ctx, now, "time", 0, 0, (0.0, 0.0), format!("Dawn of day {day}."));
             // No one is asked to think at dawn: each person's new day begins at its own rising
-            // (brain.rs, `NEWDAY_MARK`).
+            // (brain.rs, `rhythm.last_day`).
         }
         k.last_hour = hour;
     }

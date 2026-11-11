@@ -1333,6 +1333,9 @@ pub struct Rhythm {
     pub rise_h: f32,
     pub bed_h: f32,
     pub evening_h: f32,
+    /// The world day whose new day it last began (`living_rules::day_of`); the day it is
+    /// born into counts as begun, so a world's people do not all begin one at its creation.
+    pub last_day: u32,
 }
 
 /// A guest of a household (private; the database owner reads it): `guest` may sleep in the
