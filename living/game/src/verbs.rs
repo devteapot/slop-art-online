@@ -70,6 +70,9 @@ pub struct Rules {
     pub error: Option<String>,
     /// Every skill there is, as the installed script declares it.
     pub skills: Vec<Skill>,
+    /// How items look by the rules' `item_look` (icon id, label), kept for the revision they were
+    /// read under (a Rhai call each, so never per frame).
+    looks: std::cell::RefCell<(u32, HashMap<String, (String, String)>)>,
 }
 
 /// A skill as the world's script declares it (`<skill>_spec()`): whether it takes a target or an
@@ -90,6 +93,21 @@ pub fn skills_of(sc: &Scripts) -> Vec<Skill> {
 }
 
 impl Rules {
+    /// How an item looks: its icon id and its label, from the world's `item_look` (goods-2: an
+    /// item's `icon`, `label` traits), else its name and the name with spaces.
+    pub fn item_look(&self, item: &str) -> (String, String) {
+        let mut c = self.looks.borrow_mut();
+        if c.0 != self.revision {
+            *c = (self.revision, HashMap::new());
+        }
+        c.1.entry(item.to_string())
+            .or_insert_with(|| match self.scripts.as_ref().and_then(|sc| sc.item_look_of("item_look", item)) {
+                Some(l) if !l.icon.is_empty() => (l.icon, if l.label.is_empty() { item.replace('_', " ") } else { l.label }),
+                _ => (item.to_string(), item.replace('_', " ")),
+            })
+            .clone()
+    }
+
     /// Recompile when the `script` row changes (an install).
     fn refresh(&mut self, conn: &DbConnection) {
         let Some(row) = conn.db.script().name().find(&"skills".to_string()) else { return };
@@ -715,7 +733,14 @@ fn fire_facts(conn: &DbConnection, rules: &Scripts, t: &mut TargetFacts, me: &Me
     // The rules' own reading of a fire (`StructureTraits::fire_state`, as the authority reads it):
     // a fuel fire is lit while its row's `lit_until_ms` is ahead, holding what is left at its rate.
     let lit_until = conn.db.structure().id().find(&t.id).map_or(0, |s| s.lit_until_ms);
-    (t.lit, t.fuel) = rules.structure(&t.kind).fire_state(lit_until, me.now_ms.max(0.0) as u64, me.day_ms);
+    workplace(rules, t, lit_until, me.now_ms.max(0.0) as u64, me.day_ms);
+}
+
+/// A workplace's `lit` and `fuel` for the rules' checks (`make_check`'s `burning(a)` and fuel):
+/// lit while `lit_until_ms` is ahead of `now`; fuel the hours left × its kind's `burns.rate`
+/// (`StructureTraits::fire_state`, the authority's reading); a kind without `burns` as its traits say.
+fn workplace(rules: &Scripts, t: &mut TargetFacts, lit_until_ms: u64, now: u64, day_ms: u64) {
+    (t.lit, t.fuel) = rules.structure(&t.kind).fire_state(lit_until_ms, now, day_ms);
 }
 
 /// A creature as I perceive it, for the rules' checks.
@@ -1384,6 +1409,32 @@ mod tests {
             assert_eq!(job.out, whole);
             assert!(frames > 1, "spread over frames ({frames})");
         }
+    }
+
+    #[test]
+    fn make_is_offered_at_a_furnace_only_while_it_burns_with_fuel() {
+        // Cullet's glass: at a furnace, lit, 1 fuel, 2 sand and an alkali (ash), glassmaking.
+        let src = living_rules::floors::compose(SKILLS, include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
+        let day = 2_880_000;
+        let sc = Scripts::with_day(&src, day).unwrap();
+        let aim = Aim::Thing { class: "structure", kind: "furnace".into(), at: Vec2::ZERO, id: 5, amount: 0.0, nearest: true };
+        let m = me(&[("sand", 2), ("ash", 1)], &["glassmaking"]);
+        let glass = |lit_until: u64| {
+            let mut t = thing_facts("structure", "furnace", 5, 0.0, 1.0);
+            workplace(&sc, &mut t, lit_until, 1_000_000, day);
+            let offered = choices(&sc, &m, &aim, Some(&t), &skills_of(&sc)).iter().any(|c| c.skill == "make" && c.item.as_deref() == Some("glass"));
+            (t.lit, t.fuel, offered)
+        };
+        let hour = day / 24;
+        // Two hours left at 3 units an hour: lit, 6 units.
+        let (lit, fuel, offered) = glass(1_000_000 + 2 * hour);
+        assert!(lit && (fuel - 6.0).abs() < 1e-3 && offered, "lit {lit} fuel {fuel} offered {offered}");
+        // A sixth of an hour: lit, half a unit, too little for glass.
+        let (lit, fuel, offered) = glass(1_000_000 + hour / 6);
+        assert!(lit && (fuel - 0.5).abs() < 1e-3 && !offered, "lit {lit} fuel {fuel} offered {offered}");
+        // Out.
+        let (lit, fuel, offered) = glass(999_000);
+        assert!(!lit && fuel == 0.0 && !offered, "lit {lit} fuel {fuel} offered {offered}");
     }
 
     #[test]

@@ -111,11 +111,12 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
             }
             if let Some(v) = m.get("say") {
                 body_check(path, "say", None)?;
-                let (text, to) = match v {
-                    Value::String(s) => (s.clone(), m.get("to").cloned()),
+                let (text, to, way) = match v {
+                    Value::String(s) => (s.clone(), m.get("to").cloned(), m.get("way").cloned()),
                     Value::Object(o) => (
                         o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(),
                         o.get("to").cloned().filter(|t| !t.is_null()).or_else(|| m.get("to").cloned()),
+                        o.get("way").cloned().filter(|t| !t.is_null()).or_else(|| m.get("way").cloned()),
                     ),
                     _ => return Err(format!("{path}.say: expected text")),
                 };
@@ -124,6 +125,7 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
                 if let Some(to) = to {
                     out["say"]["to"] = target(to, &format!("{path}.say.to"))?;
                 }
+                way_of(&mut out, way, path)?;
                 return Ok(out);
             }
             if let Some(v) = m.get("wait") {
@@ -309,6 +311,23 @@ fn if_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     Ok(json!({"if": out}))
 }
 
+
+/// A say's way of speaking (`"way": "whisper"`), lowercased; `say` (the default) is left out.
+fn way_of(out: &mut Value, way: Option<Value>, path: &str) -> Result<(), String> {
+    match way {
+        None | Some(Value::Null) => Ok(()),
+        Some(Value::String(w)) => {
+            let w = w.trim().to_lowercase().replace([' ', '-'], "_");
+            if w.is_empty() || w == "say" {
+                return Ok(());
+            }
+            out["say"]["way"] = json!(w);
+            Ok(())
+        }
+        Some(_) => Err(format!("{path}.say.way: the name of a way of speaking")),
+    }
+}
+
 fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     let d = m.get("do").cloned().unwrap_or(Value::Null);
     let mut action = match d {
@@ -336,6 +355,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
             if let Some(t) = action.get("to").or_else(|| action.get("target")).cloned() {
                 out["say"]["to"] = target(t, &format!("{path}.say.to"))?;
             }
+            way_of(&mut out, action.get("way").cloned(), path)?;
             return Ok(out);
         }
         _ => {}

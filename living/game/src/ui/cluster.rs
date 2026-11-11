@@ -81,8 +81,7 @@ fn meter(p: &mut ChildSpawnerCommands, f: &Fonts, fill: impl Bundle, text: impl 
 pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
     let f = &*fonts;
     let th = wood::t();
-    let main: Vec<(String, f32, f32, f32)> = MAIN.iter().map(|(a, gap)| (key_of(*a), SLOT, SLOT, *gap)).chain(std::iter::once((WEAPON.to_string(), SLOT, 70.0, 12.0))).collect();
-    let extra: Vec<(String, f32, f32, f32)> = (0..crate::keys::EXTRA).map(|i| (key_of(Act::Extra(i)), SMALL, SMALL, 0.0)).collect();
+    let main: Vec<(String, f32, f32, f32, bool)> = MAIN.iter().map(|(a, gap)| (key_of(*a), SLOT, SLOT, *gap, false)).chain(std::iter::once((WEAPON.to_string(), SLOT, 70.0, 12.0, true))).collect();
     commands
         .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), bottom: Val::Px(14.0), justify_content: JustifyContent::Center, ..default() }, Pickable::IGNORE))
         .with_children(|root| {
@@ -100,10 +99,28 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
                         meter(v, f, (HpFill, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, down(&[(wood::ROSE2, 0.0), (wood::ROSE, 60.0), (wood::ROSE_LO, 100.0)]), Pickable::IGNORE), HpText, true);
                         meter(v, f, (EnFill, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, down(&[(wood::TEAL2, 0.0), (wood::TEAL, 100.0)]), Pickable::IGNORE), EnText, false);
                     });
-                    prim::bar(c, f, &icons, &extra, Some(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), padding: UiRect::bottom(Val::Px(10.0)), display: Display::None, ..default() }), ExtraRow);
+                    // The extra row's slots come with the rules' bar ([`extras`]): none on a bar without extras.
+                    prim::bar(c, f, &icons, &[], Some(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), padding: UiRect::bottom(Val::Px(10.0)), display: Display::None, ..default() }), ExtraRow);
                     prim::bar(c, f, &icons, &main, None, ());
                 });
         });
+}
+
+/// The extra row holds a slot for each extra the rules' bar has (up to the keys 4–9), spawned
+/// when that number changes: a bar without extras lays out none.
+pub fn extras(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>, roles: Option<Res<crate::combat::Roles>>, rows: Query<(Entity, Option<&Children>), With<ExtraRow>>) {
+    let want = roles.map_or(0, |r| r.extra().len()).min(crate::keys::EXTRA as usize);
+    for (row, kids) in &rows {
+        if kids.map_or(0, |k| k.len()) == want {
+            continue;
+        }
+        commands.entity(row).despawn_related::<Children>();
+        commands.entity(row).with_children(|r| {
+            for i in 0..want {
+                prim::slot(r, &fonts, &icons, &key_of(Act::Extra(i as u8)), SMALL, SMALL, 0.0, false);
+            }
+        });
+    }
 }
 
 /// The rules' description of a skill, for the tooltip.

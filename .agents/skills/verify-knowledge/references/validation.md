@@ -1,5 +1,23 @@
 # Knowledge validation
 
+## 2026-11-11 speech-2: names of two words (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `names.py --name "Mara Quill"` (`minds-names2-mara`): 7 of 7. The player says "I am Mara", and the mind learns "Mara Quill": the `introduced` row, the tagged consolidation, the memory, and the person's node named after it; the mind out of earshot learns nothing.
+
+## 2026-11-11 speech-1: names (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `names.py` (new): `minds-names-1` 7 of 7 with the trial stack's Neo4j (0 nodes left):
+  - before the name, the graph knows the player as "a stranger";
+  - one `introduced` row, and the only acquaintance is the mind's;
+  - the consolidation prompt holds "Mercy told you their name. {Mercy=#id}", and the memory keeps it;
+  - the person's node is named "Mercy" afterwards;
+  - the mind 38 m away has no node naming the player.
+- Not run: the full `verify_knowledge.py` suite, player memory.
+
 ## 2026-11-11 goods-2: teaching a world's own technique (dev-box)
 
 Branch `goods-2` (from main `62d861f0`, merged with main four times, last with `94050f9a` at `6fefe997`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.

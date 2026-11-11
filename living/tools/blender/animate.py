@@ -463,6 +463,8 @@ class Skeleton:
             heel=Vector((ankle.x, sole, heel_z)),
             tip=Vector((toe.x, sole, tip_z)),
             sole=sole,
+            # How far the foot reaches out sideways from the ankle (a foot lying on its side).
+            half_width=max(abs(p.x - ankle.x) for p in pts),
         )
 
 
@@ -1467,6 +1469,227 @@ def guarded(sk, frames, cyclic, stats, planted=None):
     return out
 
 
+# The limb guard (`limb_guard`): wrists at least this far above the floor (game m), ankles at least
+# LIMB_ANKLE_FACTOR of the lower of the ankle's standing height and the foot's half width (a foot
+# lying on its side), so each body's own feet set it; a limb more than LIMB_EPS short is lifted.
+LIMB_WRIST_CLEAR = 0.03
+LIMB_ANKLE_FACTOR = 0.9
+LIMB_EPS = 0.002
+# A foot low on the floor (the ankle under this share of its standing height: sitting, kneeling,
+# lying) whose sole still goes under after the ankle's lift turns about the ankle, toes up, by the
+# least angle that brings its heel, ball and toe tip to the floor, at most LIMB_PITCH_MAX degrees;
+# what is still under after that lifts the ankle again.
+LIMB_LOW_ANKLE = 0.6
+LIMB_PITCH_MAX = 70.0
+
+
+def solve_arm(sk, side, rot, pos, target, stats):
+    """Two-bone IK for an arm, as world-space corrections to its pose: the elbow stays in the plane
+    shoulder, elbow, wrist make now and on the side it is on, and the hand keeps its world
+    rotation. Returns the local rotations of the upper arm, forearm and hand, and how far short
+    of the target the wrist stays (file units, upward: a target out of reach)."""
+    up, lo, hd = bone(side, "UpperArm"), bone(side, "LowerArm"), bone(side, "Hand")
+    S, E, W = pos[up], pos[lo], pos[hd]
+    l1, l2 = (E - S).length, (W - E).length
+    v = target - S
+    d = v.length
+    reach = (l1 + l2) * 0.999
+    short = 0.0
+    if d > reach:
+        stats["overreach"] = max(stats.get("overreach", 0.0), d - reach)
+        short = d - reach
+        d = reach
+    d = max(d, abs(l1 - l2) + 1e-4)
+    u = v.normalized()
+    normal = (E - S).cross(W - S)
+    if normal.length < 1e-6:
+        normal = Vector((0.0, 1.0, 0.0)).cross(u)
+    side_dir = normal.normalized().cross(u).normalized()
+    if side_dir.dot(E - S) < 0:
+        side_dir = -side_dir
+    a = (l1 * l1 - l2 * l2 + d * d) / (2 * d)
+    h = math.sqrt(max(l1 * l1 - a * a, 0.0))
+    E2 = S + u * a + side_dir * h
+    W2 = S + u * d
+    q1 = (E - S).rotation_difference(E2 - S)
+    q2 = (q1 @ (W - E)).rotation_difference(W2 - E2)
+    up_rot = q1 @ rot[up]
+    lo_rot = q2 @ q1 @ rot[lo]
+    parent = sk.parent.get(up)
+    parent_rot = rot[parent] if parent in rot else Quaternion()
+    out = {up: (parent_rot.inverted() @ up_rot).normalized(), lo: (up_rot.inverted() @ lo_rot).normalized(), hd: (lo_rot.inverted() @ rot[hd]).normalized()}
+    return out, short * (v.y / max(v.length, 1e-9)) if short else 0.0
+
+
+def limb_guard(sk, frames, cyclic, stats):
+    """Keep wrists and ankles off the floor, every clip and every body: a wrist under
+    `LIMB_WRIST_CLEAR`, or an ankle under its foot's clearance (see LIMB_ANKLE_FACTOR), is raised
+    by a smooth curve never below how far short it is (`smooth_drop`), the arm (`solve_arm`) or the
+    leg (`solve_leg`) solved to it with the hand or foot keeping its rotation; where an arm can't
+    reach, the hips rise by what is left. A low foot (see LIMB_LOW_ANKLE) whose sole is still under
+    then turns toes up about its ankle, and what is left after that lifts it again. A clip where no
+    wrist, ankle or low sole goes under comes back unchanged (the same frames). Records `limb_wrist_lift_m`, `limb_ankle_lift_m`, `limb_hip_lift_m`
+    (game m), `limb_frames`, `limb_left_m` (the most still short), and for turned feet
+    `limb_toe_pitch_deg` and `limb_sole_left_m`; `limb_floor_left_m` is any sole point still
+    under, low or not."""
+    n = len(frames) - 1
+    count = n if cyclic else n + 1
+    names = [bone(s, x) for s in "LR" for x in LEG] + [bone(s, x) for s in "LR" for x in ("UpperArm", "LowerArm", "Hand")]
+    names = [b for b in names if b in sk.parent]
+    hands = [bone(s, "Hand") for s in "LR" if bone(s, "Hand") in sk.parent]
+    eps = LIMB_EPS * sk.unit
+    wclear = sk.floor + LIMB_WRIST_CLEAR * sk.unit
+    aclear = {s: sk.floor + LIMB_ANKLE_FACTOR * min(sk.feet[s]["ankle"].y - sk.feet[s]["sole"], sk.feet[s]["half_width"]) for s in "LR"}
+
+    low = {s: sk.feet[s]["sole"] + LIMB_LOW_ANKLE * (sk.feet[s]["ankle"].y - sk.feet[s]["sole"]) for s in "LR"}
+
+    def short(fk):
+        w = {h: [max(0.0, wclear - pos[h].y) for _, pos in fk] for h in hands}
+        a = {s: [max(0.0, aclear[s] - pos[bone(s, "Foot")].y) for _, pos in fk] for s in "LR"}
+        return w, a
+
+    def sole_pts(rot, pos, s):
+        f_ = sk.feet[s]
+        ft, toe = bone(s, "Foot"), bone(s, "ToeBase")
+        ball = Vector((f_["toe"].x, f_["sole"], f_["toe"].z))
+        return [pos[ft] + rot[ft] @ (f_["heel"] - f_["ankle"]), pos[ft] + rot[ft] @ (ball - f_["ankle"]), pos[toe] + rot[toe] @ (f_["tip"] - f_["toe"])]
+
+    def sole_short(fk):
+        """How far each low foot's sole is under the floor, per frame (0 where the ankle is not low)."""
+        return {s: [max(0.0, sk.feet[s]["sole"] - min(p.y for p in sole_pts(rot, pos, s))) if pos[bone(s, "Foot")].y < low[s] else 0.0 for rot, pos in fk] for s in "LR"}
+
+    fk = [fk_pose(sk, q, off, names) for q, off in frames[:count]]
+    w, a = short(fk)
+    w = {h: [x if x > eps else 0.0 for x in v] for h, v in w.items()}
+    a = {s: [x if x > eps else 0.0 for x in v] for s, v in a.items()}
+    t = {s: [x if x > eps else 0.0 for x in v] for s, v in sole_short(fk).items()}
+    if not any(any(v) for d in (w, a, t) for v in d.values()):
+        return frames
+    W = {h: smooth_drop(v, cyclic=cyclic) if any(v) else [0.0] * count for h, v in w.items()}
+    A = {s: smooth_drop(v, cyclic=cyclic) if any(v) else [0.0] * count for s, v in a.items()}
+    out = [(dict(q), off.copy()) for q, off in frames[:count]]
+    # The arms first; what they can't reach lifts the hips.
+    hip = [0.0] * count
+    for k in range(count):
+        rot, pos = fk[k]
+        for side, h in zip("LR", [bone(s, "Hand") for s in "LR"]):
+            if h not in W or W[h][k] <= 0.0:
+                continue
+            q, left = solve_arm(sk, side, rot, pos, pos[h] + Vector((0.0, W[h][k], 0.0)), stats)
+            out[k][0].update(q)
+            hip[k] = max(hip[k], left)
+    hip = smooth_drop([x if x > eps else 0.0 for x in hip], cyclic=cyclic) if any(x > eps for x in hip) else [0.0] * count
+    # The legs: each foot where it was, raised by its own lift, from hips that may have risen.
+    for k in range(count):
+        if hip[k] <= 0.0 and A["L"][k] <= 0.0 and A["R"][k] <= 0.0:
+            continue
+        q, off = out[k]
+        if hip[k] > 0.0:
+            off = off + Vector((0.0, hip[k], 0.0))
+        rot0, pos0 = fk[k]
+        rot, pos = fk_pose(sk, q, off, names)
+        for s in "LR":
+            if hip[k] <= 0.0 and A[s][k] <= 0.0:
+                continue
+            ft = bone(s, "Foot")
+            pole = rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1))
+            q.update(solve_leg(sk, s, pos[bone(s, "UpperLeg")], rot[HIPS], pos0[ft] + Vector((0.0, A[s][k], 0.0)), rot0[ft], rot0[bone(s, "ToeBase")], stats, pole=pole))
+        out[k] = (q, off)
+    # Low feet whose soles are still under: toes up about the ankle, then what is left lifts them.
+    fk2 = [fk_pose(sk, q, off, names) for q, off in out]
+    need = sole_short(fk2)
+    pitch = {}
+    for s in "LR":
+        ft, shin = bone(s, "Foot"), bone(s, "LowerLeg")
+        ang = [0.0] * count
+        for k in range(count):
+            if need[s][k] <= eps:
+                continue
+            rot, pos = fk2[k]
+            fwd = rot[ft] @ (sk.feet[s]["toe"] - sk.feet[s]["ankle"])
+            axis = Vector((0.0, 1.0, 0.0)).cross(fwd)
+            if axis.length < 1e-6:
+                continue
+            axis.normalize()
+            # The sign that raises the toe tip.
+            if (Quaternion(axis, math.radians(10)) @ fwd).y < fwd.y:
+                axis = -axis
+            best = (-math.inf, 0.0)
+            for deg in range(1, int(LIMB_PITCH_MAX) + 1):
+                r = Quaternion(axis, math.radians(deg))
+                rr = {ft: r @ rot[ft], bone(s, "ToeBase"): r @ rot[bone(s, "ToeBase")]}
+                pp = {ft: pos[ft], bone(s, "ToeBase"): pos[ft] + r @ (pos[bone(s, "ToeBase")] - pos[ft])}
+                lowest = min(p.y for p in sole_pts(rr, pp, s))
+                if lowest > best[0] + 1e-9:
+                    best = (lowest, deg)
+                if lowest >= sk.feet[s]["sole"]:
+                    break
+            ang[k] = float(best[1])
+        if any(ang):
+            pitch[s] = smooth_drop(ang, cyclic=cyclic)
+    for k in range(count):
+        q, off = out[k]
+        rot, pos = fk2[k]
+        for s, ang in pitch.items():
+            if ang[k] <= 0.0:
+                continue
+            ft, shin = bone(s, "Foot"), bone(s, "LowerLeg")
+            fwd = rot[ft] @ (sk.feet[s]["toe"] - sk.feet[s]["ankle"])
+            axis = Vector((0.0, 1.0, 0.0)).cross(fwd).normalized()
+            if (Quaternion(axis, math.radians(10)) @ fwd).y < fwd.y:
+                axis = -axis
+            q[ft] = (rot[shin].inverted() @ Quaternion(axis, math.radians(ang[k])) @ rot[ft]).normalized()
+    if pitch:
+        stats["limb_toe_pitch_deg"] = round(max(max(v) for v in pitch.values()), 1)
+        fk3 = [fk_pose(sk, q, off, names) for q, off in out]
+        rest = sole_short(fk3)
+        for s in "LR":
+            if not any(x > eps for x in rest[s]):
+                continue
+            lift = smooth_drop([x if x > eps else 0.0 for x in rest[s]], cyclic=cyclic)
+            for k in range(count):
+                if lift[k] <= 0.0:
+                    continue
+                q, off = out[k]
+                rot, pos = fk3[k]
+                ft = bone(s, "Foot")
+                pole = rot[bone(s, "UpperLeg")] @ Vector((0, 0, -1))
+                q.update(solve_leg(sk, s, pos[bone(s, "UpperLeg")], rot[HIPS], pos[ft] + Vector((0.0, lift[k], 0.0)), rot[ft], rot[bone(s, "ToeBase")], stats, pole=pole))
+                A[s][k] += lift[k]
+        stats["limb_sole_left_m"] = round(max(max(v) for v in sole_short([fk_pose(sk, q, off, names) for q, off in out]).values()) / sk.unit, 4)
+    stats["limb_wrist_lift_m"] = max((max(v) for v in W.values()), default=0.0) / sk.unit
+    stats["limb_ankle_lift_m"] = max(max(v) for v in A.values()) / sk.unit
+    if any(hip):
+        stats["limb_hip_lift_m"] = max(hip) / sk.unit
+    stats["limb_frames"] = sum(1 for k in range(count) if any(v[k] for d in (w, a, t) for v in d.values()))
+    fk_out = [fk_pose(sk, q, off, names) for q, off in out]
+    w2, a2 = short(fk_out)
+    # Every sole point still under the floor, low foot or not (the floor guard's own measure).
+    stats["limb_floor_left_m"] = round(max(0.0, max(sk.feet[s]["sole"] - min(p.y for p in sole_pts(rot, pos, s)) for rot, pos in fk_out for s in "LR")) / sk.unit, 4)
+    stats["limb_left_m"] = max([max(v) for v in w2.values()] + [max(v) for v in a2.values()]) / sk.unit
+    if cyclic:
+        out.append(({b: v.copy() for b, v in out[0][0].items()}, out[0][1].copy()))
+    return out
+
+
+def limbs_guarded(sk, frames, cyclic, stats):
+    """`limb_guard` with the floor guard's protection: where it would raise the clip's largest
+    frame-to-frame jerk by more than FLOOR_JERK_MARGIN, the clip is left as it was
+    (`limb_guard_skipped`); else its sidecar gets `limb_jerk_deg` [before, after, bone]."""
+    limb_stats = {}
+    out = limb_guard(sk, frames, cyclic, limb_stats)
+    if out is frames:
+        return frames
+    before, _ = max_jerk(frames, cyclic)
+    after, at = max_jerk(out, cyclic)
+    if after > before + FLOOR_JERK_MARGIN:
+        stats["limb_guard_skipped"] = [round(before, 2), round(after, 2), at]
+        return frames
+    stats.update(limb_stats)
+    stats["limb_jerk_deg"] = [round(before, 2), round(after, 2), at]
+    return out
+
+
 def overlay_clip(sk, spec, neutral):
     """A hand-keyed gesture on the neutral pose: central bones (Neck, Head, …) turn by eased key
     curves over the clip, from rest and back to it (degrees: pitch + nods forward, yaw + turns to
@@ -1493,6 +1716,7 @@ def overlay_clip(sk, spec, neutral):
     planted = {}
     frames = plant_feet(sk, frames, contacts, Vector(), False, stats, planted_out=planted)
     frames = guarded(sk, frames, False, stats, planted)
+    frames = limbs_guarded(sk, frames, False, stats)
     info = {"source": "hand-keyed overlay on the neutral pose", "kind": "once", "loop": False, "frames": n,
             "seconds": round(n / FPS, 3), "speed": 0.0, "contacts": foot_markers(sk, frames, Vector(), False)[0]}
     return frames, info
@@ -1580,6 +1804,7 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
     if spec.get("plant", True):
         frames = plant_feet(sk, frames, contacts, belt_v, kind == "loop", stats, track, planted_out=planted)
     frames = guarded(sk, frames, kind == "loop", stats, planted)
+    frames = limbs_guarded(sk, frames, kind == "loop", stats)
     # Foot-down markers. A gait's loop starts where its right foot comes down (the start of the
     # right foot's longest contact), so phase 0 is the same event in every gait and the game can
     # play them all at one shared phase.

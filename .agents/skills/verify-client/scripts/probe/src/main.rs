@@ -38,9 +38,9 @@ macro_rules! primary_tables {
             belief, judgment, place, thought, chronicle, stats, bond_offer, expecting,
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, script, community, membership, join_request, genome,
-            practice, land, settlement, lot, fighter, skill_card, act_card, doing, weather,
+            practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather,
             seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how, my_offers);
+            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard);
     };
 }
 
@@ -151,6 +151,7 @@ fn snapshot(c: &DbConnection) -> Value {
         fighter,
         skill_card,
         act_card,
+        speech_card,
         doing,
         weather,
         my_combat,
@@ -170,7 +171,8 @@ fn snapshot(c: &DbConnection) -> Value {
         my_inventory,
         my_know_how,
         my_offers,
-        heard_sounds
+        heard_sounds,
+        my_heard
     );
     // What the perception views returned to this identity (docs/PERCEPTION.md).
     let ids = |v: Vec<u32>| { let mut v = v; v.sort_unstable(); v };
@@ -191,6 +193,8 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_offers": c.db.my_offers().iter().map(|r| json!({"id":r.id,"incoming":r.incoming,"from":r.from,"to":r.to,"give_item":r.give_item,"want_item":r.want_item,"until_ms":r.until_ms})).collect::<Vec<_>>(),
         // What I hear and do not see (only while the world's `fov_on` law is on): no id.
         "heard_sounds": c.db.heard_sounds().iter().map(|r| json!({"key":r.key.to_string(),"kind":r.kind,"bearing":r.bearing,"band":r.band})).collect::<Vec<_>>(),
+        // Who heard my own lines: speaker and line of each row (docs/COMMUNICATION.md §6).
+        "my_heard": c.db.my_heard().iter().map(|r| json!({"line":r.line,"speaker":r.speaker,"way":r.way,"hearers":r.hearers})).collect::<Vec<_>>(),
     });
     let characters: Vec<_> = c.db.character().iter().map(|r| json!({
         "id":r.id,"name":r.name,"kind":r.kind,"controller":r.controller.to_hex().to_string(),

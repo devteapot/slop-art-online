@@ -1,5 +1,32 @@
 # Validation record (player)
 
+## 2026-11-11 ui-1 step 4: the bar, offer cards, face out of the lists (laptop)
+
+Branch `ui-1-step4` (origin/main merged at `5cd546da`), on the laptop's Docker SpacetimeDB 2.14.1, `scoped`, no model calls; world `verify-player-ui1d` (`$V launch --run player-ui1d --seed island`, joined as `Verifier`). The step changes no authority code; the rules are identical with every `_ui()` stripped (`living_rules` test), and its acts go through `human_act` and `use_skill` as before.
+
+- `offers.py` 17 of 17, `answers.py` 9 of 9 (the decline told to the walker, the player's outcome), `gesture.py` 10 of 10.
+- `offers.py` now has the walker ask for hide, not berries: the island's newcomer arrives with berries, so "accept without the goods" was accepted at once on a fresh world (an earlier run here: 13 of 17).
+- `combat.py --scene all`: 26 of 26 on `player-ui1c` before origin/main's `fix-place-free` (e3f0527f); 16 of 26 on `player-ui1d` after it. Every failure is a staged fight: the target is put on the nearest free tile, out of a strike's reach ("refused: out of reach"), and the jump finds "no room to jump". Not this branch's: its scenes need placing for the new `place_at`. Evidence `.local/living/verify/player-ui1d/combat.txt`.
+
+## 2026-11-11 speech-2: whisper and call, refusals in the script's words (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `speak.py` `player-speak5`: 15 of 15. For each way on the card, the refusal (a whisper to no one, a whisper 4 m away, a second call within 6 s) is the reducer's error, byte for byte the words of the installed script's `<way>_check` on the same facts, run outside the authority as a client runs it (`living-rules` example `way_check`, `speech::check_ctx`).
+- Earlier attempts:
+  - `player-speak3` 12 of 12 was before refusals moved to the script.
+  - `player-speak4` failed only the second call: its facts and SQL took 5.7 s before the second call was sent, past the 6 s gap, so the reducer accepted it. It now sends at once and asks the client's check about the same moment.
+- After merging origin/main (`93019a3`): `player-speak6` 15 of 15.
+- After merging origin/main (`48cd022`): `player-speak9` 15 of 15.
+- `speech::check_way`, origin/main `601d1f6` merged: `player-speak11` 15 of 15 (the `way_check` example now calls `check_way`, as the authority does).
+
+## 2026-11-11 speech-1: human_speak (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `speak.py` (new): `player-speak2` 8 of 8: `speech_card` read anonymously; `human_say`, `human_speak(…, "say")` and `human_speak(…, "")` spoken; their `said` rows in `my_experience`; `my_heard` rows joined by `line`, listing the resident; refused "no way of speaking called `shout`" and "speaking too fast", writing nothing. The shipped script has one way, so the card's `needs_to`, `reach` and gap loops had nothing to drive.
+- `player-speak1` failed only the too-fast check: the first line's row reached `my_experience` at the next frame, during the check's count. The check now waits 0.8 s before counting.
+
 ## 2026-11-11 rules-offers-2: answers by id (Spark)
 
 Branch `rules-offers-2` (origin/main merged at `5f7ba5b`), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. Scoped maintain pass on offers (offers.md, README, SKILL.md): "Declining: there is no act" was drift and is replaced; `answers.py` added.

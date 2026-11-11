@@ -180,6 +180,9 @@ async fn main() -> Result<()> {
                     "SELECT * FROM rhythm",
                     // Who told whom their name (private): prompts name people only when known.
                     "SELECT * FROM acquaintance",
+                    // Who heard each line (private, one row per line in its speaker's window): a
+                    // speaker's own line reads as heard by those it saw (docs/COMMUNICATION.md §6).
+                    "SELECT * FROM line_heard",
                 ].map(String::from)).collect::<Vec<String>>());
         })
         .on_disconnect(|_, e| {
@@ -208,7 +211,8 @@ async fn main() -> Result<()> {
             if rethink {
                 let _ = tx.send(mind::Event::Percept(e.clone()));
             }
-            if e.kind == "speech" || e.kind == "silence" {
+            // A whisper to me carries words too; noticing one (`whispered`) does not.
+            if e.kind == "speech" || e.kind == "whisper" || e.kind == "silence" {
                 let _ = tx.send(mind::Event::Speech(e.clone()));
             }
         });

@@ -18,8 +18,11 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 mod check;
+#[cfg(test)]
+mod seed_check;
 pub mod context;
 pub mod fields;
+pub mod speech;
 mod ui;
 pub use ui::UiWork;
 pub use check::Report;
@@ -790,6 +793,8 @@ pub struct Scripts {
     shows: crate::social::Shows,
     /// Every skill the script declares (`<skill>_spec()`).
     skills: std::sync::Arc<crate::catalog::Skills>,
+    /// The ways of speaking (`<way>_speech()`), in their order.
+    ways: Vec<speech::WaySpec>,
     /// Functions of no parameter.
     nullary: HashSet<String>,
     /// What each function reads of its parameters.
@@ -826,6 +831,9 @@ pub struct Scripts {
     law_errors: RefCell<Vec<String>>,
     /// What each kind of structure does for those near it (its traits in `structures()`).
     structures: HashMap<String, StructureTraits>,
+    /// Resource kinds' shares of their regrowth by season (`regrow_by_season`), when not the
+    /// shipped ones.
+    seasons: HashMap<String, [f32; 4]>,
     /// The data tables, shared with the engine's primitives.
     tables: Rc<RefCell<Tables>>,
     /// How each skill is presented (`<name>_ui()` over its defaults), and what was wrong with
@@ -847,6 +855,12 @@ pub struct StructureTraits {
     /// A fire that burns fuel (a hearth, an oven, a furnace, a lamp): it warms and lights only
     /// while lit.
     pub burns: Option<Burns>,
+    /// A store: the most things it holds in all (`holds`; none: not a store). One stores into
+    /// and takes from a kind that has it.
+    pub holds: Option<f32>,
+    /// The kind it counts as wherever a kind is asked by name (`like: "storage"`: a graph's
+    /// `nearest storage` finds it too); empty: only its own name.
+    pub like: String,
 }
 
 /// What a client shows of an item or of what a recipe makes (`Scripts::item_look_of`).
@@ -936,12 +950,65 @@ pub struct Limits {
 /// 2026-11-11) and 2,373 after, so the string limit is 4,096.
 pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 4_096, array: 256, map: 512 };
 
+/// Rhai's hashing keys, the same in every build of every program that runs the laws: the
+/// authority, the game client and the mind service (docs/LIVING_CORE.md, "One hashing seed").
+///
+/// Rhai hashes function names, call signatures and `switch` cases with `ahash`, and turns on
+/// `ahash`'s `compile-time-rng`. Unless a seed is set, the keys are random numbers drawn each
+/// time `ahash` compiles (a new target folder, a cache miss, a toolchain update), and they
+/// decide where entries land in Rhai's tables and in which order it hands back a script's
+/// functions. So the same source cost a different fuel per call from build to build (`tool-8`),
+/// and a rule that followed that order (`fov-1`'s field analysis) decided differently by build.
+/// Fixed keys make both a function of the code alone.
+///
+/// The value is the fuel bench's key set 0 since `tool-8` (`sb_bench::hashing_seed(0)`), so the
+/// gate's history at that set is the game's; nothing else about it matters but that it is not
+/// zero (Rhai takes zero keys as no seed) and never changes: changing it moves every law's fuel.
+/// It was not chosen for a law's fuel. Fixed keys are public, so whoever chooses a string that
+/// Rhai hashes could look for collisions: to slow the engine (hash flooding) or to take a wrong
+/// `switch` branch (Rhai matches a case by its hash alone). Acceptable while scripts come from a
+/// world's seed and admin installs; the docs list where a player's words reach a hashed
+/// position today (an act's item) and when to revisit.
+pub const HASHING_SEED: [u64; 4] = [0x5eed_0000_0000_0001, 0x5eed_0000_0000_0002, 0x5eed_0000_0000_0003, 0x5eed_0000_0000_0004];
+
+/// Fix Rhai's hashing keys to [`HASHING_SEED`] (`rhai::config::hashing::set_hashing_seed`) and
+/// return the keys in force. Rhai reads them once per process (a module instance), so this must
+/// run before anything touches Rhai: every engine of this crate is made by [`new_engine`], which
+/// calls it. Keys set earlier by someone else stay in force (the fuel bench's other key sets).
+pub fn fix_hashing() -> [u64; 4] {
+    #[cfg(test)]
+    if let Some(k) = test_seed() {
+        let _ = rhai::config::hashing::set_hashing_seed(k);
+        return k.unwrap_or_default();
+    }
+    let _ = rhai::config::hashing::set_hashing_seed(Some(HASHING_SEED));
+    rhai::config::hashing::get_hashing_seed().unwrap_or_default()
+}
+
+/// Tests only: other keys for this process (`LIVING_RHAI_TEST_SEED`: four numbers, or `build`
+/// for the keys this build of `ahash` drew), for the check that no rule depends on them.
+#[cfg(test)]
+fn test_seed() -> Option<Option<[u64; 4]>> {
+    let v = std::env::var("LIVING_RHAI_TEST_SEED").ok()?;
+    if v == "build" {
+        return Some(None);
+    }
+    let k: Vec<u64> = v.split(',').map(|w| w.trim().parse().expect("LIVING_RHAI_TEST_SEED: four numbers or `build`")).collect();
+    Some(Some(k.try_into().expect("LIVING_RHAI_TEST_SEED: four numbers")))
+}
+
+/// A bare Rhai engine, after [`fix_hashing`]. The only way this crate makes one.
+pub fn new_engine() -> Engine {
+    fix_hashing();
+    Engine::new_raw()
+}
+
 fn engine(t: &Rc<RefCell<Tables>>) -> Engine {
     engine_with(LIMITS, t)
 }
 
 fn engine_with(l: Limits, t: &Rc<RefCell<Tables>>) -> Engine {
-    let mut e = Engine::new_raw();
+    let mut e = new_engine();
     register_tables(&mut e, t);
     rhai::packages::StandardPackage::new().register_into_engine(&mut e);
     e.set_max_operations(l.operations);
@@ -1046,7 +1113,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1068,7 +1135,9 @@ impl Scripts {
         skills.structures = s.kinds_of("structures");
         skills.techniques = s.read_know_how()?;
         s.skills = std::sync::Arc::new(skills);
+        s.ways = s.read_ways()?;
         s.structures = s.read_structures()?;
+        s.seasons = s.read_seasons()?;
         s.laws = s.read_laws()?;
         s.reach = s.read_reach()?;
         for (f, names) in name_laws(&s) {
@@ -1196,6 +1265,49 @@ impl Scripts {
         Ok(crate::catalog::Skills::new(list))
     }
 
+    /// The ways of speaking (`<way>_speech()`), read once here, in their `order` (then the
+    /// source's). A script that declares none speaks by the shipped `say` (today's speech), so a
+    /// world installed before ways were declared keeps speaking until its next install.
+    fn read_ways(&self) -> Result<Vec<speech::WaySpec>, String> {
+        let mut ways = Vec::new();
+        for f in self.nullary.iter().filter(|f| f.ends_with("_speech")) {
+            let way = f.trim_end_matches("_speech");
+            if way.is_empty() {
+                continue;
+            }
+            if !way.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                return Err(format!("{f}: a way's name is lowercase letters and _"));
+            }
+            if self.skills.get(way).is_some() || self.shapes.get(way).is_some() {
+                return Err(format!("{f}: `{way}` is a skill already; a way of speaking needs a name of its own"));
+            }
+            let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+            let w = speech::way_of(way, &m)?;
+            if !w.needs.is_empty() && !self.skills.techniques.iter().any(|t| t.name == w.needs) {
+                return Err(format!("{f}: `needs` names a technique of `know_how()`, not `{}`", w.needs));
+            }
+            ways.push(w);
+        }
+        if ways.is_empty() {
+            ways.push(speech::WaySpec::say());
+        }
+        if !ways.iter().any(|w| w.name == speech::SAY) {
+            return Err("the script's ways of speaking need `say_speech()` (every line said without a way is said by it)".into());
+        }
+        ways.sort_by_key(|w| (w.order, self.source_at(&format!("fn {}_speech(", w.name)), w.name.clone()));
+        Ok(ways)
+    }
+
+    /// The ways of speaking, in their order.
+    pub fn ways(&self) -> &[speech::WaySpec] {
+        &self.ways
+    }
+
+    /// A way of speaking by name.
+    pub fn way(&self, name: &str) -> Option<&speech::WaySpec> {
+        self.ways.iter().find(|w| w.name == name)
+    }
+
     /// Every skill the script declares.
     pub fn skills(&self) -> &std::sync::Arc<crate::catalog::Skills> {
         &self.skills
@@ -1295,7 +1407,21 @@ impl Scripts {
                 None => None,
                 Some(v) => Some(burns_of(k, v)?),
             };
-            out.insert(k.clone(), StructureTraits { warms: flag("warms")?, roof: flag("roof")?, lights, burns });
+            let holds = match m.get("holds") {
+                None => None,
+                Some(v) => Some(number(v).filter(|n| *n >= 0.0 && n.is_finite()).ok_or_else(|| format!("structures: `holds` of `{k}` is the most things it holds in all (a number of at least 0)"))? as f32),
+            };
+            let like = match m.get("like") {
+                None => String::new(),
+                Some(v) => {
+                    let l = v.clone().into_string().map_err(|_| format!("structures: `like` of `{k}` names the kind it counts as"))?;
+                    if l == *k || t.entry("structures", &l).is_none() {
+                        return Err(format!("structures: `like` of `{k}` is `{l}`, which is not another kind of the table"));
+                    }
+                    l
+                }
+            };
+            out.insert(k.clone(), StructureTraits { warms: flag("warms")?, roof: flag("roof")?, lights, burns, holds, like });
         }
         if self.has("structure_traits") {
             let legacy = self.law_map("structure_traits")?;
@@ -1317,8 +1443,49 @@ impl Scripts {
 
     /// What a kind of structure does for those near it.
     pub fn structure(&self, kind: &str) -> &StructureTraits {
-        static NONE: StructureTraits = StructureTraits { warms: false, roof: false, lights: 0.0, burns: None };
+        static NONE: StructureTraits = StructureTraits { warms: false, roof: false, lights: 0.0, burns: None, holds: None, like: String::new() };
         self.structures.get(kind).unwrap_or(&NONE)
+    }
+
+    /// Whether a structure of `kind` is what a rule or a graph asks for by `name`: that kind, or
+    /// one `like` it (Cullet's `store` is `like: "storage"`).
+    pub fn is_kind(&self, kind: &str, name: &str) -> bool {
+        kind == name || (!name.is_empty() && self.structure(kind).like == name)
+    }
+
+    /// The share of a resource kind's regrowth rate in each season (spring, summer, autumn,
+    /// winter): its `regrow_by_season` in `resources()`, any season it leaves out at the
+    /// shipped share ([`crate::GROWING`]: full, and none in winter).
+    pub fn regrow_seasons(&self, kind: &str) -> [f32; 4] {
+        self.seasons.get(kind).copied().unwrap_or(crate::GROWING)
+    }
+
+    /// What minds are told the seasons do to the land, after the calendar: the script's
+    /// `seasons_text()` (built from the resource kinds' `regrow_by_season`), or, for a script
+    /// without it, the words every world was told before (2026-11-11).
+    pub fn seasons_words(&self) -> String {
+        const BEFORE: &str = "In winter nothing regrows and nights are colder: store food before it.";
+        if !self.has("seasons_text") {
+            return BEFORE.into();
+        }
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "seasons_text", ()).ok().and_then(|d| d.into_string().ok()).unwrap_or_else(|| BEFORE.into())
+    }
+
+    /// Every resource kind's `regrow_by_season`, read once (only kinds that have it).
+    fn read_seasons(&self) -> Result<HashMap<String, [f32; 4]>, String> {
+        let t = self.tables.borrow();
+        let mut out = HashMap::new();
+        for k in t.names("resources") {
+            let Some(v) = t.entry("resources", k).and_then(|m| m.get("regrow_by_season")) else { continue };
+            let m = v.clone().try_cast::<Map>().ok_or_else(|| format!("resources: `regrow_by_season` of `{k}` is a map of seasons (spring, summer, autumn, winter) to shares of its rate"))?;
+            let mut by = crate::GROWING;
+            for (season, share) in m {
+                let i = crate::SEASONS.iter().position(|x| *x == season.as_str()).ok_or_else(|| format!("resources: `regrow_by_season` of `{k}` names `{season}`, which is no season (spring, summer, autumn, winter)"))?;
+                by[i] = number(&share).filter(|n| *n >= 0.0 && *n <= 16.0).ok_or_else(|| format!("resources: `regrow_by_season.{season}` of `{k}` is a share of its rate (0 to 16)"))? as f32;
+            }
+            out.insert(k.clone(), by);
+        }
+        Ok(out)
     }
 
     /// How far any structure warms or shelters (the farthest the engine looks for one).
@@ -1465,6 +1632,10 @@ impl Scripts {
             let mut parts: Vec<String> = laws.iter().filter(|l| &l.topic == topic).map(|l| l.about.trim().to_string()).collect();
             if let Some((_, t)) = world.iter().find(|(k, _)| k == topic) {
                 parts.push(t.trim().to_string());
+            }
+            // The ways of speaking, each in its own words, in their order.
+            if topic == "speech" {
+                parts.extend(self.ways.iter().map(|w| format!("{} = {}", w.name, w.about.trim())));
             }
             if parts.is_empty() {
                 continue;
@@ -2506,11 +2677,90 @@ mod tests {
     /// orders, with the world's own sections (seasons, life) where they belong; every law the
     /// engine asks and every world constant must be described, or an install is refused.
     #[test]
+    fn ways_of_speaking_are_read_from_the_script() {
+        let s = scripts();
+        let names: Vec<&str> = s.ways().iter().map(|w| w.name.as_str()).collect();
+        assert_eq!(names, ["say", "whisper", "call"]);
+        let whisper = s.way("whisper").unwrap();
+        assert_eq!((whisper.carry, whisper.only_to, whisper.reach, whisper.kind.as_str(), whisper.names, whisper.animals.as_str()), (speech::Carry::Within(1.5), true, 1.5, "whisper", false, ""));
+        let noticed = whisper.noticed.as_ref().unwrap();
+        assert_eq!((noticed.within_m, noticed.seen, noticed.kind.as_str(), noticed.text.as_str()), (6.0, true, "whispered", "{a} whispers something to {b}."));
+        let call = s.way("call").unwrap();
+        assert_eq!((call.carry_for(9.0), call.max_chars, call.gap_s, call.animals.as_str(), call.public()), (22.5, 80, 6.0, "a person shouting", true));
+        assert!(call.about.contains("within 22.5 m"), "{}", call.about);
+        // The shipped `say` is today's speech, field for field (the regression baseline).
+        let mut say = s.way("say").unwrap().clone();
+        assert_eq!(say.about, speech::WaySpec::say().about);
+        say.about = speech::WaySpec::say().about;
+        assert_eq!(say, speech::WaySpec::say());
+        assert!(s.world_text(&[]).contains("SPEAKING: say = Speak aloud."));
+        let src = include_str!("../../scripts/skills.rhai");
+        let with = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap());
+        // A way the engine cannot keep is refused, naming the key.
+        let e = with("fn shout_speech() { #{ about: \"x\", cost: #{ energy: 2.0 } } }").err().unwrap();
+        assert!(e.contains("unknown trait `cost`"), "{e}");
+        let e = with("fn hush_speech() { #{ about: \"x\", words: #{ within_m: 1.5, only_to: true } } }").err().unwrap();
+        assert!(e.contains("need `to: \"required\"`"), "{e}");
+        let e = with("fn wave_speech() { #{ about: \"x\" } }").err().unwrap();
+        assert!(e.contains("is a skill already"), "{e}");
+        let e = with("fn say_speech() { #{ about: \"x\", needs: \"telepathy\" } }").err().unwrap();
+        assert!(e.contains("names a technique"), "{e}");
+        // A second way comes in its order, and its words for one ear reach no animal.
+        let two = with("fn hush_speech() { #{ about: \"Hush.\", order: 1, to: \"required\", words: #{ within_m: 1.5, only_to: true }, heard_to_you: \"{a} hushes to you\" } }").unwrap();
+        let w = two.way("hush").unwrap();
+        assert_eq!(two.ways().iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["say", "whisper", "hush", "call"]);
+        assert_eq!((w.carry, w.only_to, w.animals.as_str(), w.label.as_str()), (speech::Carry::Within(1.5), true, "", "Hush"));
+        assert_eq!((w.carry_for(9.0), w.widest(9.0)), (1.5, 1.5));
+        assert!(two.world_text(&[]).contains("say = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper = Whisper to someone beside you (within 1.5 m)."));
+        // A script with no ways at all speaks by today's `say`.
+        let none = Scripts::new(&src.replace("_speech()", "_speech_old()")).unwrap();
+        assert_eq!(none.way("say"), Some(&speech::WaySpec::say()));
+    }
+
+    #[test]
+    fn ways_refuse_in_their_checks_words() {
+        use speech::check_way;
+        let s = scripts();
+        let me = ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), ..Default::default() };
+        let them = |dist: f32, alive: bool| Some(TargetFacts { class: "creature".into(), id: 2, kind: "person".into(), alive, dist, ..Default::default() });
+        let check = |way: &str, to, since| check_way(&s, way, me.clone(), to, "hello", since);
+        // The words a client shows before sending are the reducer's (both call `check_way`).
+        assert_eq!(check("whisper", None, None), Err("a whisper needs someone to whisper to".into()));
+        assert_eq!(check("whisper", them(3.0, true), None), Err("too far to whisper: step closer".into()));
+        assert_eq!(check("whisper", them(1.0, false), None), Err("too far to whisper: step closer".into()), "absent or dead reads as too far: ids cannot be probed");
+        assert_eq!(check("whisper", them(1.0, true), None), Ok(()));
+        assert_eq!(check("call", None, Some(3_000)), Err("too soon to call out again: wait a few seconds".into()));
+        assert_eq!(check("call", None, Some(6_000)), Ok(()));
+        assert_eq!(check("call", None, None), Ok(()));
+        assert_eq!(check("say", them(30.0, true), Some(0)), Ok(()), "say has no check of its own");
+        assert_eq!(check("", None, None), Ok(()), "no way named is say");
+        assert_eq!(check("shout", None, None), Err("no way of speaking called `shout`".into()), "the engine's own refusal, in the reducer's words");
+        // A way whose spec requires something must refuse it in its check, or the install is refused.
+        let src = include_str!("../../scripts/skills.rhai");
+        let install = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap()).and_then(|s| s.validate().map(|_| ()));
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }").unwrap_err();
+        assert!(e.contains("has no `hush_check(a)`"), "{e}");
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }\nfn hush_check(a) { if a.target.class == \"none\" { return \"hush to whom?\"; } \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to someone 1.5 m away"), "{e}");
+        let e = install("fn whisper_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to no one"), "{e}");
+        let e = install("fn call_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("a second line 5000 ms after the first"), "{e}");
+        let e = install("fn say_check(a) { \"no\" }").unwrap_err();
+        assert!(e.contains("refuses a line that breaks nothing"), "{e}");
+        // A check reads only what `check_way` gives, which a client can give too.
+        let e = install("fn say_check(a) { if a.hour > 30.0 { return \"never\"; } \"\" }").unwrap_err();
+        assert!(e.contains("`say_check` reads `a.hour`"), "{e}");
+        let e = Scripts::new(&crate::floors::compose(src, "fn sign_speech() { #{ about: \"Sign.\", needs_sight: true } }").unwrap()).err().unwrap();
+        assert!(e.contains("`needs_sight` is not built yet"), "{e}");
+    }
+
+    #[test]
     fn world_text_is_built_from_the_laws() {
         let s = scripts();
         let t = s.world_text(&[("seasons", "a year is 8 days.".into()), ("life", "a person lives about 70 years.".into())]);
         let heads: Vec<&str> = t.lines().map(|l| l.split(':').next().unwrap_or("")).collect();
-        assert_eq!(heads[1..].join(" "), "SENSES MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
+        assert_eq!(heads[1..].join(" "), "SENSES SPEAKING MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
         assert!(t.starts_with("One day lasts 12 real minutes; night is 20:00-06:00.\nSENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m; at night 6 m, or 9 m carrying a torch."), "{t}");
         assert!(t.contains("FOOD: berries 12, fish 16, meat 20, cooked_fish 34, cooked_meat 42, smoked_fish 24, smoked_meat 30 (hunger points). Cook raw fish or meat at a campfire"), "{t}");
         assert!(t.contains("BODY: hunger rises ~1.2/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");
@@ -2551,7 +2801,7 @@ mod tests {
         assert_eq!(with(|k| k.moving), "eat signal wait");
         assert_eq!(with(|k| k.moment), "flee follow graze rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
-        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits::default()));
+        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
         assert_eq!((s.num_of("kept_spoil", "storage", 0.0), s.num_of("planted_max", "berry_bush", 0.0)), (1.0 / 3.0, 5.0));
         assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.remains_ms("deer"), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 1_800_000.0, 5.2));
@@ -2955,6 +3205,83 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
             skill: skill.into(),
             ..Default::default()
         }
+    }
+
+    /// A store holds what its kind `holds` (rules-3): the shipped storage 120 things, refused
+    /// past that with the same words as before; a world's own kind of store holds its own and is
+    /// found wherever a storage is asked for by name (`like`). Cullet's four stores hold theirs,
+    /// and a crate anyone builds there is the shipped storage again.
+    #[test]
+    fn a_store_holds_what_its_kind_holds() {
+        let shipped = scripts();
+        let at = |kind: &str, held: u32, qty: u32| SkillCtx {
+            actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), inv: vec![("wood".into(), 500)], ..Default::default() },
+            target: TargetFacts { class: "structure".into(), id: 7, kind: kind.into(), dist: 1.0, inv: vec![("stone".into(), held)], ..Default::default() },
+            item: "wood".into(),
+            qty,
+            skill: "store".into(),
+            ..Default::default()
+        };
+        let take = |kind: &str| {
+            let mut c = at(kind, 3, 1);
+            (c.item, c.skill, c.actor.inv) = ("stone".into(), "take".into(), Vec::new());
+            c
+        };
+        assert_eq!(shipped.structure("storage").holds, Some(120.0));
+        assert!(shipped.check("store", &at("storage", 100, 20)).is_ok());
+        assert_eq!(shipped.check("store", &at("storage", 100, 21)).unwrap_err(), "the storage is full (it holds 100 of 120 things)");
+        assert_eq!(shipped.check("store", &at("house", 0, 1)).unwrap_err(), "can only store in a storage");
+        assert!(shipped.check("take", &take("storage")).is_ok());
+        assert_eq!(shipped.check("take", &take("house")).unwrap_err(), "nothing to take from");
+        assert!(shipped.skills().get("store").unwrap().takes.contains("(a storage holds 120 things in all)"));
+        // A world's own store: its size, and a storage wherever one is asked for by name.
+        let src = crate::floors::compose(include_str!("../../scripts/skills.rhai"), r#"fn structures() { base_structures() + [#{ name: "barn", like: "storage", holds: 500 }] }"#).unwrap();
+        let w = Scripts::new(&src).unwrap();
+        w.validate().unwrap();
+        assert!(w.check("store", &at("barn", 400, 100)).is_ok() && w.check("store", &at("storage", 100, 21)).is_err());
+        assert_eq!(w.check("store", &at("barn", 400, 101)).unwrap_err(), "the storage is full (it holds 400 of 500 things)");
+        assert!(w.check("take", &take("barn")).is_ok());
+        assert!(w.is_kind("barn", "storage") && w.is_kind("storage", "storage") && !w.is_kind("storage", "barn") && !w.is_kind("house", "storage") && !shipped.is_kind("barn", "storage"));
+        assert!(w.skills().get("store").unwrap().takes.contains("(a storage holds 120 things in all; a barn 500)"));
+        let refused = |extra: &str| Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), extra).unwrap()).err().unwrap_or_default();
+        assert!(refused(r#"fn structures() { base_structures() + [#{ name: "barn", like: "silo", holds: 5 }] }"#).contains("`like` of `barn` is `silo`"));
+        assert!(refused(r#"fn structures() { base_structures() + [#{ name: "barn", holds: -1 }] }"#).contains("`holds` of `barn`"));
+        // Cullet's stores.
+        let c = cullet();
+        let holds: Vec<(&str, Option<f32>, bool)> = ["store", "peat_barn", "yard_store", "house_store", "storage"].iter().map(|k| (*k, c.structure(k).holds, c.is_kind(k, "storage"))).collect();
+        assert_eq!(holds, vec![("store", Some(1200.0), true), ("peat_barn", Some(1000.0), true), ("yard_store", Some(900.0), true), ("house_store", Some(150.0), true), ("storage", Some(120.0), true)]);
+        assert!(!c.has("storage_holds") && !shipped.has("storage_holds"));
+        assert_eq!(c.check("store", &at("house_store", 100, 51)).unwrap_err(), "the storage is full (it holds 100 of 150 things)");
+    }
+
+    /// Regrowth by season is a value on each resource kind (rules-3): the shipped kinds have
+    /// none, so they regrow fully outside winter and not at all in it, as before; a kind's
+    /// `regrow_by_season` changes the seasons it names. Cullet's fish keep regrowing in winter,
+    /// its root plots rest; and minds are told what winter does from the same table.
+    #[test]
+    fn regrowth_by_season_is_a_value_on_each_kind() {
+        let shipped = scripts();
+        for k in shipped.tables().names("resources") {
+            assert_eq!(shipped.regrow_seasons(k), crate::GROWING, "{k}");
+        }
+        assert_eq!(shipped.regrow_seasons("no_such_kind"), crate::GROWING);
+        assert_eq!(shipped.seasons_words(), "In winter nothing regrows and nights are colder: store food before it.");
+        let c = cullet();
+        let by = |k: &str| c.regrow_seasons(k);
+        assert_eq!((by("fishing_spot"), by("weir"), by("kelp_bed"), by("greens_bed")), ([1.0, 1.0, 1.0, 0.75], [1.0, 1.0, 1.0, 0.75], [1.0, 1.0, 1.0, 1.25], [1.0, 1.0, 1.0, 0.5]));
+        assert_eq!((by("root_plot"), by("sand_bank"), by("peat_bank"), by("tree"), by("berry_bush")), (crate::GROWING, [1.0; 4], crate::GROWING, crate::GROWING, crate::GROWING));
+        assert_eq!(c.seasons_words(), "In winter kelp_bed and sand_bank regrow as in the other seasons or more, fishing_spot, greens_bed and weir more slowly, and berry_bush, tree, boulder, reeds, clay_bank, peat_bank and root_plot not at all. Nights are colder: store food before it.");
+        c.validate().unwrap();
+        // A season named wrong, or a share that is no number, is refused.
+        let refused = |extra: &str| Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), extra).unwrap()).err().unwrap_or_default();
+        assert!(refused(r#"fn resources() { base_resources() + [#{ name: "kelp_bed", yields: "fish", regrow_per_h: 0.1, max: 2.0, regrow_by_season: #{ monsoon: 1.0 } }] }"#).contains("`monsoon`, which is no season"));
+        assert!(refused(r#"fn resources() { base_resources() + [#{ name: "kelp_bed", yields: "fish", regrow_per_h: 0.1, max: 2.0, regrow_by_season: #{ winter: "lots" } }] }"#).contains("regrow_by_season.winter"));
+        // A Cullet winter's day: a fishing ground regrows three quarters of a day's rate, a root
+        // plot nothing (the regrowth the authority applies, `common::amount_now`).
+        let (day, epoch) = (crate::cullet_check::CULLET_DAY_MS, 1_000_000u64);
+        let w0 = epoch + day * 6 - day * 7 / 24;
+        let grown = |k: &str| crate::regrowth_ms(w0, w0 + day, epoch, day, crate::YEAR_DAYS, &c.regrow_seasons(k)) as f64 / day as f64;
+        assert_eq!((grown("fishing_spot"), grown("root_plot"), grown("kelp_bed")), (0.75, 0.0, 1.25));
     }
 
     /// Goods are data with traits, and the rules match by trait: a fire burns whatever has its

@@ -15,11 +15,11 @@
 //!
 //! `--seeds K`: measure in K fresh instances of the module, instance i with Rhai's hashing keys
 //! number i (`sb_seed`, sb_bench::fix_hashing). Where Rhai's tables put an entry depends on its
-//! keys, so the fuel of a call does too; each build of the authority draws its keys at random
-//! when ahash is compiled. The mean over a fixed set of keys is what a build costs on average,
-//! and it moves only when the code or the fixtures do. Each line then gives the mean
-//! (`fuel_per_call`) and every key's own (`fuel_seeds`); a law's outputs must not depend on the
-//! keys (`digest`, checked).
+//! keys, so the fuel of a call does too. Key set 0 is the rules' own seed
+//! (living_rules::script::HASHING_SEED), the keys every build of the game runs under; the others
+//! show how much of a law's fuel is where its entries happen to land. Each line then gives the
+//! mean (`fuel_per_call`) and every key's own (`fuel_seeds`, set 0 first: what gate.py judges);
+//! a law's outputs must not depend on the keys (`digest`, checked).
 
 use sb_bench::{Kind, Law};
 use std::time::{Duration, Instant};

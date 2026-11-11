@@ -89,7 +89,7 @@ impl Plugin for UiPlugin {
             .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
-        let widgets = ((cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
+        let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
         let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
@@ -358,6 +358,7 @@ pub struct DumpExtra<'w, 's> {
     theme: Res<'w, ThemeState>,
     weapon: Res<'w, crate::weapon::Weapon>,
     slots: Res<'w, prim::Slots>,
+    talks: Res<'w, people::Talks>,
     tip: Query<'w, 's, &'static Node, With<prim::Tooltip>>,
     tip_title: Query<'w, 's, &'static Text, (With<prim::TooltipTitle>, Without<prim::TooltipText>)>,
     tip_text: Query<'w, 's, &'static Text, (With<prim::TooltipText>, Without<prim::TooltipTitle>)>,
@@ -378,6 +379,7 @@ impl DumpExtra<'_, '_> {
         let ground = self.cam.cursor_ground.map(|g| serde_json::json!([g.x, g.y, g.z]));
         serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
+            "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground})
     }
 }

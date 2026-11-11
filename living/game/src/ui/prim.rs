@@ -75,27 +75,34 @@ pub struct TooltipTitle;
 pub struct TooltipText;
 
 /// A bar: a row of slots, `(key, size, width, gap before)`, in `node` (none: a plain row).
-pub fn bar(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, slots: &[(String, f32, f32, f32)], node: Option<Node>, extra: impl Bundle) {
+/// A row of slots: (key, size, width, gap before it, whether it shows a caption).
+pub fn bar(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, slots: &[(String, f32, f32, f32, bool)], node: Option<Node>, extra: impl Bundle) {
     let node = node.unwrap_or(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(6.0), align_items: AlignItems::FlexEnd, ..default() });
     p.spawn((node, Pickable::IGNORE, extra)).with_children(|r| {
-        for (key, size, width, gap) in slots {
-            slot(r, f, icons, key, *size, *width, *gap);
+        for (key, size, width, gap, caption) in slots {
+            slot(r, f, icons, key, *size, *width, *gap, *caption);
         }
     });
 }
 
-/// One slot.
-pub fn slot(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, key: &str, size: f32, width: f32, gap: f32) {
+/// One slot. Only the parts it can show are spawned (a caption where asked, cost chips in a
+/// theme that shows costs): every node is laid out each frame, shown or not.
+#[allow(clippy::too_many_arguments)]
+pub fn slot(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, key: &str, size: f32, width: f32, gap: f32, caption: bool) {
     let k = SlotKey(key.to_string());
     let th = wood::t();
     p.spawn((SlotRoot, k.clone(), Block, Tag(key.to_string()), Node { width: Val::Px(width), margin: UiRect::left(Val::Px(gap)), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() })).with_children(|s| {
         s.spawn((SlotFace, k.clone(), Node { width: Val::Px(width), height: Val::Px(size), border: wood::b(3.0), border_radius: wood::r(10.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(1.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, overflow: Overflow::clip(), ..default() }, BackgroundGradient::default(), BorderColor::all(th.edge), Outline { width: Val::Px(0.0), offset: Val::Px(2.0), color: Color::srgb_u8(0xff, 0xcf, 0x5c) }, Pickable::IGNORE)).with_children(|q| {
             q.spawn((SlotGlyph, k.clone(), Node { width: Val::Px(size * 0.56), height: Val::Px(size * 0.56), ..default() }, ImageNode::new(icons.get(Glyph::Ui(super::icons::Mark::Dots))), Pickable::IGNORE));
-            q.spawn((SlotCaption, k.clone(), Text::new(""), f.body(10.5, 800), TextColor(th.text), Node { display: Display::None, ..default() }, Pickable::IGNORE));
+            if caption {
+                q.spawn((SlotCaption, k.clone(), Text::new(""), f.body(10.5, 800), TextColor(th.text), Node { display: Display::None, ..default() }, Pickable::IGNORE));
+            }
             q.spawn((SlotSweep, k.clone(), Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundGradient::default(), Pickable::IGNORE))
                 .with_child((SlotTime, k.clone(), Text::new(""), f.body(17.0, 800), TextColor(Color::WHITE), theme::text_shadow(), Pickable::IGNORE));
+            if th.chips {
             q.spawn((SlotCost, k.clone(), Node { position_type: PositionType::Absolute, right: Val::Px(2.0), top: Val::Px(2.0), min_width: Val::Px(15.0), height: Val::Px(15.0), padding: UiRect::axes(Val::Px(3.0), Val::Px(0.0)), border_radius: BorderRadius::all(Val::Px(8.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, display: Display::None, ..default() }, BackgroundColor(wood::alpha(wood::TEAL, 0.9)), Pickable::IGNORE))
                 .with_child((SlotCostText, k.clone(), Text::new(""), f.body(9.5, 800), TextColor(Color::WHITE), Pickable::IGNORE));
+            }
             q.spawn((SlotCount, k.clone(), Text::new(""), f.body(12.0, 800), TextColor(th.text), Node { position_type: PositionType::Absolute, right: Val::Px(4.0), bottom: Val::Px(1.0), ..default() }, Pickable::IGNORE));
         });
         // The key, as bound.
