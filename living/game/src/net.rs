@@ -250,7 +250,7 @@ pub fn chunk_ranges(col: &str, (cx0, cx1): (u32, u32), (cy0, cy1): (u32, u32)) -
 /// A perceived body as the drawing code takes it: its motion row (`seen_bodies`, which carries
 /// no path, chunk or kind), with the creature's kind from its `seen_characters` row (both views
 /// hold the same creatures).
-pub fn body_of(conn: &DbConnection, m: Motion) -> Body {
+pub fn body_of(conn: &DbConnection, m: Moving) -> Body {
     let kind = conn.db.seen_characters().id().find(&m.id).map(|c| c.kind).unwrap_or_default();
     Body {
         id: m.id,
@@ -267,12 +267,15 @@ pub fn body_of(conn: &DbConnection, m: Motion) -> Body {
         heading: m.heading,
         turn: m.turn,
         turn_s: m.turn_s,
+        face_off: m.face_off,
+        face_turn: m.face_turn,
+        face_turn_s: m.face_turn_s,
     }
 }
 
 /// Every body my character perceives, mine included (`my_body` and `seen_bodies`).
 pub fn bodies(conn: &DbConnection) -> impl Iterator<Item = Body> + '_ {
-    let rows: Vec<Motion> = conn.db.my_body().iter().chain(conn.db.seen_bodies().iter()).collect();
+    let rows: Vec<Moving> = conn.db.my_body().iter().chain(conn.db.seen_bodies().iter()).collect();
     rows.into_iter().map(move |m| body_of(conn, m))
 }
 
@@ -281,7 +284,7 @@ pub fn find_body(conn: &DbConnection, id: u32) -> Option<Body> {
 }
 
 /// A perceived body's motion row, mine included.
-pub fn find_motion(conn: &DbConnection, id: u32) -> Option<Motion> {
+pub fn find_motion(conn: &DbConnection, id: u32) -> Option<Moving> {
     conn.db.my_body().id().find(&id).or_else(|| conn.db.seen_bodies().id().find(&id))
 }
 

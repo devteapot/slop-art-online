@@ -4,7 +4,7 @@ What a player's client may read is what its character perceives now, plus its ow
 
 ## Sub-features
 
-- `seen_bodies` (the narrow motion row: no path, chunk or kind), `seen_fighters` and `seen_doing` hold the creatures the caller perceives, nothing else; `seen_characters` holds those and the caller's own living character. Since 2026-11-10 (`scale-1`) the caller's own body, fighter and doing rows are in `my_body`, `my_fighter` and `my_doing` (at most one row each), not in `seen_*`.
+- `seen_bodies` (the narrow motion row, `Moving`: no path, chunk or kind; the travel segment and the facing offset), `seen_fighters` and `seen_doing` hold the creatures the caller perceives, nothing else; `seen_characters` holds those and the caller's own living character. Since 2026-11-10 (`scale-1`) the caller's own body, fighter and doing rows are in `my_body`, `my_fighter` and `my_doing` (at most one row each), not in `seen_*`.
 - `seen_characters` is what the caller perceives of each of them: the `perceived_of` projection (`SeenCharacter`: `id`, `name` when known else empty, `label`, `kind`, `stage`, `folk`, `style`, `own`, `band`, exact `hp`/`max_hp` or -1). No `controller`, `ai`, home, parents or cause. Two newcomers who were never told each other's names see each other as `a stranger`, health as a band (`seen-characters.json`). `seen_fighters` carries the projected band. The appraiser-and-bystander proof is `verify-player`'s `appraise.py`.
 - In sight: two players 3 tiles apart on open ground receive each other's body and character; each gets its own body in `my_body` and not in `seen_bodies` (`sight.json`, step `in-sight`).
 - Beyond sight: the same players 20-30 tiles apart receive no body, character, fighter or doing row of the other (step `beyond-sight`).
