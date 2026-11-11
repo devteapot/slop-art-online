@@ -22,4 +22,19 @@ Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (sixth change)
 
 - 5.5 m, not 4: a creature already seen keeps 1 m (`keep_seen_m`) on the near ring (3 m) and on side vision (a third of 11 m by day), so 4 m stays seen by day.
 - Other residents nearby are heard too: the script picks the row to the west in the close band.
-- `human_face` (the player's facing input) is not built yet; this file covers the `face` act.
+
+## The player's look
+
+`human_face(dx, dy)` turns `body.heading`; `(0, 0)` releases it. `scripts/face.py` drives it with the player identity, with the field on and a resident 5.5 m west.
+
+- Standing: `human_face(-1, 0)` turns the body west (`my_body` at the end of its turn), and the resident comes into view.
+- A look within 10° of the one held writes nothing (`my_body` row unchanged); a release while standing keeps the facing.
+- Walking east (`human_move(1, 0)`) and looking north: the heading turns 30° north of east and no further (`look_walk_deg`). Released, it returns east. Looking north and stopping: the body stands and finishes the turn north.
+- The movement input bucket, narrowed for the check with `set_world_law` (`input_hz` 0.2, `input_burst` 3): of eight looks 90° apart three or four are taken, the rest refused ("too many movement inputs"), and a `human_move` right after is refused too. The laws are put back (30, 15).
+- Anonymous: refused ("you have no living character").
+
+```bash
+.agents/skills/verify-player/scripts/face.py --run "$R"   # any seed, about 1 min
+```
+
+Gotchas: HTTP calls are slower than the shipped refill (30 a second), so the bucket is only exhausted with the laws narrowed. `my_body`'s `heading` is the segment's start; the facing is `heading + turn × turn_s`.

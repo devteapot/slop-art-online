@@ -96,6 +96,7 @@ Since 2026-11-11 (`fov-1`, [perception](PERCEPTION.md#the-field-of-view-sixth-ch
   - **A strike** reaches 1.6 m plus a lunge of 0.6 m. By day a striker behind is therefore always within the 3 m ring: it is seen, and a graph guards and turns to it as before. In the dark the ring is 2 m, so only a strike from 2.0 to 2.2 m behind, at the edge of its lunge, is unseen.
   - **Missiles** (`bowshot` 22 m, `firebolt` 16 m) from behind are unseen beyond the ring, and land unless the target turns.
   - **A charge or a dash** from behind is unseen while it is outside the ring. A graph-driven striker walks into reach before its windup, and a player's strike starts within reach, so by day the windup itself starts inside the ring.
+- **A player's look turns the guard.** `block` is aimed `facing`, so a raised guard covers the front of the body as `human_face` turns it ([perception](PERCEPTION.md#the-players-look-human_face)).
 - **The near ring is a law.** The owner can lower it with `set_world_law` (`fov_near_m`, `fov_near_dark_m`). Verified with both at 0.5 m (`verify-core` `scenes.py fov`): a strike from 1 m behind gets no guard from the one struck, and the blow lands.
 
 ## Where combat rules live

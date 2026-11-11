@@ -416,6 +416,10 @@ pub struct Laws {
     pub heard_near_m: f32,
     pub heard_close_m: f32,
     pub heard_linger_s: f32,
+    /// A player's look (`human_face`): a change within this many degrees is the same look; walking,
+    /// the body turns toward the look at most this many degrees off its way.
+    pub look_slack_deg: f32,
+    pub look_walk_deg: f32,
 }
 
 /// How long after one's own birth, or one's youngest child's, a grown person waits before
@@ -470,6 +474,8 @@ impl Default for Laws {
             heard_near_m: 5.0,
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
+            look_slack_deg: 10.0,
+            look_walk_deg: 30.0,
         }
     }
 }
@@ -1884,6 +1890,8 @@ impl Scripts {
             heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
             heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
             heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),
+            look_slack_deg: g("look_slack_deg", l.look_slack_deg).clamp(0.0, 90.0),
+            look_walk_deg: g("look_walk_deg", l.look_walk_deg).clamp(0.0, 180.0),
         };
         Ok(l)
     }

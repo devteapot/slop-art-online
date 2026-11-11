@@ -267,14 +267,30 @@ living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, kept) -> b
 | `fov_margin_deg` | 10 | someone already seen stays seen this far past an edge |
 | `heard_near_m`, `heard_close_m` | 5, 15 | a sound's distance bands: near, close, far out to hearing |
 | `heard_linger_s` | 2 | a sound is kept this long after it was last heard |
+| `look_slack_deg` | 10 | a player's look within this of the one held (or, standing, of the facing) is the same look |
+| `look_walk_deg` | 30 | walking, the body turns toward the look at most this far off the way it is told to go |
 
 `law(name)` is a new primitive for laws: the value in force, the script's `laws()` with the world's own values over it. Cullet's overlay replaces `senses` and carries the same `field` line (`living/seeds/worlds/cullet/laws.rhai`). When the field is on, `senses_law`'s description, which minds are told, says so ("One sees that far only within about 70 degrees either side of the way one faces, … one hears what is behind one, and turns to see it.").
 
-**Facing** is one state, the body's heading as the authority holds it: steering sets it (the travel direction, kept while standing), and so do the `face` act and the turns of a strike, a guard and an aim. No second facing state was added. A player's facing input (`human_face`) is the last part of this change and is not in this section.
+**Facing** is one state, the body's heading as the authority holds it: steering sets it (the travel direction, kept while standing), and so do the `face` act and the turns of a strike, a guard and an aim. No second facing state was added. A player turns it with `human_face` ([below](#the-players-look-human_face)).
 
 **Where it applies.** `perception::in_sight(ctx, map, observer, eye, heading, target, at, dist, w, now, kept)` asks the observer's senses and the target's glow and calls `sight::sees`. `perception::sensed` (what a graph's scene and a mind's scene see and hear, from one gather) and the players' sweep call `sight::sees` directly with the senses read once. Every path goes through it: players' perceived sets (`sweep_one`, with `kept` for those already perceived), minds' scenes and behaviour graphs (`sensed`), witnessed events (`perceive::witnessed`), a carer seeing a crying infant (`perception::sees`), the combat feed and the witnesses of a death (`combat::show`, `combat::died`), what a predator senses before it attacks (`act.rs`), and a player's aimed act ("you cannot see them", with `kept` when the target is in the player's perceived set). The chunk-body cache now holds each body's heading at the instant (`NearCreature.heading`), so onlookers' facing costs no extra lookup.
 
 **What is not seen coming.** A graph's `threatened` condition (a hostile windup aimed at me) now holds, while the field is on, only when the one winding up is seen. Without a field it is as before: any windup aimed at me, seen or not. See [combat](COMBAT.md#backstabs-when-sight-depends-on-facing) for when a blow from behind lands unseen.
+
+#### The player's look: `human_face`
+
+`human_face(dx, dy)` (a player reducer, like `human_move(dx, dy, run)`; screen axes, any length) turns the body's one facing, `body.heading`, toward a direction. `human_face(0, 0)` releases the look, as `human_move(0, 0)` stops.
+
+- **The look is an input, kept with the movement input.** `steer` gains two defaulted columns, `look_on` and `look` (the yaw), beside the movement direction (`gx`, `gy`). The body's facing is still only `body.heading`, which everyone reads: the sight rule, the guard's front, a gesture's turn, and the Spark's `speech_audience` law and `facing` greeting.
+- **Standing:** the body turns where it stands at its turn rate (`motion::face`, one `body` row write; observers see the turn as the segment's arc).
+- **Walking under the movement keys:** the heading is the travel, so steering's way bends toward the look by at most `look_walk_deg` (30°), turning at the turn rate like any steering. A look beyond that is clamped, not ignored: walking east and looking north, the body walks and faces 30° north of east. When the walk stops (`human_move(0, 0)` and its glide), the body finishes the turn to the look where it stands.
+- **Release:** walking, the heading returns to the way it walks at once (steering is asked again). Standing, the facing stays where it is.
+- **Writes and limits.** A look within `look_slack_deg` (10°) of the one held writes nothing, and nor does one within 10° of where a standing body already faces. Any other look, and a release, spends a token of the movement input bucket (`input_hz`/`input_burst`, shared with `human_move`; refused: "too many movement inputs"). So a client that follows the cursor can send looks freely: only real changes write the private `steer` row and the public `body` row, which reaches observers.
+- **What drops a look:** any other walk (`motion::start` with a goal that is not the movement keys: a path, a pursuit, a flight, a mind's or a command's) faces its way and clears the look, so a character the world's minds take over walks as anyone does.
+- **For the two control schemes:** with "face where you walk" the client sends looks only while aiming, guarding or striking, then releases; with "face the cursor" it sends them continually. Both go through this one reducer. A raised guard covers the front (`block`'s aim is `facing`), so it turns with the look.
+- **Verified** (`verify-player` `scripts/face.py`, 11 of 11: standing, the slack, a release, walking within 30°, release while walking, finishing the turn on stopping, the shared bucket, an anonymous caller refused; `verify-client` 36 of 36 with `human_face` in the reducer matrix; `verify-core` `moves` and `fov` pass on the same build). A running world takes the two `steer` columns in place: 2.14.1's automatic migration adds a column with a default.
+- **Data paths:** `human_face` reads the player's `steer` and `body` rows by key, and writes `steer` and `body` only on a change past the slack. The body update reaches the players who perceive it through their frames, as any turn does.
 
 #### Heard, not seen
 

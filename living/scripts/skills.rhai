@@ -67,6 +67,10 @@ fn laws() {
         // near within `heard_near_m`, close within `heard_close_m`, far out to hearing; it
         // lingers `heard_linger_s` after it was last heard.
         heard_near_m: 5.0, heard_close_m: 15.0, heard_linger_s: 2.0,
+        // A player's look (`human_face`): a change within `look_slack_deg` of the look held (or
+        // of where the body stands facing) is nothing new; walking, the body turns toward the
+        // look at most `look_walk_deg` off the way it is told to go (the walk bends with it).
+        look_slack_deg: 10.0, look_walk_deg: 30.0,
     }
 }
 
@@ -2151,5 +2155,7 @@ fn laws_about(l) {
         heard_near_m: `a sound within ${short(l.heard_near_m)} m is near`,
         heard_close_m: `within ${short(l.heard_close_m)} m it is close, farther it is far`,
         heard_linger_s: `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
+        look_slack_deg: `a player's look within ${short(l.look_slack_deg)} degrees of the last is the same look`,
+        look_walk_deg: `walking, one turns toward where one looks at most ${short(l.look_walk_deg)} degrees off one's way`,
     }
 }

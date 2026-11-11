@@ -83,6 +83,7 @@ pub mod heard_table;
 pub mod heard_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
+pub mod human_face_reducer;
 pub mod human_move_reducer;
 pub mod human_say_reducer;
 pub mod infant_cry_table;
@@ -341,6 +342,7 @@ pub use heard_table::*;
 pub use heard_type::Heard;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
+pub use human_face_reducer::human_face;
 pub use human_move_reducer::human_move;
 pub use human_say_reducer::human_say;
 pub use infant_cry_table::*;
@@ -554,6 +556,10 @@ pub enum Reducer {
     HumanAct {
         node: String,
     },
+    HumanFace {
+        dx: f32,
+        dy: f32,
+    },
     HumanMove {
         dx: f32,
         dy: f32,
@@ -707,6 +713,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::GrantRepertoires => "grant_repertoires",
             Reducer::Housekeeping { .. } => "housekeeping",
             Reducer::HumanAct { .. } => "human_act",
+            Reducer::HumanFace { .. } => "human_face",
             Reducer::HumanMove { .. } => "human_move",
             Reducer::HumanSay { .. } => "human_say",
             Reducer::InstallScript { .. } => "install_script",
@@ -783,6 +790,12 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::HumanAct { node } => {
                 __sats::bsatn::to_vec(&human_act_reducer::HumanActArgs { node: node.clone() })
+            }
+            Reducer::HumanFace { dx, dy } => {
+                __sats::bsatn::to_vec(&human_face_reducer::HumanFaceArgs {
+                    dx: dx.clone(),
+                    dy: dy.clone(),
+                })
             }
             Reducer::HumanMove { dx, dy, run } => {
                 __sats::bsatn::to_vec(&human_move_reducer::HumanMoveArgs {

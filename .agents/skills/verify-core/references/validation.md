@@ -4,6 +4,7 @@
 
 Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
 
+- `core-face1-a` (`human_face`: steering bends toward a held look; a stop finishes the turn): `moves` 5 of 5, `fov` 18 of 18.
 - `core-fov1-m` (after merging `origin/main` `accf27c8`, eye-2's sight included): `fov` 18 of 18, `sight` 6, `senses` 7.
 - `core-fov1-j` (default seed, the final build before the merge: graph scenes see and hear from one gather, `perception::sensed`): `fov` 18 of 18; `tick` 6, `sight` 6, `senses` 7, `moves` 5, `death-names` 8 pass; `doing` fails as below.
 - `core-fov1-c` (the build before that): `fov` 18 of 18 (new: off as shipped; `set_world_law` refusals, the script block at a new revision, `law_change` and the chronicle row; facing east and west; the 3 m ring guarding a strike from 1 m behind; a 0.5 m ring: 1.5 m behind unseen, no guard, the blow lands; witnesses by facing; off again). Then `tick`, `sight`, `senses` and `moves` pass on the same world.
