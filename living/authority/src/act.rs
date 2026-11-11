@@ -575,7 +575,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     if let Some(a) = &cur {
         // A new graph may continue what the character was already doing (the same amount
         // too: a 4 s wait does not carry on a 30 s one).
-        if a.node == ORPHAN && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item && a.qty == qty {
+        // A run asked for (or a walk) that the body is not doing is a new start.
+        let same_pace = run.map_or(true, |r| r == motion::runs(ctx, id));
+        if a.node == ORPHAN && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item && a.qty == qty && same_pace {
             let mut a = a.clone();
             a.node = node;
             a.revision = revision;
@@ -789,7 +791,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     }
     // An action that would start right here must pass its rules first, too; so must force
     // against someone farther off (no closing in on someone the rules won't let you strike).
-    if !needs_approach || shape.is_some_and(|s| s.closes_in) || aside_from.is_some() {
+    // A dash (a dodge, a jump) is checked too: it goes by steering, never through `perform`, so
+    // before stamina-1 its check (then "too exhausted to dodge") was never asked.
+    if !needs_approach || shape.is_some_and(|s| s.closes_in) || aside_from.is_some() || aim == Aim::Dash {
         let probe = match &aside_from {
             Some(t) => Activity { target: t.to_ref(), ..act.clone() },
             None => act.clone(),

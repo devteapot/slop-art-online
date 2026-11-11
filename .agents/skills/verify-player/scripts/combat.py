@@ -481,7 +481,10 @@ def scene_breath(st):
     time.sleep(0.8)
     run = sql(st, f"SELECT speed FROM body WHERE id = {cid}")[0]["speed"]
     v1 = my_vitals(st)
-    check(st, "a player's run is 1.85 times its walk and drains 4 breath a second from the row's anchor", walk and abs(run / walk - 1.85) < 0.02 and abs(v1["stamina_rate"] + 4.0) < 1e-3 and v1["stamina_from_ms"] == v1["at_ms"], {"walk": walk, "run": run, "row": v1})
+    src = sql(st, "SELECT source FROM script WHERE name = 'skills'")[0]["source"]
+    own = [r for r in sql(st, "SELECT * FROM world_law") if r["name"] == "run_share"]
+    share = float(own[0]["value"]) if own else float(__import__("re").search(r"\brun_share: ([0-9.]+)", src).group(1))
+    check(st, "a player's run is the run_share law times its walk and drains 4 breath a second from the row's anchor", walk and abs(run / walk - share) < 0.02 and abs(v1["stamina_rate"] + 4.0) < 1e-3 and v1["stamina_from_ms"] == v1["at_ms"], {"walk": walk, "run": run, "row": v1})
     time.sleep(1.5)
     v1b = my_vitals(st)
     check(st, "a held run writes no row while it lasts", v1b == v1, {"first": v1["at_ms"], "later": v1b["at_ms"]})

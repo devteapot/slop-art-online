@@ -312,11 +312,11 @@ mod tests {
         let t = Tuning { top: 5.5, ..Default::default() };
         // A walk (2.6) on a road: 3.64, under the top.
         assert!((road_pace(2.6, 1.0, &t) - 3.64).abs() < 1e-4);
-        // A run (4.81): 6.73 uncapped, 5.5 capped.
-        assert_eq!(road_pace(4.81, 1.0, &t), 5.5);
-        assert!((road_pace(4.81, 0.0, &t) - 4.81).abs() < 1e-6, "off road the run is its own");
+        // A run of 4.5 m/s: 6.3 uncapped, 5.5 capped.
+        assert_eq!(road_pace(4.5, 1.0, &t), 5.5);
+        assert!((road_pace(4.5, 0.0, &t) - 4.5).abs() < 1e-6, "off road the run is its own");
         // Faster than the top on its own (a deer's flight, 6.8): not slowed by a road.
         assert_eq!(road_pace(6.8, 1.0, &t), 6.8);
-        assert_eq!(road_pace(4.81, 1.0, &Tuning::default()), 4.81 * 1.4, "no top: no cap");
+        assert_eq!(road_pace(4.5, 1.0, &Tuning::default()), 4.5 * 1.4, "no top: no cap");
     }
 }

@@ -181,7 +181,7 @@ def drop_case(run):
 def breath_case(run):
     """A mind can run (docs/STAMINA.md): its prompt documents `"run": true` on a goto and the
     graph's `stamina` condition, its scene carries its breath, and an act it decides with
-    `"run": true` runs at the run's share of its walk (1.85 for a person) and drains breath on
+    `"run": true` runs at the run's share of its walk (the `run_share` law) and drains breath on
     the vitals row the mind service reads."""
     people = prepare(run)
     actor = people[0]['id']
@@ -201,7 +201,9 @@ def breath_case(run):
     accepted(run, actor)
     ran = run.wait(lambda: next((b for b in [run.private(f'SELECT * FROM body WHERE id = {actor}', 'running-body')[0]] if b['speed'] > walk * 1.5), None), 'the act runs', 30)
     v = run.private(f'SELECT * FROM vitals WHERE id = {actor}', 'running-vitals')[0]
-    assert abs(ran['speed'] / walk - 1.85) < 0.02, (walk, ran['speed'])
+    src = run.sql("SELECT source FROM script WHERE name = 'skills'", 'script')[0]['source']
+    share = float(re.search(r'\brun_share: ([0-9.]+)', src).group(1))
+    assert abs(ran['speed'] / walk - share) < 0.02, (walk, ran['speed'], share)
     assert v['stamina_rate'] < 0 and v['stamina_from_ms'] == v['at_ms'], v
     sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
     text = '\n'.join(str(m.get('content', '')) for e in sent for m in e['body'].get('messages', []))

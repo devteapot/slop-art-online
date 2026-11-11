@@ -959,8 +959,11 @@ pub struct Limits {
 /// `resources()` and 60 array entries (2026-11-11); the limits leave room for a world about
 /// four times that. Rhai counts the strings of a map together too: `laws_about(l)`, the words
 /// for every world constant, held 1,959 characters before the field of view's laws (`fov-1`,
-/// 2026-11-11) and 2,373 after, so the string limit is 4,096.
-pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 4_096, array: 256, map: 512 };
+/// 2026-11-11) and 2,373 after. `stamina-1` (2026-11-11) added 38 constants for breath, focus,
+/// costs, health and blows: their words bring it past 4,096 (about 4,200 with the numbers), so the
+/// string limit is 6,144; their numbers are written as they are (`${l.x}`, not `short`), since a
+/// call each took `laws_about` past its operations.
+pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 6_144, array: 256, map: 512 };
 
 fn engine(t: &Rc<RefCell<Tables>>) -> Engine {
     engine_with(LIMITS, t)
@@ -2854,8 +2857,8 @@ mod tests {
         assert!(s.done("graze", &SkillCtx::default()).unwrap().contains(&Effect::Graze));
     }
 
-    /// How a creature moves besides its walk is a law per creature: a person runs 1.85 times its
-    /// walk (4.8 m/s), animals 1.5 times (a wolf 5.1, charging at a hunt's approach), a flight
+    /// How a creature moves besides its walk is a law per creature: a person runs `run_share`
+    /// times its walk (a world law), animals 1.5 times (charging at a hunt's approach), a flight
     /// 1.15, stepping aside 0.8, turning 6 rad/s keeping 0.4 of its speed in the sharpest turns,
     /// keeping 0.8 m from others at weight 0.9; no road takes anyone past 5.5 m/s.
     #[test]
@@ -2864,7 +2867,8 @@ mod tests {
         let mut person = creature(false, false);
         person.actor.kind = "person".into();
         let m = s.moves(&person).unwrap();
-        assert_eq!(m, Moves { run: 1.85, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: 5.5, charge: false });
+        let share = s.law_value("run_share").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert_eq!(m, Moves { run: share, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: 5.5, charge: false });
         assert_eq!(s.law_plan("motion").describe(), vec!["actor.kind".to_string()], "the shipped law reads only the kind");
         let mut wolf = creature(false, false);
         wolf.actor.kind = "wolf".into();
@@ -2872,12 +2876,12 @@ mod tests {
         assert_eq!((w.run, w.charge, w.top), (1.5, true, 5.5));
         let spec = &s.law_specs()["motion"];
         assert_eq!(spec.cadence, Cadence::Hot);
-        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains("A person runs 1.85 times its walk") && spec.about.contains("past 5.5 m/s"), "{}", spec.about);
+        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains(&format!("A person runs {} times its walk", share)) && spec.about.contains("past 5.5 m/s"), "{}", spec.about);
         // A floor where wolves run harder: the law reads the kind, and only wolves change.
         let src = include_str!("../../scripts/skills.rhai").replace("fn motion(a)", "fn base_motion(a)");
         let f = Scripts::new(&format!("{src}\nfn motion(a) {{ let m = base_motion(a); if a.actor.kind == \"wolf\" {{ m.run = 2.0; }} m }}")).unwrap();
-        assert_eq!((f.moves(&wolf).unwrap().run, f.moves(&person).unwrap().run), (2.0, 1.85));
-        assert!(f.validate().is_ok());
+        assert_eq!((f.moves(&wolf).unwrap().run, f.moves(&person).unwrap().run), (2.0, share));
+        if let Err(e) = f.validate() { panic!("{e}"); }
         // A law without `top` or `charge` (an older floor's): no cap, no charge.
         let old = Scripts::new(&format!("{src}\nfn motion(a) {{ #{{ run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0 }} }}")).unwrap();
         let o = old.moves(&wolf).unwrap();
@@ -3216,13 +3220,17 @@ mod tests {
         let set = [("walk_base".to_string(), serde_json::json!(3.0))];
         assert!(close(walk(&Scripts::new(&with_world_laws(src, &set)).unwrap(), 80.0).0, 3.0));
         assert!(close(walk(&Scripts::new(&with_world_laws(&cullet_src, &set)).unwrap(), 20.0).0, 2.4));
-        // The run: 1.85 times the walk, 4.81 m/s; capped on a road at 5.5 (steer::road_pace).
+        // The run: the `run_share` law times the walk, capped on a road at `run_top`
+        // (steer::road_pace); a setting of the share changes it on a running world.
         let mut c = ctx();
         c.actor.stage = "adult".into();
         let m = island.moves(&c).unwrap();
+        let share = island.law_value("run_share").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert!(close(m.run, share));
         let run = 2.6 * m.run;
-        assert!(close(run, 4.81));
-        assert_eq!(crate::steer::road_pace(run, 1.0, &m.tuning(1.4)), 5.5);
+        assert_eq!(crate::steer::road_pace(run, 1.0, &m.tuning(1.4)), (run * 1.4).min(5.5).max(run));
+        let slower = Scripts::new(&with_world_laws(src, &[("run_share".into(), serde_json::json!(1.65))])).unwrap();
+        assert!(close(slower.moves(&c).unwrap().run, 1.65));
         assert!(close(crate::steer::road_pace(2.6, 1.0, &m.tuning(1.4)), 3.64), "a road walk is as fast as before");
     }
 

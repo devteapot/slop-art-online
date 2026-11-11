@@ -189,6 +189,11 @@ fn breath_due(ctx: &ReducerContext, b: &mut Body, st: &Steer, now: u64) {
     }
 }
 
+/// Whether the body's steering goal runs (a run under way, or out of breath and walking).
+pub fn runs(ctx: &ReducerContext, id: u32) -> bool {
+    ctx.db.steer().id().find(id).is_some_and(|st| st.goal != GOAL_NONE && st.flags & FLAG_RUN != 0)
+}
+
 /// End a run where the body stops (no steering update follows): its breath comes back.
 fn end_run(ctx: &ReducerContext, st: &mut Steer, id: u32, now: u64) -> bool {
     if st.flags & FLAG_DRAIN == 0 {

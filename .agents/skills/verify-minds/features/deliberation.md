@@ -46,7 +46,7 @@ R=minds-deliberation-$(date +%Y%m%d-%H%M%S)
 Since `stamina-1` (docs/STAMINA.md), the case `run` checks a mind's running (`breath_case`):
 
 - **The walk.** It measures the person's walk with an admin `goto` graph.
-- **The act.** It has the fake model decide `{"do": "goto", "target": {"at": [x, y]}, "run": true}`. The body runs at 1.85 times that walk, and the `vitals` row has a negative `stamina_rate` from its anchor.
+- **The act.** It has the fake model decide `{"do": "goto", "target": {"at": [x, y]}, "run": true}`. The body runs at the `run_share` law times that walk, and the `vitals` row has a negative `stamina_rate` from its anchor.
 - **The prompt.** The prompt documents `"run": true` and the `{"stamina": {"below": 30}}` condition.
 - **The scene.** The scene's `you` has `stamina`, and `you.slowed` when the rules slow the body (the `slowed` law; the words are checked in Cargo).
 - **The felt body.** The felt body adds "out of breath" below 20 breath (`prompts::tests::the_body_is_felt_in_words`).

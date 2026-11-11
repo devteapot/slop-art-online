@@ -15,7 +15,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - A jump (the bar's seventh place, Space in the game) hops about 1.6 m like a dash but does not evade (`jump_combat()`'s `evades: false`): a blow winding up as you jump toward its striker lands or misses by reach, never `DODGED` (scene `jump`).
 - Heal mends yourself.
 - Breath (since `stamina-1`, docs/STAMINA.md; scene `breath`), read through the player's own `my_vitals`:
-  - **A run.** `human_move` with run goes 1.85 times the walk and drains 4 breath a second. The row's rate comes from its anchor, and a held run writes no further row. Letting go writes the refill from a second later at 25 a second. Standing, breath comes back with no row written.
+  - **A run.** `human_move` with run goes the `run_share` law times the walk and drains 4 breath a second. The row's rate comes from its anchor, and a held run writes no further row. Letting go writes the refill from a second later at 25 a second. Standing, breath comes back with no row written.
   - **Costs.** A dodge takes 20 and a jump 10.
   - **Refusal.** Dodging on without a pause is refused "out of breath", in the use's outcome and as a `my_combat` REFUSED row.
 - The seed's bold pack attacks a healthy adult player.

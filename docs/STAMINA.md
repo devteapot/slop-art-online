@@ -13,7 +13,7 @@ Built 2026-11-11 on the Spark (branch `stamina-1`) from the approved [proposal](
   - every `flee`, unless it says `run: false`;
   - the approach to a blow by a creature whose `motion` law sets `charge` (wolves).
 
-  A run goes at `motion(a).run` times the walk: a person 1.85 (4.81 m/s), animals 1.5 (a wolf 5.1, a deer 5.55). It drains `stamina_run` (4) breath a second. When breath runs out, the body walks at the goal's own pace (a flight at 1.15). It runs again once it has `stamina_resume` (30). A run also needs 30 to start.
+  A run goes at `motion(a).run` times the walk: a person `run_share`, animals 1.5 (a wolf 5.1 m/s, a deer 5.55). **`run_share` 1.85 is a placeholder.** The laptop's in-game measurement sets it: the highest speed at which the run still reads as a natural run. Kimodo's best run clip is 3.63 m/s natural, and scaled much further it reads as quick stepping. It drains `stamina_run` (4) breath a second. When breath runs out, the body walks at the goal's own pace (a flight at 1.15). It runs again once it has `stamina_resume` (30). A run also needs 30 to start.
 - **Road cap.** No road takes a body past `motion(a).top` (`run_top`, 5.5 m/s). A body that is faster on its own is not slowed.
 - **Walk.** The walk is 2.6 m/s from the narrow `walk_base` law, read by the shipped `move_speed` (Cullet's overlay reads it through `base_move_speed`). An exhausted body (energy below 10) walks at `tired_pace` (0.8, was 0.6). Cullet keeps its own ×0.8 below 35.
 - **Why a body is slowed.** A `slowed(a)` law gives the words: on the island "exhausted, so you walk slower", on Cullet also "tired, so you walk slower". A mind's scene shows them as `you.slowed`, beside `you.stamina` (and the focus pool under the world's word while it is not full). The mind's felt body adds "out of breath" below 20 breath.
@@ -26,7 +26,7 @@ Built 2026-11-11 on the Spark (branch `stamina-1`) from the approved [proposal](
 
 | Group | Laws (shipped value) |
 |---|---|
-| Moving | `walk_base` 2.6, `run_share` 1.85, `run_top` 5.5, `tired_pace` 0.8 |
+| Moving | `walk_base` 2.6, `run_share` 1.85 (placeholder), `run_top` 5.5, `tired_pace` 0.8 |
 | Breath | `stamina_max` 100, `stamina_regen` 25, `stamina_delay_s` 1, `stamina_run` 4, `stamina_guard` 4, `stamina_resume` 30, `stamina_tires` 0.02 |
 | Focus | `focus_max` 100, `focus_regen` 3, `focus_delay_s` 2 |
 | Costs | `cost_strike` 10, `cost_bowshot` 6, `cost_dodge` 20, `cost_jump` 10, `cost_block` 5, `cost_attack` 8, `cost_throw` 10, `cost_shoot` 6, `cost_threaten` 3 (breath); `cost_firebolt` 30, `cost_heal` 35 (focus) |

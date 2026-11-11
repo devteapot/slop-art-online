@@ -87,6 +87,12 @@ fn laws() {
         // What each move takes from its pool (`combat_pool`), paid at its release.
         cost_strike: 10.0, cost_bowshot: 6.0, cost_firebolt: 30.0, cost_heal: 35.0, cost_dodge: 20.0, cost_jump: 10.0, cost_block: 5.0,
         cost_attack: 8.0, cost_throw: 10.0, cost_shoot: 6.0, cost_threaten: 3.0,
+        // Health and blows (docs/STAMINA.md, "Fight length"): a grown, whole body's health by
+        // kind (read when a body comes into the world), a bare blow by kind, and what each
+        // weapon or skill does before strength, skill and armor. Every blow does its full damage.
+        hp_person: 100.0, hp_deer: 40.0, hp_wolf: 55.0,
+        blow_person: 7.0, blow_deer: 4.0, blow_wolf: 13.0,
+        dmg_spear: 18.0, dmg_strike: 10.0, dmg_strike_spear: 15.0, dmg_bowshot: 14.0, dmg_firebolt: 24.0, dmg_throw: 24.0, dmg_shoot: 16.0,
     }
 }
 
@@ -223,7 +229,8 @@ fn call_speech() {
 // (metres) and how strongly that bends its way; how far a wander may turn from the way it was
 // heading (radians) and for how long after stopping it still keeps that way (seconds). Asked per creature at every steering step and
 // kept per state, like senses: the shipped law reads nothing, so every creature shares it.
-// A person runs `run_share` times its walk (4.8 m/s grown and rested); animals keep their own
+// A person runs `run_share` times its walk (a placeholder until the run's look is measured in
+// the game: the clips set how fast a run still reads as a run); animals keep their own
 // run (a wolf 5.1 m/s, a deer 5.55). A road speeds no one past `run_top` (m/s), and a run costs
 // breath (`pools`).
 fn motion(a) {
@@ -382,9 +389,9 @@ fn items_with(t) { having("items", t) }
 //   remains_h                   game hours its remains lie before they are gone
 fn kinds() {
     [
-        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_h: 120.0 },
-        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_h: 60.0 },
-        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_h: 60.0 },
+        #{ name: "person", max_hp: law("hp_person"), lunge: 0.6, blow: law("blow_person"), dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_h: 120.0 },
+        #{ name: "deer", grazes: true, max_hp: law("hp_deer"), lunge: 0.6, blow: law("blow_deer"), dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_h: 60.0 },
+        #{ name: "wolf", max_hp: law("hp_wolf"), lunge: 1.8, blow: law("blow_wolf"), dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_h: 60.0 },
     ]
 }
 fn kind_of(kind) { let all = kinds(); for k in all { if k.name == kind { return k; } } all[0] }
@@ -1058,7 +1065,7 @@ fn attack_duration(a) { switch a.actor.kind { "wolf" => 550, _ => if inv(a, "spe
 // a wolf leaps, a person steps into a thrust. Out of reach by more than this, it misses.
 fn lunge(kind) { kind_of(kind).lunge }
 fn attack_done(a) {
-    let dmg = if a.actor.kind == "person" && inv(a, "spear") > 0 { 18.0 } else { kind_of(a.actor.kind).blow };
+    let dmg = if a.actor.kind == "person" && inv(a, "spear") > 0 { law("dmg_spear") } else { kind_of(a.actor.kind).blow };
     // Strength and skill at fighting (knack × practice) make blows count.
     let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
     [#{ op: "damage", amount: dmg }] + spent("attack")
@@ -1462,7 +1469,7 @@ fn block_done(a) { spent("block") }
 fn strike_check(a) { attack_check(a) }
 fn strike_duration(a) { 350 }
 fn strike_done(a) {
-    let dmg = if inv(a, "spear") > 0 { 15.0 } else { 10.0 };
+    let dmg = if inv(a, "spear") > 0 { law("dmg_strike_spear") } else { law("dmg_strike") };
     let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
     [#{ op: "damage", amount: dmg }] + spent("strike")
 }
@@ -1482,7 +1489,7 @@ fn bowshot_check(a) {
 fn bowshot_duration(a) { 300 }
 fn bowshot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "launch" }] + spent("bowshot") }
 fn bowshot_missile(a) { #{ speed: 30.0, range: 22.0, radius: 0.15 } }
-fn bowshot_hit(a) { [#{ op: "damage", amount: 14.0 * a.actor.strength * a.actor.factor * armor(a) }] }
+fn bowshot_hit(a) { [#{ op: "damage", amount: law("dmg_bowshot") * a.actor.strength * a.actor.factor * armor(a) }] }
 
 // A bolt of fire: slower, shorter, wider and much harder, at a great cost of focus.
 fn firebolt_check(a) {
@@ -1492,7 +1499,7 @@ fn firebolt_check(a) {
 fn firebolt_duration(a) { 450 }
 fn firebolt_done(a) { [#{ op: "launch" }] + spent("firebolt") }
 fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35 } }
-fn firebolt_hit(a) { [#{ op: "damage", amount: 24.0 * a.actor.factor * armor(a) }] }
+fn firebolt_hit(a) { [#{ op: "damage", amount: law("dmg_firebolt") * a.actor.factor * armor(a) }] }
 
 // Closing wounds by hand (wound_tending): yourself or an ally in sight, quickly, even mid-fight.
 fn heal_check(a) {
@@ -1514,7 +1521,7 @@ fn throw_check(a) {
     winded(a)
 }
 fn throw_duration(a) { 800 }
-fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: 24.0 * armor(a) }] + spent("throw") }
+fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: law("dmg_throw") * armor(a) }] + spent("throw") }
 
 fn shoot_check(a) {
     if inv(a, "bow") < 1 { return "no bow to shoot with"; }
@@ -1525,7 +1532,7 @@ fn shoot_check(a) {
     winded(a)
 }
 fn shoot_duration(a) { 700 }
-fn shoot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "damage", amount: 16.0 * a.actor.strength * a.actor.factor * armor(a) }] + spent("shoot") }
+fn shoot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "damage", amount: law("dmg_shoot") * a.actor.strength * a.actor.factor * armor(a) }] + spent("shoot") }
 
 // ---- trade ------------------------------------------------------------------------
 
@@ -2478,30 +2485,43 @@ fn laws_about(l) {
         heard_linger_s: `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
         look_slack_deg: `a player's look within ${short(l.look_slack_deg)} degrees of the last is the same look`,
         look_walk_deg: `walking, one turns toward where one looks at most ${short(l.look_walk_deg)} degrees off one's way`,
-        walk_base: `a grown person walks ${short(l.walk_base)} m/s`,
-        run_share: `and runs ${short(l.run_share)} times that`,
-        run_top: `no road takes anyone past ${short(l.run_top)} m/s`,
-        tired_pace: `the exhausted walk at ${short(l.tired_pace)} of their pace`,
-        stamina_max: `stamina holds ${short(l.stamina_max)} rested`,
-        stamina_regen: `and comes back ${short(l.stamina_regen)} a second`,
-        stamina_delay_s: `from ${short(l.stamina_delay_s)} s after the last effort`,
-        stamina_run: `a run takes ${short(l.stamina_run)} a second`,
-        stamina_guard: `a held guard ${short(l.stamina_guard)} a second`,
-        stamina_resume: `a run starts with ${short(l.stamina_resume)} at least`,
+        walk_base: `a grown person walks ${l.walk_base} m/s`,
+        run_share: `and runs ${l.run_share} times that`,
+        run_top: `no road takes anyone past ${l.run_top} m/s`,
+        tired_pace: `the exhausted walk at ${l.tired_pace} of their pace`,
+        stamina_max: `stamina holds ${l.stamina_max} rested`,
+        stamina_regen: `and comes back ${l.stamina_regen} a second`,
+        stamina_delay_s: `from ${l.stamina_delay_s} s after the last effort`,
+        stamina_run: `a run takes ${l.stamina_run} a second`,
+        stamina_guard: `a held guard ${l.stamina_guard} a second`,
+        stamina_resume: `a run starts with ${l.stamina_resume} at least`,
         stamina_tires: `each point spent tires by ${l.stamina_tires}`,
-        focus_max: `mana holds ${short(l.focus_max)}`,
-        focus_regen: `and comes back ${short(l.focus_regen)} a second`,
-        focus_delay_s: `from ${short(l.focus_delay_s)} s after the last use`,
-        cost_strike: `a strike takes ${short(l.cost_strike)}`,
-        cost_bowshot: `a bow shot ${short(l.cost_bowshot)}`,
-        cost_firebolt: `a fire bolt ${short(l.cost_firebolt)} mana`,
-        cost_heal: `a heal ${short(l.cost_heal)} mana`,
-        cost_dodge: `a dodge ${short(l.cost_dodge)}`,
-        cost_jump: `a jump ${short(l.cost_jump)}`,
-        cost_block: `a guard ${short(l.cost_block)}`,
-        cost_attack: `an attack ${short(l.cost_attack)}`,
-        cost_throw: `a throw ${short(l.cost_throw)}`,
-        cost_shoot: `a shot ${short(l.cost_shoot)}`,
-        cost_threaten: `a threat ${short(l.cost_threaten)}`,
+        focus_max: `mana holds ${l.focus_max}`,
+        focus_regen: `and comes back ${l.focus_regen} a second`,
+        focus_delay_s: `from ${l.focus_delay_s} s after the last use`,
+        cost_strike: `a strike takes ${l.cost_strike}`,
+        cost_bowshot: `a bow shot ${l.cost_bowshot}`,
+        cost_firebolt: `a fire bolt ${l.cost_firebolt} mana`,
+        cost_heal: `a heal ${l.cost_heal} mana`,
+        cost_dodge: `a dodge ${l.cost_dodge}`,
+        cost_jump: `a jump ${l.cost_jump}`,
+        cost_block: `a guard ${l.cost_block}`,
+        cost_attack: `an attack ${l.cost_attack}`,
+        cost_throw: `a throw ${l.cost_throw}`,
+        cost_shoot: `a shot ${l.cost_shoot}`,
+        cost_threaten: `a threat ${l.cost_threaten}`,
+        hp_person: `a grown person has ${l.hp_person} health`,
+        hp_deer: `a deer ${l.hp_deer}`,
+        hp_wolf: `a wolf ${l.hp_wolf}`,
+        blow_person: `a bare blow does ${l.blow_person}`,
+        blow_deer: `a deer's ${l.blow_deer}`,
+        blow_wolf: `a wolf's bite ${l.blow_wolf}`,
+        dmg_spear: `a spear thrust ${l.dmg_spear}`,
+        dmg_strike: `a sword strike ${l.dmg_strike}`,
+        dmg_strike_spear: `with a spear ${l.dmg_strike_spear}`,
+        dmg_bowshot: `an arrow ${l.dmg_bowshot}`,
+        dmg_firebolt: `a fire bolt ${l.dmg_firebolt}`,
+        dmg_throw: `a thrown spear ${l.dmg_throw}`,
+        dmg_shoot: `a shot ${l.dmg_shoot}`,
     }
 }
