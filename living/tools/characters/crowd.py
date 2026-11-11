@@ -7,8 +7,9 @@ and memory, with every person a different file, at the game camera.
 
 TOWN_DIR is a town made by town.py (its `town.json` names the people; their models are
 lookdev/anim/own-<name>.glb). The people stand in the game's own crowd (`LIVING_GAME_CROWD`,
-characters.rs `spawn_crowd`) in the look-dev line-up, seen by the default game camera (22 m,
-28° down), each playing its idle clip. Three runs, each in a fresh process, uncapped:
+characters.rs `spawn_crowd`) in an environment (`--env`, default `cullet`: its ground and light;
+its kit is drawn if this checkout has it), seen by the default game camera (22 m, 28° down),
+each playing its idle clip. Three runs, each in a fresh process, uncapped:
 
 - `ours`: --count generated people, each a different file;
 - `vroid`: the same count of the VRoid bases the game used before (two files, recoloured);
@@ -121,7 +122,7 @@ def gpu_memory(pid):
     return total // (1 << 20)
 
 
-def run_game(out, name, env, seconds, size):
+def run_game(out, name, env, seconds, size, place="cullet"):
     """Run the game headless on the line-up for `seconds`, logging; returns what was measured."""
     log = os.path.join(out, f"{name}.log")
     shots = os.path.join(out, name)
@@ -130,7 +131,7 @@ def run_game(out, name, env, seconds, size):
     binary = os.path.join(target if os.path.isabs(target) else os.path.join(REPO, target), "release", "living-game")
     # The tour photographs once per shot; each shot waits for the scene to settle, so a list of
     # shots keeps the run going while the log gathers its two-second reports.
-    e = dict(os.environ, LIVING_GAME_LOOKDEV="1", LIVING_GAME_TOUR=shots, LIVING_GAME_TOUR_ONLY="lineup", LIVING_GAME_TOUR_SHOTS=",".join(["default"] * 400), LIVING_GAME_SIZE=size,
+    e = dict(os.environ, LIVING_GAME_LOOKDEV="1", LIVING_GAME_TOUR=shots, LIVING_GAME_TOUR_ONLY=place, LIVING_GAME_TOUR_SHOTS=",".join(["default"] * 400), LIVING_GAME_SIZE=size,
              LIVING_GAME_FPS_CAP="0", LIVING_GAME_FRAMES=os.path.join(out, f"{name}.frames.csv"), RUST_LOG="warn,living_game=debug", **env)
     e.setdefault("LIVING_GAME_PERF", "frames,diag")
     peak = dict(rss=0, gpu=0)
@@ -168,7 +169,23 @@ def run_game(out, name, env, seconds, size):
         res.update(frame_ms=round(sum(a for a, _, _ in settled) / len(settled), 2), worst_ms=max(b for _, b, _ in settled), characters=settled[-1][2], reports=len(perf))
     files = re.findall(r"characters: (\S+) has (\d+) spring joints", text)
     res.update(files=len(set(f for f, _ in files)), spring_joints=sum(int(n) for _, n in files))
-    res["diag"] = [line.split("living_game", 1)[-1].strip() for line in text.splitlines() if re.search(r"diag|view |draws|meshes|triangles|springs", line) and "people perf" not in line][-14:]
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    views = re.findall(r"views: (\d+) toon materials; main (\d+) meshes \((\d+) distinct, (\d+) materials\) (\d+)k tris \[people (\d+), (\d+) materials, (\d+)k\]; cascade0 (\d+) meshes \((\d+) distinct, (\d+) materials\) (\d+)k tris", clean)
+    if views:
+        v = [int(x) for x in views[-1]]
+        res.update(toon_materials=v[0], main_meshes=v[1], main_distinct_meshes=v[2], main_materials=v[3], main_ktris=v[4], people_meshes=v[5], people_materials=v[6], people_ktris=v[7],
+                   cascade_meshes=v[8], cascade_materials=v[10], cascade_ktris=v[11], cascades=len(re.findall(r"cascade\d+ ", clean.split("views:")[-1].splitlines()[0])))
+    last = [m for m in re.findall(r"diag: (render/.*)", clean)]
+    if last:
+        gpu = {k.strip(): float(v) for k, v in (kv.rsplit(" ", 1) for kv in last[-1].split(";") if kv.strip()) if k.strip().endswith("elapsed_gpu") or k.strip().endswith("elapsed_cpu")}
+        res["gpu_ms"] = round(sum(v for k, v in gpu.items() if k.endswith("elapsed_gpu")), 2)
+        res["passes_gpu_ms"] = {k.split("/")[1]: round(v, 2) for k, v in gpu.items() if k.endswith("elapsed_gpu") and v >= 0.1}
+    sp = re.findall(r"springs: ([\d.]+) characters \((\d+) joints\) a frame, (\d+) µs a frame", clean)
+    if sp:
+        res.update(springs_characters=float(sp[-1][0]), springs_joints=int(sp[-1][1]), springs_us=int(sp[-1][2]))
+    an = re.findall(r"anim cost: (\d+) bodies; per frame play (\d+) µs, animation set (\d+) µs, ik (\d+) µs", clean)
+    if an:
+        res.update(anim_us=sum(int(x) for x in an[-1][1:]))
     # The work the main schedule did each frame, from the per-frame record.
     try:
         rows = [line.split(",") for line in open(e["LIVING_GAME_FRAMES"]) if line[:1].isdigit()]
@@ -197,6 +214,7 @@ def main():
     ap.add_argument("--perf", default="", help="more LIVING_GAME_PERF flags for every run (e.g. nooutlines)")
     ap.add_argument("--springs", default="", help="LIVING_GAME_SPRINGS for every run (0 turns spring bones off)")
     ap.add_argument("--tag", default="", help="a suffix for this set of runs' names")
+    ap.add_argument("--env", default="cullet", help="the environment the crowd stands in (envs/<id>.json; `lineup` is the look-dev line-up, which also shows every file in lookdev/)")
     a = ap.parse_args()
     people = json.load(open(os.path.join(a.town, "town.json")))["people"]
     out = os.path.abspath(a.out)
@@ -211,9 +229,9 @@ def main():
     try:
         for name in a.runs.split(","):
             if name == "empty":
-                results.append(run_game(out, name + a.tag, extra, a.seconds, a.size))
+                results.append(run_game(out, name + a.tag, extra, a.seconds, a.size, a.env))
             elif name == "vroid":
-                results.append(run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:1"), a.seconds, a.size))
+                results.append(run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:1"), a.seconds, a.size, a.env))
             elif name == "ours":
                 book = json.loads(original)
                 bases, seed = book_for(people, a.count)
@@ -222,13 +240,13 @@ def main():
                 book.update(bases=bases, folks=dict(adult=one, giant=one, small=small), palettes={k: [] for k in book["palettes"]})
                 with open(RECIPES, "w") as f:
                     json.dump(book, f)
-                results.append(run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:{seed}"), a.seconds, a.size))
+                results.append(run_game(out, name + a.tag, dict(extra, LIVING_GAME_CROWD=f"{a.count}:{seed}"), a.seconds, a.size, a.env))
                 with open(RECIPES, "w") as f:
                     f.write(original)
             else:
                 raise SystemExit(f"--runs: {name!r} is not one of empty, vroid, ours")
             r = results[-1]
-            print(json.dumps({k: v for k, v in r.items() if k != "diag"}))
+            print(json.dumps(r))
     finally:
         with open(RECIPES, "w") as f:
             f.write(original)
