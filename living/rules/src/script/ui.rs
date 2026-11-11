@@ -359,8 +359,8 @@ impl Scripts {
             }
         }
         if let Some(v) = m.get("effect") {
-            match text(f, "look.effect", v).and_then(|s| named(f, "look.effect", &s, ui::EFFECTS)) {
-                Ok(e) => l.effect = Some(e),
+            match text(f, "look.effect", v).and_then(|s| if s == "none" { Ok(None) } else { named(f, "look.effect", &s, ui::EFFECTS).map(Some) }) {
+                Ok(e) => l.effect = e,
                 Err(e) => errors.push(e),
             }
         }

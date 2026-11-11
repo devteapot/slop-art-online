@@ -202,7 +202,7 @@ pub const ITEM_ICONS: &[&str] = &["berries", "bread", "meat", "arrow", "spear", 
 /// Clip families (`look.clip`): the client maps a family to its clips, rates and beats. `throw`
 /// is the spear throw's take; `turn`, `step` and `play` are the town-life looks of `_shows()`.
 pub const CLIPS: &[&str] = &["slash", "overhead", "thrust", "shoot", "throw", "cast", "guard", "dash", "jump", "bite", "leap", "gesture", "turn", "step", "play", "work", "eat", "sleep", "rest", "hand"];
-/// Named effects (`look.effect`).
+/// Named effects (`look.effect`; `"none"` declares that it has none).
 pub const EFFECTS: &[&str] = &["slash", "arrow", "bolt", "burst", "glow", "guard_arc"];
 /// Body states a declaration may switch (`toggles`). Each is added only when the authority has
 /// it; the drawn state is the Spark's to add, so none is listed yet.
@@ -333,19 +333,37 @@ pub struct Source<'a> {
     pub shows: Option<&'a str>,
 }
 
+// The vocabulary's words the defaults use, named once (no word in the code below is a skill's
+// name, even where a word is spelt like one: the `jump` clip, the `heal` icon).
+const ICON_SWORD: &str = "sword";
+const ICON_BOW: &str = "bow";
+const ICON_FIRE: &str = "fire";
+const ICON_SHIELD: &str = "shield";
+const ICON_DODGE: &str = "dodge";
+const ICON_HEAL: &str = "heal";
+const CLIP_SLASH: &str = "slash";
+const CLIP_SHOOT: &str = "shoot";
+const CLIP_CAST: &str = "cast";
+const CLIP_GUARD: &str = "guard";
+const CLIP_DASH: &str = "dash";
+const CLIP_JUMP: &str = "jump";
+const EFFECT_SLASH: &str = "slash";
+const EFFECT_ARROW: &str = "arrow";
+const EFFECT_BOLT: &str = "bolt";
+
 /// How a skill is aimed and looks by its combat shape, as the client drew any skill it did not
 /// know by name (`combat.rs` `look()`): icon, clips and effect.
 pub fn look_by_aim(shape: &Shape, missile: Option<MissileSpec>) -> Look {
     let l = |icon: &'static str, clip: &'static str, effect: Option<&'static str>| Look { icon: Some(icon), clips: vec![clip], effect };
     match shape.aim {
-        Aim::Point if missile.is_some_and(|m| m.radius >= BOLT_RADIUS) => l("fire", "cast", Some("bolt")),
-        Aim::Point => l("bow", "shoot", Some("arrow")),
-        Aim::Facing => l("shield", "guard", None),
+        Aim::Point if missile.is_some_and(|m| m.radius >= BOLT_RADIUS) => l(ICON_FIRE, CLIP_CAST, Some(EFFECT_BOLT)),
+        Aim::Point => l(ICON_BOW, CLIP_SHOOT, Some(EFFECT_ARROW)),
+        Aim::Facing => l(ICON_SHIELD, CLIP_GUARD, None),
         // A dash that does not evade is a jump (the WIP's `Roles::of` reads it the same way).
-        Aim::Dash if !shape.evades => l("dodge", "jump", None),
-        Aim::Dash => l("dodge", "dash", None),
-        Aim::SelfOrAlly => l("heal", "cast", None),
-        Aim::Creature => l("sword", "slash", Some("slash")),
+        Aim::Dash if !shape.evades => l(ICON_DODGE, CLIP_JUMP, None),
+        Aim::Dash => l(ICON_DODGE, CLIP_DASH, None),
+        Aim::SelfOrAlly => l(ICON_HEAL, CLIP_CAST, None),
+        Aim::Creature => l(ICON_SWORD, CLIP_SLASH, Some(EFFECT_SLASH)),
         Aim::None => Look::default(),
     }
 }
@@ -531,8 +549,9 @@ const MOST_SKILL_KEYS: usize = 12;
 /// `extra` joins the extra row by its order. Then each place takes the first skill not yet
 /// placed whose aim fits it, as the step-4 WIP's `Roles::of` did: the primary a skill aimed at a
 /// creature; the secondary a skillshot with an arrow (radius under [`BOLT_RADIUS`]); the skill
-/// keys a guard, a heal (oneself or an ally) and any skillshot; the jump a dash that does not
-/// evade; the dodge any dash. Every skill left goes to the extra row, in bar order. A single
+/// keys a guard, a heal (oneself or an ally) and any skillshot (a key a declaration took passes
+/// to the first free key); the jump a dash that does not evade; the dodge any dash. Every skill
+/// left goes to the extra row, in bar order. A single
 /// place claimed twice keeps the first claim (an install refuses the second).
 pub fn bar_places_of(entries: &[BarEntry]) -> Bar {
     let mut bar = Bar { skill: vec![None; SKILL_KEYS], ..Default::default() };
@@ -572,8 +591,13 @@ pub fn bar_places_of(entries: &[BarEntry]) -> Bar {
         (BarPlace::Jump, 0, |e| e.aim == Aim::Dash && !e.evades),
         (BarPlace::Dodge, 0, |e| e.aim == Aim::Dash),
     ];
+    // A skill key a declaration took passes its skill to the first key free after the others.
+    let mut displaced: Vec<Fits> = Vec::new();
     for (place, index, fits) in by_aim {
         if bar.at(place, index).is_some() {
+            if place == BarPlace::Skill {
+                displaced.push(fits);
+            }
             continue;
         }
         if let Some(e) = entries.iter().find(|e| e.place.is_none() && !placed.contains(&e.name.as_str()) && fits(e)) {
@@ -581,6 +605,13 @@ pub fn bar_places_of(entries: &[BarEntry]) -> Bar {
                 *slot = Some(e.name.clone());
                 placed.push(&e.name);
             }
+        }
+    }
+    for fits in displaced {
+        let Some(free) = bar.skill.iter().position(|s| s.is_none()) else { break };
+        if let Some(e) = entries.iter().find(|e| e.place.is_none() && !placed.contains(&e.name.as_str()) && fits(e)) {
+            bar.skill[free] = Some(e.name.clone());
+            placed.push(&e.name);
         }
     }
     for (i, e) in entries.iter().enumerate() {
