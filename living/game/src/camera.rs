@@ -194,7 +194,6 @@ const CONTEXT_HOLD_S: f32 = 1.2;
 /// and within [`FIGHT_REACH_M`].
 fn opponents(net: &Net, scene: &Scene, combat: &crate::combat::Combat, fought: &mut std::collections::HashMap<u32, f64>) -> Vec<u32> {
     use living_rules::combat::seen;
-    use spacetimedb_sdk::Table;
     let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else {
         fought.clear();
         return vec![];
@@ -215,7 +214,7 @@ fn opponents(net: &Net, scene: &Scene, combat: &crate::combat::Combat, fought: &
             }
         }
     }
-    for f in conn.db.seen_fighters().iter().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120) {
+    for f in crate::net::fighters(conn).into_iter().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120) {
         if f.target == me {
             saw(f.id, now);
         } else if f.id == me {

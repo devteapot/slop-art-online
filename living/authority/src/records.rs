@@ -487,7 +487,7 @@ pub fn stance(ctx: &ReducerContext, holder: u64, toward: u64) -> Option<(String,
 #[spacetimedb::view(accessor = my_records, public)]
 pub fn my_records(ctx: &ViewContext) -> Vec<MyRecord> {
     let mut out = Vec::new();
-    for c in ctx.db.character().controller().filter(ctx.sender()).filter(|c| c.alive) {
+    if let Some(c) = crate::perception::living(ctx) {
         let community = ctx.db.membership().member().find(c.id).map_or(0, |m| COMMUNITY | m.community as u64);
         for party in [c.id as u64, community].into_iter().filter(|p| *p != 0) {
             for p in ctx.db.record_party().party().filter(party) {

@@ -57,10 +57,9 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         }
     }
     drop(phase);
-    // Missiles in flight are swept along their paths; what players saw expires.
+    // Missiles in flight are swept along their paths.
     let phase = common::span("tick.missiles");
     crate::combat::missiles(ctx, now);
-    crate::combat::expire(ctx, now);
     drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
@@ -91,6 +90,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // What each player's character perceives (docs/PERCEPTION.md), each every 200 ms.
     let phase = common::span("tick.perception");
     crate::perception::sweep(ctx, now);
+    drop(phase);
+    // What each player is shown of the others in its scene, at its frame (frame.rs).
+    let phase = common::span("tick.frames");
+    crate::frame::deliver(ctx, now);
     drop(phase);
     let phase = common::span("tick.slots");
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
@@ -333,6 +336,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);
     crate::perception::expire(ctx, now);
+    crate::combat::expire(ctx, now);
     crate::records::housekeeping(ctx, now);
     let hour = common::hour(&w, now) as u8;
     if hour != k.last_hour {

@@ -543,6 +543,7 @@ pub struct InfantCry {
 /// What reached a character's senses (sights, speech, what happened to them, their own
 /// results). Game state, not knowledge: written only by the authority, never edited, kept
 /// in a bounded per-character window. Minds read it and record how far they consolidated.
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(open_tables, spacetimedb::table(accessor = experience, public))]
 #[cfg_attr(not(open_tables), spacetimedb::table(accessor = experience))]
 pub struct Experience {
@@ -1213,8 +1214,13 @@ pub struct Perceived {
 /// when the projection changes (whom the viewer knows, a reveal, a health band); it goes with
 /// the creature's `perceived` row. Kept apart from `perceived` so a projection change re-runs
 /// only the views that show it (`seen_characters`, `seen_fighters`), not `seen_bodies`.
+///
+/// Frames (`frame.rs`): for others than the viewer's own character, the band and exact health
+/// are written at the viewer's frames (at most every `frame::BAND_MS`), not at each blow, so
+/// `seen_characters` re-runs at most that often however busy the fight. The viewer's own row
+/// follows at once.
 #[derive(Clone, Debug, PartialEq)]
-#[spacetimedb::table(accessor = projected)]
+#[spacetimedb::table(accessor = projected, index(accessor = by_viewer_body, btree(columns = [viewer, body])))]
 pub struct Projected {
     #[primary_key]
     #[auto_inc]
@@ -1240,6 +1246,82 @@ pub struct Projected {
     /// Exact health when the law grants it (oneself, or revealed), else -1.
     pub hp: f32,
     pub max_hp: f32,
+}
+
+/// What a player's client was last shown of a perceived creature's `fighter` row (private;
+/// frames, `frame.rs`): its move columns as they are, its band as this viewer perceives it
+/// (the projection's; 255 when not perceived). One row per creature in the player's scene that
+/// has a fighter row, keyed like `motion_seen`, written when it comes into sight and at the
+/// viewer's frames when its move or health changed. `seen_fighters` reads these rather than
+/// `fighter`, so a move re-runs no one's view until their frame.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fighter_seen)]
+pub struct FighterSeen {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub fighter: Fighter,
+}
+
+/// A person's current character (private): the one they play, or the one that died last until
+/// they join again. Written at `join` and when the world's minds hand a character back
+/// (`presence`). The views and the player reducers read this one row instead of every
+/// character the identity ever controlled (`character.controller`), which grows with each
+/// death and rejoin.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = player)]
+pub struct Player {
+    #[primary_key]
+    pub identity: Identity,
+    pub character: u32,
+}
+
+/// How a perceived creature moves, as its viewer was last shown it (private; frames,
+/// `frame.rs`): one row per creature in a player's perceived set, keyed
+/// `frame::key(viewer's character, creature)`, written when it comes into sight and then at
+/// the viewer's frames when the creature's motion changed; it goes with the `perceived` row.
+/// `seen_bodies` reads these rather than `body`, so a body's steering update re-runs no one's
+/// view until their frame.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = motion_seen)]
+pub struct MotionSeen {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub motion: crate::perception::Motion,
+}
+
+/// An experience line of a player's character released to its client (private; frames,
+/// `frame.rs`): `id` is the `experience` row's, `line` a copy of it (rows are never edited). A
+/// line is staged (`shown` false) when it is written and released at the character's next
+/// frame; the newest `frame::LINES_SHOWN` stay released. `my_experience` reads the released ones
+/// by `(observer, true)`, one point lookup, so neither a staged line nor any other `experience`
+/// write re-runs it, and its read set is one key, not one per line (2.14.1 scans every view's
+/// read set when a refreshed view commits).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = line_seen, index(accessor = by_observer_shown, btree(columns = [observer, shown])))]
+pub struct LineSeen {
+    #[primary_key]
+    pub id: u64,
+    pub observer: u32,
+    pub shown: bool,
+    pub line: Experience,
+}
+
+/// What a player's client was last shown of what a perceived creature is visibly doing (private;
+/// frames, `frame.rs`): a copy of its `doing` row, keyed like `motion_seen`, written when it comes
+/// into sight and at the viewer's frames when the row changed. `seen_doing` reads these rather
+/// than one `doing` row per creature in the scene.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = doing_seen)]
+pub struct DoingSeen {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub doing: Doing,
 }
 
 /// What a skill use revealed to an observer about a target, until `until_ms` (private): the

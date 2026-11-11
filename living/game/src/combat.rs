@@ -492,7 +492,7 @@ fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Op
 
 /// Whether a creature looks hostile to me: its move under way is aimed at me.
 pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
-    conn.db.seen_fighters().id().find(&id).is_some_and(|f| f.target == me && f.act != 0)
+    crate::net::find_fighter(conn, id).is_some_and(|f| f.target == me && f.act != 0)
 }
 
 /// An animal's move: its own clip by how the rules aim the skill (`skill_card.aim`), never by
@@ -546,7 +546,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
         if out.contains_key(&id) {
             continue;
         }
-        let f = conn.db.seen_fighters().id().find(&id);
+        let f = crate::net::find_fighter(conn, id);
         let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < f.until_ms.max(f.release_ms) + 120);
         let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
         let animal = c.animals.contains(&id);
@@ -624,7 +624,7 @@ fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<
             // The guard's arc in front (the rules' degrees either side), toward where it was
             // raised: the authority's aim on my fighter row once it holds it, else the direction
             // sent. Only an indicator before the press follows the cursor.
-            let held = net.my_id.and_then(|me| net.conn.as_ref()?.db.seen_fighters().id().find(&me)).filter(|f| f.act == card.code && (f.aim_x != 0.0 || f.aim_y != 0.0)).map(|f| Vec2::new(f.aim_x, f.aim_y).normalize_or(dir));
+            let held = net.my_id.and_then(|me| net.conn.as_ref()?.db.my_fighter().id().find(&me)).filter(|f| f.act == card.code && (f.aim_x != 0.0 || f.aim_y != 0.0)).map(|f| Vec2::new(f.aim_x, f.aim_y).normalize_or(dir));
             let dir = if c.guarding { held.or(c.guard_dir).unwrap_or(dir) } else { dir };
             let a0 = dir.y.atan2(dir.x);
             let half = card.arc.to_radians();
