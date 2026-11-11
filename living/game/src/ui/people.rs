@@ -385,9 +385,9 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mu
                     _ => Some(Answer::Dismiss),
                 };
                 if let Some(a) = answer {
-                    let key = p.key;
+                    let (key, how) = (p.key, match &a { Answer::Act((skill, _)) => skill.clone(), Answer::Dismiss => "dismissed".into() });
                     answer_offer(a, p, &mut verbs, &mut offers.dismissed);
-                    info!("ui: answered {key:?} from #{id}");
+                    info!("ui: {how} {key:?} from #{id}");
                 }
             }
             // `person:ACT:ID` (ACT first, so a script finds `@person:intro`).

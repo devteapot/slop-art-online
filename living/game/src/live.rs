@@ -931,7 +931,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   while walking), until `stop`;
 /// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
 ///   (a headless run has no cursor); `cursor:X,Y` puts the game's cursor there (fractions of the
-///   picture; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
+///   picture, or `@NAME`, a tagged node; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
 ///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
@@ -1122,8 +1122,9 @@ fn script(
             true
         }
         "cursor" => {
+            // X,Y (fractions of the picture) or @NAME (a tagged node: hovering a slot, a button).
             s.pointing = None;
-            pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
+            pointer.scripted = frac(arg);
             true
         }
         "tap" => {
