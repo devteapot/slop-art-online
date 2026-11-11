@@ -961,9 +961,14 @@ impl Scripts {
         // A script from before a required law existed runs on the shipped script's functions,
         // with its own on top, until it is installed again.
         let borrowed: Vec<String> = REQUIRED_LAWS.iter().filter(|f| !ast.iter_functions().any(|d| d.name == **f)).map(|f| f.to_string()).collect();
+        // What each function reads, from its own source: the field analysis places statements by
+        // line and column, which two sources share, so a merged script is analysed source by
+        // source, the script's own functions over the shipped ones.
+        let mut fields = None;
         if !borrowed.is_empty() {
             const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
             let base = engine.compile(SHIPPED).map_err(|e| format!("shipped script compile: {e}"))?.clone_functions_only();
+            fields = Some(fields::Fields::analyze(&base).under(fields::Fields::analyze(&ast)));
             ast = base.merge(&ast);
         }
         // A floor's overlay keeps each base function it replaces as `base_NAME` (`floors::compose`):
@@ -973,7 +978,7 @@ impl Scripts {
         let fns = ast.iter_functions().filter(|f| own(f.name)).map(|f| f.name.to_string()).collect();
         let unary = ast.iter_functions().filter(|f| own(f.name) && f.params.len() == 1).map(|f| f.name.to_string()).collect();
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
-        let fields = fields::Fields::analyze(&ast);
+        let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
         let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), tables, source: source.to_string(), law_errors: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
@@ -2470,6 +2475,20 @@ mod tests {
         assert!(!odd.laws().fov_on && odd.law_value("no_such").is_none());
         // What a sound out of sight is told as.
         assert_eq!((on.heard_as("person"), on.heard_as("wolf"), on.heard_as("hare")), ("person".into(), "wolf".into(), "creature".into()));
+    }
+
+    /// A script from before a required law runs with the shipped one merged under it. The two
+    /// sources share line numbers, so the field analysis must not attribute one's statements to
+    /// the other's functions: the borrowed law reads what it reads, every time.
+    #[test]
+    fn a_borrowed_law_reads_its_own_fields_every_time() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let old_src = src.replace("fn senses(a)", "fn senses_gone(a)");
+        for _ in 0..40 {
+            let old = Scripts::new(&old_src).unwrap();
+            assert_eq!(old.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()]);
+            assert_eq!(old.senses(&creature(true, false)).unwrap().sight, 6.0);
+        }
     }
 
     #[test]
