@@ -88,6 +88,7 @@ When height becomes a rule (slope speed, line of sight, falling), the authority 
   - Water under a footprint is left alone, and so are roads, except under wells and market stalls. Those stand on the paved plaza by design; the first generation run found 12 of them not blocking until this exception was made.
   - Measured on seed 7 at 2048 m with the buildings table at `977a14c`: 24,364 tiles blocked. Only 19 walkable tiles are cut off (enclosed yards); nothing is placed there. All 249 building doors and every plaza stay reachable (`host::tests::hosted_island_keeps_doors_reachable`). With the table at `dc34fdf` the figures were 24,445 and 18.
   - Blocking goes through tiles, so pathfinding, steering, `line_clear` and perception need no new code.
+  - **Sight over low things** (since 2026-11-11, [below](#sight-over-low-things-2026-11-11)): what stands below eye height is `Low` (9), not `Wall`; it blocks walking but not sight.
 - **Doors:** `host::door(lot)` is the point half a metre in front of the lot, snapped to the nearest walkable tile. A `structure` stands there:
   - `house` for houses and townhouses;
   - `inn`;
@@ -166,6 +167,23 @@ The planner now dresses settlements with props, terraces sloping sites, and lays
 - Their site has its own id (`living_rules::land::Site::id`: `steampunk_town`, `cyberpunk_town`). `island::match_seed` matches seed entries by that id, so `"site": "steampunk_town"` in [`island.json`](../living/seeds/island.json) peoples Kettlebridge and `"cyberpunk_town"` peoples Lanternquay.
 - `SiteKind` gains no variant: client code matches it exhaustively. Newcomers arrive at the first plain town ([arrival](#arrival-2026-11-10)).
 - Since 2026-11-10 a seed entry may also choose its site by `near` (a settlement placed before it) and `region` (region kinds); the island's hamlets (`hamlet_village`) are matched that way, and the authority keeps the land's roads as a graph (`living_rules::ways`) until creation ends, for the stages of residents' known ways ([seeded lives](SEEDED_LIVES.md)).
+
+### Sight over low things (2026-11-11)
+
+Sight is blocked only by what rises above the eye. Hosting decides it per lot and per blocking prop (`host::hosted_map`): its footprint becomes `Wall` when the thing rises above the eye, else `Low` (`Terrain::Low`, tile byte 9), which blocks walking, steering, routes and building like a wall but not sight or missiles, like a drop ([perception](PERCEPTION.md#drops-sight-across-ground-levels)). It covers every controller, since every perception path goes through `perception::in_sight` and `Map::sight_clear`, and the game client runs the same test on the land it regenerates.
+
+The rule is land data, `LandParams.sight` (`living_rules::land::Sight`), not a Rhai law: which tiles block is computed when the land is hosted, in the rules crate, without the world's script, and the game client rebuilds the same hosted land for its own sight test (sight-2). The authority and the client must compute blocking from the same input, which is the seed's land data. Defaults come from each kind's own definition; the map below only overrides them:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `eye_m` | 1.6 | Eye height (metres). A thing hides what is behind it when it rises above this. |
+| `hides_m` | `{}` | Per kind (a lot kind's or a prop kind's id), how high it hides, in place of its model's height. `{"market_stall": 0}` makes open-sided stalls see-through; `{"well": 0.95}` sees over a well's rim, under its roof. |
+
+How high a thing rises is its model's `height_m` from [`data/buildings.json`](../living/rules/data/buildings.json) (lots through `Lot::height_m`, props through `Prop::height_m`). A thing with no height (0: a lot without a model) hides, as walls did; on the island, plan-test and Cullet seeds every blocking lot and prop has one (`sight_census` lists them per kind). A seed writes, for example, `"map": {"params": {"sight": {"hides_m": {"market_stall": 0}}}}`. The tiles digest covers the result, so a client regenerating the land agrees with the authority, and an empty `hides_m` is the plain height rule. The field is left out of the serialized parameters at its default.
+
+By the heights in the table at the time, these blocking things stand below 1.6 m: carts (fantasy 1.02–1.12 m, steampunk and cyberpunk handcarts 0.92–1.2 m), small folk's wells (1.17 m), salvage heaps (1.5 m). Above it and still hiding: the fantasy well (3.4 m: a 0.95 m rim, with a roof on two posts), fountains (2.78–3.95 m), market crosses (4.72–5.4 m), market stalls (2.6 m), kiosks (2.8 m), food stalls (3.2 m), vending banks (1.9 m), containers (5.2–9.4 m) and every building. Seed 7 at 2048 m has 61 low tiles (one cart and the small folk's lowest houses, 1.52 m: the eye height is one per land, not scaled to the folk who live there); the megacity floor at 2048 m has 590.
+
+On Brackenford's square (the island's arrival square), counted over every walkable tile centre within 48 m of the arrival point (5,141, the eye's own tile aside; `cargo run --release -p living-rules --example sight_census -- living/seeds/island.json`; `host::tests::sight_is_blocked_only_above_eye_height`): 3,853 were hidden before this change and 3,853 after it. The square's blockers are buildings, ten 2.6 m stalls, the 3.4 m well and the 5.4 m market cross, all above the eye. With `hides_m {"market_stall": 0}` 2,554 are hidden; with stalls at 0 and wells at 0.95, 2,163.
 
 ### Arrival (2026-11-10)
 

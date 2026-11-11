@@ -4,7 +4,7 @@
 
 - A land seed's `map.params.plans` (`living_rules::settle::PlanSpec`, docs/AUTHORED_PLANS.md): levels at exact heights, streets, stairs, a square, a harbour (`sea`) and lots with explicit kinds, sizes, models and heights, in the plan's own frame (`origin`, `rotation_deg`).
 - The planned settlement is one settlement row in the plan's `style` and `kind`; a seed town takes it by `site: <plan id>` (`Site::id` is the plan's id; `island::match_seed`).
-- Its lot rows are the plan's lots in plan order (contiguous ids), each with its kind, `width_m` × `depth_m`, `model` ("" without one), `height_m` (6 for a building without one) and its level's height as `floor_m`; every door is walkable; blocking lots stand on `Wall` tiles like any lot.
+- Its lot rows are the plan's lots in plan order (contiguous ids), each with its kind, `width_m` × `depth_m`, `model` ("" without one), `height_m` (6 for a building without one) and its level's height as `floor_m`; every door is walkable; blocking lots stand on `Wall` tiles like any lot (`Low` below eye height).
 - `homes` (household key → lot id): that household's members live at the lot's door (`character.home_x/y`) and own its house structure.
 - `buildings[].lot`: the named building's sign stands at that lot's door (and its structure is the lot's own when the kinds match).
 - `town_life` kinds `lot:<id>` (places and `work`): residents' `place` rows stand at that lot (its spots, else its door).

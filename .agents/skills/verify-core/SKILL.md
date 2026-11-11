@@ -45,6 +45,8 @@ K=$R-skirmish
 mkdir -p ".local/living/verify/$K"
 python3 "$V" launch --run "$K" --seed island > ".local/living/verify/$K/launch.txt" 2>&1
 python3 "$C/scenes.py" skirmish --run "$K" > ".local/living/verify/$K/skirmish.txt" 2>&1
+# The drop scene over a low thing (tile 9, a cart below eye height) on the same island world.
+python3 "$C/scenes.py" low --run "$K" > ".local/living/verify/$K/low.txt" 2>&1
 python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
 
 # Drops between ground levels hide nothing and block the foot (features/sight.md, about 1 min)

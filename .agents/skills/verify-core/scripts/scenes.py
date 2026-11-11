@@ -625,7 +625,7 @@ def wall_geometry(s):
             if x < W and y < H:
                 tiles[y * W + x] = t
     at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
-    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8)
+    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
     for y in range(4, H - 4):
         for x in range(4, W - 4):
             if not walk(x, y):
@@ -672,10 +672,10 @@ def sight(s):
 
 
 
-def drop_geometry(s):
-    """On this world's own map: an `eye` tile and an `across` one on one axis with only drop
-    tiles (8, 1 to 3 of them) between and walkable ground behind each for 3 tiles. Returns the
-    spots and a tile lookup."""
+def drop_geometry(s, cls=8):
+    """On this world's own map: an `eye` tile and an `across` one on one axis with only tiles of
+    class `cls` (8 a drop, 9 a low thing; 1 to 3 of them) between and walkable ground behind each
+    for 3 tiles. Returns the spots and a tile lookup."""
     w = s.rows("SELECT width, height FROM world")[0]
     W, H = w["width"], w["height"]
     tiles = bytearray([4]) * (W * H)
@@ -688,20 +688,20 @@ def drop_geometry(s):
             if x < W and y < H:
                 tiles[y * W + x] = t
     at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
-    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8)
+    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
     for y in range(4, H - 4):
         for x in range(4, W - 4):
-            if at(x, y) != 8:
+            if at(x, y) != cls:
                 continue
             for dx, dy in [(1, 0), (0, 1)]:
                 if not walk(x - dx, y - dy):
                     continue
                 for gap in (1, 2, 3):
                     bx, by = x + gap * dx, y + gap * dy
-                    if walk(bx, by) and all(at(x + i * dx, y + i * dy) == 8 for i in range(gap)) \
+                    if walk(bx, by) and all(at(x + i * dx, y + i * dy) == cls for i in range(gap)) \
                             and all(walk(x - i * dx, y - i * dy) and walk(bx + i * dx, by + i * dy) for i in range(1, 4)):
                         return {"eye": (x - 2 * dx + .5, y - 2 * dy + .5), "across": (bx + 2 * dx + .5, by + 2 * dy + .5), "drop": [(x + i * dx, y + i * dy) for i in range(gap)]}, at
-    raise RuntimeError("no drop geometry on this map")
+    raise RuntimeError(f"no {'drop' if cls == 8 else 'low'} geometry on this map")
 
 
 def drop(s):
@@ -710,8 +710,11 @@ def drop(s):
     the attacker and waves at it, and it witnesses the fight. Then a person on the far side is
     sent (`goto`) to the fight's spot: its body never stands on a drop tile and never jumps one
     between samples; it goes round (by a stair or the drop's end) or is refused. On a world with
-    drops (`--seed plan-test` or `island`). Admin `place_at` and `set_behavior` set the scene."""
-    spots, at = drop_geometry(s)
+    drops (`--seed plan-test` or `island`). Admin `place_at` and `set_behavior` set the scene.
+    As the `low` scene the same is driven over a low thing (tile 9: a cart, below eye height,
+    `LandParams.sight`) on an `island` run."""
+    what = "drop" if s.name == "drop" else "low thing"
+    spots, at = drop_geometry(s, 8 if s.name == "drop" else 9)
     (s.out / f"{s.name}-spots.json").write_text(json.dumps(spots, indent=2) + "\n")
     attacker, victim, watcher, walker = s.people(4)
     fight = spots["eye"]
@@ -726,9 +729,9 @@ def drop(s):
     s.graph(attacker, {"do": {"skill": "attack", "target": {"id": victim}}})
     time.sleep(8)
     uses = [u for u in s.rows("SELECT * FROM skill_use", "uses") if u["at_ms"] >= t0 and u["skill"] == "wave"]
-    s.expect("a graph across the drop sees the attacker (waves at it)", any(u["actor"] == watcher and u["target"] == attacker for u in uses), uses, fatal=False)
+    s.expect(f"a graph across the {what} sees the attacker (waves at it)", any(u["actor"] == watcher and u["target"] == attacker for u in uses), uses, fatal=False)
     fights = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {watcher}", "experience-watcher") if r["kind"] == "fight" and r["at_ms"] >= t0]
-    s.expect("the resident across the drop witnesses the fight", fights, fights[:2], fatal=False)
+    s.expect(f"the resident across the {what} witnesses the fight", fights, fights[:2], fatal=False)
     s.expect("the fight happened (chronicle)", s.rows(f"SELECT * FROM chronicle WHERE kind = 'attack' AND a = {attacker}", "attack-story"))
     s.graph(attacker, {"wait": 120})
     # The walker is sent across: steering and routing keep it off the drop.
@@ -739,11 +742,11 @@ def drop(s):
     while time.monotonic() < end:
         pts.append(body_at(s, walker))
         time.sleep(0.25)
-    blocked = [q for q in pts if at(math.floor(q[0]), math.floor(q[1])) in (2, 4, 7, 8)]
+    blocked = [q for q in pts if at(math.floor(q[0]), math.floor(q[1])) in (2, 4, 7, 8, 9)]
     jumps = [(a, b) for a, b in zip(pts, pts[1:]) if math.dist(a, b) > 1.6]
     goto = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {walker}", "walker-uses") if u["skill"] == "goto" and u["at_ms"] >= t0]
     (s.out / f"{s.name}-walk.json").write_text(json.dumps({"start": start, "trail": pts, "uses": goto}, indent=1) + "\n")
-    s.expect("a walk across the drop never stands on it or jumps it", pts and not blocked and not jumps,
+    s.expect(f"a walk across the {what} never stands on it or jumps it", pts and not blocked and not jumps,
              {"start": start, "end": pts[-1] if pts else None, "walked_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:])), 1), "goto": [u["outcome"] for u in goto][-1:], "blocked": blocked[:5], "jumps": jumps[:3]})
 
 
@@ -761,7 +764,7 @@ def open_line(s, length=16):
             x, y = cx * 16 + k % 16, cy * 16 + k // 16
             if x < W and y < H:
                 tiles[y * W + x] = t
-    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7, 8)
+    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7, 8, 9)
     for y in range(8, H - 8, 3):
         for x in range(8, W - length - 8, 2):
             if all(walk(x + i, y + d) for i in range(length) for d in (-1, 0, 1)):
@@ -1254,7 +1257,7 @@ def tile_grid(s):
             x, y = cx * 16 + k % 16, cy * 16 + k // 16
             if x < W and y < H:
                 tiles[y * W + x] = t
-    return W, H, lambda x, y: 0 <= x < W and 0 <= y < H and tiles[int(y) * W + int(x)] not in (2, 4, 7, 8)
+    return W, H, lambda x, y: 0 <= x < W and 0 <= y < H and tiles[int(y) * W + int(x)] not in (2, 4, 7, 8, 9)
 
 
 def open_ray(s, length):
@@ -1419,7 +1422,7 @@ def laws(s):
     s.expect("an ordinary night outside costs no health", night["hp_rate"] >= 0, night)
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "drop": drop}
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "drop": drop, "low": drop}
 
 
 def main():
