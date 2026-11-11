@@ -1,5 +1,32 @@
 # Knowledge validation
 
+## 2026-11-11 speech-2: names of two words (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `names.py --name "Mara Quill"` (`minds-names2-mara`): 7 of 7. The player says "I am Mara", and the mind learns "Mara Quill": the `introduced` row, the tagged consolidation, the memory, and the person's node named after it; the mind out of earshot learns nothing.
+
+## 2026-11-11 speech-1: names (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `names.py` (new): `minds-names-1` 7 of 7 with the trial stack's Neo4j (0 nodes left):
+  - before the name, the graph knows the player as "a stranger";
+  - one `introduced` row, and the only acquaintance is the mind's;
+  - the consolidation prompt holds "Mercy told you their name. {Mercy=#id}", and the memory keeps it;
+  - the person's node is named "Mercy" afterwards;
+  - the mind 38 m away has no node naming the player.
+- Not run: the full `verify_knowledge.py` suite, player memory.
+
+## 2026-11-11 goods-2: teaching a world's own technique (dev-box)
+
+Branch `goods-2` (from main `62d861f0`, merged with main four times, last with `94050f9a` at `6fefe997`), own container `goods2-stdb` (2.14.1, port 3323, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR` and `--target-dir`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
+
+- `verify_knowledge.py world-know-how` (new; cullet-laws, authority only): `knowledge-goods2-glass`, merged `knowledge-goods2m-glass` and third merge `knowledge-goods2f-glass` (with the new `--target-dir`) and fourth `knowledge-goods2g-glass` pass. Teaching `glass` is refused with the world's techniques listed (…, fire_bolt, wound_tending, toolmaking, glassmaking); glassmaking to a student without fire "they must first learn fire"; with fire, `taught by Walker1`; again, "they already know glassmaking".
+- Full `verify_knowledge.py run`: merged `knowledge-goods2m-full` all 21 proofs pass (teaching and truthful technique feedback among them; the stone refusal's list is the know-how table's). An earlier run on the first merge (`knowledge-goods2-full`) passed every authority proof and failed in memory integration: the witness's speech was the 41st of Oren's experiences, past the driver's `pending[:40]`, and main's merge replaced the driver while it ran. A rerun (`knowledge-goods2-full2`) failed at launch on main's reverted `verify.py` (the CLI install, "Argument list too long"), fixed here.
+- Before and after (script level, main's script against goods-2, every technique × three teacher states × five targets): 300 of 300 answers identical per world on the 20 old techniques; differences only for fire_bolt, wound_tending, glassmaking and names that are no technique (the refusal now lists the know-how table).
+
+
 ## 2026-11-11 fix-death-labels on main (Spark)
 
 Main at `7837320` (the merge of `fix-death-labels`: `die` keeps the dead's name for its community, `witnessed` reads "you" for the event's object), worktree on the DGX Spark, against the trial container `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only, load average 19–29 from other work.

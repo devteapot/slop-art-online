@@ -104,7 +104,7 @@ Values per game hour unless noted; in brackets per real minute on that world's d
 | A trap's catch | a meat every 8 game hours | none (`trap_every_h` 0: no small game on the Wrack) | The world does not restock |
 | A person's remains lie | 120 game hours (an hour real) | 48 game hours (96 real minutes; `remains_h`) | |
 
-**Sight that depends on facing** (`fov-1`, 2026-11-11; [perception](PERCEPTION.md#the-field-of-view-sixth-change)) is a world law, `fov_on`, off on both worlds as shipped; `set_world_law fov_on true` turns it on for a running world. Cullet's `senses` carries the shipped field, so the values are the same law values on both:
+**Sight that depends on facing** (`fov-1`, 2026-11-11; [perception](PERCEPTION.md#the-field-of-view-seventh-change)) is a world law, `fov_on`, off on both worlds as shipped; `set_world_law fov_on true` turns it on for a running world. Cullet's `senses` carries the shipped field, so the values are the same law values on both:
 
 | Law | Island | Cullet | |
 | --- | ---: | ---: | --- |

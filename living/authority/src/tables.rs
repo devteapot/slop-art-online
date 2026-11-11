@@ -318,6 +318,13 @@ pub struct Steer {
     /// Movement input bucket of a player (tokens refill at the `input_hz` law).
     pub tokens: f32,
     pub input_ms: u64,
+    /// A player's look (`human_face`): held while `look_on`, the direction (radians, the same
+    /// angle as `body.heading`) the body turns to. It is an input, like the movement direction
+    /// in `gx`/`gy`; the body's facing is still only `body.heading`.
+    #[default(false)]
+    pub look_on: bool,
+    #[default(0.0f32)]
+    pub look: f32,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
@@ -391,6 +398,12 @@ pub struct Activity {
     pub want: String,
     #[default(0u32)]
     pub want_qty: u32,
+    /// An answer (accept, decline): the trade offer or the record it names (0: none, the rules
+    /// take what stands). Added at the end with defaults, so the table migrates in place.
+    #[default(0u64)]
+    pub offer: u64,
+    #[default(0u64)]
+    pub record: u64,
 }
 
 /// Items held by a creature (`owner = id`) or a structure (`owner = STRUCTURE_BIT | id`).
@@ -594,6 +607,60 @@ pub struct Experience {
     pub salience: f32,
 }
 
+/// Who heard a line (docs/COMMUNICATION.md §6; `heard` is fov-1's heard-not-seen sounds): for each line a speaker said (its own `said`
+/// experience row, `line`), the people who received the words and whom the speaker perceived
+/// at that moment (in its sight, by the sight rule). Private: the speaker's person reads its
+/// own through `my_heard`, the mind service as the owner. Written in the same transaction as
+/// the `said` row, and gone with it (the window's trim, consolidation, death), so a speaker
+/// keeps at most its window's own lines. A separate table, not a column on `experience`:
+/// `line_seen.line` embeds `Experience`, and automatic migration cannot change that type.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = line_heard)]
+pub struct LineHeard {
+    /// The speaker's `said` experience id.
+    #[primary_key]
+    pub line: u64,
+    #[index(btree)]
+    pub speaker: u32,
+    /// The way it was said (`say`, …).
+    pub way: String,
+    /// Those who received the words and whom the speaker saw, nearest first.
+    pub hearers: Vec<u32>,
+    pub at_ms: u64,
+}
+
+/// Each way of speaking as the rules state it (one row per `<way>_speech()` in the script),
+/// rewritten whenever a skill script is installed, so a client builds its talk box (the chips,
+/// what each needs) without running the rules (public, static, like `skill_card`). The
+/// client's greying is a hint; the authority decides.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = speech_card, public)]
+pub struct SpeechCard {
+    #[primary_key]
+    pub name: String,
+    pub label: String,
+    /// Where it comes among the ways (chip order, smallest first).
+    pub order: i32,
+    /// What it is (for the box's hint).
+    pub about: String,
+    /// A line needs someone to be said to (`to` != 0).
+    pub needs_to: bool,
+    /// The addressee must be within this many metres (0: wherever the words carry).
+    pub reach_m: f32,
+    /// How far the words go for a person with the world's ordinary hearing (metres).
+    pub carry_m: f32,
+    /// A technique the speaker must know ("" none), as in `my_know_how`.
+    pub requires: String,
+    /// The addressee must be in the speaker's sight.
+    pub needs_sight: bool,
+    /// Only the addressee receives the words.
+    pub private: bool,
+    /// Longest line (characters; longer is cut).
+    pub max_chars: u16,
+    /// Shortest time between two lines of this way (ms).
+    pub gap_ms: u32,
+}
+
 /// Practical know-how: a technique this character can perform. World state (a capability),
 /// not belief; it dies with the character unless taught or written down first.
 #[cfg_attr(open_tables, spacetimedb::table(accessor = know_how, public,
@@ -676,6 +743,11 @@ pub struct Deliberation {
     pub updated_ms: u64,
     pub scene: String,
     pub revision: u32,
+    /// When each line of `reason` arrived, in milliseconds separated by spaces and aligned with
+    /// its lines: a deliberation consumes the lines its prompt contained (living_rules::reasons).
+    /// A string because a column default must be a constant.
+    #[default("")]
+    pub arrived: String,
 }
 
 // ---- mind projections (observer and behavior inputs) ----------------------

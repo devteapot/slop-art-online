@@ -333,22 +333,22 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
     Ok(revision)
 }
 
-/// Reasons about the plan being replaced; a new plan makes them obsolete.
-const PLAN_STATE: &[&str] = &["Nothing in my current plan works", "My actions keep failing", "I finished my plan", "A quiet moment to take stock"];
-
-/// Remove the pending deliberation unless reasons arrived after `seen_ms`. When a new plan
-/// is installed (`new_plan`), reasons about the old plan failing that piled up while the mind
-/// was thinking are dropped; otherwise they re-triggered thinking at once, every few seconds.
+/// Remove what the deliberation that read the request as of `seen_ms` considered. Reasons
+/// that arrived later stay pending, except, when a new plan is installed (`new_plan`), those
+/// about the old plan failing that piled up while the mind was thinking (they re-triggered
+/// thinking at once, every few seconds). A reason the prompt contained never stays: before
+/// 2026-11-11 it did whenever anything arrived during the call, and plan-finished churn kept
+/// one feeling the reason of dozens of thoughts.
 fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: bool) {
     if let Some(mut d) = ctx.db.deliberation().actor().find(actor) {
-        if d.updated_ms <= seen_ms {
-            ctx.db.deliberation().actor().delete(actor);
-        } else if new_plan {
-            let rest: Vec<&str> = d.reason.lines().filter(|l| !l.trim().is_empty() && !PLAN_STATE.iter().any(|p| l.starts_with(p))).collect();
-            if rest.is_empty() {
+        let rest = if d.updated_ms <= seen_ms { None } else { living_rules::reasons::consume(&d.reason, &d.arrived, seen_ms, new_plan) };
+        match rest {
+            None => {
                 ctx.db.deliberation().actor().delete(actor);
-            } else {
-                d.reason = rest.join("\n");
+            }
+            Some((reason, arrived)) => {
+                d.reason = reason;
+                d.arrived = arrived;
                 ctx.db.deliberation().actor().update(d);
             }
         }
@@ -371,7 +371,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        let _ = perceive::speak(ctx, actor, &say, say_to, now);
+        let _ = crate::speech::speak(ctx, actor, &say, say_to, "say", now);
     }
     Ok(())
 }
@@ -381,7 +381,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
 /// deliberation reasons and the deliberation clock alone, so talking never displaces or
 /// postpones thinking about what to do.
 #[spacetimedb::reducer]
-pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way: String, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
     let c = authorize(ctx, actor)?;
     if !c.alive {
         return Err("character is dead".into());
@@ -396,7 +396,7 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
     }
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        perceive::speak(ctx, actor, &say, say_to, now)?;
+        crate::speech::speak(ctx, actor, &say, say_to, &way, now)?;
     }
     Ok(())
 }
@@ -475,6 +475,10 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
         let done: Vec<u64> = ctx.db.experience().observer().filter(actor).filter(|e| e.id <= upto).map(|e| e.id).collect();
         for id in done {
             ctx.db.experience().id().delete(id);
+        }
+        // Who heard the lines it integrated goes with them.
+        for line in ctx.db.line_heard().speaker().filter(actor).filter(|h| h.line <= upto).map(|h| h.line).collect::<Vec<_>>() {
+            crate::speech::forget_line(ctx, line);
         }
     }
     let row = MindCursor { actor, upto, updated_ms: now };

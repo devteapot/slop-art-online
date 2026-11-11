@@ -25,7 +25,15 @@ clip with a speed):
   (heel down, then the ball); an animal's at its
   paw tip (`paw_tips` in the sidecar; the paw bone's head without it).
 
-Everything but missing markers is a warning, so a new clip still gets built. Thresholds are in
+- **floor jerk** (every clip, not only gaits): where animate.py's floor guard changed a clip,
+  its sidecar's `floor_jerk_deg` is [largest jerk before, after, bone]: the largest change in
+  angular step from one frame to the next on any bone (degrees). More than `JERK_MARGIN` over
+  the clip's own before is an error: a guard that bends or lifts the feet must not make them pop.
+  `floor_guard_skipped` (the guard left a clip alone because it would have) is a warning. The
+  limb guard (wrists and ankles off the floor) is checked the same way: `limb_jerk_deg`,
+  `limb_guard_skipped`.
+
+Everything but missing markers and floor jerk is a warning, so a new clip still gets built. Thresholds are in
 [`GAITS`] and the constants below. Prints a summary line per character and per gait clip.
 """
 
@@ -64,6 +72,8 @@ SYNC_TOL = 0.04
 LENGTH_TOL = 0.02
 # A planted foot may move this far over its window (m).
 SLIDE_M = 0.04
+# The floor guard may raise a clip's largest frame-to-frame jerk by at most this (degrees).
+JERK_MARGIN = 6.0
 SAMPLE_FPS = 60
 
 # People's files are fitted to this height in the game; their sidecar speeds are in its metres
@@ -316,6 +326,21 @@ def check_file(path):
         report["errors"].append("no looping gait with a speed in the sidecar")
     for name, c in gaits:
         report["clips"].append(check_clip(glb, family, top, name, c, feet, points, unit))
+    # The floor guard's jerk, every clip it changed.
+    report["floor_jerk"] = []
+    for name, c in clips.items():
+        if not isinstance(c, dict):
+            continue
+        for guard, jerk_key, skip_key in (("floor guard", "floor_jerk_deg", "floor_guard_skipped"), ("limb guard", "limb_jerk_deg", "limb_guard_skipped")):
+            fj, skipped = c.get(jerk_key), c.get(skip_key)
+            if skipped:
+                report["warnings"].append(f"{name}: the {guard} left it alone (it would jerk {skipped[2]} by {skipped[1]:.1f} degrees a frame, {skipped[0]:.1f} before)")
+            if not fj:
+                continue
+            if guard == "floor guard":
+                report["floor_jerk"].append([name] + list(fj))
+            if fj[1] > fj[0] + JERK_MARGIN:
+                report["errors"].append(f"{name}: the {guard} jerks {fj[2]} by {fj[1]:.1f} degrees a frame ({fj[0]:.1f} before, more than {JERK_MARGIN:.0f} over)")
     for c in report["clips"]:
         report["errors"] += [f"{c['clip']}: {e}" for e in c["errors"]]
         report["warnings"] += [f"{c['clip']}: {w}" for w in c["warnings"]]
@@ -426,6 +451,12 @@ def main():
                 print(f"    ERROR {e}")
             for w in c["warnings"]:
                 print(f"    warning: {w}")
+        if r.get("floor_jerk"):
+            worst = max(r["floor_jerk"], key=lambda x: x[2] - x[1])
+            print(f"  floor guard: {len(r['floor_jerk'])} clips changed; jerk rises most in {worst[0]}: {worst[1]:.1f} -> {worst[2]:.1f} degrees ({worst[3]}), allowed {JERK_MARGIN:.0f} over")
+        for w in r["warnings"]:
+            if "floor guard" in w or "limb guard" in w:
+                print(f"  warning: {w}")
         for e in r["errors"]:
             if not any(e.endswith(x) for c in r["clips"] for x in c["errors"]):
                 print(f"  ERROR {e}")

@@ -14,6 +14,7 @@ mod island;
 mod mind;
 mod motion;
 mod perceive;
+mod speech;
 mod perception;
 mod presence;
 mod records;
@@ -71,6 +72,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
+    speech::cards(ctx, &sc);
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
     for kind in ["person", "deer", "wolf"] {
         living_rules::graph::parse(&seed::instinct(kind)).map_err(|e| format!("{kind} instinct: {e}"))?;
@@ -139,6 +141,7 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
     town::cards(ctx, &sc);
+    speech::cards(ctx, &sc);
     let now = common::now_ms(ctx);
     // Past the clock's too: writing a world's own laws moves it without a new script.
     let rev = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision).unwrap_or(0).max(common::clock(ctx).scripts_rev) + 1;
@@ -613,6 +616,24 @@ pub(crate) fn command_done(ctx: &ReducerContext, id: u32, now: u64) {
     }
 }
 
+/// Face a direction (screen axes: +x east, +y south; any length), or release the look (`0, 0`):
+/// the player's look. It turns the same facing everything else turns, `body.heading`. Standing,
+/// the body turns where it stands at its turn rate. Walking (`human_move`), it turns toward the
+/// look at most the `look_walk_deg` law off the way it walks, the walk bending with it, and when
+/// it stops it finishes the turn. Released, facing returns to the way it walks. A look within the
+/// `look_slack_deg` law of the one held is free; any other change spends a token of the movement
+/// input bucket (the `input_hz`/`input_burst` laws, shared with `human_move`), so a client
+/// that follows the cursor sends looks freely and only changes write rows.
+#[spacetimedb::reducer]
+pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> {
+    let me = my_character(ctx)?;
+    if !dx.is_finite() || !dy.is_finite() {
+        return Err("direction must be finite".into());
+    }
+    let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
+    motion::look(ctx, me.id, dir, common::now_ms(ctx))
+}
+
 /// Move in a direction (screen axes: +x east, +y south; any length) or stop (`0, 0`), at a
 /// walk or a run. Steering carries it out with the same physics as everyone's movement;
 /// it replaces whatever the character was doing. Send it when the intent changes (a key
@@ -658,8 +679,18 @@ pub(crate) fn player_controls(ctx: &ReducerContext, id: u32, now: u64) -> Result
     Ok(())
 }
 
+/// Say a line aloud (the `say` way): to `to`, or to the room with 0. Kept for clients from
+/// before `human_speak`.
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {
     let me = my_character(ctx)?;
-    perceive::speak(ctx, me.id, &text, to, common::now_ms(ctx))
+    speech::speak(ctx, me.id, &text, to, "say", common::now_ms(ctx))
+}
+
+/// Say a line in a way of speaking (`speech_card.name`; "" is `say`): to `to`, or to the room
+/// with 0. A line the way refuses comes back as the reducer's error, in the world's words.
+#[spacetimedb::reducer]
+pub fn human_speak(ctx: &ReducerContext, text: String, to: u32, way: String) -> Result<(), String> {
+    let me = my_character(ctx)?;
+    speech::speak(ctx, me.id, &text, to, &way, common::now_ms(ctx))
 }

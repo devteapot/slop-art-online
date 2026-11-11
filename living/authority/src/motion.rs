@@ -128,7 +128,7 @@ pub fn speed_of(b: &Body) -> f32 {
 }
 
 fn fresh_steer(id: u32) -> Steer {
-    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0 }
+    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0, look_on: false, look: 0.0 }
 }
 
 fn load_steer(ctx: &ReducerContext, id: u32) -> (Steer, bool) {
@@ -486,7 +486,17 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
             }
         }
         GOAL_DIRECTION => {
-            let (dir, crowded) = separate(ctx, b.id, p, st.gy.atan2(st.gx), 0, &moves, now);
+            // A held look (`human_face`) turns the body toward it within the walking limit (the
+            // `look_walk_deg` law) of the way it is told to go: the heading is the travel, so the
+            // walk bends with it, turning at the body's turn rate like any steering.
+            let way = st.gy.atan2(st.gx);
+            let way = if st.look_on {
+                let limit = laws.look_walk_deg.to_radians();
+                way + geo::wrap(st.look - way).clamp(-limit, limit)
+            } else {
+                way
+            };
+            let (dir, crowded) = separate(ctx, b.id, p, way, 0, &moves, now);
             let max_dt = if crowded { laws.steer_s.min(1.0 / laws.crowd_hz) } else { laws.steer_s };
             want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt });
         }
@@ -510,7 +520,7 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
             want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt });
         }
         _ => {
-            // No goal: finish a glide, then stand.
+            // No goal: finish a glide, then stand (turning to a held look, `human_face`).
             stand = Some(IDLE);
         }
     }
@@ -576,6 +586,14 @@ fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Opti
     } else if let Some(until) = stand {
         halt(b);
         b.next_ms = until;
+        if st.look_on {
+            let d = geo::wrap(st.look - b.heading);
+            if d.abs() > laws.look_slack_deg.to_radians() {
+                let rate = moves.turn_rate.max(0.5);
+                let h = b.heading;
+                set_motion(b, h, 0.0, rate * d.signum(), d.abs() / rate);
+            }
+        }
     }
     b.chunk = chunk_of(p.0, p.1);
     (ev, dirty)
@@ -643,6 +661,11 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
             at = (at.0 / n, at.1 / n);
         }
         _ => {}
+    }
+    // A walk of any other kind (a path, a pursuit, a flight; a mind's or a command's) faces
+    // its way: a player's held look serves only its own movement keys.
+    if goal.kind != GOAL_DIRECTION {
+        st.look_on = false;
     }
     st.goal = goal.kind;
     st.target = goal.target;
@@ -778,6 +801,54 @@ pub fn intent(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, run: bool,
             };
             start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: u, keep: 0.0, speed, flags: run_flag }, now).map(|_| ())
         }
+    }
+}
+
+/// A player's look (`human_face`): turn the body to face `dir` (`None`: release, facing returns
+/// to the way it walks). One facing state, `body.heading`: standing, the body turns where it
+/// stands at its turn rate; walking under its movement keys, it turns toward the look within the
+/// `look_walk_deg` law of its way (the walk bends with it) and, when it stops, finishes the turn.
+/// A look within the `look_slack_deg` law of the held one (or, standing, of where the body
+/// faces) writes nothing; any other spends a token of the movement input bucket.
+pub fn look(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, now: u64) -> Result<(), String> {
+    let (mut st, exists) = load_steer(ctx, id);
+    let laws = common::laws(ctx);
+    let slack = laws.look_slack_deg.to_radians();
+    let want = dir.and_then(|(x, y)| (x.is_finite() && y.is_finite() && x.hypot(y) > 1e-3).then(|| y.atan2(x)));
+    let Some(b) = ctx.db.body().id().find(id) else { return Err("no body".into()) };
+    let moving = b.vx != 0.0 || b.vy != 0.0;
+    let walking = st.goal == GOAL_DIRECTION;
+    match want {
+        None if !st.look_on => return Ok(()),
+        Some(w) if st.look_on && geo::wrap(w - st.look).abs() <= slack && (moving || geo::wrap(w - common::heading_at(&b, now)).abs() <= slack) => return Ok(()),
+        Some(w) if !st.look_on && !moving && geo::wrap(w - common::heading_at(&b, now)).abs() <= slack => return Ok(()),
+        _ => {}
+    }
+    let refill = now.saturating_sub(st.input_ms) as f32 / 1000.0 * laws.input_hz;
+    let tokens = if exists { (st.tokens + refill).min(laws.input_burst) } else { laws.input_burst };
+    if tokens < 1.0 {
+        return Err("too many movement inputs".into());
+    }
+    st.tokens = tokens - 1.0;
+    st.input_ms = now;
+    st.look_on = want.is_some();
+    if let Some(w) = want {
+        st.look = w;
+    }
+    let (gx, gy, flags) = (st.gx, st.gy, st.flags);
+    save_steer(ctx, st, exists);
+    if walking && moving {
+        // Steer again now, toward the look or back to the way.
+        let speed = b.speed;
+        start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: (gx, gy), keep: 0.0, speed, flags }, now).map(|_| ())
+    } else if let (Some(w), false) = (want, moving) {
+        let p = common::pos(&b, now);
+        face(ctx, id, (p.0 + w.cos(), p.1 + w.sin()), now);
+        Ok(())
+    } else {
+        // A release while standing keeps the facing; a look during a glide or a dash is taken
+        // when the body stands.
+        Ok(())
     }
 }
 

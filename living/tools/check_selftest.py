@@ -7,11 +7,21 @@ name, a bare name on PATH), with the caller's cache settings kept; a foreign wra
 plain sccache, used as they are without the cache settings (the foreign one in the digest);
 and no cache at all when only an sccache on PATH exists. Then SIGKILLs a process that
 registered a process group with the watchdog and checks the group and the registered folder
-are gone. Builds nothing; touches nothing outside the temporary directory.
-Usage: check_selftest.py
+are gone.
+
+The script fuel gate step (`script-gate`), in a clone of this worktree (its uncommitted files
+under living/ included): an empty stamp store runs it; a stamp at its digest skips it; an
+edited script, budgets.json or sb-host's wasmtime configuration runs it again, an edited README
+does not; and gate.py, over a stand-in bench, passes laws within budget and fails one over it
+or not measured, naming the law, its fuel and its budget. With --gate it also runs the real
+step there (builds the bench, a few minutes cold): it passes and is stamped, is skipped on a
+second run, fails the check under a lowered budget with that message, and runs again after an
+edit to the script. Otherwise builds nothing; touches nothing outside the temporary directory.
+Usage: check_selftest.py [--gate]   (CHECK_SELFTEST_TARGET: the --gate build's target folder)
 """
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -95,6 +105,138 @@ def wrapper_cases(home):
     expect("no pinned sccache: an sccache on PATH is not used", r.get("env") == {} and r["exe"] is None and "on PATH is not used" in r["how"], r)
 
 
+def clone_worktree(home):
+    """A clone of this worktree's HEAD with its uncommitted files under living/ copied in."""
+    root = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=TOOLS, stdout=subprocess.PIPE, text=True, check=True).stdout.strip()
+    repo = os.path.join(home, "repo")
+    subprocess.run(["git", "clone", "-q", "--shared", root, repo], check=True)
+    subprocess.run(["git", "checkout", "-q", "--detach", subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, stdout=subprocess.PIPE, text=True).stdout.strip()],
+                   cwd=repo, check=True)
+    ls = lambda *a: [n for n in subprocess.run(["git", "ls-files", "-z", *a, "--", "living"], cwd=root, stdout=subprocess.PIPE, text=True).stdout.split("\0") if n]
+    for rel in ls("-d"):
+        if os.path.lexists(os.path.join(repo, rel)):
+            os.remove(os.path.join(repo, rel))
+    for rel in ls("-m", "-o", "--exclude-standard"):
+        if os.path.isfile(os.path.join(root, rel)):
+            os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
+            shutil.copy2(os.path.join(root, rel), os.path.join(repo, rel))
+    return repo
+
+
+def check_env(home, **extra):
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("LIVING_CHECK", "CARGO_TARGET_DIR"))}
+    env.update({"LIVING_CHECK_STORE": os.path.join(home, "store"), "CARGO_TARGET_DIR": os.path.join(home, "target"), **extra})
+    return env
+
+
+def gate_plan(repo, home):
+    out = os.path.join(home, "plan.json")
+    r = subprocess.run([sys.executable, os.path.join(repo, "living/tools/check.py"), "--plan", "--steps", "script-gate", "--json", out], cwd=repo,
+                       env=check_env(home), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    try:
+        return json.load(open(out))["plan"][0], r.stdout
+    except (OSError, ValueError, KeyError, IndexError):
+        return {}, r.stdout
+
+
+def edited(path, text):
+    """Append text to a file; returns a function that puts it back."""
+    old = open(path, "rb").read()
+    with open(path, "ab") as f:
+        f.write(text.encode())
+    return lambda: open(path, "wb").write(old)
+
+
+STUB_HOST = r"""#!/usr/bin/env python3
+import json, sys
+fuel = json.loads(sys.argv[-1]) if sys.argv[-1].startswith("{") else {}
+laws = sys.argv[sys.argv.index("--laws") + 1].split(",")
+for law in laws:
+    if law in fuel:
+        print(json.dumps({"engine": "rhai", "law": law, "fuel_per_call": fuel[law], "fuel_seeds": [fuel[law] - 5, fuel[law] + 5], "p50_ns": 1000.0}))
+"""
+
+
+def gate_judge_cases(home, repo):
+    stub = os.path.join(home, "stub-host")
+    script(stub, STUB_HOST)
+    budgets = os.path.join(home, "budgets.json")
+    with open(budgets, "w") as f:
+        json.dump({"fuel_per_call": {"rates": 9000, "rates-law": 245000}}, f)
+    gate = os.path.join(repo, "living/tools/script_bench/gate.py")
+
+    def judge(fuel):
+        # the stub reads the fuel to report from its last argument; gate.py passes its own
+        # arguments after the module, so wrap the stub with a fixed answer
+        wrapper = os.path.join(home, "stub-answer")
+        script(wrapper, f"#!/bin/sh\nexec {sys.executable} {stub} \"$@\" '{json.dumps(fuel)}'\n")
+        verdict = os.path.join(home, "verdict.json")
+        r = subprocess.run([sys.executable, gate, "--host", wrapper, "--module", "/dev/null", "--budgets", budgets, "--json", verdict],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        return r.returncode, r.stdout, json.load(open(verdict)) if os.path.exists(verdict) else None
+
+    rc, out, v = judge({"rates": 8588, "rates-law": 211847})
+    expect("gate.py: every law within its budget passes", rc == 0 and v and v["ok"] and "every law within its budget" in out, out)
+    rc, out, v = judge({"rates": 8588, "rates-law": 250000})
+    expect("gate.py: a law over its budget fails, naming the law, its fuel and its budget",
+           rc == 1 and v and not v["ok"] and "rates-law takes 250,000 fuel a call, over its budget of 245,000" in out, out)
+    rc, out, v = judge({"rates": 8588})
+    expect("gate.py: a budgeted law not measured fails", rc == 1 and "not measured: rates-law" in out, out)
+
+
+def gate_cases(home, build):
+    repo = clone_worktree(home)
+    sb = os.path.join(repo, "living/tools/script_bench")
+    p, out = gate_plan(repo, home)
+    expect("script-gate: an empty stamp store runs it", p.get("digest") and not p.get("skip"), out)
+    inputs = set(p.get("inputs", []))
+    expect("script-gate: its inputs hold the script, the bench, the rules crate, budgets.json and wasmtime's pin",
+           {"living/scripts", "living/rules", "living/tools/script_bench/bench", "living/tools/script_bench/host", "living/tools/script_bench/module",
+            "living/tools/script_bench/budgets.json", "living/tools/script_bench/Cargo.lock"} <= inputs, sorted(inputs))
+    d = p.get("digest") or "0" * 64
+    stamp = os.path.join(home, "store", "stamps", d[:2], d + ".json")
+    os.makedirs(os.path.dirname(stamp), exist_ok=True)
+    with open(stamp, "w") as f:
+        json.dump({"step": "script-gate", "at": "selftest", "worktree": repo, "commit": "0" * 40}, f)
+    p, out = gate_plan(repo, home)
+    expect("script-gate: a stamp at its digest skips it", p.get("skip") is True and p.get("digest") == d, out)
+    for what, rel, text, runs in (("an edited script", "living/scripts/skills.rhai", "\n// check_selftest\n", True),
+                                   ("an edited budgets.json", "living/tools/script_bench/budgets.json", "\n", True),
+                                   ("an edited wasmtime configuration (sb-host)", "living/tools/script_bench/host/src/main.rs", "\n// check_selftest\n", True),
+                                   ("an edited README", "living/tools/script_bench/README.md", "\ncheck_selftest\n", False)):
+        undo = edited(os.path.join(repo, rel), text)
+        p, out = gate_plan(repo, home)
+        undo()
+        ok = (not p.get("skip") and p.get("digest") not in (None, d)) if runs else (p.get("skip") is True and p.get("digest") == d)
+        expect(f"script-gate: {what} {'runs it again' if runs else 'still skips it'}", ok, out)
+    gate_judge_cases(home, repo)
+    if not build:
+        return
+    shutil.rmtree(os.path.join(home, "store"))
+    target = os.environ.get("CHECK_SELFTEST_TARGET") or os.path.join(home, "target")
+    run = lambda: subprocess.run([sys.executable, "living/tools/check.py", "--steps", "script-gate"], cwd=repo, env=check_env(home, CARGO_TARGET_DIR=target),
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    r = run()
+    expect("script-gate (built): passes and is stamped", r.returncode == 0 and "script-gate: passed" in r.stdout and "stamped [" in r.stdout, r.stdout[-3000:])
+    r = run()
+    expect("script-gate (built): skipped on a second run", r.returncode == 0 and "script-gate: skip" in r.stdout, r.stdout[-3000:])
+    path = os.path.join(sb, "budgets.json")
+    old = open(path).read()
+    b = json.loads(old)
+    b["fuel_per_call"]["rates-law"] = 1000
+    with open(path, "w") as f:
+        json.dump(b, f)
+    r = run()
+    open(path, "w").write(old)
+    expect("script-gate (built): a budget under the law's fuel fails the check, naming the law, its fuel and its budget",
+           r.returncode != 0 and "script-gate: FAILED" in r.stdout and "rates-law takes " in r.stdout and "over its budget of 1,000" in r.stdout, r.stdout[-3000:])
+    undo = edited(os.path.join(repo, "living/scripts/skills.rhai"), "\n// check_selftest\n")
+    r = run()
+    undo()
+    expect("script-gate (built): an edited script runs it again, and it passes", r.returncode == 0 and "script-gate: passed" in r.stdout
+           and "script-gate: skip" not in r.stdout, r.stdout[-3000:])
+
+
 WATCHED = r"""
 import os, subprocess, sys, tempfile, time
 sys.path.insert(0, sys.argv[1])
@@ -144,13 +286,15 @@ def alive_pid(pid):
     return bool(out) and not out.startswith("Z")
 
 
-def main():
+def main(argv):
     with tempfile.TemporaryDirectory(prefix="check-selftest-") as home:
         wrapper_cases(home)
         watchdog_case(home)
+    with tempfile.TemporaryDirectory(prefix="check-selftest-gate-") as home:
+        gate_cases(home, "--gate" in argv)
     print("check_selftest:", "FAILED " + ", ".join(failures) if failures else "all passed")
     return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
