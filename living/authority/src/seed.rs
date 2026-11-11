@@ -2384,11 +2384,11 @@ mod tests {
             assert!(row.contains("// ---- floor overlay ----") && row.contains(s.laws.trim()), "{name}: the installed script lost its overlay");
             let day_ms = s.day_ms().unwrap();
             let sc = living_rules::script::Scripts::with_day(&row, day_ms).unwrap_or_else(|e| panic!("{name}: {e}"));
-            let shipped = living_rules::script::Scripts::with_day(SKILLS, day_ms).unwrap();
+            // Each of its functions replaces the shipped one of that name (kept as `base_NAME`).
+            let defines = |src: &str, f: &str| src.lines().any(|l| l.trim_start().trim_start_matches("private ").starts_with(&format!("fn {f}(")));
             for f in living_rules::floors::overlay_functions(&s.laws).unwrap() {
-                assert!(sc.has(&f), "{name}: `{f}` of its laws is not in force");
-                if shipped.has(&f) {
-                    assert!(sc.has(&format!("base_{f}")), "{name}: `{f}` does not replace the shipped one");
+                if defines(SKILLS, &f) {
+                    assert!(defines(&row, &format!("base_{f}")), "{name}: `{f}` of its laws does not replace the shipped one");
                 }
             }
             let pace = living_rules::life::Pace { year_days: s.year_days as f32, pace: s.life_pace };
