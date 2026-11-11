@@ -109,8 +109,12 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (LATCHES.contains(&a.skill.as_str()) || sc.shows().aside(&a.skill))).map(|a| a.node);
     ev.alerts();
     let root = ev.g.clone();
+    let played = !ev.me.ai;
     let result = ev.run(&root.root, 0);
     ev.after(result, &root.root);
+    if played && result != St::Run {
+        crate::command_done(ctx, id, now);
+    }
 }
 
 /// Resolve a target for a deliberate act exactly as a graph leaf would (only what the
@@ -500,6 +504,10 @@ impl<'a> Ev<'a> {
                 St::Run
             }
             Err(why) => {
+                // Refused at the start: a failure like any other, not an unseen retry.
+                if act::refused(self.ctx, self.me.id, id, rev, &desc, &why, self.now) {
+                    self.st.fails = self.st.fails.saturating_add(1);
+                }
                 self.last_fail = format!("{skill}: {why}");
                 St::Fail
             }
@@ -1205,8 +1213,12 @@ impl<'a> Ev<'a> {
         if self.st.last != self.orig.last && cur.last == self.orig.last {
             cur.last = self.st.last.clone();
         }
-        if self.st.fails == 0 && self.orig.fails > 0 && cur.fails == self.orig.fails {
+        // Refused starts counted here add to the row's fails; a deliberation about them
+        // resets it (unless a failure was reported meanwhile).
+        if self.st.fails == 0 && cur.fails == self.orig.fails {
             cur.fails = 0;
+        } else if self.st.fails > self.orig.fails {
+            cur.fails = cur.fails.saturating_add(self.st.fails - self.orig.fails);
         }
         if cur != before {
             ctx.db.mind_state().id().update(cur);

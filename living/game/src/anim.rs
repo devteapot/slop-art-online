@@ -26,7 +26,8 @@
 //! no foot mixes with its opposite. A body steps whenever it moves (above [`STEP_ON`], down to
 //! [`STEP_OFF`]): at a slow walk's rate its feet still keep still, where standing would glide.
 //! Starting from standing, the phase starts at the leading gait's right mid-stance (the planted
-//! foot under the hips, the pose nearest standing) while the gait fades in over [`MOVE_IN`].
+//! foot under the hips, the pose nearest standing) while the gait fades in over [`MOVE_IN_REST`]
+//! (over [`MOVE_IN`] when a stopping body walks on).
 //! Stopping, the phase runs on to the leading gait's next double support
 //! (`Contacts::next_settle`) when that is within [`SETTLE_MAX`] of a cycle, no slower than
 //! reaching it within [`SETTLE_S`]; further than that it stays put, since running on would slide
@@ -63,8 +64,12 @@ pub const STEP_OFF: f32 = 0.06;
 /// A stopping body runs on to double support only when it is this close (in cycles); otherwise
 /// it stands from where it is, rather than slide its planted foot through the rest of a stance.
 pub const SETTLE_MAX: f32 = 0.2;
-/// Gait fades in over this (s) from standing; standing fades in over [`MOVE_OUT`] once settled.
+/// Gait fades in over this (s) when a stopping body walks on, and over [`MOVE_IN_REST`] when it
+/// sets off from standing (the authority starts a body at full speed, and the gait starts from
+/// the pose nearest standing, so a long fade would slide the feet); standing fades in over
+/// [`MOVE_OUT`] once settled.
 pub const MOVE_IN: f32 = 0.2;
+pub const MOVE_IN_REST: f32 = 0.08;
 pub const MOVE_OUT: f32 = 0.25;
 /// A stopping body reaches its settling phase within this (s).
 pub const SETTLE_S: f32 = 0.3;
@@ -150,6 +155,8 @@ pub struct Anim {
     rate: f32,
     /// How much the body is in its gait rather than standing (0–1).
     pub moving: f32,
+    /// It set off from standing and its gait is still fading in ([`MOVE_IN_REST`]).
+    starting: bool,
     /// The phase a stopping body settles at (unwrapped: at or after `phase`), and the least rate
     /// that gets it there within [`SETTLE_S`].
     settle: Option<(f32, f32)>,
@@ -322,6 +329,7 @@ fn build(
             phase: 0.0,
             rate: 0.0,
             moving: 0.0,
+            starting: false,
             settle: None,
             blend: gait::Blend { parts: [(0, 1.0), (0, 0.0)], n: 1, cycle_m: 1.0 },
             stands: vec![(stand, 1.0)],
@@ -513,6 +521,7 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
             // planted foot under the hips, the other one stepping off).
             let lead = b.parts().iter().max_by(|x, y| x.1.total_cmp(&y.1)).map(|&(i, _)| i);
             a.phase = lead.and_then(|i| set.gaits.info(set.gaits.gaits()[i].clip)).map_or(0.0, |i| i.contacts.mid_stance(1));
+            a.starting = true;
         }
         a.settle = None;
         a.blend = b;
@@ -546,7 +555,8 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
             *g -= k;
         }
     }
-    a.moving = approach(a.moving, moving, dt / MOVE_IN, dt / MOVE_OUT);
+    a.starting &= moving > 0.0 && a.moving < 1.0;
+    a.moving = approach(a.moving, moving, dt / if a.starting { MOVE_IN_REST } else { MOVE_IN }, dt / MOVE_OUT);
     // Standing loops crossfade.
     let stand = if set.full.contains_key(m.stand) { m.stand } else { "idle" };
     if !a.stands.iter().any(|s| s.0 == stand) {
@@ -580,6 +590,7 @@ mod tests {
             phase: 0.0,
             rate: 0.0,
             moving: 0.0,
+            starting: false,
             settle: None,
             blend: gait::Blend { parts: [(0, 1.0), (0, 0.0)], n: 1, cycle_m: 1.0 },
             stands: vec![("idle", 1.0)],
@@ -602,9 +613,12 @@ mod tests {
         assert!((a.phase - mid).abs() < 0.02, "starts at the right mid-stance, not {}", a.phase);
         // One cycle covers the blend's metres: at 1.4 m/s the phase advances 1.4 / cycle a second.
         let p = a.phase;
-        step(&mut a, &s, &m, 0.1);
-        assert!((a.phase - p - 0.1 * 1.4 / a.blend.cycle_m).abs() < 1e-5);
+        step(&mut a, &s, &m, 0.05);
+        assert!((a.phase - p - 0.05 * 1.4 / a.blend.cycle_m).abs() < 1e-5);
         assert!(a.moving > 0.0 && a.moving < 1.0, "the gait fades in");
+        // From standing it is in within MOVE_IN_REST: the authority starts a body at full speed.
+        step(&mut a, &s, &m, MOVE_IN_REST - 0.05 + 1e-4);
+        assert_eq!(a.moving, 1.0, "in after {MOVE_IN_REST} s from standing");
     }
 
     #[test]

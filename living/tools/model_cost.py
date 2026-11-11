@@ -51,6 +51,8 @@ import sys
 import threading
 import time
 import urllib.request
+
+from journal_io import restore
 import urllib.error
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -145,7 +147,7 @@ def entries(run):
         with op(f, "rt") as fh:
             for line in fh:
                 try:
-                    e = json.loads(line)
+                    e = restore(json.loads(line), os.path.dirname(f))
                 except Exception:
                     continue
                 if e.get("request"):
@@ -652,7 +654,7 @@ def cmd_sample2(a):
     # Internalize: the system prompt the mind sends today (taken verbatim from a real
     # internalize request) over real consolidation contexts; consolidate_user is the user
     # message of both (lived.rs). Plus the real request itself.
-    real = [json.loads(l) for l in open(a.internalize_journal) if json.loads(l).get("purpose") == "internalize"][0]
+    real = [restore(json.loads(l), os.path.dirname(a.internalize_journal)) for l in open(a.internalize_journal) if json.loads(l).get("purpose") == "internalize"][0]
     isys = real["request"]["messages"][0]["content"]
     for i, e in enumerate(distinct(consol, a.internalize - 1)):
         r = rec(f"internalize-{i:02d}", "internalize", e, built_from="person_consolidate")

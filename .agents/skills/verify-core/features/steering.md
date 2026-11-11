@@ -21,9 +21,14 @@ Run the existing driver through the recorder using [SKILL.md](../SKILL.md). It s
 
 ## Driving long walks
 
-- Offline: `cargo test -p living-rules nav::` (a long wall walked round in legs whose tile search stays within its corridor, unreachable and unwalkable goals refused, a shut gate closing the way and opening it again, roads taken where they are faster, routes identical from a cold, a warm and a pre-built cache).
+- Offline: `cargo test -p living-rules nav::` (a long wall walked round in legs whose tile search stays within its corridor, unreachable and unwalkable goals refused, a shut gate closing the way and opening it again, roads taken where they are faster, routes identical from a cold, a warm and a pre-built cache; since 2026-11-10 ground across water refused at once once warmed, the island walk (264,326)→(904,456) arriving along its kept route where legs searched afresh turned back forever, 40 random reachable island pairs arriving, and a walk ending after 10 legs without headway).
+- A walk to a place keeps its area route in the private `walk_route` table between legs (docs/PATHS.md, "A walk keeps its route"): one row per body walking to a place, gone when it arrives. A walk that gets no nearer for 10 legs ends with "you were getting no nearer: the way kept turning back".
 - Costs on real terrain: `living/tools/path_budget` (its own workspace) on a `path-world.json` (terrain chunk rows, from and to): `legs` walks to each target leg by leg (expansions, time, length against the plain search's optimum), `clicks` replays click-to-move requests, `cache` counts the whole map's regions and areas. `path_budget/fuel` measures fuel per leg under SpacetimeDB 2.14.1's wasmtime configuration.
 - Live, on an island run: `living/tools/walk_times.py --db verify-<run> --residents N --secs S` sends N residents walking to three far settlements each (admin `set_behavior`) and samples every body: walked distance, settlements reached, how many are moving. Run `living/tools/bench.py --db verify-<run>` meanwhile for the tick's cost (its `tick.routes` span is the warm-up). For players, see [verify-player](../../verify-player/features/player-character.md).
+
+## Flight
+
+- Live, on a `stage1-acts` run: `scenes.py flee` holds every graph on `wait`, puts a wolf 6 tiles from a deer and gives the deer the graph `flee` the wolf. It checks that the deer's `steer` row runs from the wolf itself (`goal` 4, `target` the wolf's id), that the distance sampled about every 0.5 s never falls, and that the flight ends about `flee_clear` (a law, 9) tiles farther than it began. A deer told "cornered" is put back on `wait` and the next deer is tried. Before 2026-11-10 the goal ran from a point 9 tiles beyond the deer, so the deer ran at the wolf.
 
 ## Gotchas
 

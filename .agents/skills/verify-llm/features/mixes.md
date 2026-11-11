@@ -5,12 +5,14 @@
 ## Sub-features
 
 - **Purposes:** `think`, `deliberate`, `talk`, `consolidate`, `reorganize`, `internalize`, `judge` (`llm::PURPOSES`). A purpose a mix does not name (nor its parent, nor `*`) goes to the default route.
-- **Effort:** the mix's `@effort`, else the profile's map for the purpose, else for its parent (`reorganize` inherits `consolidate`'s, so an older profile does not send reorganization at GLM's default `max`). `purpose_max_tokens` caps a purpose apart from `max_tokens`.
+- **Effort:** the mix's `@effort`, else the profile's map for the purpose, else for its parent (`reorganize` inherits `consolidate`'s, so an older profile does not send reorganization at GLM's default `max`). A map entry may be `null`: the profile deliberately sends no effort for that purpose (DeepSeek's talk, consolidate and internalize, thinking off).
+- **Effort gaps** (`ModelsFile::effort_gaps`, 2026-11-10): every (profile, purpose) a route can reach with no `@effort` and no map entry is logged at start as `MODEL CONFIG: profile … has no reasoning_effort for …`, through mixes, groups, stages, rotation, species and overflow profiles (for the purposes that overflow), and for `LIVING_PLAYER_MEMORY_MODEL`'s internalize. The project's file has none (a Cargo test).
+- **Output caps:** `purpose_max_tokens` caps a purpose apart from `max_tokens`. Every profile in the project's file caps every purpose (think 1,500, talk and rethink 1,000, deliberate, consolidate and internalize 6,000, reorganize 24,000), so a runaway stops near what the purpose needs.
 - **Stage of attention:** on stage while a human player is in the scene or was part of what the character lived within `LIVING_LOD_STICKY_S` (mind/lod.rs). It is tracked whenever the level of detail is on or any mix is staged; with neither, everyone is on stage.
 - **Startup checks** (`ModelsFile::check`): every route names a profile, `profile@effort` or a mix; mixes name profiles, not mixes; purposes are known; a default mix covers every purpose. A mix with an unkeyed profile is disabled with a warning and passed over like an unkeyed profile.
 - **Journal:** every exchange records `profile`, `effort` (what was sent), `mix` and `attention` (for a staged choice), so purpose × profile × effort can be read back.
 
-Sources: `living/mind/src/llm.rs` (`Choice`, `Pick`, `ModelsFile::check`, `Llm::pick`, `request_body`), `living/mind/src/mind.rs` (`Minds::attention`, `Minds::watched`), `living/mind/src/main.rs` (contact events when staged).
+Sources: `living/mind/src/llm.rs` (`Choice`, `Pick`, `ModelsFile::check`, `ModelsFile::effort_gaps`, `Profile::effort_entry`, `Llm::pick`, `request_body`), `living/mind/src/mind.rs` (`Minds::attention`, `Minds::watched`), `living/mind/src/main.rs` (contact events when staged).
 
 ## Driving it
 

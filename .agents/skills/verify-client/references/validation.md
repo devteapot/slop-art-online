@@ -1,5 +1,9 @@
 # Client protocol validation
 
+## 2026-11-10 client feel (Mac)
+
+Branch `fix-client-feel` (from `6c8d1002`; client-only changes, authority, rules and scripts identical to `origin/main`), shared container (2.14.1), `scoped`: 30 PASS, exit 0 (`client-feel-1110-231833/`, archived under `.local/living/fix-client-feel/`). The game client was driven headless and windowed on scratch island world `verify-feel-1` with the new `key:`, `mouse:` and `chat:` script steps and a TCP proxy that cuts the connection (features/game-client.md): no bodies are drawn while offline, a notice shows, and the client resubscribes and sends the held intent again after reconnecting.
+
 ## 2026-11-10 records private, `my_records` (Mac)
 
 Branch `rules-2` (`eaee6b0`), own container `sao-rules2-stdb` (2.14.1, port 3342), `scoped`: 30 PASS, exit 0 (`client-rules2-4/`). Harness fixes in this change:

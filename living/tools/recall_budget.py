@@ -31,6 +31,8 @@ import random
 import re
 from pathlib import Path
 
+from journal_io import restore
+
 ROOT = Path(__file__).resolve().parents[2]
 SECTIONS = ("# What comes to mind", "# Memories this brings back")
 STOP = set("""about above after again against because before being below between both could
@@ -116,7 +118,7 @@ def cmd_measure(a):
         for f in files:
             for line in (gzip.open(f, "rt") if f.endswith(".gz") else open(f)):
                 try:
-                    e = json.loads(line)
+                    e = restore(json.loads(line), os.path.dirname(f))
                 except ValueError:
                     continue
                 if e.get("purpose") not in ("think", "deliberate", "consolidate") or e.get("error") or not e.get("reply"):
@@ -337,7 +339,7 @@ def cmd_replay(a):
     for run in a.runs:
         for f in sorted(glob.glob(os.path.join(a.journal, run, "*.jsonl.gz"))):
             for line in gzip.open(f, "rt"):
-                e = json.loads(line)
+                e = restore(json.loads(line), os.path.dirname(f))
                 if e.get("purpose") != a.purpose or e.get("error") or len(e["request"]["messages"]) != 2:
                     continue
                 u = e["request"]["messages"][1]["content"]

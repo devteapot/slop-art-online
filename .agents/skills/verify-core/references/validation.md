@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-10 fix-rules-small (dev-box)
+
+Own container `rules-small-stdb` (2.14.1, port 3417), private `CARGO_TARGET_DIR`, head `9115e59` for the sweep. `cargo_checks.py` pass; `scenes.py` tick 6/6, food 4/4 (new), refusal 4/4 (new), seize, sight, needs pass (`core-rs-final`); flee 4/4 (new) and grazing 3/3 with its new `doing` check (`core-rs-final-stage`, stage1-acts); steering 5/5; mechanics 23/23; skirmish and dealings pass; `town.py` 20 of 21, failing "a resident faces someone who comes up behind them", the scene's recorded flake (above, on base worlds too). Not run: lives, infant, lifecycle, wildlife (its 20-minute migration).
+
 ## 2026-11-10 world rules on records (Mac)
 
 Branch `rules-2` (`eaee6b0`, from main `bbf7271`) in a worktree, the worker's own container `sao-rules2-stdb` (2.14.1, port 3342), private `CARGO_TARGET_DIR`. `scenes.py dealings` (new; island): 16 of 16 on `8bc4f14` and again on `eaee6b0` (`core-rules2-deal1/`, `core-rules2-final-dealings/`). Regression: `tick`, `needs`, `seize` 6/6 each (default seed, `core-rules2-final/`), `skirmish` 8/8 (island). `just living-check` exit 0, rules 120 passed. Not run: `town.py`, `lives.py`, `infant`, mechanics. Design and numbers: docs/WORLD_RULES.md.

@@ -1,5 +1,28 @@
 # Validation record (player)
 
+## 2026-11-11 player-told (dev-box): a failed command told to the player
+
+Branch `player-told` (from `4b75812`), the worker's own container `player-told-stdb` (2.14.1, port 3447), default seed, `scoped`. `act::tell` tells a played character's failed graph action as an AI's is told.
+
+- `told.py` (new): 12 of 12 (`player-told-c`). Refused at start: one line "You failed to graze: only deer graze", the AI control's text exactly; the same command again inside the window added none. After starting: one line "You failed to give berries → person: they moved away", the AI control's text exactly. `character.ai` false at both reads (no takeover). The first two attempts failed on the driver: a `follow` whose target was moved far, and a receiver moved 40 m, are dropped by the evaluator without a report for the AI too (`player-told-a`, `-b`).
+- The same script on the unchanged module (`player-told-base`, `act.rs` stashed): 7 of 12, no line in the player's log for either failure while the AI got both. The case detects the defect.
+- `command.py`: 4 of 4 (`player-told-c`). The player-character recipe (`player-told-d`): join once, gift and its `act` feedback, follow, run, walk, stop, say, heard, admin refused; after the move the player's log also holds "You failed to follow → person: you moved" (the follow broken off by taking the controls).
+- verify-core `scenes.py refusal`: 4 of 4 (`core-player-told`).
+- Not run: `combat.py`, `gesture.py`, `host.py`, `appraise.py`, `wake.py`, `deal.py`, `new_skill.py`, `walk_times.py`, the game client binary.
+
+## 2026-11-10 fix-rules-small (dev-box): the client-feel failures triaged
+
+Branch `fix-rules-small`, the worker's own container `rules-small-stdb` (2.14.1, port 3417), island seed, `scoped`; a clean baseline worktree of `origin/main` (`7dab3cb`, authority equal to `6c8d100`) on the same container.
+- **origin/main, unchanged scripts** (`player-rs-base1`): `combat.py --scene all` 20 of 25, the same five as `player-feel-1110-231835`; `gesture.py` **10 of 10**. So the gesture failures of the client-feel run (no player `skill_use` for the wave and nod, waving at oneself accepted) do not reproduce on main's authority built clean; that run's module came from a dirty tree ("commit 5b1e54a4 + uncommitted living/ changes", built in the shared `living/target/verify-island`).
+- **Block, dodge, heal (stale scene):** the attacker was resident 17, Tib Tolley, a child (`stage` 1); the rules refuse its strike ("too young to fight", told since this branch's refused-start change). `dummy()` now takes adults only; the block scene raises the guard toward the attacker where it actually stands.
+- **Fire bolt (stale scene):** the diagonal from the arrival spot (410.5, 258.5, inside a town) crossed a building's wall; with that fixed, residents at their posts stood in the line. The bow and bolt scenes now choose a clear line and follow the body the impact names.
+- **Gestures on this branch (stale scene):** with world creation repeating, the first resident found at a post was always an outlaw (Marta Hale, #253) whose fellow threatened the player; the commotion took her attention. The script now takes the resident at a post nearest the player.
+- **After the fixes** (`player-rs-combat3`, fresh world): `combat.py --scene all` 25 of 25, `gesture.py` 10 of 10, and `--scene bow,bolt` twice more, each striking its dummy. `command.py` (new, a command runs once): 4 of 4 (`player-rs-cmd2`, `player-rs-final`: `{"wait":4}` back to "waiting for you" after 4.2 s). The sweep's player recipe (`player-rs-final`): join, move and stop, say, admin refused.
+
+## 2026-11-10 client feel (Mac): failures on `origin/main`'s authority
+
+Branch `fix-client-feel`, whose `living/authority`, `living/rules` and `living/scripts` equal `origin/main` (`6c8d1002`); shared container (2.14.1), island seed, `scoped`, run `player-feel-1110-231835`. `combat.py --scene all`: 20 of 25. Failed: the fire bolt struck a wall; both block scenes recorded no events (`[]`); the dodge moved 1.95 m with no events; heal refused "you are not hurt" (health 98). `gesture.py`: 7 of 10. Failed: no player `skill_use` row for the accepted wave and nod (the residents' answers and the `doing` rows are there), and waving at oneself was not refused. Not triaged in this change (no authority code changed); the last full passes recorded below predate the merges since `rhai-1`.
+
 ## 2026-11-10 dealings and a skill only the script declares (Mac)
 
 Branch `rules-2` (`eaee6b0`) in a worktree, own container `sao-rules2-stdb` (2.14.1, port 3342), default seed, `scoped`. `deal.py` (new): 13 of 13 (`player-rules2-deal2/`; the first attempt failed one check on the driver, which looked for "proposed to" in lowercase, `-deal1/`). `new_skill.py` (new): 6 of 6 (the first attempt assumed the player's wood count). Not run: `combat.py`, `gesture.py`, `host.py`, `appraise.py`, `wake.py`, the game client binary.

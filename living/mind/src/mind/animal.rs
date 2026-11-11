@@ -264,7 +264,7 @@ impl super::Minds {
         let labels: Vec<String> = options.iter().map(|o| o.label.clone()).collect();
         let user = prompts::animal_choose_user(prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason), &pack_lines, &labels);
         let msgs = [Msg { role: "system", content: prompts::animal_choose_system(&c.kind, &sp.nature) }, Msg { role: "user", content: user }];
-        let reply = self.llm.chat_in_lane(&route, at, "deliberate", &c.name, &msgs, lane).await?;
+        let reply = self.llm.chat_in_lane(&route, at, "deliberate", &c.name, &msgs, lane).await.map_err(super::unavailable)?;
         let v = llm::parse_json(&reply.content).unwrap_or(json!({}));
         let pick = v["pick"].as_u64().or_else(|| v["pick"].as_str().and_then(|s| s.trim().parse().ok())).map(|p| p as usize).filter(|p| *p < options.len());
         let option = pick.map(|p| options[p].clone()).unwrap_or_else(|| options[0].clone());

@@ -467,7 +467,7 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     let arrive = island::arrival(ctx);
     let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
     let id = seed::spawn_creature(ctx, &name, "person", ctx.sender(), false, at, now);
-    mind::set_graph(ctx, id, r#"{"wait":30}"#, "waiting for you", "human", now)?;
+    mind::set_graph(ctx, id, WAITING_GRAPH, WAITING, "human", now)?;
     // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
     seed::newcomer_kit(ctx, id, now);
     presence::start(ctx, id, ctx.sender(), now);
@@ -517,8 +517,26 @@ pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
             return Ok(());
         }
     }
-    let json = format!(r#"{{"seq":[{},{{"wait":60}}]}}"#, g.to_json());
-    mind::set_graph(ctx, me.id, &json, "your command", "human", common::now_ms(ctx)).map(|_| ())
+    // It runs once: when it ends, done or failed, the character waits for its person again
+    // (`command_done`).
+    mind::set_graph(ctx, me.id, &g.to_json(), COMMAND, "human", common::now_ms(ctx)).map(|_| ())
+}
+
+/// A played character's plan while it waits for its person, and the graph it waits with.
+pub(crate) const WAITING: &str = "waiting for you";
+pub(crate) const WAITING_GRAPH: &str = r#"{"wait":30}"#;
+/// The plan of a command its person gave with `human_act`.
+const COMMAND: &str = "your command";
+
+/// A played character's graph has run to its end (done or failed). A command from its person
+/// is over: the character waits for them again, instead of starting the command over.
+pub(crate) fn command_done(ctx: &ReducerContext, id: u32, now: u64) {
+    use crate::tables::brain as _;
+    if ctx.db.brain().id().find(id).is_some_and(|b| b.plan == COMMAND && b.source == "human") {
+        if let Err(e) = mind::set_graph(ctx, id, WAITING_GRAPH, WAITING, "human", now) {
+            log::warn!("character {id}: could not go back to waiting: {e}");
+        }
+    }
 }
 
 /// Move in a direction (screen axes: +x east, +y south; any length) or stop (`0, 0`), at a

@@ -80,15 +80,18 @@ def wait_for(fn, secs=8.0):
     return fn()
 
 
-def resident(p):
-    """A resident standing at a post now (keeping a stall, a workshop, a gate)."""
+def resident(p, near):
+    """The resident standing at a post now (keeping a stall, a workshop, a gate) nearest `near`,
+    the player's arrival point inside a town. Not just the first found: since world creation
+    repeats (2026-11-10) that was always the same outlaw keeping the road, whose fellows
+    threaten a stranger who comes near, and the commotion took its attention from the greeting."""
     acts = {a["id"]: a for a in p.sql("SELECT id, skill, phase FROM activity")}
     ppl = {c["id"]: c for c in p.sql("SELECT id, name, stage, alive FROM character WHERE kind = 'person'") if c["alive"] and c["stage"] >= 2}
-    for b in p.sql("SELECT id, x, y, next_ms FROM body"):
-        a = acts.get(b["id"])
-        if b["id"] in ppl and a and a["skill"] == "keep" and a["phase"] == 1 and b["next_ms"] > 10**18:
-            return {"id": b["id"], "name": ppl[b["id"]]["name"], "at": (b["x"], b["y"])}
-    return None
+    posts = [b for b in p.sql("SELECT id, x, y, next_ms FROM body") if b["id"] in ppl and (a := acts.get(b["id"])) and a["skill"] == "keep" and a["phase"] == 1 and b["next_ms"] > 10**18]
+    if not posts:
+        return None
+    b = min(posts, key=lambda b: math.dist((b["x"], b["y"]), near))
+    return {"id": b["id"], "name": ppl[b["id"]]["name"], "at": (b["x"], b["y"])}
 
 
 def main():
@@ -107,7 +110,8 @@ def main():
         mine = [c for c in p.sql("SELECT id, alive FROM my_characters", "player") if c["alive"]]
     me = mine[0]["id"]
     my_name = p.sql(f"SELECT name FROM character WHERE id = {me}")[0]["name"]
-    r = wait_for(lambda: resident(p), 60)
+    here = p.sql(f"SELECT x, y FROM body WHERE id = {me}")[0]
+    r = wait_for(lambda: resident(p, (here["x"], here["y"])), 60)
     if not r:
         check(p, "a resident is standing at a post", False, "none found within 60 s")
         return finish(p)

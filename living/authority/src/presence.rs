@@ -173,7 +173,7 @@ fn hand_back(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     if let Some(a) = ctx.db.activity().id().find(p.id) {
         crate::act::cancel(ctx, a, now, None);
     }
-    if let Err(e) = crate::mind::set_graph(ctx, p.id, r#"{"wait":30}"#, "waiting for you", "human", now) {
+    if let Err(e) = crate::mind::set_graph(ctx, p.id, crate::WAITING_GRAPH, crate::WAITING, "human", now) {
         log::warn!("handback of {}: {e}", p.id);
     }
     crate::combat::invalidate_humans();

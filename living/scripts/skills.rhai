@@ -24,6 +24,8 @@ fn laws() {
         alone_within: 6.0,
         // A body within this many radians of facing something already faces it.
         face_slack: 0.35,
+        // A flight runs until it is this many tiles farther from the threat than it began.
+        flee_clear: 9.0,
         // Seconds a played character stands with no connection of its person before the
         // world's minds take it over (it keeps living; the person takes it back on return).
         takeover_s: 30.0,
@@ -1507,5 +1509,7 @@ fn craft_shows() { #{ look: "work" } }
 fn read_shows() { #{ look: "work" } }
 fn tend_shows() { #{ look: "work" } }
 fn eat_shows() { #{ look: "eat" } }
+// Grazing looks like eating to a client that does not know it by name.
+fn graze_shows() { #{ look: "eat" } }
 fn sleep_shows() { #{ look: "sleep" } }
 fn rest_shows() { #{ look: "rest" } }
