@@ -24,6 +24,8 @@ The fake rule matches a deliberate request containing "demanded 1 stone of you",
 
 - The rules' `ask` goes through the authority's thinking cadence (`perceive::request`: a person who deliberated within the species' `think_min_s` gets no new request unless it is urgent), as an offer's does. Right after the mind service starts, the ask is usually dropped. The case then requests the next thought itself (`asked_by_the_rules` in `result.json` says which), and that thought shows the demand among the character's dealings.
 - The fake rule matches the dealing's own words, including the quoted reason between "stone" and "of you".
+- Both adults are held (`wait`) before the demander is placed, as in `answers`: on the default world the first adult is a guard who walks to the north gate at the start, and an unheld demander wanders to the berry bushes while the mind service starts. A `demand` refused with "no #1 in sight" means the demander could not see the other when it acted (its experiences are kept as `demander-experiences.json`).
+- Beside a guard standing in a gateway, `place_near`'s nearest free tile is diagonal, across the wall's end. Sight across one wall's corner is clear both ways since fix-dealings (2026-11-11, `Map::sight_walk`); before, the demander there could not see the guard although the guard saw it.
 
 - `record` and `record_party` are subscribed whole by the mind service (as the owner, like `trade_offer`); a character is shown only the records it or its community is a party to.
 - Regard shows in the same section on an island world (its seeded stances); the default world has none.
