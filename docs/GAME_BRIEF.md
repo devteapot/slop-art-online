@@ -845,7 +845,7 @@ Branch `feel-4`. Evidence is in `.local/living/feel-4/` (git-ignored). Client on
 
 Branches `sight-edge` and `sight-2`. Evidence, with contact sheets, is in `.local/living/sight-edge/` and `.local/living/sight-2/` (git-ignored). Client only: no authority, rules or bindings changes. The client now also subscribes to the public `gate` table.
 
-The screen drew ground and buildings to about 180 m, while people came and went at the rules' sight. **F2** cycles three ways of showing where your character's sight ends. A note names the new mode and the key ("Edge of sight: not seen now · F2 changes how it is shown"). The same note shows for about 7 s on arrival, so the key can be found; after that it shows only when the mode changes. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting mode, for headless captures.
+The screen drew ground and buildings to about 180 m, while people came and went at the rules' sight. **F2** cycles three ways of showing where your character's sight ends. A note names the new mode and the key ("Edge of sight: not seen now · F2 changes how it is shown"). The same note shows for about 6 s on arrival, so the key can be found: since talk-1 it is on the line of first-time hints under the target frame, with the talk hint (`ui/tips.rs`). After that it shows only when the mode changes, over the skill bar. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting mode, for headless captures.
 
 - **Not seen now** (the default since `sight-2`): what your character doesn't see now is drawn greyer, flatter (toward the fog's colour, so night stays dark), dimmer and a little cooler. That covers:
   - ground, buildings and scenery beyond your sight, over a soft band from 1.5 m inside the radius to 3 m beyond it;
@@ -907,7 +907,7 @@ Branch `talk-1`, after play-test 2. In that session the residents answered every
   - Animals, and people hostile to you, are struck by a tap as before.
   - With the box open, a tap on a peaceful person addresses them instead.
   - `combat::hostile_to_me` is the HUD's hostile stance, now shared.
-- **First-time hint** (`ui/tips.rs`): "Enter — talk to the person you point at", under the target frame, for 6 s once the first load lifts, and again the first time someone speaks to you. `Tips::once` is a shared line, so other first-time hints (F2, F3) can stack there.
+- **First-time hint** (`ui/tips.rs`): "Enter — talk to the person you point at", under the target frame, for 6 s once the first load lifts, and again the first time someone speaks to you. `Tips::once` is a shared line: sight-2's F2 arrival note moved onto it at the merge, and others (F3) can stack there.
 - **F1 controls line:** it said "right click: walk to" and "R: turn to where you face". It now lists the skill bar's keys.
 - **F at remains offered "take wound tending"** and the authority refused it three times. The client checks `take` as if the remains held whatever is asked, because their contents are not perceived, and its candidates included the techniques the player knows.
   - Techniques are now candidates only toward a person (teach) or oneself.

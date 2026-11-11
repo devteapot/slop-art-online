@@ -101,8 +101,6 @@ const ASK_S: f32 = 0.25;
 const FAR_MARGIN: f32 = 10.0;
 /// Limited view: how far toward the fog what lies behind something within sight goes.
 const SHADOW_FOG: f32 = 0.8;
-/// The arrival note stays this much longer than other notes (s).
-const NOTE_EXTRA_S: f64 = 3.0;
 
 #[derive(Resource)]
 pub struct SightEdge {
@@ -185,6 +183,7 @@ pub fn update(
     clock: Res<crate::daylight::Clock>,
     loading: Option<Res<crate::loading::Loading>>,
     mut verbs: Option<ResMut<crate::verbs::Verbs>>,
+    mut tips: Option<ResMut<crate::ui::tips::Tips>>,
     time: Res<Time>,
 ) {
     if keys.just_pressed(KeyCode::F2) {
@@ -213,12 +212,12 @@ pub fn update(
     if let Some(w) = edge.want {
         edge.radius += (w - edge.radius) * (1.0 - (-dt * EASE).exp());
     }
-    // Once I have arrived (my sight known, the first-load cover gone): the note, a little longer
-    // than other notes.
+    // Once I have arrived (my sight known, the first-load cover gone): the note, on the line of
+    // first-time hints (`ui/tips.rs`), with the talk hint.
     let arrived = edge.want.is_some() && hud.as_deref().is_some_and(|h| h.death.is_none()) && crate::loading::Loading::clear(loading.as_deref());
     if !edge.noted && arrived {
-        if let Some(v) = verbs.as_deref_mut() {
-            v.toasts.push(crate::verbs::Toast { text: edge.mode.note(), ok: None, at: time.elapsed_secs_f64() + NOTE_EXTRA_S });
+        if let Some(t) = tips.as_deref_mut() {
+            t.once(&edge.mode.note(), time.elapsed_secs_f64());
             edge.noted = true;
             info!("sight edge: arrival note: {}", edge.mode.note());
         }
