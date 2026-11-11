@@ -11,7 +11,9 @@
       "pay off my favour to Bramwell Tallow",
       "keep the fish road clear of smugglers and wolves",
       "see the seawall built before another surge",
-      "keep what I know about Kai Ostrander to myself"
+      "keep what I know about Kai Ostrander to myself",
+      "learn to read the sky and the water well enough to know a storm two days out",
+      "take Dory out on the shallows in a borrowed boat, when she's ready"
     ],
     "mood": "watchful and a little tired",
     "traits": {
@@ -168,7 +170,13 @@
         "why": "Bramwell's favour hangs over me and I mean to clear it."
       }
     ],
-    "secret": "He knows Kai Ostrander is alive at Coldwell with the outlaws, from a letter Ilse Ostrander showed him, and has told no one."
+    "secret": "He knows Kai Ostrander is alive at Coldwell with the outlaws, from a letter Ilse Ostrander showed him, and has told no one.",
+    "pastimes": [
+      "walking the tide steps at first light, counting boats home",
+      "mending his own boots by the fire while Nia closes the stall",
+      "sitting with Wick Gull over a cup at the back of the house"
+    ],
+    "calling": "I keep the night road, and I mean to keep it right — no smuggler slips past me and no wolf takes a runner."
   },
   "Nia Brine": {
     "narrative": "I keep a stall of dried fish and lamp oil by the tide steps and sell to the night crews who come in cold and hungry. My mother sold fish on this quay before me and I learned the trade at her elbow. Wick walks the road at night and I mind the stall and Dory, and I've watched the lantern keepers light up late more nights than I can count. The drowned deserve better than that, and I say so to anyone buying oil.",
@@ -182,7 +190,9 @@
       "see the tide lanterns lit on time again",
       "keep the stall's marks ahead of the winter",
       "get Dory past her fear of the water",
-      "trade well with Perrin Tallow and the night crews"
+      "trade well with Perrin Tallow and the night crews",
+      "save enough marks to have the stall's awning replaced before winter",
+      "teach Dory the lantern song properly, word for word"
     ],
     "mood": "brisk and quietly angry",
     "traits": {
@@ -345,7 +355,13 @@
         "why": "They sell us stone at a price that keeps the wall unbuilt."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending nets at the bench her mother left her",
+      "singing the lantern song low while she stacks the oil jars",
+      "gossiping with Nia Gull over the fish crates"
+    ],
+    "calling": "I sell fish and oil to the crews who come in cold, and I'd sooner do that than anything else on this quay."
   },
   "Dory Brine": {
     "narrative": "I sit under the stall with the dried fish hanging over me and the oil jars I'm not to touch. The water by the steps is dark and it moves and I don't like it. When the lanterns come on I watch them from the doorway, and Dory Gull and me play at the back of the stall till Mama calls.",
@@ -355,7 +371,9 @@
     ],
     "goals": [
       "stay by Mama",
-      "play with Dory Gull"
+      "play with Dory Gull",
+      "play with Dory Gull every day",
+      "be brave enough to touch the water at the steps"
     ],
     "mood": "clingy and a little fearful",
     "traits": {
@@ -414,6 +432,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "playing fish-sellers with Dory Gull behind the stall",
+      "stacking the empty oil jars into towers",
+      "watching the lanterns come on from the doorway"
+    ],
+    "calling": "When I'm big I want to light the lanterns like the keepers do."
   }
 }

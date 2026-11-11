@@ -10,7 +10,9 @@
     "goals": [
       "keep the saved beams for the hollow's own building",
       "finish the new garden gates before the frost",
-      "teach Fennel the difference between fallen and living wood"
+      "teach Fennel the difference between fallen and living wood",
+      "master a tight joint that needs no peg, the way my father's father made them",
+      "build a proper drying rack so the beams season true before winter"
     ],
     "mood": "stubborn and a little worried",
     "traits": {
@@ -146,7 +148,13 @@
         "why": "A well-made gate or bench outlasts any argument."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sorting and stacking the woodpile by grain and season",
+      "whittling small figures from offcuts at the bench",
+      "walking the old forest paths to see what the wind has brought down"
+    ],
+    "calling": "I make what the hollow needs from what the forest lets fall — benches, gates, beams, all of it."
   },
   "Marjoram Underbank": {
     "narrative": "I bake the hollow's bread and keep the herb garden by the oven. The common table is my charge, and I feed whoever comes to it, whether they come for the bread or for the talk. Yarrow is stubborn about the wood, but he is a good man, and Fennel is growing up strong. I worry about the winter store, but we have always managed.",
@@ -159,7 +167,9 @@
     "goals": [
       "keep the common table supplied through the winter",
       "dry enough herbs for the salves and the cooking",
-      "see Fennel learn a trade he loves"
+      "see Fennel learn a trade he loves",
+      "learn to bake a loaf that keeps a full week without going hard",
+      "dry and store enough herbs that no one in the hollow goes without a salve this winter"
     ],
     "mood": "warm but watchful",
     "traits": {
@@ -287,7 +297,13 @@
         "why": "The herb garden by the oven keeps us well through the coughs of winter."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "tending the herb garden by the oven at first light",
+      "trading gossip and news at the common table over a loaf",
+      "singing the old bread songs while the oven heats"
+    ],
+    "calling": "I bake the hollow's bread and keep the common table — feeding people is the work I was made for."
   },
   "Fennel Underbank": {
     "narrative": "I help in the garden and follow my father about the woodpile. I want to learn the pedlar's road from Thistle Mossfoot and see the places he talks about. The fallen wood is ours, my father says, and I believe him.",
@@ -299,7 +315,9 @@
     "goals": [
       "learn the names of the herbs from mother",
       "watch father work the wood",
-      "ask Thistle Mossfoot about the road"
+      "ask Thistle Mossfoot about the road",
+      "learn the name and use of every herb in mother's garden",
+      "be allowed to stack the small wood by himself without being told twice"
     ],
     "mood": "curious and eager",
     "traits": {
@@ -384,6 +402,12 @@
         "why": "Thistle says the road is long and full of stories."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "following his father around the woodpile and handing up offcuts",
+      "playing hide-and-seek in the garden rows with Tansy Mossfoot",
+      "listening to Thistle Mossfoot's road stories with his chin in his hands"
+    ],
+    "calling": "I want to walk the pedlar's road and carry things between places, like Thistle does."
   }
 }

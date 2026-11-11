@@ -11,7 +11,9 @@
       "keep the slow pits burning through the winter",
       "see the east-road trade with Thistle Mossfoot stay sweet",
       "keep Pell and Sena safe from the wolves",
-      "be paid what the quay stalls owe for charcoal"
+      "be paid what the quay stalls owe for charcoal",
+      "teach Pell the whole of the burn, from stacking to banking, so the pits pass to him",
+      "carve a proper tally-board for the shed so no debt can be lost or denied"
     ],
     "mood": "steady, a little grim since the wolves came down",
     "traits": {
@@ -159,7 +161,13 @@
         "why": "What Sena says to the quay builders is her business; I keep to the pits and the tally."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sitting by the slow pits at dusk watching the smoke drift east",
+      "whittling handles and wedges from offcut wood by the door",
+      "sharing a cup at the Hollis hearth after a burn"
+    ],
+    "calling": "I am a charcoal burner, and I will die a charcoal burner; the slow pits are the only work I have ever wanted."
   },
   "Sena Tarn": {
     "narrative": "I fell and trim beside Cael and keep the tally of every load that goes down the wood road, and I have a tongue when the tally is questioned. I told the quay folk plain that the seawall will never be built and the stone price is a swindle, and I stand by it, but I do not want the wood road's loads turned back for my saying so. I have quietly offered Thistle Mossfoot a load of charcoal to smooth the smoke complaint, and I have not told Cael the whole of it.",
@@ -173,7 +181,9 @@
       "keep the quay stalls buying Sootwood charcoal and baskets",
       "mend things with Thistle Mossfoot before the east road sours",
       "see the seawall stone come from the ridge and not from Kettlebridge",
-      "keep Pell from the forest edge until the wolves are gone"
+      "keep Pell from the forest edge until the wolves are gone",
+      "learn to write a proper letter, so the quay stalls hear from her directly and not through a carrier",
+      "see the wood road kept clear and safe enough that Pell can walk it alone"
     ],
     "mood": "brisk and a little worried about the road",
     "traits": {
@@ -318,7 +328,13 @@
         "why": "A load unrecorded is a load unpaid; I keep the tally and I do not let it slip."
       }
     ],
-    "secret": "I have quietly promised Thistle Mossfoot a load of charcoal to smooth the smoke complaint, and I have not told Cael the whole of it."
+    "secret": "I have quietly promised Thistle Mossfoot a load of charcoal to smooth the smoke complaint, and I have not told Cael the whole of it.",
+    "pastimes": [
+      "walking the wood road to the Hollis door for a morning's talk",
+      "keeping the tally-book in her own hand and reading it over of an evening",
+      "tending the little herb bed behind the shed"
+    ],
+    "calling": "I trim and keep the tally, and I would have the loads go out fair and come back paid; that is work worth doing well."
   },
   "Pell Tarn": {
     "narrative": "I stack the pits with Da and carry water and kindling, and when the work is done I watch the smoke go up and think about the quay boats. I want to see the tide lanterns at Lanternquay more than anything. I say I am not afraid of the wolves, but I do not go to the forest edge any more, and at night I listen for them.",
@@ -330,7 +346,9 @@
     "goals": [
       "see the tide lanterns at Lanternquay",
       "crew on a quay boat one day",
-      "not let anyone see he is afraid of the wolves"
+      "not let anyone see he is afraid of the wolves",
+      "see the tide lanterns at Lanternquay with his own eyes",
+      "learn to swim before he ever sets foot on a boat"
     ],
     "mood": "restless and a little frightened underneath",
     "traits": {
@@ -420,6 +438,12 @@
         "why": "I say so, and I mean to make it true, but I keep by the stacks for now."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "watching the smoke rise from the pits and naming shapes in it",
+      "playing at boats with Durrow and Tace in the Hollis yard",
+      "listening to Thistle Mossfoot's tales of the quay and the pedlar roads"
+    ],
+    "calling": "One day I want to crew a quay boat; for now I stack the pits and carry water for Da."
   }
 }

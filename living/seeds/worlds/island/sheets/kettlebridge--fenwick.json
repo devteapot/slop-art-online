@@ -11,7 +11,9 @@
       "get Dele barred from works contracts",
       "collect what Josiah Crane owes him for the brick",
       "keep the crate work coming in",
-      "see Lottie settled and Perry apprenticed well"
+      "see Lottie settled and Perry apprenticed well",
+      "save enough marks to take on an apprentice of his own one day",
+      "build a proper brick hearth and chimney for Mabel's kitchen"
     ],
     "mood": "sour and put-upon",
     "traits": {
@@ -168,7 +170,13 @@
         "why": "Whatever the Council says, Mabel and the children eat first."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "checking the seams of a crate he has just finished, running his thumb along the joints",
+      "sitting in the Council yard of an evening with the other builders, arguing rates over a mug",
+      "walking the fish road to look at the seawall crates stacked and waiting"
+    ],
+    "calling": "I build crates and seawalls that hold, and I want to be paid a builder's rate for a builder's work."
   },
   "Mabel Fenwick": {
     "narrative": "I keep the ironware stall in the square and I know the price of a cracked pot better than most. Gideon is a good builder and a poor diplomat, and he has made an enemy of Dele Oyelaran in front of the whole Council yard. I still take Ife's marks over the stall, because marks are marks and the terrace has to eat. I wish my husband would hold his tongue, but I will not say so where the neighbours can hear.",
@@ -182,7 +190,9 @@
       "keep the stall's trade with the terrace and the foundry both",
       "see Lottie learn the trade properly",
       "keep Gideon out of trouble with the Council",
-      "pay off the stall fee she owes to no one, but keep the box full"
+      "pay off the stall fee she owes to no one, but keep the box full",
+      "have a second stall or a lock-up store for the winter stock",
+      "teach Lottie to keep the stall's books as well as its pots"
     ],
     "mood": "watchful and tired",
     "traits": {
@@ -324,7 +334,13 @@
         "why": "Hester Crane pays on the day and needs ironware. That is a trade worth keeping sweet."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "turning a chipped pot in her hands and judging what it will fetch",
+      "mending the stall's awning on a quiet afternoon",
+      "sharing a pot of tea with Ife Oyelaran after the stall closes"
+    ],
+    "calling": "I keep the ironware stall, and I can price a whole cartload by eye before the carter has finished unloading."
   },
   "Lottie Fenwick": {
     "narrative": "I mind the stall when Mother is cooking, and I know a cracked pot when I see one. Bisi Oyelaran is my friend and she is quick with numbers, and I do not care what Father says about her father. I want to keep the stall one day, and I want to see the quay at Lanternquay before I am old.",
@@ -338,7 +354,9 @@
       "keep the stall's trade good",
       "stay friends with Bisi despite the fathers",
       "see Lanternquay and the tide lanterns",
-      "learn to price a whole stall's stock by eye"
+      "learn to price a whole stall's stock by eye",
+      "save for the walk to Lanternquay and back, and see the tide lanterns lit",
+      "learn to mend a cracked pot so the mend does not show"
     ],
     "mood": "cheerful and a little defiant",
     "traits": {
@@ -462,7 +480,13 @@
         "why": "A trader who has to count on her fingers is a trader who gets cheated. Mother taught me better."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "pricing the stall's stock in her head and checking herself against Mother's tally",
+      "walking down to the foundry gate to meet Bisi when her shift ends",
+      "sitting on the clock tower steps to watch the square"
+    ],
+    "calling": "I want to keep the stall one day, and to know every pot and pan in it better than anyone."
   },
   "Perry Fenwick": {
     "narrative": "I climb the clock tower steps when nobody is looking, and I am not afraid of the clock striking. I want to see the top of the tower one day. Father is angry a lot and Mother is always at the stall, and Lottie tells me I will fall, but I will not.",
@@ -474,7 +498,9 @@
     "goals": [
       "reach the top of the clock tower",
       "see the harbour from the tower",
-      "not get caught by Mother"
+      "not get caught by Mother",
+      "reach the top of the clock tower and see the harbour from it",
+      "get Barnaby Quill to show him the inside of the clock"
     ],
     "mood": "bold and restless",
     "traits": {
@@ -552,6 +578,12 @@
         "why": "Father is angry and Mother worries, but I am not afraid of the clock or the steps."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "climbing the clock tower steps as high as he dares",
+      "playing at builders with offcut bricks and a wooden mallet",
+      "watching Barnaby Quill wind the clock"
+    ],
+    "calling": "I want to climb high and see far, and one day I will know how the clock works."
   }
 }

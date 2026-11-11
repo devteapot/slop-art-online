@@ -11,7 +11,9 @@
       "Get back my snares or their value from the Coldwell people",
       "Prove Hob Ferrier sold my hides at Ferncross",
       "Keep the wolves and the outlaws off the Ashby fields",
-      "See Wren safe and taught to shoot straight"
+      "See Wren safe and taught to shoot straight",
+      "Teach Wren to draw and loose a bow true enough to trust her at the edge",
+      "Make a bow of his own from a stave he's been seasoning since last winter"
     ],
     "mood": "simmering, watchful",
     "traits": {
@@ -154,7 +156,13 @@
         "why": "A girl who knows the paths and the bow will never be at a stranger's mercy."
       }
     ],
-    "secret": "I have gone once to the Coldwell boundary at dusk with my bow, meaning to make Ned Hale speak to me, and came away without knocking. I have told no one, not even Osbert."
+    "secret": "I have gone once to the Coldwell boundary at dusk with my bow, meaning to make Ned Hale speak to me, and came away without knocking. I have told no one, not even Osbert.",
+    "pastimes": [
+      "Walking his snare lines at first light, reading the ground for tracks",
+      "Shooting at a mark on the field edge until his arm aches",
+      "Sitting at the Ashby hearth mending snares and bowstrings while Wren watches"
+    ],
+    "calling": "I keep the wood edge and the snare lines on it, and I'd sooner be out on that edge than anywhere under a roof."
   },
   "Wren Ashby": {
     "narrative": "I live in the Ashby house with my father and my uncle's family, and I know the hens by name and the way to the wood edge by heart. Father lets me carry his spare bowstring and sometimes his snares, and I am learning to set them without tangling. Nell Tolley is my friend though she is afraid of the woods, and I tell her there is nothing in them worse than a wolf, and Father can shoot a wolf.",
@@ -166,7 +174,9 @@
     "goals": [
       "Learn to set a snare as well as Father does",
       "Make Nell Tolley not afraid of the woods",
-      "See the snare line that was cut and find out who did it"
+      "See the snare line that was cut and find out who did it",
+      "Set a snare all by herself that catches something",
+      "Get Nell Tolley to walk to the wood edge with her, just once"
     ],
     "mood": "curious and a little proud",
     "traits": {
@@ -255,6 +265,12 @@
         "value": 0.5,
         "why": "Aunt Edith says the hens pay for the bread."
       }
-    ]
+    ],
+    "pastimes": [
+      "Feeding and naming the hens, and chasing them back into the coop",
+      "Practising with a little bow Father cut for her at a straw mark",
+      "Following the wood edge path as far as she dares before turning back"
+    ],
+    "calling": "I want to be a wood-edge keeper like Father, and know every snare line by heart, and never be afraid out there."
   }
 }

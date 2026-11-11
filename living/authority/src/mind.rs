@@ -24,6 +24,9 @@ pub struct PersonaIn {
     pub goals: Vec<String>,
     pub traits: String,
     pub mood: String,
+    /// Empty (no pastimes and no calling): the ones it had are kept.
+    pub pastimes: Vec<String>,
+    pub calling: String,
 }
 
 #[derive(SpacetimeType, Clone, Debug)]
@@ -509,7 +512,13 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
         }
     }
     if let Some(p) = update.persona {
-        let version = ctx.db.persona().id().find(actor).map(|p| p.version + 1).unwrap_or(1);
+        let old = ctx.db.persona().id().find(actor);
+        let version = old.as_ref().map(|p| p.version + 1).unwrap_or(1);
+        let keep = p.pastimes.is_empty() && p.calling.trim().is_empty();
+        let (pastimes, calling) = match (&old, keep) {
+            (Some(o), true) => (o.pastimes.clone(), o.calling.clone()),
+            _ => (p.pastimes.iter().take(6).map(|v| clip(v, 120)).collect(), clip(&p.calling, 200)),
+        };
         let row = Persona {
             id: actor,
             narrative: clip(&p.narrative, 2_000),
@@ -519,6 +528,8 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             mood: clip(&p.mood, 120),
             version,
             updated_ms: now,
+            pastimes,
+            calling,
         };
         common::invalidate_traits(ctx, actor);
         if ctx.db.persona().id().find(actor).is_some() {

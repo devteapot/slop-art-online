@@ -170,6 +170,8 @@ async fn main() -> Result<()> {
                     "SELECT * FROM my_deliberations",
                     // Whether the people who play characters are there (private; the owner reads it).
                     "SELECT * FROM presence",
+                    // People's daily rhythms (private, one small row each, written at birth).
+                    "SELECT * FROM rhythm",
                     // Who told whom their name (private): prompts name people only when known.
                     "SELECT * FROM acquaintance",
                 ].map(String::from)).collect::<Vec<String>>());

@@ -88,6 +88,7 @@ What one resident starts with. Every item is a world fact written once, at world
 | Whose name they know | kin and one's own community; **`acquaintance` rows** for each authored relation across communities unless the sheet says `knows_name: false` | perception (names in percepts), minds (`known_as`) |
 | A short past | sheet `memories` (in `background`) | the mind, installed as formative memories |
 | Stances, wants and fears | sheet `stances`, `values`, `goals`, `mood` | the mind |
+| Pastimes and the work they love | sheet `pastimes`, `calling` → `persona` | the mind's prompts |
 | Their daily rhythm | `residents[].rhythm` (or drawn) → `rhythm` | graphs (`bedtime`, `evening`), the new day, the mind's prompts |
 | Appetite and hardiness | genes (`appetite`, `hardiness`), drawn per person | the needs law |
 | A secret | the seed file only (`LIVING_SEED`); never a table | the character's own prompts |
@@ -408,6 +409,16 @@ What replaced them (general rules and seeded data; no role types, no scripts):
 - **Tolerance as genes.** `appetite` (how fast hunger grows) and `hardiness` (what cold and wet take) are constitution genes, ±12 % typical, inherited like the others; the needs law reads them (`appetite_gene`, `hardiness_gene`). One can tell one's own: "always hungry", "quick to feel the cold".
 - **A new day at one's own rising.** The dawn broadcast is gone. A person's new day begins within three hours of its own `rise_h`, once a game day: a "A new day begins for you" feeling and a deliberation request, which goes through the thinking throttle like any other (not urgent).
 - **What minds see.** A person's prompt says when they usually rise and go to bed and how long their evening is (`daily_life` in `mind.rs`).
+
+## Wants beyond survival
+
+Every seeded person should have wants the mind sees and pursues: ambitions, people they care about, pastimes and a trade they like. Before this, the island's 277 sheets carried values, goals and relations, but their goals were mostly the world's tensions (the gate-due, debts, quarrels) and nothing said what anyone enjoyed. The persona the prompts show (`persona_text`) carried narrative, values, goals, traits and mood, and nothing of one's work or days.
+
+- **Seed format.** A sheet may say `pastimes` (2–3 things they enjoy for their own sake) and `calling` (the work they love, or long for instead). Both go into the persona when the sheet is installed. A model-written identity (`identity_system`, a resident without a sheet, `facts.rs`) and a consolidation's identity rewrite may write them too; an identity that leaves them out keeps the ones it had.
+- **Persona.** `persona.pastimes` and `persona.calling` (authority table and `PersonaIn`; bindings regenerated). Prompts show "You enjoy: …" and "The work you love: …", and the world's facts about one's daily life: "Your work: <occupation> in <town>" and one's rhythm.
+- **Generator.** `author_world.py`'s sheet prompt asks for goals that mix ambitions, care for particular people and wants of their own beside the situations, and for pastimes and a calling; `check_sheet` keeps them.
+- **Filled for the island.** `living/tools/fill_wants.py island` asks a model, one household at a time, for each member's pastimes, calling and one or two goals of their own, from the sheet as it stands, and writes them into the sheets and the compiled seed. 277 of 277 residents; DeepSeek V4.1 Flash, 92 calls, 356,480 prompt tokens (273,408 cached), 36,821 completion, logged in `authoring-log.jsonl` (purpose `wants`). Examples: Aldric Marrow, the Reeve, plays dice with old Wat Fenner at the inn and wants to teach Maud the full ledger; Wenna Marrow spins on her mother's old wheel and would have "a loom of my own and cloth that folk buy for its weave, not for my name"; Fennel Underbank, a child, wants to walk the pedlar's road like Thistle.
+- **The format stays general** for the new small city: `pastimes`, `calling`, `rhythm` and the evening habits are seed fields any world may use; nothing in the engine knows a pastime.
 
 ## Open questions for the user
 

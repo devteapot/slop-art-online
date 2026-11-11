@@ -12,7 +12,9 @@
       "save enough marks for a net of my own",
       "prove to Bramwell Tallow I am worth his daughter",
       "clear what I owe Ilse Ostrander for a winter's suppers",
-      "see the seawall begun"
+      "see the seawall begun",
+      "learn the water off the north cape so well he could find his way home in fog",
+      "save enough for a net of his own before the next winter"
     ],
     "mood": "hopeful and short of marks",
     "traits": {
@@ -166,7 +168,13 @@
         "why": "Ostrander Cormorant knows the deep water and I mean to learn it off him."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and re-mending his net at the tide steps, checking every knot",
+      "sitting on the quay wall at dusk watching the boats come in",
+      "sharing a jug at the inn with Jory Pike and swapping tide talk"
+    ],
+    "calling": "I mean to fish my own boat and set my own net, not another man's, and put by every tide until I can."
   },
   "Sella Mackerel": {
     "narrative": "I cook at the fish market and keep a stall of fried fish and bread, and I mean to have that stall rebuilt in stone before the next surge takes it. My mother Sella Pike the elder has fed the quay on credit for years and taught me the pan; my brother Ostrander Mackerel crews on Ostrander Cormorant's boat and is courting Sella Tallow, and I hear both sides of the quay's quarrels while I fry. The Warden will not hear of building until the seawall is paid for, and I think the rebuild would bring trade enough to pay for the wall twice over. I hear Marrow Wrack and Gideon Fenwick each call the other a cheat, and I think the quarrel keeps good stone out of the quay.",
@@ -181,7 +189,9 @@
       "rebuild her stall in stone",
       "see the lower quay rebuilt",
       "keep her brother from overreaching on credit",
-      "get the Warden to listen about the rebuild"
+      "get the Warden to listen about the rebuild",
+      "save the marks to lay a stone footing for her stall",
+      "get the Warden to hear her out on the rebuild, even if he says no"
     ],
     "mood": "busy and impatient with the Warden",
     "traits": {
@@ -345,6 +355,12 @@
         "why": "He would owe the whole quay for a net; someone in the family should count."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "frying fish and bread at her stall and trading gossip over the pan",
+      "walking the lower quay at low tide to see what the surge took and what could be built",
+      "pricing stone and timber with the masons, just to know the numbers"
+    ],
+    "calling": "I cook at the fish market and I want my stall built in stone, so the sea can come and it will still be standing."
   }
 }

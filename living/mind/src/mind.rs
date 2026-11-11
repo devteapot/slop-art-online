@@ -775,7 +775,7 @@ impl Minds {
             store.apply(c.id, &patch, &thought, now).await?;
             store.set_identity(c.id, 1, &persona, "born", &thought, now).await?;
         }
-        let p = PersonaIn { narrative: persona["narrative"].as_str().unwrap_or_default().into(), values: Vec::new(), goals: Vec::new(), traits: persona["traits"].to_string(), mood: "alert".into() };
+        let p = PersonaIn { narrative: persona["narrative"].as_str().unwrap_or_default().into(), values: Vec::new(), goals: Vec::new(), traits: persona["traits"].to_string(), mood: "alert".into(), pastimes: Vec::new(), calling: String::new() };
         self.project(c.id, Some(p), None).await
     }
 
@@ -814,6 +814,8 @@ impl Minds {
             goals: strings(&persona["goals"]),
             traits: persona["traits"].to_string(),
             mood: persona["mood"].as_str().unwrap_or_default().into(),
+            pastimes: strings(&persona["pastimes"]),
+            calling: persona["calling"].as_str().unwrap_or_default().into(),
         };
         self.project(c.id, Some(persona), None).await
     }
@@ -879,6 +881,8 @@ impl Minds {
             "goals": strings(&sheet["goals"]),
             "traits": traits,
             "mood": sheet["mood"].as_str().unwrap_or("settled"),
+            "pastimes": strings(&sheet["pastimes"]),
+            "calling": sheet["calling"].as_str().unwrap_or_default(),
         });
         if let Some(secret) = self.secret(c.id) {
             identity["secret"] = json!(secret);
@@ -933,6 +937,8 @@ impl Minds {
             goals: strings(&identity["goals"]),
             traits: identity["traits"].to_string(),
             mood: identity["mood"].as_str().unwrap_or_default().into(),
+            pastimes: strings(&identity["pastimes"]),
+            calling: identity["calling"].as_str().unwrap_or_default().into(),
         };
         // Thoughts are public: the detail is the sheet as the background has it, never a secret.
         let mut detail = sheet.clone();
@@ -1013,6 +1019,8 @@ impl Minds {
             goals: strings(&v["goals"]),
             traits: born.clone().unwrap_or_else(|| v["traits"].clone()).to_string(),
             mood: v["mood"].as_str().unwrap_or("curious").into(),
+            pastimes: strings(&v["pastimes"]),
+            calling: String::new(),
         };
         let t = ThoughtIn { kind: "consolidate".into(), summary: format!("Born to {an} and {bn}."), detail: v.to_string(), latency_ms: reply.latency_ms, tokens: reply.tokens, model: reply.model, reference: thought };
         self.project(c.id, Some(persona), Some(t)).await
@@ -1471,10 +1479,37 @@ impl Minds {
                     None => "\nYou belong to no community.".into(),
                 };
                 let secret = self.secret(actor).map(|s| format!("\nKnown only to you: {s}")).unwrap_or_default();
-                format!("{}{secret}\nValues: {}\nGoals: {}\nTraits: {}\nMood: {}\nYou know how to: {know}{belong}", p.narrative, p.values.join("; "), p.goals.join("; "), p.traits, p.mood)
+                // What one enjoys and the work one loves: wants beyond getting by.
+                let mut likes = String::new();
+                if !p.pastimes.is_empty() {
+                    likes.push_str(&format!("\nYou enjoy: {}", p.pastimes.join("; ")));
+                }
+                if !p.calling.trim().is_empty() {
+                    likes.push_str(&format!("\nThe work you love: {}", p.calling.trim()));
+                }
+                format!("{}{secret}\nValues: {}\nGoals: {}{likes}\nTraits: {}\nMood: {}{}\nYou know how to: {know}{belong}", p.narrative, p.values.join("; "), p.goals.join("; "), p.traits, p.mood, self.daily_life(actor))
             }
             None => "(no persona yet)".into(),
         }
+    }
+
+    /// The world's facts about one's daily life, as given: one's work and where, and one's
+    /// own rhythm (when one usually rises and goes to bed).
+    fn daily_life(&self, actor: u32) -> String {
+        let bg: Value = self.conn.db.background().id().find(&actor).and_then(|b| serde_json::from_str(&b.text).ok()).unwrap_or_default();
+        let mut out = String::new();
+        if let Some(occ) = bg["occupation"].as_str().filter(|o| !o.is_empty() && *o != "child") {
+            let town = bg["town"].as_str().map(|t| format!(" in {t}")).unwrap_or_default();
+            out.push_str(&format!("\nYour work: {occ}{town}"));
+        }
+        if let Some(r) = self.conn.db.rhythm().id().find(&actor) {
+            let hm = |h: f32| {
+                let m = (h.rem_euclid(24.0) * 60.0).round() as u32;
+                format!("{:02}:{:02}", m / 60 % 24, m % 60)
+            };
+            out.push_str(&format!("\nYour days: you usually rise about {} and go to bed about {}; the last {:.0} hours before bed are your evening.", hm(r.rise_h), hm(r.bed_h), r.evening_h));
+        }
+        out
     }
 
     fn relations(&self, actor: u32) -> Vec<String> {
@@ -1971,6 +2006,8 @@ impl Minds {
             goals: strings(&p["goals"]),
             traits: p["traits"].to_string(),
             mood: p["mood"].as_str().unwrap_or_default().into(),
+            pastimes: strings(&p["pastimes"]),
+            calling: p["calling"].as_str().unwrap_or_default().into(),
         });
         let thought = ThoughtIn {
             kind: "consolidate".into(),

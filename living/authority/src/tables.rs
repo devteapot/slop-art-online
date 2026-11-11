@@ -661,6 +661,10 @@ pub struct Persona {
     pub mood: String,
     pub version: u32,
     pub updated_ms: u64,
+    /// What they enjoy doing for its own sake (pastimes), and the work they love or long for
+    /// (`calling`): wants beyond getting by (docs/SEEDED_LIVES.md, "Wants beyond survival").
+    pub pastimes: Vec<String>,
+    pub calling: String,
 }
 
 #[spacetimedb::table(accessor = relation,

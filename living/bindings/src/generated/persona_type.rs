@@ -15,6 +15,8 @@ pub struct Persona {
     pub mood: String,
     pub version: u32,
     pub updated_ms: u64,
+    pub pastimes: Vec<String>,
+    pub calling: String,
 }
 
 impl __sdk::InModule for Persona {
@@ -33,6 +35,8 @@ pub struct PersonaCols {
     pub mood: __sdk::__query_builder::Col<Persona, String>,
     pub version: __sdk::__query_builder::Col<Persona, u32>,
     pub updated_ms: __sdk::__query_builder::Col<Persona, u64>,
+    pub pastimes: __sdk::__query_builder::Col<Persona, Vec<String>>,
+    pub calling: __sdk::__query_builder::Col<Persona, String>,
 }
 
 impl __sdk::__query_builder::HasCols for Persona {
@@ -47,6 +51,8 @@ impl __sdk::__query_builder::HasCols for Persona {
             mood: __sdk::__query_builder::Col::new(table_name, "mood"),
             version: __sdk::__query_builder::Col::new(table_name, "version"),
             updated_ms: __sdk::__query_builder::Col::new(table_name, "updated_ms"),
+            pastimes: __sdk::__query_builder::Col::new(table_name, "pastimes"),
+            calling: __sdk::__query_builder::Col::new(table_name, "calling"),
         }
     }
 }

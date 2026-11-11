@@ -11,7 +11,9 @@
       "keep the toll rolls clean enough that no one can accuse me of a cheat",
       "save enough marks to stop depending on the chapel's charity",
       "find the courage to speak plainly to Gareth Wade",
-      "be trusted with more of the Guild's writing"
+      "be trusted with more of the Guild's writing",
+      "learn to cut and keep a proper formal hand, fit for the Guild's own records",
+      "save enough to take a room of my own, however small, and owe the chapel nothing"
     ],
     "mood": "steady, a little lonely, watchful",
     "traits": {
@@ -153,6 +155,12 @@
         "why": "The chapel's charity is warm, but it is not mine, and I want something that is."
       }
     ],
-    "secret": "I am in love with Gareth Wade, who does not know."
+    "secret": "I am in love with Gareth Wade, who does not know.",
+    "pastimes": [
+      "writing letters for neighbours at the chapel table after dark",
+      "walking the market square at closing, reading the day's chalked prices",
+      "sitting with the sisters at the common fire of an evening, listening more than talking"
+    ],
+    "calling": "I keep the tolls straight and put other people's words down fair — a clean page is a kindness, and I'd rather be trusted with it than praised for it."
   }
 }

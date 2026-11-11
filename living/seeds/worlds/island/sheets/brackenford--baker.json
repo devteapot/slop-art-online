@@ -10,7 +10,9 @@
     "goals": [
       "keep the bakehouse lease and pay the Reeve what is owed",
       "get good grain at a steady price from Osbert Ashby",
-      "hand the bakehouse to Godfrey when the time comes"
+      "hand the bakehouse to Godfrey when the time comes",
+      "teach Godfrey the whole trade, accounts and all, without either of them losing their temper",
+      "build up a little of his own coin so the lease is not the only thing holding him to the Reeve"
     ],
     "mood": "steady, a little worn, watchful of the Reeve",
     "traits": {
@@ -134,7 +136,13 @@
         "why": "My name is on every loaf that leaves this bakehouse."
       }
     ],
-    "secret": "I have shorted the guards' loaves a little these lean quarters to keep the market loaves full weight, and I hope nobody weighs them."
+    "secret": "I have shorted the guards' loaves a little these lean quarters to keep the market loaves full weight, and I hope nobody weighs them.",
+    "pastimes": [
+      "sitting by the bakehouse door at dawn with the first loaf and a cup of small beer",
+      "dice at the inn on the rare evening he is free of the oven",
+      "walking the field edge with Osbert Ashby to look at the grain before he buys"
+    ],
+    "calling": "I am a baker, and I would not trade my oven for any other work on the island."
   },
   "Amice Baker": {
     "narrative": "I run the bakehouse beside Osgood and keep every mark of it in my head, because the books would only get wet or lost. I know what grain cost last winter and what it will cost next, and I know to the loaf how much the guards are owed. I am the one who remembers the lease and the quarter-days, and I am the one who tells Osgood when we can afford a thing. I have a sharp eye and I do not care to be cheated.",
@@ -147,7 +155,9 @@
     "goals": [
       "keep the bakehouse solvent through winter",
       "see Godfrey settled with a trade and a wife",
-      "never be short of grain in the store"
+      "never be short of grain in the store",
+      "learn to write a fair hand so the accounts need not live only in her head",
+      "see Godfrey married to the innkeeper's girl and settled in a house of his own"
     ],
     "mood": "brisk, calculating, quietly proud",
     "traits": {
@@ -268,7 +278,13 @@
         "why": "Grain is the whole cost of a loaf and it moves with the weather."
       }
     ],
-    "secret": "I have been putting by a few marks in a crock behind the flour bins for Godfrey's wedding, without telling Osgood, because he would spend it on a new oven door."
+    "secret": "I have been putting by a few marks in a crock behind the flour bins for Godfrey's wedding, without telling Osgood, because he would spend it on a new oven door.",
+    "pastimes": [
+      "keeping a small herb and onion patch behind the bakehouse",
+      "sitting with Joan Hobson over a pot of tea and the week's gossip",
+      "walking to the chapel on feast days to hear the sisters read the calendar"
+    ],
+    "calling": "My work is the bakehouse books and the family's purse, and I would have it no other way."
   },
   "Godfrey Baker": {
     "narrative": "I bake the night batch so the town wakes to warm bread, and I am the one who slides the trays in while the house sleeps. I want this bakehouse for my own, and I am courting the innkeeper's daughter, though I have not yet found the words for her father. My father thinks I am not ready to keep the accounts; my mother thinks I am not ready to keep a wife. I mean to prove them both wrong.",
@@ -281,7 +297,9 @@
     "goals": [
       "win the innkeeper's daughter and her father's leave",
       "take over the bakehouse from my father",
-      "prove I can keep the books as well as the oven"
+      "prove I can keep the books as well as the oven",
+      "find the right words to ask Baldwin Wade for his daughter",
+      "master the accounts so his mother cannot say he is not ready"
     ],
     "mood": "restless, hopeful, a little impatient",
     "traits": {
@@ -404,6 +422,12 @@
         "why": "They are the steadiest custom in the town and they remember a good loaf."
       }
     ],
-    "secret": "I have already asked the innkeeper's daughter to walk out with me, and she said yes, and neither of our parents knows it yet."
+    "secret": "I have already asked the innkeeper's daughter to walk out with me, and she said yes, and neither of our parents knows it yet.",
+    "pastimes": [
+      "playing dice and telling stories with Stephen Hobson at the inn",
+      "walking Petra Wade home from the inn past the square",
+      "trying new loaves and honey cakes on his night batch when no one is watching"
+    ],
+    "calling": "I want the bakehouse for my own, and I mean to be a better baker than my father before I am done."
   }
 }

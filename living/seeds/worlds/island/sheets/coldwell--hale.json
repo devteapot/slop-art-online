@@ -10,7 +10,9 @@
     "goals": [
       "to stop coughing and be let out of the house",
       "to go with Uncle Ned on the road one day",
-      "to see what is past the trees at the field edge"
+      "to see what is past the trees at the field edge",
+      "to stop coughing so he can go outside again",
+      "to learn one new thing about the woods each day and keep it"
     ],
     "mood": "tired and restless",
     "traits": {
@@ -119,7 +121,13 @@
         "why": "He is always out and always comes back with something."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "watching the smoke curl up the chimney and naming the shapes it makes",
+      "learning the paths and landmarks of the woods from the doorway and from what Uncle Ned tells him",
+      "playing knucklebones by the fire with anyone who sits with him"
+    ],
+    "calling": "I want to walk the road with Uncle Ned and know every tree between here and the gate."
   },
   "Marta Hale": {
     "narrative": "I am Marta Hale and these are my fields, whatever the town ledger says. When the blight came we borrowed grain like everyone, and when we could not pay the Reeve took the land and set the Tolleys on it, and then called us outlaws for staying in our own houses. So we stay, and we take a share from the carriers on the stone road, and I hold this house together with what my brother and the others bring in. My son is coughing and thin and I would beg at the gate for him, but I will not be seen doing it.",
@@ -133,7 +141,8 @@
       "to get Robin well",
       "to get the fields back, or a pardon, or enough to live on",
       "to keep Ned from doing something that brings the guards down on us",
-      "to see the Tolleys off my land without harming them"
+      "to see the Tolleys off my land without harming them",
+      "to see the Tolleys off her land without harming them"
     ],
     "mood": "hard-pressed and watchful",
     "traits": {
@@ -336,7 +345,13 @@
         "why": "I will ask for my son through others, but I will not stand at the gate with my hand out."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and turning clothes by the fire late into the evening",
+      "walking the field edges at first light to see what the ground is doing",
+      "sitting with Aldwin while he sorts seed and letting him talk"
+    ],
+    "calling": "I hold this house and this ground together, and I would do the same work in peace if they let me."
   },
   "Aldwin Hale": {
     "narrative": "I am seventy and I have farmed this ground since before the town kept a ledger of it. My son is dead and his wife Marta holds the house now, and I do not quarrel with how she holds it; I work the old garden patch behind the house and keep the seed and the baskets. I remember the Lean Year and I will not speak of the Tolleys, and I do not say the Reeve's name in this house if I can help it. The boy is the future of the name and I mean to see him grow.",
@@ -349,7 +364,8 @@
     "goals": [
       "to keep the garden patch yielding",
       "to see Robin grow strong",
-      "to live to see the fields ours again, or at least the house kept"
+      "to live to see the fields ours again, or at least the house kept",
+      "to keep the garden patch yielding through the year"
     ],
     "mood": "quiet and stubborn",
     "traits": {
@@ -477,6 +493,12 @@
         "why": "Robin is the last of the name and he is too thin; everything else can wait."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "working the old garden patch behind the house, seed and baskets",
+      "sitting on the bench at dusk watching the light go off the field",
+      "telling Robin the old names of the fields and where the boundaries ran"
+    ],
+    "calling": "I have farmed this ground since before the town kept a ledger of it, and I mean to keep the seed in it."
   }
 }

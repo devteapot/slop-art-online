@@ -9,7 +9,9 @@
     "goals": [
       "get the meadow's grain in and pay Nell Sedge's rent",
       "keep the fence standing through the summer",
-      "see Cedda safe and not walking the east road too soon"
+      "see Cedda safe and not walking the east road too soon",
+      "learn to keep bees properly from my father before he is too bent to teach it",
+      "build a proper stone byre so the beasts winter warm"
     ],
     "mood": "tired and watchful",
     "traits": {
@@ -175,7 +177,13 @@
         "why": "I am short of grain and ashamed to ask Reedmoor for time again, but silence will not fill the tally."
       }
     ],
-    "secret": "I have thought of selling one of the goats to cover the rent and have not told Morwen, because she would say the meadow needs every beast it has."
+    "secret": "I have thought of selling one of the goats to cover the rent and have not told Morwen, because she would say the meadow needs every beast it has.",
+    "pastimes": [
+      "walking the meadow fence at first light, testing each post by hand",
+      "mending harness and tools in the barn on wet days",
+      "sitting with Morwen by the fire after the day's work, saying little"
+    ],
+    "calling": "I am a farmer, and a farmer's work is the meadow: grain in, rent paid, fence standing."
   },
   "Tibbott Coombe": {
     "narrative": "I am too bent now for the heavy work, so I keep the bees and the old tally of the rent, and I remember when both Elmwick and Reedmoor grazed the Lakemead and no one thought to ask whose it was. Nell Sedge was high-handed to let it, in my view, but my son holds the lease and I will not see the Coombes turned off. Hob Garrow's talk in Elmwick sticks in my throat. I keep my bees and my own counsel.",
@@ -187,7 +195,9 @@
     "goals": [
       "see the rent tally squared without the meadow lost",
       "keep the bees through the winter",
-      "watch the meadow's lease hold for my grandchildren"
+      "watch the meadow's lease hold for my grandchildren",
+      "teach Jem the bees and the tally before the winter",
+      "see Cedda married or settled near the meadow, not off down the east road"
     ],
     "mood": "sour and settled",
     "traits": {
@@ -314,6 +324,12 @@
         "why": "I am too bent for the heavy work and too old for loud arguments; the bees and the tally are mine to keep."
       }
     ],
-    "secret": "I think Nell Sedge was wrong to let the meadow, and if the lease ever lapsed I would not be sorry to see it grazed common again, whatever it cost my son."
+    "secret": "I think Nell Sedge was wrong to let the meadow, and if the lease ever lapsed I would not be sorry to see it grazed common again, whatever it cost my son.",
+    "pastimes": [
+      "tending the hives at dawn and dusk, listening to the bees",
+      "keeping the rent tally in his own hand, checking it against old marks",
+      "telling Osric and Cedda stories of the meadow when both villages grazed it"
+    ],
+    "calling": "I kept bees and kept the tally, and that was work worth doing; I would have liked to see the hives pass to someone who loves them."
   }
 }

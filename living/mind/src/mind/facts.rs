@@ -201,8 +201,10 @@ impl Minds {
             goals: strings(&v["goals"]),
             traits: born.clone().unwrap_or_else(|| v["traits"].clone()).to_string(),
             mood: v["mood"].as_str().unwrap_or("settled").into(),
+            pastimes: strings(&v["pastimes"]),
+            calling: v["calling"].as_str().unwrap_or_default().into(),
         };
-        let detail = json!({"facts": facts, "model_written": ["narrative", "values", "goals", "traits", "mood", "relations"], "traits_from": if born.is_some() { "genome" } else { "model" }, "reply": v});
+        let detail = json!({"facts": facts, "model_written": ["narrative", "values", "goals", "traits", "mood", "pastimes", "calling", "relations"], "traits_from": if born.is_some() { "genome" } else { "model" }, "reply": v});
         let t = ThoughtIn { kind: "consolidate".into(), summary: "Who I am, from what the world holds about me.".into(), detail: detail.to_string(), latency_ms: reply.latency_ms, tokens: reply.tokens, model: reply.model, reference: thought };
         self.project(c.id, Some(persona), Some(t)).await
     }

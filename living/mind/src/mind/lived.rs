@@ -414,6 +414,9 @@ impl Minds {
                 goals: cur.as_ref().map(|c| c.goals.clone()).unwrap_or_default(),
                 traits: p.get("traits").map(|t| t.to_string()).unwrap_or_else(|| "{}".into()),
                 mood: p.get("mood").and_then(|x| x.as_str()).unwrap_or_default().into(),
+                // What a person enjoys is theirs to show; kept as it was.
+                pastimes: Vec::new(),
+                calling: String::new(),
             }
         });
         // The graph is the memory; the projection is what the body and the observer read. An

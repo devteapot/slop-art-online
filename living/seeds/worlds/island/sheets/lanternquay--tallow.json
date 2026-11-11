@@ -11,7 +11,9 @@
       "get the rope and tar money out of Wick Gull and Orvin Hollis",
       "clear what I owe Josiah Crane for the iron nails before the next load",
       "see Sella settled with a man who can keep her",
-      "keep the stall's name good with every fisher on the quay"
+      "keep the stall's name good with every fisher on the quay",
+      "teach himself to splice a proper long splice so he never has to buy one in",
+      "take a day to see the light on the north cape for himself, just once"
     ],
     "mood": "pressed but steady",
     "traits": {
@@ -168,7 +170,13 @@
         "why": "If the lower quay goes again, my stall goes with it."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "mending and tarring his own lines on the stall steps at first light",
+      "walking the outer quay to look over the boats and count who's out",
+      "a mug at the stall with Silas Pike, arguing over which rope holds best in a blow"
+    ],
+    "calling": "I know what a boat needs before her owner does, and I mean to keep the quay supplied till I'm too old to haul."
   },
   "Perrin Tallow": {
     "narrative": "I keep the pie and eel stall beside Bramwell's, and I know the price of every fish and every coil of rope on this quay. The marks live in my apron and I can tell you to the penny what we have and what we owe. Bramwell frets over the debts owed to us; I fret over my girl, who looks at a crewman the way I once looked at a man with a stall. I feed half the quay and hear the other half.",
@@ -182,7 +190,9 @@
       "get the stall's marks back from the debts owed to us",
       "see Sella courted by someone who can keep her, without breaking her heart",
       "keep the pie and eel stall the best on the quay",
-      "put by enough for the winter when the boats lie up"
+      "put by enough for the winter when the boats lie up",
+      "get her eel recipe written down properly so it isn't lost",
+      "put by a winter purse without Bramwell knowing the size of it"
     ],
     "mood": "sharp-eyed and warm",
     "traits": {
@@ -360,7 +370,13 @@
         "why": "I have cooked for the men who patch the lower quay with salvage, and salvage will not hold another surge."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "baking pies before dawn with the harbour noise coming up through the boards",
+      "trading gossip with Nia Gull over the stall rail",
+      "keeping a little book of prices and what each household owes"
+    ],
+    "calling": "I feed half the quay and hear the other half, and I'd not trade my stall for any work on the island."
   },
   "Sella Tallow": {
     "narrative": "I mind my father's stall when my mother is cooking, and I can tell a good coil of line from a bad one by the feel of it. I like the quiet of the stall and the noise of the quay both, and I want to see the fish road before I settle to anything. Ostrander Mackerel buys a pie most days and eats it slow, and my father watches him do it.",
@@ -372,7 +388,9 @@
     "goals": [
       "learn the fish road and see Kettlebridge with my own eyes",
       "keep the stall's name good while my mother cooks",
-      "make my own mind up about Ostrander Mackerel"
+      "make my own mind up about Ostrander Mackerel",
+      "walk the fish road to Kettlebridge and back with her own eyes on it",
+      "learn to cook her mother's eel pies so the stall never wants for her"
     ],
     "mood": "restless and cheerful",
     "traits": {
@@ -502,6 +520,12 @@
         "why": "I want the road, but I would not leave my mother with the stall and the debts."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "feeling over coils of line to judge them, and testing herself against her father's eye",
+      "walking the quay at dusk with Juno Reyes, watching the tide lanterns lit",
+      "listening to the runners' talk of the fish road and the towns up it"
+    ],
+    "calling": "I want to see the fish road before I settle to a stall, and then perhaps keep one as well as my mother does."
   }
 }

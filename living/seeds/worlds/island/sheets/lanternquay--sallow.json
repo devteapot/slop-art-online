@@ -11,7 +11,9 @@
       "keep the lantern list true",
       "see the seawall built",
       "keep the peace between Mara and Ilse",
-      "write a fair account of the drowned"
+      "write a fair account of the drowned",
+      "teach someone younger to keep the lantern list and the accounts after me",
+      "see the seawall raised before another surge takes the lower quay"
     ],
     "mood": "watchful, mildly troubled",
     "traits": {
@@ -163,7 +165,13 @@
         "why": "We need their stone, even at their price; Barnaby's letters show they need our fish."
       }
     ],
-    "secret": "I have begun to suspect Mara lights the lanterns late on purpose, as a kind of mourning for her brother, and I have not written it in the lantern list."
+    "secret": "I have begun to suspect Mara lights the lanterns late on purpose, as a kind of mourning for her brother, and I have not written it in the lantern list.",
+    "pastimes": [
+      "walking the quay at dusk to count the lanterns lit",
+      "reading old letters and harbour records by the fire",
+      "a slow game of dice with the boat-owners at the inn"
+    ],
+    "calling": "I keep the quay's accounts and its drowned, and I would have every name written true."
   },
   "Mira Sallow": {
     "narrative": "I keep a room of herbs and salves behind the fish market, and the stall-keepers come to me for their coughs and their cuts. I have carried Sella Pike's debt for two seasons now, and the stall-keepers are starting to talk about who pays and who does not. My husband Ostrander writes the quay's letters, and between us we know more of the quay's troubles than most. The winter cough on the poor terrace worries me more than any debt.",
@@ -177,7 +185,9 @@
       "collect what is owed without breaking Sella Pike",
       "keep the winter cough from spreading on the poor terrace",
       "see the seawall built before the next surge",
-      "keep my herb room stocked through winter"
+      "keep my herb room stocked through winter",
+      "build a store of winter herbs and salves before the cold sets in",
+      "see Sella Pike's debt settled in a way that leaves her standing"
     ],
     "mood": "tired, quietly resentful",
     "traits": {
@@ -335,6 +345,12 @@
         "why": "Ysolde's herbs are better than any I can grow, and her price is fair."
       }
     ],
-    "secret": "I have been giving Sella Pike her medicines without charge for a month now, and I have not told Ostrander, who would write it in the ledger."
+    "secret": "I have been giving Sella Pike her medicines without charge for a month now, and I have not told Ostrander, who would write it in the ledger.",
+    "pastimes": [
+      "tending the pots of herbs and salves in her room behind the fish market",
+      "sitting with a neighbour over a cup of something warm",
+      "walking the shore at low tide for what the water leaves"
+    ],
+    "calling": "I mend what the quay brings me, coughs and cuts and all, and I would have no one go untreated for want of marks."
   }
 }

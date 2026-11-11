@@ -9,7 +9,9 @@
     "goals": [
       "stay out of Crane's reach until the indenture is forgotten",
       "make myself useful enough at Coldwell that nobody asks where I came from",
-      "learn to fight properly from Kai"
+      "learn to fight properly from Kai",
+      "build a small forge of his own at Coldwell, hidden from the road, and remember his hands are his",
+      "learn to fight properly from Kai until he can stand his ground without a hammer"
     ],
     "mood": "watchful and a little ashamed",
     "traits": {
@@ -144,7 +146,13 @@
         "why": "If Marta knew Crane's people were asking after me she might send me on for the household's sake, and I have nowhere else."
       }
     ],
-    "secret": "The letter from Barnaby Quill asking after him on the Coldwell road is sewn into his coat; he has told no one, not Kai, and the indenture paper is folded inside it."
+    "secret": "The letter from Barnaby Quill asking after him on the Coldwell road is sewn into his coat; he has told no one, not Kai, and the indenture paper is folded inside it.",
+    "pastimes": [
+      "banking the common fire at Coldwell so it burns even and clean through the night",
+      "mending pots and hinges for the household with a hand-bellows he rigged from a hide and two boards",
+      "walking the stone road at dusk to watch the Kettlebridge carts and guess what each load weighs"
+    ],
+    "calling": "I read fire for a living — give me a bloom and a bellows and I'll tell you what the iron means to be."
   },
   "Hob Ferrier": {
     "narrative": "I hunted these woods for the steading before the Lean Year, and I hunt them still — only now the meat goes into a common pot that is not mine, in a house that is not mine, on land that was. The Tolleys sleep in the barn I raised, and the Guild counts rent off my father's fields. I walk the edge of those fields so Hal Tolley can see me do it. Marta says keep off the tenants; I have kept off them so far.",
@@ -156,7 +164,9 @@
     "goals": [
       "see the Tolleys off the Coldwell fields one way or another",
       "keep the household in meat through the winter",
-      "get a pardon, or a field, or at least a reckoning"
+      "get a pardon, or a field, or at least a reckoning",
+      "keep the household in meat through the winter, whatever else comes",
+      "get a pardon, or a field, or at least a reckoning before he's too old to draw a bow"
     ],
     "mood": "sour and restless",
     "traits": {
@@ -324,6 +334,12 @@
         "why": "A pardon from the man who outlawed us would be a leash. I would rather be hunted than owned."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "hunting the woods at first light with Ned, reading sign and setting snares",
+      "whittling bow-staves and arrow shafts by the fire while the pot boils",
+      "walking the boundary of the old Coldwell fields at dusk so Hal Tolley sees him do it"
+    ],
+    "calling": "I'm a hunter — these woods fed my father's table and they'll feed mine, whatever the Guild writes on its paper."
   }
 }

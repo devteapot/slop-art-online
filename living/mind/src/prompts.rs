@@ -299,7 +299,8 @@ pub fn identity_system() -> String {
 The person has lived before this moment: use their background, but give them an individual temperament, private hopes, worries, \
 likes and grudges of their own (not a job description; what they did so far is history, not destiny). Write the narrative in the first person, \
 2-4 sentences. Relations: how they feel about each person named in the background (trust and affinity -100..100, a label such as \
-family, partner, friend, rival, stranger, and a short note in their words). Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \
+family, partner, friend, rival, stranger, and a short note in their words). Pastimes: two or three things they enjoy doing for their own sake; calling: the work they love, \
+or the one they long for instead. Reply with ONE JSON object: {{\"narrative\": \"...\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \
 \"traits\": {{\"caution\": 0-100, \"sociability\": 0-100, \"empathy\": 0-100, \"curiosity\": 0-100, \"ambition\": 0-100, \"introspection\": 0-100, \"temper\": 0-100, \"nurture\": 0-100}}, \"mood\": \"...\", \
 \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"...\", \"note\": \"...\"}}]}}",
             world_rules()
@@ -448,7 +449,7 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
- \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
+ \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
         if lessons() { LESSON } else { "" },
         world_rules()
     ))

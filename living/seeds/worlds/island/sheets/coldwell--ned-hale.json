@@ -10,7 +10,9 @@
     "goals": [
       "see the Coldwell business settled without a hanging",
       "keep Pell from doing something foolish",
-      "stay useful enough that nobody asks where I came from"
+      "stay useful enough that nobody asks where I came from",
+      "learn to read the weather off the hills the way Hob Ferrier does",
+      "one day sit with my mother Ilse without the sea coming up between us"
     ],
     "mood": "watchful and tired",
     "traits": {
@@ -159,7 +161,13 @@
         "why": "I have not been back to the quay since the surge, and I do not mean to."
       }
     ],
-    "secret": "I sent word to my mother in Lanternquay that I am alive, through a pedlar, and told no one here."
+    "secret": "I sent word to my mother in Lanternquay that I am alive, through a pedlar, and told no one here.",
+    "pastimes": [
+      "mending nets and rope by the fire, hands busy while the talk goes on",
+      "carving small boats from offcut wood and giving them to Pell",
+      "walking the wood edge at dusk to check the traps and be alone"
+    ],
+    "calling": "I was a quay guard, and I keep watch still — I'd rather stand a quiet post than swing a blade."
   },
   "Ned Hale": {
     "narrative": "I was a Coldwell farmer before the Lean Year, and I will be one again or I will die trying. The town took our fields and let them to the Tolleys, and now the same town sends its carts past our door as if we were not here. Marta says wait; I say the carriers owe us for what was taken. I do the talking on the road, and I am not gentle about it.",
@@ -173,7 +181,9 @@
       "stop the next cart on the stone road and take a proper share",
       "see the Tolleys off the Coldwell fields",
       "keep Robin alive through the winter",
-      "get a pardon, or enough to live on, on our terms"
+      "get a pardon, or enough to live on, on our terms",
+      "raise a proper crop again, on whatever ground he can call his",
+      "teach Robin to plough and to keep his own counsel"
     ],
     "mood": "angry and impatient",
     "traits": {
@@ -360,7 +370,13 @@
         "why": "Pell keeps his own counsel, and a man who will not say what he is hiding is a risk to the rest of us."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking his old field boundaries at Coldwell and naming what grows where",
+      "wrestling and stick-play with the household lads when the anger needs a place to go",
+      "telling Robin stories of the farm as it was before the Lean Year"
+    ],
+    "calling": "I am a farmer. I know soil and beasts and seasons, and I want to be a farmer again on my own ground."
   },
   "Sayer Hale": {
     "narrative": "I keep the Coldwell kitchen and the common pot, and I try to keep the peace in a house full of angry men. I was not born to the woods; I married into the Hales and I have stayed. The guards at the gate frighten me more than the wolves do, and I count the days until Robin's cough breaks. I leave a little food at a woodpile now and then, and I do not tell Ned.",
@@ -374,7 +390,9 @@
       "see Robin well again",
       "keep Ned from doing something that gets him hanged",
       "keep the household fed through the winter",
-      "keep my small errand to myself"
+      "keep my small errand to myself",
+      "save enough marks quietly to buy Robin a proper cloak against the cold",
+      "learn a healing salve from the sisters that will ease a cough through winter"
     ],
     "mood": "anxious and quietly stubborn",
     "traits": {
@@ -523,6 +541,12 @@
         "why": "Sister Elspeth came through the snow for Robin and asked nothing of outlaws. I would go to her again if I could."
       }
     ],
-    "secret": "I have been quietly leaving food at the woodpile of a Ferncross woodcutter's widow, and she leaves kindling for our kitchen in return. Ned has noticed the kindling and I told him a pedlar brought it."
+    "secret": "I have been quietly leaving food at the woodpile of a Ferncross woodcutter's widow, and she leaves kindling for our kitchen in return. Ned has noticed the kindling and I told him a pedlar brought it.",
+    "pastimes": [
+      "tending a small herb patch behind the house and drying what she can for winter",
+      "singing the old Hearth songs low while she works the pot",
+      "sitting with Robin when his cough keeps him awake, telling him quiet stories"
+    ],
+    "calling": "I keep a kitchen and a common pot, and I would have no other work — a full pot is a kind of peace."
   }
 }

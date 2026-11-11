@@ -131,7 +131,13 @@
         "why": "A hunter who takes without asking is no better than a wolf."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sitting by the hearth fire of an evening with a cup, listening to Sigrun talk over the day's trade",
+      "walking the stone road at first light to read the tracks laid in the night",
+      "skinning and curing a hide slowly by hand, taking pride in a clean job"
+    ],
+    "calling": "I'm a hunter, and the woods are the only place I'm easy — a clean kill and a fair price at the stall is honest work."
   },
   "Sigrun Beornson": {
     "narrative": "I sell my husband's venison and hides at the Guild stall, and I have a sharp eye for a bad coin and a soft buyer. I keep the house by the north field and trade with Aethelred Tanner over the hides, and I do not let him cheat me twice. The town talks of the gate-due and the outlaws and the Kettlebridge quarrel, and I listen to it all and sell through it. Ulf is my joy, and I mean for him to have more than a hunter's hut when he is grown.",
@@ -264,7 +270,13 @@
         "why": "Brackenford and Kettlebridge can hate each other; I sell to both and say nothing."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "trading talk at the Guild stall and hearing every bit of town gossip",
+      "counting and sorting the household's marks by the fire at night",
+      "walking out to the north field to see the house and the land in order"
+    ],
+    "calling": "I sell what my husband brings in, and I'd sooner have a good stall in the square than any soft work — a fair price, well won."
   },
   "Ulf Beornson": {
     "narrative": "I am eight and I go into the woods with my father. He shows me tracks and I set snares, and once I caught a hare and Mother cooked it. I am learning the names of the trees and the birds, and I am not afraid of the dark the way the town children are. I want to be as good a hunter as my father.",
@@ -335,6 +347,12 @@
         ]
       }
     ],
-    "stances": []
+    "stances": [],
+    "pastimes": [
+      "setting snares in the woods with Father and checking them at dawn",
+      "climbing trees and naming the birds he sees",
+      "playing at tracking with Bram Fenner round the north field"
+    ],
+    "calling": "I want to be as good a hunter as my father, and know every tree and track in the woods."
   }
 }

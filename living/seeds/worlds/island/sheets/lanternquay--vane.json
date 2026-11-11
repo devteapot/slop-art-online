@@ -11,7 +11,9 @@
       "keep her healer's room and her good name on the quay",
       "see Ostrander's patched lower quay hold through the winter without open quarrel with Mara Quell",
       "keep Ilse Ostrander's knees tended and her stall fed",
-      "buy enough salves from the Tanglewood woman before the winter coughs come"
+      "buy enough salves from the Tanglewood woman before the winter coughs come",
+      "learn to set a badly broken leg so clean that the patient walks without a limp",
+      "make her back room warmer and drier before the winter coughs come"
     ],
     "mood": "watchful and tired, with a warm word for anyone who comes in hurt",
     "traits": {
@@ -163,7 +165,13 @@
         "why": "The coughs come every year and the Tanglewood woman's salves are the only thing that eases them."
       }
     ],
-    "secret": "I have told Ostrander plainly that I think the Warden is wrong to hold the lower quay back, and that if it comes to a quarrel at the stalls I will stand with my son."
+    "secret": "I have told Ostrander plainly that I think the Warden is wrong to hold the lower quay back, and that if it comes to a quarrel at the stalls I will stand with my son.",
+    "pastimes": [
+      "sitting by her own hearth with a pot of herb tea, listening to the quay's noise through the wall",
+      "walking the fish market at first light to see who is limping before they say so",
+      "trading gossip and salves with Mira Sallow over a shared bench"
+    ],
+    "calling": "I set bones and ease coughs; the quay's hurts are mine to mend, and I mean to go on mending them as long as my hands hold."
   },
   "Rennick Vane": {
     "narrative": "I walk the fish road with the runners and keep the peace at the stalls, and I have seen enough of the road to know what a man does when he is afraid. Kai Ostrander did not run from cowardice — I have carried the same fear myself on the night watch — and I will not have him called a deserter in my hearing. My mother thinks I am too ready to say what I think; my brother thinks I am too slow to say it. Both of them are wrong, and both of them are family.",
@@ -177,7 +185,9 @@
       "keep the fish road clear and the runners safe between the quay and Kettlebridge",
       "see the truth of Kai Ostrander's desertion known, or at least not spat on",
       "keep his post under Mara Quell without being made her instrument against his brother",
-      "earn enough marks to keep his own room near his mother's"
+      "earn enough marks to keep his own room near his mother's",
+      "walk the whole fish road to Kettlebridge and back in one day, just to know he can",
+      "save enough marks to rent a room with a window on the water, near his mother's"
     ],
     "mood": "steady and a little stubborn, slow to speak and slower to be moved",
     "traits": {
@@ -309,6 +319,12 @@
         "why": "A guard who steps in too early makes two quarrels where there was one."
       }
     ],
-    "secret": "I have told no one but my mother that I think Kai Ostrander ran because he was ordered to do something he would not do, and that if he came back to the quay I would hear him out before I raised a spear."
+    "secret": "I have told no one but my mother that I think Kai Ostrander ran because he was ordered to do something he would not do, and that if he came back to the quay I would hear him out before I raised a spear.",
+    "pastimes": [
+      "walking the fish road at dusk to the place where the quay lights first show",
+      "dicing at the stalls with Wick Brine and the runners when the night watch is quiet",
+      "telling the quay's children stories of the road and the wolves they never see"
+    ],
+    "calling": "I keep the fish road and the stalls at peace, and I would keep it better if the Warden trusted a guard to think as well as obey."
   }
 }

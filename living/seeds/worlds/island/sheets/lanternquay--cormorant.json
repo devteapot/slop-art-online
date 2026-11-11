@@ -10,7 +10,9 @@
     "goals": [
       "hold my fishing ground against Wick Quell",
       "keep my boat and gear in good repair",
-      "see Wick settled with a boat of his own when he is ready"
+      "see Wick settled with a boat of his own when he is ready",
+      "master the deep-water shoals the old men never charted",
+      "see his boat handed on sound and paid for, not owed"
     ],
     "mood": "grim and stubborn",
     "traits": {
@@ -136,7 +138,13 @@
         "why": "Stone from Kettlebridge comes dear, and the lower quay has been patched before; I would rather see the money in boats."
       }
     ],
-    "secret": "I cut Wick Quell's net the second time, not the first, and I would do it again."
+    "secret": "I cut Wick Quell's net the second time, not the first, and I would do it again.",
+    "pastimes": [
+      "mending and tarring his nets on the quay at first light",
+      "sitting at the inn with Ostrander Mackerel over a mug after the catch is landed",
+      "walking the harbour wall at dusk to read the weather for tomorrow"
+    ],
+    "calling": "I fish the deep water past the mouth, and I would not trade it for any work ashore."
   },
   "Tamsin Cormorant": {
     "narrative": "I sell fresh fish at the morning stalls and keep the household's marks in a box under the floor. My man is quiet until he is not, and my son is learning the water beside him. I have no love for Kettlebridge: they sell us stone at a price that would make a saint swear, and the lower quay still lies in rubble. I trade with Ilse Ostrander for noodles and gossip, and I keep my head down when the men talk of nets and ground.",
@@ -149,7 +157,9 @@
     "goals": [
       "keep the household's marks safe through the winter",
       "see Wick crew on his own boat before I am old",
-      "get a fair price for fish and not be undercut"
+      "get a fair price for fish and not be undercut",
+      "build the household's marks to a sum that would see Wick to a boat",
+      "have a stall of her own under a roof, out of the weather"
     ],
     "mood": "watchful and brisk",
     "traits": {
@@ -272,7 +282,13 @@
         "why": "Wick and his friends work the water; a hungry crew is a careless crew."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "trading gossip with Ilse Ostrander over noodles at the stalls",
+      "keeping the household's box of marks in order and counting them of a quiet evening",
+      "bartering a little extra at the morning stalls for something small and pretty"
+    ],
+    "calling": "I sell the morning catch and keep the household's marks, and I am good at both."
   },
   "Wick Cormorant": {
     "narrative": "I crew on my father's boat and I know the harbour mouth as well as he does. I want a boat of my own, but that takes marks and marks take time. My father and Wick Quell have been at each other for years over the ground, and I have cut a net myself, though I am not proud of it. I wish the quarrel would end, but I do not say so to my father.",
@@ -285,7 +301,9 @@
     "goals": [
       "save marks for a boat of my own",
       "learn the deep water from my father",
-      "see the quarrel with Quell end without either of them losing face"
+      "see the quarrel with Quell end without either of them losing face",
+      "save enough marks to buy a hull of his own",
+      "learn the harbour mouth and the deep shoals so well his father trusts him with the wheel"
     ],
     "mood": "restless and hopeful",
     "traits": {
@@ -393,6 +411,12 @@
         "why": "Sella and her mother know the price of everything, and a friendly stall is a good stall."
       }
     ],
-    "secret": "I cut Wick Quell's net myself, and my father does not know."
+    "secret": "I cut Wick Quell's net myself, and my father does not know.",
+    "pastimes": [
+      "carving small boat models from driftwood",
+      "swimming in the harbour on warm evenings with Sella Tallow",
+      "listening to the old fishermen's stories at the inn"
+    ],
+    "calling": "I want a boat of my own on the deep water, and until then I learn every rope of my father's."
   }
 }

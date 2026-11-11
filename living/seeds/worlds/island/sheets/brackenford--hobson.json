@@ -10,7 +10,9 @@
     "goals": [
       "get the Reeve to settle the wall account so I can pay Silas Pike",
       "find stone that does not cost half a year's wages",
-      "see Stephen master the trade and build better than I have"
+      "see Stephen master the trade and build better than I have",
+      "save enough marks to buy a good mason's mallet and chisels of my own, not borrowed",
+      "take Stephen to see a Kettlebridge-built face and argue with him about how it was done"
     ],
     "mood": "harried and sore at pocket",
     "traits": {
@@ -167,7 +169,13 @@
         "why": "The sisters heal and keep the fire; the town is better with them, and their roof is mine to keep sound."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "walking the wall at dusk, tapping stones to hear which ring true",
+      "a mug at the inn with Wilfred Smith, complaining about the price of everything",
+      "carving small stone figures for the chapel sill when there is a spare offcut"
+    ],
+    "calling": "I am a mason: I put stone on stone so the town stands, and I want my pay for it, no more and no less."
   },
   "Joan Hobson": {
     "narrative": "I am Joan Hobson, midwife of Brackenford, and I have brought half the town into the world and closed the eyes of a fair few besides. I work with the chapel sisters and with Hilda Smith when the bone-setting is needed, and I have never turned away a woman in labour, whatever her household or her husband's quarrels. My Reginald frets over the Reeve's account and Silas Pike's marks, and I let him fret, for fretting is his way of working. I have delivered Wenna Marrow's child's way into the world before, so to speak, and I will be there when her time comes, and I do not care what the town says of her.",
@@ -180,7 +188,9 @@
     "goals": [
       "see Wenna Marrow safely delivered of her first",
       "keep the peace between Reginald and Silas Pike before it comes to blows",
-      "train another pair of hands to the midwife's work before I am too old"
+      "train another pair of hands to the midwife's work before I am too old",
+      "learn the Kettlebridge sisters' way with a hard turning, if any of them will teach a Brackenford woman",
+      "keep a little purse of her own against the day Reginald's debts bite"
     ],
     "mood": "steady, watchful, a little tired",
     "traits": {
@@ -331,7 +341,13 @@
         "why": "The sisters and I do the same work under different roofs; the common fire is the town's heart."
       }
     ],
-    "secret": "I have known for a month that Wenna Marrow's child is coming early and the birth may go hard, and I have told no one, not even Reginald, for fear the town would make it a judgement on her."
+    "secret": "I have known for a month that Wenna Marrow's child is coming early and the birth may go hard, and I have told no one, not even Reginald, for fear the town would make it a judgement on her.",
+    "pastimes": [
+      "sitting with Sister Elspeth at the chapel fire, trading gossip and simples",
+      "tending the herb bed by the door, rue and comfrey and motherwort",
+      "walking out to the fields at dusk to clear her head after a hard birth"
+    ],
+    "calling": "I am a midwife: I bring children into the world and keep their mothers alive, and there is no work I would trade it for."
   },
   "Stephen Hobson": {
     "narrative": "I am twenty and I am my father's apprentice, and I have set more stones in the town wall than I can count, and I want to set better ones. A wall is a fine thing, but a wall is a thing that keeps people out; I want to build a thing that keeps people in: a hall, a tower, a house with a stone face that will stand when the wall has fallen. My father says stone is dear and the Reeve does not pay, and both are true, and I mean to build anyway. Cedric Tanner and I talk of it over ale, and Osbert Smith wants to learn the Kettlebridge masons' work as much as I do.",
@@ -344,7 +360,9 @@
     "goals": [
       "build one thing grander than a wall",
       "learn the Kettlebridge masons' stonework if I can get near it",
-      "earn enough to set up as a mason in my own right"
+      "earn enough to set up as a mason in my own right",
+      "make a model of a hall with a stone face, and show it to someone who will tell him the truth about it",
+      "get a Kettlebridge mason to talk shop with him over ale, whatever his father says"
     ],
     "mood": "eager and a little impatient",
     "traits": {
@@ -480,6 +498,12 @@
         "why": "He has forgotten more about stone than I know, even when he will not hear of a new thing."
       }
     ],
-    "secret": ""
+    "secret": "",
+    "pastimes": [
+      "sketching arches and towers in charcoal on the back of a slate",
+      "drinking and arguing with Cedric Tanner at the inn",
+      "walking the stone road south a way to look at how the Kettlebridge walls are laid"
+    ],
+    "calling": "I want to build something people live in, not just something that keeps them out."
   }
 }
