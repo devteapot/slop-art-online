@@ -359,7 +359,8 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
             let mut sensed: Vec<(String, u32)> = Vec::new();
             // Itself among them, as before; others when seen (a clear sight line) or smelled.
             let map = common::map(ctx);
-            let seen = common::creatures_near(ctx, from, common::gather_radius(ctx, sight), now).into_iter().filter(|c| c.id == id || (c.dist <= common::sight_to(ctx, sight, c.id, &w, now) && map.sight_clear(from, c.pos)));
+            let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::heading_at(&b, now));
+            let seen = common::creatures_near(ctx, from, common::gather_radius(ctx, sight), now).into_iter().filter(|c| c.id == id || crate::perception::in_sight(ctx, &map, id, from, heading, c.id, c.pos, c.dist, &w, now, false));
             for c in seen.chain(common::smelled_near(ctx, id, &actor.kind, from, sight, now)) {
                 match sensed.iter_mut().find(|(k, _)| *k == *c.kind) {
                     Some(e) => e.1 += 1,
@@ -678,7 +679,10 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     }
     if node == PLAYER && target.class == 3 && target.id as u32 != id {
         let w = common::world(ctx);
-        if !crate::perception::in_sight(&common::map(ctx), here, target.at, dist(here, target.at), common::sight_to(ctx, common::sight_for(ctx, id, &w, now), target.id as u32, &w, now)) {
+        let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::heading_at(&b, now));
+        // Already in the player's sight (its perceived set): the keep margins hold, as on its screen.
+        let kept = ctx.db.perceived().viewer().filter(ctx.sender()).any(|p| p.body == target.id as u32);
+        if !crate::perception::in_sight(ctx, &common::map(ctx), id, here, heading, target.id as u32, target.at, dist(here, target.at), &w, now, kept) {
             return Err("you cannot see them".into());
         }
     }

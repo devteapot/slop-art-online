@@ -121,6 +121,10 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
 /// Install a skill script: compiled and validated on the world's day, then written with a new
 /// revision. `install_script` (the admin) and a seed's laws overlay (`floor::begin`) go through it.
 pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(), String> {
+    // The world's own law values (`world_law`: a seed's `rules`, `set_world_law`) are written
+    // at the end of the installed source, so every client that compiles the `script` row reads
+    // the laws in force (`living_rules::script::with_world_laws`).
+    let source = living_rules::script::with_world_laws(living_rules::script::without_world_laws(&source), &world_law_values(ctx));
     let mut sc = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
         living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
@@ -146,6 +150,43 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     common::invalidate_scripts_rev();
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
+    Ok(())
+}
+
+/// The world's own law values (`world_law` rows), by name.
+pub(crate) fn world_law_values(ctx: &ReducerContext) -> Vec<(String, serde_json::Value)> {
+    let mut v: Vec<(String, serde_json::Value)> = ctx.db.world_law().iter().filter_map(|w| serde_json::from_str(&w.value).ok().map(|v| (w.name, v))).collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0));
+    v
+}
+
+/// Change a law on a running world (admin): `name` is any constant of the script's `laws()`
+/// (`fov_on`, `fire_warmth`, …), `value` its new value as JSON (`true`, `1.5`), of the law's
+/// own kind. The value is kept as the world's own (`world_law`, like a seed's `rules`) and
+/// written into the installed script (`world_law_values()`), which is installed again with a
+/// new revision: the authority's caches, the mind service and every client that compiles the
+/// `script` row take the law in force, so `senses(a)` returns the field at once when `fov_on`
+/// turns on. Every change is kept in `law_change` (name, old, new, when, who, the revision) and
+/// in the chronicle. Refused, with nothing written, for a name that is not a law, a value of
+/// another kind, or a script that then fails its install checks.
+#[spacetimedb::reducer]
+pub fn set_world_law(ctx: &ReducerContext, name: String, value: String) -> Result<(), String> {
+    require_admin(ctx)?;
+    let v: serde_json::Value = serde_json::from_str(value.trim()).map_err(|_| format!("`{value}` is not a value: give a number or true or false"))?;
+    let sc = common::scripts(ctx);
+    sc.laws_with(&[(name.clone(), v.clone())])?;
+    let old = sc.law_value(&name).map(|o| o.to_string()).unwrap_or_default();
+    let new = v.to_string();
+    ctx.db.world_law().name().delete(name.clone());
+    ctx.db.world_law().insert(WorldLaw { name: name.clone(), value: new.clone() });
+    let source = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).ok_or("no script installed")?;
+    // Its install refuses a value the laws cannot run with; the reducer's error rolls the row back.
+    install_source(ctx, source)?;
+    let now = common::now_ms(ctx);
+    let revision = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision).unwrap_or(0);
+    ctx.db.law_change().insert(LawChange { id: 0, name: name.clone(), old: old.clone(), new: new.clone(), at_ms: now, by: ctx.sender(), revision });
+    common::chronicle(ctx, now, "law", 0, 0, (0.0, 0.0), format!("the world's law {name} changed from {old} to {new} (script revision {revision})"));
+    log::info!("set_world_law: {name} {old} -> {new} (revision {revision})");
     Ok(())
 }
 

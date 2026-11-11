@@ -1,0 +1,289 @@
+# The store: heavy outputs in one place
+
+Status: **built, nothing published** (2026-11-11, branch `tool-store`, on the Spark). The tool, its tests, this proposal and the draft dataset cards are in the repository. Nothing has been uploaded, no repository has been created, and the Hugging Face token was not used. Publishing is switched off until the owner agrees (see [Publishing is gated](#publishing-is-gated)).
+
+## Why
+
+The heavy outputs sit on three disks: run journals and results, play sessions, verification evidence, the motion library and its raw takes, clip handoffs, and the asset board's media. They move between machines by `scp`, `rsync` and hand-made tarballs. Evidence was lost twice when a worktree was removed. The owner suggested public Hugging Face repositories, since the code repository is public and MIT.
+
+| Part | Command | Script |
+| --- | --- | --- |
+| What a machine holds | `just living-store manifest [--md FILE] [--json FILE]` | [`living/tools/store.py`](../living/tools/store.py) |
+| What would be published, with every redaction | `just living-store scrub --dry-run SRC [--report DIR] [--decide CAT=VALUE]` | same |
+| Pack a unit as it would be published | `just living-store pack batch\|session\|motion SRC --out DIR` | same |
+| Publish (gated) | `just living-store publish batch\|session\|motion SRC --backend local\|hf [--yes-publish]` | same |
+| Fetch | `just living-store fetch motion-library`, `just living-store fetch batch NAME [--unpack]` | same |
+| Size and file estimates | `just living-store layout [--manifest FILE] [--ratio 0.1]` | same |
+| Self-test | `just living-store-selftest` | [`living/tools/store_selftest.py`](../living/tools/store_selftest.py) |
+
+Defaults are in [`living/tools/store_config.json`](../living/tools/store_config.json): never-touch folders per machine, the owner decisions, repository names and backends. Each machine's own settings go in `~/.config/slop-store/config.json` (or `$STORE_CONFIG`). The draft dataset cards are in [`living/tools/store_cards/`](../living/tools/store_cards/).
+
+The tool uses only the Python 3.9+ standard library and runs on Linux and macOS. The Hugging Face backend imports `huggingface_hub` only past its gate, or for a fetch. No other script calls Hugging Face. The machine is detected as `laptop` (macOS), `spark` (Linux aarch64) or `dev-box` (anything else); `STORE_MACHINE` overrides the detection.
+
+This tool reads files that other tools exported and never talks to SpacetimeDB or Neo4j. The SpacetimeDB documentation check in AGENTS.md therefore does not apply.
+
+## Hugging Face facts (checked 2026-11-11)
+
+- **[Storage limits](https://huggingface.co/docs/hub/storage-limits):**
+  - Free accounts get "Best-effort" public storage and 100 GB of private storage. Public storage asks for "content that offers genuine value to other users", and the Hub has "mitigations in place to prevent abuse of free public storage".
+  - Recommended limits: under 100k files per repository, under 10k entries per folder, under 200 GB per file.
+  - "There is no per-repo size limit for models and datasets"; uploads count against the account.
+  - Commits: "keep around 50-100 files per commit", and "the user experience on the Hub starts to degrade after a few thousand commits".
+  - A dataset needs a card and is shared "to enable community reuse".
+- **[Data files](https://huggingface.co/docs/hub/datasets-data-files-configuration) and [adding datasets](https://huggingface.co/docs/hub/datasets-adding):**
+  - Accepted: Parquet (recommended), JSON Lines, CSV, WebDataset `.tar` and media.
+  - Accepted compression: `.gz`, `.zst`, `.bz2`, `.lz4`, `.xz`, `.zip`.
+  - Several tables in one repository: `configs:` entries in the card's YAML, each with `data_files` globs.
+  - The pages recommend JSON Lines for nested data. They do not say whether the viewer previews compressed JSON Lines; that is checked on the first upload.
+- **[Dataset cards](https://huggingface.co/docs/hub/datasets-cards):** YAML metadata (`license`, `pretty_name`, `tags`, `task_categories`) and a README documenting use and biases.
+- **[Uploads](https://huggingface.co/docs/huggingface_hub/guides/upload):** `upload_folder` splits large folders into several commits by itself. Even so, the HF backend commits at most 100 files at a time (`HFBackend.COMMIT_FILES`).
+
+## Manifest
+
+`store.py manifest` scans each checkout's `.local/living` (trial batches, journals, verification evidence, build folders, play sessions), `.local/kimodo/outputs/library`, `.local/play*` and `living/game/assets/lookdev`. In the home folder it scans `playtest-*`, `trials-archive`, `kimodo-test/library` (read only), `cliplab*`, `clip-handoff`, `kimodo-clips-*`, `kimodo-locomotion-*` and `archive/asset-board`. Checkouts are `~/dev/*` and `~/.t3/worktrees/*/*`.
+
+For each item it records the path, size and file count, whether it can be regenerated and in how long, and where it would go. Never-touch folders are listed but not read.
+
+### Spark (2026-11-11 19:30)
+
+Full table: [`docs/store/manifest-spark.md`](store/manifest-spark.md).
+
+| Kind | Items | Distinct units | Size | Files | Regenerable | Goes to |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| `trial-batch` | 198 (incl. runner logs) | 97 | 5.7 GB | 18,165 | 64 real (5.1 GB): no, real model calls and hours of run time. 32 fake (452 MB): yes, in their run time | runs |
+| `trials-archive` | 50 | 50 | 531 MB | 50 | no; 49 of the 50 are also live batches | runs, deduplicated |
+| `trial-ledger` | 15 | 7 | 0.4 MB | 57 | no | runs |
+| `journal-copy` | 11 | 10 | 4.2 GB | 5,416 | duplicate: `trials.py` copies each into its batch | not uploaded |
+| `mind-journal` | 2 | 2 | 0.2 MB | 10 | no | runs (verify) |
+| `verify-evidence` | 16 | 14 | 1.4 GB | 15,252 | mostly yes with the same commit; paid tiers no | runs (verify) |
+| `play-session` | 2 | 2 | 120 MB | 399 | no | runs (sessions) |
+| `motion-raw` | 1 | – | 115 MB | 151 | partly: same prompt and seed, 3–4 s a take; bit-identical not guaranteed | assets |
+| `motion-library-copy` | 1 | – | 455 MB | 627 | as above (a superset of `motion-raw`) | assets |
+| `cliplab` | 2 | 2 | 437 MB | 772 | scores yes; takes as above | assets |
+| `clip-handoff` | 1 | – | 85 MB | 22 | yes, seconds | assets |
+| `clip-deliverable` | 8 | 8 | 577 MB | 939 | yes, seconds | not uploaded (superseded) |
+| `trial-build` | 36 | – | 986 MB | 164 | yes: `trials.py build`, minutes | not uploaded |
+| `build-output` | 10 | – | 11.2 GB | 22,591 | yes: cargo, minutes | not uploaded |
+| `secret` | 13 | – | 715 B | 13 | n/a (`neo4j.env`) | never |
+| `other` | 24 | – | 3.5 MB | 167 | mostly yes | case by case |
+| `never-touch` | 4 | – | not read | – | n/a: `~/dev/slop-art-online`, `~/slop-lab`, `~/ComfyUI`, `/var/lib/docker` (the `sao-living` data) | never |
+
+25.7 GB was scanned. Of that, 11.2 GB is Cargo output and 4.2 GB is journal copies. The asset board's media are not on the Spark; its records are in git (`living/assets/board/`).
+
+### Adding the laptop and the dev-box
+
+The coordinator on each machine runs these commands from a checkout of `main` once this branch is merged, or of `origin/tool-store` before:
+
+```bash
+# laptop (macOS; the main checkout ~/dev/slop-art-online is a normal evidence location there)
+STORE_MACHINE=laptop python3 living/tools/store.py manifest --md docs/store/manifest-laptop.md \
+    --json ~/store-dryrun-$(date +%F)/manifest-laptop.json
+# dev-box
+STORE_MACHINE=dev-box python3 living/tools/store.py manifest --md docs/store/manifest-dev-box.md \
+    --json ~/store-dryrun-$(date +%F)/manifest-dev-box.json
+```
+
+Then commit the `docs/store/manifest-<machine>.md` file on a branch. Each machine has its own file, so the branches do not conflict.
+
+- If a machine has folders that must not be read, list them first in its `~/.config/slop-store/config.json` as `{"never_touch": {"laptop": ["~/path"]}}`.
+- If evidence sits somewhere the scan does not look, report the path so the scan can be extended.
+
+To estimate one repository across machines, run `layout --manifest` on each machine's JSON.
+
+## Layout proposal
+
+Two public datasets, a few files per unit, one commit per unit.
+
+**`slop-art-online-runs`** ([draft card](../living/tools/store_cards/runs.md))
+
+```
+batches/<machine>/<batch>/   instances.jsonl.gz  calls.jsonl.gz  rows.jsonl.gz  prompts.jsonl.gz  files.tar.gz  MANIFEST.json
+sessions/<machine>/<name>/   (the same six files)
+verify/<machine>/<checkout>-<date>.tar.gz
+README.md                    the card; configs: instances, calls, rows, prompts, session_calls, session_rows
+```
+
+- **Tables.** Each table has one fixed schema, so the viewer can show it.
+  - `calls` has one row per model call, with `purpose`, `model`, `tokens`, `latency_ms` and `error` as columns, and the whole journal line as `entry`.
+  - `rows` has one row per recorded row (`samples`, `thoughts`, `experiences`, `chronicle`, `graphs`, `mind_rows`, `events`, `census`), with `stream`, `at_ms` and the row as JSON text.
+  - `prompts` holds each distinct system prompt once, as the mind's journal does.
+- **Round trip.** `store.py fetch batch <name> --unpack` rebuilds the `trials.py` evidence layout, scrubbed (the self-test checks it file by file). Running `trial_evidence.py` or `trials.py report` on a fetched batch has not been tried yet.
+- **Format.** JSON Lines with gzip is used because it needs no dependencies. Parquet, the Hub's recommended format, can replace it later without changing the layout.
+
+**`slop-art-online-assets`** ([draft card](../living/tools/store_cards/assets.md))
+
+```
+motion/raw/<clip>_s<seed>.npz   motion/MANIFEST.json (sha256 per take)
+motion/cliplab/<clip>/          checks.json, contact sheets, variants.json
+motion/handoffs/*.tar.gz        cliplab.py --handoff batches with their sha256
+board/<family>/<version>/       asset board photographs and pages (from the laptop's ~/archive/asset-board)
+```
+
+**Estimates from the Spark's manifest.** The packed size of `l9` was measured at 9.5 MB from 99 MB, a ratio of 0.096:
+
+| Repository | Part | Units | Raw | Estimated | Files |
+| --- | --- | ---: | ---: | ---: | ---: |
+| runs | batches | 97 | 5.7 GB | 0.58 GB | 582 |
+| runs | sessions | 2 | 120 MB | ≤ 60 MB | 12 |
+| runs | verify | 17 | 1.4 GB | ~0.15 GB | 16 |
+| **runs** | | | | **~0.8 GB** | **~616** |
+| assets | motion/raw | 627 takes | 455 MB | 455 MB (npz, already compact) | 628 |
+| assets | cliplab, handoffs | 3 | 521 MB | ~0.26 GB | ~725 |
+| **assets** | | | | **~0.7 GB** | **~1,350** |
+
+- **Within the advice.**
+  - Both repositories stay far below 100k files and 10k per folder. The largest folder is `motion/raw`, with 627 files.
+  - About 120 commits in all: one per batch or session, and seven of at most 100 files for the takes. That is far from "a few thousand".
+- **Unknowns.** The laptop's play sessions, play reports and asset board, and the dev-box's runs, are not counted yet; add them from their manifests.
+- **Real against fake.** Publishing only the 64 real batches would make the runs repository about 0.5 GB.
+
+### Not uploaded, and why
+
+| What | Why |
+| --- | --- |
+| Cargo targets (`target-*`, `verify/build-*`), trial modules (`trials/wasm`), derived seeds (`trials/seeds`), build logs | Build output: regenerated in minutes from the code at the batch's commit (`batch.json` records it). 12 GB on the Spark alone. |
+| SpacetimeDB replicas, WAL and the Docker volumes; Neo4j stores | Database replicas. What matters from them is already exported into the batch (rows, `final.json`, snapshots). They are also large and machine-specific. |
+| `.local/living/journal/verify-trial-*` | Duplicates of each batch's `journal/` (copied at the stop; checked byte-identical on `l9`). |
+| `~/trials-archive/*.tar.gz` that are also live batches | 49 of 50 are. The one archive-only tarball (3.4 KB) would be unpacked to a scratch folder and packed as a batch; `pack` does not read tarballs as batches yet. |
+| `kimodo-clips-*`, `kimodo-locomotion-*`, review folders | Hand-made copies of takes that `motion/raw` and `motion/handoffs` hold. |
+| `living/game/assets/lookdev` (game-ready GLBs) | `just living-game-assets` regenerates them in minutes. Accepted versions are recorded through the board. |
+| `neo4j.env`, `.env`, `cli.toml`, keys | Secrets: refused by the scrubber whatever the source. |
+| Browser profiles, `__pycache__`, macOS `._*` files | Not evidence. A browser profile holds cookies and logins. One was found in `~/playtest-2` (`ffprof/`, `review/ffprof-ui/`) and refused. |
+
+## The scrubber
+
+`store.py scrub --dry-run SRC` reads SRC twice, writes nothing outside `~/store-dryrun-<date>/` (or `--report`), and uploads nothing. SRC can be a folder, a file or a tarball; tarball members are read in memory.
+
+1. **Learn.**
+   - The session's player comes from the client log's `playing character #N` (or `--player`).
+   - The owner's typed lines are found where the world quotes them:
+     - `<speaker> said[ to …]: “…” {<speaker>=#N, …}`, where the tags start with the speaker, except after `You said`;
+     - a conversation prompt's lines from the label in its `# You and <label> (#N)` header;
+     - client events of kind `say`.
+   - Logins are taken from home paths (`/home/<x>`, `/Users/<x>`).
+2. **Classify and redact.** Each file gets a status:
+   - `ok`: publishable after redaction;
+   - `held`: waits on an owner decision;
+   - `excluded`: the owner said no;
+   - `refused`: cannot be made safe;
+   - `skipped`: build output.
+
+   Held files are still read, so the report shows their redactions. File names are scrubbed too, for example `Diego.jsonl` becomes `Player.jsonl`.
+
+**Always redacted (text):**
+
+| Category | What | Becomes |
+| --- | --- | --- |
+| `known-secret` | The literal values of this machine's secrets: secret-named variables in the environment and in every checkout's `.env`, `trials/*.env` (including the password half of `NEO4J_AUTH`), the HF token file and SpacetimeDB CLI tokens. Read at run time, never printed. This is how a bare 32-character Mistral key is caught. | `[redacted:secret]` |
+| `hf-token`, `github-token`, `api-key`, `aws-key`, `slack-token`, `google-key`, `jwt` | `hf_…`; `ghp_/gho_/ghu_/ghs_/ghr_…` and `github_pat_…`; `sk-…` and `sk-ant-…`; `AKIA…`; `xox?-…`; `AIza…`; JWTs (SpacetimeDB identity tokens) | `[redacted:<category>]` |
+| `bearer`, `secret-assignment`, `url-credentials`, `secret-field` | `Bearer …`; `Authorization: Basic …`; `x-api-key`; `NAME_TOKEN/SECRET/PASSWORD/API_KEY/_KEY/_AUTH=…` (so `LIVING_TOKEN=…`, `MISTRAL_API_KEY=…`); `password=`, `token=` and the like; `scheme://user:pass@`; JSON fields named like secrets (`prompt_cache_key` is not one) | `[redacted:secret]` |
+| `owner-email`, `email` | The owner's addresses (git config, `GIT_*`, `STORE_OWNER_EMAILS`), then any address | `[owner-email]`, `[email]` |
+| `owner-name` | Full name and surname (git config, `GIT_*`, `STORE_OWNER_NAMES`) | `[owner]` |
+| `home-path`, `login` | `/home/<user>`, `/Users/<user>`, `C:\Users\<user>`; bare logins | `~`, `[user]` |
+| `private-ip` | 10/8, 172.16/12, 192.168/16, Tailscale 100.64/10 (octets checked; 127.0.0.1 and public addresses stay) | `[private-ip]` |
+| `hostname` | This machine's name, `~/.ssh/config` hosts, `STORE_HOSTNAMES`, `*.ts.net`, `*.local`/`*.lan`, Mac default names | `[host]` |
+
+**Refused whole:**
+- files in never-touch folders, or with `sao-living` in the path;
+- secrets files (`.env`, `*.env`, `cli.toml`, `id_*`, `*.pem`, `*.key`, `.netrc`, credentials);
+- anything containing a private-key block;
+- browser profiles;
+- macOS metadata;
+- binaries of unknown kind.
+
+Known binaries (`.npz`, images, video, `.glb`) are scanned as bytes for literal identity strings, home paths and token patterns. A hit refuses the file, because it cannot be redacted in place.
+
+No identity is in the repository: the scrubber reads it at run time, and the tests plant fake values. The owner's identifiers are not hard-coded either.
+
+**Self-test** (`just living-store-selftest`, 19 tests, about 0.1 s):
+
+- planted secrets in every format above, including a bare Mistral-style key, `LIVING_TOKEN` in shell and JSON form, `NEO4J_AUTH`, a SpacetimeDB-style JWT and URL credentials;
+- the owner's email, name, first name and login;
+- private and non-private addresses, hostnames, and base64 that must not match;
+- strings that must stay unchanged (`.local/living`, journal hashes, `prompt_cache_key`, `max_tokens`, "the bearer of the letter");
+- refusals, never-touch paths, gzip and JSON Lines;
+- a fake play session: the owner's lines are learned and redacted, a resident's line to the player is kept, and the browser profile is refused;
+- the dry-run CLI, checking that no secret reaches the report or stdout;
+- batch pack → local publish → fetch → unpack, equal to the scrubbed source;
+- the motion round trip with sha256 checks;
+- the manifest on a fake home;
+- the publish gate.
+
+### Dry runs (2026-11-11; reports in `~/store-dryrun-2026-11-11/` on the Spark, not in git)
+
+| Source | Files ok | Held | Refused / skipped | Redactions (masked) |
+| --- | --- | --- | --- | --- |
+| Trial batch `l9` (`~/dev/slop-trials-e6/.local/living/trials/l9`, read only, 99 MB, 6 instances) | 134 (50.9 MB) | 36 journal files (46.6 MB): `model_exchanges` | 0 | `home-path` 18 (`/home/g…`), `secret-field` 6 (`…[16 chars]`: the fake-server key in `mind-env.json`) |
+| Play-test 2 (`~/playtest-2`, 121 MB) | 249 (67.6 MB) | 101 (23.7 MB): 62 journal files, 37 stills/screenshots, 2 FEEDBACK.md | 163 refused (95 browser profile, 68 macOS `._*`), 8 skipped (`__pycache__`) | `home-path` 514 (`/Users/c…`, `/home/g…`), `owner-first-name` 554 (`D…o[5]`), `owner-line` 240 (`w…p[6]`, `h…`, `s…i[11]`) |
+| Play-test 3 (`~/playtest-3`, two tarballs) | 37 (1.7 MB) | 66 (2.8 MB): 64 journal files, 2 FEEDBACK.md | 117 macOS `._*` | `home-path` 8, `owner-first-name` 98, `owner-line` 37 (`H…`) |
+
+- **Secrets.** None of the three sources holds an API key, token, JWT, private address or owner email.
+- **Owner lines.** In play-test 2 the scrubber found exactly the owner's three typed lines (masked `h…`, `s…i[11]`, `w…p[6]`), the same lines as the hand-made diagnosis `playtest-2/diagnosis/REPORT.md`. In play-test 3 it found one (`H…`), as in the play report.
+- **Packed size.** The `l9` what-if pack (`--decide model_exchanges=include`) is 9.5 MB. No home path, login, hostname or fake key is left in it.
+
+### For the owner to decide
+
+| Category | Now | Counts in the dry runs |
+| --- | --- | --- |
+| `model_exchanges`: the journals' actual requests and replies (Mistral-hosted GLM 5.3 Flash and DeepSeek V4.1 Flash) | **undecided** (held) | `l9`: 3,639 calls (consolidate 656, think 1,445, deliberate 1,461, reorganize 77; GLM 3,637, DeepSeek 2). Play-test 2: 274 calls. Play-test 3: 268. Thoughts, experiences and chronicle rows also carry the models' words; they are treated as world rows unless the owner says otherwise. |
+| `owner_lines`: the owner's typed lines wherever they recur | **exclude** (default; replaced by `[owner line]`) | Play-test 2: 3 lines, 240 occurrences. Play-test 3: 1 line, 37 occurrences. Paraphrases by models cannot be caught. Lines shorter than 6 characters ("hi") are caught only in quotes, and a resident saying the same quoted words is redacted too. |
+| `owner_first_name`: the player character carries it | **redact** (to `Player`) | Play-test 2: 554. Play-test 3: 98. |
+| `owner_notes`: FEEDBACK.md | **undecided** | 2 files per play test (one is a tarball copy) |
+| `session_media`: stills, screenshots, video | **undecided** | Play-test 2: 37 files, 21.8 MB. They show the HUD and chat as drawn. |
+
+`--decide CAT=VALUE` previews a choice on `scrub` and `pack`. It is not saved. `publish` takes decisions only from the config files, and refuses a unit while any of its files is held.
+
+Not redacted, by design:
+- SpacetimeDB identities (public keys, not credentials);
+- the code repository's GitHub URL;
+- residents' names, which are game content.
+
+## Licences (draft notes; not legal advice)
+
+| Data | Derives from | May it be published? | Source |
+| --- | --- | --- | --- |
+| Kimodo motion takes (`motion/raw`) | NVIDIA Kimodo-SOMA-RP-v1.2 (NVIDIA Open Model License), trained on the proprietary Bones Rigplay dataset; prompts encoded by Meta Llama 3 8B Instruct through LLM2Vec | Yes, as far as read. "NVIDIA does not claim ownership to any outputs"; "An output is not a Derivative Model"; "You are responsible for outputs and their subsequent uses" (ss. 1.1, 2.4). Redistribution terms bind copies of the model, not outputs. Model use must follow NVIDIA's Trustworthy AI terms. Llama 3: "Built with Meta Llama 3", and s.1.b.v forbids using its "output or results" to improve another LLM; the card asks users not to train language models on the takes. | `~/kimodo-test/kimodo/README.md` (code Apache-2.0; checkpoints licensed separately); the model's `LICENSE` and `README.md` in the local HF cache (read only); [model page](https://huggingface.co/nvidia/Kimodo-SOMA-RP-v1.2); [licence page](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) (version of 2025-10-24); the Llama 3 `LICENSE` in the local HF cache |
+| VRoid sample characters (`vroid-Sendagaya_Shino`, `vroid-Vivi`) | VRoid beta samples, downloaded by `living/tools/lookdev_assets.sh` from the `madjin/vrm-samples` mirror | CC0 with commercial use allowed: each file's VRM metadata reads `licenseName: CC0`, `commercialUssageName: Allow`, `allowedUserName: Everyone`. They are not in the proposed repositories; our generated characters contain none of their content. | [`living/tools/blender/THIRD_PARTY.md`](../living/tools/blender/THIRD_PARTY.md) (read from the files 2026-11-11); [OpenGameArt "VRoid Studio CC0 models"](https://opengameart.org/content/vroid-studio-cc0-models). VRoid's own help and Hub pages refused automated reads (HTTP 403). A [Booth listing](https://booth.pm/en/items/3094418) says VRoid has ended distribution of the CC0 samples. |
+| Model replies (journals, thoughts, spoken lines) | Mistral AI's API serving `zai-glm-5-3-flash`, `deepseek-v4-1-flash-1017` and `ministral-*` | Probably yes, labelled AI-generated. Mistral's [Commercial Terms](https://legal.mistral.ai/terms/commercial-terms-of-service) (effective 2026-09-25): the customer "owns all Output" (s.3.1). It may not be presented as human-made (s.3.2) or used to reverse engineer Mistral's products (s.2.2(e)). [Additional terms](https://legal.mistral.ai/terms/additional-terms) s.6 leave third-party models' rights with their licensors. [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5) is MIT. [DeepSeek's model licence](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/LICENSE-MODEL) s.6: "DeepSeek claims no rights in the Output". DeepSeek's own [platform terms](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html) ask that published output be marked as AI-generated (s.3.1), which the card does. | **Not verified:** the licences of the exact GLM 5.3 and DeepSeek V4.1 versions, and whether `ministral-*-latest` maps to Ministral 3 (Apache-2.0 on its [8B card](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512)) or the 2410 models ([Mistral Research License](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)). `l9` used only GLM and DeepSeek. |
+| Prompts and world rows | Our mind service and the authority's rules | Ours, MIT | this repository |
+| Blender-generated models, textures, board photographs | Our scripts and the game's renderer | Ours, MIT. The tools (Blender GPL, ffmpeg LGPL/GPL) put no terms on what they produce. | `living/tools/blender/THIRD_PARTY.md` |
+| SpacetimeDB exports, Neo4j data | Data written by our module and minds | Yes. [SpacetimeDB](https://github.com/clockworklabs/SpacetimeDB/blob/master/LICENSE.txt) is BSL 1.1 (changing to AGPL-3.0 with a linking exception) and [Neo4j](https://github.com/neo4j/neo4j/blob/dev/LICENSE.txt) Community is GPLv3; both cover the programs. Neither says anything about exported data; the GPL family covers output only when the output is itself a covered work. Replicas and stores are not published anyway. | the linked licence files |
+
+The proposed licence of both cards is MIT, matching the code. That is the owner's choice; the cards are marked draft.
+
+## Fetch and publish
+
+- **`fetch motion-library`** copies `motion/raw/*.npz` from the assets repository into `.local/kimodo/outputs/library/`, the folder `gen_anim.sh` and `gen_person.sh` read. This replaces the `rsync` from the Spark in `spark.sh`.
+  - Every take is checked against `motion/MANIFEST.json`'s sha256.
+  - A take already there with the same content is kept.
+  - A different one is replaced only with `--force`.
+  - It refuses to write into a read-only folder such as `~/kimodo-test`.
+- **`fetch batch NAME [--machine M] [--unpack]`** fetches `batches/<machine>/<NAME>/` into `.local/living/store/batches/NAME/`. It refuses when the name exists on several machines and no `--machine` is given. With `--unpack` it rebuilds the evidence layout.
+- **`publish`** packs the unit into a temporary folder, refuses it while any file is held, and hands the folder to a backend.
+  - Batches go to `runs:batches/<machine>/<name>`, sessions to `runs:sessions/<machine>/<name>`, and the motion library to `assets:motion`.
+  - `--backend local` is a folder per repository (`backends.local.root`, default `~/store-local`), with a `.commits.jsonl` log. The tests use it, and it can serve as a machine-local mirror.
+  - `--backend hf` creates the repository if needed and uploads with `upload_folder`, or in commits of 100 files when there are more. It fetches with `snapshot_download`.
+
+### Publishing is gated
+
+Publishing to Hugging Face needs both of these:
+
+1. `--yes-publish` on the command line;
+2. `"publish_enabled": true` in the **machine-local** config, `~/.config/slop-store/config.json`, together with `backends.hf.namespace`.
+
+`load_config` refuses a repository config that sets `publish_enabled`, so no commit can switch publishing on. The gate is checked before any file is read and before `huggingface_hub` is imported.
+
+The tests cover the gate:
+- each of the three off combinations refuses, and the fake API records no call;
+- the CLI refuses with a poisoned `huggingface_hub` module in place, which would fail if anything imported it;
+- the shipped config is off.
+
+## Not covered
+
+- **Laptop and dev-box manifests.** Not run; the commands are above.
+- **Tables for verify evidence and sessions.** Verify evidence is planned as one tarball per checkout and date, and `pack` does not build that yet. Sessions pack with the batch shapes (one "instance" per top-level folder); their tables have not been designed separately.
+- **Parquet.** Not produced: `pyarrow` is not installed on the Spark.
+- **The viewer.** Whether the Hub viewer previews these `.jsonl.gz` files is unchecked until a first upload.
+- **Speed.** About 0.4 s per MB (`l9`: 45 s for the dry run, 39 s for the pack). Packing all 5.7 GB of batches would take about 35 minutes.
+- **Media.** Images and video are not checked for drawn text; that is why `session_media` is a decision.
+- **Owner lines.** Lines a model paraphrased, and lines no resident heard (no prompt quotes them), are not found.

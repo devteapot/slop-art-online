@@ -36,6 +36,7 @@ use crate::common::{self, pos, NearCreature};
 use crate::tables::*;
 use living_rules::map::Map;
 use living_rules::script::{Precision, Regard, RegardIn, Scripts};
+use spacetimedb::rand::Rng;
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, ViewContext};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -119,29 +120,74 @@ pub struct MyOffer {
 
 // ---- the one sight rule ------------------------------------------------------------------
 
-/// Whether an eye at `eye` sees `at`, `dist` away, with sight `sight`: within it, and no
-/// rock, wall or shut gate between (`Map::sight_clear`). Players' perceived sets, minds'
-/// percepts and scenes, behaviour graphs and the combat feed all see by this.
-pub fn in_sight(map: &Map, eye: (f32, f32), at: (f32, f32), dist: f32, sight: f32) -> bool {
-    dist <= sight && map.sight_clear(eye, at)
+/// The one sight rule: whether `observer`, its eye at `eye` and its body facing `heading`, sees
+/// `at` (`dist` away), where creature `target` stands (0: a place, no light on it). Its own
+/// senses now (the `senses` law: sight, and a field when the world's `fov_on` law is on), the
+/// light on the target (the `glow` law, which shows it only within the field) and a clear sight
+/// line, decided by `living_rules::sight::sees`, the function the game client calls too.
+/// `kept`: the target is already seen (the keep margins on distance and angle). Players'
+/// perceived sets, minds' percepts and scenes, behaviour graphs, witnesses, the combat feed and
+/// a player's aimed act all see by this.
+#[allow(clippy::too_many_arguments)]
+pub fn in_sight(ctx: &ReducerContext, map: &Map, observer: u32, eye: (f32, f32), heading: f32, target: u32, at: (f32, f32), dist: f32, w: &World, now: u64, kept: bool) -> bool {
+    let senses = common::senses_of(ctx, observer, w, now);
+    let glow = if target != 0 { common::glow_of(ctx, target, w, now) } else { 0.0 };
+    let keep = kept.then(|| common::laws(ctx).keep_seen_m);
+    living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, keep)
 }
 
-/// Whether character `id`, standing at `eye`, sees `at` now (its own sight: day, night or a
-/// torch).
-pub fn sees(ctx: &ReducerContext, id: u32, eye: (f32, f32), at: (f32, f32), w: &World, map: &Map, now: u64) -> bool {
-    in_sight(map, eye, at, common::dist(eye, at), common::sight_for(ctx, id, w, now))
+/// Whether character `id`, its body `eye`, sees the place `at` now.
+pub fn sees(ctx: &ReducerContext, id: u32, eye: &Body, at: (f32, f32), w: &World, map: &Map, now: u64) -> bool {
+    let e = pos(eye, now);
+    in_sight(ctx, map, id, e, common::heading_at(eye, now), 0, at, common::dist(e, at), w, now, false)
 }
 
-/// The creatures a character at `at` with sight `sight` sees (itself excluded), nearest first:
-/// within its sight, or within the `glow` of a light on them (a carried torch, lamplight).
-pub fn visible(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> Vec<NearCreature> {
+/// What character `id` at `at` sees now and what it hears but does not see, from one gather of
+/// the creatures round it, nearest first, itself excluded. Seen: within its sight (`sight`, its
+/// `senses` law's now) or the `glow` of a light on them (a carried torch, lamplight), within its
+/// field when the world's law turns it on, with a clear line. Heard: only while it has a field,
+/// within its hearing and not seen ([`heard`] for one that has no scene to share).
+pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
     let map = common::map(ctx);
-    let gather = common::gather_radius(ctx, sight);
-    if gather <= sight {
-        return common::creatures_near(ctx, at, sight, now).into_iter().filter(|c| c.id != id && map.sight_clear(at, c.pos)).collect();
-    }
     let w = common::world(ctx);
-    common::creatures_near(ctx, at, gather, now).into_iter().filter(|c| c.id != id && (c.dist <= sight || c.dist <= common::glow_of(ctx, c.id, &w, now)) && map.sight_clear(at, c.pos)).collect()
+    let senses = common::senses_of(ctx, id, &w, now);
+    let gather = common::gather_radius(ctx, sight);
+    let lit = gather > sight;
+    // Facing matters only with a field (one body lookup then), and only then is anything heard.
+    let field = senses.field.is_some();
+    let heading = if field { ctx.db.body().id().find(id).map_or(0.0, |b| common::heading_at(&b, now)) } else { 0.0 };
+    let hearing = if field { senses.hearing } else { 0.0 };
+    let (mut seen, mut heard) = (Vec::new(), Vec::new());
+    for c in common::creatures_near(ctx, at, gather.max(hearing), now) {
+        if c.id == id {
+            continue;
+        }
+        if c.dist <= gather && living_rules::sight::sees(&map, at, heading, c.pos, c.dist, &senses, if lit { common::glow_of(ctx, c.id, &w, now) } else { 0.0 }, None) {
+            seen.push(c);
+        } else if c.dist <= hearing {
+            heard.push(c);
+        }
+    }
+    (seen, heard)
+}
+
+/// What `id` at `at`, facing `heading`, hears but does not see now, when its senses have a
+/// field (the `fov_on` law; without one, nothing is told as heard and everything stays as it
+/// was): every creature within its hearing, all round, that is not in `seen`. Nearest first.
+pub fn heard(ctx: &ReducerContext, id: u32, at: (f32, f32), seen: &HashSet<u32>, now: u64) -> Vec<NearCreature> {
+    let w = common::world(ctx);
+    let s = common::senses_of(ctx, id, &w, now);
+    if s.field.is_none() || s.hearing <= 0.0 {
+        return Vec::new();
+    }
+    common::creatures_near(ctx, at, s.hearing, now).into_iter().filter(|c| c.id != id && !seen.contains(&c.id)).collect()
+}
+
+/// How a heard creature is told: its kind as a listener can tell it (the script's `heard_as`
+/// law: "person", "deer", "wolf", else "creature").
+pub fn heard_kind(ctx: &ReducerContext, kind: &str) -> String {
+    let sc = common::scripts(ctx);
+    sc.heard_as(kind)
 }
 
 /// The largest sight anyone has now (for gathering onlookers before each one's own test): the
@@ -496,24 +542,30 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let Some(b) = ctx.db.body().id().find(id) else { return };
     let Some(me) = ctx.db.character().id().find(id) else { return };
     let here = pos(&b, now);
-    let sight = common::sight_for(ctx, id, w, now);
+    let heading = common::heading_at(&b, now);
+    let senses = common::senses_of(ctx, id, w, now);
+    let sight = senses.sight;
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
     let keep = common::laws(ctx).keep_seen_m;
     // Gathered within the viewer's sight, or the farthest glow when the world's laws light
-    // people (a carried torch, lamplight); each is then seen within its own reach.
+    // people (a carried torch, lamplight); each is then seen by the one sight rule: its reach
+    // in that direction (the field, when the world's law gives one), the light on it, and a
+    // clear line. A creature already seen keeps the margins (`keep_seen_m`, the field's angle).
     let gather = common::gather_radius(ctx, sight);
+    let lit = gather > sight;
     for c in common::creatures_near(ctx, here, gather + keep, now) {
         if c.id == id {
             continue;
         }
-        let s = if gather > sight { common::sight_to(ctx, sight, c.id, w, now) } else { sight };
-        let reach = if had.contains(&c.id) { s + keep } else { s };
-        if in_sight(map, here, c.pos, c.dist, reach) {
+        let glow = if lit { common::glow_of(ctx, c.id, w, now) } else { 0.0 };
+        let kept = had.contains(&c.id).then_some(keep);
+        if living_rules::sight::sees(map, here, heading, c.pos, c.dist, &senses, glow, kept) {
             seen.insert(c.id);
         }
     }
+    hear(ctx, id, viewer, here, &seen, now);
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
@@ -601,6 +653,78 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     }
 }
 
+// ---- heard, not seen -----------------------------------------------------------------------
+
+/// How long a heard key's salt epoch lasts: a sound that starts in another epoch gets a key
+/// that cannot be matched with an earlier one of the same creature (ms).
+const HEAR_EPOCH_MS: u64 = 240_000;
+
+thread_local! {
+    /// When each (listener, target) was last heard (module memory; a fresh instance starts each
+    /// row's linger at its first sweep).
+    static HEARD_LAST: RefCell<HashMap<(u32, u32), u64>> = RefCell::new(HashMap::new());
+}
+
+fn hear_salt(ctx: &ReducerContext) -> u64 {
+    if let Some(s) = ctx.db.hear_salt().id().find(0) {
+        return s.salt;
+    }
+    let salt: u64 = ctx.rng().gen();
+    ctx.db.hear_salt().insert(HearSalt { id: 0, salt });
+    salt
+}
+
+/// A listener's key for a sound: from the listener, the target and the secret salt of the epoch
+/// it began in. Not the character id, and not derivable from it without the salt.
+fn heard_key(salt: u64, listener: u32, target: u32, now: u64) -> u64 {
+    let mut x = salt ^ ((listener as u64) << 32 | target as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (now / HEAR_EPOCH_MS).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
+    // splitmix64's finalizer.
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ (x >> 31)
+}
+
+/// What a player hears but does not see, kept in its `heard` rows (the `heard_sounds` view):
+/// written when a sound starts or its bearing or band changes; gone when the creature comes into
+/// sight, or `heard_linger_s` after it was last heard. Nothing while its senses have no field.
+fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen: &HashSet<u32>, now: u64) {
+    let now_heard = heard(ctx, id, here, seen, now);
+    let rows: Vec<Heard> = ctx.db.heard().viewer().filter(viewer).collect();
+    if now_heard.is_empty() && rows.is_empty() {
+        return;
+    }
+    let laws = common::laws(ctx);
+    let linger = (laws.heard_linger_s * 1000.0) as u64;
+    let mut current: HashSet<u32> = HashSet::new();
+    let mut salt = None;
+    for c in &now_heard {
+        current.insert(c.id);
+        HEARD_LAST.with(|h| h.borrow_mut().insert((id, c.id), now));
+        let bearing = living_rules::sight::compass8(here, c.pos);
+        let band = living_rules::sight::heard_band(c.dist, laws.heard_near_m, laws.heard_close_m);
+        match rows.iter().find(|r| r.target == c.id && r.listener == id) {
+            Some(r) if r.bearing == bearing && r.band == band => {}
+            Some(r) => {
+                ctx.db.heard().key().update(Heard { bearing, band, ..r.clone() });
+            }
+            None => {
+                let salt = *salt.get_or_insert_with(|| hear_salt(ctx));
+                let key = heard_key(salt, id, c.id, now);
+                if ctx.db.heard().key().find(key).is_none() {
+                    ctx.db.heard().insert(Heard { key, viewer, listener: id, target: c.id, kind: heard_kind(ctx, &c.kind), bearing, band, since_ms: now });
+                }
+            }
+        }
+    }
+    for r in rows.iter().filter(|r| !current.contains(&r.target)) {
+        let last = HEARD_LAST.with(|h| *h.borrow_mut().entry((id, r.target)).or_insert(now));
+        if r.listener != id || seen.contains(&r.target) || now.saturating_sub(last) >= linger {
+            ctx.db.heard().key().delete(r.key);
+            HEARD_LAST.with(|h| h.borrow_mut().remove(&(id, r.target)));
+        }
+    }
+}
+
 /// A creature's health moved (a blow, a heal, the 1 Hz band follow-up): the players who
 /// perceive it see its band follow, and exact health where the law grants it: its own player
 /// at once, the others at their next frame (`frame.rs`).
@@ -642,6 +766,10 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for p in ctx.db.projected().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.projected().id().delete(p);
     }
+    for k in ctx.db.heard().viewer().filter(viewer).map(|h| h.key).collect::<Vec<_>>() {
+        ctx.db.heard().key().delete(k);
+    }
+    HEARD_LAST.with(|h| h.borrow_mut().retain(|(l, _), _| *l != id));
 }
 
 /// A character is no longer seen by anyone (it died): its rows in others' sets go, its motion
@@ -801,6 +929,29 @@ pub fn seen_doing(ctx: &ViewContext) -> Vec<Doing> {
 #[spacetimedb::view(accessor = my_doing, public, primary_key = id)]
 pub fn my_doing(ctx: &ViewContext) -> Vec<Doing> {
     living(ctx).and_then(|c| ctx.db.doing().id().find(c.id)).into_iter().collect()
+}
+
+/// What a player hears but cannot see (a row of `heard_sounds`): what it sounds like, one of
+/// eight compass ways, how far as a band, and a key that stays the same while the sound lasts.
+/// Never who it is.
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct HeardSound {
+    /// Stable while the sound lasts; derived from the listener, the creature and a secret salt
+    /// that rotates every few minutes, so it names no one.
+    pub key: u64,
+    /// "person", "deer", "wolf" or "creature".
+    pub kind: String,
+    /// 0 north, then clockwise: 1 north-east … 7 north-west.
+    pub bearing: u8,
+    /// 0 near (within `heard_near_m`), 1 close (`heard_close_m`), 2 far (out to hearing).
+    pub band: u8,
+}
+
+/// What my character hears and does not see now (only while the world's `fov_on` law gives
+/// sight a field). Reads only my `heard` rows.
+#[spacetimedb::view(accessor = heard_sounds, public, primary_key = key)]
+pub fn heard_sounds(ctx: &ViewContext) -> Vec<HeardSound> {
+    ctx.db.heard().viewer().filter(ctx.sender()).map(|h| HeardSound { key: h.key, kind: h.kind, bearing: h.bearing, band: h.band }).collect()
 }
 
 /// My current character, alive, or the one that died last until I join again (the death
