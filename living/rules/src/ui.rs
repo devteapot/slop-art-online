@@ -62,8 +62,8 @@ vocab! {
         Item = "item",
         /// The ways chips in the text box (ways of speaking only).
         Box = "box",
-        /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), the offer
-        /// it answers as the act's reference once the grammar carries one (rules-offers-2).
+        /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), naming the
+        /// offer it answers (`"offer": id`).
         Offer = "offer",
     }
 }
@@ -744,8 +744,8 @@ pub enum ActTarget {
     Thing { kind: String, at: Option<[f32; 2]> },
     /// A point on the ground.
     At([f32; 2]),
-    /// An incoming offer: toward its sender. The offer's id goes with the act once the grammar
-    /// carries a reference (rules-offers-2); until then the act names the sender only.
+    /// An incoming offer: toward its sender, naming the offer it answers (`"offer": id`; 0
+    /// names none, and the rules take what stands from the sender).
     Offer { from: u32, offer: u64 },
 }
 
@@ -769,7 +769,14 @@ pub fn act_node(skill: &str, target: &ActTarget, picked: &Picked) -> serde_json:
     let mut leaf = json!({"do": skill});
     match target {
         ActTarget::Me => {}
-        ActTarget::Creature(id) | ActTarget::Offer { from: id, .. } => leaf["target"] = json!({"id": id}),
+        ActTarget::Creature(id) => leaf["target"] = json!({"id": id}),
+        // The offer it answers goes with it (`"offer": id`); 0 names none.
+        ActTarget::Offer { from, offer } => {
+            leaf["target"] = json!({"id": from});
+            if *offer != 0 {
+                leaf["offer"] = json!(offer);
+            }
+        }
         ActTarget::Thing { kind, .. } => leaf["target"] = json!({"nearest": kind}),
         ActTarget::At(p) => leaf["target"] = json!({"at": p}),
     }

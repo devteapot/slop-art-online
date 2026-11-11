@@ -8,7 +8,7 @@ Run `scripts/verify_llm.py` from the repository root as shown in [SKILL.md](../S
 | Routing and key configuration | `routing-group`, `routing-assign`, `routing-rotate`, `routing-child`, `routing-default`, `missing-default-key` | [routing.md](routing.md) |
 | Per-purpose model mixes, stage of attention, effort per purpose, output caps per purpose, effort gaps | `mix`; Cargo `mixes_route_each_purpose_and_stage_with_its_effort`, `a_models_file_naming_what_does_not_exist_is_refused`, `purposes_sent_without_an_effort_entry_are_reported`, `every_profile_caps_each_purpose_near_its_need` | [mixes.md](mixes.md) |
 | Pacing, priority lanes, token admission and caching | Cargo and fake contract, `basic` | [pacing.md](pacing.md) |
-| Rate limits, overflow and fallback; background calls do not overflow | `overflow`, `retry-fallback`, `error-overflow`; Cargo `background_calls_do_not_overflow` | [overflow.md](overflow.md) |
+| Rate limits, overflow and fallback; background calls do not overflow, except listed ones on a capacity 429 | `overflow`, `capacity-overflow`, `capacity-retry`, `retry-fallback`, `error-overflow`; Cargo `background_calls_do_not_overflow`, `a_model_out_of_capacity_sends_listed_memory_work_to_the_overflow` | [overflow.md](overflow.md) |
 | Outage gate and recovery; a deliberation keeps its request | `outage` | [outage.md](outage.md) |
 | JSON repair and bounded deliberation retry | `repair`, `deliberation-retry`, `retry-exhausted` | [repair.md](repair.md) |
 | Real HTTP timeout | `timeout` | [timeout.md](timeout.md) |

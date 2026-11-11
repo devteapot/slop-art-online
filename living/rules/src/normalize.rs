@@ -111,11 +111,12 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
             }
             if let Some(v) = m.get("say") {
                 body_check(path, "say", None)?;
-                let (text, to) = match v {
-                    Value::String(s) => (s.clone(), m.get("to").cloned()),
+                let (text, to, way) = match v {
+                    Value::String(s) => (s.clone(), m.get("to").cloned(), m.get("way").cloned()),
                     Value::Object(o) => (
                         o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(),
                         o.get("to").cloned().filter(|t| !t.is_null()).or_else(|| m.get("to").cloned()),
+                        o.get("way").cloned().filter(|t| !t.is_null()).or_else(|| m.get("way").cloned()),
                     ),
                     _ => return Err(format!("{path}.say: expected text")),
                 };
@@ -124,6 +125,7 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
                 if let Some(to) = to {
                     out["say"]["to"] = target(to, &format!("{path}.say.to"))?;
                 }
+                way_of(&mut out, way, path)?;
                 return Ok(out);
             }
             if let Some(v) = m.get("wait") {
@@ -309,6 +311,23 @@ fn if_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     Ok(json!({"if": out}))
 }
 
+
+/// A say's way of speaking (`"way": "whisper"`), lowercased; `say` (the default) is left out.
+fn way_of(out: &mut Value, way: Option<Value>, path: &str) -> Result<(), String> {
+    match way {
+        None | Some(Value::Null) => Ok(()),
+        Some(Value::String(w)) => {
+            let w = w.trim().to_lowercase().replace([' ', '-'], "_");
+            if w.is_empty() || w == "say" {
+                return Ok(());
+            }
+            out["say"]["way"] = json!(w);
+            Ok(())
+        }
+        Some(_) => Err(format!("{path}.say.way: the name of a way of speaking")),
+    }
+}
+
 fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     let d = m.get("do").cloned().unwrap_or(Value::Null);
     let mut action = match d {
@@ -336,6 +355,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
             if let Some(t) = action.get("to").or_else(|| action.get("target")).cloned() {
                 out["say"]["to"] = target(t, &format!("{path}.say.to"))?;
             }
+            way_of(&mut out, action.get("way").cloned(), path)?;
             return Ok(out);
         }
         _ => {}
@@ -392,6 +412,23 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         out.insert("want".into(), json!(fix_item(w)));
         let q = action.get("want_qty").or_else(|| action.get("for_qty")).and_then(|q| q.as_f64()).unwrap_or(1.0);
         out.insert("want_qty".into(), json!(q.max(1.0).round() as u64));
+    }
+    // What an answer (accept, decline) is about: the id of the trade offer or proposal seen,
+    // for a skill whose spec reads it. Elsewhere the words are ignored, as before.
+    for (key, alias) in [("offer", "offer_id"), ("record", "record_id")] {
+        if !spec.args.iter().any(|a| a == key) {
+            continue;
+        }
+        if let Some(v) = action.get(key).or_else(|| action.get(alias)).filter(|v| !v.is_null()) {
+            let id = v.as_u64().or_else(|| v.as_f64().filter(|f| *f >= 0.0 && f.fract() == 0.0).map(|f| f as u64)).or_else(|| v.as_str().and_then(|s| s.trim().trim_start_matches('#').parse::<u64>().ok()));
+            match id {
+                Some(0) => {},
+                Some(n) => {
+                    out.insert(key.into(), json!(n));
+                },
+                _ => return Err(format!("{path}.do.{key}: the id of the {} you answer (a whole number from what you were asked)", if key == "offer" { "trade offer" } else { "proposal" })),
+            }
+        }
     }
     if let Some(t) = action.get("target").or_else(|| action.get("to")).or_else(|| action.get("from")).cloned() {
         // Any skill may be aimed (read a sign, build a wall there, sleep in a shelter: the body

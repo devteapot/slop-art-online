@@ -8,10 +8,14 @@ and fails when a law takes more fuel (WASM instructions) per call than budgets.j
 The measurement does not move unless the code or the fixtures do:
   - every batch makes 64 calls, one pass over each fixture set, after one warm-up batch
     (sb-host --calls 64), so the count does not depend on how fast this machine is today;
-  - it runs in 8 instances of the module, each with one of the bench's fixed sets of Rhai
-    hashing keys (sb-host --seeds 8, sb_bench::fix_hashing). Unpinned, those keys are drawn
-    at random when ahash is compiled, and they alone moved rates-law by 9% and perceived by
-    29% between compiles of the same source. A law's fuel is the mean over the 8 sets.
+  - Rhai's hashing keys are fixed. Unpinned, they are drawn at random when ahash is compiled,
+    and they alone moved rates-law by 9% and perceived by 29% between compiles of the same
+    source. Since det-1 the rules fix them for every engine of the game (the authority, the
+    client and the mind: living_rules::script::HASHING_SEED), and the bench's key set 0 is that
+    seed. A law's fuel is its fuel under key set 0: the cost the game pays, which is judged.
+  - it also runs under 7 other fixed key sets (sb-host --seeds 8, sb_bench::fix_hashing), as a
+    diagnostic: the mean and range over the 8 sets show how much of a law's fuel is where its
+    entries happen to land, and each law's outputs must be the same under every set.
 
 Usage: gate.py --host SB_HOST --module RHAI_WASM [--budgets budgets.json] [--out DIR] [--json PATH]
   --out   keep the raw lines (gate.jsonl) and sb-host's stderr (gate.err) in DIR
@@ -69,14 +73,16 @@ def main(argv):
         if "error" in row:
             print(f"gate: {row.get('engine')}: {row['error']}")
             return 2
-        law, fuel = row["law"], row["fuel_per_call"]
+        law, mean = row["law"], row["fuel_per_call"]
+        keys = row.get("fuel_seeds") or [mean]
+        # Key set 0 is the game's own seed (HASHING_SEED); the fuel the game pays.
+        fuel = round(keys[0])
         b = budgets.get(law)
         ok = b is not None and fuel <= b
         fail |= not ok
-        keys = row.get("fuel_seeds") or [fuel]
-        verdict.append({"law": law, "fuel": fuel, "budget": b, "ok": ok, "keys_min": min(keys), "keys_max": max(keys), "p50_ns": row["p50_ns"]})
+        verdict.append({"law": law, "fuel": fuel, "budget": b, "ok": ok, "keys_mean": mean, "keys_min": min(keys), "keys_max": max(keys), "p50_ns": row["p50_ns"]})
         print(f"{'ok  ' if ok else 'OVER'} {law:10} {fuel:>9,.0f} fuel/call  budget {b if b is None else format(b, ',')}"
-              f"  (keys {min(keys):,.0f}..{max(keys):,.0f}; {row['p50_ns'] / 1000:.2f} us p50 here)")
+              f"  (other keys: mean {mean:,.0f}, {min(keys):,.0f}..{max(keys):,.0f}; {row['p50_ns'] / 1000:.2f} us p50 here)")
     missing = sorted(set(budgets) - {v["law"] for v in verdict})
     if missing:
         print("not measured:", ", ".join(missing))

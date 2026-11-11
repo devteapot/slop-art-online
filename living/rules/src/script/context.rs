@@ -7,7 +7,7 @@ use super::SkillCtx;
 use rhai::{Array, Dynamic, Map};
 
 /// Fields of `a`. The order is the bit order of [`Plan::top`].
-pub const TOP: [&str; 18] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record", "daylight"];
+pub const TOP: [&str; 21] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record", "daylight", "offer_id", "record_id", "offer"];
 /// Fields of `a.actor` (the body genes are `genes::BODY`; `factor` is the skill factor).
 pub const ACTOR: [&str; 30] = [
     "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor", "lit",
@@ -171,6 +171,7 @@ enum Val<'a> {
     Inv(&'a [(String, u32)], &'a Keys),
     Records(&'a [crate::records::RecordFacts]),
     Record(Option<&'a crate::records::RecordFacts>),
+    Offer(Option<&'a super::OfferFacts>),
 }
 
 /// A record as the rules see it: `#{ id, kind, status, open, terms, parties, me, by, age_s,
@@ -207,6 +208,21 @@ pub(crate) fn record_map(r: &crate::records::RecordFacts) -> Dynamic {
     m.into()
 }
 
+/// A trade offer as the rules see it (`a.offer`).
+fn offer_map(o: &super::OfferFacts) -> Dynamic {
+    let mut m = Map::new();
+    m.insert("id".into(), Dynamic::from_int(o.id as i64));
+    m.insert("from".into(), Dynamic::from_int(o.from as i64));
+    m.insert("to".into(), Dynamic::from_int(o.to as i64));
+    m.insert("give".into(), o.give.clone().into());
+    m.insert("give_qty".into(), Dynamic::from_int(o.give_qty as i64));
+    m.insert("want".into(), o.want.clone().into());
+    m.insert("want_qty".into(), Dynamic::from_int(o.want_qty as i64));
+    m.insert("open".into(), o.open.into());
+    m.insert("left_s".into(), Dynamic::from_float(o.left_s as f64));
+    m.into()
+}
+
 /// A record's bytes for a memo key: its id and every value the rules can read.
 fn record_key(r: &crate::records::RecordFacts, out: &mut Vec<u8>) {
     out.extend(r.id.to_le_bytes());
@@ -233,6 +249,7 @@ impl Val<'_> {
             },
             Val::Records(v) => v.iter().map(record_map).collect::<Array>().into(),
             Val::Record(r) => r.map_or(Dynamic::UNIT, record_map),
+            Val::Offer(o) => o.map_or(Dynamic::UNIT, offer_map),
         }
     }
 
@@ -277,6 +294,21 @@ impl Val<'_> {
             },
             Val::Record(r) => match r {
                 Some(r) => record_key(r, out),
+                None => out.push(0),
+            },
+            Val::Offer(o) => match o {
+                Some(o) => {
+                    out.push(1);
+                    out.extend(o.id.to_le_bytes());
+                    out.extend(o.from.to_le_bytes());
+                    out.extend(o.to.to_le_bytes());
+                    s(out, &o.give);
+                    out.extend(o.give_qty.to_le_bytes());
+                    s(out, &o.want);
+                    out.extend(o.want_qty.to_le_bytes());
+                    out.push(o.open as u8);
+                    out.extend(o.left_s.to_bits().to_le_bytes());
+                },
                 None => out.push(0),
             },
         }
@@ -397,6 +429,9 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "records" => Val::Records(&c.records),
             "record" => Val::Record(c.record.as_ref()),
             "daylight" => Val::F(1.0 - c.dark),
+            "offer_id" => Val::I(c.offer_id as i64),
+            "record_id" => Val::I(c.record_id as i64),
+            "offer" => Val::Offer(c.offer.as_ref()),
             _ => Val::Str(&c.skill),
         };
         f(Level::Top, name, v);

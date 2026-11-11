@@ -263,7 +263,7 @@ impl Minds {
     fn happened_since(&self, listener: u32, other: u32, since: u64) -> Vec<String> {
         self.experiences(listener)
             .into_iter()
-            .filter(|x| x.at_ms > since && !matches!(x.kind.as_str(), "speech" | "silence" | "repeat"))
+            .filter(|x| x.at_ms > since && !matches!(x.kind.as_str(), "speech" | "whisper" | "silence" | "repeat"))
             .filter(|x| ((x.subject == other || x.object == other) && x.salience >= 0.4) || x.salience >= 0.7)
             .map(|x| x.text)
             .collect()
@@ -587,6 +587,9 @@ impl Minds {
             _ => (String::new(), 0),
         };
         let say = if say.eq_ignore_ascii_case("null") || living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
+        // The way it is said (`"way": "whisper"`, or inside `say`); one the world does not have
+        // is said aloud. A whisper is answered in a whisper unless the reply says otherwise.
+        let way = way_of(&v).unwrap_or_else(|| if self.how_heard(&heard) == "whisper" && prompts::ways().iter().any(|w| w == "whisper") { "whisper".into() } else { "say".into() });
         let to = if to != 0 && to != me && self.conn.db.character().id().find(&to).map_or(false, |c| c.kind == "person") { to } else { other };
         // What the speaker says is now settled closes the exchange (their own judgment).
         let outcome = flat(if v["settled"].is_null() || v["settled"] == json!(false) { &v["outcome"] } else { &v["settled"] }).trim().to_string();
@@ -693,10 +696,10 @@ impl Minds {
                 }
             }
         }
-        let mut result = self.say(me, say.clone(), to, t.clone()).await;
+        let mut result = self.say(me, say.clone(), to, way.clone(), t.clone()).await;
         if matches!(&result, Err(e) if e.to_string().contains("too fast")) {
             tokio::time::sleep(Duration::from_millis(SPEECH_GAP_MS)).await;
-            result = self.say(me, say.clone(), to, t).await;
+            result = self.say(me, say.clone(), to, way.clone(), t).await;
         }
         if result.is_err() && !say.is_empty() {
             let mut tk = self.talk.lock().unwrap();
@@ -727,12 +730,33 @@ impl Minds {
         result
     }
 
-    async fn say(&self, actor: u32, say: String, to: u32, t: ThoughtIn) -> Result<()> {
+    async fn say(&self, actor: u32, say: String, to: u32, way: String, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_say_then(actor, say, to, 0, t, move |_, r| {
+        self.conn.reducers.mind_say_then(actor, say, to, way, 0, t, move |_, r| {
             let _ = tx.send(flatten(r));
         })?;
         rx.await?.map_err(|e| anyhow!("mind_say: {e}"))
+    }
+
+    /// How the line being answered was said: its way (`whisper`, `call`, `say`), from the
+    /// listener's row and the speaker's `heard` row. (How far away the speaker stood is in the
+    /// row's own words when the way says it, "calls out to you from about 25 m": this service
+    /// does not follow bodies.)
+    fn how_heard(&self, heard: &Line) -> String {
+        self.how_heard_told(heard).0
+    }
+
+    /// The way it was said, and how the listener's own row tells it, without the words ("Bram
+    /// calls out to you from about 25 m").
+    fn how_heard_told(&self, heard: &Line) -> (String, String) {
+        let e = self.conn.db.experience().id().find(&heard.exp);
+        let told = e.as_ref().map(|e| e.text.split_once(": “").map_or(e.text.as_str(), |(head, _)| head).to_string()).unwrap_or_default();
+        let way = match &e {
+            Some(e) if e.kind == "whisper" => "whisper".to_string(),
+            Some(e) => self.conn.db.line_heard().iter().find(|h| h.speaker == heard.speaker && h.at_ms == e.at_ms).map(|h| h.way).unwrap_or_else(|| "say".into()),
+            None => "say".into(),
+        };
+        (way, told)
     }
 
     /// Who they are and how they talk, how they feel about the other, what the moment brings
@@ -757,7 +781,7 @@ impl Minds {
             .map(|r| format!("{}: trust {:.0}, affinity {:.0}{}", if r.label.is_empty() { "no word for it yet" } else { &r.label }, r.trust, r.affinity, if r.note.is_empty() { String::new() } else { format!(" — {}", r.note) }))
             .unwrap_or_else(|| "You have no settled feelings about them yet.".into());
         let lately: Vec<String> = {
-            let all: Vec<Experience> = self.experiences(me).into_iter().filter(|e| (e.subject == other || e.object == other) && !matches!(e.kind.as_str(), "speech" | "repeat")).collect();
+            let all: Vec<Experience> = self.experiences(me).into_iter().filter(|e| (e.subject == other || e.object == other) && !matches!(e.kind.as_str(), "speech" | "whisper" | "repeat")).collect();
             let n = all.len();
             all.iter().skip(n.saturating_sub(5)).map(|e| self.exp_line(e, &fmt, false)).collect()
         };
@@ -841,13 +865,21 @@ impl Minds {
         }
         for o in self.conn.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {
             if o.from == other && o.to == me {
-                between.push(format!("{other_name} offers you {} {} for {} {} (accept to exchange).", o.give_qty, o.give_item, o.want_qty, o.want_item));
+                between.push(format!("{other_name} offers you {} {} for {} {} (offer {}: accept to exchange, or decline).", o.give_qty, o.give_item, o.want_qty, o.want_item, o.id));
             } else if o.from == me && o.to == other {
                 between.push(format!("You offered {other_name} {} {} for {} {}; they have not accepted yet.", o.give_qty, o.give_item, o.want_qty, o.want_item));
             }
         }
         // Agreements and demands between the two, as the world keeps them.
         between.extend(self.dealings_with(me, other));
+        // How it was said: a whisper is between the two; a call came from beyond a voice.
+        let voice = prompts::voice_m();
+        let (way, told) = self.how_heard_told(heard);
+        let how = match way.as_str() {
+            "whisper" => "They whispered this to you; only you heard the words. To keep it between you, whisper back (\"way\": \"whisper\"); a whisper reaches only someone beside you.".to_string(),
+            "call" => format!("{}. An ordinary voice carries {voice:.0} m: if they are farther than that, call back (\"way\": \"call\") or go over to them.", if told.is_empty() { "They called this out".to_string() } else { told }),
+            _ => String::new(),
+        };
         let t = prompts::TalkUser {
             name: &c.name,
             identity: &identity,
@@ -863,6 +895,7 @@ impl Minds {
             body: &body,
             conversation: &convo,
             heard: &heard.text,
+            how: &how,
             between: &between,
         };
         (prompts::talk_system(), prompts::talk_user(&t))
@@ -943,4 +976,17 @@ mod tests {
         c.lines.push(Line { speaker: 2, to: 1, text: "Three berries for one wood, then.".into(), at_ms: 0, at: (0.0, 0.0), turn: true, exp: 0 });
         assert!(c.novelty_without("Iseisevik offers you 3 berries for 1 wood.", &["iseisevik".to_string()]) < NEW_MATTER);
     }
+}
+
+/// The way of speaking a reply names (`"way"` beside or inside `say`): `None` when it names
+/// none, `say` when it names one the world's rules do not have.
+fn way_of(v: &Value) -> Option<String> {
+    let named = v["way"].as_str().or_else(|| v["say"]["way"].as_str())?.trim().to_lowercase().replace([' ', '-'], "_");
+    if named.is_empty() {
+        return None;
+    }
+    Some(match crate::prompts::ways() {
+        ways if ways.iter().any(|w| *w == named) => named,
+        _ => "say".into(),
+    })
 }

@@ -183,15 +183,18 @@ class Hair:
     hf: head_form.Head. spec: style, length, parting, fringe, volume, curl, colour, tip, grey,
     silver (the grey hairs' colour), seed. hairline(az) gives the lowest height hair grows at;
     covered(p) > 0 where headwear hides the head; bald(p) > 0 inside a bald crown. `body` moves
-    the neck's and shoulders' proxy (Comb).
+    the neck's and shoulders' proxy (Comb). `detail` below 1 makes the far model's hair.
 
     Result: v (N×3), f (faces), col (N×3 sRGB), uv (N×2, Blender's v up), nrm (N×3 shading
     normals), and per vertex
     `chain` (-1 for the head, else a spring chain's index) with `along` (metres down that
     chain). `chains` lists each chain's joint positions."""
 
-    def __init__(self, hf, spec, hairline, covered=None, bald=None, body=None):
+    def __init__(self, hf, spec, hairline, covered=None, bald=None, body=None, detail=1.0):
         self.hf, self.spec, self.hairline = hf, spec, hairline
+        # 1 the full model; less for the far model: the same locks on the same paths, with
+        # longer steps along them and three vertices across in place of six.
+        self.detail = float(detail)
         self.covered = covered or (lambda p: -1.0)
         self.bald = bald or (lambda p: -1.0)
         self.comb = Comb(hf, body)
@@ -601,8 +604,8 @@ class Hair:
             total = float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum())
             if total < 0.012:
                 continue
-            seg = 0.022 - 0.008 * self.curl
-            n = int(np.clip(round(total / seg), 3, 22))
+            seg = (0.022 - 0.008 * self.curl) / self.detail
+            n = int(np.clip(round(total / seg), 3 if self.detail >= 1 else 2, 22))
             pts, on, s = self._resample(path, touch, n)
             pts = self._wave(pts, on, s, k)
             col = self._lock_colour(k, base, tipc, silver, grey)
@@ -684,6 +687,10 @@ class Hair:
         base, tipc = col
         across = (-1.0, -0.5, 0.0, 0.5, 1.0)
         profile = (0.0, 0.78, 1.0, 0.78, 0.0)  # a flat front with turned edges, as a comb leaves a lock
+        back = True
+        if self.detail < 1:
+            # The far model: two edges and a ridge, closed by a flat back.
+            across, profile, back = (-1.0, 0.0, 1.0), (0.0, 1.0, 0.0), False
         u0, du = k["u0"], k["du"]
         chain_id = k["chain"] if chain is None else chain
         rings = n if blunt <= 0 else n + 1
@@ -698,13 +705,14 @@ class Hair:
                 self.uv.append((u0 + du * (a + 1) / 2, 1 - t[i]))
                 # Shaded as part of the whole head of hair, turning only a little across the lock.
                 self.nrm.append(unit(out[i] + side[i] * (0.42 * a)))
-            self.v.append(c - out[i] * th[i] * 0.35)
-            self.col.append(cc * 0.55)
-            self.uv.append((u0 + du * 0.5, 1 - t[i]))
-            self.nrm.append(-out[i])
-            self.chain += [chain_id] * 6
-            self.along += [s[i]] * 6
-        nr = 6
+            if back:
+                self.v.append(c - out[i] * th[i] * 0.35)
+                self.col.append(cc * 0.55)
+                self.uv.append((u0 + du * 0.5, 1 - t[i]))
+                self.nrm.append(-out[i])
+            self.chain += [chain_id] * (len(across) + back)
+            self.along += [s[i]] * (len(across) + back)
+        nr = len(across) + back
         v0 = len(self.v) - rings * nr
         # A broad lock on the head bends across to follow it, as combed hair lies: each vertex
         # is moved to its own height over whatever the lock's middle lies on.
@@ -713,7 +721,7 @@ class Hair:
             near = smooth((0.030 - mid_d) / 0.020)
             if near.max() > 0.01:
                 V = np.array(self.v[v0 : v0 + rings * nr])
-                want = np.repeat(mid_d, nr) + np.repeat(th[:rings], nr) * np.tile(np.array(profile + (-0.35,)), rings)
+                want = np.repeat(mid_d, nr) + np.repeat(th[:rings], nr) * np.tile(np.array(profile + ((-0.35,) if back else ())), rings)
                 wgt = np.repeat(near, nr)
                 for _ in range(2):
                     V = V - self.comb.normal(V) * ((self.comb.dist(V) - want) * wgt)[:, None]

@@ -215,7 +215,12 @@ fn the_three_looks_by_name_are_declared_not_coded() {
         assert_eq!(UiSpec { look: d.look.clone(), declared: false, ..u.clone() }, d, "{skill}: only `look` is declared");
     }
     let declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
-    assert_eq!(declared, ["strike", "throw", "shoot"], "the shipped script declares only these (step 2 adds the bar's)");
+    assert_eq!(declared, ["strike", "throw", "shoot", "decline"], "the shipped script declares only these (step 2 adds the bar's)");
+    // decline (rules-offers-2) declares only its look: the trade icon, the client's list of
+    // icons by name being what the declarations replace.
+    let (u, d) = (s.ui("decline").unwrap(), s.ui_default("decline").unwrap());
+    assert_eq!(u.look.icon, Some("trade"));
+    assert_eq!(UiSpec { look: d.look.clone(), declared: false, ..u.clone() }, d, "decline: only `look` is declared");
 }
 
 #[test]
@@ -713,12 +718,14 @@ fn declarations_place_and_present() {
 
 #[test]
 fn a_way_of_speaking_is_presented_in_the_box() {
-    let s = with("fn whisper_speech() { #{ label: \"Whisper\" } }\nfn whisper_ui() { #{ on: \"box\", alias: \"/w\", to_label: \"Whisper to {b}\", bubble: \"hushed\", rows: #{ whisper: \"line\", whispered: \"dots\" } } }");
+    // The shipped script has the ways (`whisper_speech()`, docs/COMMUNICATION.md); a declaration
+    // presents one.
+    let s = with("fn whisper_ui() { #{ on: \"box\", alias: \"/w\", to_label: \"Whisper to {b}\", bubble: \"hushed\", rows: #{ whisper: \"line\", whispered: \"dots\" } } }");
     assert!(s.ui_errors().is_empty(), "{:?}", s.ui_errors());
     let w = s.ui("whisper").unwrap();
     let way = w.way.as_ref().unwrap();
     assert_eq!((w.on.clone(), way.alias.as_deref(), way.bubble, way.rows.get("whispered").copied()), (vec![On::Box], Some("/w"), Some(Bubble::Hushed), Some(Row::Dots)));
-    let s = with("fn whisper_speech() { #{} }\nfn whisper_ui() { #{ label: \"W\", on: \"bar\" } }");
+    let s = with("fn whisper_ui() { #{ label: \"W\", on: \"bar\" } }");
     assert!(s.ui_errors().iter().any(|e| e.contains("a way's `label` is set by `whisper_speech()`")));
     assert!(s.ui_errors().iter().any(|e| e.contains("text box")));
 }
@@ -798,7 +805,9 @@ fn without_vocabulary(src: &str) -> String {
 /// And the species' signals: a body offered `signal` must have signals to make
 /// (`Species::signals`), a rule moved unchanged from `species::skills_help_of` so minds' references
 /// stay byte for byte.
-const GRAMMAR: &[&str] = &["goto", "signal"];
+/// And `offer`: the field an answer (accept, decline) names the trade offer it answers with
+/// (`{"do": "accept", "target": {"id": 4}, "offer": 9}`, rules-offers-2), spelt like the skill.
+const GRAMMAR: &[&str] = &["goto", "signal", "offer"];
 
 #[test]
 fn no_skill_is_named_in_the_rules_interface_code() {
@@ -1190,10 +1199,15 @@ fn seventy_declarations_cost_little_to_compile() {
 }
 
 #[test]
-fn the_grammar_has_no_offer_reference_yet() {
-    // Finding 7: an act toward an incoming offer names its sender; the offer's own id joins the
-    // act when the grammar carries a reference (rules-offers-2). This fails when it does, so that
-    // `act_node` starts sending it.
-    assert!(serde_json::from_value::<graph::Action>(json!({"skill": "accept", "offer": 1})).is_err(), "the grammar carries `offer` now: send `ActTarget::Offer`'s id in `act_node`");
-    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
+fn an_act_toward_an_offer_names_it() {
+    // Finding 7: an act toward an incoming offer names its sender and the offer it answers
+    // (rules-offers-2), and the grammar carries the reference; an offer of 0 names none.
+    let a: graph::Action = serde_json::from_value(json!({"skill": "accept", "offer": 1})).expect("the grammar carries `offer`");
+    assert_eq!(a.offer, Some(1));
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}, "offer": 9}));
+    assert_eq!(act_node("decline", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), json!({"do": "decline", "target": {"id": 4}, "offer": 9}));
+    assert_eq!(act_node("accept", &ActTarget::Offer { from: 4, offer: 0 }, &Picked::default()), json!({"do": "accept", "target": {"id": 4}}));
+    // What it sends parses as the act it names.
+    let parsed = crate::acts::parse(act_node("decline", &ActTarget::Offer { from: 4, offer: 9 }, &Picked::default()), None, &Default::default()).unwrap();
+    assert_eq!((parsed.skill.as_str(), parsed.offer), ("decline", Some(9)));
 }

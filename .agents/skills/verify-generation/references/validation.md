@@ -1,5 +1,14 @@
 # Validation record (generation)
 
+## 2026-11-11 kit-2: Cullet's lots in the model table (dev-box)
+
+Branch `kit-2` (origin/main through layout-1, `3c73d835`, merged), own container `kit2-stdb` (2.14.1, port 3322, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private target directories, `scoped`, no minds. The change: `gen_cullet.sh` now puts Cullet's 88 lot models into `living/rules/data/buildings.json` as style `cullet`, each with `eye_solid` and `eye_cells`, so their hosted tiles hide by shape (1,384 `Low` tiles on Cullet where there were none); 18 root plots and three open lots gained a `model`; lots carry `lit` (ignored by the rules). No entry point or table changed, so no maintain pass; the SKILL names the new writer of the table.
+
+- `generation-kit2-20261111-195631` (`--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k,floor-megacity-4k`, before layout-1): island 979, plan-test 78, floor-megacity-2k 77, floor-megacity-4k 92 pass. Cullet failed 4 of 317 (`the seed's laws are composed over the shipped script`, `seeded rhythms are as given`, two authored-relations checks: four elders dead of old age 6 s after creation). "Original seeds unchanged" failed because `cullet.json` was regenerated during the run.
+- `generation-kit2main-200618` (a clean detached checkout of origin/main `6a31176a`, `--seeds cullet`): the same 4 of 317 fail, so they were main's (fixed there by goods-2: the verify launch keeps a seed's laws again).
+- `generation-kit2c-20261111-204204` (the final tree, `--seeds cullet,plan-test`): cullet 317 and plan-test 78 pass; original seeds unchanged.
+- Not run: `authored` and `guards`, the other seeds after layout-1.
+
 ## 2026-11-11 layout-1: Cullet's plan redrawn (dev-box)
 
 Branch `layout-1` (origin/main `6caebe20` merged: rates-2, lives-3, ground-1), own container `layout1-stdb` (2.14.1, port 3324, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `scoped`, no minds. The seed changed in its plan's geometry only ([Cullet's layout](../../../../docs/CULLET_LAYOUT.md)): 13 levels (three new), 46 streets, 19 stairs, 59 of the 93 lots moved; the lot ids, kinds, resources' kinds and structures are as they were, so no shape changed and no maintain pass was run.
@@ -10,6 +19,16 @@ Branch `layout-1` (origin/main `6caebe20` merged: rates-2, lives-3, ground-1), o
 - `cargo test -p living-rules`: 171 passed, 9 ignored, with `settle::plan::tests::the_cullet_seed_is_valid_and_reachable`; that test refused three earlier drafts of the plan (a lot on a new lane each time), which `land_dump` alone had let through.
 - Not rerun: every other seed, `authored`, `guards`.
 
+
+## 2026-11-11 rules-3: household stores owned, lots' own door structures (dev-box)
+
+Branch `rules-3` (from `93019a37`, origin/main `1d71e6c2` merged), own container `rules3-stdb` (2.14.1, port 3325), `scoped`, no minds. A maintain pass of the plans feature scoped to this change (`plan.rs` `StructureSpec.owner`, `LotSpec.structure`; `seed.rs` `plan_structures`, `authored_households`; `island.rs` door kinds; `floor.rs` households), not a source wave.
+
+- `generation-r3-200638` (`--feature worlds --seeds island,plan-test,cullet`): island 979 of 979, plan-test 79 of 79 (new: `its 1 household structures are placed and owned by their household's house owner`), cullet 318 of 319. The failure was the check, not the world: `authored structures and lot stores hold what the plan says` compared the 22 household stores exactly, and in the seconds the world ran before the snapshot (doctor) 17 households had already taken smoked fish from their own store (one baked roots with its peat, one stored ash), found through `like: "storage"`. Peat and roots were otherwise exact. The check now lets a household store hold less of the plan's items than placed (never more) and reports the use.
+- `generation-r3c-201236` (`--seeds cullet`, the corrected check): 319 of 319, including `2 lots have their own door structure (peat_barn, store)`, `its 22 household structures are placed and owned by their household's house owner` and `authored structures and lot stores hold what the plan says (17 household stores already used by their people)`; original seeds unchanged.
+- After merging origin/main `25c1fb92` (layout-1's plan, goods-2): `generation-r3m-210752` (`--seeds plan-test,cullet`): plan-test 79 of 79, cullet 319 of 319, the same household, door and store checks passing.
+- `seed::tests::a_plan_naming_kinds_the_world_lacks_is_refused` now also refuses an unknown door kind (`structure \`silo\``), a store owned by `household:nobody` (naming the 22 households) and any owned store on a seed with no residents.
+- Not rerun: realm, valley, authored-test, aske-coast, stage3-village, the megacity floors, cullet-laws, the guards and authored features (seeds without plans or owners; the parser and plan changes are covered by the rules and authority tests).
 
 ## 2026-11-11 rates-2: plan resources, structures and stores; unknown plan kinds refused (dev-box)
 
