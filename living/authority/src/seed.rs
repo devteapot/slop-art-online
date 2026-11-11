@@ -533,6 +533,42 @@ pub struct Seed {
     /// The world's own values of laws (`laws()` in the script), by name: `{"minds": false}`.
     #[serde(default)]
     pub rules: serde_json::Map<String, serde_json::Value>,
+    /// Real minutes in one game day (the world's `day_ms`; none: the shipped 12). Laws written
+    /// per game hour keep their balance per game day whatever this is.
+    #[serde(default)]
+    pub day_minutes: Option<f64>,
+    /// The world's own laws: a Rhai overlay over the shipped script (`floors::compose`: its
+    /// functions replace the base's of the same name, which stay as `base_NAME`), installed
+    /// when the world is created through the same checks as `install_script`.
+    #[serde(default)]
+    pub laws: String,
+    /// Where the overlay's source is kept, relative to `living/seeds`. A sender puts its text
+    /// into `laws` (`build.rs` for a compiled seed, `living/tools/seed_text.py` for
+    /// `create_floor`); a seed that names a file without its text is refused.
+    #[serde(default)]
+    pub laws_file: String,
+}
+
+impl Seed {
+    /// The world's day in real milliseconds, checked: between 1 and 1440 real minutes.
+    pub fn day_ms(&self) -> Result<u64, String> {
+        match self.day_minutes {
+            None => Ok(living_rules::DEFAULT_DAY_MS),
+            Some(m) if (1.0..=1440.0).contains(&m) => Ok((m * 60_000.0).round() as u64),
+            Some(m) => Err(format!("seed: day_minutes is between 1 and 1440 real minutes, not {m}")),
+        }
+    }
+
+    /// The world's script: the shipped one, or with the seed's overlay composed over it.
+    pub fn script(&self) -> Result<Option<String>, String> {
+        if self.laws.trim().is_empty() {
+            if !self.laws_file.is_empty() {
+                return Err(format!("seed: laws_file `{}` was not read into `laws` (send the seed through living/tools/seed_text.py)", self.laws_file));
+            }
+            return Ok(None);
+        }
+        living_rules::floors::compose(SKILLS, &self.laws).map(Some).map_err(|e| format!("seed laws: {e}"))
+    }
 }
 
 #[derive(Deserialize, Default)]

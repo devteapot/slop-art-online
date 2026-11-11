@@ -239,7 +239,7 @@ pub const RESOURCES: &[(&str, &str)] = &[
     ("clay_bank", "clay"),
 ];
 
-pub const STRUCTURES: &[&str] = &["campfire", "shelter", "storage", "remains", "sign", "bush_patch", "house", "gate", "trap", "hall", "workshop", "market", "inn"];
+pub const STRUCTURES: &[&str] = &["campfire", "shelter", "storage", "remains", "sign", "bush_patch", "house", "gate", "trap", "hall", "workshop", "market", "inn", "lamp"];
 pub const CREATURES: &[&str] = &["person", "deer", "wolf"];
 /// Things built into the terrain itself rather than as structures.
 pub const TERRAIN_BUILDS: &[&str] = &["wall", "road", "bridge"];

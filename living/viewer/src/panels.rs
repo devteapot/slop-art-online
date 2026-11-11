@@ -63,7 +63,7 @@ pub fn top_bar(root: &mut egui::Ui, net: &Net, snap: &Snap, view: &mut View) {
                 ui.separator();
                 let h = snap.hour();
                 let day = living_rules::day_of(snap.now, w.epoch_ms, snap.day_ms());
-                let night = living_rules::is_night(h);
+                let night = living_rules::shipped_night(h);
                 let icon = if night { "🌙" } else if darkness(h) > 0.0 { "🌇" } else { "☀" };
                 ui.label(RichText::new(format!("Day {day}  {}  {icon} {}", hhmm(h), if night { "night" } else { "day" })).strong().size(15.0));
                 let season = snap.season();
