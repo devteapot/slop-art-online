@@ -332,34 +332,34 @@ python3 living/tools/characters/rig_probe.py IN.glb OUT.glb --pose          # fi
 |  |  |  | `cranium_height` | scale z | ×0.95 to ×1.07 | new |
 | `J_Id_Forehead` | `J_Id_Cranium` | skull | `forehead` | move y | -12 to 16 ‰H | pass 2's `forehead`: low and sloping to high and full |
 | `J_Id_Glabella` | `J_Id_Cranium` | brows | `brow_ridge` | move y | -4 to 12 ‰H | pass 2's `brow_ridge` |
-| `J_Id_Face` | `J_Bip_C_Head` | outline | `face_length` | scale z | ×0.92 to ×1.1 | pass 2's `face_length`: everything below the eyes |
+| `J_Id_Face` | `J_Bip_C_Head` | outline | `face_length` | scale z | ×0.92 to ×1.095 | pass 2's `face_length`: everything below the eyes |
 |  |  |  | `face_width` | scale x | ×0.94 to ×1.07 | pass 2's `face_width` |
-| `J_Id_Corner_L`, `J_Id_Corner_R` | `J_Id_Face` | outline | `front_breadth` | move x | -16 to 16 ‰H | new: how broad the front planes are |
+| `J_Id_Corner_L`, `J_Id_Corner_R` | `J_Id_Face` | outline | `front_breadth` | move x | -16 to 12 ‰H | new: how broad the front planes are |
 | `J_Id_Zygoma_L`, `J_Id_Zygoma_R` | `J_Id_Face` | outline | `cheekbones` | move x | -12 to 16 ‰H | pass 2's `cheekbones` |
 |  |  |  | `cheekbone_height` | move z | -12 to 12 ‰H | new |
-| `J_Id_Cheek_L`, `J_Id_Cheek_R` | `J_Id_Face` | outline | `cheeks` | move y | -12 to 20 ‰H | pass 2's `cheeks`: hollow to full; this bone is turned at rest to face out of the cheek, so its forward is the surface's normal |
+| `J_Id_Cheek_L`, `J_Id_Cheek_R` | `J_Id_Face` | outline | `cheeks` | move o | -9 to 20 ‰H | pass 2's `cheeks`: hollow to full, out of the cheek (0.55 away from the midline and 0.83 forward) |
 | `J_Id_Jaw` | `J_Id_Face` | outline | `jaw_width` | scale x | ×0.88 to ×1.14 | pass 2's `jaw_width` |
-|  |  |  | `jaw_angle` | turn x | -4 to 5 ° | new: a steeper or flatter jaw line |
+|  |  |  | `jaw_angle` | turn x | -2 to 2.5 ° | new: a flatter or steeper jaw line (the chin up or down about the jaw's hinge) |
 | `J_Id_Gonion_L`, `J_Id_Gonion_R` | `J_Id_Jaw` | outline | `jaw_square` | move x | -10 to 14 ‰H | pass 2's `jaw_square`: tapered to square |
-| `J_Id_Chin` | `J_Id_Jaw` | outline | `chin_length` | move z | -28 to 20 ‰H | pass 2's `chin_length` (down is longer) |
+| `J_Id_Chin` | `J_Id_Jaw` | outline | `chin_length` | move z | 20 to -28 ‰H | pass 2's `chin_length`: short (the chin's point up) to long (down) |
 |  |  |  | `chin_width` | scale x | ×0.7 to ×1.4 | pass 2's `chin_width`: pointed to broad |
 |  |  |  | `chin_forward` | move y | -16 to 20 ‰H | pass 2's `chin_forward` |
 | `J_Id_Orbit_L`, `J_Id_Orbit_R` | `J_Id_Face` | eyes | `eye_spacing` | move x | -12 to 14 ‰H | pass 2's `eye_spacing` |
-|  |  |  | `eye_height` | move z | -14 to 14 ‰H | pass 2's `eye_height` |
+|  |  |  | `eye_height` | move z | -14 to 10 ‰H | pass 2's `eye_height` |
 |  |  |  | `socket_depth` | move y | -10 to 8 ‰H | new: the eye set deeper or shallower |
-|  |  |  | `eye_size` | scale xyz | ×0.88 to ×1.13 | pass 2's `eye_size` |
-|  |  |  | `eye_open` | scale z | ×0.82 to ×1.18 | pass 2's `eye_open` |
+|  |  |  | `eye_size` | scale xyz | ×0.88 to ×1.105 | pass 2's `eye_size` |
+|  |  |  | `eye_open` | scale z | ×0.82 to ×1.125 | pass 2's `eye_open` |
 |  |  |  | `eye_tilt` | turn y | -6 to 7 ° | pass 2's `eye_tilt`: outer corners down to up |
 | `J_Adj_L_FaceEye`, `J_Adj_R_FaceEye` | `J_Id_Orbit_L` | eyes | `iris_size` | scale xyz | ×0.9 to ×1.1 | pass 2's `iris_size` |
-| `J_Id_Brow_L`, `J_Id_Brow_R` | `J_Id_Face` | brows | `brow_height` | move z | -12 to 16 ‰H | pass 2's `brow_height` |
+| `J_Id_Brow_L`, `J_Id_Brow_R` | `J_Id_Face` | brows | `brow_height` | move z | -9.5 to 16 ‰H | pass 2's `brow_height` |
 |  |  |  | `brow_tilt` | turn y | -8 to 8 ° | pass 2's `brow_tilt` |
 |  |  |  | `brow_thickness` | scale z | ×0.7 to ×1.4 | pass 2's `brow_thickness` |
 |  |  |  | `brow_length` | scale x | ×0.9 to ×1.12 | pass 2's `brow_length` |
-| `J_Id_Nose` | `J_Id_Face` | nose | `nose_length` | scale z | ×0.85 to ×1.2 | pass 2's `nose_length` |
+| `J_Id_Nose` | `J_Id_Face` | nose | `nose_length` | scale z | ×0.85 to ×1.13 | pass 2's `nose_length` |
 |  |  |  | `nose_width` | scale x | ×0.8 to ×1.25 | pass 2's `nose_width` |
 |  |  |  | `nose_bridge` | scale y | ×0.8 to ×1.25 | pass 2's `nose_bridge`: how far the nose stands out |
 | `J_Id_NoseTip` | `J_Id_Nose` | nose | `nose_tip` | move z | -10 to 12 ‰H | pass 2's `nose_tip`: turned down to turned up |
-| `J_Id_Mouth` | `J_Id_Face` | mouth | `mouth_height` | move z | -12 to 12 ‰H | pass 2's `mouth_height` (down is lower) |
+| `J_Id_Mouth` | `J_Id_Face` | mouth | `mouth_height` | move z | 9 to -12 ‰H | pass 2's `mouth_height`: close under the nose (up) to low (down) |
 |  |  |  | `mouth_width` | scale x | ×0.85 to ×1.18 | pass 2's `mouth_width` |
 |  |  |  | `lip_fullness` | scale z | ×0.7 to ×1.35 | pass 2's `lip_fullness` |
 | `J_Id_MouthCorner_L`, `J_Id_MouthCorner_R` | `J_Id_Mouth` | mouth | `mouth_curve` | move z | -6 to 6 ‰H | pass 2's `mouth_curve`: corners down to up |

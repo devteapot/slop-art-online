@@ -80,15 +80,15 @@ RIG = [
     ("J_Id_Glabella", "J_Id_Cranium", "brows", "between the brows", [
         ("brow_ridge", "move", "y", -4, 12, "‰H", "pass 2's `brow_ridge`")]),
     ("J_Id_Face", "J_Bip_C_Head", "outline", "the bridge of the nose", [
-        ("face_length", "scale", "z", 0.92, 1.10, "×", "pass 2's `face_length`: everything below the eyes"),
+        ("face_length", "scale", "z", 0.92, 1.095, "×", "pass 2's `face_length`: everything below the eyes"),
         ("face_width", "scale", "x", 0.94, 1.07, "×", "pass 2's `face_width`")]),
     ("J_Id_Corner_L", "J_Id_Face", "outline", "the cheek corner beside the eye", [
-        ("front_breadth", "move", "x", -16, 16, "‰H", "new: how broad the front planes are")]),
+        ("front_breadth", "move", "x", -16, 12, "‰H", "new: how broad the front planes are")]),
     ("J_Id_Zygoma_L", "J_Id_Face", "outline", "the cheekbone's point", [
         ("cheekbones", "move", "x", -12, 16, "‰H", "pass 2's `cheekbones`"),
         ("cheekbone_height", "move", "z", -12, 12, "‰H", "new")]),
     ("J_Id_Cheek_L", "J_Id_Face", "outline", "the cheek's fullest point", [
-        ("cheeks", "move", "o", -12, 20, "‰H", "pass 2's `cheeks`: hollow to full, out of the cheek (0.55 away from the midline and 0.83 forward)")]),
+        ("cheeks", "move", "o", -9, 20, "‰H", "pass 2's `cheeks`: hollow to full, out of the cheek (0.55 away from the midline and 0.83 forward)")]),
     ("J_Id_Jaw", "J_Id_Face", "outline", "the jaw's hinge, under the ear", [
         ("jaw_width", "scale", "x", 0.88, 1.14, "×", "pass 2's `jaw_width`"),
         ("jaw_angle", "turn", "x", -2.0, 2.5, "°", "new: a flatter or steeper jaw line (the chin up or down about the jaw's hinge)")]),
@@ -100,26 +100,26 @@ RIG = [
         ("chin_forward", "move", "y", -16, 20, "‰H", "pass 2's `chin_forward`")]),
     ("J_Id_Orbit_L", "J_Id_Face", "eyes", "the eye's middle, on the skin", [
         ("eye_spacing", "move", "x", -12, 14, "‰H", "pass 2's `eye_spacing`"),
-        ("eye_height", "move", "z", -14, 14, "‰H", "pass 2's `eye_height`"),
+        ("eye_height", "move", "z", -14, 10, "‰H", "pass 2's `eye_height`"),
         ("socket_depth", "move", "y", -10, 8, "‰H", "new: the eye set deeper or shallower"),
-        ("eye_size", "scale", "xyz", 0.88, 1.13, "×", "pass 2's `eye_size`"),
-        ("eye_open", "scale", "z", 0.82, 1.18, "×", "pass 2's `eye_open`"),
+        ("eye_size", "scale", "xyz", 0.88, 1.105, "×", "pass 2's `eye_size`"),
+        ("eye_open", "scale", "z", 0.82, 1.125, "×", "pass 2's `eye_open`"),
         ("eye_tilt", "turn", "y", -6.0, 7.0, "°", "pass 2's `eye_tilt`: outer corners down to up")]),
     ("J_Adj_L_FaceEye", "J_Id_Orbit_L", "eyes", "behind the eye (the bone the look turns; it exists today)", [
         ("iris_size", "scale", "xyz", 0.90, 1.10, "×", "pass 2's `iris_size`")]),
     ("J_Id_Brow_L", "J_Id_Face", "brows", "the brow's middle", [
-        ("brow_height", "move", "z", -12, 16, "‰H", "pass 2's `brow_height`"),
+        ("brow_height", "move", "z", -9.5, 16, "‰H", "pass 2's `brow_height`"),
         ("brow_tilt", "turn", "y", -8.0, 8.0, "°", "pass 2's `brow_tilt`"),
         ("brow_thickness", "scale", "z", 0.70, 1.40, "×", "pass 2's `brow_thickness`"),
         ("brow_length", "scale", "x", 0.90, 1.12, "×", "pass 2's `brow_length`")]),
     ("J_Id_Nose", "J_Id_Face", "nose", "the bridge, between the eyes", [
-        ("nose_length", "scale", "z", 0.85, 1.20, "×", "pass 2's `nose_length`"),
+        ("nose_length", "scale", "z", 0.85, 1.13, "×", "pass 2's `nose_length`"),
         ("nose_width", "scale", "x", 0.80, 1.25, "×", "pass 2's `nose_width`"),
         ("nose_bridge", "scale", "y", 0.80, 1.25, "×", "pass 2's `nose_bridge`: how far the nose stands out")]),
     ("J_Id_NoseTip", "J_Id_Nose", "nose", "the nose's tip", [
         ("nose_tip", "move", "z", -10, 12, "‰H", "pass 2's `nose_tip`: turned down to turned up")]),
     ("J_Id_Mouth", "J_Id_Face", "mouth", "the mouth's middle", [
-        ("mouth_height", "move", "z", 12, -12, "‰H", "pass 2's `mouth_height`: close under the nose (up) to low (down)"),
+        ("mouth_height", "move", "z", 9, -12, "‰H", "pass 2's `mouth_height`: close under the nose (up) to low (down)"),
         ("mouth_width", "scale", "x", 0.85, 1.18, "×", "pass 2's `mouth_width`"),
         ("lip_fullness", "scale", "z", 0.70, 1.35, "×", "pass 2's `lip_fullness`")]),
     ("J_Id_MouthCorner_L", "J_Id_Mouth", "mouth", "the mouth's corner", [

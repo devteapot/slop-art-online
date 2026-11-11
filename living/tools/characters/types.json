@@ -136,7 +136,7 @@
       "does": "scale",
       "axis": "z",
       "least": 0.92,
-      "most": 1.1,
+      "most": 1.095,
       "unit": "\u00d7",
       "note": "pass 2's `face_length`: everything below the eyes"
      },
@@ -163,7 +163,7 @@
       "does": "move",
       "axis": "x",
       "least": -16,
-      "most": 16,
+      "most": 12,
       "unit": "\u2030H",
       "note": "new: how broad the front planes are"
      }
@@ -207,7 +207,7 @@
       "id": "cheeks",
       "does": "move",
       "axis": "o",
-      "least": -12,
+      "least": -9,
       "most": 20,
       "unit": "\u2030H",
       "note": "pass 2's `cheeks`: hollow to full, out of the cheek (0.55 away from the midline and 0.83 forward)"
@@ -316,7 +316,7 @@
       "does": "move",
       "axis": "z",
       "least": -14,
-      "most": 14,
+      "most": 10,
       "unit": "\u2030H",
       "note": "pass 2's `eye_height`"
      },
@@ -334,7 +334,7 @@
       "does": "scale",
       "axis": "xyz",
       "least": 0.88,
-      "most": 1.13,
+      "most": 1.105,
       "unit": "\u00d7",
       "note": "pass 2's `eye_size`"
      },
@@ -343,7 +343,7 @@
       "does": "scale",
       "axis": "z",
       "least": 0.82,
-      "most": 1.18,
+      "most": 1.125,
       "unit": "\u00d7",
       "note": "pass 2's `eye_open`"
      },
@@ -387,7 +387,7 @@
       "id": "brow_height",
       "does": "move",
       "axis": "z",
-      "least": -12,
+      "least": -9.5,
       "most": 16,
       "unit": "\u2030H",
       "note": "pass 2's `brow_height`"
@@ -433,7 +433,7 @@
       "does": "scale",
       "axis": "z",
       "least": 0.85,
-      "most": 1.2,
+      "most": 1.13,
       "unit": "\u00d7",
       "note": "pass 2's `nose_length`"
      },
@@ -486,7 +486,7 @@
       "id": "mouth_height",
       "does": "move",
       "axis": "z",
-      "least": 12,
+      "least": 9,
       "most": -12,
       "unit": "\u2030H",
       "note": "pass 2's `mouth_height`: close under the nose (up) to low (down)"

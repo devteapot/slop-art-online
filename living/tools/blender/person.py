@@ -123,6 +123,7 @@ SKIN_WARM = (0.80, 0.48, 0.40)
 SKIN_SHADE = (0.66, 0.45, 0.37)
 HAIR = (0.115, 0.09, 0.08)
 HAIR_TIP = (0.20, 0.155, 0.125)
+WHOLE_HEAD = False  # keep the scalp the hair's cap would cover (--parts head)
 RECEDE = 0.0  # how far the front hairline has moved back, m
 BALD = 0.0  # 0 a full head of hair to 1 a bald crown from the forehead back
 STRANDS_PATH = ""  # where the strands' picture is written
@@ -949,7 +950,8 @@ def make_face(arm, spec, atlas_path):
     head's surface (positions relative to HEAD, quads) for hair, beards and headwear."""
     look = spec["look"]
     # The scalp is dropped where the hair's cap covers it (well inside the hairline).
-    keep = lambda c: c[2] < hairline(az_of(c)) + 0.016 or bald_depth(c) > -0.012
+    # A face type's own file keeps the whole skull: every hair style shares it.
+    keep = lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.016 or bald_depth(c) > -0.012
     face = cage_head.CageFace(HF, look, keep=keep) if TYPED else head_mesh.Face(HF, look, keep=keep)
     m = face.mesh
     # The iris shares the eye's material (the atlas); highlights are plain colour, as the lines are.
@@ -995,7 +997,7 @@ def make_far_head(arm, spec, picture_path):
     openings; the eyes, lash lines and brows are painted on its skin (face_paint.paint_far).
     Returns the object and the head's surface for hair and headwear."""
     look = spec["look"]
-    face = head_mesh.FarFace(HF, look, keep=lambda c: c[2] < hairline(az_of(c)) + 0.030 or bald_depth(c) > -0.012)
+    face = head_mesh.FarFace(HF, look, keep=lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.030 or bald_depth(c) > -0.012)
     m = face.mesh
     world = np.array(HEAD)[None, :] + np.array(m.v) * HEAD_SCALE
     ob = raw_object("FarHead", world, m.f, [{"J_Bip_C_Head": 1.0}] * len(m.v), m.col, MAT["far"], arm, uvs=m.uv)
@@ -1718,7 +1720,8 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
     obs.append(head)
     obs.append(make_neck(arm))
     covered = dict(kerchief=lambda p: min(kerchief_depth(p), (p[2] + 0.070) * 2), cap=cap_depth).get(spec["headwear"])
-    obs += make_hair(arm, spec, pos, quads, covered, bones)
+    if not WHOLE_HEAD:  # a face type's own file has no hair: a style brings its own, with its spring bones
+        obs += make_hair(arm, spec, pos, quads, covered, bones)
     if spec["headwear"] == "kerchief":
         obs += make_kerchief(arm, pos, quads, spec["headwear_colour"])
     elif spec["headwear"] == "cap":
@@ -1993,6 +1996,10 @@ def add_vrm(path, title, springs=None):
     return j
 
 
+CLIENT_MORPHS = ("Fcl_EYE_Close", "Fcl_MTH_A")  # what the game drives (living/game/src/lookdev.rs): the blink and the open mouth
+TYPE_PARTS = ("Face", "Hands", "Neck", "FarHead")  # a face type's file: its head and skin, near and far
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -2008,6 +2015,9 @@ def main():
     ap.add_argument("--bake", action="store_true", help="build the identity values into the head itself (the bones stay at rest), to compare with the same person composed by bones")
     ap.add_argument("--lod", default="near", choices=("near", "far", "both"), help="`near` the full model (the default); `far` the far model alone (about 6,000 triangles, for beyond 10 m); "
                     "`both` one file with the two on one skeleton, the far model's meshes named Far*")
+    ap.add_argument("--parts", default="all", choices=("all", "head", "face"), help="`head`: only what a face type's file holds (the whole head, the neck and hands, and the far head with --lod both): no hair, no clothes; "
+                    "`face`: the whole head and neck alone, to photograph a type")
+    ap.add_argument("--morphs", default="all", choices=("all", "client"), help=f"`client`: keep only the expressions the game drives ({', '.join(CLIENT_MORPHS)}); every expression costs each vertex of the face again")
     ap.add_argument("--blend")
     a = ap.parse_args(argv)
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -2039,6 +2049,7 @@ def main():
         json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"]} if spec.get("type") else {})), f, indent=1)
     g = globals()
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
+    g["WHOLE_HEAD"] = a.parts != "all"
     arm = make_armature()
     obs, tris = [], {}
     for far in (False, True):
@@ -2046,6 +2057,17 @@ def main():
             continue
         g["FAR"] = far
         parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
+        if a.parts != "all":
+            keep = [ob for ob in parts if ob.name.split(".")[0] in (TYPE_PARTS if a.parts == "head" else ("Face", "Neck"))]
+            for ob in parts:
+                if ob not in keep:
+                    bpy.data.objects.remove(ob, do_unlink=True)
+            parts = keep
+        if a.morphs == "client":
+            for ob in parts:
+                if ob.data.shape_keys:
+                    for key in [k for k in ob.data.shape_keys.key_blocks if k.name != "Basis" and k.name not in CLIENT_MORPHS]:
+                        ob.shape_key_remove(key)
         if TYPED:
             spread_head_weights(parts)
             if spec.get("baked") and spec.get("identity"):

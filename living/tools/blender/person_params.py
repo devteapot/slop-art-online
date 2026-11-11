@@ -382,8 +382,25 @@ def resolve(p):
     )
 
 
+def from_type(tid):
+    """The figure a face type's own file is built on (`type:<id>`): the type with every identity
+    value at 0, at the usual age, height and build of its band, with nothing a person adds (no
+    freckles, stubble or weathering). A type for either sex takes line b's as male, a and c's as
+    female; children's builds do not differ."""
+    types = face_types.load()["types"]
+    if tid not in types:
+        raise SystemExit(f"type {tid!r}: not one of {sorted(types)}")
+    t = types[tid]
+    sex = t["sex"] if t["sex"] in ("male", "female") else ("male" if t["line"] == "b" else "female")
+    body = t["body"]
+    return dict(type=tid, identity=dict(), seed=1000 + sorted(types).index(tid), sex=sex, age=dict(child=8, youth=15, adult=32, elder=68)[t["band"]],
+                build=dict(height=body["height_m"][1], weight=body.get("weight", 0.0), muscle=body.get("muscle", 0.0)), skin=dict(tone=0.25, freckles=0.0, weathered=0.0), beard=dict(style="none", stubble=0.0))
+
+
 def from_variant(name):
-    """A preset's name, or `<seed>:<kind>` (man, woman, elder_man, elder_woman, boy, girl)."""
+    """A preset's name, `type:<face type>` (the type's own figure) or `<seed>:<kind>` (man, woman, elder_man, elder_woman, boy, girl)."""
+    if name.startswith("type:"):
+        return from_type(name[5:])
     if ":" in name:
         seed, kind = name.split(":")
         sex, lo, hi = KINDS[kind]

@@ -427,13 +427,34 @@ class Cage:
             self.mouth_lo = list(lower.values())
             below = {vid(R["lip_low"], j) for j in range(-2, 3)}
             faces = [tuple(lower.get(v, v) for v in f) if any(v in below for v in f) else f for f in faces]
-        # Outward winding.
-        out = []
-        for f in faces:
-            q = self.v[list(f)]
-            nrm = np.cross(q[1] - q[0], q[2] - q[0])
-            out.append(f if np.dot(nrm, q.mean(axis=0) - ORIGIN * np.array([1, 1, 1.0])) >= 0 else tuple(reversed(f)))
-        self.faces = out
+        # Outward winding, carried from face to face across shared edges. Asking each face
+        # whether it looks away from the head's middle is wrong where the surface turns under
+        # (below the nose's tip, under the chin): those faces were turned inward and showed as
+        # a hole from below. One face that cannot be wrong starts it: the one furthest forward.
+        faces = [tuple(f) for f in faces]
+        edge = {}
+        for i, f in enumerate(faces):
+            for a, b in zip(f, f[1:] + f[:1]):
+                edge.setdefault((min(a, b), max(a, b)), []).append(i)
+        seed = max(range(len(faces)), key=lambda i: self.v[list(faces[i])].mean(axis=0)[1])
+        q = self.v[list(faces[seed])]
+        if np.cross(q[1] - q[0], q[2] - q[0])[1] < 0:
+            faces[seed] = tuple(reversed(faces[seed]))
+        done, todo = {seed}, [seed]
+        while todo:
+            i = todo.pop()
+            f = faces[i]
+            for a, b in zip(f, f[1:] + f[:1]):
+                for k in edge[(min(a, b), max(a, b))]:
+                    if k in done:
+                        continue
+                    g = faces[k]
+                    if any((x, y) == (a, b) for x, y in zip(g, g[1:] + g[:1])):  # the same way along the shared edge: turn it
+                        faces[k] = tuple(reversed(g))
+                    done.add(k)
+                    todo.append(k)
+        assert len(done) == len(faces), "the cage is one connected surface"
+        self.faces = faces
         self.face_row = face_row  # the row each face starts at: from the jaw line down it is the neck's skin, not the face's
         self.neck_ring = [vid(R["neck"], j) for j in range(COLS)]
         # Creases.
