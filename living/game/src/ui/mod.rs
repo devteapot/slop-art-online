@@ -76,15 +76,18 @@ impl Plugin for UiPlugin {
             .init_resource::<settings::SkillNames>()
             .init_resource::<people::Talks>()
             .init_resource::<people::LogPage>()
+            .init_resource::<people::Hints>()
             .init_resource::<prompt::Tip>()
             .init_resource::<pack::Carrying>()
             .configure_sets(Update, UiInput.in_set(crate::phase::Phase::Input).before(crate::controls::movement))
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
-            .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn))
+            .init_resource::<ThemeState>()
+            // The UI's trees are spawned once the theme is known, and again on each new theme.
+            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
         let widgets = (frame::vitals, frame::status, frame::skills, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
-        let windows = (people::update, prompt::update, say::update, pack::update);
+        let windows = (people::update, people::hints, prompt::update, say::update, pack::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
         } else {
@@ -113,6 +116,11 @@ pub struct HudRoot;
 fn their_window(mut verbs: ResMut<crate::verbs::Verbs>, mut ws: ResMut<win::Windows>) {
     if let Some(id) = verbs.open_window.take() {
         ws.open(win::Win::Person(id));
+    }
+    // Introduce yourself from the list: their window, with the line in its box.
+    if let Some(id) = verbs.introduce.take() {
+        ws.open(win::Win::Person(id));
+        verbs.want_intro = Some(id);
     }
     if std::mem::take(&mut verbs.inventory) {
         ws.open(win::Win::Pack);
@@ -224,6 +232,61 @@ mod tests {
     }
 }
 
+/// The interface's theme in force, and a change asked for this frame (F4, Settings › Play).
+#[derive(Resource, Default)]
+pub struct ThemeState {
+    pub name: wood::Name,
+    pub want: Option<wood::Name>,
+    rebuild: bool,
+    started: bool,
+}
+
+/// The theme: from the settings file (or `LIVING_GAME_THEME`, for captures) at start; F4 cycles
+/// it; a change is saved, named on screen, and rebuilds the UI.
+fn theme(mut looks: ResMut<ThemeState>, keys: Res<ButtonInput<KeyCode>>, input: Res<crate::controls::Input>, mut prefs: ResMut<crate::keys::Prefs>, mut verbs: Option<ResMut<crate::verbs::Verbs>>, mut tips: ResMut<tips::Tips>, mut ws: ResMut<win::Windows>, time: Res<Time>) {
+    if !looks.started {
+        looks.started = true;
+        let n = std::env::var("LIVING_GAME_THEME").ok().and_then(|v| wood::Name::parse(&v)).or_else(|| prefs.theme.as_deref().and_then(wood::Name::parse)).unwrap_or_default();
+        looks.name = n;
+        wood::set(n);
+        looks.rebuild = true;
+        info!("ui: theme {}", n.label());
+        return;
+    }
+    if keys.just_pressed(KeyCode::F4) && !input.chat_open {
+        looks.want = Some(looks.name.next());
+    }
+    if let Some(n) = looks.want.take().filter(|n| *n != looks.name) {
+        looks.name = n;
+        wood::set(n);
+        looks.rebuild = true;
+        ws.respawn = true;
+        prefs.theme = Some(n.key().into());
+        prefs.dirty = true;
+        let text = format!("Theme: {}  ·  F4 changes it", n.label());
+        info!("ui: {text}");
+        match verbs.as_mut() {
+            Some(v) => v.toasts.push(crate::verbs::Toast { text, ok: None, at: time.elapsed_secs_f64() }),
+            None => tips.show(&text, time.elapsed_secs_f64()),
+        }
+    }
+}
+
+fn rebuilding(looks: Res<ThemeState>) -> bool {
+    looks.rebuild
+}
+
+/// A new theme: every UI tree goes, to be spawned again in the new look.
+fn sweep(mut commands: Commands, roots: Query<Entity, With<HudRoot>>) {
+    for e in &roots {
+        commands.entity(e).despawn();
+    }
+}
+
+fn rebuilt(mut looks: ResMut<ThemeState>) {
+    looks.rebuild = false;
+}
+
 /// A script's request for the game UI's state (`dump:NAME` in the live script; `verify-ui`).
 #[derive(Resource, Default)]
 pub struct Dump(pub Option<std::path::PathBuf>);
@@ -280,11 +343,12 @@ fn dump(
 pub struct DumpExtra<'w> {
     prefs: Res<'w, crate::keys::Prefs>,
     binds: Res<'w, crate::keys::Binds>,
+    theme: Res<'w, ThemeState>,
 }
 
 impl DumpExtra<'_> {
     fn json(&self) -> serde_json::Value {
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw})
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key()})
     }
 }
 

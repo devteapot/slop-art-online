@@ -984,11 +984,26 @@ Branch `ui-1`: the owner's choice of interface (design D: B's amount on screen i
 
 Built in steps; steps 1–3 are on main, 4–5 follow, and step 6 (the character window, the skills and know-how window, the fight target plate, a look pass) waits for the owner's go-ahead.
 
-**The look** (`ui/wood.rs`): walnut frames with a brass inner line and an ink edge, parchment bodies, gold buttons, ink key chips, a hard toon drop shadow; Nunito for reading and Marcellus for titles. Sizes are the mock-up's pixels: the UI scale is the window's height over 900 (1600×900 is 1:1; never under 0.9). The game draws an arrow cursor while the system cursor is captured.
+**The look is a theme** (`ui/wood.rs`; play-test 4, 2026-11-11: the owner liked the windows' behaviour but not their look or density, "I'd prefer a much cleaner interface"). Every visual value of the D widgets comes from one `Theme`: colours by role (text, edge, surface, accent, field, line), edge width, corner radius, ornament (a frame's inner line, a second body edge), title face and size, shadows, and density (key chips beside titles and buttons, the title bar's grip, help lines shown always or once). Four themes:
+- **Clear** (the default): light neutral, flat panels with a 1 px edge and a soft shadow, Nunito only at two weights, no ornament.
+- **Night:** the same, dark and translucent.
+- **Linen:** warm and flat, a hint of the game's palette.
+- **Walnut:** design D as first built (walnut, brass, parchment, Marcellus titles, key chips).
+
+Settings › Play › Look chooses it, F4 cycles it (a note names it: "Theme: Night · F4 changes it"), the settings file keeps it, and `LIVING_GAME_THEME` sets it for captures. A change rebuilds the UI's trees and reopens the open windows where they were. The sizes are the mock-up's pixels: the UI scale is the window's height over 900 (1600×900 is 1:1; never under 0.9). The drawn cursor is the ring and dot of 90f6fac1 again (the owner preferred it to D's arrow).
+
+**Density** (what a player does not need in the moment went, or went behind a click):
+- **Windows:** no grip, no key chips beside ✕ (the keys are in the Menu list and Settings), a smaller ✕; titles on one line (a long label is shortened with "…").
+- **A person's window:** no second line repeating the title (it shows only a named person's clothes); "First seen 3 min ago · not in sight" on one line; the acts are Give ›, Wave, Look over and More… (Trade…, Introduce yourself and every act the rules allow are behind More…); the box reads "Enter to talk", its "to" chip is shortened, no Enter chip; the line explaining Tab shows until the first line is said.
+- **Log and people:** the box's help line shows until the first line is said.
+- **The list of acts:** toward a person Talk, Their window, Give ›, Offer ›, Wave and Appraise, then More… (Introduce yourself, Threaten, Tend, Accept, Demand, Host, Conceive, Teach, Nod, Face, Goto, Follow, Flee, Join and the rest); toward a thing, the first four and More…; the title on one line; no "hold F" note.
+- **The pack:** no single "Items" tab; only as many rows of cells as it needs (one free row); "Click an item to use it; drag it onto someone to give it." on one line, until an item is clicked or carried.
+- **The F prompt:** "F Talk", with "hold F · more" only the first two times a list is opened that way.
+- **Hints at the top** (F2, F3, Enter) are drawn in the theme, and still show once a session.
 
 **On screen while playing:** the compass (top right; the needle follows the view; the place's name under it is the nearest place my character knows within 90 m, from `my_places`, and none shows otherwise) and two labelled buttons, Pack (I) and Menu (Esc). The cluster at the bottom (step 4) is still the old bars and skill bar until then. Only while they matter: nameplates, the F prompt beside the person or thing F acts on ("F Talk · hold F · more"), bubbles, notes over the cluster (parchment, marked green when done and red when refused, in the authority's words), and the first-time tip ("New here", bottom left; "Got it" or "All tips"; once a session, and off in Settings).
 
-**Windows** (`ui/win.rs`):
+**Windows** (`ui/win.rs`; behaviour as play-tested and accepted):
 - Two anchors at 1600×900: the left (26, 26) holds a person, the log and people (and later the character); the right (under the buttons, 26 from the edge, top 252) holds the pack. One window per anchor, so at most two narrow windows (426 wide) are open and the middle stays clear. Opening a window takes its home anchor and replaces what holds it. Skills and know-how, and Settings, are wide (1076), in the centre left of the compass column, and close the others. Heights stop short of the screen's edge (the wide ones above the cluster).
 - Hold the click on a title bar and slide (a three-finger drag is the same press and move): the window follows, both anchors are outlined, and letting go snaps it to the nearer one. If another window holds it, the two change places; a wide window goes back to the centre.
 - Close with ✕, the window's own key (I, L, K) or Esc. A click in a window raises it.
@@ -1028,7 +1043,7 @@ Built in steps; steps 1–3 are on main, 4–5 follow, and step 6 (the character
 | Two panels or windows open | 1,123–2,070 | 1,421–2,018; one run 4,198 (992 nodes) |
 | Settings › Controls open | – | 2,935 (930 nodes) |
 
-No regression shows with nothing open. With two windows open it may cost about 0.3 ms more, within the noise; Settings is the heaviest, and only while it is open. Hit-testing on the game's cursor adds about 60–100 µs to input (10–30 before). Per-frame work was trimmed on the way: controls repaint only when lit or hovered changes, labels by looks refresh four times a second, and the scripts' tag map is built only in scripted runs. Evidence: `.local/living/verify/ui-b/ui/ab*`, `uiperf-*` and `baseperf-*` (client logs, `ui perf:` lines).
+After the themes and density pass (Clear against the play-tested `92e667c5`, interleaved, load average 26–29): nothing open 1.69–2.75 ms against 1.85–2.30; a person window and the pack open 2.3–2.4 ms against 3.4–3.6. Unchanged or lower, within the noise. No regression shows with nothing open. With two windows open it may cost about 0.3 ms more, within the noise; Settings is the heaviest, and only while it is open. Hit-testing on the game's cursor adds about 60–100 µs to input (10–30 before). Per-frame work was trimmed on the way: controls repaint only when lit or hovered changes, labels by looks refresh four times a second, and the scripts' tag map is built only in scripted runs. Evidence: `.local/living/verify/ui-b/ui/ab*`, `uiperf-*` and `baseperf-*` (client logs, `ui perf:` lines).
 
 **Look direction** (`controls::look`): the client's look goes through one function, toward the authority's `human_face(dx, dy)` (being built on dev-box, fov-1: rate-limited, changes under about 10° write nothing, and `human_face(0, 0)` releases the look). It is a no-op until the reducer is on main and the bindings are regenerated. Facing the cursor it is given the cursor's direction; facing where you walk, none. Settings › Play keeps a place for a read-only "facing sight" line (on or off, with the field's focal, side, side share, near and margin), not built yet.
 
