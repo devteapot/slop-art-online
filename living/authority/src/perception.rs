@@ -342,6 +342,80 @@ impl Projection {
     }
 }
 
+// ---- what an observer perceives a target doing --------------------------------------------
+
+/// How near the line of a mover's heading something must be to be what it walks toward: within
+/// about 18° of it.
+const TOWARD_COS: f32 = 0.95;
+
+/// What a creature is perceived doing (a mind's scene, the first sight of someone): its
+/// activity's label, which is what anyone sees of it ("goto → person"), except when its body is
+/// moving under its controller's direct intent (`motion::GOAL_DIRECTION`: a player's movement
+/// keys) and its activity is none or `wait`. Then the motion is what is seen ([`moving_label`]).
+/// It reads the body and its steering, never who controls it, so the same body behaviour reads
+/// the same whoever plays it (docs/PERCEPTION.md, "Activity derived from the body").
+/// `observer` and `seen` (what it sees) are whom the walker can be heading toward. Point lookups
+/// on `activity`, `steer` and `body` only; nothing is written.
+pub fn doing_of(ctx: &ReducerContext, id: u32, observer: (u32, &str, (f32, f32)), seen: &[NearCreature], now: u64) -> Option<String> {
+    let a = ctx.db.activity().id().find(id);
+    if a.as_ref().is_some_and(|a| a.skill != "wait") {
+        return a.map(|a| a.label);
+    }
+    let st = ctx.db.steer().id().find(id).filter(|s| s.goal == crate::motion::GOAL_DIRECTION);
+    let b = st.as_ref().and_then(|_| ctx.db.body().id().find(id)).filter(|b| b.vx != 0.0 || b.vy != 0.0);
+    match (st, b) {
+        (Some(st), Some(b)) => {
+            let dt = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
+            let (x, y, heading) = living_rules::steer::pose(b.x, b.y, b.heading, b.vx.hypot(b.vy), b.turn, b.turn_s, dt);
+            let among = std::iter::once((observer.1, observer.2)).filter(|_| observer.0 != id).chain(seen.iter().filter(|c| c.id != id).map(|c| (&*c.kind, c.pos)));
+            Some(moving_label(st.flags & crate::motion::FLAG_RUN != 0, (x, y), heading, among))
+        }
+        _ => a.map(|a| a.label),
+    }
+}
+
+/// The motion seen of a body moving with no activity of its own, in the style of an activity's
+/// label: `walk` or `run` (the run input), then `→ <kind>` of the nearest creature its heading
+/// points at, else the compass way it goes ("walk east").
+pub fn moving_label<'a>(run: bool, at: (f32, f32), heading: f32, among: impl IntoIterator<Item = (&'a str, (f32, f32))>) -> String {
+    let gait = if run { "run" } else { "walk" };
+    let (hx, hy) = (heading.cos(), heading.sin());
+    let ahead = among
+        .into_iter()
+        .filter_map(|(kind, p)| {
+            let (dx, dy) = (p.0 - at.0, p.1 - at.1);
+            let d = dx.hypot(dy);
+            (d > 0.3 && (dx * hx + dy * hy) / d >= TOWARD_COS).then_some((d, kind))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    match ahead {
+        Some((_, kind)) => format!("{gait} → {kind}"),
+        None => format!("{gait} {}", common::direction(at, (at.0 + 2.0 * hx, at.1 + 2.0 * hy))),
+    }
+}
+
+#[cfg(test)]
+mod doing_tests {
+    use super::moving_label;
+
+    #[test]
+    fn a_walker_heading_at_someone_walks_toward_them() {
+        // Heading east (+x) at a person 6 m ahead, a wolf off to the side.
+        let l = moving_label(false, (0.0, 0.0), 0.0, [("wolf", (3.0, 4.0)), ("person", (6.0, 0.5))]);
+        assert_eq!(l, "walk → person");
+        // The nearest of those ahead.
+        assert_eq!(moving_label(true, (0.0, 0.0), 0.0, [("person", (9.0, 0.0)), ("deer", (4.0, 0.2))]), "run → deer");
+    }
+
+    #[test]
+    fn a_walker_heading_at_no_one_goes_a_compass_way() {
+        // +y is south; someone behind or well off the line is not what it walks toward.
+        let l = moving_label(false, (0.0, 0.0), std::f32::consts::FRAC_PI_2, [("person", (0.0, -5.0)), ("person", (4.0, 4.0))]);
+        assert_eq!(l, "walk south");
+        assert_eq!(moving_label(true, (10.0, 10.0), std::f32::consts::PI, []), "run west");
+    }
+}
+
 // ---- the perceived set ---------------------------------------------------------------------
 
 thread_local! {

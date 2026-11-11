@@ -19,6 +19,8 @@ __pycache__/
 # Living core build output and local service data
 /living/target/
 /.local/living/
+# The Kimodo clip library (fetched from the Spark; docs/GAME_BRIEF.md, animation)
+/.local/kimodo/
 /living/viewer/dist/
 /living/game/assets/lookdev/
 /living/game/assets/view/
