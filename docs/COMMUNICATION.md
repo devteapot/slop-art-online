@@ -641,16 +641,17 @@ The talk prompt tells a turn answering a call how far away the caller is and wha
 
 A way's refusal is the words of its `<way>_check(a)`, and the reducer returns exactly those words. The game client compiles the world's script, so it can run the same check before it sends and show the same words.
 
-- **One context builder.** Both sides build the check's context with `living_rules::script::speech::check_ctx(way, actor, addressee, text, since_ms)`:
+- **One function.** Both sides call `living_rules::script::speech::check_way(scripts, way, actor, addressee, text, since_ms) -> Result<(), String>`; `Err` holds the words. It returns "no way of speaking called `X`" for a way the script lacks, `Ok` for a way with no check, and otherwise runs `<way>_check(a)` over `speech::check_ctx`. Its inputs:
   - `a.target` is the addressee: class `none` for the room; one who is absent or dead is a creature not alive and 1e9 m away, so a check cannot tell the two apart and ids cannot be probed;
   - `a.text` is the line;
   - `a.qty` is the milliseconds since the speaker's last line in this way. The authority reads it from the speaker's `line_heard` rows, and a client can take the latest `my_heard.at_ms` of that way. It is 4,000,000,000 if never.
+  - Those are all a check sees. The install refuses a `<way>_check` that reads any other field of `a` (the hour, the season…): a client could not give it the same.
 - **Only the engine's refusals are Rust:** "no way of speaking called `X`", and "speaking too fast" (2 s across all ways). Neither belongs to a way.
 - **The install holds the check to its spec.** Each way that requires an addressee, a reach, a technique or a gap above 2 s must have a `<way>_check` that refuses a sample line breaking it (to no one; 0.5 m beyond the reach; absent or dead; not knowing the technique; 1 s inside the gap). It must also accept a line that breaks nothing, or the install is refused (`check.rs` `ways`).
 - **A safety net that is never reached.** The primitive still enforces the spec, and its words name the check that let the line through. A script that passed the install never reaches it. The words of a whisper go only to the addressee within 1.5 m whatever the check says.
 - **`needs_sight` is refused at install for now:** no fact in the check's context says whether the addressee is seen. It waits for signing (item 13). Its `speech_card` column stays, always false.
 - **The agreement test.**
-  - Rules unit test `ways_refuse_in_their_checks_words`: the shipped checks' words on each case through `check_ctx`, and the install refusing a way whose check does not enforce its spec.
+  - Rules unit test `ways_refuse_in_their_checks_words`: the shipped checks' words on each case through `check_way` (also a way that does not exist, and no way named), the install refusing a check that reads `a.hour`, and the install refusing a way whose check does not enforce its spec.
   - End to end, `verify-player` `speak.py` gives each way on `speech_card` its refusals through `human_speak`: to no one, beyond its reach, within its gap. It runs the installed script's check on the same facts outside the authority, as a client would (`living/rules/examples/way_check.rs`), and requires the reducer's error to be byte for byte that text.
 
 ### Silence that tells the truth (item 8)

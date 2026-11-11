@@ -161,7 +161,9 @@ fn senses_law() {
 // script, runs the same check before it sends, so a player sees the same words either way.
 // `a.target` is the addressee (class "none" for the room; one who is not there, absent or dead,
 // is a creature not alive and very far), `a.text` the line, `a.qty` the milliseconds since the
-// speaker's last line in this way (4000000000 if never). A way that requires an addressee, a
+// speaker's last line in this way (4000000000 if never); nothing else (the install refuses a
+// check that reads another field, such as the hour, which a client could not give). Both call
+// `living_rules::script::speech::check_way`. A way that requires an addressee, a
 // reach, a technique or a gap must refuse a line that breaks it (the install tries). Only the
 // engine's own refusals are not here: a way it does not know, and two lines within 2 s.
 fn say_speech() {

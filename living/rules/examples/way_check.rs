@@ -1,12 +1,12 @@
 //! A way's refusal as a client sees it before sending: the world's script's `<way>_check` on
-//! the facts a client has, through the same context builder the authority uses
-//! (`living_rules::script::speech::check_ctx`). The verify-player agreement test compares its
+//! the facts a client has, through the function the authority calls
+//! (`living_rules::script::speech::check_way`). The verify-player agreement test compares its
 //! words with the reducer's.
 //!
 //! `way_check SCRIPT_FILE DAY_MS FACTS_JSON`, with FACTS_JSON
 //! `{"way": "whisper", "text": "…", "to": null | {"id": 7, "alive": true, "dist": 3.2}, "since_ms": null | 2500, "knows": []}`,
 //! prints `{"refused": "too far to whisper: step closer"}` or `{"refused": null}`.
-use living_rules::script::{speech::check_ctx, ActorFacts, Scripts, TargetFacts};
+use living_rules::script::{speech::check_way, ActorFacts, Scripts, TargetFacts};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -29,6 +29,6 @@ fn main() {
         dist: t.get("dist").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
         ..Default::default()
     });
-    let c = check_ctx(way, actor, to, f["text"].as_str().unwrap_or(""), f["since_ms"].as_u64());
-    println!("{}", serde_json::json!({ "refused": sc.check(way, &c).err() }));
+    let refused = check_way(&sc, way, actor, to, f["text"].as_str().unwrap_or(""), f["since_ms"].as_u64()).err();
+    println!("{}", serde_json::json!({ "refused": refused }));
 }

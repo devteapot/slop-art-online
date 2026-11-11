@@ -320,22 +320,19 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
     f
 }
 
-/// The context of a way of speaking's `<way>_check(a)` (`living_rules::script::speech::check_ctx`,
-/// the builder a client uses too): the speaker (the fields the check reads), the addressee
-/// (0: the room), the line, and how long ago the speaker last spoke in this way.
-pub fn way_ctx(ctx: &ReducerContext, id: u32, way: &str, to: u32, text: &str, since_ms: Option<u64>, now: u64) -> SkillCtx {
+/// What a way of speaking's check is given about the speaker (the fields its plan reads) and
+/// the addressee (0: the room), for `living_rules::script::speech::check_way`, the check a client
+/// runs too.
+pub fn way_facts(ctx: &ReducerContext, id: u32, way: &str, to: u32, now: u64) -> (living_rules::script::ActorFacts, Option<living_rules::script::TargetFacts>) {
     let w = common::world(ctx);
     let plan = common::scripts(ctx).law_plan(&format!("{way}_check"));
-    let base = law_ctx(ctx, id, &w, now, &plan);
-    let mut actor = base.actor.clone();
+    let mut actor = law_ctx(ctx, id, &w, now, &plan).actor;
     actor.id = id;
     let addressee = (to != 0).then(|| {
         let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
         target_facts(ctx, &TargetRef { class: 3, id: to as u64, x: 0.0, y: 0.0 }, from, now)
     });
-    let mut c = living_rules::script::speech::check_ctx(way, actor, addressee, text, since_ms);
-    (c.night, c.dark, c.hour, c.season, c.raining) = (base.night, base.dark, base.hour, base.season, base.raining);
-    c
+    (actor, addressee)
 }
 
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {

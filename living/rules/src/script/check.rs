@@ -185,6 +185,13 @@ fn ways(p: &mut Probe) -> Result<(), String> {
     let speaker = actors().into_iter().find(|a| a.kind == "person" && a.stage == "adult").unwrap_or_default();
     for w in s.ways().to_vec() {
         let f = format!("{}_check", w.name);
+        // Only what `speech::check_way` gives (a client must be able to give the same).
+        if s.has(&f) {
+            let plan = s.plan(&f);
+            if let Some(k) = super::context::TOP.iter().enumerate().find(|(i, k)| plan.top & (1 << i) != 0 && !super::speech::CHECK_FIELDS.contains(k)).map(|(_, k)| k) {
+                return Err(format!("install refused: `{f}` reads `a.{k}`; a way's check reads only {} (what a client can give it too)", super::speech::CHECK_FIELDS.iter().map(|k| format!("`a.{k}`")).collect::<Vec<_>>().join(", ")));
+            }
+        }
         let gap_ms = (w.gap_s * 1000.0) as u64;
         let needs_check = w.to == super::speech::To::Required || w.reach > 0.0 || !w.needs.is_empty() || gap_ms > 2_000;
         if !s.has(&f) {

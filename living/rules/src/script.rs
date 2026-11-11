@@ -2567,12 +2567,12 @@ mod tests {
 
     #[test]
     fn ways_refuse_in_their_checks_words() {
-        use speech::check_ctx;
+        use speech::check_way;
         let s = scripts();
         let me = ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), ..Default::default() };
         let them = |dist: f32, alive: bool| Some(TargetFacts { class: "creature".into(), id: 2, kind: "person".into(), alive, dist, ..Default::default() });
-        let check = |way: &str, to, since| s.check(way, &check_ctx(way, me.clone(), to, "hello", since));
-        // The words a client shows before sending are the reducer's (both call these).
+        let check = |way: &str, to, since| check_way(&s, way, me.clone(), to, "hello", since);
+        // The words a client shows before sending are the reducer's (both call `check_way`).
         assert_eq!(check("whisper", None, None), Err("a whisper needs someone to whisper to".into()));
         assert_eq!(check("whisper", them(3.0, true), None), Err("too far to whisper: step closer".into()));
         assert_eq!(check("whisper", them(1.0, false), None), Err("too far to whisper: step closer".into()), "absent or dead reads as too far: ids cannot be probed");
@@ -2581,6 +2581,8 @@ mod tests {
         assert_eq!(check("call", None, Some(6_000)), Ok(()));
         assert_eq!(check("call", None, None), Ok(()));
         assert_eq!(check("say", them(30.0, true), Some(0)), Ok(()), "say has no check of its own");
+        assert_eq!(check("", None, None), Ok(()), "no way named is say");
+        assert_eq!(check("shout", None, None), Err("no way of speaking called `shout`".into()), "the engine's own refusal, in the reducer's words");
         // A way whose spec requires something must refuse it in its check, or the install is refused.
         let src = include_str!("../../scripts/skills.rhai");
         let install = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap()).and_then(|s| s.validate().map(|_| ()));
@@ -2594,6 +2596,9 @@ mod tests {
         assert!(e.contains("a second line 5000 ms after the first"), "{e}");
         let e = install("fn say_check(a) { \"no\" }").unwrap_err();
         assert!(e.contains("refuses a line that breaks nothing"), "{e}");
+        // A check reads only what `check_way` gives, which a client can give too.
+        let e = install("fn say_check(a) { if a.hour > 30.0 { return \"never\"; } \"\" }").unwrap_err();
+        assert!(e.contains("`say_check` reads `a.hour`"), "{e}");
         let e = Scripts::new(&crate::floors::compose(src, "fn sign_speech() { #{ about: \"Sign.\", needs_sight: true } }").unwrap()).err().unwrap();
         assert!(e.contains("`needs_sight` is not built yet"), "{e}");
     }

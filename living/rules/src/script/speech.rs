@@ -8,7 +8,7 @@
 
 use rhai::{Dynamic, Map};
 
-use super::{ActorFacts, SkillCtx, TargetFacts};
+use super::{ActorFacts, Scripts, SkillCtx, TargetFacts};
 
 /// `a.qty` of a way's check when the speaker never said a line in that way.
 pub const NEVER_MS: u32 = 4_000_000_000;
@@ -27,6 +27,29 @@ pub fn check_ctx(way: &str, actor: ActorFacts, addressee: Option<TargetFacts>, t
     };
     SkillCtx { actor, target, text: text.into(), qty: since_ms.map_or(NEVER_MS, |ms| ms.min(NEVER_MS as u64) as u32), skill: way.into(), ..Default::default() }
 }
+
+/// Whether `way` refuses a line, in the script's words: the one check every caller runs. The
+/// authority runs it before it speaks a line and returns its `Err` as the reducer's error, word
+/// for word; a client runs it before sending, to show the same words first. The engine's two
+/// refusals are here too, in the reducer's words: a way the script does not have, and (when the
+/// way has a check) whatever its `<way>_check(a)` returns over [`check_ctx`]. The 2 s speaking
+/// limit is the engine's alone ("speaking too fast", `SPEAK_GAP_MS` in the authority).
+///
+/// The check sees exactly these inputs (the install refuses a `<way>_check` that reads any other
+/// field of `a`, such as the hour, which a client could not give the same).
+pub fn check_way(scripts: &Scripts, way: &str, actor: ActorFacts, addressee: Option<TargetFacts>, text: &str, since_ms: Option<u64>) -> Result<(), String> {
+    let way = if way.is_empty() { SAY } else { way };
+    if scripts.way(way).is_none() {
+        return Err(format!("no way of speaking called `{way}`"));
+    }
+    if !scripts.has(&format!("{way}_check")) {
+        return Ok(());
+    }
+    scripts.check(way, &check_ctx(way, actor, addressee, text, since_ms))
+}
+
+/// The fields of `a` a way's check may read: those [`check_way`] fills.
+pub const CHECK_FIELDS: &[&str] = &["actor", "target", "text", "qty", "skill"];
 
 /// To whom a line may be said.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

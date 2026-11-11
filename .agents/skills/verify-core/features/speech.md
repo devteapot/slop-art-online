@@ -9,7 +9,7 @@ Design: [docs/COMMUNICATION.md](../../../../docs/COMMUNICATION.md). Source: `liv
   1. Empty text is accepted and writes nothing. An unknown way is refused: "no way of speaking called `X`". Lines are cut to the way's `max_chars`.
   2. Refusals, which write nothing and come back as the reducer's `Err`:
      - the engine's own: "no way of speaking called `X`" and "speaking too fast" (2 s across all ways, `SPEAK_GAP_MS`, for a speaker with a `mind_state` row);
-     - the way's (since the coordinator's requirement on `speech-2`): exactly the words its `<way>_check(a)` returns, built by `living_rules::script::speech::check_ctx`, the builder a client uses to run the same check before sending.
+     - the way's (since the coordinator's requirement on `speech-2`): exactly the words its `<way>_check(a)` returns, through `living_rules::script::speech::check_way(scripts, way, actor, addressee, text, since_ms)`, the function a client calls to run the same check before sending (it also gives "no way of speaking called `X`"). A check may read only `a.actor`, `a.target`, `a.text`, `a.qty` and `a.skill`; the install refuses one that reads another field.
 
      The check gets the addressee as `a.target` (class `none` for the room; absent or dead reads as alive false and very far), the line as `a.text`, and the milliseconds since the speaker's last line in this way as `a.qty` (from its `line_heard` rows; 4,000,000,000 if never). The install refuses a way that requires an addressee, a reach, a technique or a gap without a check that refuses a sample line breaking it (`check.rs` `ways`). Shipped words:
      - `whisper_check`: "a whisper needs someone to whisper to", and "too far to whisper: step closer";

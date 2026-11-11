@@ -37,8 +37,8 @@ fn way_check(ctx: &ReducerContext, sc: &living_rules::script::Scripts, w: &WaySp
     if !sc.has(&format!("{}_check", w.name)) {
         return Ok(());
     }
-    let c = crate::act::way_ctx(ctx, speaker, &w.name, to, text, since_ms(ctx, speaker, &w.name, now), now);
-    sc.check(&w.name, &c)
+    let (actor, addressee) = crate::act::way_facts(ctx, speaker, &w.name, to, now);
+    living_rules::script::speech::check_way(sc, &w.name, actor, addressee, text, since_ms(ctx, speaker, &w.name, now))
 }
 
 /// Whether `speaker` must still wait before its next line of `way`: the 2 s speaking limit, or

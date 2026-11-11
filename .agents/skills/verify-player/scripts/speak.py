@@ -13,7 +13,7 @@ rules list (`speech_card`), is refused in the world's words, and reads who heard
   gap beyond 2 s, a second line within it. The words are the script's `<way>_check`: the
   reducer's error must be exactly what that check says on the same facts, run outside the
   authority the way a client runs it before sending (`living-rules` example `way_check`, the
-  installed script, `speech::check_ctx`). A refused line writes nothing.
+  installed script, `speech::check_way`). A refused line writes nothing.
 
     speak.py --run RUN
 
