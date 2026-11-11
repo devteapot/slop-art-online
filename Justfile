@@ -97,8 +97,9 @@ living-test:
 
 # Everything that must keep compiling after any change: authority (wasm), mind, the native
 # and browser observer, the game client, and the rules tests. Run before every commit.
-# living/tools/check.py runs these five cargo steps (docs/TOOLING.md): the three cargo build
-# directories at once under one jobserver; a step skipped when it already passed on this
+# living/tools/check.py runs these six steps (docs/TOOLING.md): the five cargo steps and the
+# script fuel gate (living/tools/script_bench: fails when a hot law is over budgets.json). Its
+# four cargo build directories at once under one jobserver; a step skipped when it already passed on this
 # machine on byte-identical inputs; rustc through sccache when it is installed
 # (living/tools/install_sccache.sh). `living-check-full` runs every step regardless of stamps;
 # LIVING_CHECK_SERIAL=1 runs them one by one with cargo's output on the terminal.
@@ -132,11 +133,12 @@ living-store *args:
 living-store-selftest:
     python3 living/tools/store_selftest.py
 
-# Fuel budgets of the hot Rhai laws (rates, the strike path, perceived_of, a constant lookup) in
-# the module under SpacetimeDB's wasmtime config; fails over living/tools/script_bench/budgets.json
-# (docs/SCRIPT_ENGINES.md). Builds in its own target dir unless CARGO_TARGET_DIR is set.
+# Fuel budgets of the hot Rhai laws (rates, the strike path, perceived_of, hooks, senses, motion)
+# in the module under SpacetimeDB's wasmtime config; fails over living/tools/script_bench/budgets.json
+# (docs/LIVING_CORE.md, Fuel budgets). The check's `script-gate` step alone, run whatever its
+# stamp says; living/tools/script_bench/gate.sh runs it by hand and keeps the evidence.
 living-script-gate:
-    CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/.local/script-bench/target}" living/tools/script_bench/gate.sh
+    python3 living/tools/check.py --steps script-gate --full
 
 
 # The game client's generated assets (git-ignored; the scripts are the source), on any machine
