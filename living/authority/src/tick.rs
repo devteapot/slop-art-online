@@ -437,14 +437,21 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             }
         }
     }
-    // Offers are dropped a minute after they can no longer be taken up (the laws' windows).
+    // Bond offers are dropped a minute after they can no longer be taken up (the laws'
+    // window). Trade offers go as soon as they end, so `my_offers` stops showing them
+    // within this second.
     let laws = common::laws(ctx);
-    let (bond_ms, trade_ms) = ((laws.bond_window_s * 1000.0) as u64 + 60_000, (laws.trade_window_s * 1000.0) as u64 + 60_000);
+    let bond_ms = (laws.bond_window_s * 1000.0) as u64 + 60_000;
     for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > bond_ms).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.bond_offer().id().delete(o);
     }
-    for o in ctx.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > trade_ms).map(|o| o.id).collect::<Vec<_>>() {
+    for o in ctx.db.trade_offer().iter().filter(|o| now > o.ends_ms(laws.trade_window_s)).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.trade_offer().id().delete(o);
+    }
+    // An offer made before `until_ms` existed gets its end from the law's window.
+    for mut o in ctx.db.trade_offer().iter().filter(|o| o.until_ms == 0).collect::<Vec<_>>() {
+        o.until_ms = o.ends_ms(laws.trade_window_s);
+        ctx.db.trade_offer().id().update(o);
     }
 
     // Bound the story feed.
