@@ -2725,6 +2725,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--plan", default=PLAN)
     ap.add_argument("--only", help="comma-separated ids or folders (default: everything the kit can build)")
+    ap.add_argument("--join", action="append", default=[], help="also write a terrace of the plan (`terraces`: \"Low Row east\") as one model, <out>/terrace/<name>.glb, "
+                    "for the asset board; the game uses the houses' own models, never this one")
     ap.add_argument("--figure", action="store_true", help="stand a 1.75 m figure by each model: for contact sheets only, never for the kit's own folder")
     a = ap.parse_args(argv)
     plan = json.load(open(a.plan))
@@ -2776,12 +2778,41 @@ def main():
         report[it["id"]] = rec
         print(f"GEN {it['id']}: tris={rec['tris']}/{budget} above={rec['above_floor_m']} h={rec['height_m']} tagged={rec['surface_tagged_share']} "
               f"palette={rec['palette_share']}+{rec['palette_wear_blend_share']} doors={len(DOORS)} {time.time() - t0:.2f}s")
+    joined = {}
+    for tname in a.join:
+        # The same houses as above (the same seeds), stood side by side as the plan places them.
+        members = [dict(l, what="lot") for l in plan["lots"] if l["id"] in plan["terraces"][tname] and l.get("model", "//").split("/")[1] in GEN]
+        cx = (min(l["at"][0] - l["size"][0] / 2 for l in members) + max(l["at"][0] + l["size"][0] / 2 for l in members)) / 2
+        cy = members[0]["at"][1]
+        B.reset()
+        objs = []
+        for it in members:
+            rng = random.Random(f"cullet-{it['seed']}-{it['id']}")
+            k = Kit(rng, dict(glow=LIGHT["Glow"][0]), pr=random.Random(f"cullet-detail-{it['seed']}-{it['id']}"))
+            it["near"] = near.get(it["id"], {})
+            GEN[it["model"].split("/")[1]][0](k, rng, it)
+            xs, ys = [v.co.x for v in k.b.bm.verts], [v.co.y for v in k.b.bm.verts]
+            obj, _ = k.b.finish(it["id"])
+            obj.data.transform(Matrix.Translation(((min(xs) + max(xs)) / 2 + it["at"][0] - cx, (min(ys) + max(ys)) / 2 + it["at"][1] - cy, 0.0)))
+            objs.append(obj)
+        for o in objs:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        bpy.ops.object.join()
+        slug = tname.lower().replace(" ", "_")
+        path = os.path.join(a.out, "terrace", f"{slug}.glb")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", export_vertex_color="ACTIVE", export_normals=True, export_yup=True, use_selection=False)
+        joined[slug] = dict(file=f"terrace/{slug}.glb", what="terrace", terrace=tname, houses=[it["id"] for it in members], households=[it.get("household_name", it.get("state", "")) for it in members],
+                            fronts_m=[it["size"][0] for it in members], ridges_m=[it["height_m"] for it in members], **measure(objs[0]))
+        joined[slug]["sha256"] = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        print(f"GEN {slug}: {len(members)} houses joined, tris={joined[slug]['tris']} above={joined[slug]['above_floor_m']}")
     print(f"GEN total {len(report)} models, {sum(r['tris'] for r in report.values())} triangles, {time.time() - t_all:.1f}s; not built (grey boxes): {len(skipped)}")
     if not only:
         with open(os.path.join(a.out, "fixtures.json"), "w") as f:
             json.dump(placed, f, indent=1)
         with open(os.path.join(a.out, "report.json"), "w") as f:
-            json.dump(dict(script="living/tools/blender/cullet.py", plan="living/seeds/worlds/cullet/plan.json", blender=bpy.app.version_string, models=report, not_built=skipped), f, indent=1)
+            json.dump(dict(script="living/tools/blender/cullet.py", plan="living/seeds/worlds/cullet/plan.json", blender=bpy.app.version_string, models=report, not_built=skipped, **joined), f, indent=1)
 
 
 if __name__ == "__main__":
