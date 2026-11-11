@@ -59,26 +59,31 @@ For documentation-only work, check links, terminology, current/target labels and
 
 ## Agent and skill compatibility
 
-This project supports Cursor, Codex, Claude Code and Mistral Vibe. This is a compatibility requirement for all project skills and agent setup, including P-Stack, regardless of which agent is making a change.
+This project supports Cursor, Codex, Claude Code and Mistral Vibe. This is a compatibility requirement for all project skills and agent setup, regardless of which agent is making a change.
 
 - Keep shared project instructions in this `AGENTS.md`. Current Claude Code reads it through its default AGENTS.md fallback when no project Claude instruction file is present. Do not add a separate `CLAUDE.md` or duplicate policy unless a supported runtime requires an adapter; keep any required adapter limited to importing the shared instructions.
 - Prefer the standard Agent Skills format and `.agents/skills/` as the shared source for project-authored skills. Keep runtime-specific discovery paths, tool names, model IDs, option mappings and instruction loading in thin adapters. Claude Code uses `.claude/skills/` links to the shared tree; Mistral Vibe can discover `.agents/skills/` directly. Maintain Cursor's required discovery adapters as well.
 - When creating, changing, configuring, updating or removing a skill, review the effect on all four agents in the same change. A request made through Claude, Cursor, Codex or Mistral is project-wide unless the user explicitly limits it to that agent. Update the shared source and every affected adapter, link, setup record and invocation example.
-- Keep shared model roles, reasoning baselines and budgets in the project configuration. Within T3, resolve provider/model/options from its live catalog. Translate into the active agent's supported tools instead of hardcoding the current provider into a shared workflow or writing independent global model sheets.
-- The vendored P-Stack trees deliberately differ: `.agents/skills/` contains the Codex/Claude-compatible port and `.cursor/skills/` contains the original Cursor version. Preserve their provenance and runtime-specific behavior; coordinate any required edits to both variants. See `.agents/pstack-installation.md`.
+- Keep model choice in [Models and coordination](#models-and-coordination) below. Do not add per-agent or global model sheets, and do not hardcode a model into a shared skill.
+- The vendored skill trees deliberately differ: `.agents/skills/` contains the Codex/Claude-compatible port and `.cursor/skills/` contains the original Cursor version. Preserve their provenance and runtime-specific behavior; coordinate any required edits to both variants. See `.agents/vendored-skills.md`.
 - Verify relevant skill discovery, instruction loading, configuration and supported workflows for each affected agent using available read-only or fake-provider checks. Report any unverified runtime or missing capability as remaining compatibility work.
 
-## P-Stack in T3 Code
+## Models and coordination
 
-When using any P-Stack workflow, first read `.agents/pstack-models.md` and, when T3 orchestration is available, `.agents/pstack-t3.md`. These project-local instructions override the vendored skills' harness-specific model defaults, global model-sheet locations and delegation examples. Resolve models and options through T3's live `orchestrator_capabilities` catalog, including enabled custom providers and models. Never limit discovery to the native agent tool's model list. P-Stack workflows do not override the SpacetimeDB documentation check, validation discipline or performance-evidence rules above.
+All agent work on this project runs on Claude.
 
-Use T3-owned child tasks for cross-provider work and for models the native subagent tool cannot run. Leave runtime and interaction modes inherited. Resolve model/role effort baselines and budgets from `.agents/pstack-effort.json` through `.agents/scripts/pstack-effort.ts` against the live catalog before dispatch, and pass its validated effort options. When no baseline applies, the session preset leaves effort unchanged; cross-provider defaults may differ from the parent's. Keep Astra manual-only and preserve provider-specific approval settings. Outside T3, use the native runtime's tools and verified models, with the current session model as the fallback. The installed skills are explicitly invoked; no plugin routing hook is installed.
+- **Coordinators:** each machine has one coordinator thread on Claude Opus 5.5 (`claude-opus-5-5`) at high reasoning effort.
+- **Subagents:** Claude Opus 5.5 at high reasoning effort by default.
+- **Fable exceptions:** use Claude Fable 5.2 (`claude-fable-5-2`) at high reasoning effort for asset generation, such as 3D models and textures, and for a task that Opus has attempted and could not solve. Say in the report when a task was moved to Fable and why.
+- A model named inside a skill does not override this section. This section does not switch the model of a thread the user started.
 
-For `setup-pstack`, refresh T3's live catalog, show the resolved project roles and reasoning budgets, and apply requested model choices to `.agents/pstack-models.md` and effort choices to `.agents/pstack-effort.json`. Follow the project adapter's setup procedure instead of the vendored global-sheet and SessionStart-hook steps.
+Each machine has one role:
 
-GPT-6.1-Sol is the default implementation coordinator; Claude Opus 5.5 leads UI work (Bevy presentation, input and interaction) and judgment at their saved high-effort baselines. For mixed features, delegate the UI portion to Opus and the authority, simulation and agent logic to Sol with clear interface and file ownership, then verify integration. UI scope overrides generic workflow model defaults for that portion. The policy does not switch the current conversation's provider. See `.agents/pstack-models.md` for routing and unavailable-model behavior.
+- **Laptop:** the game client and the owner's play-tests.
+- **dev-box:** the first game version.
+- **Spark:** experiments on the mind and the rules.
 
-For quick, easy, narrowly scoped non-UI changes and bounded mechanical batches, use GLM 5.3 through Mistral Vibe at its saved max-effort baseline as the bulk-work delegate. Sol coordinates and reviews the result. Keep UI work with Opus and broad, architectural or unknown-cause work with Sol/judgment; return a GLM assignment to the coordinator if its scope grows.
+Coordinators run as T3 Code threads owned by their machine and are started through T3's linked environments. Set the model and effort explicitly when starting a thread on another machine: it otherwise takes that machine's default. Each thread works in its own worktree from `origin/main`, and code moves between machines only through git. Use Rex for long remote jobs and interactive steps.
 
 ## Verification surfaces
 
