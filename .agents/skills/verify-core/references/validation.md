@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-11 the laws of starting a family and of the longing for a child (exp-hamlet-births, Spark)
+
+Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`. New scene `family_laws` (`core-family-20261111-142152`, stage1-acts): 9 of 9. Its first attempt (`core-hamlet-20261111-141837-family-laws`) passed the conceive checks and then failed for two scene bugs. One was a `str.format` on the script. The other came after it was fixed (`core-family-20261111-141949`): the empty-handed adult dropped its food only after the law was installed, so it had felt the longing for a moment with food in hand. The scene now empties hands first. `lifecycle` 6 of 6 (`core-hamlet-20261111-141837-lifecycle`). Baseline `core-hamlet-20261111-141837`: tick, needs, food, refusal, seize, sight, senses and moves pass (42 checks). `cargo_checks.py`: rules (the new `laws_with` longing values, `longing_wait_ms` equal to the old `20 − nurture/6`, and the `deathline` values `births_report.py` ports), authority 12, mind 82 and viewer sync 5 pass. `just living-check` exits 0. Not run: skirmish, dealings, town, lives, infant (about 2 h; cry routing is untouched), mechanics, steering, wildlife.
+
 
 ## 2026-11-11 lives-2 after merging laws-2 (dev-box)
 
