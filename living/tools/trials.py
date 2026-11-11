@@ -1073,10 +1073,12 @@ class Instance:
         why = None
         # Where a whole island thinks (`minds.only: "all"`, thousands of calls in 5 minutes), a
         # provider's 429s at about 1% are noise the mind retries: failures count as a runaway
-        # only as a share of the calls (20%, the same one 10%), never below the one-mind counts.
+        # only as a share of the calls (half, the same one 40%: the island's first minutes are a
+        # burst of identity and memory calls the provider answers with 429s), never below the
+        # one-mind counts.
         many = self.trial.get("minds", {}).get("only") == "all"
-        fail_limit = max(30, 0.2 * len(self.recent)) if many else 30
-        same_limit = max(15, 0.1 * len(self.recent)) if many else 15
+        fail_limit = max(30, 0.5 * len(self.recent)) if many else 30
+        same_limit = max(15, 0.4 * len(self.recent)) if many else 15
         if len(errors) >= fail_limit:
             why = f"{len(errors)} failed model calls in 5 minutes"
         elif same and same[0][1] >= same_limit:
