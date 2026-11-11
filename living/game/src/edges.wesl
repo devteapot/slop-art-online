@@ -123,6 +123,12 @@ fn rgb_of(c: vec3<f32>) -> vec3<f32> {
     return c.z * mix(vec3(1.0), clamp(p - 1.0, vec3(0.0), vec3(1.0)), c.y);
 }
 
+// How deep the shade goes (the lit value's share, linear light) by day and by night, and how
+// far it cools by night.
+const SHADE_DAY: f32 = 0.30;
+const SHADE_NIGHT: f32 = 0.35;
+const SHADE_NIGHT_COOL: f32 = 0.4;
+
 // Shade (the default since play-test 5: "more similar to the shadows than this grey overlay"):
 // what I don't see lies in shadow, in the scene's own shadow tone (the toon shader's hue shift,
 // saturation and depth, toward the sky fill's hue), with no grey. Every edge is a gradient: the
@@ -153,19 +159,21 @@ fn look_shade(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, ground: f32, l
     }
     var hsv = hsv_of(color);
     // The toon shadow's own move (`shadow_of`): hues toward the shadow hue by the style's shift
-    // (reds and oranges less, so they deepen rather than go pink), saturation a little lower,
-    // and darker: to about half by day, a little more by night so it still reads when the
-    // scene's shadows are already dark. Then a faint neutral cool over it, the sky's light in
-    // a shadow, and no colour of its own: the shade never tints the scene.
+    // (reds and oranges less), its saturation kept, so unseen ground takes the tone the scene's
+    // cast shadows have (measured on Brackenford's paving: rosy brown, green dropping most).
+    // Deeper than a cast shadow, as asked: to about 0.3 of the lit value in linear light, which
+    // is 0.55-0.6 on screen, so the pool I see reads as the lit place. No grey over it: a grey
+    // laid over the distance fog read as a haze. By night, when everything is already dark, a
+    // little less deep but clearly cooler, so the pool still reads as where I see.
     let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
     let shift = edges.sight_shade.y * (1.0 - 0.75 * red);
     var dh = edges.sight_shade.x - hsv.x;
     dh = dh - round(dh);
     hsv.x = fract(hsv.x + dh * shift);
-    hsv.y = clamp(hsv.y * edges.sight_shade.z * 0.75, 0.0, 1.0);
-    hsv.z = hsv.z * (1.0 - edges.sight_shade.w * mix(1.3, 1.2, light));
-    var shade = rgb_of(hsv);
-    shade = mix(shade, vec3<f32>(0.86, 0.92, 1.04) * luma(shade), 0.25) * edges.sight_tint.rgb;
+    hsv.y = clamp(hsv.y * edges.sight_shade.z, 0.0, 1.0);
+    hsv.z = hsv.z * mix(SHADE_NIGHT, SHADE_DAY, light);
+    var shade = rgb_of(hsv) * edges.sight_tint.rgb;
+    shade = mix(shade, vec3<f32>(0.62, 0.74, 1.1) * luma(shade), SHADE_NIGHT_COOL * (1.0 - light));
     return mix(color, shade, s);
 }
 
