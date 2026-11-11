@@ -46,13 +46,6 @@ pub fn unheard(e: &Experience) -> Option<u32> {
     (e.kind == "silence").then_some(e.subject)
 }
 
-/// An offer made to me: who offers, in the authority's own words ("Mercy offers you 2 berries
-/// for 1 wood."). Read from my `offer` experience row (`act.rs`, `Effect::Offer`); the Spark's
-/// view of standing offers (`my_offers`, name not final) replaces this reader when it lands.
-pub fn offer(e: &Experience) -> Option<u32> {
-    (e.kind == "offer").then_some(e.subject)
-}
-
 /// The spoken words of a percept such as `Helper said: “Welcome!”` (the whole text otherwise).
 pub fn words(text: &str) -> &str {
     match (text.find('“'), text.rfind('”')) {

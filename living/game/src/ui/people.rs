@@ -67,20 +67,15 @@ pub struct Talks {
     pub met: HashMap<u32, Met>,
     /// Events: (authority ms, text).
     pub events: Vec<(u64, String)>,
-    /// Offers made to me: from whom, the authority's words, when (authority ms); dismissed
-    /// ones are dropped.
-    pub offers: Vec<(u32, String, u64)>,
-    /// A new offer arrived this session (the note says so once per offer).
-    pub fresh_offer: Option<(u32, String)>,
+    /// Offers dismissed on this client (row ids, this session only: the world is not told).
+    pub dismissed: HashSet<u64>,
+    /// Offers already noted.
+    noted: HashSet<u64>,
     seen: HashSet<u64>,
     me: Option<u32>,
 }
 
 impl Talks {
-    /// Drop an offer from someone (declined, or accepted).
-    pub fn dismiss(&mut self, from: u32) {
-        self.offers.retain(|o| o.0 != from);
-    }
 
     /// Our conversation, oldest first.
     pub fn with(&self, id: u32) -> impl Iterator<Item = &Line> {
@@ -121,13 +116,6 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
         } else if let Some(to) = heard::unheard(&e) {
             if let Some(l) = t.lines.values_mut().rev().find(|l| l.mine && l.to == to && l.at_ms == e.at_ms) {
                 l.unheard = true;
-            }
-            t.events.push((e.at_ms, wood::readable(&e.text)));
-        } else if let Some(who) = heard::offer(&e) {
-            t.offers.retain(|o| o.0 != who);
-            t.offers.push((who, wood::readable(&e.text), e.at_ms));
-            if e.at_ms as f64 + 10_000.0 >= scene.now_ms {
-                t.fresh_offer = Some((who, wood::readable(&e.text)));
             }
             t.events.push((e.at_ms, wood::readable(&e.text)));
         } else if let Some(who) = heard::introduced(&e) {
@@ -291,7 +279,8 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                         o.spawn((OfferText(id), Text::new(""), wood::ink(f, 14.0, 700), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
                         o.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(6.0), ..default() }, Pickable::IGNORE)).with_children(|b| {
                             kit::button(b, f, "Accept", &format!("person:accept:{id}"), false);
-                            kit::button(b, f, "Decline", &format!("person:decline:{id}"), true);
+                            // No act declines yet: this hides it here and tells them nothing.
+                            kit::button(b, f, "Dismiss", &format!("person:dismiss:{id}"), true);
                         });
                     });
                     // What I can give them, from my pack and the rules (opened by Give ›).
@@ -383,12 +372,7 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mu
                         verbs.want_toward = Some(id);
                     }
                     "trade" => verbs.open_group = Some((id, "offer".into())),
-                    // Accept through the rules' own act, as a mind accepts.
-                    "accept" => {
-                        verbs.send.push((crate::verbs::Aim::Creature { id }, crate::verbs::Choice { skill: "accept".into(), item: None, want: None, words: false, say: None, label: "accept".into(), have: 0 }));
-                        offers.dismiss(id);
-                    }
-                    "decline" => offers.dismiss(id),
+                    "accept" | "dismiss" => answer_offer(act, id, net.conn.as_ref(), &mut verbs, &mut offers),
                     "more" if net.conn.as_ref().is_some_and(|c| c.db.seen_characters().id().find(&id).is_none()) => {
                         verbs.toasts.push(crate::verbs::Toast { text: format!("{} is not in sight", looks.cap(id)), ok: None, at: time.elapsed_secs_f64() });
                     }
@@ -670,29 +654,64 @@ pub fn hints(hints: Res<Hints>, mut lines: Query<&mut Node, (With<Hint>, Without
 }
 
 
-/// Offers made to me: a note when one arrives, and the card in that person's window while the
-/// rules' `trade_window_s` holds it open.
-#[allow(clippy::type_complexity)]
-pub fn offers(mut talks: ResMut<Talks>, looks: Res<Looks>, mut ws: ResMut<Windows>, rules: NonSend<crate::verbs::Rules>, scene: NonSend<crate::world::Scene>, mut verbs: ResMut<crate::verbs::Verbs>, time: Res<Time>, mut cards: Query<(&OfferCard, &mut Node)>, mut texts: Query<(&OfferText, &mut Text)>) {
-    let window_ms = rules.scripts.as_ref().map_or(180_000.0, |s| s.laws().trade_window_s as f64 * 1000.0);
-    let now = scene.now_ms;
-    talks.offers.retain(|o| now - (o.2 as f64) < window_ms);
-    if let Some((who, text)) = talks.fresh_offer.take() {
-        // Their window, with Accept in it, if the left anchor is free (or only the log is there).
-        let free = matches!(ws.at(super::win::Anchor::Left), None | Some(Win::Log));
-        if free {
-            ws.open(Win::Person(who));
+/// Answering an offer, the one place its acts live (rules-offers-2 will name the offer or record
+/// and add a real `decline`). Today Accept is the rules' `accept` toward its maker, as a mind
+/// accepts: what it takes is the rules' (their proposed terms first, else their swap), and a
+/// refusal comes back as a note in the rules' words while the card stays. Dismiss has no act yet:
+/// it hides their offers on this client for this session and tells them nothing.
+fn answer_offer(how: &str, from: u32, conn: Option<&DbConnection>, verbs: &mut crate::verbs::Verbs, talks: &mut Talks) {
+    match how {
+        "accept" => verbs.send.push((crate::verbs::Aim::Creature { id: from }, crate::verbs::Choice { skill: "accept".into(), item: None, want: None, words: false, say: None, label: "accept".into(), have: 0 })),
+        _ => {
+            for o in conn.into_iter().flat_map(|c| c.db.my_offers().iter()).filter(|o| o.incoming && o.from == from) {
+                talks.dismissed.insert(o.id);
+            }
         }
-        let more = if free { "" } else { " Their window has Accept." };
-        verbs.toasts.push(crate::verbs::Toast { text: format!("{text}{more}"), ok: None, at: time.elapsed_secs_f64() });
-        let _ = &looks;
+    }
+}
+
+/// What Accept toward someone will do, in words: their open proposal of terms if they have one
+/// (the rules' `accept` takes those first), else their standing offer.
+fn offer_words(conn: &DbConnection, o: &MyOffer, me: u32, who: &str) -> String {
+    let terms = conn.db.my_records().iter().find(|r| r.actor == me && r.open && r.kind == "agreement" && r.status == "offered" && r.role == "to" && r.others.split(',').any(|p| p == format!("from={}", o.from)));
+    if let Some(r) = terms {
+        let t: serde_json::Value = serde_json::from_str(&r.terms).unwrap_or_default();
+        let n = |k: &str| t[k].as_u64().unwrap_or(1);
+        let item = |k: &str| t[k].as_str().unwrap_or("?").replace('_', " ");
+        return format!("{who} proposes terms: they give {} {}, you give {} {}. Accept agrees to these (the world keeps count), not to their swap.", n("from_qty"), item("from_gives"), n("to_qty"), item("to_gives"));
+    }
+    format!("{who} offers you {} {} for {} {}.", o.give_qty, o.give_item.replace('_', " "), o.want_qty, o.want_item.replace('_', " "))
+}
+
+/// Offers made to me (`my_offers`): a note when one arrives, and the card in that person's
+/// window while the row stands (it goes when taken, withdrawn, offered again or out of time).
+#[allow(clippy::type_complexity)]
+pub fn offers(mut talks: ResMut<Talks>, looks: Res<Looks>, mut ws: ResMut<Windows>, net: NonSend<Net>, mut verbs: ResMut<crate::verbs::Verbs>, time: Res<Time>, mut cards: Query<(&OfferCard, &mut Node)>, mut texts: Query<(&OfferText, &mut Text)>) {
+    let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else { return };
+    let rows: Vec<MyOffer> = conn.db.my_offers().iter().filter(|o| o.incoming && o.to == me && !talks.dismissed.contains(&o.id)).collect();
+    for o in &rows {
+        if talks.noted.insert(o.id) {
+            let words = offer_words(conn, o, me, &looks.cap(o.from));
+            // Their window, with Accept in it, if the left anchor is free (or only the log is).
+            let free = matches!(ws.at(super::win::Anchor::Left), None | Some(Win::Log));
+            if free {
+                ws.open(Win::Person(o.from));
+            }
+            let more = if free { "" } else { " Their window has Accept." };
+            info!("ui: offer #{} from #{}: {words}", o.id, o.from);
+            verbs.toasts.push(crate::verbs::Toast { text: format!("{words}{more}"), ok: None, at: time.elapsed_secs_f64() });
+        }
+    }
+    if talks.noted.len() > 256 {
+        let live: HashSet<u64> = conn.db.my_offers().iter().map(|o| o.id).collect();
+        talks.noted.retain(|id| live.contains(id));
     }
     for (c, mut n) in &mut cards {
-        show(&mut n, talks.offers.iter().any(|o| o.0 == c.0));
+        show(&mut n, rows.iter().any(|o| o.from == c.0));
     }
     for (c, mut t) in &mut texts {
-        if let Some(o) = talks.offers.iter().find(|o| o.0 == c.0) {
-            set_text(&mut t, &o.1);
+        if let Some(o) = rows.iter().filter(|o| o.from == c.0).max_by_key(|o| o.at_ms) {
+            set_text(&mut t, &wood::readable(&offer_words(conn, o, me, &looks.cap(c.0))));
         }
     }
 }
