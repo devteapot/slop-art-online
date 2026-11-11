@@ -1,0 +1,209 @@
+{
+ "schema": 1,
+ "family": "place:cullet-strand",
+ "id": "20261111-67f9e733-a3c397",
+ "published": "2026-11-11T21:57:47+01:00",
+ "imported": "2026-11-11T21:57:47+01:00",
+ "track": "layout-2",
+ "maker": "Claude Fable 5.2",
+ "note": "layout pass 2: the graveyard on three terraces over the quarry and the clay pit, the cistern's apron and runnel, the Readers' yard, the dyke; the quarry's raw face, bay, crane and stones; the boatyard, wrack stance, peat stance, creel stand, working quay and kiln road; walls that block and courts as open lots (not visible in stills)",
+ "source": {
+  "commit": "67f9e733057690e16f7f703e83d6771e3bb14817",
+  "branch": "layout-2",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "ba8a3208b6de4ec07d414f3f8336f9b6c321cfd45d56675f5df73ea3dff0d2ee",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-strand/20261111-67f9e733-a3c397",
+ "members": [
+  {
+   "name": "yard",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "1fbbe0b4805a1bbb0609342b4e90fa197345efbea85940414b24e213f478d0d3",
+   "shots": [
+    "day-270_28_22",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-270_28_22",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "quay_fish",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "f36818c4374c74fd6a06d0e3d14a1f19fa7274f7d82cd6f0dcee34d3149dddfe",
+   "shots": [
+    "day-270_28_22",
+    "day-90_10_7_60",
+    "day-90_28_22",
+    "day-default",
+    "dusk-270_28_22",
+    "dusk-90_10_7_60",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "quay_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "91a7612899155a29267f5ead7223d5e91c48fa5de8fcdfe34d6becb34df7d832",
+   "shots": [
+    "day-0_14_9_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-0_14_9_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "net_wynd_foot",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "91374dc678ac7767aa962e8c77a43ee15835a92677e5cf1db582a8b84397b3d4",
+   "shots": [
+    "day-0_14_9_60",
+    "day-default",
+    "dusk-0_14_9_60",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "cone",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "ff11b4c3539ffcc7f644b844d06bab0a2af5c17ea1353af90cf499d6cda1b742",
+   "shots": [
+    "day-300_25_40",
+    "day-90_28_22",
+    "day-default",
+    "dusk-300_25_40",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "mole",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "930df37a67e9029d66f4d2f75d17aabafa80f9216523681014c771521e76e3b4",
+   "shots": [
+    "day-0_25_70",
+    "day-330_20_60",
+    "dusk-0_25_70",
+    "dusk-330_20_60"
+   ],
+   "clips": []
+  },
+  {
+   "name": "boatyard",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "373089ec03e886ebecacda7284891316c8a6c72f3abe48d1df74284d825cb153",
+   "shots": [
+    "day-0_14_9_60",
+    "day-close",
+    "day-default",
+    "dusk-0_14_9_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "kelp_stance",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "d6b0c132c984874f2ae866c7bfc3c67723be3bf195e8728e84d18522da5fdeb6",
+   "shots": [
+    "day-0_14_9_60",
+    "day-close",
+    "day-default",
+    "dusk-0_14_9_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "peat_stance",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "a262d64c337ec82d2c7a6916a0df1014dd73b237b34a016431bffe3b21f00cec",
+   "shots": [
+    "day-close",
+    "day-default",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "creel_stand",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "b263b473e515cf0872b00168e08e99680d1c9f046438261477d5161993f01ea7",
+   "shots": [
+    "day-close",
+    "day-default",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "fish_quay",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "6ecf126f4889404f54523f7cfc19609f637d098eaecce989ce9fb987adf7541b",
+   "shots": [
+    "day-180_26_10",
+    "day-270_14_9_60",
+    "day-close",
+    "day-default",
+    "dusk-180_26_10",
+    "dusk-270_14_9_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "kiln_road",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "852e670f41c94557203159f6dbbdc5320e2e8231cc244bd21725bc81071163ea",
+   "shots": [
+    "day-270_14_9_60",
+    "day-close",
+    "day-default",
+    "dusk-270_14_9_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

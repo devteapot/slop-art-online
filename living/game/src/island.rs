@@ -1003,7 +1003,8 @@ fn ready(assets: &AssetServer, scene: &Handle<WorldAsset>) -> bool {
 /// - its model file (`model`, under `envs/`) when it is on disk;
 /// - in a **planned** settlement (an authored plan, docs/AUTHORED_PLANS.md), otherwise a grey box
 ///   of its footprint and height, or for an open lot of no height a footprint marker
-///   ([`MARKER_H`]). A planned lot is never given another lot's model: its plan sized it for its
+///   ([`MARKER_H`]), unless a fixture of its kit stands on it (since layout-2: a court or a plot
+///   is an open lot, and its enclosure draws it). A planned lot is never given another lot's model: its plan sized it for its
 ///   own, and a terrace of borrowed houses would overlap. Its environment's folder may be empty
 ///   or missing (Cullet's before its kit is generated);
 /// - elsewhere, a model of its kind from its environment (a generated town's buildings are
@@ -1026,6 +1027,11 @@ fn lot_item(envs: &HashMap<String, EnvDef>, land: &Land, lot: &LotRow) -> Option
         let (w, d) = (lot.width_m.max(0.1), lot.depth_m.max(0.1));
         if lot.height_m > 0.0 {
             return Some(Item { size: Some(Vec3::new(w, lot.height_m, d)), ..base });
+        }
+        // An open lot a fixture of the kit stands on (a court's walls, a plot's beds, a
+        // graveyard's rows) is drawn by that fixture: no slab under it.
+        if crate::envs::fixtures(lot.env).iter().any(|f| f.covers(lot.at)) {
+            return None;
         }
         return planned.then(|| Item { size: Some(Vec3::new(w, MARKER_H, d)), height: MARKER_H, marker: true, solid: false, ..base });
     }

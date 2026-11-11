@@ -380,11 +380,25 @@ pub(crate) struct Fixture {
     /// The ground its origin stands on.
     pub floor: f32,
     pub height: f32,
+    /// Its rectangle (along its front, then deep), when the kit says: the ground it covers, so an
+    /// open lot it stands on is not also drawn as a slab ([`Fixture::covers`]).
+    #[serde(default)]
+    pub size: Option<[f32; 2]>,
     /// A light it carries: [`local_light`]'s kind (`lamp`) and colour.
     #[serde(default)]
     pub light: Option<String>,
     #[serde(default)]
     pub glow: Option<[f32; 3]>,
+}
+
+impl Fixture {
+    /// Whether a point of the land lies on its rectangle (never, for a kit that gives no sizes).
+    pub fn covers(&self, p: Vec2) -> bool {
+        let Some([w, d]) = self.size else { return false };
+        let f = Vec2::new(self.front[0], self.front[1]).normalize_or(Vec2::Y);
+        let q = p - Vec2::new(self.at[0], self.at[1]);
+        q.dot(f).abs() <= d * 0.5 && q.dot(Vec2::new(-f.y, f.x)).abs() <= w * 0.5
+    }
 }
 
 /// The fixtures an environment's kit lists (`envs/<env>/fixtures.json`), those whose models are
