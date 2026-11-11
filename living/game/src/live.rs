@@ -421,7 +421,12 @@ fn bodies(
         // no move does.
         let show = town.shows.get(&id).copied().unwrap_or_default();
         let action = combat.actions.get(&id).copied().or(show.once);
-        let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
+        // A jump's aim is only the way it hops (the authority's dash direction: the travel), and
+        // it is drawn over whatever the body plays (`jump.rs`), so it keeps the body's facing:
+        // taken as a facing, it turned a body walking backwards or sideways to face its travel
+        // for the hop and back after (play-test 2). A dodge's roll is a forward take, so it
+        // still faces its dash.
+        let aimed = action.filter(|a| a.clip != crate::jump::CLIP).and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
         // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
         // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
         let row = crate::net::find_motion(conn, id);
