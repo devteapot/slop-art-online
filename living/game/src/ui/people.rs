@@ -67,10 +67,10 @@ pub struct Talks {
     pub met: HashMap<u32, Met>,
     /// Events: (authority ms, text).
     pub events: Vec<(u64, String)>,
-    /// Offers dismissed on this client (row ids, this session only: the world is not told).
-    pub dismissed: HashSet<u64>,
-    /// Offers already noted.
-    noted: HashSet<u64>,
+    /// Proposals dismissed on this client (this session only: the world is not told).
+    dismissed: HashSet<Standing>,
+    /// Proposals already noted.
+    noted: HashSet<Standing>,
     seen: HashSet<u64>,
     me: Option<u32>,
 }
@@ -664,54 +664,96 @@ fn answer_offer(how: &str, from: u32, conn: Option<&DbConnection>, verbs: &mut c
         "accept" => verbs.send.push((crate::verbs::Aim::Creature { id: from }, crate::verbs::Choice { skill: "accept".into(), item: None, want: None, words: false, say: None, label: "accept".into(), have: 0 })),
         _ => {
             if let Some(c) = conn {
-                talks.dismissed.extend(c.db.my_offers().iter().filter(|o| o.incoming && o.from == from).map(|o| o.id));
+                let all = proposals(c, &HashSet::new());
+                talks.dismissed.extend(all.into_iter().filter(|p| p.from == from).map(|p| p.key));
             }
         }
     }
 }
 
-/// What Accept toward someone will do, in words: their open proposal of terms if they have one
-/// (the rules' `accept` takes those first), else their standing offer.
-fn offer_words(conn: &DbConnection, o: &MyOffer, me: u32, who: &str) -> String {
-    let terms = conn.db.my_records().iter().find(|r| r.actor == me && r.open && r.kind == "agreement" && r.status == "offered" && r.role == "to" && r.others.split(',').any(|p| p == format!("from={}", o.from)));
-    if let Some(r) = terms {
-        let t: serde_json::Value = serde_json::from_str(&r.terms).unwrap_or_default();
-        let n = |k: &str| t[k].as_u64().unwrap_or(1);
-        let item = |k: &str| t[k].as_str().unwrap_or("?").replace('_', " ");
-        return format!("{who} proposes terms: they give {} {}, you give {} {}. Accept agrees to these (the world keeps count), not to their swap.", n("from_qty"), item("from_gives"), n("to_qty"), item("to_gives"));
-    }
-    format!("{who} offers you {} {} for {} {}.", o.give_qty, o.give_item.replace('_', " "), o.want_qty, o.want_item.replace('_', " "))
+/// A proposal standing toward me: a swap offer (`my_offers`) or proposed terms (`my_records`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Standing {
+    Offer(u64),
+    Terms(u64),
 }
 
-/// Offers made to me (`my_offers`): a note when one arrives, and the card in that person's
-/// window while the row stands (it goes when taken, withdrawn, offered again or out of time).
+/// One proposal, and its words as the card and the note say them.
+pub struct Proposal {
+    pub key: Standing,
+    pub from: u32,
+    pub at_ms: u64,
+    /// The goods on each side: (theirs, mine).
+    pub goods: (String, String),
+    pub said: String,
+}
+
+fn goods(item: &str, n: u64) -> String {
+    if item == "lodging" { "a night's lodging".into() } else { format!("{} {}", n.max(1), item.replace('_', " ")) }
+}
+
+/// What stands toward me, not dismissed here: swaps offered to me and terms proposed to me (an
+/// open `agreement` record, `offered`, where I am `to`), as the rules keep them.
+pub fn proposals(conn: &DbConnection, dismissed: &HashSet<Standing>) -> Vec<Proposal> {
+    let mut out: Vec<Proposal> = conn.db.my_offers().iter().filter(|o| o.incoming).map(|o| Proposal { key: Standing::Offer(o.id), from: o.from, at_ms: o.at_ms, goods: (goods(&o.give_item, o.give_qty as u64), goods(&o.want_item, o.want_qty as u64)), said: String::new() }).collect();
+    for r in conn.db.my_records().iter().filter(|r| r.open && r.kind == "agreement" && r.status == "offered" && r.role == "to") {
+        let Some(from) = r.others.split(',').find_map(|p| p.strip_prefix("from=")).and_then(|v| v.parse::<u32>().ok()) else { continue };
+        let t: serde_json::Value = serde_json::from_str(&r.terms).unwrap_or_default();
+        let side = |k: &str, q: &str| goods(t[k].as_str().unwrap_or("?"), t[q].as_u64().unwrap_or(1));
+        out.push(Proposal { key: Standing::Terms(r.id), from, at_ms: r.made_ms, goods: (side("from_gives", "from_qty"), side("to_gives", "to_qty")), said: t["words"].as_str().unwrap_or("").to_string() });
+    }
+    out.retain(|p| !dismissed.contains(&p.key));
+    out
+}
+
+/// What Accept toward someone takes, in words: their proposed terms if they have some (the
+/// rules' `accept` takes those first), else their newest swap.
+fn offer_words(ps: &[Proposal], from: u32, who: &str) -> Option<String> {
+    let mine: Vec<&Proposal> = ps.iter().filter(|p| p.from == from).collect();
+    let terms = mine.iter().filter(|p| matches!(p.key, Standing::Terms(_))).max_by_key(|p| p.at_ms);
+    let swap = mine.iter().filter(|p| matches!(p.key, Standing::Offer(_))).max_by_key(|p| p.at_ms);
+    if let Some(p) = terms {
+        let said = if p.said.is_empty() { String::new() } else { format!(" (\"{}\")", p.said) };
+        let also = if swap.is_some() { " Accept agrees to these, not to their swap." } else { "" };
+        return Some(format!("{who} proposes terms: they give {}, you give {}{said}. The world keeps count of what each owes.{also}", p.goods.0, p.goods.1));
+    }
+    swap.map(|p| format!("{who} offers you {} for {}.", p.goods.0, p.goods.1))
+}
+
+/// Proposals to me (swaps in `my_offers`, terms in `my_records`): a note when one arrives, and
+/// the card in that person's window while one stands (it goes when the rules take, withdraw,
+/// replace or time it out, or when it is dismissed here).
 #[allow(clippy::type_complexity)]
 pub fn offers(mut talks: ResMut<Talks>, looks: Res<Looks>, mut ws: ResMut<Windows>, net: NonSend<Net>, mut verbs: ResMut<crate::verbs::Verbs>, time: Res<Time>, mut cards: Query<(&OfferCard, &mut Node)>, mut texts: Query<(&OfferText, &mut Text)>) {
-    let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else { return };
-    let rows: Vec<MyOffer> = conn.db.my_offers().iter().filter(|o| o.incoming && o.to == me && !talks.dismissed.contains(&o.id)).collect();
-    for o in &rows {
-        if talks.noted.insert(o.id) {
-            let words = offer_words(conn, o, me, &looks.cap(o.from));
+    let Some(conn) = net.conn.as_ref() else { return };
+    let ps = proposals(conn, &talks.dismissed);
+    for p in &ps {
+        if talks.noted.insert(p.key) {
+            let words = offer_words(&ps, p.from, &looks.cap(p.from)).unwrap_or_default();
             // Their window, with Accept in it, if the left anchor is free (or only the log is).
             let free = matches!(ws.at(super::win::Anchor::Left), None | Some(Win::Log));
             if free {
-                ws.open(Win::Person(o.from));
+                ws.open(Win::Person(p.from));
             }
             let more = if free { "" } else { " Their window has Accept." };
-            info!("ui: offer #{} from #{}: {words}", o.id, o.from);
-            verbs.toasts.push(crate::verbs::Toast { text: format!("{words}{more}"), ok: None, at: time.elapsed_secs_f64() });
+            info!("ui: proposal {:?} from #{}: {words}", p.key, p.from);
+            // Terms are told by the rules themselves (a `record` experience, `verbs.rs` notes it).
+            if matches!(p.key, Standing::Offer(_)) {
+                verbs.toasts.push(crate::verbs::Toast { text: format!("{words}{more}"), ok: None, at: time.elapsed_secs_f64() });
+            }
         }
     }
     if talks.noted.len() > 256 {
-        let live: HashSet<u64> = conn.db.my_offers().iter().map(|o| o.id).collect();
-        talks.noted.retain(|id| live.contains(id));
+        let live: HashSet<Standing> = proposals(conn, &HashSet::new()).into_iter().map(|p| p.key).collect();
+        talks.noted.retain(|k| live.contains(k));
+        talks.dismissed.retain(|k| live.contains(k));
     }
     for (c, mut n) in &mut cards {
-        show(&mut n, rows.iter().any(|o| o.from == c.0));
+        show(&mut n, ps.iter().any(|p| p.from == c.0));
     }
     for (c, mut t) in &mut texts {
-        if let Some(o) = rows.iter().filter(|o| o.from == c.0).max_by_key(|o| o.at_ms) {
-            set_text(&mut t, &wood::readable(&offer_words(conn, o, me, &looks.cap(c.0))));
+        if let Some(w) = offer_words(&ps, c.0, &looks.cap(c.0)) {
+            set_text(&mut t, &wood::readable(&w));
         }
     }
 }

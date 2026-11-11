@@ -296,7 +296,7 @@ pub struct Dump(pub Option<std::path::PathBuf>);
 
 /// Write the game UI's state: open windows (top last) with their anchors and rectangles (UI px
 /// and fractions of the picture), the Menu list, the list of acts, the words being typed and to
-/// whom, the weapon, and every tagged node shown.
+/// whom, the notes shown, the weapon, and every tagged node shown.
 #[allow(clippy::too_many_arguments)]
 fn dump(
     mut d: ResMut<Dump>,
@@ -332,6 +332,7 @@ fn dump(
         "acts": verbs.menu.as_ref().map(|m| serde_json::json!({"title": m.title, "group": m.group, "rows": m.rows().iter().map(|r| r.label()).collect::<Vec<_>>()})),
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone())})),
         "pointer_over_ui": ui.over_ui,
+        "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
         "extra": extra.json(),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
     });
@@ -343,15 +344,23 @@ fn dump(
 
 /// Further state the dump reports, from the widgets of later steps.
 #[derive(bevy::ecs::system::SystemParam)]
-pub struct DumpExtra<'w> {
+pub struct DumpExtra<'w, 's> {
     prefs: Res<'w, crate::keys::Prefs>,
     binds: Res<'w, crate::keys::Binds>,
     theme: Res<'w, ThemeState>,
+    weapon: Res<'w, crate::weapon::Weapon>,
+    slots: Res<'w, prim::Slots>,
+    tip: Query<'w, 's, &'static Node, With<prim::Tooltip>>,
+    tip_title: Query<'w, 's, &'static Text, (With<prim::TooltipTitle>, Without<prim::TooltipText>)>,
+    tip_text: Query<'w, 's, &'static Text, (With<prim::TooltipText>, Without<prim::TooltipTitle>)>,
 }
 
-impl DumpExtra<'_> {
+impl DumpExtra<'_, '_> {
     fn json(&self) -> serde_json::Value {
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key()})
+        // The bar's slots as drawn: what each is, why it is greyed, held, refused just now.
+        let slots: serde_json::Map<_, _> = self.slots.0.iter().map(|(k, v)| (k.0.clone(), serde_json::json!({"label": v.label, "key": v.key, "off": v.off, "held": v.held, "refused": v.refused.is_some(), "count": v.count, "caption": v.caption}))).collect();
+        let tip = self.tip.iter().any(|n| n.display != Display::None).then(|| serde_json::json!({"title": self.tip_title.iter().next().map(|t| t.0.clone()), "text": self.tip_text.iter().next().map(|t| t.0.clone())}));
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(), "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip})
     }
 }
 
