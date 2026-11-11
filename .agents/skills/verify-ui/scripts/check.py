@@ -851,8 +851,11 @@ def look_walk_one(run, c, preset):
     name = f"look-walk-{preset}" + (f"-{os.environ['LOOK_WALK_TAG']}" if os.environ.get("LOOK_WALK_TAG") else "")
     out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}-{THEME}" if THEME else name)
     os.makedirs(out_dir, exist_ok=True)
-    env_keep = {k: os.environ.get(k) for k in ["LIVING_GAME_FEET", "LIVING_GAME_CONTROL", "LIVING_GAME_RECORD"]}
+    env_keep = {k: os.environ.get(k) for k in ["LIVING_GAME_FEET", "LIVING_GAME_CONTROL", "LIVING_GAME_RECORD", "LIVING_GAME_LOOK_WALK"]}
     os.environ["LIVING_GAME_FEET"] = os.path.join(out_dir, "feet.jsonl")
+    # The preset from the first frame: the character's row may still hold a facing from the last
+    # drive (a look stays held on the authority when a client quits), which the body draws.
+    os.environ["LIVING_GAME_LOOK_WALK"] = preset
     os.environ["LIVING_GAME_CONTROL"] = "cursor"
     if os.environ.get("LOOK_WALK_RECORD"):
         os.environ["LIVING_GAME_RECORD"] = os.path.join(out_dir, "record")
@@ -988,6 +991,7 @@ def look_walk_one(run, c, preset):
         want = 180.0 - min(max((180 - off) - upper, 0), body) if off > LOOK_WALK_BACK.get(preset, 135) else min(max(off - upper, 0), body)
         row = {"off": off, "speed": round(v, 3), "drawn_over_authority": round(ratio, 3), "drawn_windows": len(ratios), "clock_jumps": len([x for x in jumps_at if st[0]["t"] - 2.5 <= x <= st[-1]["t"]]), "authority_speed": auth, "legs_off_median": round(legs, 1), "legs_want": want, "crossed_frames": len(crossed), "frames": len(st),
                "min_sep_m": round(min((r["sep"] for r in st if r["sep"] is not None), default=0), 3), "own_overlap_frames": sum(1 for r in st if r["own_overlap"]), "cross_weight_max": round(max(r["cross_w"] for r in st), 2)}
+        row["crossed_at"] = [{"t": round(r["t"] - seg[0]["t"], 2), "legs_off": round(r["legs_off"], 1), "sep": round(r["sep"], 3) if r["sep"] is not None else None, "cross_w": round(r["cross_w"], 2), "gaits": [(n, round(w, 2)) for n, w in (r.get("gaits") or []) if w > 0.05], "look_off": round(wrapd(r["look"] - r["heading"]), 1)} for r in crossed[:12]]
         result["segments"].append(row)
         if off == 0:
             base_v, base_auth = v, auth
@@ -996,6 +1000,16 @@ def look_walk_one(run, c, preset):
         else:
             c.check(s, f"steady {off}° (past head+chest): no crossing once the body has come round", not crossed, f"{len(crossed)}/{len(st)} frames")
         c.check(s, f"steady {off}°: the legs settle {want:.0f}° off the travel (±8°)", abs(legs - want) <= 8, f"{legs:.1f}°")
+        # Along the keys: the authority's travel heading against the keys' way (compass `walk`,
+        # sim = compass − 90°), times its speed against straight walking's. look-2: a look turns
+        # only the facing, so this is 1.00× at every look (before it, 0.87× past a 30° look).
+        keys = walk - 90.0
+        hd = statistics.median(wrapd(r["heading"] - keys) for r in st)
+        row["travel_off_keys_deg"] = round(hd, 2)
+        if base_v:
+            along = auth * math.cos(math.radians(hd)) / base_auth
+            row["along_keys"] = round(along, 4)
+            c.check(s, f"steady {off}°: ground speed along the keys 1.00× (±1%)", abs(along - 1) <= 0.01 and abs(hd) < 2.0, f"{along:.4f}×, travel {hd:+.2f}° off the keys")
         if base_v and off:
             c.check(s, f"steady {off}°: the authority's ground speed as straight (±2%)", abs(auth / base_auth - 1) <= 0.02, f"{auth:.3f} vs {base_auth:.3f} m/s")
         # A segment the display clock jumped in (a resync, `bodies.rs`) is left out here and said
@@ -1040,6 +1054,68 @@ LOOK_WALK_BACK = {"head": 130, "chest": 135, "loose": 155}
 LOOK_WALK_SPOT = (300.0, 330.0)
 
 
+def look_walk_others(run, c):
+    """Another player's body as I draw it (look-3): verify.py's player identity walks east beside
+    me with its look held north (`human_move`, then `human_face`, as that player). The authority
+    keeps its travel east at full speed and turns its facing 75° north (`look_walk_deg`); my
+    client draws that body's legs on its travel and its upper body twisted toward the facing
+    (the look target from the row, `live.rs` `authority_facing`), logged as `LIVING_GAME_FEET_ID`."""
+    s = "look-walk:others"
+    if "token" not in json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json"))):
+        subprocess.run([sys.executable, V, "player", "--run", run, "join", "Bender"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT id FROM my_body", "--as-player"], capture_output=True, text=True)
+    t = r.stdout
+    other = json.loads(t[t.find("["):])[0]["id"] if "[" in t else None
+    c.check(s, "a second player to walk beside me", other is not None, t[-200:])
+    if other is None:
+        return
+    snap = f"sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy, speed, face_off, face_turn, face_turn_s FROM body WHERE id = {other}"
+    plan = ("ready;click:@tip:ok;sync:spot;wait:5;frame:0;view:30:9;lookwalk:chest;wait:1;sync:other;wait:2;sync:go;wait:3;sync:walking;shot:01_other_walking;wait:2;"
+            "sync:halt;wait:2.5;quit")
+    syncs = [f"spot=place_at|{{me}}|{LOOK_WALK_SPOT[0]}|{LOOK_WALK_SPOT[1]}", f"other=place_at|{other}|(mx-4)|(my+3)",
+             f"go=player|human_move|1|0|false;player|human_face|0|-1", f"walking={snap}", "halt=player|human_move|0|0|false;player|human_face|0|0"]
+    name = "look-walk-others"
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+    os.makedirs(out_dir, exist_ok=True)
+    keep = {k: os.environ.get(k) for k in ["LIVING_GAME_FEET", "LIVING_GAME_FEET_ID", "LIVING_GAME_CONTROL"]}
+    os.environ.update({"LIVING_GAME_FEET": os.path.join(out_dir, "feet.jsonl"), "LIVING_GAME_FEET_ID": str(other), "LIVING_GAME_CONTROL": "cursor"})
+    try:
+        out, code, text = drive(run, name, plan, syncs=syncs)
+    finally:
+        for k, v in keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    scene = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    b = ((scene.get("snaps") or {}).get("walking") or [{}])[0]
+    row = (b.get("rows") or [None])[0]
+    if row:
+        speed = math.hypot(row["vx"], row["vy"])
+        f = math.degrees(facing_at(row, b["wall_ms"]))
+        h = math.degrees(heading_at(row, b["wall_ms"]))
+        c.check(s, "the authority: their travel east at full speed (1.00× along the keys)", abs(wrapd(h)) < 2.0 and abs(row["vx"] / row["speed"] - 1) <= 0.01, f"travel {h:+.1f}°, vx {row['vx']:.3f} of speed {row['speed']:.3f}, |v| {speed:.3f}")
+        c.check(s, "the authority: their facing 75° north of the travel (look_walk_deg)", abs(wrapd(f - h) + 75.0) < 4.0, f"facing {f:+.1f}°, {wrapd(f - h):+.1f}° off the travel")
+    else:
+        c.check(s, "the authority's row while they walk", False, json.dumps(b)[-200:])
+    lines = [x for x in feet_log(out) if x.get("id") == other and x.get("heading") is not None]
+    t_go = None
+    for x in lines:
+        if abs(wrapd(x["heading"])) < 3 and (x.get("twist") or 0) < -40:
+            t_go = x["t"] if t_go is None else t_go
+    walking = [x for x in lines if t_go is not None and x["t"] >= t_go + 1.0 and abs(wrapd(x["heading"])) < 3]
+    walking = walking[: max(1, len(walking) * 2 // 3)]
+    c.check(s, "my client logged their body walking with its look held", len(walking) > 30, f"{len(walking)} frames")
+    if len(walking) > 30:
+        import statistics
+        tw = statistics.median(x["twist"] for x in walking)
+        legs = statistics.median(abs(wrapd(x["yaw"] - 180.0 - x["heading"])) for x in walking)
+        c.check(s, "drawn: their upper body twists toward the authority's facing (−75° ± 6)", abs(tw + 75.0) <= 6.0, f"twist {tw:+.1f}°")
+        c.check(s, "drawn: their legs stay on their travel (±8°)", legs <= 8.0, f"legs {legs:.1f}° off")
+        json.dump({"other": other, "twist_median": tw, "legs_off_median": legs, "frames": len(walking), "authority": row}, open(os.path.join(out, "others.json"), "w"), indent=1)
+
+
 def look_walk(run, c):
     """`look-walk` (play-test 5, item 2): every preset, or `LOOK_WALK_PRESETS=chest,head`;
     `LOOK_WALK_REUSE=1` checks the last drives' feet logs again, `LOOK_WALK_RECORD=1` also records
@@ -1049,6 +1125,7 @@ def look_walk(run, c):
         look_walk_one(run, c, p)
     if os.environ.get("LOOK_WALK_REUSE"):
         return
+    look_walk_others(run, c)
     # Settings › Play › Looking aside sets the preset and the settings file keeps it.
     s = "look-walk:settings"
     plan = ("ready;wait:1.5;click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;shot:01_play;click:@settings:look_walk:loose;wait:0.5;dump:02;shot:02_loose;"

@@ -8,7 +8,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 - `living/game/src/ui/facing.rs`: Settings › Play › Facing sight, with the switch (read-only without the admin link), "Facing sight: on/off" and the values.
 - `living/game/src/heardmark.rs`: a soft ground mark per `heard_sounds` row, keyed by its per-viewer key. It sits that compass way at its band's rough distance and fades after the row goes.
 - `living/game/src/controls.rs` `look`: `human_face(dx, dy)`.
-  - Facing the cursor: the cursor's direction while standing; released while a direction is held (`FACE_WHILE_MOVING` off until look-2).
+  - Facing the cursor: the cursor's direction, standing and walking (`FACE_WHILE_MOVING` on since look-3; before look-2 it was off and the look was released while a direction was held).
   - Facing where you walk: only while a move is aimed, then released with `(0, 0)`.
   - A look is sent on changes over 4°, at most every 0.1 s. A send the bucket refused ("too many movement inputs") is retried.
   - The look goes before the frame's move, so the release reaches the authority while the body still stands: the facing is kept, and the walk turns on its eased curve. A release mid-walk would snap the heading to the travel, a leg jump `look-walk` catches.
