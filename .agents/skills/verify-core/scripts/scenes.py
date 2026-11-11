@@ -339,7 +339,10 @@ def arrival(s):
     ids = {c["id"] for c in newcomers}
     time.sleep(65)
     after = s.rows(founders, "cooldown")
-    s.expect("cooldown prevents another group below the floor", {c["id"] for c in after} == ids)
+    # The cooldown is about no second group coming in; a newcomer may meet a wolf meanwhile
+    # (the scene's waits are over by the time the migration comes), so its death is recorded.
+    fates = s.rows("SELECT id, alive, cause FROM character WHERE " + " OR ".join(f"id = {i}" for i in sorted(ids)), "cooldown-newcomers")
+    s.expect("cooldown prevents another group below the floor", {c["id"] for c in after} <= ids, {"other_founders": sorted({c["id"] for c in after} - ids), "newcomers_dead": [c for c in fates if not c["alive"]]})
 
 
 def infant(s):
@@ -1063,7 +1066,97 @@ def dealings(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves}
+REMAINS_S = 90
+
+
+def carcass_law(kind):
+    """What the shipped script gives a kind's remains: the `carcass` trait of its row in
+    `kinds()` (read by the `carcass(kind)` law)."""
+    src = (ROOT / "living/scripts/skills.rhai").read_text()
+    m = re.search(r'name:\s*"%s"[^\n]*?carcass:\s*#\{([^}]*)\}' % kind, src)
+    return {k: int(v) for k, v in re.findall(r"(\w+):\s*(\d+)", m.group(1))} if m else {}
+
+
+def remains(s):
+    """Every death leaves remains with the `carcass` law's items; a kill feeds nobody by itself;
+    any creature beside the remains takes from them; they are gone after `remains_s`; a wander
+    keeps its heading (the `motion` law's `wander_turn`, `wander_keep_s`). Needs a world with deer and wolves (stage1-acts)."""
+    src = compose((ROOT / "living/scripts/skills.rhai").read_text(), {"remains_s": f"fn remains_s(kind) {{ {REMAINS_S} }}"})
+    s.call("install_script", src)
+    for c in s.rows("SELECT id FROM character WHERE alive = true"):
+        s.graph(c["id"], {"wait": 600})
+    deer = [c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'deer' AND alive = true")]
+    wolves = [c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'wolf' AND alive = true")]
+    s.expect("world has two deer and three wolves", len(deer) >= 2 and len(wolves) >= 3, {"deer": deer, "wolves": wolves})
+    law = carcass_law("deer")
+    s.expect("the carcass law gives a deer meat and hide", law.get("meat", 0) > 0 and law.get("hide", 0) > 0, law)
+
+    def remains_of(victim, label=None):
+        rows = s.rows(f"SELECT * FROM structure WHERE kind = 'remains' AND owner = {victim}", label)
+        return rows[0] if rows else None
+
+    def held(structure):
+        return {r["item"]: r["qty"] for r in s.rows(f"SELECT item, qty FROM inventory WHERE owner = {(1 << 40) | structure}")}
+
+    # A death that is no kill (an admin's) leaves remains too, due under the law.
+    a = deer[0]
+    s.call("kill", a, "verify-core remains")
+    r_a = s.wait(lambda: remains_of(a, "admin-death-remains"), seconds=10)
+    s.expect("a deer's death leaves remains holding the carcass law's items", held(r_a["id"]) == law, held(r_a["id"]))
+    rot = s.rows(f"SELECT * FROM rot WHERE structure = {r_a['id']}", "admin-death-rot")
+    s.expect("its remains are due after the remains_s law", len(rot) == 1 and rot[0]["due_ms"] - r_a["built_ms"] == REMAINS_S * 1000, rot)
+
+    # A wolf's kill: the carcass goes into the remains, not into the killer's pack.
+    b, killer, other, walker = deer[1], wolves[0], wolves[1], wolves[2]
+    s.call("place_near", killer, b)
+    before = s.inventory(killer, "killer-before")
+    s.graph(killer, {"first": [{"do": "attack", "target": {"id": b}}, {"wait": 1}]})
+    r_b = s.wait(lambda: remains_of(b, "kill-remains"), seconds=150, every=1)
+    s.graph(killer, {"wait": 600})
+    victim = s.rows(f"SELECT alive, cause FROM character WHERE id = {b}", "kill-victim")[0]
+    s.expect("the wolf killed the deer", not victim["alive"] and "killed by" in victim["cause"], victim)
+    after = s.inventory(killer, "killer-after")
+    s.expect("a kill puts nothing in the killer's pack", after.get("meat", 0) == before.get("meat", 0) and after.get("hide", 0) == before.get("hide", 0), {"before": before, "after": after})
+    s.expect("the kill's remains hold the carcass law's items", held(r_b["id"]) == law, held(r_b["id"]))
+
+    # The killer and another wolf both take meat from the one carcass.
+    s.call("place_near", other, killer)
+    for w in (killer, other):
+        s.graph(w, {"first": [{"if": {"not": {"has": {"item": "meat"}}}, "then": {"do": "take", "target": {"nearest": "remains"}, "item": "meat"}}, {"wait": 2}]})
+    s.wait(lambda: all(s.inventory(w).get("meat", 0) >= 1 for w in (killer, other)), seconds=30, every=1)
+    left = held(r_b["id"])
+    s.expect("two wolves take meat from one kill", left.get("meat", 0) == law["meat"] - 2, {"left": left, "killer": s.inventory(killer, "killer-took"), "other": s.inventory(other, "other-took")})
+    for w in (killer, other):
+        s.graph(w, {"wait": 600})
+
+    # A wander keeps roughly its heading between waits (the wander laws).
+    s.graph(walker, {"seq": [{"do": "wander"}, {"wait": 3}]})
+    stops, last = [], None
+    end = time.monotonic() + 75
+    while time.monotonic() < end:
+        b_ = s.rows(f"SELECT x, y, vx, vy FROM body WHERE id = {walker}")[0]
+        if b_["vx"] == 0 and b_["vy"] == 0 and (last is None or math.dist(last, (b_["x"], b_["y"])) > 1.5):
+            last = (b_["x"], b_["y"])
+            stops.append(last)
+        time.sleep(0.5)
+    s.graph(walker, {"wait": 600})
+    legs = [math.atan2(q[1] - p_[1], q[0] - p_[0]) for p_, q in zip(stops, stops[1:])]
+    turns = [abs((b2 - b1 + math.pi) % (2 * math.pi) - math.pi) for b1, b2 in zip(legs, legs[1:])]
+    kept = sum(t <= 1.6 for t in turns)
+    (s.out / f"{s.name}-wander.json").write_text(json.dumps({"stops": stops, "turns_rad": turns}, indent=2) + "\n")
+    # Uniform random headings would turn by at most 1.6 rad about half the time.
+    s.expect("a wander keeps its heading between waits", len(turns) >= 5 and kept >= 0.8 * len(turns), {"turns": len(turns), "within_1.6_rad": kept})
+
+    # Remains are gone once due, with what was left in them (housekeeping runs each minute).
+    due = rot[0]["due_ms"]
+    wait_s = max(0, due - s.rows("SELECT last_ms FROM clock")[0]["last_ms"]) / 1000 + 70
+    s.wait(lambda: remains_of(a) is None, seconds=wait_s + 30, every=5)
+    s.expect("remains are gone after their time, with their items and rot row",
+             remains_of(a, "expired") is None and not held(r_a["id"]) and not s.rows(f"SELECT * FROM rot WHERE structure = {r_a['id']}"), r_a)
+    s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
+
+
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains}
 
 
 def main():

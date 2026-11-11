@@ -53,7 +53,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['clock', 'steer', 'walk_route', 'wake', 'familiar', 'deliberation', 'rearing',
+PRIVATE = ['clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberation', 'rearing',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
            'routine', 'routine_stat', 'background', 'brain', 'mind_state', 'mind_cursor',

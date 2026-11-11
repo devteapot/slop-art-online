@@ -814,7 +814,7 @@ pub fn moves_of(ctx: &ReducerContext, id: u32, now: u64) -> living_rules::script
     hot(ctx, id, &w, now, "motion", |h| &mut h.moves, |sc, c| {
         sc.moves(c).unwrap_or_else(|e| {
             log::warn!("motion for {id}: {e}");
-            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0 }
+            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0, wander_turn: 1.2, wander_keep_s: 0.0 }
         })
     })
 }
@@ -886,23 +886,54 @@ pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) ->
     out
 }
 
-/// Creatures a body of species `kind` smells beyond `sight` (within its scent radius, of its
-/// scent kinds), nearest first; empty for a body without a scent. Uses the same per-tick chunk
-/// cache as sight: a radius of 60 tiles covers at most 9x9 chunks, filtered by kind first.
-pub fn smelled_near(ctx: &ReducerContext, kind: &str, at: (f32, f32), sight: f32, now: u64) -> Vec<NearCreature> {
+thread_local! {
+    /// What each body last smelled: when, from where, at what sight, and every creature of its
+    /// scent kinds within the radius then (with its position then).
+    static SMELLED: RefCell<HashMap<u32, (u64, (f32, f32), f32, Rc<Vec<NearCreature>>)>> = RefCell::new(HashMap::new());
+}
+
+/// A body that has moved this far since its last read smells afresh.
+const SCENT_MOVE: f32 = 4.0;
+
+/// Creatures body `who` of species `kind` smells beyond `sight` (within its scent radius, of
+/// its scent kinds), nearest first; empty for a body without a scent. A fresh read sweeps the
+/// per-tick chunk cache over every chunk within the radius (19x19 chunks at 150 tiles), so a
+/// body reads afresh at most `scent_hz` times a second, or when it has moved `SCENT_MOVE`
+/// tiles; in between, distances are taken from where it is now to where the creatures were.
+pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), sight: f32, now: u64) -> Vec<NearCreature> {
     let Some(scent) = scent_of(kind).filter(|s| s.radius > sight) else { return Vec::new() };
-    let mut out = Vec::new();
-    for c in chunks_around(at.0, at.1, scent.radius) {
-        for (id, k, p) in chunk_bodies(ctx, c, now).iter() {
-            if !scent.kinds.iter().any(|x| **x == **k) {
-                continue;
-            }
-            let d = dist(at, *p);
-            if d > sight && d <= scent.radius {
-                out.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: d });
+    let _t = span("scent.query");
+    let every_ms = (1000.0 / laws(ctx).scent_hz) as u64;
+    let kept = SMELLED.with(|m| {
+        m.borrow().get(&who).filter(|(t, from, s, _)| now >= *t && now - *t < every_ms && dist(*from, at) < SCENT_MOVE && *s == sight).map(|e| e.3.clone())
+    });
+    let all = kept.unwrap_or_else(|| {
+        let _t = span("scent.read");
+        let mut all = Vec::new();
+        for c in chunks_around(at.0, at.1, scent.radius) {
+            for (id, k, p) in chunk_bodies(ctx, c, now).iter() {
+                if *id != who && scent.kinds.iter().any(|x| **x == **k) && dist(at, *p) <= scent.radius + SCENT_MOVE {
+                    all.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: 0.0 });
+                }
             }
         }
-    }
+        let all = Rc::new(all);
+        SMELLED.with(|m| {
+            let mut m = m.borrow_mut();
+            if m.len() > 4096 {
+                m.retain(|_, e| now.saturating_sub(e.0) < 10_000);
+            }
+            m.insert(who, (now, at, sight, all.clone()));
+        });
+        all
+    });
+    let mut out: Vec<NearCreature> = all
+        .iter()
+        .filter_map(|c| {
+            let d = dist(at, c.pos);
+            (d > sight && d <= scent.radius).then(|| NearCreature { dist: d, ..c.clone() })
+        })
+        .collect();
     out.sort_by(|a, b| a.dist.total_cmp(&b.dist));
     out
 }

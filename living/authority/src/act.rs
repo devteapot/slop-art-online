@@ -322,7 +322,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
             // Itself among them, as before; others when seen (a clear sight line) or smelled.
             let map = common::map(ctx);
             let seen = common::creatures_near(ctx, from, sight, now).into_iter().filter(|c| c.id == id || map.sight_clear(from, c.pos));
-            for c in seen.chain(common::smelled_near(ctx, &actor.kind, from, sight, now)) {
+            for c in seen.chain(common::smelled_near(ctx, id, &actor.kind, from, sight, now)) {
                 match sensed.iter_mut().find(|(k, _)| *k == *c.kind) {
                     Some(e) => e.1 += 1,
                     None => sensed.push((c.kind.to_string(), 1)),
@@ -561,10 +561,14 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         "wander" => {
             let map = common::map(ctx);
             let mut pick = None;
-            // A stroll carries on roughly the way it was going, when it was going anywhere.
-            let moving = me.vx != 0.0 || me.vy != 0.0;
+            // A stroll carries on roughly the way it was going: while moving, or after standing
+            // less than the creature's `motion` law says (a search keeps its direction between
+            // waits).
+            let moves = common::moves_of(ctx, me.id, now);
+            let keep = me.vx != 0.0 || me.vy != 0.0 || now.saturating_sub(me.t_ms) < (moves.wander_keep_s * 1000.0) as u64;
+            let turn = moves.wander_turn.max(0.01);
             for k in 0..12 {
-                let ang: f32 = if moving && k < 6 { me.heading + ctx.rng().gen_range(-1.2f32..1.2) } else { ctx.rng().gen_range(0.0..std::f32::consts::TAU) };
+                let ang: f32 = if keep && k < 6 { me.heading + ctx.rng().gen_range(-turn..turn) } else { ctx.rng().gen_range(0.0..std::f32::consts::TAU) };
                 let r: f32 = ctx.rng().gen_range(3.0..9.0);
                 let p = (here.0 + ang.cos() * r, here.1 + ang.sin() * r);
                 if map.free(p.0, p.1) {
@@ -1976,25 +1980,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         fight_report(ctx, attacker, victim, now);
     }
     if dead {
-        // The killer takes what it can carry; the rest is left to rot.
-        let sc = common::scripts(ctx);
-        let killer_kind = ctx.db.character().id().find(attacker).map(|c| c.kind).unwrap_or_default();
-        let limit = sc.num_of("carry_limit", &killer_kind, 40.0) as u32;
-        let mut room = limit.saturating_sub(common::inv_list(ctx, attacker as u64).iter().map(|(_, q)| *q).sum::<u32>());
-        let mut left = 0;
-        for (item, n) in [("meat", sc.num_of("carcass_meat", &vc.kind, 0.0) as u32), ("hide", sc.num_of("carcass_hide", &vc.kind, 0.0) as u32)] {
-            let take = n.min(room);
-            room -= take;
-            left += n - take;
-            if take > 0 {
-                common::inv_add(ctx, attacker as u64, item, take);
-            }
-        }
-        if left > 0 {
-            if let Some(ac) = ctx.db.character().id().find(attacker) {
-                percept(ctx, &ac, now, "body", victim, attacker, at, format!("You could not carry all of the {} (your pack is full); the rest is left to rot.", vc.kind), 0.3);
-            }
-        }
+        // The body is left as remains (`die`): the killer, its pack or anyone beside them takes from them.
         // A person killed by a person: a killing, counted apart from deaths to animals.
         if by_person && vc.kind == "person" {
             common::chronicle(ctx, now, "killing", attacker, victim, at, if yielded { format!("{an} killed {vn}, who had yielded") } else { format!("{an} killed {vn}") });
@@ -2145,16 +2131,33 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32) {
     for k in ctx.db.know_how().actor().filter(id).map(|k| k.id).collect::<Vec<_>>() {
         ctx.db.know_how().id().delete(k);
     }
-    if kind == "person" {
+    // Every body is left as remains: what it carried, what its body gives (the `carcass` law by
+    // kind) and its artifacts, until the `remains_s` law's time is up (`expire_remains`).
+    let sc = common::scripts(ctx);
+    let mut left = items;
+    for (item, q) in sc.items_of("carcass", &kind) {
+        if living_rules::catalog::item(&item).is_some() {
+            match left.iter_mut().find(|(i, _)| *i == item) {
+                Some(e) => e.1 += q,
+                None => left.push((item, q)),
+            }
+        }
+    }
+    let held: Vec<Artifact> = ctx.db.artifact().holder().filter(id as u64).collect();
+    if !left.is_empty() || !held.is_empty() || kind == "person" {
         common::invalidate_structures(ctx);
         let s = ctx.db.structure().insert(Structure { id: 0, kind: "remains".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: id, built_ms: now });
-        for (item, q) in items {
+        for (item, q) in left {
             common::inv_add(ctx, STRUCTURE_BIT | s.id, &item, q);
         }
-        for mut t in ctx.db.artifact().holder().filter(id as u64).collect::<Vec<_>>() {
+        for mut t in held {
             t.holder = STRUCTURE_BIT | s.id;
             ctx.db.artifact().id().update(t);
         }
+        let last_ms = (sc.num_of("remains_s", &kind, 1800.0).max(0.0) * 1000.0) as u64;
+        ctx.db.rot().insert(Rot { structure: s.id, due_ms: now + last_ms });
+    }
+    if kind == "person" {
         common::chronicle(ctx, now, "death", id, killer, at, format!("{name} died ({cause})"));
     }
     ctx.db.body().id().delete(id);

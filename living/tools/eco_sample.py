@@ -47,14 +47,18 @@ def main():
             ids = {c["id"] for c in chars}
             vit = [v for v in q(db, token, "SELECT id, hp, hunger, hunger_rate, at_ms FROM vitals") if v["id"] in ids]
             act = [x for x in q(db, token, "SELECT id, skill, phase, target, victim, started_ms FROM activity") if x["id"] in ids]
-            inv = [x for x in q(db, token, "SELECT owner, item, qty FROM inventory WHERE item = 'meat'") if x["owner"] in ids]
+            remains = q(db, token, "SELECT id, owner, x, y, built_ms FROM structure WHERE kind = 'remains'")
+            meat_rows = q(db, token, "SELECT owner, item, qty FROM inventory WHERE item = 'meat'")
+            inv = [x for x in meat_rows if x["owner"] in ids]
+            for r in remains:
+                r["meat"] = sum(x["qty"] for x in meat_rows if x["owner"] == (1 << 40) | r["id"])
             clock = q(db, token, "SELECT * FROM clock")
             chron = q(db, token, f"SELECT id, at_ms, kind, a, b, x, y, text FROM chronicle WHERE id > {last_chron}")
             if chron:
                 last_chron = max(c["id"] for c in chron)
             people = [[b["id"], round(b["x"], 1), round(b["y"], 1)] for b in bodies if b["kind"] == "person"]
             animals = [b for b in bodies if b["id"] in ids]
-            f.write(json.dumps({"t": round(t, 1), "clock": clock, "chars": chars, "bodies": animals, "vitals": vit, "activity": act, "meat": inv, "people": people, "chronicle": chron}) + "\n")
+            f.write(json.dumps({"t": round(t, 1), "clock": clock, "chars": chars, "bodies": animals, "vitals": vit, "activity": act, "meat": inv, "remains": remains, "people": people, "chronicle": chron}) + "\n")
             f.flush()
         except Exception as e:  # keep sampling through a slow or failed read
             print(f"{t:.0f}s: {e}", file=sys.stderr)

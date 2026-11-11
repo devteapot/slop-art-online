@@ -598,7 +598,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     // go after), at most the 3 nearest of each kind.
     let mut smelled = Vec::new();
     let mut per_kind: Vec<(std::rc::Rc<str>, u32)> = Vec::new();
-    for c in common::smelled_near(ctx, &me.kind, at, r, now) {
+    for c in common::smelled_near(ctx, id, &me.kind, at, r, now) {
         if c.id == id {
             continue;
         }

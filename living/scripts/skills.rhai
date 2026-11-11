@@ -15,6 +15,8 @@ fn laws() {
         // (how each creature turns and keeps apart is its `motion` law).
         slow_radius: 1.2, corner_radius: 0.9,
         steer_s: 2.0, crowd_hz: 3.0, chase_hz: 4.0, combat_hz: 8.0,
+        // How often a body smells afresh; between reads it keeps what it last smelled.
+        scent_hz: 1.0,
         input_hz: 30.0, input_burst: 15.0,
         // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
         // tiles (it was one per 70, and the wilds filled with deer).
@@ -85,10 +87,11 @@ fn senses_law() {
 // How a creature moves besides its walking pace (`move_speed`): its run, its flight and the
 // pace it steps aside at, as shares of its walk; how fast it turns (radians a second) and how
 // much of its speed it keeps in the sharpest turns; how far it keeps from other bodies
-// (metres) and how strongly that bends its way. Asked per creature at every steering step and
+// (metres) and how strongly that bends its way; how far a wander may turn from the way it was
+// heading (radians) and for how long after stopping it still keeps that way (seconds). Asked per creature at every steering step and
 // kept per state, like senses: the shipped law reads nothing, so every creature shares it.
 fn motion(a) {
-    #{ run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9 }
+    #{ run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0 }
 }
 
 // A grown, rested body of a kind at its normal pace (for descriptions).
@@ -100,7 +103,7 @@ fn motion_law() {
         cadence: "hot",
         topic: "moving",
         covers: ["move_speed"],
-        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. Running is ${short(m.run)} times one's walk and a flight ${short(m.flee)} times; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can.`,
+        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. Running is ${short(m.run)} times one's walk and a flight ${short(m.flee)} times; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can. A stroll (wander) keeps roughly the way it was going, turning at most about ${short(m.wander_turn)} radians, even after a stop of up to ${short(m.wander_keep_s)} s.`,
     }
 }
 
@@ -193,12 +196,13 @@ fn items_with(t) { let out = []; for i in items() { if i[t] != () { out.push(i.n
 //   lunge                       how far a blow still carries past the attack's reach (metres)
 //   blow                        the damage of its bare attack, before strength and skill
 //   dodge_dist, dodge_speed     its dodge: a dash of so many metres at so many metres a second
-//   carcass_meat, carcass_hide  what its remains give
+//   carcass                     what its body leaves in its remains (items and amounts)
+//   remains_s                   seconds its remains lie before they are gone
 fn kinds() {
     [
-        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass_meat: 0, carcass_hide: 0 },
-        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass_meat: 5, carcass_hide: 1 },
-        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass_meat: 2, carcass_hide: 1 },
+        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_s: 3600 },
+        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_s: 1800 },
+        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_s: 1800 },
     ]
 }
 fn kind_of(kind) { let all = kinds(); for k in all { if k.name == kind { return k; } } all[0] }
@@ -718,9 +722,10 @@ fn yield_check(a) {
 fn yield_duration(a) { 1000 }
 fn yield_done(a) { [#{ op: "yield" }] }
 
-// Meat left when a creature dies at someone's hand.
-fn carcass_meat(kind) { kind_of(kind).carcass_meat }
-fn carcass_hide(kind) { kind_of(kind).carcass_hide }
+// What a creature's body leaves in its remains when it dies, however it died, beside what it
+// carried (its kind's `carcass`), and how long the remains lie (its kind's `remains_s`).
+fn carcass(kind) { let c = kind_of(kind).carcass; if c == () { #{} } else { c } }
+fn remains_s(kind) { kind_of(kind).remains_s }
 
 fn max_hp(kind) { kind_of(kind).max_hp }
 
@@ -1701,7 +1706,7 @@ fn know_how_law() {
 
 fn food_law() {
     #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_rate", "carried_spoil", "kept_spoil", "carry_limit", "source_of", "items"],
-       about: `${foods_text()} (hunger points). Cook raw ${or_list(items_with("cooks_to"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass_meat("deer")} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
+       about: `${foods_text()} (hunger points). Cook raw ${or_list(items_with("cooks_to"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass("deer").meat} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
 }
 
 fn making_law() {
@@ -1726,8 +1731,13 @@ fn theft_law() {
        about: "Taking from someone else's store when you are not of their people and not their guest is theft: if the owner sees it, they are roused, and anyone watching sees you take it." }
 }
 
+fn remains_law() {
+    #{ cadence: "event", topic: "food", covers: ["carcass", "remains_s"],
+       about: `Whatever dies leaves remains where it fell: what it carried, and what its body gives (a deer ${carcass("deer").meat} meat and ${carcass("deer").hide} hide, a wolf ${carcass("wolf").meat} meat and ${carcass("wolf").hide} hide). A kill does not fill the killer's pack: whoever is beside the remains, the hunter, its pack or anyone else, takes from them (take). Remains are gone after about ${short(remains_s("deer") / 60.0)} minutes (a person's after ${short(remains_s("person") / 60.0)}), with whatever is left in them, unless they hold a tablet or sign.` }
+}
+
 fn combat_law() {
-    #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "lunge", "max_hp", "carcass_meat", "carcass_hide", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
+    #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "lunge", "max_hp", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
        about: `fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
 }
 
@@ -1780,6 +1790,7 @@ fn laws_about(l) {
         alone_within: `someone with no other person within ${short(l.alone_within)} m is alone`,
         face_slack: `a body within ${short(l.face_slack)} radians of facing something already faces it`,
         flee_clear: `a flight ends ${short(l.flee_clear)} m farther from the threat than it began`,
+        scent_hz: `a creature smells afresh ${short(l.scent_hz)} times a second at most (or when it has moved a few metres); in between it keeps what it last smelled`,
         takeover_s: `a played character with no connection of its person for ${short(l.takeover_s)} s lives on under the world's minds`,
         follow_s: `one follow lasts ${short(l.follow_s)} s before the follower looks again`,
         read_sign_m: `reading with nothing named reads the nearest sign within ${short(l.read_sign_m)} m`,
