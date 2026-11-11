@@ -10,7 +10,6 @@ use crate::style::{outline, Kind, Outlined, Style, Toon};
 use crate::world::{rgb, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-use bevy::world_serialization::WorldAssetRoot;
 use bevy_mod_outline::OutlineMeshExt;
 use std::collections::{HashMap, HashSet};
 
@@ -388,11 +387,13 @@ pub fn build_lineup(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette:
             continue;
         }
         let file = animated(&format!("{FOLDER}/{name}"));
-        let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+        // The root alone, so a character of the same file spawned while it loads does not read
+        // it a second time (`characters::SceneOf`).
+        let handle = assets.load::<bevy::gltf::Gltf>(file.clone());
         // glTF models face +Z, toward the camera's default side (south); VRM models face −Z.
         let vrm = name.ends_with(".vrm");
         let turn = Quat::from_rotation_y(if vrm { std::f32::consts::PI } else { 0.0 });
-        commands.spawn((crate::envs::EnvPart, Model::character(file, vrm), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
+        commands.spawn((crate::envs::EnvPart, Model::character(file, vrm), crate::characters::SceneOf(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     }
     // `LIVING_GAME_CROWD=N[:seed][:style]`: N seeded random characters in rows south of the
     // line-up, facing the default camera (shots from yaw 0 at about 35 m see them from the front).
