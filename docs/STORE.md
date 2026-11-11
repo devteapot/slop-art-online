@@ -280,13 +280,22 @@ What the scrubber does now:
 - **Exact matches.**
   - Any quote style counts: typographic, single, back-quote, escaped, or HTML entities (`&ldquo;`, `&quot;`, `&#39;`), in any case. So does a JSON string equal to a line.
   - The match uses the line's **core**: leading and trailing whitespace and punctuation removed, and internal whitespace of any width. "where am i ?" therefore matches “where am I?”, “Where  am i” and, being 6 characters or more, an unquoted "where am I" (fbc37c32 review A3).
-- **Names the player gave themself** (fbc37c32 review A2). Any of these becomes one of the player's names and is replaced like the first name, by `Player` (`player`, `PLAYER`), wherever it appears, file names included. It is automatic, with no flag:
-  - a typed line of the form "I'm X", "Hi, I am X", "it's X", "call me X", "my name is X", "name's X" or "I go by X" (`SELF_NAME_RULES`);
-  - a tag or label residents' prompts use for the player (`{X=#26}`, `X (#26)`, `X (person:26)`);
-  - "introduced themself as «X» {…=#26}";
-  - a `known_name`, `known_as`, `introduced_as`, `nickname` or `name` field in a memory-graph node or relation about the player (`key: "person:26"`, `id: 26`), including inside model replies, which are JSON text.
+- **Names the player gave themself** (fbc37c32 review A2; narrowed in `fix-store-scrub-3` after play-test 4 v2).
+  - **Learned only from the player's own typed lines:** "I'm X", "Hi, I am X", "it's X", "call me X", "my name is X", "name's X", "I go by X" (`SELF_NAME_RULES`). Single words only, and not a common word or a state (`STOPWORDS`, `NOT_NAMES`: "I'm fine" or "call me later" is no name).
+  - **Epithets stay.** A name a resident gives the player is the resident's word, not the owner's, and is never learned. That covers tags, labels and graphs, including `known_name`: such a field can confirm a typed name but never introduces one. `--player-name NAME` (repeatable, on `scrub`, `pack` and `publish`) adds names for one run; it is an extra, not the mechanism.
+  - **The owner's real first name** is still replaced everywhere, in any case.
+  - **A self-given name can also be an ordinary game word** (in play-test 4 it was), so it is replaced only where it names the player:
+    - **Never in text the game or the mind service wrote from a template:** system prompt files, system messages inside journal entries, installed scripts, `*.rhai`. These stay byte-identical, and an owner line quoted into them is still caught by the exact quoted match. Nor in JSON keys, game codes (`do`, `skill`, `kind`, … in `CODE_KEYS`), or identifiers (`on_strike`: here `_` joins words).
+    - **Replaced as a name:** after "called", "named", "introduced (themself) as", "goes by", "known as", "call me", "I'm"; in `known_name`, `known_as`, `introduced_as`, `nickname` and `name` fields (the name on the person, and memories about them); in `{X=#26}` tags and `X (#26)` labels; as an address at the start of a line or utterance ("X, come here"); capitalised, not at the start of a sentence ("I told X about the well"); in file names.
+    - **Kept as the ordinary word:** lowercase after an article, possessive or determiner ("a strike", "the strike"), and only when the word also occurs in this run's game-written text (templates, system prompts, installed scripts). "the zorbin fellow" is not kept.
+    - **Undecidable, so replaced and listed:** every other use in residents' speech and journals ("strike them down", a capitalised word at a sentence start). Each entry goes to `ambiguous.md` and to `report.json` (`ambiguous`), with the file, the location (row, field path, line), the context with the name masked by its length (`[6 chars]`) and the replacement. A wrong replacement there costs one word. The manifest records only the count (`self_name_ambiguous`).
+- **The installed rules script is a hard check** (`installed_sha_problems`). If a session records `installed sha256 …` in `run/installed_script.txt`, the published `installed_source.rhai` must hash to it, so the record stays verifiable. Older records have no `installed_source.rhai` and instead name their file on a `file sha256 … (…/skills.rhai)` line; that file is checked. `pack` and `publish` refuse a unit that fails, before writing anything. `scrub` writes its reports, prints MISMATCH, and exits non-zero, giving why: the script is not published, or which redactions changed it. `installed_script.txt` itself may change, but only where its home paths are redacted (`/Users/<login>/…` becomes `~/…`); the shas it records stay as they are.
 
-  Single words only, and not a common word or a state (`STOPWORDS`, `NOT_NAMES`: "I'm fine" or "call me later" is no name). `--player-name NAME` (repeatable, on `scrub`, `pack` and `publish`) adds names for one run; it is an extra, not the mechanism. The report lists how many self-given names were learned, as lengths.
+  Checked on this machine's sessions (outputs kept locally in `~/store-dryrun-2026-11-11/playtest-{2-v3b,3-v3}/`):
+  - Play-test 3: the installed sha matches; all 6 system prompts and `installed_source.rhai` are byte-identical; `installed_script.txt` differs only by the home path.
+  - Play-test 2: the record names `skills.rhai`, and its sha matches, both in this scrub and in the copy already published.
+  - Neither session has a self-given name, so there are 0 ambiguous places.
+  - Play-test 2's scrub is byte-identical to the published unit (38 of 38 files).
 - **Echo matcher** (`EchoMatcher`):
   - Letter runs are folded (`ssssssssshi` and `sssshi` are both `shi`).
   - A one- or two-word line matches a word that is equal after folding, or within edit ratio 0.8 for words of four letters or more.

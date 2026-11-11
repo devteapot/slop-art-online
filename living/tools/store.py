@@ -540,6 +540,41 @@ class Identity:
 # Scrubber
 # --------------------------------------------------------------------------------------------
 
+CODE_KEYS = {"do", "skill", "kind", "type", "purpose", "act", "rel", "lane", "mix", "profile", "effort", "stage",
+             "folk", "activity", "verb", "hook", "law", "fn", "status", "role", "model", "finish_reason", "stream"}
+DETERMINERS = {"a", "an", "the", "this", "that", "these", "those", "my", "your", "his", "her", "its", "our",
+               "their", "some", "any", "no", "each", "every", "another", "one", "first", "last", "next"}
+NAME_BEFORE = re.compile(
+    r"(?i)(?:\bcalled|\bnamed|\bintroduced (?:him|her|them)sel(?:f|ves)(?: as)?|\bintroduced as|\bgoes by|\bgo by|"
+    r"\bknown as|\bcall me|\bcalls (?:him|her|them)sel(?:f|ves)|\bname is|\bname's|\bi'?m|\bi am|"
+    r"\"(?:known_name|known_as|introduced_as|nickname|name|given_name|told_name|self_name|calls_self)\"\s*:)"
+    r"\s*[«“\"'‘]?\s*$")
+CODE_BEFORE = re.compile(r"\"(?:" + "|".join(sorted(CODE_KEYS)) + r")\"\s*:\s*\"$")
+
+
+def _self_name_kind(s, a, b, word, game_word=False):
+    """name | ordinary | ambiguous, for a self-given name found at s[a:b]. game_word: the word
+    occurs in the game's own text of this run (templates, system prompts, installed scripts)."""
+    before, after = s[max(0, a - 60):a], s[b:b + 20]
+    if NAME_BEFORE.search(before):
+        return "name"                                       # called «X», known_name: "X"
+    if re.match(r"\s*(?:=#\d+|\((?:#|person:)\d+\))", after):
+        return "name"                                       # {X=#26}, X (#26)
+    if CODE_BEFORE.search(before):
+        return "ordinary"                                   # "do": "strike": a game code
+    prev = re.search(r"([A-Za-z']+)\W*$", before)
+    if (game_word and word.islower() and prev and prev.group(1).lower() in DETERMINERS
+            and not re.search(r"[«“\"'‘]\s*$", before)):
+        return "ordinary"                                   # "a strike", "the strike": the game's word
+    stripped = before.rstrip(" \t")
+    at_start = not stripped or stripped[-1] in "\n.!?:;([{«“\"'‘—-" or stripped.endswith("\\n")
+    if at_start and re.match(r"\s*[,!]", after):
+        return "name"                                       # "X, come here" addressed
+    if word[:1].isupper() and not word.isupper() and not at_start:
+        return "name"                                       # "I told X about the well"
+    return "ambiguous"
+
+
 NAME_KEYS = {"known_name", "known_as", "introduced_as", "nickname", "calls_self", "self_name", "name",
              "given_name", "told_name"}
 NOT_NAMES = {"new", "here", "fine", "good", "ok", "okay", "lost", "sorry", "back", "home", "hungry", "tired",
@@ -938,6 +973,9 @@ class Scrubber:
         self.dropped = []       # what the session echo pass dropped: {file, where, why}
         self.review_data = {}   # scrubbed copies of review-only files (report.json, commands.jsonl)
         self._template = False  # inside a prompt template or installed script: exact quoted lines only
+        self.ambiguous = []     # self-given names replaced where it could not be told name from word
+        self.template_words = set()   # words of the game's own text in this run (templates, scripts)
+        self._cur_file, self._cur_loc = "", ""
         self.echo = None
         self._build()
 
@@ -957,13 +995,22 @@ class Scrubber:
         self._lines()
 
     def _names(self):
-        """The player's names, replaced by "Player": the owner's first name, names the player gave
-        themself in the run, and --player-name. Any case; "_" and "-" separate."""
-        names = set(self.id.first_names) | self.extra_names | self.self_names
-        self.player_names = names
+        """The player's names, replaced by "Player".
+        - The owner's first name: everywhere, any case; "_" and "-" separate.
+        - Names the player gave themself in a typed line, and --player-name: only where the word
+          names the player, never in templates (_self_name_sub), because such a name can also be
+          an ordinary game word."""
+        first = set(self.id.first_names)
+        own = (self.extra_names | self.self_names) - first
+        self.player_names = first | own
+        self.self_name_set = {n.lower() for n in own}
         self.first_name = (re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(n) for n in
-                                      sorted(names, key=len, reverse=True)) + r")(?![A-Za-z0-9])", re.I)
-                           if names else None)
+                                      sorted(first, key=len, reverse=True)) + r")(?![A-Za-z0-9])", re.I)
+                           if first else None)
+        alt = "|".join(re.escape(n) for n in sorted(own, key=len, reverse=True))
+        # in text "_" joins: on_strike is an identifier, not a name; in file names "_" separates
+        self.self_name_re = re.compile(rf"(?<![A-Za-z0-9_])(?:{alt})(?![A-Za-z0-9_])", re.I) if own else None
+        self.self_name_path = re.compile(rf"(?<![A-Za-z0-9])(?:{alt})(?![A-Za-z0-9])", re.I) if own else None
 
     def learn_self_name(self, name):
         """A name the player gave themself. Single words only; not a common word or a state."""
@@ -1040,19 +1087,9 @@ class Scrubber:
                 at = int(cols[3]) if len(cols) > 3 and cols[3].isdigit() and len(cols[3]) >= 12 else None
                 if self.in_span(at):
                     self.owner_lines.add(m.group(2))
-        # names residents know the player by: tags ({X=#26}), labels ("X (#26)", "X (person:26)"),
-        # and introductions ("… introduced themself as «X» {someone=#26}")
-        for m in re.finditer(r"([^=,{}\n]{1,40})=#(\d+)", s):
-            if int(m.group(2)) in pids:
-                self.learn_self_name(m.group(1).strip())
-        for m in re.finditer(r"(?<![\w'-])([A-Z][A-Za-z'-]{1,30}) \((?:#|person:)(\d+)\)", s):
-            if int(m.group(2)) in pids:
-                self.learn_self_name(m.group(1))
-        for m in re.finditer(r"(?:introduced|introduces|called|calls|named|names) (?:him|her|them)sel(?:f|ves) "
-                             r"(?:as )?[«“\"'‘]?([A-Za-z][A-Za-z'-]{1,30})[»”\"'’]?[^\n{]{0,80}\{([^}]*)\}", s):
-            first = re.search(r"=#(\d+)", m.group(2))
-            if first and int(first.group(1)) in pids:
-                self.learn_self_name(m.group(1))
+        # Names residents give the player (tags, labels, graphs) are not learned: a self-given
+        # name comes only from the player's own typed lines (finish_learning). An epithet is the
+        # resident's word.
         # "<speaker> said[ to <x>]: “…” {<speaker>=#n, …}": the tags follow the order of mention,
         # so the first is the speaker, except in "You said to …", where the tags start after "You".
         for m in re.finditer(r"(?:^|\n|\] |\d\d:\d\d )([^:“\n\]]{1,80}?) [a-z]+(?: to [^:“\n]{1,80})?: "
@@ -1076,6 +1113,8 @@ class Scrubber:
     def learn_json(self, obj, name):
         if not self.player_ids:
             return
+        if isinstance(obj, dict) and obj.get("role") == "system" and isinstance(obj.get("content"), str):
+            self.template_words.update(w.lower() for w in WORD.findall(obj["content"]))
         if isinstance(obj, dict):
             who = None
             for k in ("speaker", "by", "from", "said_by"):
@@ -1096,8 +1135,6 @@ class Scrubber:
                         m = re.match(r"\s*You said(?: to [^:“\n]{1,80})?: “([^”\n]{1,800})”", v)
                         if m:
                             self.owner_lines.add(m.group(1))
-            if self._about_player(obj):
-                self._learn_graph_names(obj)
             for v in obj.values():
                 self.learn_json(v, name)
         elif isinstance(obj, list):
@@ -1155,7 +1192,7 @@ class Scrubber:
             return whole[:s - base] + repl + whole[e - base:]
         return regex.sub(f, text)
 
-    def scrub_text(self, s, acc, binary=False):
+    def scrub_text(self, s, acc, binary=False, self_names="narrow"):
         s = self._sub(self.known_secret, s, "known-secret", acc, "[redacted:secret]")
         for cat, rx in TOKEN_RULES:
             s = self._sub(rx, s, cat, acc, f"[redacted:{cat}]")
@@ -1209,8 +1246,42 @@ class Scrubber:
                 return "player" if v.islower() else "PLAYER" if v.isupper() and len(v) > 1 else "Player"
             if self.first_name is not None:
                 s = self.first_name.sub(fn, s)
+            if self.self_name_re is not None and self_names != "off" and not self._template:
+                s = self._self_name_sub(s, acc, self_names)
         return s
 
+    # -- names the player gave themself --------------------------------------------------------
+    def _self_name_sub(self, s, acc, mode):
+        """Replace a self-given name where it names the player; keep it where it is plainly the
+        ordinary word; replace and list it where that cannot be told (self.ambiguous).
+        mode "all" (review output) replaces every occurrence."""
+        out, last = [], 0
+        for m in self.self_name_re.finditer(s):
+            a, b, word = m.start(), m.end(), m.group(0)
+            kind = "name" if mode == "all" else _self_name_kind(s, a, b, word,
+                                                                 word.lower() in self.template_words)
+            out.append(s[last:a])
+            if kind == "ordinary":
+                acc.add("self-name-kept", word)
+                out.append(word)
+            else:
+                acc.add("self-name", word)
+                rep = "player" if word.islower() else "PLAYER" if word.isupper() and len(word) > 1 else "Player"
+                out.append(rep)
+                if kind == "ambiguous":
+                    self._list_ambiguous(s, a, b, rep)
+            last = b
+        out.append(s[last:])
+        return "".join(out)
+
+    def _list_ambiguous(self, s, a, b, rep):
+        ctx = s[max(0, a - 70):a] + "\x00" + s[b:b + 70]
+        ctx = self.self_name_path.sub(lambda m: f"[{len(m.group(0))} chars]", ctx)
+        ctx = self.scrub_text(ctx, Findings(), self_names="off").replace("\n", " ")
+        ctx = ctx.replace("\x00", f"[{b - a} chars]")
+        line = s.count("\n", 0, a) + 1
+        where = self._cur_loc + (f", line {line}" if "\n" in s else "")
+        self.ambiguous.append({"file": self._cur_file, "where": where, "context": ctx, "replacement": rep})
     def scrub_obj(self, obj, acc):
         if isinstance(obj, dict) and obj.get("role") == "system" and not self._template:
             # a system prompt is our template: an owner line can reach it only by substitution
@@ -1222,14 +1293,25 @@ class Scrubber:
         if isinstance(obj, dict):
             out = {}
             for k, v in obj.items():
-                k2 = self.scrub_text(k, acc) if isinstance(k, str) else k
+                k2 = self.scrub_text(k, acc, self_names="off") if isinstance(k, str) else k
                 if (isinstance(v, str) and isinstance(k, str) and SECRET_KEY.search(k)
                         and not NOT_SECRET_KEY.search(k) and len(v) >= 6 and not v.startswith("[redacted")
                         and " " not in v):
                     acc.add("secret-field", v)
                     out[k2] = "[redacted:secret]"
+                elif (isinstance(v, str) and k in NAME_KEYS and self.self_name_re is not None
+                      and v.strip().strip("«»“”\"'‘’").lower() in self.self_name_set):
+                    acc.add("self-name", v)
+                    out[k2] = "Player"                       # the name on the person
+                elif isinstance(v, str) and k in CODE_KEYS:
+                    out[k2] = self.scrub_text(v, acc, self_names="off")   # a game code, not a name
                 else:
-                    out[k2] = self.scrub_obj(v, acc)
+                    loc = self._cur_loc
+                    self._cur_loc = f"{loc}.{k}" if loc else str(k)
+                    try:
+                        out[k2] = self.scrub_obj(v, acc)
+                    finally:
+                        self._cur_loc = loc
             return out
         if isinstance(obj, list):
             return [self.scrub_obj(v, acc) for v in obj]
@@ -1245,7 +1327,9 @@ class Scrubber:
         """The path a file is published under: scrubbed like text, and in a play session any
         word of it that echoes an owner line, even a common one ("reply_hi"), is replaced."""
         acc = acc if acc is not None else Findings()
-        pub = self.scrub_text(rel, acc).replace("[owner line]", "owner-line")
+        pub = self.scrub_text(rel, acc, self_names="off").replace("[owner line]", "owner-line")
+        if self.self_name_path is not None:
+            pub = self.self_name_path.sub(lambda m: "player" if m.group(0).islower() else "Player", pub)
         if self._echo_on():
             for a, b, line in reversed(self.echo.find(pub, context=False)):
                 acc.add("owner-echo", pub[a:b])
@@ -1266,7 +1350,7 @@ class Scrubber:
 
     def safe_text(self, text):
         """What review output may say: the published redaction, plus echoes of owner lines."""
-        out = self.scrub_text(str(text), Findings())
+        out = self.scrub_text(str(text), Findings(), self_names="all")
         if self.echo is not None and bool(self.echo) and self.decisions.get("owner_lines") != "include":
             for a, b, line in reversed(self.echo.find(out)):
                 out = out[:a] + "[owner line]" + out[b:]
@@ -1462,9 +1546,11 @@ class Scrubber:
             if hit or idn:
                 return "excluded", ("held: the README describes the owner or their intentions "
                                     f"({'mentions “' + hit.group(0) + '”' if hit else 'names the owner'})"), None, acc
+        self._cur_file, self._cur_loc = relpath, ""
         if name.endswith(".jsonl"):
             out = []
-            for line in text.splitlines():
+            for i, line in enumerate(text.splitlines()):
+                self._cur_loc = f"row {i}"
                 if not line.strip():
                     out.append(line)
                     continue
@@ -1499,6 +1585,8 @@ class Scrubber:
         if text is None:
             return
         self.learn_logins(text)
+        if is_template(relpath):
+            self.template_words.update(w.lower() for w in WORD.findall(text))
         if name.endswith(".jsonl"):
             for line in text.splitlines():
                 try:
@@ -1762,6 +1850,9 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
     instances.jsonl.gz, calls.jsonl.gz, rows.jsonl.gz, prompts.jsonl.gz, files.tar.gz, MANIFEST.json."""
     name = name or os.path.basename(os.path.abspath(src).rstrip("/"))
     rows, totals, data = scrub_source(src, scrubber, keep_data=True)
+    problems = installed_sha_problems(rows, data)
+    if problems:
+        raise Refused("installed script check failed: " + "; ".join(scrubber.safe_text(p) for p in problems))
     os.makedirs(out_dir, exist_ok=True)
     instances, calls, streams, prompts = {}, [], [], []
     tar_buf = io.BytesIO()
@@ -1830,6 +1921,8 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
            "models": _model_counts(calls),
            "held": [{"path": scrubber.publish_path(r["path"]), "reason": r["reason"]}
                     for r in rows if r["status"] in ("excluded", "held", "review", "refused")],
+           "self_name_ambiguous": len([d for d in scrubber.ambiguous
+                                       if d["file"] in {r["path"].split("!")[-1] for r in rows if r["status"] == "ok"}]),
            "dropped": [{"file": scrubber.publish_path(d["file"]), "where": d["where"],
                         "why": "quotes an owner line" if d["why"].startswith("quotes") else "repeats an owner line",
                         "action": d.get("action", "dropped")}
@@ -2200,6 +2293,43 @@ def check_models(man, cfg):
         raise Refused("held: calls from unverified model(s): " + "; ".join(f"{m} ({n})" for m, n in sorted(bad.items())))
 
 
+def installed_sha_problems(rows, data):
+    """The published installed rules script must hash to the sha installed_script.txt records,
+    so the record stays verifiable. One message per problem; empty when every pair matches."""
+    status = {r["path"]: r for r in rows}
+    out = []
+    for rel, body in data.items():
+        if os.path.basename(rel.split("!")[-1]) != "installed_script.txt":
+            continue
+        m = re.search(r"installed sha256 ([0-9a-f]{64})", body.decode("utf-8", "replace"))
+        if not m:
+            continue
+        src = rel[:-len("installed_script.txt")] + "installed_source.rhai"
+        if src not in data:
+            # older records name the installed file instead: "file sha256 <sha> (<path>/skills.rhai)"
+            named = re.search(r"file\s+sha256 [0-9a-f]{64} \(([^)\n]+)\)", body.decode("utf-8", "replace"))
+            if named:
+                base = os.path.basename(named.group(1).strip())
+                root = rel.split("!")[0] + "!" if "!" in rel else ""
+                session = rel[:rel.rfind("run/")] if "run/" in rel else os.path.dirname(rel) + "/"
+                cands = sorted((k for k in data if os.path.basename(k) == base and k.startswith(root)),
+                               key=lambda k: (not k.startswith(session), len(k)))
+                if cands:
+                    src = cands[0]
+        if src not in data:
+            st = status.get(src)
+            out.append(f"{src}: not published ({st['status'] + ', ' + (st['reason'] or '') if st else 'missing'}), "
+                       f"so the installed sha {m.group(1)[:12]}… in {rel} cannot be checked")
+            continue
+        got = _sha(data[src])
+        if got != m.group(1):
+            why = ", ".join(f"{c} {v['count']}" for c, v in (status.get(src, {}).get("findings") or {}).items()) \
+                or "no redaction recorded"
+            out.append(f"{src}: sha256 {got[:12]}… after scrubbing, but {rel} records {m.group(1)[:12]}… "
+                       f"(redactions in the script: {why})")
+    return out
+
+
 def check_batch_complete(src):
     """A batch is complete when batch.json exists and every instance has its summary.json."""
     if not os.path.exists(os.path.join(src, "batch.json")):
@@ -2388,7 +2518,7 @@ def write_scrubbed(src, scrubber, out, review_out=None):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "wb") as f:
                 f.write(body)
-    return rows, totals
+    return rows, totals, data
 
 
 def source_label(src, scrubber):
@@ -2398,6 +2528,17 @@ def source_label(src, scrubber):
     if not t.startswith("~"):
         t = "…/" + "/".join(os.path.abspath(src).rstrip("/").split("/")[-2:])
     return scrubber.safe_text(t)
+
+
+def ambiguous_markdown(amb):
+    lines = ["# Self-given name: places it could not be told from the ordinary word", "",
+             f"{len(amb)} place(s), each replaced. The name appears only as its length. A wrong replacement "
+             "here costs one word; templates, prompts and scripts are never touched.", "",
+             "| File | Where | Context | Replaced by |", "| --- | --- | --- | --- |"]
+    for d in amb:
+        ctx = d["context"].replace("|", "\\|")
+        lines.append(f"| `{d['file']}` | {d['where']} | {ctx} | {d['replacement']} |")
+    return "\n".join(lines) + "\n"
 
 
 def dropped_markdown(dropped):
@@ -2420,9 +2561,10 @@ def cmd_scrub(a, cfg, machine):
     if a.write:
         if os.path.exists(a.write) and os.listdir(a.write):
             raise Refused(f"{a.write} is not empty")
-        rows, totals = write_scrubbed(src, sc, os.path.join(a.write, "tree"), os.path.join(a.write, "review"))
+        rows, totals, data = write_scrubbed(src, sc, os.path.join(a.write, "tree"), os.path.join(a.write, "review"))
     else:
-        rows, totals, _ = scrub_source(src, sc)
+        rows, totals, data = scrub_source(src, sc, keep_data=True)
+    problems = installed_sha_problems(rows, data)
     keep = {r["path"].split("!")[-1] for r in rows if r["status"] in ("ok", "review")}
     dropped = [d for d in sc.dropped if d["file"] in keep]
     dec = decision_report(src, sc, rows, totals)
@@ -2439,9 +2581,13 @@ def cmd_scrub(a, cfg, machine):
         f.write(md)
     with open(os.path.join(out, "dropped.md"), "w") as f:
         f.write(sc.safe_text(dropped_markdown(dropped_s)))
+    amb = [dict(d, file=sc.safe_text(sc.publish_path(d["file"]))) for d in sc.ambiguous if d["file"] in keep]
+    with open(os.path.join(out, "ambiguous.md"), "w") as f:
+        f.write(sc.safe_text(ambiguous_markdown(amb)))
     with open(os.path.join(out, "report.json"), "w") as f:
         json.dump({"src": label, "kind": kind, "rows": rows_s, "redactions": totals_s,
-                   "decisions": dec_s, "dropped": dropped_s,
+                   "decisions": dec_s, "dropped": dropped_s, "ambiguous": sc.safe(amb),
+                   "installed_check": problems or "ok",
                    "review": sorted(sc.safe_text(sc.publish_path(r.replace("!", "/"))) for r in sc.review_data)},
                   f, ensure_ascii=False, indent=1)
     by = {}
@@ -2456,7 +2602,12 @@ def cmd_scrub(a, cfg, machine):
         say(f"  decide {c} (now {d['decision']})")
     if sc.review_data:
         say(f"  review only (held from publishing): {len(sc.review_data)} file(s) in {tilde(os.path.join(out, 'review'))}")
+    say(f"  self-given name replaced where name and word could not be told apart: {len(amb)} place(s) "
+        f"(ambiguous.md)")
+    say("  installed script: " + ("sha matches the record" if not problems else "MISMATCH"))
     print(tilde(os.path.join(out, "report.md")))
+    if problems:
+        raise Refused("installed script check failed: " + "; ".join(sc.safe_text(p) for p in problems))
 
 
 def _pack(kind, src, out, sc, machine):
