@@ -377,6 +377,10 @@ impl Net {
         let mut queries: Vec<&str> = PERCEIVED.to_vec();
         if self.mode == Mode::Tiles {
             queries.push("SELECT * FROM terrain_chunk");
+        } else {
+            // Gates shut and opened (about a hundred rows on a town, changed rarely): a shut gate
+            // blocks sight, which the edge of sight draws (`sightfield.rs`).
+            queries.push("SELECT * FROM gate");
         }
         info!("world kind: {:?}", self.mode);
         let (ok, err) = (self.inbox.clone(), self.inbox.clone());

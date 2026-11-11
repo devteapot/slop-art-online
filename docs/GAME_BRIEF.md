@@ -843,31 +843,53 @@ Branch `feel-4`. Evidence is in `.local/living/feel-4/` (git-ignored). Client on
 
 ## Edge of sight (2026-11-11)
 
-Branch `sight-edge`. Evidence, with a contact sheet, is in `.local/living/sight-edge/` (git-ignored). Client only: no authority, rules, bindings or seed changes.
+Branches `sight-edge` and `sight-2`. Evidence, with contact sheets, is in `.local/living/sight-edge/` and `.local/living/sight-2/` (git-ignored). Client only: no authority, rules or bindings changes. The client now also subscribes to the public `gate` table.
 
-The screen drew ground and buildings to about 180 m, while people came and went at the rules' sight (11 m by day). **F2** now cycles three ways of showing where your character's sight ends, with a note naming the new one. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting mode, for headless captures.
+The screen drew ground and buildings to about 180 m, while people came and went at the rules' sight. **F2** cycles three ways of showing where your character's sight ends. A note names the new mode and the key ("Edge of sight: not seen now · F2 changes how it is shown"). The same note shows for about 7 s on arrival, so the key can be found; after that it shows only when the mode changes. `LIVING_SIGHT_EDGE=fade|unseen|limited` sets the starting mode, for headless captures.
 
-- **Fade** (the default, unchanged): people fade in and out at the edge of sight (`fade.rs`).
-- **Not seen now:** as Fade. Ground, buildings and scenery beyond your sight are also drawn greyer, flatter (toward the fog's colour, so night stays dark), dimmer and a little cooler, over a soft band from 1.5 m inside the radius to 3 m beyond it. They are public and stay drawn. The sky is left alone.
-- **Limited view:** as Fade. The view also fogs from your sight radius to 1.3 × of it, in the fog's colour, and the camera's far plane stops drawing just past that. The camera's angle, distance and controls are unchanged.
+- **Not seen now** (the default since `sight-2`): what your character doesn't see now is drawn greyer, flatter (toward the fog's colour, so night stays dark), dimmer and a little cooler. That covers:
+  - ground, buildings and scenery beyond your sight, over a soft band from 1.5 m inside the radius to 3 m beyond it;
+  - what lies behind something that blocks your sight lines (a building, a market stall, a well, rock, a shut gate), with a soft edge about half a tile wide.
 
-How it works (`sightedge.rs`, `edges.wesl`, `post.rs`, `style.rs`):
-- **The radius is the rules'.** The client asks the world's installed script (`senses(a)`, the law the authority's perception sweep uses) for your character, with night from the displayed clock and a torch from your inventory. It eases to a new answer over about a second.
-- **The finishing pass marks the edge.** Both marks are a circle round your character on the ground plane, from each pixel's world position by depth.
-  - The fog is round you rather than Bevy's distance fog from the camera: the eye is about 22 m from you, so a camera fog at a 14 m night sight would hide your own character.
-  - Shell outlines are drawn outside that pass, so in limited view they stop halfway into the fog band.
+  The things that block are drawn normally when any face of them is in sight: you see the stall, not what stands behind it. Everything stays drawn, because it is public; the sky is left alone. People whose sight line breaks fade out as it breaks.
+- **Fade:** people fade in and out at the edge of sight (`fade.rs`). Nothing else changes.
+- **Limited view:** as "not seen now" for people. The view also fogs from your sight radius to 1.3 × of it, in the fog's colour, and the camera's far plane stops just past that. What lies behind something within your sight fogs 80% of the way. The camera's angle, distance and controls are unchanged.
 
-Measured on a scratch island world with the play-test scene's sight installed (48 m by day, 20 with a torch, 14 at night):
-- People drawn stayed within the radius, at most 0.9 m beyond it: the authority's one-tile margin.
-- Frame time showed no cost. Each run was one uncapped headless window at 1280×720, standing still with 11–18 people in sight by day and 3–6 at night, 20 s per mode. By day the median was 4.9–5.3 ms in every mode; at night it was 4.4–4.8 ms. The spread between modes is within run-to-run noise.
+**Why "not seen now" is the default.** It shows the sight lines and leaves the town readable. Limited view hides most of the town by day behind stalls and houses, which makes it hard to find your way. Fade shows nothing of why people vanish. The owner had not found F2 in play-test 2, so the modes were never compared; the arrival note is there for the next play-test.
+
+**What the rules do** (`sight-2`, read from the authority and rules source; details in the evidence README):
+- **No facing.** Sight is a radius and a clear line, the same all round. No path has a cone or a facing term: not players' perceived sets, minds' scenes, behaviour graphs, witnessed events or the combat feed (`perception::in_sight`, `perception::visible`). Facing matters only to a raised guard (`Aim::Facing`) and to the social `turn`. The only cone in the code is `living/game/src/sight.rs`, a client-only mock for tile worlds that is off by default and not the rules.
+- **What blocks a line:** `Map::sight_clear` walks every tile the segment crosses between the two exact positions, each end's own tile excepted. A tile blocks if it is `Wall` or `Rock`, or is a shut gate (`Map::blocked`). The hosted map turns into `Wall` the footprints of buildings, towers, **wells** and **market stalls**, and of fountains, market crosses, carts, kiosks, food stalls, vending machines, containers and salvage (`host::hosted_map`). Water, forest, trees, benches, lamps, crops, fences, barrels and crates do not block.
+- **No hysteresis on the line.** The sweep runs every 200 ms. Its one-tile hold (`keep_seen_m`) widens only the distance for someone already seen. A broken line drops them at the next sweep.
+- **So people vanish behind stalls and wells.** By the rules these are as opaque as a house, though the camera sees over them. In the captures, 36 of the 64 people within reach were inside 48 m by day but behind something. One stood 3.5 m away, behind the stall next to the player.
+
+How it works (`sightfield.rs`, `sightedge.rs`, `edges.wesl`, `post.rs`):
+- **The radius is the rules'.** The client asks the world's installed script (`senses(a)`, the law the authority's perception sweep uses) for your character. Night comes from the displayed clock and a torch from your inventory. The radius eases to a new answer over about a second.
+- **The sight field is the authority's test on the same tiles.** The client keeps the tiles as the authority hosts them:
+  - the land regenerated through `host::hosted_map`, with its digests checked;
+  - the window's `terrain_chunk` rows where they differ from it;
+  - the shut gates from `gate`.
+
+  It runs `Map::sight_clear` from your drawn position to the centre of every half-metre texel within your sight plus 4 m, in a 256 × 256 texture (±64 m). Blocking tiles joined to a seen one are marked seen too. The field is worked out again on the async compute pool when you move 0.25 m, your sight changes or the tiles do. The finishing pass samples it, filtered, at each pixel's ground position.
+- **People leaving sight.** In "not seen now" and limited view, someone drawn whose exact line from you breaks (`Map::sight_clear`, from your drawn position to theirs) fades out at once. The authority's next sweep and its delivery then stop sending them; in the captures that came 17–181 ms later. Nobody is drawn who isn't sent.
+- **The fog** is round you rather than Bevy's distance fog from the camera: the eye is about 22 m from you, so a camera fog at a 14 m night sight would hide your own character. Shell outlines are drawn outside the finishing pass, so in limited view they stop halfway into the fog band.
+
+**Checked against the authority.** The checks used `verify-sight2-1`, a scratch world from the play-test 2 module: Brackenford, no mind service. It had the scene's sight (48 m by day, 20 m with a torch, 14 m at night). Each check compared the client's dumped field with the authority's `perceived` rows and every body's position (owner SQL), at three spots by day and three at night.
+- 63 of 64 bodies within reach agreed. The one miss stood on the shadow's edge (field 0.51).
+- Over 270 client-side checks of people drawn, 2 had a broken line: people mid-departure, within the sweep's 200 ms.
+
+**Cost** (laptop, with other agents' builds running):
+- One field recompute at 48 m tests about 34,000 texels: mean 1.3 ms, max 2.7 ms on a quieter machine (1.2–1.9 ms under load). At 14 m it tests about 4,000: 0.3 ms. It runs on the async compute pool, off the frame. Walking, it runs about 7 times a second (every 0.25 m).
+- Each recompute uploads a 64 kB texture.
+- The pass adds one filtered texture sample per pixel.
+- Frame time showed no cost. Each build ran one uncapped headless window at 1280×720, among the stalls by day, 20 s per mode, under a load average of 13–17 from other work. The previous build's medians were 5.9–6.6 ms; this one's were 5.8–6.4 ms in every mode.
 
 **Not done:**
-- Sight lines: walls do not cut the marked circle, though the authority's sight does stop at them.
+- Lamplight and lit people. The `rules-1` branch makes night a `daylight` law and lets a light on someone show them beyond your sight (`glow`). The client asks `senses` in one place, `sightedge::my_sight`, which `rules-1` changes to read the `daylight` law. A lit person beyond your radius would be drawn in the dimmed band: they are seen because they are lit.
 - The two-distance rule (see at 48 m, know at 24 m).
-- Lamplight.
 - Weather shortening sight. That waits on rules that do it.
-- No F1 panel slider.
-- By day at 48 m, most of the default view already lies within sight, so "not seen now" marks only the far end of a street.
+- Terrain edits are known only within the client's `terrain_chunk` window: 7 × 7 chunks, re-centred as you walk, so at least about 24 m round you. Edits made since world creation farther out, within a 48 m sight, are not in the field.
+- No settings menu; that comes with the interface redesign.
 
 ## World look and camera research (2026-11-08)
 
