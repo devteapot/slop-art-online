@@ -1,6 +1,6 @@
 ---
 name: verify-minds
-description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations (and ways of speaking, mind_say), consolidation, reconnect handling, LIVING_ONLY, mind level of detail, the rethink gate (LIVING_RETHINK), the prompt frame (LIVING_FRAME), or player memory (LIVING_PLAYER_MEMORY).
+description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations (and ways of speaking, mind_say), consolidation, reconnect handling, LIVING_ONLY, mind level of detail, the rethink gate (LIVING_RETHINK), the prompt frame (LIVING_FRAME), the skill reference's combat timings (LIVING_SKILL_TIMINGS), or player memory (LIVING_PLAYER_MEMORY).
 ---
 
 # Verify internal minds

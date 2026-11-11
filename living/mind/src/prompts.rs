@@ -211,6 +211,7 @@ pub fn set_rules(revision: u32, source: &str) {
             *RULES_REV.write().unwrap() = Some(revision);
             *RULES_SOURCE.write().unwrap() = Some((revision, Arc::new(source.to_string())));
             *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
+            *TIMINGS.write().unwrap() = Some(Arc::new(timings_of(&s)));
         }
         Err(e) => log::warn!("rules revision {revision} unreadable: {e}"),
     }
@@ -225,14 +226,62 @@ pub fn shapes() -> Arc<living_rules::combat::Shapes> {
     SHAPES.write().unwrap().get_or_insert(bundled).clone()
 }
 
-/// A person's skill reference: each skill under the world's rules, with what it takes and gives.
-pub fn skills_help() -> String {
-    living_rules::catalog::skills_help()
+/// Each combat skill's timing in words (`Scripts::timing`: the numbers `skill_card` shows).
+static TIMINGS: std::sync::RwLock<Option<Arc<std::collections::BTreeMap<String, String>>>> = std::sync::RwLock::new(None);
+
+fn timings_of(s: &living_rules::script::Scripts) -> std::collections::BTreeMap<String, String> {
+    // Only the skills under the combat timing model (`timed`: a windup, recovery and cooldown
+    // the other side can read); the older force skills' durations are not windups.
+    s.shapes().iter().filter(|(_, shape)| shape.timed).filter_map(|(skill, _)| s.timing(skill).map(|t| (skill.to_string(), t.words()))).collect()
 }
 
-/// A species' skill reference, with what each skill takes and gives.
+/// The world's combat timings (the bundled rules' until the world's have been read).
+fn timings() -> Arc<std::collections::BTreeMap<String, String>> {
+    if let Some(t) = TIMINGS.read().unwrap().as_ref() {
+        return t.clone();
+    }
+    let bundled = Arc::new(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).map(|s| timings_of(&s)).unwrap_or_default());
+    TIMINGS.write().unwrap().get_or_insert(bundled).clone()
+}
+
+/// Whether the skill reference states each combat skill's timing (`LIVING_SKILL_TIMINGS`, on
+/// unless `0`, `off` or `false`; docs/COMBAT_MIND.md §3.7). Off, the reference is as before.
+pub fn timings_on() -> bool {
+    !matches!(std::env::var("LIVING_SKILL_TIMINGS").unwrap_or_default().trim().to_ascii_lowercase().as_str(), "0" | "off" | "false")
+}
+
+/// Skill lines with each combat skill's timing under it (`timing: winds up 350 ms …`).
+fn help_lines(offered: Vec<&living_rules::catalog::SkillSpec>, with_timing: bool) -> String {
+    let t = timings();
+    offered
+        .into_iter()
+        .map(|s| {
+            let line = living_rules::catalog::skill_line(s);
+            match t.get(&s.name).filter(|_| with_timing) {
+                Some(w) => format!("{line}\n    timing: {w}"),
+                None => line,
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A person's skill reference: each skill under the world's rules, with what it takes and gives
+/// and, for a combat skill, its timing.
+pub fn skills_help() -> String {
+    if !timings_on() {
+        return living_rules::catalog::skills_help();
+    }
+    help_lines(living_rules::ui::offered(&living_rules::catalog::skills(), None), true)
+}
+
+/// A species' skill reference, with what each skill takes and gives and, for a combat skill,
+/// its timing.
 pub fn species_skills_help(sp: &living_rules::species::Species) -> String {
-    living_rules::species::skills_help(sp)
+    if !timings_on() {
+        return living_rules::species::skills_help(sp);
+    }
+    help_lines(living_rules::ui::offered(&living_rules::catalog::skills(), Some(sp)), true)
 }
 static SIZE: std::sync::OnceLock<(u32, u32)> = std::sync::OnceLock::new();
 
@@ -1043,6 +1092,24 @@ pub fn talk_user(t: &TalkUser) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_skill_reference_states_combat_timings() {
+        let s = living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).unwrap();
+        let t = timings_of(&s);
+        assert!(t["strike"].contains("winds up 350 ms") && t["strike"].contains("250 ms to recover") && t["strike"].contains("ready again 650 ms"), "{}", t["strike"]);
+        assert!(t["dodge"].starts_with("a dash at once") && t["dodge"].contains("ready again 900 ms"), "{}", t["dodge"]);
+        assert!(t["block"].starts_with("raised at once and held up to 8 s"), "{}", t["block"]);
+        assert!(t["bowshot"].contains("flies 30 m/s") && t["firebolt"].contains("ready again 4 s"), "{} / {}", t["bowshot"], t["firebolt"]);
+        assert!(!t.contains_key("yield") && !t.contains_key("tend") && !t.contains_key("threaten"), "only timed skills: {:?}", t.keys().collect::<Vec<_>>());
+        assert!(t.values().all(|w| !w.contains("then 0 ms")), "{t:?}");
+        let skills = living_rules::catalog::skills();
+        let offered = || living_rules::ui::offered(&skills, None);
+        assert_eq!(help_lines(offered(), false), living_rules::catalog::skills_help(), "off: the reference as before");
+        let on = help_lines(offered(), true);
+        assert!(on.contains("timing: winds up 350 ms"), "{on}");
+        assert!(on.lines().filter(|l| l.trim_start().starts_with("timing:")).count() >= 4, "{on}");
+    }
+
     #[test]
     fn talk_examples_show_every_shown_act() {
         // talk_acts() leaves these out as already shown; a name missing from the examples is an

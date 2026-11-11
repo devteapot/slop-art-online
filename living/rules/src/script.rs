@@ -1877,6 +1877,25 @@ impl Scripts {
         self.effects(&format!("{skill}_hit"), ctx)
     }
 
+    /// A combat skill's timing as a person has it (`skill_card`'s numbers, and the minds' skill
+    /// reference): its windup (`<skill>_duration`; none for a dash or a guard), recovery
+    /// (`combat_recover`), cooldown (`combat_cooldown`), a guard's hold and a missile's speed.
+    pub fn timing(&self, skill: &str) -> Option<crate::combat::Timing> {
+        use crate::combat::Aim;
+        let shape = self.shapes().get(skill)?;
+        let c = SkillCtx { actor: ActorFacts { kind: "person".into(), ..Default::default() }, skill: skill.to_string(), qty: shape.hold_ms, ..Default::default() };
+        let windup_ms = if matches!(shape.aim, Aim::Dash | Aim::Facing) { 0 } else { self.duration_ms(skill, &c).unwrap_or(0) as u32 };
+        let speed = if shape.missile { self.missile(skill, &c).map_or(0.0, |m| m.speed) } else { 0.0 };
+        Some(crate::combat::Timing {
+            aim: shape.aim,
+            windup_ms,
+            recover_ms: self.num_of("combat_recover", skill, 0.0) as u32,
+            cooldown_ms: self.num_of("combat_cooldown", skill, 0.0) as u32,
+            hold_ms: if shape.aim == Aim::Facing { shape.hold_ms } else { 0 },
+            speed,
+        })
+    }
+
     /// A skill's missile (`<skill>_missile(a)`: a map of speed, range and radius).
     pub fn missile(&self, skill: &str, ctx: &SkillCtx) -> Result<crate::combat::MissileSpec, String> {
         let f = format!("{skill}_missile");
