@@ -481,6 +481,8 @@ LIVING_LOD=1 just living-mind                          # minds with the level of
 python3 living/tools/mind_load.py <db> <run>           # model load per person, extrapolated, and off stage
 ```
 
+**Play session report.** After every owner play session, `living/tools/play_report.py` writes one page of what was on screen and a timeline of the session (lines and who heard and answered them, fights, refusals, errors, cost). The play launcher records each session (`play_report.py record-start`/`record-stop`, `LIVING_GAME_RECORD` for the client) and runs it at the end; by hand: `python3 living/tools/play_report.py --db <database> --run <run> --journal <journal dir> --logs <dir with client.log and mind.log> --out <dir> [--capture <dir>]`. See [the play report](PLAY_REPORT.md).
+
 `just living-publish` updates the module in place and installs the current skill rules. LLM exchanges are journaled to `.local/living/journal/<run>/<name>.jsonl`.
 
 ### Play with one command
