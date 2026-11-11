@@ -10,7 +10,7 @@
 //!   strikes. "Got it" closes it; "All tips" opens Settings. It hides while a window holds the
 //!   left anchor.
 
-use super::hit::{Block, Hot, Tag, UiPointer};
+use super::hit::{Block, Tag, UiPointer};
 use super::icons::{Glyph, Icons, Mark};
 use super::kit;
 use super::model::HudModel;
@@ -35,7 +35,7 @@ pub struct TipCard;
 pub struct TipWeapon;
 
 /// The weapon's line of the tip shows once sheathe and draw is built (step 4).
-pub const SHEATHE: bool = false;
+pub const SHEATHE: bool = true;
 
 /// Whether the first-time tip shows, and when it was dismissed.
 #[derive(Resource, Default)]

@@ -794,7 +794,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   UI, `ui/hit.rs` `Tag`), `slide:A>B[:SECS]` holds the click at A and slides to B (a
 ///   title-bar drag, an item onto someone), `scroll:PX` swipes
 ///   two fingers over a window, `point:ID` puts the cursor on someone (hovering them),
-///   `dodge:W|A|S|D` double-taps a direction, and `dump:NAME`
+///   `dodge:W|A|S|D` double-taps a direction, `weapon:toggle|draw|sheathe` is X, and `dump:NAME`
 ///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
 ///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
@@ -869,7 +869,7 @@ fn script(
     target: Option<Res<crate::capture::Target>>,
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
-    (time, mut exit, cams): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>),
+    (time, mut exit, cams, mut weapon): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>),
 ) {
     // A point: X,Y as fractions of the picture, or @NAME, a tagged node of the game UI.
     let frac = |v: &str| match v.strip_prefix('@') {
@@ -1033,6 +1033,15 @@ fn script(
             // point finds them), frame after frame as the camera eases: hovering them, as a
             // player keeps pointing. Until a `cursor:` step or another `point:`.
             s.pointing = arg.parse().ok();
+            true
+        }
+        "weapon" => {
+            // As X: `weapon:toggle` (or `draw`, `sheathe`).
+            weapon.scripted = Some(match arg {
+                "draw" => true,
+                "sheathe" => false,
+                _ => !weapon.drawn,
+            });
             true
         }
         "scroll" => {

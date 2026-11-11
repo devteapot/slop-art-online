@@ -1,9 +1,9 @@
 //! Player input → the authority's player reducers.
 //!
-//! - WASD (Shift to run) moves relative to the camera through `human_move`. Only changes of
+//! - WASD (Shift held to run; all through `keys.rs`'s bindings) moves relative to the camera through `human_move`. Only changes of
 //!   intent are sent: the authority keeps steering until told otherwise, and rate-limits
 //!   intent changes (`input_hz`/`input_burst` laws).
-//! - The mouse buttons and Q/E/R/Shift are the skill bar (`combat.rs`); scripts can still walk
+//! - The mouse buttons, Q/E/R (1–3), 4–9, Space and a double tap are the skill bar (`combat.rs`); scripts can still walk
 //!   to a point with `goto`.
 //! - Enter opens proximity chat (`human_say`); only characters within earshot hear it. It is
 //!   addressed to the person pointed at, or the nearest within earshot (`talk.rs`).
@@ -217,6 +217,7 @@ pub fn movement(
     target: Res<Target>,
     ui: Res<crate::hud::UiWants>,
     time: Res<Time>,
+    binds: Res<crate::keys::Binds>,
 ) {
     if net.my_id != input.sent_for {
         input.sent_for = net.my_id;
@@ -247,20 +248,22 @@ pub fn movement(
     } else if input.chat_open || ui.keyboard {
         (Vec2::ZERO, false)
     } else {
+        use crate::keys::Act;
         let mut d = Vec2::ZERO;
-        if keys.pressed(KeyCode::KeyW) {
+        if binds.pressed(Act::Forward, &keys) {
             d += up;
         }
-        if keys.pressed(KeyCode::KeyS) {
+        if binds.pressed(Act::Back, &keys) {
             d -= up;
         }
-        if keys.pressed(KeyCode::KeyD) {
+        if binds.pressed(Act::Right, &keys) {
             d += right;
         }
-        if keys.pressed(KeyCode::KeyA) {
+        if binds.pressed(Act::Left, &keys) {
             d -= right;
         }
-        (d.normalize_or_zero(), keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight))
+        // Run held (Shift by default); the dodge has its own binding since interface D.
+        (d.normalize_or_zero(), binds.down(Act::Run, &keys, &mouse))
     };
     input.moving = dir != Vec2::ZERO;
     if input.moving {

@@ -292,7 +292,7 @@ pub fn follow(
     windows: Query<&Window>,
     ui: Res<crate::hud::UiWants>,
     (town, combat, island, mut pointer, solids): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>, ResMut<crate::pointer::Pointer>, Query<(&Transform, &crate::lookdev::Fitted), (With<crate::envs::Solid>, Without<Camera3d>)>),
-    time: Res<Time>,
+    (time, binds): (Res<Time>, Option<Res<crate::keys::Binds>>),
 ) {
     let Ok((mut tf, mut proj, camera, gtf, mut fog)) = q.single_mut() else { return };
     let dt = time.delta_secs();
@@ -386,7 +386,7 @@ pub fn follow(
     }
     cam.yaw += turn + manual;
     // Glance: hold Alt and move the mouse; let go and it eases back.
-    let holding = !ui.over() && (keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight));
+    let holding = !ui.over() && binds.as_ref().is_some_and(|b| b.pressed(crate::keys::Act::Glance, &keys));
     if let Some(g) = cam.scripted_glance {
         cam.glance += (g - cam.glance) * ease(6.0);
     } else if holding {

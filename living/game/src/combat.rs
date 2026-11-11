@@ -165,6 +165,85 @@ impl Cards {
     }
 }
 
+/// The bar's places and the rules' skills on them (interface D): which skill each key uses,
+/// chosen by how the rules aim and shape each bar skill, never by its name, so a skill the
+/// rules add takes a place without a client change.
+/// - `main`: LMB, RMB, then the three skill keys (Q E R, with 1–3 as twins): the first bar
+///   skill aimed at a creature; at a point with a small missile (an arrow); at its facing (a
+///   guard); at oneself or an ally (a heal); at a point with a wide missile (a bolt).
+/// - `jump`: a dash that does not evade; `dodge`: a dash that does.
+/// - `extra`: every other bar skill, in the bar's order, on 4–9.
+#[derive(Resource, Default, Clone, Debug, PartialEq)]
+pub struct Roles {
+    pub main: [Option<String>; 5],
+    pub jump: Option<String>,
+    pub dodge: Option<String>,
+    pub extra: Vec<String>,
+    /// Bar skills the rules call hostile (attack skills: greyed while the weapon is sheathed).
+    pub hostile: Vec<String>,
+}
+
+impl Roles {
+    pub fn of(cards: &Cards, shapes: Option<&living_rules::combat::Shapes>) -> Roles {
+        let mut bar: Vec<&SkillCard> = cards.all.iter().filter(|c| c.slot != NOT_ON_BAR).collect();
+        bar.sort_by_key(|c| c.slot);
+        let shape = |s: &str| shapes.and_then(|sh| sh.get(s));
+        let mut r = Roles::default();
+        let mut used: Vec<String> = Vec::new();
+        let take = |want: &dyn Fn(&SkillCard) -> bool, used: &mut Vec<String>| -> Option<String> {
+            let c = bar.iter().find(|c| !used.contains(&c.skill) && want(c))?;
+            used.push(c.skill.clone());
+            Some(c.skill.clone())
+        };
+        r.main[0] = take(&|c| c.aim == "creature", &mut used);
+        r.main[1] = take(&|c| c.aim == "point" && c.radius < BOLT_RADIUS, &mut used);
+        r.main[2] = take(&|c| c.aim == "facing", &mut used);
+        r.main[3] = take(&|c| c.aim == "self_or_ally", &mut used);
+        r.main[4] = take(&|c| c.aim == "point", &mut used);
+        r.jump = take(&|c| c.aim == "dash" && shape(&c.skill).is_some_and(|s| !s.evades), &mut used);
+        r.dodge = take(&|c| c.aim == "dash", &mut used);
+        r.extra = bar.iter().filter(|c| !used.contains(&c.skill)).take(crate::keys::EXTRA as usize).map(|c| c.skill.clone()).collect();
+        r.hostile = bar.iter().filter(|c| shape(&c.skill).is_some_and(|s| s.hostile)).map(|c| c.skill.clone()).collect();
+        r
+    }
+
+    /// The skill a binding uses, if any.
+    pub fn skill(&self, a: crate::keys::Act) -> Option<&str> {
+        use crate::keys::Act;
+        match a {
+            Act::Primary => self.main[0].as_deref(),
+            Act::Secondary => self.main[1].as_deref(),
+            Act::Skill1 => self.main[2].as_deref(),
+            Act::Skill2 => self.main[3].as_deref(),
+            Act::Skill3 => self.main[4].as_deref(),
+            Act::Extra(i) => self.extra.get(i as usize).map(|s| s.as_str()),
+            Act::Jump => self.jump.as_deref(),
+            Act::Dodge => self.dodge.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn is_hostile(&self, skill: &str) -> bool {
+        self.hostile.iter().any(|h| h == skill)
+    }
+}
+
+/// The bar's acts, in the order presses are sent (as before: the mouse, then the keys).
+pub const BAR_ACTS: [crate::keys::Act; 13] = {
+    use crate::keys::Act::*;
+    [Primary, Secondary, Skill1, Skill3, Skill2, Extra(0), Extra(1), Extra(2), Extra(3), Extra(4), Extra(5), Jump, Dodge]
+};
+
+fn read_roles(cards: Res<Cards>, rules: NonSend<crate::verbs::Rules>, mut roles: ResMut<Roles>, mut names: ResMut<crate::ui::settings::SkillNames>) {
+    let r = Roles::of(&cards, rules.scripts.as_ref().map(|s| s.shapes()));
+    if *roles != r {
+        info!("combat: bar places {:?}, jump {:?}, dodge {:?}, more {:?}", r.main, r.jump, r.dodge, r.extra);
+        let n = crate::ui::settings::SkillNames { slots: r.main.clone(), extra: (0..crate::keys::EXTRA as usize).map(|i| r.extra.get(i).cloned()).collect(), jump: r.jump.clone(), dodge: r.dodge.clone() };
+        *names = n;
+        *roles = r;
+    }
+}
+
 /// How a skill looks on this client.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Look {
@@ -228,8 +307,9 @@ impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Combat>()
             .init_resource::<Cards>()
+            .init_resource::<Roles>()
             .init_resource::<Scripted>()
-            .add_systems(Update, (read_cards, ingest).chain().in_set(Phase::Mirror))
+            .add_systems(Update, (read_cards, read_roles, ingest).chain().in_set(Phase::Mirror))
             // After movement: a dash goes the way I move, a skill aims where I look.
             .add_systems(Update, (pick, input).chain().in_set(Phase::Input).after(crate::controls::movement))
             .add_systems(Update, actions.in_set(Phase::Present))
@@ -372,6 +452,7 @@ pub fn input(
     mut scripted: ResMut<Scripted>,
     (pointer, mut talk): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>),
     mut c: ResMut<Combat>,
+    (binds, roles, mut weapon, taps): (Res<crate::keys::Binds>, Res<Roles>, ResMut<crate::weapon::Weapon>, Res<crate::keys::DoubleTap>),
 ) {
     let now = now_ms(&scene);
     if c.predicted.as_ref().is_some_and(|(_, t)| now - t > PREDICT_MS) {
@@ -391,22 +472,15 @@ pub fn input(
     }
     c.script_aim = scripted_aiming.as_ref().map(|(_, (p, _))| *p);
     let mut releases: Vec<String> = Vec::new();
-    // The bar's skills by slot (the rules' `skill_bar()`).
-    let slot = |i: usize| cards.slot(i).map(|card| card.skill.clone());
-    let shift = |b: &ButtonInput<KeyCode>, f: fn(&ButtonInput<KeyCode>, KeyCode) -> bool| f(b, KeyCode::ShiftLeft) || f(b, KeyCode::ShiftRight);
+    // The bar's places by binding (`keys.rs`), their skills by how the rules aim them (`Roles`).
+    use crate::keys::{Act, Bind};
+    let mouse_bound = |a: Act| binds.get(a).iter().any(|b| matches!(b, Bind::Mouse(_)));
+    let ok = |a: Act| !mouse_bound(a) || free_mouse;
     if !input.demo {
         // A held guard is let go with its key, also while typing: the key went up either way,
         // and a release missed would leave the guard raised until pressed again.
-        let went_up = [
-            mouse.just_released(MouseButton::Left),
-            mouse.just_released(MouseButton::Right),
-            keys.just_released(KeyCode::KeyQ),
-            keys.just_released(KeyCode::KeyE),
-            keys.just_released(KeyCode::KeyR),
-            shift(&keys, |b, k| b.just_released(k)),
-        ];
-        for (i, up) in went_up.into_iter().enumerate() {
-            if let Some(card) = cards.slot(i).filter(|card| up && card.aim == "facing") {
+        for a in BAR_ACTS {
+            if let Some(card) = roles.skill(a).and_then(|s| cards.by_name(s)).filter(|card| card.aim == "facing" && binds.went_up(a, &keys, &mouse)) {
                 releases.push(card.skill.clone());
             }
         }
@@ -414,61 +488,47 @@ pub fn input(
     if !input.demo && typing {
         c.aiming = None;
     }
-    // A tap on a person who is not hostile to me talks to them instead of striking (play-test 2:
-    // the owner, tapping to interact, struck the first resident who greeted him). Striking them
-    // takes a held press; animals and hostile people are struck by a tap as before.
-    let peaceful = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|k| k.kind == "person") && !hostile_to_me(conn, id, me_id, now);
-    let tap_talks = |c: &Combat| {
-        let card = cards.slot(0).filter(|card| card.aim == "creature")?;
-        let whom = c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), card.reach + 0.4))?;
-        peaceful(whom).then_some(whom)
+    // Sheathed (`weapon.rs`), a tap on a person talks to them (play-test 2: the owner, tapping to
+    // interact, struck the first resident who greeted him). Drawn, a tap strikes whoever is
+    // under the cursor.
+    let person = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|k| k.kind == "person");
+    let tap_target = |c: &Combat| {
+        let reach = roles.skill(Act::Primary).and_then(|s| cards.by_name(s)).map_or(0.0, |k| k.reach);
+        c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), reach + 0.4))
     };
+    let tap_talks = |c: &Combat| (!weapon.drawn).then(|| tap_target(c)).flatten().filter(|id| person(*id));
     if !input.demo && pointer.tapped && free_mouse {
         // Open: a tap on someone addresses them instead; closed: it opens the box to them.
-        let whom = if typing { c.target.filter(|id| peaceful(*id)) } else { tap_talks(&c) };
+        let whom = if typing { c.target.filter(|id| person(*id)) } else { tap_talks(&c) };
         if let (Some(id), Some(t)) = (whom, talk.as_mut()) {
             t.open_to = Some(id);
         }
     }
     let tapped_talk = !input.demo && !typing && pointer.tapped && talk.is_some() && tap_talks(&c).is_some();
     if !input.demo && !typing && pointer.tapped {
-        let whom = c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), cards.slot(0).map_or(0.0, |k| k.reach) + 0.4));
-        info!("tap: {} (at {:?}{})", if tapped_talk { "talk" } else { "strike" }, whom, whom.map_or(String::new(), |w| format!(", {}", if peaceful(w) { "peaceful" } else { "hostile or not a person" })));
+        let whom = tap_target(&c);
+        info!("tap: {} (at {:?}, weapon {})", if tapped_talk { "talk" } else if weapon.drawn { "strike" } else { "draw" }, whom, if weapon.drawn { "drawn" } else { "sheathed" });
     }
     if !input.demo && !typing {
-        let held = |k| keys.pressed(k);
-        // Held keys show their skill's indicator: RMB, Q, LMB, R, E.
-        c.aiming = if mouse.pressed(MouseButton::Right) && free_mouse {
-            slot(1)
-        } else if held(KeyCode::KeyQ) {
-            slot(2)
-        } else if mouse.pressed(MouseButton::Left) && free_mouse {
-            slot(0)
-        } else if held(KeyCode::KeyR) {
-            slot(4)
-        } else if held(KeyCode::KeyE) {
-            slot(3)
-        } else {
-            None
-        };
-        let went_down = [
-            mouse.just_pressed(MouseButton::Left) && free_mouse && !tapped_talk,
-            mouse.just_pressed(MouseButton::Right) && free_mouse,
-            keys.just_pressed(KeyCode::KeyQ),
-            keys.just_pressed(KeyCode::KeyE),
-            keys.just_pressed(KeyCode::KeyR),
-            shift(&keys, |b, k| b.just_pressed(k)),
-            keys.just_pressed(KeyCode::Space),
-        ];
-        // In bar order, as before: LMB, RMB, Q, then R before E, then Shift, then Space (the
-        // jump, not drawn on the bar).
-        for i in [0, 1, 2, 4, 3, 5, 6] {
-            if went_down[i] {
-                if let Some(s) = slot(i) {
-                    presses.push((s, None, None));
-                }
+        // Held keys show their skill's indicator.
+        c.aiming = [Act::Secondary, Act::Skill1, Act::Primary, Act::Skill3, Act::Skill2].into_iter().chain((0..crate::keys::EXTRA).map(Act::Extra)).find(|a| ok(*a) && binds.down(*a, &keys, &mouse)).and_then(|a| roles.skill(a)).map(String::from);
+        for a in BAR_ACTS {
+            let down = binds.went_down(a, &keys, &mouse) && ok(a) && !(a == Act::Primary && tapped_talk);
+            if let Some(s) = roles.skill(a).filter(|_| down) {
+                presses.push((s.to_string(), None, None));
             }
         }
+        // The dodge's default: a double tap of a direction key, that way.
+        if let (Some(v), Some(s)) = (taps.fired, roles.dodge.as_deref()) {
+            let (up, right) = cam.control_axes();
+            let d = (up * v.y + right * v.x).normalize_or_zero();
+            presses.push((s.to_string(), Some(me + d * 2.0), None));
+        }
+    }
+    // Sheathed, the first press of an attack skill draws the weapon instead.
+    if !weapon.drawn && presses.iter().any(|(s, _, _)| roles.is_hostile(s)) {
+        weapon.set(true, crate::weapon::Why::Attack, now, &net);
+        presses.retain(|(s, _, _)| !roles.is_hostile(s));
     }
     if let Some((s, _)) = scripted_aiming {
         c.aiming = Some(s);
@@ -489,6 +549,7 @@ pub fn input(
     }
     for (skill, aim, tgt) in presses {
         let Some(card) = cards.by_name(&skill) else { continue };
+        let given = aim.is_some() && card.aim == "dash";
         let aim = aim.unwrap_or_else(|| aim_point(&cam, me, &input));
         // Who or where it goes, by how the rules aim it.
         let (target_id, point) = match card.aim.as_str() {
@@ -496,6 +557,7 @@ pub fn input(
             "self_or_ally" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
             // A dash goes the way I move, else back from where I face (a jump: toward it). Facing
             // where I walk and not aiming, that is the facing drawn, not the cursor.
+            "dash" if given => (0, aim),
             "dash" => {
                 let drawn = input.face.filter(|_| !input.faces_cursor(c.aims));
                 let back = drawn.map_or((me - aim).normalize_or(Vec2::NEG_Y), |f| -f.normalize_or(Vec2::Y));

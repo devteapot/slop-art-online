@@ -60,6 +60,12 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Re
         events.clear();
         return;
     }
+    // Changing whom: its binding if not Tab (a letter would also type).
+    if binds.keys(crate::keys::Act::Address).any(|k| k != KeyCode::Tab && keys.just_pressed(k) && !crate::keys::types(k)) {
+        if let Some(t) = talk.as_mut() {
+            t.cycle = true;
+        }
+    }
     for ev in events.read() {
         if ev.state != ButtonState::Pressed {
             continue;
@@ -79,7 +85,7 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Re
             LogicalKey::Backspace => {
                 input.chat.pop();
             }
-            LogicalKey::Tab => {
+            LogicalKey::Tab if binds.keys(crate::keys::Act::Address).any(|k| k == KeyCode::Tab) => {
                 if let Some(t) = talk.as_mut() {
                     t.cycle = true;
                 }

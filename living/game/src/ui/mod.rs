@@ -14,6 +14,7 @@
 //! replacing these widgets step by step. Its layout is the mock-up's, drawn at 1600×900, scaled
 //! with the window's height (`UiScale`).
 
+mod cluster;
 mod death;
 mod frame;
 pub mod hit;
@@ -80,10 +81,10 @@ impl Plugin for UiPlugin {
             .init_resource::<pack::Carrying>()
             .configure_sets(Update, UiInput.in_set(crate::phase::Phase::Input).before(crate::controls::movement))
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
-            .add_systems(Startup, (frame::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn))
+            .add_systems(Startup, (frame::spawn, cluster::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
-        let widgets = (frame::vitals, frame::status, frame::skills, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
+        let widgets = (cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
         let windows = (people::update, prompt::update, say::update, pack::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
