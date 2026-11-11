@@ -57,16 +57,10 @@ Reset recipes delete database data; they are not routine update commands.
 
 For documentation-only work, check links, terminology, current/target labels and `git diff --check`; do not build or regenerate bindings. Preserve unrelated workspace changes and immutable experiment artifacts.
 
-## Agent and skill compatibility
+## Agent setup
 
-This project supports Cursor, Codex, Claude Code and Mistral Vibe. This is a compatibility requirement for all project skills and agent setup, regardless of which agent is making a change.
-
-- Keep shared project instructions in this `AGENTS.md`. Current Claude Code reads it through its default AGENTS.md fallback when no project Claude instruction file is present. Do not add a separate `CLAUDE.md` or duplicate policy unless a supported runtime requires an adapter; keep any required adapter limited to importing the shared instructions.
-- Prefer the standard Agent Skills format and `.agents/skills/` as the shared source for project-authored skills. Keep runtime-specific discovery paths, tool names, model IDs, option mappings and instruction loading in thin adapters. Claude Code uses `.claude/skills/` links to the shared tree; Mistral Vibe can discover `.agents/skills/` directly. Maintain Cursor's required discovery adapters as well.
-- When creating, changing, configuring, updating or removing a skill, review the effect on all four agents in the same change. A request made through Claude, Cursor, Codex or Mistral is project-wide unless the user explicitly limits it to that agent. Update the shared source and every affected adapter, link, setup record and invocation example.
-- Keep model choice in [Models and coordination](#models-and-coordination) below. Do not add per-agent or global model sheets, and do not hardcode a model into a shared skill.
-- The vendored skill trees deliberately differ: `.agents/skills/` contains the Codex/Claude-compatible port and `.cursor/skills/` contains the original Cursor version. Preserve their provenance and runtime-specific behavior; coordinate any required edits to both variants. See `.agents/vendored-skills.md`.
-- Verify relevant skill discovery, instruction loading, configuration and supported workflows for each affected agent using available read-only or fake-provider checks. Report any unverified runtime or missing capability as remaining compatibility work.
+- Project instructions live in this `AGENTS.md`. Claude Code reads it when no project `CLAUDE.md` is present, so do not add one.
+- Project skills live in `.agents/skills/`, with links in `.claude/skills/`. They are the verification skills listed under [Verification surfaces](#verification-surfaces) and the two skills that create and maintain them. `.agents/vendored-skills.md` records where those two came from.
 
 ## Models and coordination
 
@@ -75,7 +69,8 @@ All agent work on this project runs on Claude.
 - **Coordinators:** each machine has one coordinator thread on Claude Opus 5.5 (`claude-opus-5-5`) at high reasoning effort.
 - **Subagents:** Claude Opus 5.5 at high reasoning effort by default.
 - **Fable exceptions:** use Claude Fable 5.2 (`claude-fable-5-2`) at high reasoning effort for asset generation, such as 3D models and textures, and for a task that Opus has attempted and could not solve. Say in the report when a task was moved to Fable and why.
-- A model named inside a skill does not override this section. This section does not switch the model of a thread the user started.
+- A model or provider the owner asks for by name overrides these defaults for that task.
+- A model named inside a skill does not override this section. This section does not switch the model of a thread the owner started.
 
 Each machine has one role:
 

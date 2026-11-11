@@ -48,4 +48,4 @@ After the run, the SpacetimeDB container was stopped by hand to restore its earl
 - Interactive observer checks: inspector, follow, pan and zoom.
 - The public observer path.
 - `minds.md`: requires an authorized authentic run.
-- Discovery of this skill by Codex, Cursor and Mistral Vibe. Claude Code lists P-Stack skills from `.claude/skills/`; the `verify` link was added in the same session and was not observed in the skill list.
+- Discovery of this skill by agents other than Claude Code. This stopped being a requirement on 2026-11-11, when the project moved to Claude only. Claude Code lists `verify` from `.claude/skills/`, as seen in a session's skill list on that date.
