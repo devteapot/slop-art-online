@@ -2,7 +2,13 @@
 //! buttons, lists and prompts comes from the current [`Theme`]: colours, borders, corner radius,
 //! ornament, type faces and sizes, shadows, and density (which details show inline).
 //!
-//! - **Clear** (the default): light neutral panels, flat, thin edges, a soft shadow, one face
+//! - **Glass** (the default since play-test 5): smoked, translucent panels with a subtle
+//!   top-to-bottom gradient and a thin light edge, light text with a dark drop under it (so it
+//!   reads over bright sky and white walls as over night ground), and smaller footprints:
+//!   narrower windows, tighter paddings and gaps ([`Theme::density`]), so the world shows
+//!   around and through them. No blur of what is behind: Bevy 0.20's UI has no backdrop
+//!   filter, and the panel's tint carries the contrast instead.
+//! - **Clear:** light neutral panels, flat, thin edges, a soft shadow, one face
 //!   (Nunito) at two weights, no ornament.
 //! - **Night:** the same, dark and translucent.
 //! - **Linen:** warm and flat, a hint of the game's palette, no wood, brass or parchment.
@@ -33,6 +39,7 @@ const fn hexa(v: u32, a: f32) -> Color {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Name {
     #[default]
+    Glass,
     Clear,
     Night,
     Linen,
@@ -40,10 +47,11 @@ pub enum Name {
 }
 
 impl Name {
-    pub const ALL: [Name; 4] = [Name::Clear, Name::Night, Name::Linen, Name::Walnut];
+    pub const ALL: [Name; 5] = [Name::Glass, Name::Clear, Name::Night, Name::Linen, Name::Walnut];
 
     pub fn key(self) -> &'static str {
         match self {
+            Name::Glass => "glass",
             Name::Clear => "clear",
             Name::Night => "night",
             Name::Linen => "linen",
@@ -53,6 +61,7 @@ impl Name {
 
     pub fn label(self) -> &'static str {
         match self {
+            Name::Glass => "Glass",
             Name::Clear => "Clear",
             Name::Night => "Night",
             Name::Linen => "Linen",
@@ -125,6 +134,14 @@ pub struct Theme {
     pub help: bool,
     /// The compass face and ring.
     pub compass: (Color, Color),
+    /// A drop under light text everywhere in the interface (none: only where a widget sets one),
+    /// so it keeps its contrast over whatever shows through a translucent panel ([`shade_text`]).
+    pub text_shadow: Option<Color>,
+    /// Footprint: windows' widths, paddings and gaps as a fraction of design D's (1: as drawn).
+    pub density: f32,
+    /// The ground of what floats over the world on its own (tip pills, notes, a slot's tooltip),
+    /// where a theme's surface is only a band meant to lie on a panel (none: the surface).
+    pub float: Option<Color>,
 }
 
 impl Theme {
@@ -169,6 +186,59 @@ impl Theme {
                 grip: true,
                 help: true,
                 compass: (hex(0xfbefcf), hex(0x5a3a22)),
+                text_shadow: None,
+                density: 1.0,
+                float: None,
+            },
+            Name::Glass => Theme {
+                name: n,
+                // Smoked glass: a cool slate top over a deeper bottom, both translucent. The tint
+                // is what keeps light text legible over a bright world (no backdrop blur in
+                // Bevy 0.20's UI): about a fifth of the world shows through, and
+                // `glass_keeps_contrast_over_a_bright_world` holds text to WCAG AA over the
+                // brightest ground measured by day (glass-1 stills).
+                panel: (hexa(0x222a37, 0.76), hexa(0x0b0e14, 0.84)),
+                edge: hexa(0xffffff, 0.16),
+                edge_px: 0.5,
+                rim: None,
+                body: None,
+                body_edge: hexa(0xffffff, 0.08),
+                // Rows, chips, cells and fields are darker bands under their text.
+                surface: hexa(0x05070b, 0.26),
+                // A raised cell (a full pack cell, the Give list): lighter than the panel.
+                surface_hi: hexa(0x3a4456, 0.62),
+                surface_lo: hexa(0x05070b, 0.34),
+                text: hex(0xf6f7fa),
+                muted: hex(0xd0d5dd),
+                heading: hex(0xdfe3ea),
+                title: hex(0xffffff),
+                on_panel: hex(0xdfe3ea),
+                accent: (hexa(0x6b97ff, 0.92), hexa(0x3f6fe0, 0.92)),
+                accent_text: Color::WHITE,
+                plain: hexa(0xffffff, 0.09),
+                hot: (hexa(0x86aaff, 0.30), hexa(0x86aaff, 0.20)),
+                field: hexa(0x05070b, 0.34),
+                mine: hexa(0x6f9cff, 0.26),
+                name_mine: hex(0xb2caff),
+                talk: hex(0x5b8cff),
+                talk_ink: hex(0xb2caff),
+                close: hexa(0xffffff, 0.08),
+                close_glyph: hex(0xdfe3ea),
+                line: hexa(0xffffff, 0.10),
+                radius: 0.85,
+                shadow_y: 4.0,
+                shadow_blur: 14.0,
+                shadow_a: 0.18,
+                shadow: hex(0x000000),
+                serif_titles: false,
+                title_scale: 0.72,
+                chips: false,
+                grip: false,
+                help: false,
+                compass: (hexa(0x141a24, 0.55), hexa(0xffffff, 0.22)),
+                text_shadow: Some(hexa(0x000000, 0.80)),
+                density: 0.72,
+                float: Some(hexa(0x141a24, 0.86)),
             },
             Name::Clear => Theme {
                 name: n,
@@ -209,6 +279,9 @@ impl Theme {
                 grip: false,
                 help: false,
                 compass: (hexa(0xfafaf8, 0.92), hexa(0x1c2024, 0.18)),
+                text_shadow: None,
+                density: 1.0,
+                float: None,
             },
             Name::Night => Theme {
                 name: n,
@@ -249,6 +322,9 @@ impl Theme {
                 grip: false,
                 help: false,
                 compass: (hexa(0x14171d, 0.70), hexa(0xffffff, 0.18)),
+                text_shadow: None,
+                density: 1.0,
+                float: None,
             },
             Name::Linen => Theme {
                 name: n,
@@ -289,6 +365,9 @@ impl Theme {
                 grip: false,
                 help: false,
                 compass: (hexa(0xf5eee2, 0.92), hexa(0x5a3a22, 0.25)),
+                text_shadow: None,
+                density: 1.0,
+                float: None,
             },
         }
     }
@@ -340,6 +419,11 @@ pub fn surface_hi() -> Color {
 pub fn surface_lo() -> Color {
     t().surface_lo
 }
+/// The ground of a note, pill or tooltip over the world: the theme's [`Theme::float`], or the
+/// surface the widget would use (`or`) in a theme whose surfaces stand on their own.
+pub fn float_or(or: Color) -> Color {
+    t().float.unwrap_or(or)
+}
 pub fn on_panel() -> Color {
     t().on_panel
 }
@@ -382,6 +466,33 @@ pub fn alpha(c: Color, a: f32) -> Color {
     let mut c = c;
     c.set_alpha(c.alpha() * a);
     c
+}
+
+/// A padding, gap or margin as designed, scaled by the theme's density (never under 2 px).
+pub fn d(px: f32) -> f32 {
+    (px * t().density).round().max(px.min(2.0))
+}
+
+/// Light text spawned anywhere in the interface gets the theme's drop under it, if it has one
+/// (Glass): one rule for every widget's text, instead of a shadow written into each. Dark text
+/// (a cream bubble's, a light button's) is left as it is, and so is text that has its own.
+pub fn shade_text(mut commands: Commands, q: Query<(Entity, &TextColor), (Added<Text>, Without<bevy::ui::widget::TextShadow>)>) {
+    let Some(c) = t().text_shadow else { return };
+    for (e, tc) in &q {
+        if light(tc.0) {
+            commands.entity(e).try_insert(bevy::ui::widget::TextShadow { offset: Vec2::new(0.0, 1.0), color: c });
+        }
+    }
+}
+
+/// Relative luminance (WCAG, linear sRGB).
+pub fn luminance(c: Color) -> f32 {
+    let l = c.to_linear();
+    0.2126 * l.red + 0.7152 * l.green + 0.0722 * l.blue
+}
+
+fn light(c: Color) -> bool {
+    luminance(c) > 0.3
 }
 
 fn down(stops: &[(Color, f32)]) -> BackgroundGradient {
@@ -567,11 +678,34 @@ mod tests {
         assert_eq!(super::readable("Mercy ▸"), "Mercy ›");
     }
 
+    /// Glass over the brightest world measured behind a window by day (glass-1's day stills on
+    /// Brackenford's square: pale paving, 95th percentile linear luminance 0.68–0.74), blended
+    /// in linear light as Bevy's UI is (the same stills' strips match that model): text keeps
+    /// WCAG AA (4.5) on the panel's mean, muted text 3.0, and a row's band only adds to it.
+    #[test]
+    fn glass_keeps_contrast_over_a_bright_world() {
+        use super::*;
+        let th = Theme::of(Name::Glass);
+        let world = 0.70;
+        let over = |c: Color, below: f32| luminance(c.with_alpha(1.0)) * c.alpha() + below * (1.0 - c.alpha());
+        let ratio = |a: f32, b: f32| (a.max(b) + 0.05) / (a.min(b) + 0.05);
+        let mid = th.panel.0.mix(&th.panel.1, 0.5);
+        let panel = over(mid, world);
+        let band = over(th.surface, panel);
+        assert!(ratio(luminance(th.text), panel) >= 4.5, "text on glass {:.2}", ratio(luminance(th.text), panel));
+        assert!(ratio(luminance(th.muted), panel) >= 3.0, "muted on glass {:.2}", ratio(luminance(th.muted), panel));
+        assert!(ratio(luminance(th.text), band) >= ratio(luminance(th.text), panel));
+        // And it is glass: some of the world shows through every part of a panel.
+        assert!(th.panel.0.alpha() < 0.9 && th.panel.1.alpha() < 0.9);
+    }
+
     #[test]
     fn themes_cycle_and_parse_and_long_titles_fit() {
         use super::Name;
-        assert_eq!(Name::default(), Name::Clear);
-        assert_eq!(Name::Walnut.next(), Name::Clear);
+        assert_eq!(Name::default(), Name::Glass);
+        assert_eq!(Name::Glass.next(), Name::Clear);
+        assert_eq!(Name::Walnut.next(), Name::Glass);
+        assert_eq!(Name::parse("glass"), Some(Name::Glass));
         assert_eq!(Name::parse("Night"), Some(Name::Night));
         assert_eq!(super::fit("A stranger in green and dark grey", 24), "A stranger in green and…");
         assert_eq!(super::fit("Mercy", 24), "Mercy");

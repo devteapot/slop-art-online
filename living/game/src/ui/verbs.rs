@@ -82,7 +82,7 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
         .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), bottom: Val::Px(196.0), flex_direction: FlexDirection::ColumnReverse, align_items: AlignItems::Center, row_gap: Val::Px(6.0), ..default() }, Pickable::IGNORE))
         .with_children(|root| {
             for i in 0..TOASTS {
-                root.spawn((ToastRow(i), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(8.0), Val::Px(12.0), Val::Px(5.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(10.0), max_width: Val::Px(600.0), display: Display::None, ..default() }, BackgroundColor(wood::surface()), BorderColor::all(wood::edge()), wood::hard_shadow(3.0, 0.45), Pickable::IGNORE))
+                root.spawn((ToastRow(i), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(8.0), Val::Px(12.0), Val::Px(5.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(10.0), max_width: Val::Px(600.0), display: Display::None, ..default() }, BackgroundColor(wood::float_or(wood::surface())), BorderColor::all(wood::edge()), wood::hard_shadow(3.0, 0.45), Pickable::IGNORE))
                     .with_children(|t| {
                         t.spawn((ToastMark(i), Node { width: Val::Px(8.0), height: Val::Px(8.0), border_radius: BorderRadius::all(Val::Percent(50.0)), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::muted()), Pickable::IGNORE));
                         t.spawn((ToastText(i), Text::new(""), wood::ink(f, 14.0, 800), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
@@ -311,7 +311,7 @@ pub fn toasts(model: Res<HudModel>, mut rows: Query<(&ToastRow, &mut Node, &mut 
     for (r, mut n, mut bg, mut border) in &mut rows {
         show(&mut n, r.0 < t.len() && model.death.is_none());
         if let Some((_, _, age)) = t.get(r.0) {
-            super::set_bg(&mut bg, wood::alpha(wood::surface(), alpha(*age)));
+            super::set_bg(&mut bg, wood::alpha(wood::float_or(wood::surface()), alpha(*age)));
             let c = wood::alpha(wood::edge(), alpha(*age));
             if border.top != c {
                 *border = BorderColor::all(c);

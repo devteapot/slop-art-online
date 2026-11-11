@@ -111,7 +111,7 @@ pub fn spawn_tooltip(mut commands: Commands, fonts: Res<Fonts>) {
     // wrapped text spills out of it.
     let th = wood::t();
     commands
-        .spawn((HudRoot, Tooltip, Node { position_type: PositionType::Absolute, width: Val::Px(300.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), padding: UiRect::axes(Val::Px(10.0), Val::Px(7.0)), border: wood::b(2.0), border_radius: wood::r(8.0), display: Display::None, ..default() }, BackgroundColor(th.surface_hi), BorderColor::all(th.edge), wood::shadow(3.0, 1.0), GlobalZIndex(80), Pickable::IGNORE))
+        .spawn((HudRoot, Tooltip, Node { position_type: PositionType::Absolute, width: Val::Px(300.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), padding: UiRect::axes(Val::Px(10.0), Val::Px(7.0)), border: wood::b(2.0), border_radius: wood::r(8.0), display: Display::None, ..default() }, BackgroundColor(wood::float_or(th.surface_hi)), BorderColor::all(th.edge), wood::shadow(3.0, 1.0), GlobalZIndex(80), Pickable::IGNORE))
         .with_children(|t| {
             t.spawn((TooltipTitle, Text::new(""), wood::ink(&fonts, 14.0, 800), Pickable::IGNORE));
             t.spawn((TooltipText, Text::new(""), fonts.body(12.5, 600), TextColor(th.muted), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));

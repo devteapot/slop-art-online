@@ -59,7 +59,7 @@ Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`;
 - the list of acts: `acts:0:<skill>:<I>` (`talk`, `window`, `introduce`, `give`, `more`, …), its sub-list `acts:1:<item>:<I>`;
 - the pack: `pack:<item>:<I>`; know-how: `skill:<I>`; the tip: `tip:ok`, `tip:all`;
-- Settings: `settings:page:play|controls`, `settings:theme:clear|night|linen|walnut`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
+- Settings: `settings:page:play|controls`, `settings:theme:glass|clear|night|linen|walnut`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
 
 Scenes: `--place ID:DX:DY` puts a resident beside the player and holds them still when the plan reaches `sync:scene`; `--sync NAME='reducer|arg;…'` makes other admin calls at `sync:NAME`. Both are scene setup through admin reducers, never player acts; name them in a report.
 

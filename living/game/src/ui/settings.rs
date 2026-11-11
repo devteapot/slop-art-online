@@ -1,7 +1,7 @@
 //! Settings (interface D): a wide window in the centre, opened from Menu (or Menu after Esc with
 //! nothing open), with two pages.
 //!
-//! - **Play:** the interface's theme (Clear, Night, Linen, Walnut; F4 cycles it), the control scheme (facing the cursor, or where you walk; F3 switches it too),
+//! - **Play:** the interface's theme (Glass, Clear, Night, Linen, Walnut; F4 cycles it), the control scheme (facing the cursor, or where you walk; F3 switches it too),
 //!   how the edge of sight is drawn (not seen now, limited view, fade; F2 cycles it too), the
 //!   weapon drawing itself when something attacks you, and key hints and first-time tips (with
 //!   "Show tips again").

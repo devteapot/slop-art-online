@@ -92,14 +92,17 @@ impl Plugin for UiPlugin {
         let widgets = ((cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
         let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update);
         if lookdev {
-            app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare));
+            app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(sample::fill).before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
             app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
                 .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
-                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare));
+                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare))
+                // Light text gets the theme's drop the frame it is spawned (Glass).
+                .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(kit::paint).after(UiWork).before(UiSystems::Prepare));
             if perf_on() {
                 app.init_resource::<UiPerf>()
                     .add_systems(Update, (perf_begin::<0>.before(UiInput).in_set(crate::phase::Phase::Input), perf_end::<0>.after(UiInput).in_set(crate::phase::Phase::Input)))

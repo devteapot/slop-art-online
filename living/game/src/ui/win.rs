@@ -29,9 +29,33 @@ use super::HudRoot;
 use bevy::prelude::*;
 use bevy::ui::GlobalZIndex;
 
-/// Narrow and wide windows' widths, and the anchors' places (mock-up px at 1600×900).
+/// Narrow and wide windows' widths as drawn, and the anchors' places (mock-up px at 1600×900).
+/// A theme's density narrows them ([`narrow_w`], [`wide_w`]).
 pub const NARROW_W: f32 = 426.0;
 pub const WIDE_W: f32 = 1076.0;
+
+/// A narrow window's width in the theme in force: as drawn, or narrower in a dense theme, but
+/// never under the pack's five cells and their gaps (338 px) with the body's padding.
+pub fn narrow_w() -> f32 {
+    let t = wood::t();
+    if t.density >= 1.0 {
+        NARROW_W
+    } else {
+        (NARROW_W * (0.5 + 0.5 * t.density)).round().max(338.0 + 2.0 * wood::d(14.0) + 10.0)
+    }
+}
+
+pub fn wide_w() -> f32 {
+    (WIDE_W * (0.5 + 0.5 * wood::t().density.min(1.0))).round()
+}
+
+fn width_of(w: Win) -> f32 {
+    if w.wide() {
+        wide_w()
+    } else {
+        narrow_w()
+    }
+}
 const MARGIN: f32 = 26.0;
 /// The right anchor sits under the compass and the two buttons.
 const RIGHT_TOP: f32 = 252.0;
@@ -262,7 +286,7 @@ fn close(commands: &mut Commands, ws: &mut Windows, w: Win) {
 }
 
 fn spawn_frame(commands: &mut Commands, f: &Fonts, icons: &Icons, w: Win) -> Entity {
-    let width = if w.wide() { WIDE_W } else { NARROW_W };
+    let width = width_of(w);
     commands
         .spawn((
             HudRoot,
@@ -275,7 +299,7 @@ fn spawn_frame(commands: &mut Commands, f: &Fonts, icons: &Icons, w: Win) -> Ent
         .with_children(|fr| {
             fr.spawn(wood::rim(9.0));
             // Title bar: grip, title, the window's key, ✕. Holding it moves the window.
-            fr.spawn((WinHead(w), Hot, super::hit::Tag(format!("win:{}:head", w.name())), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), padding: if wood::t().serif_titles { UiRect::new(Val::Px(16.0), Val::Px(12.0), Val::Px(8.0), Val::Px(6.0)) } else { UiRect::new(Val::Px(18.0), Val::Px(10.0), Val::Px(12.0), Val::Px(8.0)) }, ..default() }))
+            fr.spawn((WinHead(w), Hot, super::hit::Tag(format!("win:{}:head", w.name())), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), padding: if wood::t().serif_titles { UiRect::new(Val::Px(16.0), Val::Px(12.0), Val::Px(8.0), Val::Px(6.0)) } else { UiRect::new(Val::Px(wood::d(18.0)), Val::Px(wood::d(10.0)), Val::Px(wood::d(12.0)), Val::Px(wood::d(8.0))) }, ..default() }))
                 .with_children(|h| {
                     h.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), flex_shrink: 1.0, overflow: Overflow::clip(), ..default() }, Pickable::IGNORE)).with_children(|l| {
                         if wood::t().grip {
@@ -297,7 +321,7 @@ fn spawn_frame(commands: &mut Commands, f: &Fonts, icons: &Icons, w: Win) -> Ent
                             WinClose(w),
                             Hot,
                             super::hit::Tag(format!("win:{}:close", w.name())),
-                            Node { width: Val::Px(28.0), height: Val::Px(28.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(2.0), border_radius: wood::r(8.0), margin: UiRect::left(Val::Px(2.0)), ..default() },
+                            Node { width: Val::Px(wood::d(28.0).max(22.0)), height: Val::Px(wood::d(28.0).max(22.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(2.0), border_radius: wood::r(8.0), margin: UiRect::left(Val::Px(2.0)), ..default() },
                             BackgroundColor(wood::t().close),
                             BorderColor::all(if wood::t().serif_titles { wood::edge() } else { Color::NONE }),
                             wood::hard_shadow(2.0, 0.4),
@@ -307,7 +331,7 @@ fn spawn_frame(commands: &mut Commands, f: &Fonts, icons: &Icons, w: Win) -> Ent
                 });
             fr.spawn((
                 WinBody(w),
-                Node { margin: wood::body_frame().0, border: wood::body_frame().1, border_radius: wood::r(8.0), padding: UiRect::new(Val::Px(14.0), Val::Px(14.0), Val::Px(if wood::t().body.is_some() { 14.0 } else { 4.0 }), Val::Px(14.0)), flex_direction: FlexDirection::Column, row_gap: Val::Px(if wood::t().help { 8.0 } else { 10.0 }), overflow: Overflow::clip(), flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() },
+                Node { margin: wood::body_frame().0, border: wood::body_frame().1, border_radius: wood::r(8.0), padding: UiRect::new(Val::Px(wood::d(14.0)), Val::Px(wood::d(14.0)), Val::Px(if wood::t().body.is_some() { 14.0 } else { 4.0 }), Val::Px(wood::d(14.0))), flex_direction: FlexDirection::Column, row_gap: Val::Px(wood::d(if wood::t().help { 8.0 } else { 10.0 })), overflow: Overflow::clip(), flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() },
                 wood::parch(),
             ));
         })
@@ -326,7 +350,7 @@ pub fn grip(p: &mut ChildSpawnerCommands) {
 /// The two anchors, outlined only while a window is dragged.
 pub fn spawn_anchors(mut commands: Commands, fonts: Res<Fonts>) {
     for (a, label) in [(Anchor::Left, "left anchor: people, log, character"), (Anchor::Right, "right anchor: the pack")] {
-        let mut node = Node { position_type: PositionType::Absolute, top: Val::Px(if a == Anchor::Left { MARGIN } else { RIGHT_TOP }), width: Val::Px(NARROW_W), height: Val::Px(560.0), border: wood::b(3.0), border_radius: wood::r(14.0), display: Display::None, ..default() };
+        let mut node = Node { position_type: PositionType::Absolute, top: Val::Px(if a == Anchor::Left { MARGIN } else { RIGHT_TOP }), width: Val::Px(narrow_w()), height: Val::Px(560.0), border: wood::b(3.0), border_radius: wood::r(14.0), display: Display::None, ..default() };
         if a == Anchor::Left {
             node.left = Val::Px(MARGIN);
         } else {
@@ -379,7 +403,7 @@ pub fn pointer(mut ws: ResMut<Windows>, ui: Res<UiPointer>, heads: Query<&WinHea
     if let_go {
         if let Some(d) = ws.drag.take() {
             let screen_w = ws.screen.x * ui.ui_scale;
-            let width = if d.win.wide() { WIDE_W } else { NARROW_W } * ui.ui_scale;
+            let width = width_of(d.win) * ui.ui_scale;
             let centre = d.at.x + width / 2.0;
             let to = if d.win.wide() {
                 Anchor::Centre
@@ -411,7 +435,7 @@ pub fn place(mut ws: ResMut<Windows>, cams: Query<&Camera, With<Camera3d>>, ui_s
     let dragging = ws.drag.as_ref().map(|d| (d.win, d.at / k));
     for (i, o) in ws.open.iter().enumerate() {
         let Ok((_, mut n, mut z)) = frames.iter_mut().find(|(f, _, _)| f.0 == o.win).ok_or(()) else { continue };
-        let width = if o.win.wide() { WIDE_W } else { NARROW_W };
+        let width = width_of(o.win);
         let (left, right, top) = match (dragging.filter(|d| d.0 == o.win), o.anchor) {
             (Some((_, at)), _) => (Val::Px(at.x), Val::Auto, Val::Px(at.y)),
             (None, Anchor::Left) => (Val::Px(MARGIN), Val::Auto, Val::Px(MARGIN)),

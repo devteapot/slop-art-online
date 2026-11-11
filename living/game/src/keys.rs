@@ -364,7 +364,7 @@ pub struct Prefs {
     pub auto_draw: bool,
     /// Changed by a shortcut (F2, F3, F4): saved by Settings' update.
     pub dirty: bool,
-    /// The interface's theme (`ui::wood::Name`: clear, night, linen, walnut).
+    /// The interface's theme (`ui::wood::Name`: glass, clear, night, linen, walnut; none: the default, glass).
     pub theme: Option<String>,
 }
 
