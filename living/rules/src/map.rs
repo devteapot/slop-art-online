@@ -28,6 +28,10 @@ pub enum Terrain {
     /// steep to step up or down, so it blocks walking, steering, routes and building like a
     /// wall, but it is open air, so sight and missiles pass over it (`docs/PERCEPTION.md`).
     Drop = 8,
+    /// Ground under something that stands in the way but below eye height (a cart, a low well:
+    /// `host::hosted_map` by the land's `sight` parameters): it blocks the foot like a wall, but
+    /// one sees over it, and missiles fly over it.
+    Low = 9,
 }
 
 impl Terrain {
@@ -41,14 +45,15 @@ impl Terrain {
             6 => Self::Road,
             7 => Self::Wall,
             8 => Self::Drop,
+            9 => Self::Low,
             _ => Self::Grass,
         }
     }
     pub fn walkable(self) -> bool {
-        !matches!(self, Self::Water | Self::Rock | Self::Wall | Self::Drop)
+        !matches!(self, Self::Water | Self::Rock | Self::Wall | Self::Drop | Self::Low)
     }
-    /// Whether it stops sight and missiles: rock and walls do; water, forest, a drop and open
-    /// ground do not.
+    /// Whether it stops sight and missiles: rock and walls do; water, forest, a drop, a low
+    /// obstacle and open ground do not.
     pub fn opaque(self) -> bool {
         matches!(self, Self::Rock | Self::Wall)
     }
@@ -63,6 +68,7 @@ impl Terrain {
             Self::Road => "road",
             Self::Wall => "wall",
             Self::Drop => "drop",
+            Self::Low => "low",
         }
     }
 }

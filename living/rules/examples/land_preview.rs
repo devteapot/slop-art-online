@@ -118,6 +118,7 @@ fn tile_colour(t: Terrain, kind: RegionKind) -> [f32; 3] {
         Terrain::Road => [196.0, 176.0, 130.0],
         Terrain::Wall => [80.0, 70.0, 60.0],
         Terrain::Drop => [120.0, 104.0, 86.0],
+        Terrain::Low => [104.0, 94.0, 82.0],
         Terrain::Water => [60.0, 110.0, 170.0],
     }
 }

@@ -214,7 +214,8 @@ fn ledge(x: i32, y: i32, season: Season) -> Rgba {
 fn base(t: Terrain, x: i32, y: i32, depth: u8, season: Season) -> Rgba {
     match t {
         Terrain::Road => road(x, y, season),
-        Terrain::Wall => wall(x, y, season),
+        // A low thing's footprint (a well, a cart) is drawn as the wall it was before.
+        Terrain::Wall | Terrain::Low => wall(x, y, season),
         Terrain::Grass => grass(x, y, season),
         Terrain::Forest => forest_floor(x, y, season),
         Terrain::Water => water(x, y, depth, season),
@@ -227,7 +228,7 @@ fn base(t: Terrain, x: i32, y: i32, depth: u8, season: Season) -> Rgba {
 
 /// Tiles built by people, and drops, keep crisp borders (no dithered blending).
 fn built(t: Terrain) -> bool {
-    matches!(t, Terrain::Road | Terrain::Wall | Terrain::Drop)
+    matches!(t, Terrain::Road | Terrain::Wall | Terrain::Drop | Terrain::Low)
 }
 
 /// Distance (in tiles, capped at 3) from each water tile to the nearest land.

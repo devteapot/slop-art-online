@@ -65,8 +65,8 @@ pub fn door(lot: &Lot) -> (f32, f32) {
 /// What [`hosted_map`] changed.
 #[derive(Clone, Debug, Default)]
 pub struct Hosted {
-    /// Tiles turned into `Wall` under building footprints and the props that block (walkable
-    /// ground, or a drop's edge).
+    /// Tiles turned into `Wall` or `Low` under building footprints and the props that block
+    /// (walkable ground, or a drop's edge).
     pub blocked_tiles: u32,
     /// Walkable tiles that buildings cut off from the main walkable area (enclosed yards); they
     /// stay as they are, but nothing is placed there.
@@ -75,32 +75,45 @@ pub struct Hosted {
     pub reachable: Vec<bool>,
 }
 
+/// What a tile under something that blocks walking becomes: `Wall` under a thing that hides
+/// (`tall`), `Low` under one below the eye. Open ground (`open`: walkable, and not a road the
+/// thing must leave alone) is covered; a drop's edge only by a thing that hides; a `Low` tile by
+/// a taller thing over it. Walls, rock and water stay.
+fn blocking(t: Terrain, tall: bool, open: bool) -> Option<Terrain> {
+    match t {
+        _ if t.walkable() && open => Some(if tall { Terrain::Wall } else { Terrain::Low }),
+        Terrain::Drop | Terrain::Low if tall => Some(Terrain::Wall),
+        _ => None,
+    }
+}
+
 /// The land's tiles as the authority hosts them: building footprints become `Wall` (they block
-/// like walls). Water under a footprint is left alone, and so are roads, except under what
+/// like walls), or `Low` under a thing below eye height (`LandParams::sight`). Water under a footprint is left alone, and so are roads, except under what
 /// stands in a paved plaza by design: wells, market stalls and a landmark (a clock tower). Props that stand in the way
 /// ([`crate::settle::PropKind::blocks`]: fountains, market crosses, carts, kiosks, food stalls)
 /// block every walkable tile under them; the planner keeps them off streets and door paths.
 /// (Terrace drops, as `Drop`, and stair tiles are already in the land's own tiles; a drop
-/// under a footprint or a blocking prop becomes `Wall`, since what stands there hides.) Also marks the main
+/// under a footprint or a blocking prop that hides becomes `Wall`.) Also marks the main
 /// walkable area, found from the first settlement's plaza.
 pub fn hosted_map(land: &Land, p: &LandParams) -> (Map, Hosted) {
     let mut map = land.map.clone();
     let mut h = Hosted::default();
     for lot in land.lots.iter().filter(|l| blocks(l.kind)) {
         let on_plaza = matches!(lot.kind, LotKind::Well | LotKind::MarketStall) || land.settlements.get(lot.settlement as usize).is_some_and(|s| s.in_plaza(lot.centre));
+        let tall = p.sight.hides(lot.kind.id(), lot.height_m);
         for (x, y) in footprint_tiles(lot, margin_of(land, p, lot)) {
             let t = map.get(x, y);
-            // A building standing over a drop's edge is solid there too: it hides what is behind.
-            if (t.walkable() && (t != Terrain::Road || on_plaza)) || t == Terrain::Drop {
-                map.set(x, y, Terrain::Wall);
+            if let Some(b) = blocking(t, tall, t != Terrain::Road || on_plaza) {
+                map.set(x, y, b);
                 h.blocked_tiles += 1;
             }
         }
     }
     for prop in land.props.iter().filter(|p| p.kind.blocks()) {
+        let tall = p.sight.hides(prop.kind.id(), prop.height_m);
         for (x, y) in prop_tiles(prop) {
-            if map.get(x, y).walkable() || map.get(x, y) == Terrain::Drop {
-                map.set(x, y, Terrain::Wall);
+            if let Some(b) = blocking(map.get(x, y), tall, true) {
+                map.set(x, y, b);
                 h.blocked_tiles += 1;
             }
         }
@@ -391,6 +404,100 @@ mod tests {
         }
     }
 
+    /// The island (seed 7 at 2048 m, default parameters), generated once for the sight tests.
+    fn island() -> &'static Land {
+        static L: std::sync::OnceLock<Land> = std::sync::OnceLock::new();
+        L.get_or_init(|| land::generate(7, 2048, &LandParams::default()))
+    }
+
+    /// A line past a thing: an eye a few metres before it and a point just behind it, both on
+    /// open ground, such that only the thing's own tiles lie between (without them the line is
+    /// clear; with them as walls it is not).
+    fn past(m: &Map, tiles: &[(i32, i32)], c: (f32, f32), half: f32) -> Option<((f32, f32), (f32, f32))> {
+        let mut without = m.clone();
+        let mut walled = m.clone();
+        for &(x, y) in tiles {
+            if !matches!(m.get(x, y), Terrain::Water | Terrain::Road) && !m.get(x, y).walkable() {
+                without.set(x, y, Terrain::Grass);
+                walled.set(x, y, Terrain::Wall);
+            }
+        }
+        (0..32).map(|k| k as f32 * std::f32::consts::TAU / 32.0).find_map(|a| {
+            let d = (a.cos(), a.sin());
+            let e = (c.0 - d.0 * (half + 3.0), c.1 - d.1 * (half + 3.0));
+            let r = (c.0 + d.0 * (half + 1.5), c.1 + d.1 * (half + 1.5));
+            (m.free(e.0, e.1) && m.free(r.0, r.1) && without.sight_clear(e, r) && !walled.sight_clear(e, r)).then_some((e, r))
+        })
+    }
+
+    /// Sight is blocked only by what rises above the eye (1.6 m by default, `LandParams::sight`):
+    /// a cart's footprint is `Low` (no walking, but one sees and shoots over it) and someone
+    /// behind it is seen; a building, a 2.6 m market stall and the 3.4 m well on the arrival
+    /// square are `Wall` and hide. The seed's `hides_m` changes a kind without code: open stalls
+    /// (`{"market_stall": 0}`) and a well seen over its rim (`{"well": 0.95}`) hide no one, and
+    /// fewer of the square's points within 48 m are hidden. An empty map is the height rule.
+    #[test]
+    fn sight_is_blocked_only_above_eye_height() {
+        let l = island();
+        let p = LandParams::default();
+        let (m, _) = hosted_map(l, &p);
+        let lot_tiles = |lot: &Lot| footprint_tiles(lot, margin_of(l, &p, lot));
+        // A cart (the island's carts stand in its towns' streets): Low, and seen over.
+        let carts: Vec<&crate::settle::Prop> = l.props.iter().filter(|x| x.kind == crate::settle::PropKind::Cart).collect();
+        assert!(!carts.is_empty() && carts.iter().all(|c| c.height_m > 0.0 && c.height_m < 1.6), "carts below the eye: {:?}", carts.iter().map(|c| c.height_m).collect::<Vec<_>>());
+        let mut seen_past_a_cart = 0;
+        for c in &carts {
+            let tiles = prop_tiles(c);
+            assert!(tiles.iter().any(|&(x, y)| m.get(x, y) == Terrain::Low), "a cart at {:?} stands on low tiles", c.centre);
+            assert!(tiles.iter().all(|&(x, y)| !m.walkable(x, y)), "no one walks through a cart at {:?}", c.centre);
+            if let Some((e, r)) = past(&m, &tiles, c.centre, c.width_m.max(c.depth_m) * 0.5) {
+                assert!(m.sight_clear(e, r), "someone behind the cart at {:?} is seen", c.centre);
+                seen_past_a_cart += 1;
+            }
+        }
+        assert!(seen_past_a_cart > 0, "no line past a cart to test");
+        // The arrival square: what stands there hides by its height.
+        let eye = arrival(l, &m);
+        let near = |q: (f32, f32)| ((q.0 - eye.0).powi(2) + (q.1 - eye.1).powi(2)).sqrt() <= 48.0;
+        let on_square: Vec<&Lot> = l.lots.iter().filter(|x| blocks(x.kind) && near(x.centre)).collect();
+        let hidden_past = |m: &Map, kind: LotKind| {
+            let mut n = (0, 0);
+            for lot in on_square.iter().filter(|x| x.kind == kind) {
+                if let Some((e, r)) = past(m, &lot_tiles(lot), lot.centre, lot.width_m.max(lot.depth_m) * 0.5) {
+                    n.0 += 1;
+                    n.1 += !m.sight_clear(e, r) as u32;
+                }
+            }
+            n
+        };
+        for kind in [LotKind::Townhouse, LotKind::MarketStall, LotKind::Well] {
+            let (lines, hidden) = hidden_past(&m, kind);
+            assert!(lines > 0 && hidden == lines, "{kind:?}: {hidden} of {lines} lines past it hidden");
+        }
+        // The seed makes stalls see-through and wells seen over their rim; buildings still hide.
+        let mut open = p.clone();
+        open.sight.hides_m.insert("market_stall".into(), 0.0);
+        open.sight.hides_m.insert("well".into(), 0.95);
+        let (mo, _) = hosted_map(l, &open);
+        assert_eq!(digests(l, &mo).heights, digests(l, &m).heights);
+        assert_ne!(digests(l, &mo).tiles, digests(l, &m).tiles, "the tiles digest covers `hides_m`");
+        for kind in [LotKind::MarketStall, LotKind::Well] {
+            assert_eq!(hidden_past(&mo, kind).1, 0, "{kind:?} hides no one with the seed's value");
+        }
+        let (lines, hidden) = hidden_past(&mo, LotKind::Townhouse);
+        assert!(lines > 0 && hidden == lines, "buildings still hide");
+        let pts: Vec<(f32, f32)> = (eye.1 as i32 - 48..=eye.1 as i32 + 48).flat_map(|y| (eye.0 as i32 - 48..=eye.0 as i32 + 48).map(move |x| (x, y))).filter(|&(x, y)| m.walkable(x, y)).map(|(x, y)| (x as f32 + 0.5, y as f32 + 0.5)).filter(|&q| near(q)).collect();
+        let hidden = |m: &Map| pts.iter().filter(|&&q| !m.sight_clear(eye, q)).count();
+        let (a, b) = (hidden(&m), hidden(&mo));
+        assert!(b < a, "the square's hidden points: {a} by height, {b} with open stalls and wells");
+        eprintln!("arrival square, walkable points within 48 m: {}; hidden {a} by height, {b} with open stalls and wells", pts.len());
+        // An empty map is the height rule; the eye height is land data too.
+        let (me, _) = hosted_map(l, &LandParams { sight: land::Sight { eye_m: 1.6, hides_m: Default::default() }, ..p.clone() });
+        assert_eq!(me.tiles, m.tiles);
+        let (tall, _) = hosted_map(l, &LandParams { sight: land::Sight { eye_m: 3.0, ..Default::default() }, ..p.clone() });
+        assert!(on_square.iter().filter(|x| x.kind == LotKind::MarketStall).all(|lot| lot_tiles(lot).iter().any(|&(x, y)| tall.get(x, y) == Terrain::Low)), "at a 3 m eye a 2.6 m stall is low");
+    }
+
     /// Prints the digests of the first world (seed 7, 2048 m) for comparison with the WASM
     /// authority's `land` row: `cargo test --release -p living-rules host::tests::print_digests
     /// -- --ignored --nocapture`.
@@ -415,8 +522,8 @@ mod tests {
         let mega: serde_json::Value = serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).unwrap();
         let params = |v: &serde_json::Value| -> LandParams { if v["map"]["params"].is_null() { LandParams::default() } else { serde_json::from_value(v["map"]["params"].clone()).unwrap() } };
         let cases = [
-            ("island", island["seed"].as_u64().unwrap(), island["map"]["size"].as_u64().unwrap() as u32, params(&island), (0x8529800013728f1fu64, 0x0d2f77752781845c, 0x8ff57472b004a13f)),
-            ("floor-megacity-2k", mega["seed"].as_u64().unwrap(), 2048, params(&mega), (0xdb59549c884bf8b8, 0xc06f16f3dcac1290, 0x0c6b3f2c51f13129)),
+            ("island", island["seed"].as_u64().unwrap(), island["map"]["size"].as_u64().unwrap() as u32, params(&island), (0x1a2a9a096caa8e21u64, 0x0d2f77752781845c, 0x8ff57472b004a13f)),
+            ("floor-megacity-2k", mega["seed"].as_u64().unwrap(), 2048, params(&mega), (0xa3d6f6164c07192c, 0xc06f16f3dcac1290, 0x0c6b3f2c51f13129)),
         ];
         let mut bad = Vec::new();
         for (name, seed, size, p, want) in cases {
