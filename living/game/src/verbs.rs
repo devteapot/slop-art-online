@@ -698,17 +698,10 @@ fn fire_facts(conn: &DbConnection, rules: &Scripts, t: &mut TargetFacts, me: &Me
     if t.class != "structure" {
         return;
     }
-    let traits = rules.structure(&t.kind);
-    match &traits.burns {
-        Some(b) => {
-            if let Some(s) = conn.db.structure().id().find(&t.id) {
-                let now = me.now_ms.max(0.0) as u64;
-                t.lit = living_rules::fire::lit(s.lit_until_ms, now);
-                t.fuel = living_rules::fire::fuel_left(s.lit_until_ms, now, b.rate, me.day_ms);
-            }
-        }
-        None => t.lit = traits.fire(),
-    }
+    // The rules' own reading of a fire (`StructureTraits::fire_state`, as the authority reads it):
+    // a fuel fire is lit while its row's `lit_until_ms` is ahead, holding what is left at its rate.
+    let lit_until = conn.db.structure().id().find(&t.id).map_or(0, |s| s.lit_until_ms);
+    (t.lit, t.fuel) = rules.structure(&t.kind).fire_state(lit_until, me.now_ms.max(0.0) as u64, me.day_ms);
 }
 
 /// A creature as I perceive it, for the rules' checks.
