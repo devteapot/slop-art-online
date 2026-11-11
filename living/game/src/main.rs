@@ -56,6 +56,7 @@ mod view;
 mod water;
 mod weather;
 mod world;
+mod record;
 
 use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
@@ -172,6 +173,8 @@ fn main() {
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
         app.add_plugins(sightfield::SightFieldPlugin);
+        // A record of the session for the play report, when LIVING_GAME_RECORD names a directory.
+        app.add_plugins(record::RecordPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }
