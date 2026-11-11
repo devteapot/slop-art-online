@@ -679,7 +679,7 @@ A player could move, fight and greet, but not gather, eat, craft, build, give, t
 - Things are named to the authority as acts name them, by kind (`{"nearest": "berry_bush"}`). When the one under the cursor is not the nearest of its kind, the act becomes a walk to it and then the act on the nearest (`{"seq": [goto, act]}`), which runs as my behaviour.
 
 **Controls and HUD** (only relevant information on screen; everything below is hidden until it matters):
-- **F** acts on what is under the cursor, else the nearest thing or creature within 3 m: a tap does the likely act, holding it (0.28 s) or a tap with no likely act opens the list. With nothing to aim at, F opens my own list. When something is in reach, a small hint over the bar names the likely act (`F gather`) or the target (`F a stranger ›`).
+- **F** acts on what is under the cursor, else the nearest thing or creature within 3 m: a tap does the likely act, holding it (0.28 s) or a tap with no likely act opens the list. With nothing to aim at, F says so in a short note (since 2026-11-11; C opens my own list). When something is in reach, a small hint over the bar names the likely act (`F gather`) or the target (`F a stranger ›`).
 - **C** opens the list of acts on myself (eat, sleep, rest, craft, build, write, drop, experiment, …), with what I carry ("eat berries ×4").
 - **The list** sits over the bar: 1–9 and 0 or a click picks, Esc goes back or closes, F or C closes it. The mouse picks from it rather than firing the bar while it is open.
 - **Notes** of what the authority said rise just over the hint for about 4.5 s: edged green when done, red when refused with the authority's reason ("You don't know how to make a bow (archery: learn it from someone who knows it or from writing, …)"), grey when an ongoing act began.
@@ -746,6 +746,100 @@ A review of the client at `6c8d1002` found six causes of poor feel. Five are fix
 | Frames with my chest more than 2° off the view's centre, walking down a steep slope | 360 | 0 |
 
 New measurement aids: the feet log (`LIVING_GAME_FEET`) also records the authority time my body is drawn at, its segment, the one-shot asked of it and the camera's eye and pitch; the live script has `key:`, `mouse:` and `chat:` steps that drive the input systems as the window does.
+
+## Play-test 1 and feel pass 2 (2026-11-11)
+
+The owner played the island and found it hard to play. They reported:
+- walking like "an ice cube shifting on a table";
+- animations that glitch;
+- no jump;
+- things popping in and out of view;
+- a camera they could not turn;
+- a poor interface.
+
+A diagnosis came first. Its stills, logs and measurements are in `.local/living/playtest-1/` (git-ignored). Branch `feel-2` then fixed the client-side causes, one commit per fix. Before and after clips and measurements are in `.local/living/feel-2/`. Captures were headless runs of the real client on `verify-play-1`, plus scratch worlds for the jump. Presentation and input only, except the jump.
+
+- **Facing the cursor while walking** (`live.rs`, `twist.rs`, `anim.rs`):
+  - The clips have only forward gaits, so a body facing the cursor while it strafed or backed up slid its planted foot at 1.4–2 times its speed. Foot IK then let go every step.
+  - Now the legs keep to the travel: forward, or backward with the gaits reversed beyond 110° (forward again under 80°). The spine, chest, neck and head turn the rest of the way.
+  - Foot slid per metre walked: sideways 1.08 → 0.05 m, backwards 1.27 → 0.08 m, diagonally back 1.56 → 0.07 m. IK jumps per segment: 65/29/41 → 0/1/1.
+- **Stops** (`live.rs`, `ik.rs`, `anim.rs`):
+  - The legs walked on the spot for 0.5–0.8 s after the body stood. A held foot snapped up to 22 cm in one frame as the stop blended into the idle (the lock let go at its limit), then glided into place.
+  - Now the gait takes up a standing segment at once. A held foot more than 6 cm from the clip's place steps there (0.22 s, a 5 cm lift).
+  - Skating after a stop: median 72 → 20 cm. The standing clip shows 484 → 207 ms after the body stands. Stops with a snap over 10 cm: 19 → 6 of 19 (the rest are swing feet in the brake's glide).
+- **Dodge:** no fast-run frame before the dash, and no 0.6 s walk after a standing dodge.
+- **A walk on a road** (`anim.rs` `Motion::pace`):
+  - The rules speed bodies up on roads (`road_speed` 1.4), so a road walk played the run clip.
+  - The gait is now chosen at the body's own pace and steps at its real speed. Road walks at about 4 m/s: fast run 799 frames → brisk walk 838 frames, with the same slide (3–4% of the body's speed).
+- **Pop-in of buildings and scenery** (`fade.rs`, `envs::cutaway`, the toon shaders):
+  - The old cut-away hid outright anything tall within 5 m of you on the camera's side. The camera also sat inside walls it missed.
+  - Now a dithered fade follows a sight-line test against each thing's turned box. Things in the way fade to 20% drawn, and fully when the camera is inside them.
+  - It works through Bevy's visibility-range dither, so the prepasses drop the same pixels. An abrupt range gets no dither variant, so the never-cutting range ends in a crossfade.
+- **People** fade in and out of sight and into their houses. The sight rule itself (11 tiles by day) is untouched: laws-2 and lives-2 own it.
+- **Turning the view without turning you** (`pointer.rs`):
+  - A left drag, a two-finger pan or a middle drag turns the view, and the cursor stays on its ground point. In a headless run, facing held at 128° while the view turned +76° and then −109°.
+  - A pinch or the wheel zooms within 0.6–1.4 of the distance. A two-finger double tap aligns.
+  - A click captures the cursor: it is locked and hidden, and the game draws its own and feeds the UI's picking. Esc gives it back once panels are closed.
+  - A tap strikes on release; a press held 0.22 s strikes and aims.
+  - Facts checked in Bevy 0.20.1 and winit 0.30.13: macOS supports `Locked` only; a locked cursor reports a frozen position; a pan arrives as `MouseWheel` in pixels with touch phases; its coast is not marked.
+  - **Not driven on hardware:** capture, Esc release and the drawn cursor need a window and real input.
+- **Jump on Space** (`skills.rhai` `jump_*`, the rules' new `evades` trait, `jump.rs`):
+  - The rules, as proposals for the owner: a 1.6-tile hop the way you move or face, at 3.6 tiles/s; 2 energy; 0.6 s cooldown. It stops short of walls as a dodge does, and it doesn't evade.
+  - The height (0.45 m) is drawn only: a crouch, an arc with the legs drawn up, a landing dip, and no foot IK in the air.
+  - verify-player has a `jump` scene: the body moved 1.6 m and the blow landed.
+- **HUD:**
+  - Type is 10% larger than its 1080p design and never under 0.9 of it (it was 0.67 at 720p).
+  - F's tap never offers a gesture (`_shows().faces`), so it gathers from a berry bush instead of "face".
+
+**Open for the owner:**
+- the jump's rules above;
+- Shift is both run and the dodge (each run start also dodges);
+- the authority's 0.3 s brake glide after a player lets go;
+- whether a tap's strike on release (a click's length later) is acceptable, or the strike should leave the left button;
+- people appearing at 10–16 m while the view shows about 100 m (sight is a rule);
+- the zoom band, and whether a flick should coast;
+- jump and strafe takes in the clip pipeline would replace the procedural jump and the upper-body twist.
+
+## Feel pass 3 (2026-11-11)
+
+Branch `feel-3`. Evidence and before/after stills are in `.local/living/feel-3/` (git-ignored). Client only; the authority and the rules are unchanged.
+
+- **Moves:**
+  - `living/tools/oneshot_beats.py` finds when a one-shot clip's hands start, peak and settle in the baked take.
+  - The move clips (cast, bow, the three sword takes) now play only their motion. Each starts 0.15 s before its motion, at the rate (0.8–2.2×) that lands the peak on the rules' windup, and fades 0.35 s after it settles. Before, they played whole at 2.2–3.4×.
+- **Guard:** a guard let go comes down at once.
+  - The fighter row keeps its 8 s `release_ms` after a let-go; only `until_ms` is shortened.
+  - The client now treats a row whose end comes before its release as cut short. Before, a guard released after 1 s stayed drawn for 8 s.
+  - The heal "never played" because the rules refused it: "you are not hurt".
+- **Dodge through a bench:** this is the rules' design, not a dash bug. Benches are props that `PropKind::blocks()` leaves passable ("low things"), so walking passes through them too. Making them block would change every world's hosted tiles: a rules decision.
+- **Camera:**
+  - Buildings (lots) are `Solid`. Where the eye would fall inside one, it comes in along its line to the focus until it is clear, at once, and eases back out. A building merely in the way still fades.
+  - Opening the text box no longer frames the nearest person at 8 m; an answer does.
+- **Connection:** until the first connection gets through, the first-load cover says "Can't reach the world", with the server, why, and when it is tried again. It no longer lifts after 30 s onto an empty sky.
+- **Interface:**
+  - Rules names read as words, with a capital.
+  - A list's title is in the title face, over a rule.
+  - Know-how reads "You know  …".
+  - A plate sits behind the bars and the skill bar, and the health bar shows its value.
+  - The pack lists each item's name, its worth as food (muted) and its count (gold), with a carry bar.
+
+## Feel pass 4: the first minutes (2026-11-11)
+
+Branch `feel-4`. Evidence is in `.local/living/feel-4/` (git-ignored). Client only.
+
+- **Arrival:**
+  - The first load names its stage under "Arriving…": reaching the world, shaping the land, finding your way in.
+  - Low buildings (market stalls) fade when they hide you; a newcomer arrives among the stalls.
+  - F with nothing in reach says so, instead of opening the list of acts on oneself.
+- **Crowds:**
+  - Speech bubbles stack without landing on one another. A lifted bubble rose 1 px past an obstacle, inside the overlap test's 3 px margin, so the stacking passes ran out.
+  - A speaker under the cursor no longer gets a nameplate repeating the name in their bubble.
+  - The authority's labels ("a stranger") are capitalised on plates, bubbles and in the log.
+  - Look-dev's sample HUD has a `crowd` state.
+- **Jump:** the legs hold their stride in the air instead of cycling, and foot IK eases out and in over the first and last fifth of the flight.
+  - Air, median foot motion: 8.8 → 1.0 cm a frame.
+  - Landing peak: 46 → 24 cm.
+  - Take-off peak: 48 → 32 cm.
 
 ## World look and camera research (2026-11-08)
 

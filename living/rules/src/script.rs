@@ -824,7 +824,7 @@ impl Scripts {
                 continue;
             }
             let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
-            const KNOWN: &[&str] = &["aim", "timed", "rooted", "hostile", "reflex", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
+            const KNOWN: &[&str] = &["aim", "timed", "rooted", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
             if let Some(k) = m.keys().find(|k| !KNOWN.contains(&k.as_str())) {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", KNOWN.join(", ")));
             }
@@ -848,6 +848,8 @@ impl Scripts {
                 rooted: flag("rooted")?,
                 hostile: flag("hostile")?,
                 reflex: flag("reflex")?,
+                // A dash evades unless it says otherwise; nothing else does.
+                evades: aim == Aim::Dash && m.get("evades").map_or(Ok(true), |v| v.as_bool().map_err(|_| format!("{f}: `evades` must be true or false")))?,
                 real_time: flag("real_time")?,
                 melee: flag("melee")?,
                 closes_in: flag("closes_in")?,
@@ -1991,7 +1993,7 @@ mod tests {
         c.qty = 0;
         assert_eq!(s.duration_ms("block", &c).unwrap(), 1_200);
         // Timing numbers are the rules' own.
-        assert_eq!(s.shapes().bar(), ["strike", "bowshot", "firebolt", "block", "heal", "dodge"]);
+        assert_eq!(s.shapes().bar(), ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"]);
         for sk in s.shapes().bar() {
             assert!(s.num_of("combat_cooldown", sk, -1.0) > 0.0, "{sk}");
         }
@@ -2010,7 +2012,7 @@ mod tests {
             v.sort();
             v
         };
-        assert_eq!(with(|x| x.timed), sorted(vec!["strike", "bowshot", "firebolt", "block", "heal", "dodge", "attack", "shoot", "throw"]));
+        assert_eq!(with(|x| x.timed), sorted(vec!["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump", "attack", "shoot", "throw"]));
         assert_eq!(with(|x| x.missile), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.aim == Aim::Point), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.rooted), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot"]));
@@ -2020,17 +2022,19 @@ mod tests {
         assert_eq!(with(|x| x.melee), sorted(vec!["attack", "strike"]));
         assert_eq!(with(|x| x.closes_in), sorted(vec!["attack", "threaten", "strike"]));
         assert_eq!(with(|x| x.menace), vec!["threaten"]);
-        assert_eq!(with(|x| x.aim == Aim::Dash), vec!["dodge"]);
+        assert_eq!(with(|x| x.aim == Aim::Dash), vec!["dodge", "jump"]);
+        // A dash evades unless it says not to: the jump doesn't.
+        assert_eq!(with(|x| x.evades), vec!["dodge"]);
         assert_eq!(with(|x| x.aim == Aim::Facing), vec!["block"]);
         assert_eq!(with(|x| x.aim == Aim::SelfOrAlly), vec!["heal"]);
         // Real-time behavior and reflexes, with the walking and resting skills.
         let real: Vec<&str> = s.skills().names().filter(|n| sh.real_time(n)).collect();
         let mut real = real;
         real.sort();
-        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
+        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
         let mut reflex: Vec<&str> = s.skills().names().filter(|n| sh.reflex(n)).collect();
         reflex.sort();
-        assert_eq!(reflex, sorted(vec!["flee", "dodge", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"]));
+        assert_eq!(reflex, sorted(vec!["flee", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"]));
         // Knacks: the starter skills share the older skills' genes.
         for (sk, k) in [("strike", "attack"), ("bowshot", "shoot"), ("firebolt", "throw"), ("heal", "tend"), ("attack", "attack"), ("gather", "gather")] {
             assert_eq!(sh.knack(sk), k);
@@ -2042,7 +2046,7 @@ mod tests {
         for n in &names {
             assert_eq!(sh.name(sh.code(n)), *n);
         }
-        assert_eq!(names.len(), 13);
+        assert_eq!(names.len(), 14);
     }
 
     /// A combat skill the authority has never heard of works from its script alone: its

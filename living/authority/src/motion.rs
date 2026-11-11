@@ -150,6 +150,7 @@ fn put(ctx: &ReducerContext, b: Body, chunk_before: u32) {
     if b.chunk != chunk_before {
         common::invalidate_bodies();
     }
+    crate::frame::moved(b.id);
     ctx.db.body().id().update(b);
 }
 
@@ -157,9 +158,9 @@ fn put(ctx: &ReducerContext, b: Body, chunk_before: u32) {
 const RESUME_MS: u64 = 40;
 
 thread_local! {
-    /// Segments this transaction began before its `now` (`resume_at`): the transaction's
-    /// `now` and, per body, the segment's start.
-    static RESUMED: std::cell::RefCell<(u64, std::collections::HashMap<u32, u64>)> = Default::default();
+    /// Segments this transaction began before its `now` (`resume_at`): the transaction
+    /// (`common::tx_seq`) and its `now`, and, per body, the segment's start.
+    static RESUMED: std::cell::RefCell<((u64, u64), std::collections::HashMap<u32, u64>)> = Default::default();
 }
 
 /// When the next segment of a moving body begins: where its last one ended (`next_ms`),
@@ -178,7 +179,7 @@ fn resume_at(b: &Body, now: u64) -> u64 {
     }
     if b.t_ms < now && RESUMED.with(|r| {
         let r = r.borrow();
-        r.0 == now && r.1.get(&b.id) == Some(&b.t_ms)
+        r.0 == (common::tx_seq(), now) && r.1.get(&b.id) == Some(&b.t_ms)
     }) {
         return b.t_ms;
     }
@@ -192,8 +193,9 @@ fn resumed(id: u32, t0: u64, now: u64) {
     }
     RESUMED.with(|r| {
         let mut r = r.borrow_mut();
-        if r.0 != now {
-            r.0 = now;
+        let key = (common::tx_seq(), now);
+        if r.0 != key {
+            r.0 = key;
             r.1.clear();
         }
         r.1.insert(id, t0);
@@ -805,6 +807,7 @@ pub fn resteer_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) {
                 anchor(&mut b, t0);
                 resumed(b.id, t0, now);
                 b.next_ms = now;
+                crate::frame::moved(b.id);
                 ctx.db.body().id().update(b);
             }
         }
@@ -826,6 +829,7 @@ pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<
     b.path.clear();
     b.next_ms = IDLE;
     b.chunk = chunk_of(at.0, at.1);
+    crate::frame::moved(b.id);
     ctx.db.body().id().update(b);
     common::invalidate_bodies();
     Ok(())

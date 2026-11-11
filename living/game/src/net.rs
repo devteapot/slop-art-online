@@ -10,11 +10,12 @@
 //!
 //! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
 //! 2. Then, for the connection's lifetime (so the death screen keeps its rows):
-//!    - what I perceive: `seen_bodies` (the narrow motion stream, mine included),
-//!      `seen_characters`, `seen_fighters` and `seen_doing`;
-//!    - my own state: `my_characters` (the dead included), `my_vitals`, `my_experience`,
-//!      `my_places`, `my_inventory`, `my_know_how`, my combat feed and timing (`my_combat`,
-//!      `my_readiness`) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
+//!    - what I perceive: `seen_bodies` (the narrow motion stream), `seen_characters`,
+//!      `seen_fighters` and `seen_doing` (the others; `seen_characters` mine too);
+//!    - my own state: my body, fighter and doing rows (`my_body`, `my_fighter`, `my_doing`),
+//!      `my_characters` (the one I play, kept after its death until I join again),
+//!      `my_vitals`, `my_experience`, `my_places`, `my_inventory`, `my_know_how`, my combat
+//!      feed and timing (`my_combat`, `my_readiness`) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
 //!      `act_card` and the one `weather` row (docs/TOWN_LIFE.md), both small and nearly static;
 //!      the world's installed skill script (`script`, the `skills` row: about 70 kB, sent again
 //!      only when a script is installed), from which `verbs.rs` offers acts;
@@ -67,6 +68,10 @@ const PERCEIVED: &[&str] = &[
     "SELECT * FROM seen_characters",
     "SELECT * FROM seen_fighters",
     "SELECT * FROM seen_doing",
+    // My own body, move and act, apart from my scene's: my own changes re-run one row.
+    "SELECT * FROM my_body",
+    "SELECT * FROM my_fighter",
+    "SELECT * FROM my_doing",
     "SELECT * FROM my_characters",
     "SELECT * FROM my_vitals",
     "SELECT * FROM my_experience",
@@ -177,7 +182,11 @@ pub struct Net {
     pub window_moves: u32,
     inbox: Arc<Mutex<Vec<Signal>>>,
     connecting: bool,
-    retry_at: f64,
+    /// When the next attempt goes (elapsed s), how many have gone, and whether one ever got
+    /// through (the first load's cover says what is wrong until then: `loading.rs`).
+    pub retry_at: f64,
+    pub attempts: u32,
+    pub ever_live: bool,
     join_sent: bool,
     base: Option<SubscriptionHandle>,
     near: Window,
@@ -205,6 +214,8 @@ impl Default for Net {
             inbox: Arc::default(),
             connecting: false,
             retry_at: 0.0,
+            attempts: 0,
+            ever_live: false,
             join_sent: false,
             base: None,
             near: Window::default(),
@@ -250,14 +261,34 @@ pub fn body_of(conn: &DbConnection, m: Motion) -> Body {
     }
 }
 
-/// Every body my character perceives (mine included).
+/// Every body my character perceives, mine included (`my_body` and `seen_bodies`).
 pub fn bodies(conn: &DbConnection) -> impl Iterator<Item = Body> + '_ {
-    let rows: Vec<Motion> = conn.db.seen_bodies().iter().collect();
+    let rows: Vec<Motion> = conn.db.my_body().iter().chain(conn.db.seen_bodies().iter()).collect();
     rows.into_iter().map(move |m| body_of(conn, m))
 }
 
 pub fn find_body(conn: &DbConnection, id: u32) -> Option<Body> {
-    conn.db.seen_bodies().id().find(&id).map(|m| body_of(conn, m))
+    find_motion(conn, id).map(|m| body_of(conn, m))
+}
+
+/// A perceived body's motion row, mine included.
+pub fn find_motion(conn: &DbConnection, id: u32) -> Option<Motion> {
+    conn.db.my_body().id().find(&id).or_else(|| conn.db.seen_bodies().id().find(&id))
+}
+
+/// A perceived fighter's row, mine included (`my_fighter` and `seen_fighters`).
+pub fn find_fighter(conn: &DbConnection, id: u32) -> Option<Fighter> {
+    conn.db.my_fighter().id().find(&id).or_else(|| conn.db.seen_fighters().id().find(&id))
+}
+
+/// Every perceived fighter's row, mine included.
+pub fn fighters(conn: &DbConnection) -> Vec<Fighter> {
+    conn.db.my_fighter().iter().chain(conn.db.seen_fighters().iter()).collect()
+}
+
+/// What a perceived creature is visibly doing, mine included (`my_doing` and `seen_doing`).
+pub fn find_doing(conn: &DbConnection, id: u32) -> Option<Doing> {
+    conn.db.my_doing().id().find(&id).or_else(|| conn.db.seen_doing().id().find(&id))
 }
 
 impl Net {
@@ -283,6 +314,7 @@ impl Net {
 
     fn connect(&mut self) {
         self.connecting = true;
+        self.attempts += 1;
         self.status = Status::Connecting;
         let path = token_path(&self.db);
         let token = std::fs::read_to_string(&path).ok().map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
@@ -303,10 +335,21 @@ impl Net {
                 conn.db.seen_bodies().on_insert(move |_, new| {
                     all.fetch_max(new.t_ms, Ordering::Relaxed);
                 });
+                let (mine_all, mine_t) = (body_t_all.clone(), body_t.clone());
                 conn.db.seen_bodies().on_update(move |_, old, new| {
                     body_t_all.fetch_max(new.t_ms, Ordering::Relaxed);
                     if new.t_ms != old.t_ms {
                         body_t.fetch_max(new.t_ms, Ordering::Relaxed);
+                    }
+                });
+                let mine_first = mine_all.clone();
+                conn.db.my_body().on_insert(move |_, new| {
+                    mine_first.fetch_max(new.t_ms, Ordering::Relaxed);
+                });
+                conn.db.my_body().on_update(move |_, old, new| {
+                    mine_all.fetch_max(new.t_ms, Ordering::Relaxed);
+                    if new.t_ms != old.t_ms {
+                        mine_t.fetch_max(new.t_ms, Ordering::Relaxed);
                     }
                 });
                 let ok = applied.clone();
@@ -517,6 +560,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
             Signal::Base => {
                 info!("world subscribed after {now:.1} s");
                 net.status = Status::Live;
+                net.ever_live = true;
             }
             Signal::Error(e) => {
                 warn!("{e}");

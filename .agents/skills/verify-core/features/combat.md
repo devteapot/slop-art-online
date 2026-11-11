@@ -15,7 +15,7 @@
 
 ## How to get to it (user POV)
 
-Characters choose force through graphs or acts; players use the starter skills through `use_skill` (verify-player `combat.md`). Rules live in `living/scripts/skills.rhai:453,481,494` (attack, threaten, seize checks) and the combat shapes at `living/scripts/skills.rhai:735-771` (`<skill>_combat()`, `skill_bar()`; docs/COMBAT.md "Where combat rules live"). The authority selects its primitives by those traits: `living/authority/src/act.rs:252` (facts by `force`/`dares`), `:384` (`begin`: aim, melee, hostile victim; drops a force word a stored graph still carries), `:1712` (`damage`: a dash dodges, a facing guard takes its `takes`, the rest lands in full).
+Characters choose force through graphs or acts; players use the starter skills through `use_skill` (verify-player `combat.md`). Rules live in `living/scripts/skills.rhai:453,481,494` (attack, threaten, seize checks) and the combat shapes at `living/scripts/skills.rhai:735-771` (`<skill>_combat()`, `skill_bar()`; docs/COMBAT.md "Where combat rules live"). The authority selects its primitives by those traits: `living/authority/src/act.rs:252` (facts by `force`/`dares`), `:384` (`begin`: aim, melee, hostile victim; drops a force word a stored graph still carries), `:1712` (`damage`: a dash that evades dodges, as the dodge does and the jump doesn't (the shape's `evades`, on for a dash unless `evades: false`), a facing guard takes its `takes`, the rest lands in full).
 
 ## Driving it with mechanics and scenes.py
 

@@ -309,7 +309,7 @@ pub fn input(
 
 fn once(pose: Pose, start_ms: f64, face: Option<Vec2>) -> Option<(Action, f64)> {
     match pose {
-        Pose::Once(clip, rate, secs) => Some((Action { clip, rate, start_ms, hold: None, face }, start_ms + secs as f64 * 1000.0)),
+        Pose::Once(clip, rate, secs) => Some((Action { clip, rate, start_ms, hold: None, face, ..Default::default() }, start_ms + secs as f64 * 1000.0)),
         _ => None,
     }
 }
@@ -327,7 +327,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
     let ids: Vec<(u32, Vec2)> = scene.shown.iter().map(|(id, (p, _))| (*id, *p)).collect();
     for (id, p) in ids {
         let mut show = Show::default();
-        let row = conn.db.seen_doing().id().find(&id);
+        let row = crate::net::find_doing(conn, id);
         let card = row.as_ref().and_then(|d| acts.by_code(d.code));
         // Animals have no house: asleep or resting they stay where they are, drawn.
         let animal = conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind != "person");
@@ -368,7 +368,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
                     // Under the eaves, or standing at ease with the others.
                     show.idle = Some(if raining { "idle_look" } else { "listen" });
                 } else if now - (d.since_ms as f64) < SIT_DOWN_S * 1000.0 {
-                    show.once = Some(Action { clip: "sit_ground_down", rate: 1.0, start_ms: d.since_ms as f64, hold: Some(0.99), face: None });
+                    show.once = Some(Action { clip: "sit_ground_down", rate: 1.0, start_ms: d.since_ms as f64, hold: Some(0.99), face: None, ..Default::default() });
                     show.idle = Some("sit_ground");
                 } else {
                     show.idle = Some("sit_ground");
