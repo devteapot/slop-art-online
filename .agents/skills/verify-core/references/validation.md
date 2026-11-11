@@ -1,6 +1,19 @@
 # Core validation record
 
 
+## 2026-11-11 goods-1: goods as data, fires that eat fuel (dev-box)
+
+Branch `goods-1` (origin/main `4df9a895` merged), own container `goods1-stdb` (2.14.1, port 3313, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence in the worktree's `.local/living/verify/`.
+
+- `cargo_checks.py` (`core-g1-11111404`): rules 136, authority 12, mind 82, viewer sync 5 pass. `just living-check` exits 0.
+- Baseline `core-g1-11111404` (default seed): tick, food, refusal, seize, sight, senses, moves pass. Its doctor failed only "module newer than sources" (the shipped campfire's `light` was removed after the build). `needs` failed on a harness race, not the rules: after the cloak the scene waited for `rate_key` to change and caught the reset (0) the new rest writes, so it read an awake rate (`needs-cloaked.json`, key 0). The scene now waits for the key holding the cloak, rest and night bits. `codes.py` failed its two refusal checks because the test skill `zap` had no `zap_spec()`, which installs have required since 2026-11-10; it now declares one.
+- Rerun on the final build `core-g2-11111431`: doctor clean; `needs` and `codes.py` pass.
+- Mechanics 23 of 23 (`core-g1-11111404-mechanics`), steering 5 of 5 (`-steering`), `skirmish` and `dealings` on island worlds pass.
+- New: `goods` 20 of 20 and `stock` 4 of 4 on the goods fixture (`core-g1-11111404-goods`). An earlier attempt (`core-goods-135558`) passed the 20 fire and recipe checks and failed the shared-stock check because the valley also grows wild fishing spots; the stock check moved to its own scene, which selects pooled nodes.
+- Harness: `install_script` goes over HTTP (the script passed 128 KiB, past one command-line argument): `verify.py launch` and `call @FILE`, `Scene.call` for large arguments, `codes.py`.
+- Not run: `town.py`, `lives.py`, `infant`, lifecycle, wildlife, remains, flee (long scenes; the rules they read did not change except warmth, which the goods scene and `needs` cover).
+
+
 ## 2026-11-11 lives-2 after merging laws-2 (dev-box)
 
 Branch `lives-2` at `2c1fb5a` (main `8e6bae4` merged), own container `lives2-stdb` (2.14.1, port 3461), private `CARGO_TARGET_DIR`. The script installs (every law described, `minds` gone). `core-laws-053424`: tick, needs, food, refusal pass. `town.py` `core-laws-town-054630`: 21 of 23; own hours, one new day each and evenings out pass; "faces someone who comes up behind" (recorded flake) and "faces someone who speaks" failed, and both passed on a fresh world (`core-laws-speak-*`: speak, approach, speak), so a timing flake. Also verify-minds `resident` and verify-client 30 of 30 on the same build; `just living-check` exits 0; rules tests 130, mind tests 82.
