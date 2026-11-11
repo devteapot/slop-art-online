@@ -21,22 +21,30 @@ Never touched: the protected checkouts (~/dev/slop-art-online, ~/dev/slop-game,
 folder (evidence in .local included), the worktree roots themselves, and symlinks. A machine
 adds its own protected paths in ~/.config/slop-disk/protect.txt (one path per line, `#`
 comments, `~` expanded; a path protects everything under it, and a build folder holding it)
-or with --protect PATH; these add to the built-in list and never shorten it.
+or with --protect PATH; these add to the built-in list and never shorten it. A line with
+`*`, `?` or `[` is a glob, expanded on every run (one that matches nothing protects nothing).
+
+Target folders outside the worktrees (private CARGO_TARGET_DIRs such as the Spark's
+~/slop-<name>-target) are candidates only when ~/.config/slop-disk/targets.txt names them
+(same format: absolute paths or globs). No worktree goes with them, so only the in-use
+checks and the idle and pressure rules apply, never the merged rule; protection applies.
 
 A removal renames the folder aside while holding its Cargo locks, checks again that nothing
 uses it, then deletes it. Prints a report and keeps it in ~/.local/state/slop-disk/.
 
 Usage: disk_clean.py [--apply] [--repo PATH] [--floor-gb 40] [--target-gb N] [--idle 24]
                      [--merged-idle 2] [--pressure-idle 2] [--protect PATH]...
-                     [--protect-file PATH] [--list-protected] [--json]
+                     [--protect-file PATH] [--targets-file PATH] [--list-protected] [--json]
   Without --apply it is a dry run: the same report, nothing removed.
   --protect PATH     protect PATH and everything under it (repeatable), besides the file
   --protect-file P   read the machine's protected paths from P (~/.config/slop-disk/protect.txt)
+  --targets-file P   read the outside target folders from P (~/.config/slop-disk/targets.txt)
   --list-protected   print every protected path and where it comes from, then stop
-Exit status: 0, 2 for a bad argument or an unreadable or invalid protect file (nothing is
+Exit status: 0, 2 for a bad argument or an unreadable or invalid protect or targets file (nothing is
 removed), or 3 when free space is still under the floor afterwards.
 """
 import fcntl
+import glob
 import json
 import os
 import platform
@@ -51,8 +59,21 @@ PROTECTED = [os.path.join(HOME, p) for p in ("dev/slop-art-online", "dev/slop-ga
 NEVER = [os.path.join(HOME, p) for p in (".local/share/containers", ".local/share/docker", ".docker", "Library/Containers")] + ["/var/lib/containers", "/var/lib/docker"]
 # The machine's own additions to PROTECTED (never a replacement for it).
 PROTECT_FILE = os.path.join(HOME, ".config", "slop-disk", "protect.txt")
+# Cargo target folders outside the worktrees that may be cleaned (globs; none by default).
+TARGETS_FILE = os.path.join(HOME, ".config", "slop-disk", "targets.txt")
 CARGO_SIG = "Signature: 8a477f597d28d172789f06886806bc55"
 STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local/state"), "slop-disk")
+
+
+# System tools live outside a minimal PATH on some systems (macOS: /usr/sbin/lsof, /sbin/mount),
+# and the self-test and launchd jobs run with one. Look on PATH first, then the system's own
+# directories. Container tools (podman, docker) are only looked for on PATH, so a test's fake
+# PATH stays hermetic; the timer's PATH includes Homebrew's (disk_clean_install.sh).
+SYSTEM_DIRS = ("/usr/sbin", "/usr/bin", "/sbin", "/bin")
+
+
+def system_tool(name):
+    return shutil.which(name) or next((os.path.join(d, name) for d in SYSTEM_DIRS if os.access(os.path.join(d, name), os.X_OK)), None) or name
 SKIP_DIRS = {".git", "node_modules", "__pycache__"}
 GB = 1024 ** 3
 WARNINGS = []
@@ -68,17 +89,18 @@ def inside(path, base):
     return path == base or path.startswith(base.rstrip("/") + "/")
 
 
-def read_protect_file(path):
-    """[(path, source)] from a protect file: one path per line, `#` starts a comment (a whole
-    line, or after a space), `~` is expanded. A missing file adds nothing. Raises ValueError
-    for an unreadable file or a line that is not an absolute path, so a broken file stops
-    the run instead of protecting less than it says."""
+def read_path_file(path, kind="protect"):
+    """[(path, source)] from a protect or targets file: one path per line, `#` starts a
+    comment (a whole line, or after a space), `~` is expanded, and a line with `*`, `?` or `[`
+    is a glob expanded now. A missing file adds nothing. Raises ValueError for an unreadable
+    file or a line that is not an absolute path, so a broken file stops the run instead of
+    protecting less than it says."""
     try:
         text = open(path, encoding="utf-8").read()
     except FileNotFoundError:
         return []
     except (OSError, UnicodeDecodeError) as e:
-        raise ValueError(f"cannot read the protect file {path}: {e}")
+        raise ValueError(f"cannot read the {kind} file {path}: {e}")
     out = []
     for n, line in enumerate(text.splitlines(), 1):
         line = re.sub(r"(^|\s)#.*$", "", line).strip()
@@ -87,8 +109,15 @@ def read_protect_file(path):
         p = os.path.expanduser(line)
         if not os.path.isabs(p):
             raise ValueError(f"{path} line {n}: {line!r} is not an absolute path (start it with / or ~)")
-        out.append((os.path.normpath(p), f"{short(path)}, line {n}"))
+        if glob.has_magic(p):
+            out += [(os.path.normpath(m), f"{short(path)}, line {n}: {line}") for m in sorted(glob.glob(p))]
+        else:
+            out.append((os.path.normpath(p), f"{short(path)}, line {n}"))
     return out
+
+
+def read_protect_file(path):
+    return read_path_file(path, "protect")
 
 
 def protected_paths(repo, extra, protect_file):
@@ -117,7 +146,7 @@ def free_bytes(path="/"):
 
 
 def git(args, cwd):
-    r = subprocess.run(["git", "--no-optional-locks", *args], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    r = subprocess.run([system_tool("git"), "--no-optional-locks", *args], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     return r.returncode, r.stdout
 
 
@@ -407,7 +436,7 @@ def _proc_paths(base, pid, comm):
 def users_lsof():
     held = []
     try:
-        r = subprocess.run(["lsof", "-n", "-w", "-F", "pcn"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=120)
+        r = subprocess.run([system_tool("lsof"), "-n", "-w", "-F", "pcn"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=120)
     except (OSError, subprocess.TimeoutExpired):
         return [("*", "lsof did not answer: treating every folder as in use")]
     if r.returncode not in (0, 1) or not r.stdout:
@@ -482,8 +511,8 @@ def mount_points():
     except OSError:
         # macOS keeps `mount` in /sbin, which a minimal PATH (the self-test's, a launchd job's)
         # may leave out: try PATH, then the usual places.
-        exe = shutil.which("mount") or next((p for p in ("/sbin/mount", "/usr/sbin/mount", "/bin/mount") if os.access(p, os.X_OK)), None)
-        if exe is None:
+        exe = system_tool("mount")
+        if not os.path.isabs(exe):
             print("disk_clean: warning: no `mount` found, so bind mounts under build folders cannot be seen", file=sys.stderr)
             return pts
         try:
@@ -555,6 +584,9 @@ def fmt_gb(b):
 
 
 def short(p):
+    real_home = os.path.realpath(HOME)
+    if real_home != HOME and p.startswith(real_home):
+        p = HOME + p[len(real_home):]
     return p.replace(HOME, "~")
 
 
@@ -620,7 +652,7 @@ def remove_row(r, now, mpoints):
 
 def main(argv):
     opts = {"apply": False, "repo": None, "floor": 40.0, "target": None, "idle": 24.0, "merged_idle": 2.0, "pressure_idle": 2.0, "json": False,
-            "protect": [], "protect_file": PROTECT_FILE, "list": False}
+            "protect": [], "protect_file": PROTECT_FILE, "targets_file": TARGETS_FILE, "list": False}
     args = list(argv)
     try:
         while args:
@@ -635,6 +667,8 @@ def main(argv):
                 opts["protect"].append(args.pop(0))
             elif a == "--protect-file":
                 opts["protect_file"] = os.path.expanduser(args.pop(0))
+            elif a == "--targets-file":
+                opts["targets_file"] = os.path.expanduser(args.pop(0))
             elif a in ("--repo", "--floor-gb", "--target-gb", "--idle", "--merged-idle", "--pressure-idle"):
                 v = args.pop(0)
                 key = {"--repo": "repo", "--floor-gb": "floor", "--target-gb": "target", "--idle": "idle", "--merged-idle": "merged_idle", "--pressure-idle": "pressure_idle"}[a]
@@ -657,6 +691,7 @@ def main(argv):
     repo = os.path.dirname(common.strip())
     try:  # the built-in list, the main checkout of the repository wherever it is, the machine's file
         protected = protected_paths(repo, opts["protect"], opts["protect_file"])
+        outside = read_path_file(opts["targets_file"], "targets")
     except ValueError as e:
         print(f"disk_clean: {e}; nothing removed", file=sys.stderr)
         return 2
@@ -665,6 +700,9 @@ def main(argv):
     if opts["list"]:
         print("protected (never removed, nor anything under them, nor a build folder holding them):")
         print("\n".join(plist))
+        if outside:
+            print("target folders outside the worktrees that may be cleaned:")
+            print("\n".join(f"  {short(p)}  ({src})" for p, src in outside))
         return 0
     os.makedirs(os.path.join(STATE, "reports"), exist_ok=True)
     lockf = open(os.path.join(STATE, "clean.lock"), "w")
@@ -751,6 +789,48 @@ def main(argv):
                 except OSError:
                     pass
             rows.append(row)
+    # Cargo target folders outside the worktrees that targets.txt names (private CARGO_TARGET_DIRs)
+    seen = {real(r["path"]) for r in rows}
+    cands = sorted({p for p, _ in outside} | {m for p, _ in outside for m in glob.glob(glob.escape(p) + ".slop-reclaim-*")})
+    for t in cands:
+        if real(t) in seen or os.path.islink(t) or not os.path.isdir(t) or any(inside(t, n) or inside(n, t) for n in NEVER):
+            continue
+        seen.add(real(t))
+        leftover = re.search(r"\.slop-reclaim-\d+$", t)
+        if not leftover and not is_target(t):
+            continue
+        try:
+            size, newest, files, crosses = scan(t)
+        except OSError as e:
+            WARNINGS.append(f"skipped {short(t)}: {e}")
+            continue
+        idle_h = max(now - newest, 0) / 3600
+        row = {"path": t, "worktree": os.path.dirname(t), "branch": "outside the worktrees", "size": size, "files": files, "idle_h": idle_h}
+        guard = protected_by(t, protected)
+        user = None if guard else in_use(t, held, mounts)
+        if guard:
+            row.update(decision="never", why=f"protected: {short(guard[0])} ({guard[1]})")
+        elif user:
+            row.update(decision="keep", why=f"in use: {user}")
+        elif crosses or any(inside(m, t) for m in mpoints):
+            row.update(decision="keep", why="another filesystem is mounted inside it")
+        elif leftover:
+            row.update(decision="remove", why="left over from an earlier removal")
+        elif idle_h >= opts["idle"]:
+            row.update(decision="remove", why=f"idle {idle_h:.1f} h")
+        elif idle_h >= opts["pressure_idle"]:
+            row.update(decision="pressure", why=f"idle {idle_h:.1f} h; removed only under pressure")
+        else:
+            row.update(decision="keep", why=f"active (idle {idle_h:.1f} h)")
+        foreign = [] if leftover else foreign_entries(t)
+        if foreign and row["decision"] in ("remove", "pressure"):
+            row["keep_entries"] = sorted(foreign)
+            row["why"] += "; keeping its other files (" + ", ".join(sorted(foreign)[:4]) + ("…" if len(foreign) > 4 else "") + ")"
+            try:
+                row["size"] -= sum(scan(os.path.join(t, f))[0] if os.path.isdir(os.path.join(t, f)) else os.lstat(os.path.join(t, f)).st_size for f in foreign)
+            except OSError:
+                pass
+        rows.append(row)
     # what removing a folder really frees: reflink copies share extents, which du (and the
     # block count above) counts in every copy
     sized = {"exclusive": 0, "blocks": 0}
