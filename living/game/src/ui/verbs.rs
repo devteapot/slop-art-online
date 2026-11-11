@@ -56,22 +56,22 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
     // The list (0) and its sub-list (1).
     for k in 0..2u8 {
         commands
-            .spawn((HudRoot, ListRoot(k), Block, Node { position_type: PositionType::Absolute, width: Val::Px(if k == 0 { 250.0 } else { 196.0 }), flex_direction: FlexDirection::Column, padding: UiRect::bottom(Val::Px(6.0)), border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(12.0)), display: Display::None, ..default() }, wood::wood(), GlobalZIndex(Z_LIST)))
+            .spawn((HudRoot, ListRoot(k), Block, Node { position_type: PositionType::Absolute, width: Val::Px(if k == 0 { 250.0 } else { 196.0 }), flex_direction: FlexDirection::Column, padding: UiRect::bottom(Val::Px(6.0)), border: wood::b(3.0), border_radius: wood::r(12.0), display: Display::None, ..default() }, wood::wood(), GlobalZIndex(Z_LIST)))
             .with_children(|m| {
                 m.spawn(wood::rim(9.0));
                 m.spawn((Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Baseline, padding: UiRect::new(Val::Px(12.0), Val::Px(10.0), Val::Px(6.0), Val::Px(5.0)), column_gap: Val::Px(8.0), ..default() }, Pickable::IGNORE)).with_children(|h| {
-                    h.spawn((ListTitle(k), Text::new(""), wood::title(f, 17.0), Pickable::IGNORE));
+                    h.spawn((ListTitle(k), Text::new(""), wood::title(f, 17.0), TextLayout::new(Justify::Left, LineBreak::NoWrap), Pickable::IGNORE));
                     h.spawn((ListNote(k), Text::new(""), wood::on_wood(f, 11.0, 700), Pickable::IGNORE));
                 });
-                m.spawn((Node { flex_direction: FlexDirection::Column, margin: UiRect::horizontal(Val::Px(6.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), overflow: Overflow::clip(), ..default() }, BackgroundColor(wood::PARCH), BorderColor::all(wood::INK), Pickable::IGNORE)).with_children(|list| {
+                m.spawn((Node { flex_direction: FlexDirection::Column, margin: UiRect::horizontal(Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(8.0), overflow: Overflow::clip(), ..default() }, BackgroundColor(wood::surface()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|list| {
                     for i in 0..ROWS {
                         list.spawn((ListRow(k, i), Hot, Tag(format!("acts:{k}:{i}")), kit::Paint::Row, Lit(false), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(9.0), padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)), display: Display::None, ..default() }, BackgroundGradient::default()))
                             .with_children(|r| {
-                                r.spawn((ListIcon(k, i), Node { width: Val::Px(16.0), height: Val::Px(16.0), flex_shrink: 0.0, ..default() }, ImageNode::new(icons.get(Glyph::Ui(Mark::Dots))).with_color(Color::srgb_u8(0xb9, 0x7b, 0x35)), Pickable::IGNORE));
+                                r.spawn((ListIcon(k, i), Node { width: Val::Px(16.0), height: Val::Px(16.0), flex_shrink: 0.0, ..default() }, ImageNode::new(icons.get(Glyph::Ui(Mark::Dots))).with_color(wood::glyph_tint()), Pickable::IGNORE));
                                 r.spawn((ListText(k, i), Text::new(""), wood::ink(f, 15.0, 800), Node { flex_grow: 1.0, ..default() }, TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
-                                r.spawn((ListMore(k, i), Text::new(""), f.body(13.0, 700), TextColor(wood::MUTED), Pickable::IGNORE));
-                                r.spawn((ListKey(k, i), Node { padding: UiRect::axes(Val::Px(5.0), Val::Px(0.0)), min_width: Val::Px(22.0), height: Val::Px(20.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(6.0)), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::PARCH), BorderColor::all(wood::INK), wood::hard_shadow(2.0, 0.5), Pickable::IGNORE))
-                                    .with_child((ListKeyText(k, i), Text::new(""), f.body(11.0, 900), TextColor(wood::INK), Pickable::IGNORE));
+                                r.spawn((ListMore(k, i), Text::new(""), f.body(13.0, 700), TextColor(wood::muted()), Pickable::IGNORE));
+                                r.spawn((ListKey(k, i), Node { padding: UiRect::axes(Val::Px(5.0), Val::Px(0.0)), min_width: Val::Px(22.0), height: Val::Px(20.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(2.0), border_radius: wood::r(6.0), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::surface()), BorderColor::all(wood::edge()), wood::hard_shadow(2.0, 0.5), Pickable::IGNORE))
+                                    .with_child((ListKeyText(k, i), Text::new(""), f.body(11.0, 900), TextColor(wood::text()), Pickable::IGNORE));
                             });
                     }
                 });
@@ -82,9 +82,9 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
         .spawn((HudRoot, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), right: Val::Px(0.0), bottom: Val::Px(196.0), flex_direction: FlexDirection::ColumnReverse, align_items: AlignItems::Center, row_gap: Val::Px(6.0), ..default() }, Pickable::IGNORE))
         .with_children(|root| {
             for i in 0..TOASTS {
-                root.spawn((ToastRow(i), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(8.0), Val::Px(12.0), Val::Px(5.0), Val::Px(6.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(10.0)), max_width: Val::Px(600.0), display: Display::None, ..default() }, BackgroundColor(wood::PARCH), BorderColor::all(wood::INK), wood::hard_shadow(3.0, 0.45), Pickable::IGNORE))
+                root.spawn((ToastRow(i), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(8.0), Val::Px(12.0), Val::Px(5.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(10.0), max_width: Val::Px(600.0), display: Display::None, ..default() }, BackgroundColor(wood::surface()), BorderColor::all(wood::edge()), wood::hard_shadow(3.0, 0.45), Pickable::IGNORE))
                     .with_children(|t| {
-                        t.spawn((ToastMark(i), Node { width: Val::Px(8.0), height: Val::Px(8.0), border_radius: BorderRadius::all(Val::Percent(50.0)), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::MUTED), Pickable::IGNORE));
+                        t.spawn((ToastMark(i), Node { width: Val::Px(8.0), height: Val::Px(8.0), border_radius: BorderRadius::all(Val::Percent(50.0)), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::muted()), Pickable::IGNORE));
                         t.spawn((ToastText(i), Text::new(""), wood::ink(f, 14.0, 800), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
                     });
             }
@@ -97,6 +97,8 @@ fn row_view(r: &Row) -> MenuRowView {
         Row::Group { name, label: l, .. } => MenuRowView { label: label(l.trim_end_matches(" ›")), skill: name.clone(), group: true, have: 0 },
         Row::Talk => MenuRowView { label: "Talk".into(), skill: "talk".into(), group: false, have: 0 },
         Row::Window => MenuRowView { label: "Their window".into(), skill: "window".into(), group: false, have: 0 },
+        Row::Introduce => MenuRowView { label: "Introduce yourself".into(), skill: "introduce".into(), group: false, have: 0 },
+        Row::More => MenuRowView { label: "More…".into(), skill: "more".into(), group: false, have: 0 },
     }
 }
 
@@ -112,10 +114,11 @@ pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, n
             let title = if g == "offer" { "Trade".to_string() } else { label(g) };
             (title, m.rows().iter().take(ROWS).map(row_view).collect())
         });
-        let title = match &m.item {
+        // One line: a long label is shortened rather than wrapped.
+        let title = wood::fit(&match &m.item {
             Some(i) => label(&i.replace('_', " ")),
             None => label(&m.title),
-        };
+        }, 24);
         let person = match m.aim {
             crate::verbs::Aim::Creature { id } => Some(id),
             _ => None,
@@ -175,6 +178,7 @@ fn icon_key(skill: &str, binds: &crate::keys::Binds) -> (Option<Mark>, String) {
         "nod" => (Some(Mark::Wave), binds.first(Act::Nod)),
         "appraise" => (Some(Mark::Eye), binds.first(Act::LookOver)),
         "teach" | "ask" | "read" | "write" => (Some(Mark::Book), String::new()),
+        "introduce" => (Some(Mark::Person), String::new()),
         _ => (None, String::new()),
     }
 }
@@ -218,7 +222,7 @@ pub fn menu(
     let m = model.verbs.menu.as_ref().filter(|_| model.death.is_none());
     let lists: [Option<(String, String, &Vec<MenuRowView>)>; 2] = match m {
         Some(m) => {
-            let note = if m.person.is_some() { format!("hold {}", binds.first(crate::keys::Act::Interact)) } else { String::new() };
+            let note = if m.person.is_some() && wood::t().chips { format!("hold {}", binds.first(crate::keys::Act::Interact)) } else { String::new() };
             [Some((m.title.clone(), note, &m.rows)), m.sub.as_ref().map(|(t, r)| (t.clone(), if m.sub.as_ref().is_some_and(|s| s.1.iter().any(|r| r.have > 0)) { "from your pack".to_string() } else { String::new() }, r))]
         }
         None => [None, None],
@@ -307,8 +311,8 @@ pub fn toasts(model: Res<HudModel>, mut rows: Query<(&ToastRow, &mut Node, &mut 
     for (r, mut n, mut bg, mut border) in &mut rows {
         show(&mut n, r.0 < t.len() && model.death.is_none());
         if let Some((_, _, age)) = t.get(r.0) {
-            super::set_bg(&mut bg, wood::alpha(wood::PARCH, alpha(*age)));
-            let c = wood::alpha(wood::INK, alpha(*age));
+            super::set_bg(&mut bg, wood::alpha(wood::surface(), alpha(*age)));
+            let c = wood::alpha(wood::edge(), alpha(*age));
             if border.top != c {
                 *border = BorderColor::all(c);
             }
@@ -319,7 +323,7 @@ pub fn toasts(model: Res<HudModel>, mut rows: Query<(&ToastRow, &mut Node, &mut 
             let c = match ok {
                 Some(true) => Color::srgb_u8(0x5f, 0xa8, 0x4a),
                 Some(false) => wood::HOSTILE,
-                None => wood::MUTED,
+                None => wood::muted(),
             };
             super::set_bg(&mut bg, wood::alpha(c, alpha(*age)));
         }
@@ -327,7 +331,7 @@ pub fn toasts(model: Res<HudModel>, mut rows: Query<(&ToastRow, &mut Node, &mut 
     for (r, mut text, mut color) in &mut texts {
         if let Some((s, _, age)) = t.get(r.0) {
             set_text(&mut text, s);
-            super::set_color(&mut color, wood::alpha(wood::INK, alpha(*age)));
+            super::set_color(&mut color, wood::alpha(wood::text(), alpha(*age)));
         }
     }
 }

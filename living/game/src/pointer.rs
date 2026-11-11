@@ -304,43 +304,21 @@ fn update(
 #[derive(Component)]
 struct GameCursor;
 
-/// The drawn cursor: interface D's arrow (cream with an ink edge, its tip at the hot spot),
-/// drawn over everything while the system cursor is captured.
+/// A small ring with a dot, drawn over everything while the cursor is captured.
 fn spawn_cursor(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let n = 64u32;
-    // The arrow's outline, in a 32-unit box with the tip at (1.5, 1.5).
-    let poly = [Vec2::new(1.5, 1.5), Vec2::new(1.5, 23.0), Vec2::new(7.0, 18.0), Vec2::new(11.0, 27.0), Vec2::new(14.5, 25.5), Vec2::new(10.5, 16.8), Vec2::new(18.0, 16.8)];
-    let inside = |p: Vec2| {
-        let mut c = false;
-        for i in 0..poly.len() {
-            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
-            if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
-                c = !c;
-            }
-        }
-        c
-    };
-    let edge = |p: Vec2| {
-        (0..poly.len())
-            .map(|i| {
-                let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
-                let (pa, ba) = (p - a, b - a);
-                (pa - ba * (pa.dot(ba) / ba.dot(ba)).clamp(0.0, 1.0)).length()
-            })
-            .fold(f32::MAX, f32::min)
-    };
+    let n = 32u32;
     let mut data = vec![0u8; (n * n * 4) as usize];
     for y in 0..n {
         for x in 0..n {
-            let p = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) * (32.0 / n as f32);
-            let d = edge(p);
-            let fill: f32 = if inside(p) { 1.0 } else { 0.0 };
-            // A 1.4-unit ink line on the outline, cream within.
-            let ink = (1.0 - (d - 0.9).max(0.0) * 2.0).clamp(0.0, 1.0);
-            let a = fill.max(ink);
+            let d = Vec2::new(x as f32 + 0.5 - n as f32 / 2.0, y as f32 + 0.5 - n as f32 / 2.0).length();
+            let ring = (1.0 - ((d - 9.5).abs() - 1.2).max(0.0)).clamp(0.0, 1.0);
+            let edge = (1.0 - ((d - 9.5).abs() - 2.4).max(0.0)).clamp(0.0, 1.0);
+            let dot = (2.6 - d).clamp(0.0, 1.0);
+            let white = ring.max(dot);
+            let a = edge.max(dot).max(white);
             let i = ((y * n + x) * 4) as usize;
-            let (r, g, b) = if ink > 0.5 || fill == 0.0 { (42u8, 29u8, 20u8) } else { (255u8, 248u8, 234u8) };
-            data[i..i + 4].copy_from_slice(&[r, g, b, (a * 255.0) as u8]);
+            let v = (white * 255.0) as u8;
+            data[i..i + 4].copy_from_slice(&[v, v, v, (a * 230.0) as u8]);
         }
     }
     let image = Image::new(
@@ -353,7 +331,7 @@ fn spawn_cursor(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.spawn((
         GameCursor,
         ImageNode::new(images.add(image)),
-        Node { position_type: PositionType::Absolute, width: Val::Px(30.0), height: Val::Px(30.0), display: Display::None, ..default() },
+        Node { position_type: PositionType::Absolute, width: Val::Px(24.0), height: Val::Px(24.0), display: Display::None, ..default() },
         GlobalZIndex(i32::MAX),
         Pickable::IGNORE,
     ));
@@ -369,8 +347,8 @@ fn draw_cursor(p: Res<Pointer>, mut q: Query<&mut Node, With<GameCursor>>, scale
             n.display = want;
         }
         if let (true, Some(pos)) = (show, p.pos) {
-            // UI values are scaled by `UiScale`; the arrow's tip is the hot spot.
-            let (l, t) = (Val::Px(pos.x / k - 1.4), Val::Px(pos.y / k - 1.4));
+            // UI values are scaled by `UiScale`; the cursor sits on its centre.
+            let (l, t) = (Val::Px(pos.x / k - 12.0), Val::Px(pos.y / k - 12.0));
             if n.left != l {
                 n.left = l;
             }

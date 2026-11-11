@@ -64,32 +64,40 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
         .spawn((
             HudRoot,
             Block,
-            Node { position_type: PositionType::Absolute, right: Val::Px(26.0), top: Val::Px(18.0), width: Val::Px(SIZE), height: Val::Px(SIZE), border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Percent(50.0)), ..default() },
+            Node { position_type: PositionType::Absolute, right: Val::Px(26.0), top: Val::Px(18.0), width: Val::Px(SIZE), height: Val::Px(SIZE), border: wood::b(3.0), border_radius: BorderRadius::all(Val::Percent(50.0)), ..default() },
             BackgroundGradient::from(Gradient::Radial(RadialGradient {
                 position: UiPosition::CENTER,
                 shape: RadialGradientShape::ClosestSide,
-                stops: vec![ColorStop::percent(Color::srgb_u8(0xfb, 0xef, 0xcf), 0.0), ColorStop::percent(Color::srgb_u8(0xfb, 0xef, 0xcf), 74.0), ColorStop::percent(Color::srgb_u8(0xea, 0xd7, 0xab), 75.0), ColorStop::percent(Color::srgb_u8(0xea, 0xd7, 0xab), 88.0), ColorStop::percent(wood::WAL, 89.0), ColorStop::percent(wood::WAL2, 100.0)],
+                stops: {
+                    // The face, and in an ornamented theme a second band and a wooden rim.
+                    let th = wood::t();
+                    if th.serif_titles {
+                        vec![ColorStop::percent(th.compass.0, 0.0), ColorStop::percent(th.compass.0, 74.0), ColorStop::percent(Color::srgb_u8(0xea, 0xd7, 0xab), 75.0), ColorStop::percent(Color::srgb_u8(0xea, 0xd7, 0xab), 88.0), ColorStop::percent(th.compass.1, 89.0), ColorStop::percent(th.panel.1, 100.0)]
+                    } else {
+                        vec![ColorStop::percent(th.compass.0, 0.0), ColorStop::percent(th.compass.0, 100.0)]
+                    }
+                },
                 color_space: default(),
             })),
-            BorderColor::all(wood::INK),
+            BorderColor::all(wood::edge()),
             wood::hard_shadow(5.0, 0.45),
             GlobalZIndex(20),
         ))
         .with_children(|c| {
             let inner = SIZE - 6.0;
-            c.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(9.0), top: Val::Px(9.0), width: Val::Px(inner - 18.0), height: Val::Px(inner - 18.0), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Percent(50.0)), ..default() }, BorderColor::all(wood::BRASS), Pickable::IGNORE));
+            c.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(9.0), top: Val::Px(9.0), width: Val::Px(inner - 18.0), height: Val::Px(inner - 18.0), border: wood::b(2.0), border_radius: BorderRadius::all(Val::Percent(50.0)), ..default() }, BorderColor::all(if wood::t().serif_titles { Color::srgb_u8(0xd9, 0xa4, 0x41) } else { wood::t().compass.1 }), Pickable::IGNORE));
             for i in 0..DOTS {
-                c.spawn((Dot(i), Node { position_type: PositionType::Absolute, width: Val::Px(9.0), height: Val::Px(9.0), border: UiRect::all(Val::Px(1.5)), border_radius: BorderRadius::all(Val::Percent(50.0)), display: Display::None, ..default() }, BackgroundColor(Color::srgb_u8(0x5f, 0xa8, 0x4a)), BorderColor::all(wood::INK), Pickable::IGNORE));
+                c.spawn((Dot(i), Node { position_type: PositionType::Absolute, width: Val::Px(9.0), height: Val::Px(9.0), border: wood::b(1.5), border_radius: BorderRadius::all(Val::Percent(50.0)), display: Display::None, ..default() }, BackgroundColor(Color::srgb_u8(0x5f, 0xa8, 0x4a)), BorderColor::all(wood::edge()), Pickable::IGNORE));
             }
             c.spawn((Needle, Node { position_type: PositionType::Absolute, left: Val::Px(inner / 2.0 - 22.0), top: Val::Px(inner / 2.0 - 44.0), width: Val::Px(44.0), height: Val::Px(88.0), ..default() }, UiTransform::default(), Pickable::IGNORE)).with_children(|n| {
                 // An ink shape a little larger, then the north half red and the south half cream.
-                for (mark, col, inset) in [(Mark::Needle, wood::INK, 0.0), (Mark::NeedleS, wood::INK, 0.0), (Mark::Needle, wood::HOSTILE, 4.0), (Mark::NeedleS, wood::CREAM, 4.0)] {
+                for (mark, col, inset) in [(Mark::Needle, wood::edge(), 0.0), (Mark::NeedleS, wood::edge(), 0.0), (Mark::Needle, wood::HOSTILE, 4.0), (Mark::NeedleS, wood::surface_hi(), 4.0)] {
                     n.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(inset), top: Val::Px(inset), width: Val::Px(44.0 - 2.0 * inset), height: Val::Px(88.0 - 2.0 * inset), ..default() }, ImageNode::new(icons.get(Glyph::Ui(mark))).with_color(col), Pickable::IGNORE));
                 }
-                n.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(18.5), top: Val::Px(40.5), width: Val::Px(7.0), height: Val::Px(7.0), border_radius: BorderRadius::all(Val::Percent(50.0)), ..default() }, BackgroundColor(wood::INK), Pickable::IGNORE));
+                n.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(18.5), top: Val::Px(40.5), width: Val::Px(7.0), height: Val::Px(7.0), border_radius: BorderRadius::all(Val::Percent(50.0)), ..default() }, BackgroundColor(wood::edge()), Pickable::IGNORE));
             });
             c.spawn((North, Node { position_type: PositionType::Absolute, width: Val::Px(16.0), height: Val::Px(16.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, Pickable::IGNORE))
-                .with_child((Text::new("N"), f.title(13.0), TextColor(wood::INK), Pickable::IGNORE));
+                .with_child((Text::new("N"), wood::tface(&f, 13.0), TextColor(wood::text()), Pickable::IGNORE));
         });
     // The place's name.
     commands
@@ -97,13 +105,13 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
             HudRoot,
             PlaceLabel,
             Block,
-            Node { position_type: PositionType::Absolute, right: Val::Px(22.0), top: Val::Px(152.0), width: Val::Px(136.0), padding: UiRect::new(Val::Px(4.0), Val::Px(4.0), Val::Px(2.0), Val::Px(3.0)), justify_content: JustifyContent::Center, border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), display: Display::None, ..default() },
-            BackgroundColor(wood::PARCH),
-            BorderColor::all(wood::INK),
+            Node { position_type: PositionType::Absolute, right: Val::Px(22.0), top: Val::Px(152.0), width: Val::Px(136.0), padding: UiRect::new(Val::Px(4.0), Val::Px(4.0), Val::Px(2.0), Val::Px(3.0)), justify_content: JustifyContent::Center, border: wood::b(2.0), border_radius: wood::r(8.0), display: Display::None, ..default() },
+            BackgroundColor(wood::surface()),
+            BorderColor::all(wood::edge()),
             wood::hard_shadow(3.0, 0.4),
             GlobalZIndex(20),
         ))
-        .with_child((PlaceText, Text::new(""), f.title(14.0), TextColor(wood::INK), TextLayout::justify(Justify::Center), Pickable::IGNORE));
+        .with_child((PlaceText, Text::new(""), wood::tface(&f, 14.0), TextColor(wood::text()), TextLayout::justify(Justify::Center), Pickable::IGNORE));
     // Pack and Menu.
     commands
         .spawn((HudRoot, Node { position_type: PositionType::Absolute, right: Val::Px(22.0), top: Val::Px(186.0), flex_direction: FlexDirection::Row, column_gap: Val::Px(8.0), ..default() }, GlobalZIndex(20), Pickable::IGNORE))
@@ -117,7 +125,7 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
             HudRoot,
             MenuList,
             Block,
-            Node { position_type: PositionType::Absolute, right: Val::Px(22.0), top: Val::Px(238.0), width: Val::Px(220.0), flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(4.0), Val::Px(8.0)), border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(12.0)), display: Display::None, ..default() },
+            Node { position_type: PositionType::Absolute, right: Val::Px(22.0), top: Val::Px(238.0), width: Val::Px(220.0), flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(4.0), Val::Px(8.0)), border: wood::b(3.0), border_radius: wood::r(12.0), display: Display::None, ..default() },
             wood::wood(),
             GlobalZIndex(Z_MENU),
         ))
@@ -128,10 +136,10 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
                 h.spawn((Text::new("Esc"), wood::on_wood(&f, 11.0, 700), Pickable::IGNORE));
             });
             let rows: [(Row, Mark, &str, Option<&str>); 5] = [(Row::Character, Mark::Person, "Character", Some("C")), (Row::Skills, Mark::Book, "Skills and know-how", Some("K")), (Row::Log, Mark::Scroll, "Log and people", Some("L")), (Row::Settings, Mark::Gear, "Settings", None), (Row::Leave, Mark::Leave, "Leave the world", None)];
-            m.spawn((Node { flex_direction: FlexDirection::Column, margin: UiRect::horizontal(Val::Px(6.0)), border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), overflow: Overflow::clip(), ..default() }, BackgroundColor(wood::PARCH), BorderColor::all(wood::INK), Pickable::IGNORE)).with_children(|list| {
+            m.spawn((Node { flex_direction: FlexDirection::Column, margin: UiRect::horizontal(Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(8.0), overflow: Overflow::clip(), ..default() }, BackgroundColor(wood::surface()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|list| {
                 for (r, mark, label, key) in rows {
                     list.spawn((MenuRow(r), Hot, super::hit::Tag(format!("menu:{r:?}")), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)), ..default() }, BackgroundGradient::default())).with_children(|row| {
-                        row.spawn(wood::icon(&icons, Glyph::Ui(mark), 16.0, Color::srgb_u8(0xb9, 0x7b, 0x35)));
+                        row.spawn(wood::icon(&icons, Glyph::Ui(mark), 16.0, wood::glyph_tint()));
                         let mut t = row.spawn((Text::new(label), wood::ink(&f, 15.0, 800), Node { flex_grow: 1.0, ..default() }, Pickable::IGNORE));
                         if r == Row::Leave {
                             t.insert(LeaveText);
@@ -147,12 +155,12 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
 
 /// A labelled button on walnut: an icon tile, its word and its key.
 fn button(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, mark: Mark, label: &str, key: &str, marker: impl Bundle) {
-    p.spawn((marker, Hot, Block, Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(7.0), padding: UiRect::new(Val::Px(6.0), Val::Px(10.0), Val::Px(5.0), Val::Px(5.0)), border: UiRect::all(Val::Px(3.0)), border_radius: BorderRadius::all(Val::Px(10.0)), ..default() }, wood::wood()))
+    p.spawn((marker, Hot, Block, Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(7.0), padding: UiRect::new(Val::Px(6.0), Val::Px(10.0), Val::Px(5.0), Val::Px(5.0)), border: wood::b(3.0), border_radius: wood::r(10.0), ..default() }, wood::wood()))
         .with_children(|b| {
             b.spawn(wood::rim(7.0));
-            b.spawn((ButtonTile(mark == Mark::Pack), Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: UiRect::all(Val::Px(2.0)), border_radius: BorderRadius::all(Val::Px(8.0)), ..default() }, wood::tile(false), BorderColor::all(wood::INK), Pickable::IGNORE))
-                .with_child(wood::icon(icons, Glyph::Ui(mark), 18.0, Color::srgb_u8(0xc9, 0x8b, 0x3c)));
-            b.spawn((Text::new(label), f.body(14.0, 800), TextColor(wood::PARCH), Pickable::IGNORE));
+            b.spawn((ButtonTile(mark == Mark::Pack), Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(2.0), border_radius: wood::r(8.0), ..default() }, wood::tile(false), BorderColor::all(wood::edge()), Pickable::IGNORE))
+                .with_child(wood::icon(icons, Glyph::Ui(mark), 18.0, wood::glyph_tint()));
+            b.spawn((Text::new(label), f.body(14.0, 800), TextColor(wood::on_panel()), Pickable::IGNORE));
             wood::chip(b, f, key, ());
         });
 }
