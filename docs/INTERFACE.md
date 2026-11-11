@@ -1,6 +1,6 @@
 # Interface from rules and skills
 
-Status: design, 2026-11-11, branch `design-interface`. Nothing here is built. Line references are to `origin/main` at `bade5c09` unless a branch is named.
+Status: Approved 2026-11-11 as the design; steps are built in order; open questions below are not yet settled. Nothing here is built. Line references are to `origin/main` at `bade5c09` unless a branch is named.
 
 The owner's idea: "Most of the UI is related to the world rules or skills. So I think we should have a way to compose the UI by those rules and skills, with a kind of framework that attaches to exposed primitives from the game engine that can be scripted by the rules and skills, in addition to the behaviour. They should also describe how the user interacts with these systems and how they plug into the world."
 
@@ -646,27 +646,27 @@ The pages are labelled 2.0.0. The project pins 2.14.1 (`living/Cargo.toml:10-11`
 ### What must be agreed
 
 **With the Spark coordinator** (the rules and the script):
-1. May `living_rules::script` read `<name>_ui()` into `UiSpec`, leniently with `ui_errors` and refused by `validate()`, with a new `living_rules::ui` module holding the vocabularies, defaults and `bar_places`? Does the laptop worker write it, with the Spark reviewing?
-2. The drawn state:
+1. **Open.** May `living_rules::script` read `<name>_ui()` into `UiSpec`, leniently with `ui_errors` and refused by `validate()`, with a new `living_rules::ui` module holding the vocabularies, defaults and `bar_places`? Does the laptop worker write it, with the Spark reviewing?
+2. **Open.** The drawn state:
    - a `draw` act taking the state (`item: "drawn" | "sheathed"`);
    - a `stance` trait on `_combat()`, enforced in `use_skill` for players and minds;
    - the field in the projection and on `fighter`.
 
    Until then the client keeps it locally.
-3. One `offered()` filter for players and minds: `listed: false` hides from both, and real-time is `Shapes::real_time`. Is that agreed?
-4. A structured outcome on act rows (ok or refused, and the skill) and a cause kind on death, so the client stops parsing English (`verbs.rs:1173-1196`, `ui/live.rs:362-377`)?
-5. `meters()` and a `status_of(a)` law to replace three threshold sets: client 80/97/35/12, `brain.rs`, and `body_state` at 50/100. Which numbers are right? Should the AI alerts use the law, at the measured tick cost?
-6. Speech-2's whisper follows `speech-1`'s `WAY_TRAITS`: privacy from `words.only_to`, no `private` or `shows` keys. Is it acceptable that the client reads row kinds from the compiled script, not `speech_card`? Can the way refusals move into `living_rules`, so the chip and `speak` share the words?
-7. Will the client keep compiling the script for the foreseeable future, which this design relies on? Or is there a plan to stop shipping the whole rules source, laws included, to clients?
-8. The client's sight: publish a `my_senses` view, or keep calling `senses()` with the client's partial facts? Facing sight (fov-1) will need one answer.
-9. `my_offers`, as sketched above.
+3. **Open.** One `offered()` filter for players and minds: `listed: false` hides from both, and real-time is `Shapes::real_time`. Is that agreed?
+4. **Open.** A structured outcome on act rows (ok or refused, and the skill) and a cause kind on death, so the client stops parsing English (`verbs.rs:1173-1196`, `ui/live.rs:362-377`)?
+5. **Open.** `meters()` and a `status_of(a)` law to replace three threshold sets: client 80/97/35/12, `brain.rs`, and `body_state` at 50/100. Which numbers are right? Should the AI alerts use the law, at the measured tick cost?
+6. **Open.** Speech-2's whisper follows `speech-1`'s `WAY_TRAITS`: privacy from `words.only_to`, no `private` or `shows` keys. Is it acceptable that the client reads row kinds from the compiled script, not `speech_card`? Can the way refusals move into `living_rules`, so the chip and `speak` share the words?
+7. **Open.** Will the client keep compiling the script for the foreseeable future, which this design relies on? Or is there a plan to stop shipping the whole rules source, laws included, to clients?
+8. **Open.** The client's sight: publish a `my_senses` view, or keep calling `senses()` with the client's partial facts? Facing sight (fov-1) will need one answer.
+9. **Open.** `my_offers`, as sketched above.
 
 **With the dev-box coordinator** (Cullet's goods and recipes):
-1. May items carry `icon`, `label` and `group` traits from the shared vocabulary? Will Cullet's goods (kelp, ash, sand, glass, peat, lamp_oil, baked_roots) get them?
-2. Are the per-recipe label and icon taken from the product item, or declared per recipe? Will `craft` and `cook`/`smoke` fold into `recipes()`, so that one `make_ui()` drives every making? Cullet's `smoking` already duplicates `smoke`.
-3. Should `make` and `feed` get `_shows`, so that others see someone working a furnace?
-4. May the client compute `lit` and `fuel` for a structure from `lit_until_ms`, `burns.rate` and `day_ms` through `living_rules::fire`? Is the `burns` shape stable? Without it, no fuel-burning workplace offers `make`.
-5. Is `teach_check` refusing glassmaking (`techniques()` against `know_how()`, `skills.rhai:995-1044`) intended, or a bug?
+1. **Open.** May items carry `icon`, `label` and `group` traits from the shared vocabulary? Will Cullet's goods (kelp, ash, sand, glass, peat, lamp_oil, baked_roots) get them?
+2. **Open.** Are the per-recipe label and icon taken from the product item, or declared per recipe? Will `craft` and `cook`/`smoke` fold into `recipes()`, so that one `make_ui()` drives every making? Cullet's `smoking` already duplicates `smoke`.
+3. **Open.** Should `make` and `feed` get `_shows`, so that others see someone working a furnace?
+4. **Open.** May the client compute `lit` and `fuel` for a structure from `lit_until_ms`, `burns.rate` and `day_ms` through `living_rules::fire`? Is the `burns` shape stable? Without it, no fuel-burning workplace offers `make`.
+5. **Open.** Is `teach_check` refusing glassmaking (`techniques()` against `know_how()`, `skills.rhai:995-1044`) intended, or a bug?
 
 ## References
 
