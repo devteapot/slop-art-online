@@ -1409,7 +1409,47 @@ def laws(s):
     s.expect("an ordinary night outside costs no health", night["hp_rate"] >= 0, night)
 
 
-SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "family_laws": family_laws}
+def audience(s):
+    """Who heard a line (the `speech_audience` law; perceive.rs `speak`, the private `audience`
+    table). With the shipped law (off) a line writes nothing. On, a line writes one row: each
+    person who heard it (within hearing, not beyond), the distance to them and how far off the
+    speaker's facing they stood; a row older than 60 s is deleted by the next line. The shipped
+    script is installed again at the end."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    s.expect("the shipped laws() keeps no audience", shipped.count("speech_audience: false,") == 1)
+    a, b, c, far = s.people(4)
+    line = open_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    # West to east: the speaker, one 1 m east, one 4 m east, one 13 m east (beyond hearing).
+    for who, at in ((a, 1), (b, 2), (c, 5), (far, 14)):
+        s.call("place_at", who, *line[at])
+        s.graph(who, {"wait": 120})
+    s.act(a, {"do": "face", "target": {"id": c}})
+    time.sleep(3)
+    thought = {"kind": "verify", "summary": "verify-core audience", "detail": "", "latency_ms": 0, "tokens": 0, "model": "", "reference": "verify-core"}
+    say = lambda text: (s.call("mind_say", a, text, 0, 0, thought), time.sleep(2.2))
+    hearers = lambda row: {(h["id"] if isinstance(h, dict) else h[0]): (h["d"], h["off"]) if isinstance(h, dict) else (h[1], h[2]) for h in row["hearers"]}
+    say("verify audience while the law is off")
+    s.expect("law off: a line writes no audience row", not s.rows("SELECT * FROM audience", "audience-off"))
+    try:
+        s.call("install_script", shipped.replace("speech_audience: false,", "speech_audience: true,"))
+        time.sleep(2.2)
+        say("verify audience while the law is on")
+        rows = s.rows(f"SELECT * FROM audience WHERE speaker = {a}", "audience-on")
+        s.expect("law on: one row for the line, said to no one", len(rows) == 1 and rows[0]["to"] == 0, rows)
+        h = hearers(rows[0])
+        s.expect("the hearers within hearing are in it, the one beyond is not", b in h and c in h and far not in h, h)
+        s.expect("distances to the hearers", abs(h[b][0] - 1.0) < 0.4 and abs(h[c][0] - 4.0) < 0.4, h)
+        s.expect("both stand ahead of the speaker, who faces east", h[b][1] < 0.35 and h[c][1] < 0.35, h)
+        time.sleep(61)
+        say("verify audience a minute later")
+        later = s.rows(f"SELECT * FROM audience WHERE speaker = {a}", "audience-later")
+        s.expect("a row older than a minute is deleted by the next line", [r["id"] for r in later] != [rows[0]["id"]] and rows[0]["id"] not in [r["id"] for r in later] and len(later) == 1, later)
+    finally:
+        s.call("install_script", shipped)
+
+
+SCENES = {"skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "flee": flee, "food": food, "refusal": refusal, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "family_laws": family_laws, "audience": audience}
 
 
 def main():

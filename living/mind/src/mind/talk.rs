@@ -172,11 +172,13 @@ struct Facts {
     near: bool,
     /// `LIVING_GREET=nearest`: the listener is the nearest hearer free to take the turn.
     nearest_is_me: bool,
+    /// The listener settled an exchange with the speaker and its time has not come.
+    settled: bool,
 }
 
 impl Default for Facts {
     fn default() -> Self {
-        Facts { to_me: false, to_none: false, marked: false, faced: false, free: false, cares: false, draw: 1.0, answers: 0.0, curious: 0.0, familiarity: Familiarity::Known, near: false, nearest_is_me: false }
+        Facts { to_me: false, to_none: false, marked: false, faced: false, free: false, cares: false, draw: 1.0, answers: 0.0, curious: 0.0, familiarity: Familiarity::Known, near: false, nearest_is_me: false, settled: false }
     }
 }
 
@@ -207,6 +209,7 @@ impl Facts {
             && !addressed
             && !overheard
             && stranger
+            && !self.settled
             && match greet {
                 Greet::Nearest => self.nearest_is_me,
                 Greet::Curious => self.near && self.draw < self.curious,
@@ -463,6 +466,12 @@ impl Talks {
         self.pairs.iter().any(|(k, c)| *k != key && (k.0 == listener || k.1 == listener) && !c.ended && now.saturating_sub(c.last_ms) < QUIET_MS)
     }
 
+    /// Whether a listener has settled an exchange with a speaker and its time has not come
+    /// (a remark to no one does not reopen it).
+    fn settled_with(&self, listener: u32, speaker: u32, now: u64) -> bool {
+        self.pairs.get(&pair(listener, speaker)).and_then(|c| c.settled.as_ref()).is_some_and(|s| now < s.until_ms)
+    }
+
     /// Whether a listener may be drawn in by a remark not addressed to them now.
     fn overhear_free(&self, listener: u32, now: u64) -> bool {
         self.overheard.get(&listener).map_or(true, |at| now.saturating_sub(*at) > OVERHEARD_GAP_MS)
@@ -575,8 +584,15 @@ impl Minds {
                 curious: temper.curious_of_strangers(),
                 familiarity,
                 near: near_me,
+                // The first hearer, nearest first, who would take the turn: free to talk and not
+                // settled with the speaker.
                 nearest_is_me: greet == Greet::Nearest
-                    && candidates.iter().find(|(h, _)| *h == listener || (t.overhear_free(*h, now) && !t.in_other(*h, pair(*h, speaker), now))).map(|(h, _)| *h) == Some(listener),
+                    && candidates
+                        .iter()
+                        .find(|(h, _)| (*h == listener || (t.overhear_free(*h, now) && !t.in_other(*h, pair(*h, speaker), now))) && !t.settled_with(*h, speaker, now))
+                        .map(|(h, _)| *h)
+                        == Some(listener),
+                settled: t.settled_with(listener, speaker, now),
             };
             let drawn = facts.drawn(greet);
             if drawn.greeted {
@@ -1401,7 +1417,7 @@ mod tests {
     fn every_line() -> Vec<Facts> {
         let mut out = Vec::new();
         let fams = [Familiarity::Known, Familiarity::Hostile, Familiarity::Stranger, Familiarity::Barely];
-        for bits in 0u32..1 << 8 {
+        for bits in 0u32..1 << 9 {
             let b = |i: u32| bits & (1 << i) != 0;
             for familiarity in fams {
                 for draw in [0.0, 0.29, 0.5, 0.71, 0.99] {
@@ -1418,6 +1434,7 @@ mod tests {
                         familiarity,
                         near: b(6),
                         nearest_is_me: b(7),
+                        settled: b(8),
                     });
                 }
             }
@@ -1448,9 +1465,9 @@ mod tests {
                     assert!(!d.overheard && !d.greeted && !d.no_remark_draw, "{greet:?} {f:?}");
                 }
                 // Only strangers and the barely known are greeted, and only remarks to no one
-                // that the listener is free to take.
+                // that the listener is free to take, not settled with the speaker.
                 if d.greeted {
-                    assert!(f.familiarity.unfamiliar() && f.free && !f.addressed(), "{greet:?} {f:?}");
+                    assert!(f.familiarity.unfamiliar() && f.free && !f.addressed() && !f.settled, "{greet:?} {f:?}");
                 }
                 // Known people are drawn in exactly as before.
                 if f.familiarity == Familiarity::Known {

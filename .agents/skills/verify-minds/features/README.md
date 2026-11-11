@@ -3,7 +3,7 @@
 | Feature | Cases | File |
 | --- | --- | --- |
 | Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt) | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
-| Answer speech and close an exchange | `conversation` | [conversations.md](conversations.md) |
+| Answer speech and close an exchange; a line parked while a deliberation runs; `LIVING_PARK=concurrent` turns alongside; `LIVING_GREET` modes over the `audience` table | `conversation`, `parked`, `alongside`, `greet` | [conversations.md](conversations.md) |
 | No-store persona/cursor, patch-loss XFAIL | `consolidation` | [consolidation.md](consolidation.md) |
 | Validate graphs, restrict actors, recover connection | `prune`, `reject`, `only`, `reconnect` | [robustness.md](robustness.md) |
 | Wait off stage and resume on stage | `lod` | [level-of-detail.md](level-of-detail.md) |

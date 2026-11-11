@@ -304,14 +304,38 @@ def build(a):
     print("built:", TARGET / "release/living-mind", *[OUT / "wasm" / f"{n}.wasm" for n in seeds])
 
 
+def wasm_mount():
+    """The host directory the trial container serves as /wasm (read-only inside it). It is this
+    checkout's `OUT/wasm` when this checkout started the container; from another checkout (a git
+    worktree) it is the starting checkout's, and modules go there under this checkout's name."""
+    r = sh("docker", "inspect", CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}', check=False)
+    src = r.stdout.strip() if r.returncode == 0 else ""
+    return Path(src) if src else OUT / "wasm"
+
+
+def served_name(name):
+    """A module's name under the container's /wasm: as built, or, when the mount is another
+    checkout's, with this checkout's tag, so a worktree never overwrites or reuses a module
+    another checkout's batches run (`trial-hamlet-<hash>-wt<tag>`)."""
+    if wasm_mount().resolve() == (OUT / "wasm").resolve():
+        return name
+    return f"{name}-wt{hashlib.sha256(str(ROOT).encode()).hexdigest()[:6]}"
+
+
 def build_module(name, rel):
     # One target dir for every trial world: a seed change rebuilds only the authority crate.
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET / "trials-wasm"), LIVING_SEED=rel)
     sh("cargo", "build", "--manifest-path", ROOT / "living/Cargo.toml", "-p", "living-authority",
        "--target", "wasm32-unknown-unknown", "--release", env=env, timeout=3600)
     out = OUT / "wasm" / f"{name}.wasm"
+    out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(TARGET / "trials-wasm/wasm32-unknown-unknown/release/living_authority.wasm", out)
     os.chmod(out, 0o644)
+    served = served_name(name)
+    if served != name:
+        shutil.copyfile(out, wasm_mount() / f"{served}.wasm")
+        os.chmod(wasm_mount() / f"{served}.wasm", 0o644)
+        print(f"module {name} served to the container as /wasm/{served}.wasm")
 
 
 # ---- one trial instance ----------------------------------------------------------------
@@ -377,9 +401,129 @@ class Player:
     def act(self, node):
         return self.call("human_act", json.dumps(node))
 
+    def body(self):
+        rows = self.inst.rows(f"SELECT * FROM body WHERE id = {self.inst.subject}")
+        return rows[0] if rows else None
+
+    def hold(self, seconds):
+        """Stand still for a while, still present: a call at least every 10 s (an idle player
+        whose client keeps its connection)."""
+        end = time.time() + seconds
+        while time.time() < end:
+            self.call("human_move", 0.0, 0.0, False)
+            time.sleep(min(10.0, max(0.0, end - time.time())))
+
+    def group(self, avoid=()):
+        """The densest group of residents: the resident with the most others within 6 m (at
+        least two, else the most within 10 m), not led by one in `avoid` when another will do.
+        Returns (centre, member ids)."""
+        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject]
+        pos = self.inst.bodies([c["id"] for c in people])
+        ids = [c["id"] for c in people if c["id"] in pos]
+        best = None
+        for r in (6.0, 10.0):
+            for i in ids:
+                members = [j for j in ids if dist(pos[i], pos[j]) <= r]
+                key = (len(members) >= 3, i not in avoid, len(members))
+                if best is None or key > best[0]:
+                    best = (key, members)
+            if best and best[0][0]:
+                break
+        if not best:
+            return None, []
+        members = best[1]
+        cx = sum(pos[j][0] for j in members) / len(members)
+        cy = sum(pos[j][1] for j in members) / len(members)
+        return (cx, cy), members
+
+    def approach(self, members, seconds=150):
+        """Walk up to a group as a player would: a `goto` act (a walk along a route, as the
+        client's click-to-walk does) to the centre of the densest group, re-chosen and re-aimed
+        every 15 s while people move, until two residents are within 5 m (or, after 90 s, the
+        nearest is within 3 m); then a short step toward the group's centre, so that the player
+        faces into it."""
+        start, end, last = time.time(), time.time() + seconds, 0.0
+        centre = None
+        while time.time() < end:
+            near = self.residents_near(5)
+            if len(near) >= 2:
+                break
+            if time.time() - start > 90 and self.residents_near(3):
+                break
+            if time.time() - last >= 15:
+                centre, members = self.group()
+                if centre:
+                    # A point, not a person: `goto` aims only at someone in sight.
+                    self.act({"do": "goto", "target": {"at": [round(centre[0], 1), round(centre[1], 1)]}})
+                last = time.time()
+            time.sleep(2.0)
+        here = self.me()
+        pos = self.inst.bodies([c["id"] for _, c in self.residents_near(8)])
+        if here and pos:
+            cx = sum(p[0] for p in pos.values()) / len(pos)
+            cy = sum(p[1] for p in pos.values()) / len(pos)
+            dx, dy = cx - here[0], cy - here[1]
+            n = (dx * dx + dy * dy) ** 0.5 or 1.0
+            self.call("human_move", dx / n, dy / n, False)
+            time.sleep(0.4)
+        self.call("human_move", 0.0, 0.0, False)
+
+    def line(self, kind, text, to, cycle):
+        """Say a line, recording who stood within earshot (12 m) and how far (`human_line`)."""
+        near = [(round(d, 1), c["id"], c["name"]) for d, c in self.residents_near(12)]
+        b = self.body()
+        ok = self.call("human_say", text, to)
+        self.inst.emit("events", {"t": self.inst.t(), "human_line": {"kind": kind, "text": text, "to": to, "cycle": cycle, "ok": ok, "at_ms": self.inst.now_ms(),
+                                  "near": near, "heading": b and b.get("heading")}})
+
+    def greet_session(self, spec):
+        """The greeting trial (docs/TRIALS.md, "The greeting trial"): for `minutes`, in cycles,
+        walk into a group of residents, (1) say a greeting to no one in particular, (2) 50 s
+        later say a line addressed (`to`) to the nearest resident within earshot, as the game
+        client does when no one is under the cursor, (3) then stand among them for
+        `listen_s` saying nothing, while they talk among themselves; then the next group. The
+        lines name nobody and the player never says its own name, so it stays a stranger to
+        those it has not met."""
+        inst, end = self.inst, time.time() + spec.get("minutes", 25) * 60
+        greetings = spec.get("greetings", ["Hello there!", "Good day to you all.", "Hello, everyone. I've only just come down the road."])
+        addressed = spec.get("addressed", ["Is there somewhere a traveller could get a bite to eat around here?", "You look like you know this place well.",
+                                           "What do people here do for work?", "That looks like hard work."])
+        wait_s, listen_s = spec.get("wait_s", 50), spec.get("listen_s", 150)
+        led = []
+        try:
+            cycle = 0
+            while time.time() < end - 60:
+                centre, members = self.group(avoid=led[-1:])
+                if not members:
+                    self.hold(10)
+                    continue
+                led.append(members[0])
+                inst.emit("events", {"t": inst.t(), "human_group": {"cycle": cycle, "members": members, "centre": [round(x, 1) for x in centre]}})
+                self.approach(members)
+                self.line("unaddressed", greetings[cycle % len(greetings)], 0, cycle)
+                self.hold(wait_s)
+                # As the game client addresses a line with nothing under the cursor (talk-1): to
+                # the nearest person within earshot (`earshot_m`; Cullet's speech carries 12 m).
+                near = self.residents_near(spec.get("earshot_m", 12))
+                if near:
+                    self.line("addressed", addressed[cycle % len(addressed)], near[0][1]["id"], cycle)
+                self.hold(wait_s)
+                inst.emit("events", {"t": inst.t(), "human_listen": {"cycle": cycle, "from_ms": inst.now_ms(), "s": listen_s}})
+                self.hold(min(listen_s, max(0, end - time.time() - 5)))
+                inst.emit("events", {"t": inst.t(), "human_listen_end": {"cycle": cycle, "to_ms": inst.now_ms()}})
+                cycle += 1
+            # Stay present to the end of the run: no takeover inside it.
+            self.hold(max(0, end - time.time()))
+        except Exception as e:  # recorded, never raised into the run
+            inst.emit("events", {"t": inst.t(), "human_error": repr(e)[:300]})
+        inst.emit("events", {"t": inst.t(), "human_left": True, "takeover_due_s": 30})
+
     def session(self, spec):
         """About `minutes` of play: walk to the town, forage, meet people and tell them a plan,
-        make a camp by the gate, then leave (stop calling)."""
+        make a camp by the gate, then leave (stop calling). `script: greet` plays the greeting
+        trial instead (`greet_session`)."""
+        if spec.get("script") == "greet":
+            return self.greet_session(spec)
         inst, end = self.inst, time.time() + spec.get("minutes", 20) * 60
         try:
             centre = inst.anchor({"town": spec.get("town", "Brackenford")})
@@ -467,7 +611,7 @@ class Instance:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.journal = ROOT / ".local/living/journal" / self.db
         self.roles, self.saved_graphs, self.mind, self.t0 = {}, {}, None, None
-        self.cursor = {"thought": 0, "experience": 0, "chronicle": 0}
+        self.cursor = {"thought": 0, "experience": 0, "chronicle": 0, "talk": 0, "audience": 0}
         self.jpos = {}
         self.tokens = Counter()
         self.calls = Counter()
@@ -530,20 +674,31 @@ class Instance:
         tag = self.shared["variants"][self.variant].get("wasm_tag")
         if tag:
             wasm = f"{wasm}-{tag}"
+        wasm = served_name(wasm)
         sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
         self.published = True
         self.save()
         # A variant may name another skills file (a rules change under test); the default is the tree's.
-        skills = ROOT / self.shared["variants"][self.variant].get("skills", "living/scripts/skills.rhai")
-        # The trial's and then the variant's `skills_patch` change law values in that file
-        # (name -> [old text, new text]; each old text must occur exactly once).
-        source, patched = patch_skills(skills.read_text(), self.trial, self.shared["variants"][self.variant])
-        code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
-        if code != 200:
-            raise RuntimeError(f"install_script {code}: {body[:300]}")
-        (self.dir / "skills.sha256").write_text(hashlib.sha256(source.encode()).hexdigest() + "\n")
-        self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)}"
-                 f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(source.encode()).hexdigest()[:12]})")
+        v = self.shared["variants"][self.variant]
+        skills = ROOT / v.get("skills", "living/scripts/skills.rhai")
+        # A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) had them composed over the
+        # shipped script and installed when the world was created; installing the plain file
+        # would drop them (docs/CULLET_RULES.md), so that world keeps its own.
+        _, _, merged = world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])
+        if (merged.get("laws") or merged.get("laws_file")) and not v.get("skills"):
+            if self.trial.get("skills_patch") or v.get("skills_patch"):
+                raise RuntimeError("skills_patch on a seed with its own laws: put the values in the seed's laws instead")
+            self.log(f"published {self.db} from {wasm}.wasm; the seed's own laws ({merged.get('laws_file') or 'laws'}) stay installed")
+        else:
+            # The trial's and then the variant's `skills_patch` change law values in that file
+            # (name -> [old text, new text]; each old text must occur exactly once).
+            source, patched = patch_skills(skills.read_text(), self.trial, v)
+            code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
+            if code != 200:
+                raise RuntimeError(f"install_script {code}: {body[:300]}")
+            (self.dir / "skills.sha256").write_text(hashlib.sha256(source.encode()).hexdigest() + "\n")
+            self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)}"
+                     f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(source.encode()).hexdigest()[:12]})")
         end = time.time() + 60
         while time.time() < end:
             st = self.rows("SELECT * FROM stats")
@@ -984,6 +1139,24 @@ class Instance:
                            "activity": [a["skill"], a["target"]] if a and c["alive"] else None})
         self.emit("census", {"t": self.t(), "hour": row.get("hour"), "now_ms": now, "thinkers": getattr(self, "thinkers", None), "people": people})
 
+    def record_talk(self):
+        """`record.talk`: every conversation turn in the world (thought rows of kind `talk`, which
+        say whom they answered and the line heard) to `talk.jsonl`; `record.audience`: who heard
+        each line and how they stood (the `audience` table, where the world keeps it) to
+        `audience.jsonl`. For small worlds (greet_report.py)."""
+        rec = self.trial.get("record", {})
+        self.cursor.setdefault("talk", 0)
+        self.cursor.setdefault("audience", 0)
+        if rec.get("talk"):
+            for r in sorted(self.rows(f"SELECT * FROM thought WHERE id > {self.cursor['talk']}"), key=lambda r: r["id"]):
+                self.cursor["talk"] = max(self.cursor["talk"], r["id"])
+                if r.get("kind") == "talk":
+                    self.emit("talk", {"t": self.t(), **r})
+        if rec.get("audience"):
+            for r in sorted(self.rows(f"SELECT * FROM audience WHERE id > {self.cursor['audience']}"), key=lambda r: r["id"]):
+                self.cursor["audience"] = max(self.cursor["audience"], r["id"])
+                self.emit("audience", {"t": self.t(), **r})
+
     def stop_mind(self):
         if self.mind and self.mind.alive():
             self.mind.stop()
@@ -1107,10 +1280,15 @@ class Instance:
                 self.cursor[key] = max(self.cursor[key], r["id"])
         mine = set(everyone)
         new_chron = sorted(chron, key=lambda r: r["id"])
+        # `record.speech`: every line said in the world (small worlds; greet_report.py).
+        speech_all = self.trial.get("record", {}).get("speech")
         for r in new_chron:
             self.cursor["chronicle"] = max(self.cursor["chronicle"], r["id"])
             if r["a"] in mine or r["b"] in mine:
                 self.emit("chronicle", {"t": self.t(), **r})
+            if speech_all and r.get("kind") == "speech":
+                self.emit("speech", {"t": self.t(), **r})
+        self.record_talk()
         for name, rows in (("know_how", know), ("relation", rel), ("judgment", jud), ("persona", persona), ("structure", structs), ("place", places), ("routine", routines)):
             if rows is None:
                 continue
@@ -1698,7 +1876,10 @@ def shared_for(trials, a, bdir):
         s.bind(("127.0.0.1", 0))
         shared["fake_port"] = s.getsockname()[1]
         s.close()
-        shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl")],
+        # `--fake-script`: the fake server's rules (e.g. living/trials/fake/latency.json: model
+        # latencies like the real ones, so that conversation timing can be tried without a provider).
+        script = ["--script", str(Path(a.fake_script).resolve())] if getattr(a, "fake_script", None) else []
+        shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl"), *script],
                                           stdout=open(bdir / "fake.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
         time.sleep(1)
     return shared
@@ -2129,6 +2310,7 @@ def main():
     p.add_argument("--replicates", type=int, default=3)
     p.add_argument("--minutes", type=float)
     p.add_argument("--fake", action="store_true", help="answer every model call from the local fake server (no provider keys)")
+    p.add_argument("--fake-script", help="with --fake: the fake server's rules file (e.g. living/trials/fake/latency.json)")
     p.add_argument("--parallel", type=int, default=18)
     p.add_argument("--keep-db", action="store_true")
     p.add_argument("--stagger", type=float, default=2, help="seconds between instance starts")

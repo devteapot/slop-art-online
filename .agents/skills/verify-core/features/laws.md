@@ -31,3 +31,16 @@ Start it right after launch: the day checks need the world's morning, then the s
 - `install_script` installs a whole script: installing the shipped one on such a world removes its laws until it is created again.
 - The scene needs the seed's lamp (`structure` kind `lamp`) with an open line from it; without one it fails "the seed has a lamp with an open line of sight from it".
 - These checks do not measure cost: longer sight and re-projection every sweep cost more per player (docs/CULLET_RULES.md, "Costs").
+
+## Who heard a line (`speech_audience`, 2026-11-11, branch `exp-greet`)
+
+A shipped law, off by default. With it on, `speak` (`living/authority/src/perceive.rs`) writes one row per line to the private `audience` table (`tables.rs` `Audience`, `Hearer`). The row lists each person who heard the line (the speaker's hearers within hearing), the distance to each and how far each stood off the speaker's facing (`common::heading`, radians, 0 straight ahead). Rows older than 60 s are deleted by the next line (range on the `at_ms` index). Nothing reads it but the mind service under `LIVING_GREET` (verify-minds `greet`). With the law off nothing is written, so the cost is one law lookup per line. With it on, a line costs one insert, the distance and angle per hearer, and the expired rows' deletes, and the only subscriber is the mind service.
+
+```bash
+R=core-audience-$(date +%H%M%S)
+python3 "$V" launch --run "$R" && python3 "$V" doctor --run "$R"
+python3 .agents/skills/verify-core/scripts/scenes.py audience --run "$R" > ".local/living/verify/$R/audience.txt" 2>&1
+python3 "$V" cleanup --run "$R"
+```
+
+The scene places a speaker, a person 1 m east, one 4 m east and one 13 m east (beyond the shipped 9 m hearing), turns the speaker east (`face`) and speaks through `mind_say`. Checks: law off, no row. Law on (the shipped script with `speech_audience: true`, installed with `install_script`): one row, said to no one, with the two within hearing and not the third, distances about 1 and 4 m, both under 0.35 rad off the facing. A line 61 s later deletes the first row. The shipped script is installed again at the end. Evidence: `audience-line.json`, `audience-audience-off.json`, `audience-audience-on.json`, `audience-audience-later.json`, `audience-results.json`.

@@ -1,0 +1,43 @@
+{
+ "title": "A stranger walks into a group: who answers, how fast, and who answers lines not meant for them",
+ "about": "The hamlet (12 people in four households, everyone past infancy thought for, at most 12 at a time) under Cullet's laws: its 48-minute day and its senses (speech carries 12 m; docs/CULLET_RULES.md), where the owner will play. A scripted human player (`Player`, the real player reducers `join`, `human_move`, `human_say` with its own non-admin identity) joins at the arrival point and plays in cycles of about six minutes: walk up to the densest group of residents (three or more within 6 m when there is one) until the nearest is 2.5 m away, so that it faces into the group; (1) say a greeting to no one in particular; (2) 50 s later say a line addressed (`to`) to the nearest resident within earshot (12 m), as the game client (`talk-1`) addresses a line when no one is under the cursor; (3) 50 s later stand among them saying nothing for 150 s, while residents talk among themselves; then the next group. Its lines never name anyone and it never says its own name, so it stays a stranger to those it has not met. The world keeps who heard each line (`speech_audience`) in every arm, so arms differ only in the mind's conversation switches (`LIVING_GREET`, `LIVING_PARK`). Every line said, every talk turn and every audience row are recorded for greet_report.py.",
+ "gradient": "What the owner felt in a town of minds: does speech from a newcomer standing among people draw an answer, how soon, from whom (the nearest? the one addressed?), and at what cost in false replies (residents answering lines meant for others) and model tokens?",
+ "world": {
+  "seed": "hamlet",
+  "overrides": {
+   "day_minutes": 48,
+   "laws_file": "worlds/cullet/laws.rhai"
+  },
+  "rules": {
+   "speech_audience": true
+  }
+ },
+ "minutes": 25,
+ "subject": {
+  "join": {
+   "name": "Arlen"
+  }
+ },
+ "minds": {
+  "only": "all",
+  "max": 12
+ },
+ "human": {
+  "script": "greet",
+  "minutes": 25,
+  "wait_s": 50,
+  "listen_s": 150,
+  "earshot_m": 12
+ },
+ "record": {
+  "speech": true,
+  "talk": true,
+  "audience": true
+ },
+ "census_s": 30,
+ "cast": {},
+ "timeline": [],
+ "probes": [
+  "residents_thinking"
+ ]
+}
