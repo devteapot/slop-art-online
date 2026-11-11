@@ -262,6 +262,12 @@ class OwnerLines(unittest.TestCase):
             self.assertNotIn("/home/adaq", j)
             self.assertNotIn("192.168.7.42", j)
             self.assertNotIn("Quillfeather", j)
+            self.assertEqual(s2.scrub_text("diagnosis/journal_talk_wassup mate.txt", store.Findings()),
+                             "diagnosis/journal_talk_[owner line].txt")
+            self.assertEqual(s2.publish_path("diagnosis/journal_talk_wassup mate.txt"),
+                             "diagnosis/journal_talk_owner-line.txt")
+            self.assertEqual(s2.publish_path("diagnosis/journal_reply_hi_there.txt"),
+                             "diagnosis/journal_reply_owner-line.txt")
             names = {r.get("published_as") for r in rows}
             self.assertIn("session/journal/Player.jsonl", names)
             # and the owner may choose to keep their lines

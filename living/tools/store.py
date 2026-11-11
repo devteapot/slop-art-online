@@ -723,8 +723,9 @@ class EchoMatcher:
             return True
         return len(t) >= 4 and len(w) >= 3 and self._difflib.SequenceMatcher(None, w, t).ratio() >= 0.8
 
-    def find(self, text):
-        """[(start, end, line)] of every echo in text."""
+    def find(self, text, context=True):
+        """[(start, end, line)] of every echo in text. context=False drops the quote-or-verb
+        requirement for common words (for file names)."""
         words = [(m.start(), m.end(), _collapse(m.group(0))) for m in WORD.finditer(text)]
         out = []
         for line, toks in self.short:
@@ -734,7 +735,7 @@ class EchoMatcher:
                 if not all(self._close(words[i + k][2], toks[k]) for k in range(n)):
                     continue
                 a, b = words[i][0], words[i + n - 1][1]
-                if common:
+                if common and context:
                     before = text[max(0, a - 2):a]
                     after = re.match(r"[.!?,…]*\s?(.)?", text[b:b + 4])
                     quoted = any(c in QUOTE_CHARS for c in before[-1:]) and after and after.group(1) and \
@@ -821,7 +822,7 @@ class Scrubber:
         # Lines of 6+ characters are also caught unquoted (a model repeating them in a reply);
         # shorter ones ("hi") only in quotes, or every "hi" in the world would go.
         longer = [l for l in lines if len(l) >= 6]
-        self.line_bare = (re.compile(r"(?<![\w])(?:" + "|".join(re.escape(l) for l in longer) + r")(?![\w])", re.I)
+        self.line_bare = (re.compile(r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(l) for l in longer) + r")(?![A-Za-z0-9])", re.I)
                           if longer else None)
 
     # -- pass 1: learn the session's player and the owner's lines --------------------------------
@@ -999,6 +1000,17 @@ class Scrubber:
                 return "[owner line]"
             return self.scrub_text(obj, acc)
         return obj
+
+    def publish_path(self, rel, acc=None):
+        """The path a file is published under: scrubbed like text, and in a play session any
+        word of it that echoes an owner line, even a common one ("reply_hi"), is replaced."""
+        acc = acc if acc is not None else Findings()
+        pub = self.scrub_text(rel, acc).replace("[owner line]", "owner-line")
+        if self._echo_on():
+            for a, b, line in reversed(self.echo.find(pub, context=False)):
+                acc.add("owner-echo", pub[a:b])
+                pub = pub[:a] + "owner-line" + pub[b:]
+        return pub
 
     # -- session echo pass: drop what quotes or repeats an owner line ------------------------------
     def _echo_on(self):
@@ -1302,7 +1314,7 @@ def scrub_source(src, scrubber, keep_data=False):
             if keep_data and st == "ok":
                 data[rel] = out
             # renames: the published path is scrubbed too
-            pub = scrubber.scrub_text(rel, acc_paths := Findings())
+            pub = scrubber.publish_path(rel, acc_paths := Findings())
             rows.append({"path": rel, "published_as": pub if pub != rel else None,
                          "bytes": size if size is not None else len(raw), "status": st, "reason": why,
                          "findings": acc.as_dict()})
@@ -1431,7 +1443,7 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
     with tarfile.open(fileobj=tar_buf, mode="w:gz") as tf:
         for rel in sorted(data):
             body = data[rel]
-            pub = scrubber.scrub_text(rel, Findings())
+            pub = scrubber.publish_path(rel)
             parts = pub.split("/")
             inst = parts[0] if len(parts) > 1 else None
             base = parts[-1]
@@ -1488,10 +1500,10 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
            # counts only: even masked examples ("/home/g…") are not for publication
            "redactions": {c: v["count"] for c, v in totals.as_dict().items()},
            "files": [{k: r[k] for k in ("path", "bytes", "status", "reason")} |
-                     {"path": scrubber.scrub_text(r["path"], Findings()),
+                     {"path": scrubber.publish_path(r["path"]),
                       "redactions": {c: v["count"] for c, v in r["findings"].items()}} for r in rows],
            "models": _model_counts(calls),
-           "dropped": [{"file": scrubber.scrub_text(d["file"], Findings()), "where": d["where"],
+           "dropped": [{"file": scrubber.publish_path(d["file"]), "where": d["where"],
                         "why": "quotes an owner line" if d["why"].startswith("quotes") else "repeats an owner line"}
                        for d in scrubber.dropped],
            "counts": {"instances": len(instances), "calls": len(calls), "rows": len(streams),
@@ -2009,7 +2021,7 @@ def write_scrubbed(src, scrubber, out):
     """The scrubbed tree as it would be published, for review, under its published paths."""
     rows, totals, data = scrub_source(src, scrubber, keep_data=True)
     for rel, body in data.items():
-        pub = scrubber.scrub_text(rel.replace("!", "/"), Findings())
+        pub = scrubber.publish_path(rel.replace("!", "/"))
         p = _safe_join(out, pub)
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "wb") as f:
