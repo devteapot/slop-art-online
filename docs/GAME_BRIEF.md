@@ -869,6 +869,63 @@ Measured on a scratch island world with the play-test scene's sight installed (4
 - No F1 panel slider.
 - By day at 48 m, most of the default view already lies within sight, so "not seen now" marks only the far end of a street.
 
+## Feel pass 5 (2026-11-11)
+
+Branch `feel-5`, after play-test 2 (`.local/living/playtest-2/FEEDBACK.md`). Evidence is in `.local/living/feel-5/` (git-ignored): a README, the inventory (`INVENTORY.md`), the clips wanted (`CLIPS_WANTED.md`) and a contact sheet (`index.html`). Captures were headless runs of the real client on the scratch island world `verify-feel5-a`. Client only: no authority, rules, bindings or seed changes.
+
+**The jump's facing flip** (`live.rs`):
+- The owner: "When you jump while moving in one direction, the animation flips and plays in the default way, and then you flip back."
+- **Cause:** a jump's `fighter` aim is the authority's dash direction, which is the travel. `live.rs` took any move's aim as the body's facing, so a body walking sideways or backward while facing the cursor turned to its travel for the hop: forward gaits, no twist. It turned back after.
+- **Fix:** the jump's aim no longer sets the facing; the jump is drawn over whatever the body plays (`jump.rs`). A dodge's roll is a forward take, so it still faces its dash.
+- **Measured** over eight moving jumps (walk and run; sideways, backward and diagonally) while looking north:
+  - the upper body's facing moved by 45–180° during the jump before, and by 0° after;
+  - backward legs flipped by 180° and back before; after, the reversed gait holds through take-off, air and landing.
+
+**Two control schemes** (`controls.rs`, `live.rs`, `combat.rs`):
+- **F3** switches between them.
+- `LIVING_GAME_CONTROL=cursor|travel` sets the one to start in.
+- A note in the HUD's existing note style names the key and the scheme: "F3: controls (facing where you walk)" or "F3: controls (facing the cursor)".
+  - It shows on arrival, once the first-load cover lifts, for about 7 s. After that it shows for 4.5 s only when the scheme changes.
+  - The edge of sight's F2 note (`sight-2`) is another row of the same notes, so the two stack.
+- **"Travel"** (facing where you walk): the body faces its travel, and standing, its last heading.
+  - It turns to the cursor only while a move is aimed there, and back to its travel after. That means a skill key held on a skill aimed at a creature or a point, a guard up, or a move under way that faces its aim (`combat::aims_at_cursor`).
+  - A dodge or jump with no direction held goes from the facing drawn: a dodge back from it, a jump toward it. In the cursor scheme it goes from the cursor, as before.
+  - The compass and the view's align use the facing drawn too (`Input::facing`).
+- **"Cursor"** (facing the cursor): the body faces the cursor while you move with WASD, as on main, with two changes:
+  - **Standing,** the upper body turns first. The legs turn only once the look is 55° from them, and then all the way (to within 6°). On main every cursor move turned the whole body. In a sway of ±25°, the toes travelled 279 cm over seven swings on main and 5 cm now.
+  - **The twist** over the spine gives more to the neck and head: at a 90° strafe, 52° in the spine and 38° in the neck and head, against 65° and 25° before.
+  - A share on the pelvis (with the thighs turned back) was tried and dropped: under foot IK it moved the planted feet ±7 cm as the cursor swayed.
+- **The default is "travel".** Reasons:
+  - **What the screen shows is what the rules see.** The client sends no facing to the authority: only `human_move(dx, dy, run)`, each skill's aim point and target, and the `face` gesture through `human_act`. The authority, and the residents who perceive you, take your facing from your movement heading (the body's `heading`; `bearing` and `face_slack` in the act rules). In "travel" the screen and the rules agree, except while aiming, which reaches the authority through the skill's aim. In "cursor" they disagree whenever you look away from where you walk.
+  - **It plays the real clips.** Every direction of travel plays the forward clip. In "cursor", every direction but forward is the forward clip turned or played backward (inventory below).
+  - **It answers the owner's main complaint:** "the player faces the cursor but moves in the other direction".
+  - Facing the cursor stays one key away. A look-direction input to the authority may come later (the Spark's coordinator); the cursor scheme would then send it.
+
+**Locomotion inventory** (`INVENTORY.md`):
+- **Clips:** five forward loops (`sneak`, `walk`, `walk_brisk`, `run`, `run_fast`). There is no backward, sideways, diagonal, turning, starting, stopping or jumping take.
+- **In scheme "cursor":**
+  - forward: the real clip;
+  - diagonal forward (±45°) and sideways (±90°): the forward clip along the travel, with the upper body twisted 45° or 90°;
+  - diagonal back (±135°) and backward: the forward clip reversed, twisted 45° or not at all;
+  - between 80° and 110°: either, with hysteresis;
+  - turning, starting, stopping and the jump: procedural.
+- **Foot slide** stays at 2–5% of the body's speed walking and 4–9% running in every direction and both schemes (feel pass 2's legs-to-travel rule), on a paved square at 2.3 and 3.5 m/s.
+- **How it looks:**
+  - sideways reads as walking sideways from the chest;
+  - backward reads as a walk played in reverse, and at a run as a moonwalk;
+  - the legs spin round when they swap between forward and backward.
+
+**Clips wanted** (`CLIPS_WANTED.md`, for the Spark's text-to-motion; none generated here):
+- **For "cursor", in priority order:** `walk_back` and `run_back` (backward, loops); `strafe_walk_left`, `strafe_walk_right`, `strafe_run_left` and `strafe_run_right` (90° to the side, facing ahead, loops). Diagonal takes (45° and 135°, walk and run, loops) are optional: blends of the cardinal takes with a 45° warp usually suffice.
+- **For both schemes:** `turn_left_90`, `turn_right_90`, `turn_left_180` and `turn_right_180` (standing, one-shots); `walk_start`, `walk_stop`, `run_start` and `run_stop` (forward, one-shots); `jump_stand` and `jump_forward`, plus for "cursor" `jump_back`, `jump_left` and `jump_right` (one-shots at the rules' 1.6 tiles at 3.6 tiles/s).
+- **Pipeline:** `animate.py --library` measures travel forward only. Sideways and backward takes need a travel direction per entry, with Kimodo's `path` constraint pinning the hips' line.
+
+**Not done:**
+- No strafe or backward clips: the cursor scheme still shows the procedural blend above.
+- Turning on the spot beyond 55° still swivels the legs in about 0.13 s and steps both feet.
+- The settings menu belongs to the interface redesign.
+- The strike was not captured turning to its aim: the scratch square had no one in reach, so the rules refused it ("no one there to strike").
+
 ## World look and camera research (2026-11-08)
 
 **Terrain: heightfield plus meshes, not voxels.**
