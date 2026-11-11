@@ -201,7 +201,12 @@ board/<family>/<version>/       asset board photographs and pages (from the lapt
 
 **Refused whole:**
 - files in never-touch folders, or with `sao-living` in the path;
-- secrets files (`.env`, `*.env`, `cli.toml`, `id_*`, `*.pem`, `*.key`, `.netrc`, credentials);
+- **credential files, never opened** (`is_secret_path`, fbc37c32 review A4):
+  - **By file name:** `.env`, `.env.*`, `*.env`, `*.token`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `*.kdbx`, `*.secret(s)`, `id_*` keys, `credentials*`, `.netrc`, `.git-credentials`, `.pgpass`, `.npmrc`, `.pypirc`, `cli.toml`, `hf_token`, `token`.
+  - **By folder:** anything under `tokens/`, `secrets/`, `.ssh/`, `.gnupg/`, `.aws/`, `credentials/`.
+  - **Never read:** the check runs on the path before anything is read. On disk the loader is a stub that refuses if called, and a tarball member matching these names is listed but never extracted.
+  - **Listed as held:** with the reason "secret path, not read", in the report and the manifest's `held` section.
+  - **Exception:** the scrubber's own identity step still reads this machine's checkout `.env` files and token files on purpose, to learn the secret *values* to redact (`Identity.from_runtime`). That is not part of reading the source, and the values are never printed.
 - anything containing a private-key block;
 - browser profiles;
 - macOS metadata;
@@ -234,7 +239,8 @@ No identity is in the repository: the scrubber reads it at run time, and the tes
 | Play-test 3 (`~/playtest-3`, two tarballs) | 37 (1.7 MB) | 66 (2.8 MB): 64 journal files, 2 FEEDBACK.md | 117 macOS `._*` | `home-path` 8, `owner-first-name` 98, `owner-line` 37 (`H…`) |
 
 - **Secrets.** None of the three sources holds an API key, token, JWT, private address or owner email.
-- **Owner lines.** In play-test 2 the scrubber found exactly the owner's three typed lines (masked `h…`, `s…i[11]`, `w…p[6]`), the same lines as the hand-made diagnosis `playtest-2/diagnosis/REPORT.md`. In play-test 3 it found one (`H…`), as in the play report.
+- **Owner lines, play-test 2.** The scrubber found exactly the owner's three typed lines (masked `h…`, `s…i[11]`, `w…p[6]`), the same lines as the hand-made diagnosis `playtest-2/diagnosis/REPORT.md`.
+- **Owner lines, play-test 3.** Up to fbc37c32 the scrubber learned **two** lines there, not one. The extra is a line the owner's character said under its AI mind after the session ended: an authority row of the player (`subject` 26), timestamped 55 s after the client log's last line. The "You said" row rule assigned it to the owner. That was harmless over-redaction. Since `fix-store-scrub-2`, `You said` rows with a time count only inside the played span: the client log's first to last timestamp, from 1 s before to 5 s after. That row is now left alone, so play-test 3 should learn one line. This was not re-run here, by instruction.
 - **Packed size.** The `l9` what-if pack (`--decide model_exchanges=include`) is 9.5 MB. No home path, login, hostname or fake key is left in it.
 
 ### The owner's decisions (2026-11-11)
@@ -269,14 +275,35 @@ Exact quotes were not enough. On play-tests 2 and 3, models repeated the owner's
 Lines no one heard can sit in the player's own percepts ("You said to a child: “…”").
 
 What the scrubber does now:
-- **Learning.** Besides the rules above, `You said …: “…”` counts as the owner's line in the player's own entries (`(played by a person`, `# Who you are (<player>)`) and in rows whose `subject` is the player.
-- **Exact matches.** Any quote style counts: typographic, single, back-quote, escaped, or HTML entities (`&ldquo;`, `&quot;`, `&#39;`), in any case. So does a JSON string equal to a line.
+- **Learning.** Besides the rules above, `You said …: “…”` counts as the owner's line in the player's own entries (`(played by a person`, `# Who you are (<player>)`) and in rows whose `subject` is the player, if the row's time is inside the played span.
+  - The player's own entries carry no real time; their percepts show game time only. So a line the character's AI mind said there after the session can still be learned: over-redaction, not a leak.
+- **Exact matches.**
+  - Any quote style counts: typographic, single, back-quote, escaped, or HTML entities (`&ldquo;`, `&quot;`, `&#39;`), in any case. So does a JSON string equal to a line.
+  - The match uses the line's **core**: leading and trailing whitespace and punctuation removed, and internal whitespace of any width. "where am i ?" therefore matches “where am I?”, “Where  am i” and, being 6 characters or more, an unquoted "where am I" (fbc37c32 review A3).
+- **Names the player gave themself** (fbc37c32 review A2; narrowed in `fix-store-scrub-3` after play-test 4 v2).
+  - **Learned only from the player's own typed lines:** "I'm X", "Hi, I am X", "it's X", "call me X", "my name is X", "name's X", "I go by X" (`SELF_NAME_RULES`). Single words only, and not a common word or a state (`STOPWORDS`, `NOT_NAMES`: "I'm fine" or "call me later" is no name).
+  - **Epithets stay.** A name a resident gives the player is the resident's word, not the owner's, and is never learned. That covers tags, labels and graphs, including `known_name`: such a field can confirm a typed name but never introduces one. `--player-name NAME` (repeatable, on `scrub`, `pack` and `publish`) adds names for one run; it is an extra, not the mechanism.
+  - **The owner's real first name** is still replaced everywhere, in any case.
+  - **A self-given name can also be an ordinary game word** (in play-test 4 it was), so it is replaced only where it names the player:
+    - **Never in text the game or the mind service wrote from a template:** system prompt files, system messages inside journal entries, installed scripts, `*.rhai`. These stay byte-identical, and an owner line quoted into them is still caught by the exact quoted match. Nor in JSON keys, game codes (`do`, `skill`, `kind`, … in `CODE_KEYS`), or identifiers (`on_strike`: here `_` joins words).
+    - **Replaced as a name:** after "called", "named", "introduced (themself) as", "goes by", "known as", "call me", "I'm"; in `known_name`, `known_as`, `introduced_as`, `nickname` and `name` fields (the name on the person, and memories about them); in `{X=#26}` tags and `X (#26)` labels; as an address at the start of a line or utterance ("X, come here"); capitalised, not at the start of a sentence ("I told X about the well"); in file names.
+    - **Kept as the ordinary word:** lowercase after an article, possessive or determiner ("a strike", "the strike"), and only when the word also occurs in this run's game-written text (templates, system prompts, installed scripts). "the zorbin fellow" is not kept.
+    - **Undecidable, so replaced and listed:** every other use in residents' speech and journals ("strike them down", a capitalised word at a sentence start). Each entry goes to `ambiguous.md` and to `report.json` (`ambiguous`), with the file, the location (row, field path, line), the context with the name masked by its length (`[6 chars]`) and the replacement. A wrong replacement there costs one word. The manifest records only the count (`self_name_ambiguous`).
+- **The installed rules script is a hard check** (`installed_sha_problems`). If a session records `installed sha256 …` in `run/installed_script.txt`, the published `installed_source.rhai` must hash to it, so the record stays verifiable. Older records have no `installed_source.rhai` and instead name their file on a `file sha256 … (…/skills.rhai)` line; that file is checked. `pack` and `publish` refuse a unit that fails, before writing anything. `scrub` writes its reports, prints MISMATCH, and exits non-zero, giving why: the script is not published, or which redactions changed it. `installed_script.txt` itself may change, but only where its home paths are redacted (`/Users/<login>/…` becomes `~/…`); the shas it records stay as they are.
+
+  Checked on this machine's sessions (outputs kept locally in `~/store-dryrun-2026-11-11/playtest-{2-v3b,3-v3}/`):
+  - Play-test 3: the installed sha matches; all 6 system prompts and `installed_source.rhai` are byte-identical; `installed_script.txt` differs only by the home path.
+  - Play-test 2: the record names `skills.rhai`, and its sha matches, both in this scrub and in the copy already published.
+  - Neither session has a self-given name, so there are 0 ambiguous places.
+  - Play-test 2's scrub is byte-identical to the published unit (38 of 38 files).
 - **Echo matcher** (`EchoMatcher`):
   - Letter runs are folded (`ssssssssshi` and `sssshi` are both `shi`).
   - A one- or two-word line matches a word that is equal after folding, or within edit ratio 0.8 for words of four letters or more.
   - A common word ("hi", or anything of three letters or fewer) counts only when quoted alone or within two words after a speech verb. So a resident's own "Hi! Are you new here?" stays. `say` is not a speech verb, because it is the JSON key in front of every spoken line.
-  - A longer line matches a window sharing at least 60% of its words (at least three), or reading 80% alike.
+  - A longer line matches a window sharing at least 60% of its words (at least three), or reading 80% alike. The window must also share at least two of the line's **distinctive** words, totalling 8 letters or more. Distinctive means not in the stop-word list (`STOPWORDS`) and 3 letters or more. So a line of common words ("I can see it") is caught only when repeated exactly, and never in "you can see it" (fbc37c32 fix).
+  - **Templates are never fuzzy-matched.** The system prompt files (`journal/system/*.txt`), system messages inside journal entries, installed scripts (`installed_source*`, `installed_script.txt`) and `*.rhai` are written by us, not the owner. An owner line can reach them only by substitution, in quotes, so they get the exact quoted match only: no unquoted match, no echo, no dropped lines.
 - **What is dropped.** In a play session, a journal entry whose reply quotes or echoes an owner line is dropped whole, and so is any world row (JSON Lines) that does. A text line that does is replaced by `[line dropped: it quotes or repeats an owner line]`. Echoes inside prompts and JSON files are replaced by `[owner line]`.
+- **Command histories keep their rows.** A row of `commands.jsonl` or `events.jsonl`, or any row whose `cmd`/`kind`/`reducer` is a say, is kept with its timestamp. Every string in it that holds or echoes an owner line becomes `[owner line]`. `dropped.md` lists it with the action "kept, text replaced".
 - **File names.** Any word of a file name that echoes an owner line, even a common one, becomes `owner-line` (`journal_cuth_reply_hi.txt` becomes `journal_cuth_reply_owner-line.txt`).
 - **Report pages.** These (`*.html`) are excluded from session units: `play_report.py` regenerates them from the evidence.
 - **The list.** Everything dropped is listed in `dropped.md` and the unit's `MANIFEST.json`, without the owner's text.
@@ -312,6 +339,16 @@ Feedback was held by the owner's decision. The rest is agents' analysis of what 
 
 Held files are still read to learn the owner's lines. A client recorder's `events.jsonl` therefore teaches the scrubber every line sent, even though the file itself is not published.
 
+**Review-only files.** A session's `report.json` and `commands.jsonl` (`SESSION_REVIEW_NAMES`) are scrubbed in the same pass. `scrub --write DIR` writes them under `DIR/review/`, so no second pass with `--kind generic` is needed. They are listed as `review` in the reports and in the manifest's `held` section. They are never packed or published unless the general coordinator later approves.
+
+**Review files are redacted like published content** (fbc37c32 fix):
+- `report.md`, `report.json`, `dropped.md` and stdout pass every path and string through the published redaction. Paths appear as they would be published.
+- The source is named home-relative (`~/…`), or by its last two folders if it lies outside home, redacted too.
+- Masked examples of identity categories (names, logins, owner lines and echoes, host names, emails) show only a length, `[5 chars]`; home paths show `/home/…`.
+- The self-test `ReviewOutputs` searches every output, file names included, for the planted owner names, login, email and lines.
+
+Review folders written before this fix (in `~/store-dryrun-2026-11-11/` on the Spark) still list raw source paths. They are local only, and nothing published was affected.
+
 Play-test 2 under the allow-list: 38 files published (the journals, `session/run/`, `skills.rhai`). 22 held: `FEEDBACK.md`, all 20 files of `diagnosis/`, `session/CHECKLIST.md`, and `session/README.md`, which describes the owner's session.
 
 ### Publishing from the laptop or the dev-box
@@ -329,7 +366,8 @@ The steps are the same on every machine. The gate is per machine and per upload.
    STORE_MACHINE=laptop python3 living/tools/store.py scrub --write ~/store-dryrun-$(date +%F)/<name>-scrubbed <session folder> --kind play-session
    ```
    Then check:
-   - `report.md`: `owner_lines.distinct_lines` must equal the number of different lines typed in the session (the masked examples show first letter, last letter and length);
+   - `report.md`: `owner_lines.distinct_lines` must equal the number of different lines typed in the session (the masked examples show only each line's length);
+   - `review/`: the scrubbed `report.json` and `commands.jsonl`, held from publishing;
    - `dropped.md`: what the echo pass removed;
    - the `excluded` rows: what is held and why.
 

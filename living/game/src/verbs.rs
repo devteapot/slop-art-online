@@ -70,6 +70,9 @@ pub struct Rules {
     pub error: Option<String>,
     /// Every skill there is, as the installed script declares it.
     pub skills: Vec<Skill>,
+    /// How items look by the rules' `item_look` (icon id, label), kept for the revision they were
+    /// read under (a Rhai call each, so never per frame).
+    looks: std::cell::RefCell<(u32, HashMap<String, (String, String)>)>,
 }
 
 /// A skill as the world's script declares it (`<skill>_spec()`): whether it takes a target or an
@@ -90,6 +93,21 @@ pub fn skills_of(sc: &Scripts) -> Vec<Skill> {
 }
 
 impl Rules {
+    /// How an item looks: its icon id and its label, from the world's `item_look` (goods-2: an
+    /// item's `icon`, `label` traits), else its name and the name with spaces.
+    pub fn item_look(&self, item: &str) -> (String, String) {
+        let mut c = self.looks.borrow_mut();
+        if c.0 != self.revision {
+            *c = (self.revision, HashMap::new());
+        }
+        c.1.entry(item.to_string())
+            .or_insert_with(|| match self.scripts.as_ref().and_then(|sc| sc.item_look_of("item_look", item)) {
+                Some(l) if !l.icon.is_empty() => (l.icon, if l.label.is_empty() { item.replace('_', " ") } else { l.label }),
+                _ => (item.to_string(), item.replace('_', " ")),
+            })
+            .clone()
+    }
+
     /// Recompile when the `script` row changes (an install).
     fn refresh(&mut self, conn: &DbConnection) {
         let Some(row) = conn.db.script().name().find(&"skills".to_string()) else { return };
@@ -99,10 +117,13 @@ impl Rules {
         self.revision = row.revision;
         // The world's day: laws written per game hour, and the day's words, follow it.
         let day_ms = conn.db.world().iter().next().map(|w| w.day_ms).unwrap_or(living_rules::DEFAULT_DAY_MS);
+        // On the frame (a law switched mid-play recompiles too): its cost is logged, since it is
+        // a hitch of that much.
+        let t0 = std::time::Instant::now();
         match Scripts::with_day(&row.source, day_ms) {
             Ok(s) => {
                 self.skills = skills_of(&s);
-                info!("rules: skill script revision {} compiled ({} skills)", row.revision, self.skills.len());
+                info!("rules: skill script revision {} compiled ({} skills) in {:.1} ms on the frame", row.revision, self.skills.len(), t0.elapsed().as_secs_f64() * 1000.0);
                 catalog::set_skills(s.skills().clone());
                 self.scripts = Some(s);
                 self.error = None;
@@ -197,6 +218,22 @@ pub struct Me {
     pub night: bool,
     pub hour: f32,
     pub raining: bool,
+    /// The season by the world's calendar, and the clock (authority ms) and day length, for a
+    /// fire's state.
+    pub season: String,
+    pub now_ms: f64,
+    pub day_ms: u64,
+}
+
+/// Where and when I am, as the world's rules count it (audit 2026-11-11: the checks ran at
+/// noon, in summer, on grass, so a fuel-burning workplace never offered `make`).
+#[derive(Clone, Default)]
+pub struct Here {
+    /// The displayed hour and the `daylight` law's night.
+    pub hour: f32,
+    pub night: bool,
+    /// The ground under me on the hosted map, if it is known.
+    pub terrain: Option<String>,
 }
 
 /// Skills whose rules give no check say nothing about what they apply to; they are offered
@@ -257,6 +294,20 @@ fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &S
     if sc.shapes().get(skill).is_some_and(|s| s.real_time) {
         return None;
     }
+    // Where its presentation puts it (`living_rules::ui`: the defaults are this list's own
+    // choices; a declaration may take a skill from the lists, `on: []`, when a player does it
+    // another way).
+    if let Some(u) = sc.ui(skill) {
+        use living_rules::ui::On;
+        let place = match aim {
+            Aim::Me => On::Me,
+            Aim::Thing { .. } => On::Thing,
+            Aim::Creature { .. } => On::Person,
+        };
+        if !u.is_on(place) {
+            return None;
+        }
+    }
     let wants_target = *aim != Aim::Me;
     if spec.target != wants_target {
         return None;
@@ -315,7 +366,7 @@ fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill,
         // A skill that asks something in return is checked with something to ask for (each
         // thing there is becomes its own choice below).
         let want = if spec.args.iter().any(|a| a == "want") { catalog::item_names().into_iter().find(|w| w != item).unwrap_or_default() } else { String::new() };
-        SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, want: want.to_string(), want_qty: (!want.is_empty()) as u32, night: me.night, hour: me.hour, season: "summer".into(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
+        SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, want: want.to_string(), want_qty: (!want.is_empty()) as u32, night: me.night, hour: me.hour, season: me.season.clone(), text: text.to_string(), roll: 0.5, skill: skill.to_string(), raining: me.raining, ..Default::default() }
     };
     let allowed = |item: &str, text: &str| sc.check(skill, &ctx(item, text, (!item.is_empty()).then_some(item))).is_ok();
     // Words: refused without, allowed with.
@@ -543,6 +594,9 @@ pub struct Verbs {
     pub toward: Option<(u32, Vec<Choice>)>,
     pub open_group: Option<(u32, String)>,
     pub send: Vec<(Aim, Choice)>,
+    /// Acts built by the rules' presentation (`living_rules::ui::act_node`: an offer's Accept),
+    /// sent as built, reported on as any act.
+    pub send_node: Vec<(Aim, Choice, serde_json::Value)>,
     pub drop_item: Option<(u32, String)>,
     /// Asked of the game UI: open this person's window (the list's "Their window").
     pub open_window: Option<u32>,
@@ -601,8 +655,10 @@ pub(crate) fn stage_name(s: u8) -> &'static str {
     }
 }
 
-/// My character's facts as far as its client knows them.
-fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather: Option<bool>, things: &[(&'static str, String, Vec2, u64, f32)], at: Vec2) -> Me {
+/// My character's facts as far as its client knows them: its rows, the world's calendar, the
+/// ground under it and the fires about it, as the authority's `act::facts` builds them.
+#[allow(clippy::too_many_arguments)]
+fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather: Option<bool>, things: &[(&'static str, String, Vec2, u64, f32)], at: Vec2, here: &Here) -> Me {
     let c = conn.db.my_characters().id().find(&me);
     let v = conn.db.my_vitals().id().find(&me);
     let (hp, hunger, energy) = v.map_or((100.0, 0.0, 100.0), |v| {
@@ -618,17 +674,41 @@ fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather:
     }
     let knows: Vec<String> = conn.db.my_know_how().iter().filter(|k| k.actor == me).map(|k| k.technique).collect();
     let laws = rules.laws();
-    let near = |kinds: &[&str], r: f32| things.iter().any(|(_, k, p, _, _)| kinds.contains(&k.as_str()) && p.distance(at) <= r);
+    let w = conn.db.world().iter().next();
+    let (epoch, day_ms, year) = w.as_ref().map_or((0, living_rules::DEFAULT_DAY_MS, 4), |w| (w.epoch_ms, w.day_ms, w.year_days.max(4) as u64));
+    let now = now_ms.max(0.0) as u64;
+    // Warmth as the authority's `act::warmth` counts it: a roof within `shelter_warmth`; a
+    // fire that needs no feeding within `fire_warmth`; one that burns fuel within its own
+    // warmth, only while lit.
+    let (mut near_fire, mut near_shelter) = (false, false);
+    for (class, kind, p, id, _) in things.iter().filter(|t| t.0 == "structure") {
+        let _ = class;
+        let d = p.distance(at);
+        let t = rules.structure(kind);
+        if t.roof && d <= laws.shelter_warmth {
+            near_shelter = true;
+        }
+        match &t.burns {
+            Some(b) => {
+                let lit = conn.db.structure().id().find(id).is_some_and(|s| living_rules::fire::lit(s.lit_until_ms, now));
+                near_fire |= lit && d <= b.warmth;
+            }
+            None => {
+                let reach = if t.roof { laws.shelter_warmth } else { laws.fire_warmth };
+                near_fire |= t.warms && d <= reach;
+            }
+        }
+    }
     let actor = ActorFacts {
         id: me,
         kind: c.as_ref().map_or("person".into(), |c| c.kind.clone()),
         hp,
         hunger,
         energy,
-        near_fire: near(&["campfire"], laws.fire_warmth),
-        near_shelter: near(&["shelter", "house"], laws.shelter_warmth),
-        // The ground under me is not in my rows; the authority decides where building works.
-        terrain: "grass".into(),
+        near_fire,
+        near_shelter,
+        // The ground under me on the hosted map (the authority decides where building works).
+        terrain: here.terrain.clone().unwrap_or_else(|| "grass".into()),
         stage: stage_name(c.as_ref().map_or(2, |c| c.stage)).into(),
         inv,
         knows,
@@ -637,7 +717,33 @@ fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather:
         room: 25,
         ..Default::default()
     };
-    Me { actor, night: false, hour: 12.0, raining: weather.unwrap_or(false) }
+    let season = living_rules::SEASONS[living_rules::season_of(now, epoch, day_ms, year)].to_string();
+    Me { actor, night: here.night, hour: here.hour, raining: weather.unwrap_or(false), season, now_ms, day_ms }
+}
+
+/// The hour (the displayed clock), night (the `daylight` law) and the ground under me (the
+/// hosted map the client keeps for sight, `live.rs`).
+fn here_of(sc: &Scripts, clock: &crate::daylight::Clock, live: &crate::live::Live, at: Vec2) -> Here {
+    let hour = clock.hour();
+    Here { hour, night: sc.is_night(hour), terrain: live.hosted_map().map(|m| m.at(at.x, at.y).name().to_string()) }
+}
+
+/// A structure's fire as the authority's `act::fire_state` reads it: lit, and the fuel left.
+fn fire_facts(conn: &DbConnection, rules: &Scripts, t: &mut TargetFacts, me: &Me) {
+    if t.class != "structure" {
+        return;
+    }
+    // The rules' own reading of a fire (`StructureTraits::fire_state`, as the authority reads it):
+    // a fuel fire is lit while its row's `lit_until_ms` is ahead, holding what is left at its rate.
+    let lit_until = conn.db.structure().id().find(&t.id).map_or(0, |s| s.lit_until_ms);
+    workplace(rules, t, lit_until, me.now_ms.max(0.0) as u64, me.day_ms);
+}
+
+/// A workplace's `lit` and `fuel` for the rules' checks (`make_check`'s `burning(a)` and fuel):
+/// lit while `lit_until_ms` is ahead of `now`; fuel the hours left × its kind's `burns.rate`
+/// (`StructureTraits::fire_state`, the authority's reading); a kind without `burns` as its traits say.
+fn workplace(rules: &Scripts, t: &mut TargetFacts, lit_until_ms: u64, now: u64, day_ms: u64) {
+    (t.lit, t.fuel) = rules.structure(&t.kind).fire_state(lit_until_ms, now, day_ms);
 }
 
 /// A creature as I perceive it, for the rules' checks.
@@ -696,7 +802,11 @@ struct Toward {
 fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim) -> Toward {
     match aim {
         Aim::Me => Toward { title: "Yourself".into(), target: None, open: true, requests: false },
-        Aim::Thing { class, kind, at, id, amount, .. } => Toward { title: pretty(kind), target: Some(thing_facts(class, kind, *id, *amount, at.distance(my_at))), open: true, requests: false },
+        Aim::Thing { class, kind, at, id, amount, .. } => {
+            let mut t = thing_facts(class, kind, *id, *amount, at.distance(my_at));
+            fire_facts(conn, rules, &mut t, me);
+            Toward { title: pretty(kind), target: Some(t), open: true, requests: false }
+        }
         Aim::Creature { id } => match creature_facts(conn, rules, *id, 0.0) {
             Some(t) => Toward { title: label_of(conn, *id), requests: t.kind == me.actor.kind && t.kind == "person", target: Some(t), open: true },
             None => Toward { title: label_of(conn, *id), target: None, open: false, requests: false },
@@ -777,6 +887,7 @@ fn aim(
     weather: Res<crate::weather::Weather>,
     time: Res<Time>,
     mut v: ResMut<Verbs>,
+    (clock, live): (Res<crate::daylight::Clock>, Res<crate::live::Live>),
 ) {
     let Some(conn) = net.conn.as_ref() else {
         v.aim = None;
@@ -833,7 +944,8 @@ fn aim(
         let d = at.distance(my_at);
         *nearest = !all.iter().any(|t| t.1 == *kind && t.3 != *id && t.2.distance(my_at) < d - 0.05);
     }
-    let me_facts = me_facts(conn, me, scene.now_ms, sc, weather.authority.map(|(r, _)| r), &all, my_at);
+    let here = here_of(sc, &clock, &live, my_at);
+    let me_facts = me_facts(conn, me, scene.now_ms, sc, weather.authority.map(|(r, _)| r), &all, my_at, &here);
     match aim {
         // The hint follows once its job is done (this frame's share is started now).
         Some(a) => {
@@ -857,18 +969,24 @@ fn send(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, 
             Aim::Creature { id } => *id,
             _ => 0,
         };
-        let r = conn.reducers.human_say_then(line.clone(), to, net.on_reply("say"));
+        let r = conn.reducers.human_say_then(line.clone(), to, net.on_reply("say", "human_say", || serde_json::json!({"text": line, "to": to})));
         if r.is_ok() {
             input.said.push((now_ms as u64, line.clone()));
         }
         net.report("say", r);
         return;
     }
-    let node = c.node(aim, text);
+    dispatch(net, conn, rules, aim, c, c.node(aim, text), now_ms, v);
+}
+
+/// Send an act's node through `human_act` and await its outcome.
+#[allow(clippy::too_many_arguments)]
+fn dispatch(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, node: serde_json::Value, now_ms: f64, v: &mut Verbs) {
     // An act (a one-off the authority reports on) or behavior (ongoing: the body shows it).
     let act = node.get("do").is_some() && living_rules::acts::not_an_act(&c.skill, rules.shapes()).is_none();
     info!("verbs: {} → {}", c.label, node);
-    let r = conn.reducers.human_act_then(node.to_string(), net.on_reply("act"));
+    let node_s = node.to_string();
+    let r = conn.reducers.human_act_then(node_s.clone(), net.on_reply("act", "human_act", || serde_json::json!({"node": node_s})));
     net.report("act", r);
     let key = aim.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
     v.pending.push(Pending { sent_ms: now_ms, act, key, choice: c.clone() });
@@ -892,6 +1010,7 @@ pub fn input(
     time: Res<Time>,
     mut v: ResMut<Verbs>,
     (binds, looks, mut talk): (Res<crate::keys::Binds>, Res<crate::looks::Looks>, Option<ResMut<crate::talk::Talk>>),
+    (clock, live): (Res<crate::daylight::Clock>, Res<crate::live::Live>),
 ) {
     let now = time.elapsed_secs_f64();
     let now_ms = scene.now_ms;
@@ -905,7 +1024,8 @@ pub fn input(
     let free = !typing && !controls.demo;
     let pressed = |k: KeyCode| free && keys.just_pressed(k);
     let all = || things(conn, now_ms);
-    let facts = |_: &Aim| me_facts(conn, me, now_ms, sc, weather.authority.map(|(r, _)| r), &all(), my_at);
+    let here = here_of(sc, &clock, &live, my_at);
+    let facts = |_: &Aim| me_facts(conn, me, now_ms, sc, weather.authority.map(|(r, _)| r), &all(), my_at, &here);
     let is_person = |aim: &Aim| matches!(aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == "person"));
     let open = |v: &mut Verbs, aim: Aim, item: Option<String>| {
         let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
@@ -1005,6 +1125,9 @@ pub fn input(
         } else {
             send(&net, conn, sc, &aim, &c, None, now_ms, &mut v, &mut controls);
         }
+    }
+    for (aim, c, node) in std::mem::take(&mut v.send_node) {
+        dispatch(&net, conn, sc, &aim, &c, node, now_ms, &mut v);
     }
     if let Some((id, item)) = v.drop_item.take() {
         let aim = Aim::Creature { id };
@@ -1255,6 +1378,7 @@ mod tests {
         Me {
             actor: ActorFacts { id: 1, kind: "person".into(), hp: 100.0, hunger: 30.0, energy: 80.0, terrain: "grass".into(), stage: "adult".into(), inv: inv.iter().map(|(k, n)| (k.to_string(), *n)).collect(), knows: knows.iter().map(|s| s.to_string()).collect(), room: 25, ..Default::default() },
             hour: 12.0,
+            season: "summer".into(),
             ..Default::default()
         }
     }
@@ -1292,16 +1416,43 @@ mod tests {
     }
 
     #[test]
+    fn make_is_offered_at_a_furnace_only_while_it_burns_with_fuel() {
+        // Cullet's glass: at a furnace, lit, 1 fuel, 2 sand and an alkali (ash), glassmaking.
+        let src = living_rules::floors::compose(SKILLS, include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
+        let day = 2_880_000;
+        let sc = Scripts::with_day(&src, day).unwrap();
+        let aim = Aim::Thing { class: "structure", kind: "furnace".into(), at: Vec2::ZERO, id: 5, amount: 0.0, nearest: true };
+        let m = me(&[("sand", 2), ("ash", 1)], &["glassmaking"]);
+        let glass = |lit_until: u64| {
+            let mut t = thing_facts("structure", "furnace", 5, 0.0, 1.0);
+            workplace(&sc, &mut t, lit_until, 1_000_000, day);
+            let offered = choices(&sc, &m, &aim, Some(&t), &skills_of(&sc)).iter().any(|c| c.skill == "make" && c.item.as_deref() == Some("glass"));
+            (t.lit, t.fuel, offered)
+        };
+        let hour = day / 24;
+        // Two hours left at 3 units an hour: lit, 6 units.
+        let (lit, fuel, offered) = glass(1_000_000 + 2 * hour);
+        assert!(lit && (fuel - 6.0).abs() < 1e-3 && offered, "lit {lit} fuel {fuel} offered {offered}");
+        // A sixth of an hour: lit, half a unit, too little for glass.
+        let (lit, fuel, offered) = glass(1_000_000 + hour / 6);
+        assert!(lit && (fuel - 0.5).abs() < 1e-3 && !offered, "lit {lit} fuel {fuel} offered {offered}");
+        // Out.
+        let (lit, fuel, offered) = glass(999_000);
+        assert!(!lit && fuel == 0.0 && !offered, "lit {lit} fuel {fuel} offered {offered}");
+    }
+
+    #[test]
     fn a_bush_is_gathered_and_a_tap_gathers() {
         let sc = Scripts::new(SKILLS).unwrap();
         let (aim, t) = bush();
         let c = choices(&sc, &me(&[], &[]), &aim, Some(&t), &skills_of(&sc));
-        // Gathering, and turning to face it (the rules' `face` takes anything in sight).
-        assert_eq!(skills(&c), vec!["gather", "face"], "{c:?}");
+        // Gathering. Not facing it: the rules' `face` takes anything in sight, but a player faces
+        // where it looks, so `face_ui()` puts it in no list (play-test 5).
+        assert_eq!(skills(&c), vec!["gather"], "{c:?}");
         assert_eq!(likely(&sc, &aim, &c, None).map(|c| c.skill.as_str()), Some("gather"));
-        // A full pack: the rules refuse to gather, so it is not offered.
+        // A full pack: the rules refuse to gather, so it is not offered, and nothing is.
         let full = me(&[("wood", 40)], &[]);
-        assert_eq!(skills(&choices(&sc, &full, &aim, Some(&t), &skills_of(&sc))), vec!["face"]);
+        assert!(skills(&choices(&sc, &full, &aim, Some(&t), &skills_of(&sc))).is_empty());
     }
 
     #[test]

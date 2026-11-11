@@ -13,6 +13,7 @@ mod frame;
 mod island;
 mod mind;
 mod motion;
+mod outcomes;
 mod perceive;
 mod speech;
 mod perception;
@@ -137,6 +138,10 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
         sc.validate()?
     };
     log::info!("install_script: {}", checked.summary());
+    // The body's meters name fields of this world's vitals row.
+    if let Some(e) = sc.meters_unknown(&Vitals::FIELDS).first() {
+        return Err(format!("install refused: {e}"));
+    }
     rename_techniques(ctx);
     codes::install(ctx, &mut sc)?;
     combat::cards(ctx, &sc);
@@ -346,7 +351,7 @@ pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
 #[spacetimedb::reducer]
 pub fn kill(ctx: &ReducerContext, id: u32, cause: String) -> Result<(), String> {
     require_admin(ctx)?;
-    act::die(ctx, id, &cause, common::now_ms(ctx), 0);
+    act::die(ctx, id, &cause, common::now_ms(ctx), 0, living_rules::outcome::death::OTHER);
     Ok(())
 }
 

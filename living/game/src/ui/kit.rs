@@ -31,7 +31,13 @@ fn flat(c: Color) -> BackgroundGradient {
 
 /// A button: gold, or cream (`ghost`). Returns its entity.
 pub fn button(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, tag: &str, ghost: bool) -> Entity {
+    button_with(p, f, label, tag, ghost, (), ())
+}
+
+/// A button whose node and label carry more components (a widget that changes them later).
+pub fn button_with(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, tag: &str, ghost: bool, on_button: impl Bundle, on_label: impl Bundle) -> Entity {
     p.spawn((
+        on_button,
         Hot,
         Tag(tag.into()),
         Paint::Button,
@@ -41,7 +47,7 @@ pub fn button(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, tag: &str, g
         BorderColor::all(wood::edge()),
         wood::hard_shadow(3.0, 0.55),
     ))
-    .with_child((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE))
+    .with_child((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE, on_label))
     .id()
 }
 

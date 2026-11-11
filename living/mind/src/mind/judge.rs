@@ -223,7 +223,7 @@ impl Minds {
                 "temperament": persona.as_ref().map(|p| p.traits.clone()).unwrap_or_default(),
             },
             "body": match now_body {
-                Some(b) => Some(json!({"health": b.hp.round(), "max_health": b.max_hp.round(), "hunger": b.hunger.round(), "energy": b.energy.round(), "felt": crate::prompts::felt_body(b)})),
+                Some(b) => Some(json!({"health": b.hp.round(), "max_health": b.max_hp.round(), "hunger": b.hunger.round(), "energy": b.energy.round(), "felt": crate::prompts::felt_body(&b)})),
                 None => felt.map(|(at, you)| json!({"health": you["health"], "max_health": 100, "hunger": you["hunger"], "energy": you["energy"], "felt_seconds_ago": at.elapsed().as_secs()})),
             },
             "recently_perceived": recent,

@@ -8,6 +8,7 @@ Hugging Face gate refusing while it is off. No network; huggingface_hub is never
 Usage: python3 living/tools/store_selftest.py [-v]
 """
 import gzip
+import hashlib
 import io
 import json
 import os
@@ -152,8 +153,8 @@ class Text(unittest.TestCase):
 class Files(unittest.TestCase):
     def test_refusals(self):
         s = scrubber()
-        for name, why in ((".env", "secrets"), ("neo4j.env", "secrets"), ("cli.toml", "secrets"),
-                          ("id_ed25519", "secrets"), ("._summary.json", "macOS"), (".DS_Store", "macOS")):
+        for name, why in ((".env", "secret path"), ("neo4j.env", "secret path"), ("cli.toml", "secret path"),
+                          ("id_ed25519", "secret path"), ("._summary.json", "macOS"), (".DS_Store", "macOS")):
             st, reason = s.classify(f"a/{name}")
             self.assertEqual(st, "refused", name)
             self.assertIn(why, reason)
@@ -873,6 +874,416 @@ class Cards(unittest.TestCase):
         # every table the card configures has declared types
         self.assertEqual(set(configs), set(declared))
         self.assertNotIn("DRAFT", head)
+
+
+class ReviewOutputs(unittest.TestCase):
+    """Everything the scrubber writes, review files and stdout included, passes the same redaction
+    as published content: no planted owner name, login or line anywhere, in contents or names."""
+
+    PLANTED = (r"(?i)\bada\b", r"(?i)quillfeather", r"(?i)adaq", r"(?i)wassup mate", r"(?i)hi there",
+               r"(?i)a line nobody heard", re.escape(EMAIL))
+
+    def test_all_outputs_clean(self):
+        with tempfile.TemporaryDirectory() as t:
+            # a source outside home whose path holds the login
+            src = os.path.join(t, "adaq-sessions", "playtest-9")
+            fake_session(src)
+            write(src, "diagnosis/experience_ada.txt", "Ada's rows\n")
+            write(src, "diagnosis/journal_linnet_talk_wassup mate.txt", "excerpt\n")
+            write(src, "report/report.json", json.dumps({"lines": [{"text": "wassup mate", "at_ms": 7}],
+                                                         "player": "Ada"}))
+            write(src, "commands.jsonl", json.dumps({"at_ms": 123, "cmd": "say", "text": "wassup mate"}) + "\n" +
+                  json.dumps({"at_ms": 124, "cmd": "move", "to": [1, 2]}) + "\n")
+            mem = ("# Who you are (Ada)\n(played by a person: who they are shows only in what they do)\n"
+                   "- [1188] day 1 09:15 You said to a child: “a line nobody heard” {someone=#11}")
+            write(src, "session/journal/Ada.jsonl", journal_entry("Ada", "internalize", mem, "{}") + "\n")
+            old = store.Identity.from_runtime
+            store.Identity.from_runtime = classmethod(lambda cls, *a, **k: ident())
+            outs = []
+            try:
+                for args in (["scrub", "--dry-run", src, "--kind", "play-session", "--report", os.path.join(t, "r1")],
+                             ["scrub", "--write", os.path.join(t, "w1"), src, "--kind", "play-session"]):
+                    buf = io.StringIO()
+                    with redirect_stdout(buf), redirect_stderr(buf):
+                        self.assertEqual(store.main(args), 0)
+                    outs.append(("stdout " + args[1], buf.getvalue()))
+            finally:
+                store.Identity.from_runtime = old
+            for d in ("r1", "w1"):
+                for root, _, names in os.walk(os.path.join(t, d)):
+                    for n in names:
+                        p = os.path.join(root, n)
+                        rel = os.path.relpath(p, t)
+                        outs.append(("name " + rel, rel))
+                        with open(p, encoding="utf-8", errors="replace") as f:
+                            outs.append((rel, f.read()))
+            for where, text in outs:
+                for pat in self.PLANTED:
+                    self.assertIsNone(re.search(pat, text), f"{pat} in {where}")
+            # the header names the source by a label, the login redacted
+            with open(os.path.join(t, "r1", "report.md")) as f:
+                head = f.readline()
+            self.assertIn("[user]-sessions/playtest-9", head)
+            # review files were scrubbed in the same pass and are not in the published tree
+            rv = os.path.join(t, "w1", "review")
+            self.assertTrue(os.path.exists(os.path.join(rv, "report", "report.json")))
+            self.assertTrue(os.path.exists(os.path.join(rv, "commands.jsonl")))
+            self.assertFalse(os.path.exists(os.path.join(t, "w1", "tree", "commands.jsonl")))
+            with open(os.path.join(rv, "commands.jsonl")) as f:
+                rows = [json.loads(l) for l in f]
+            self.assertEqual(rows[0], {"at_ms": 123, "cmd": "say", "text": "[owner line]"})   # (d) kept
+            self.assertEqual(rows[1]["to"], [1, 2])
+
+    def test_review_files_held_from_packs(self):
+        with tempfile.TemporaryDirectory() as t:
+            fake_session(t)
+            write(t, "report/report.json", "{}")
+            write(t, "commands.jsonl", "{}\n")
+            cfg = store.load_config(local_config="/nonexistent/config.json")
+            s = store.Scrubber(ident(), cfg=cfg, machine="test", kind="play-session")
+            man = store.pack_session(t, os.path.join(t, "_p"), s, machine="test")
+            held = {h["path"]: h["reason"] for h in man["held"]}
+            self.assertIn("report/report.json", held)
+            self.assertIn("commands.jsonl", held)
+            self.assertIn("review only", held["commands.jsonl"])
+            with tarfile.open(os.path.join(t, "_p", "files.tar.gz")) as tf:
+                self.assertFalse([m for m in tf.getnames() if m.endswith(("report.json", "commands.jsonl"))])
+
+
+class ShortLinesAndTemplates(unittest.TestCase):
+    """A four-word owner line made of common words does not echo into "can see it"; system prompt
+    templates and installed scripts are touched only by an exact quoted substitution."""
+
+    def test_common_words_and_templates(self):
+        self.assertFalse(store.EchoMatcher({"I can see it"}).find("Yes, you can see it from the wall."))
+        self.assertTrue(store.EchoMatcher({"the brass lantern flickers"}).find("a brass lantern flickering low"))
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            talk = "# You and a stranger (#26)\n\n# What you are answering\na stranger: “I can see it”"
+            sysline = "When you can see it, act on what is in front of you."
+            write(t, "session/journal/Bram.jsonl",
+                  json.dumps({"actor": "Bram", "purpose": "talk", "model": "m", "reply": '{"say": "Yes, you can see it from the wall."}',
+                              "request": {"messages": [{"role": "system", "content": sysline},
+                                                       {"role": "user", "content": talk}]}}, ensure_ascii=False) + "\n")
+            write(t, "session/journal/system/abc.txt", sysline + "\n")
+            write(t, "session/journal/system/sub.txt", "Earlier someone said “I can see it”.\n")
+            write(t, "session/run/installed_source.rhai", "// if you can see it, strike\nlet x = 1;\n")
+            write(t, "session/skills.rhai", "// you can see it at 48 m\n")
+            write(t, "session/run/mind.log", "INFO Bram: they can see it now\n")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            rows, totals, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(s.owner_lines, {"I can see it"})
+            self.assertEqual(data["session/journal/system/abc.txt"].decode(), sysline + "\n")
+            self.assertEqual(data["session/run/installed_source.rhai"].decode(), "// if you can see it, strike\nlet x = 1;\n")
+            self.assertEqual(data["session/skills.rhai"].decode(), "// you can see it at 48 m\n")
+            self.assertEqual(data["session/run/mind.log"].decode(), "INFO Bram: they can see it now\n")
+            # an exact quoted substitution into a template is still caught
+            self.assertEqual(data["session/journal/system/sub.txt"].decode(), "Earlier someone said “[owner line]”.\n")
+            j = json.loads(data["session/journal/Bram.jsonl"].decode())
+            self.assertEqual(j["request"]["messages"][0]["content"], sysline)      # inline system prompt untouched
+            self.assertIn("you can see it from the wall", j["reply"])               # the reply is kept
+            self.assertNotIn("“I can see it”", j["request"]["messages"][1]["content"])
+            self.assertEqual(s.dropped, [])
+
+
+class CommandRows(unittest.TestCase):
+    def test_say_rows_kept_with_time(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            write(t, "session/run/events.jsonl",
+                  json.dumps({"at_ms": 5, "kind": "say", "text": "hi there"}) + "\n" +
+                  json.dumps({"at_ms": 6, "kind": "press", "key": "F"}) + "\n" +
+                  json.dumps({"at_ms": 7, "kind": "reply", "reducer": "human_say", "args": {"text": "hi there"}}) + "\n")
+            s = scrubber(kind="play-session")
+            rows, totals, data = store.scrub_source(t, s, keep_data=True)
+            self.assertIn("hi there", s.owner_lines)          # learned from the client's own events
+            out = [json.loads(l) for l in data["session/run/events.jsonl"].decode().splitlines()]
+            self.assertEqual([r["at_ms"] for r in out], [5, 6, 7])
+            self.assertEqual(out[0]["text"], "[owner line]")
+            self.assertEqual(out[2]["args"]["text"], "[owner line]")
+            self.assertEqual(out[1]["key"], "F")
+            self.assertTrue(all(d.get("action", "").startswith("kept") for d in s.dropped))
+            man = store.pack_session(t, os.path.join(t, "_p"), scrubber(kind="play-session"), machine="test")
+            self.assertTrue(man["dropped"] and all(d["action"].startswith("kept") for d in man["dropped"]))
+
+
+class SelfGivenNames(unittest.TestCase):
+    """A name the player gives themself in a typed line is the player's name: replaced by
+    "Player" where it names the player, in text, memory graphs and file names, with no flag."""
+
+    def session(self, t, intro):
+        write(t, "session/run/client.log", "2026-11-11T15:15:35.0Z INFO playing character #26\n"
+                                           "2026-11-11T15:19:20.0Z INFO quit\n")
+        talk = f"# You and a stranger (#26)\n\n# What you are answering\na stranger: “{intro}”"
+        write(t, "session/journal/Bram.jsonl", "\n".join([
+            journal_entry("Bram", "talk", talk, '{"say": "Well met."}'),
+            journal_entry("Bram", "think", "- [1201] day 1 09:20 The stranger called «Zorbin» waved {Zorbin=#26}\n"
+                                           "- Zorbin (#26) [Person]", '{"thought": "Zorbin seems kind"}'),
+            journal_entry("Bram", "consolidate", "notes",
+                          json.dumps({"nodes": [{"key": "person:26", "labels": ["Person"], "name": None,
+                                                 "props": {"known_name": "Zorbin"}}],
+                                      "relations": [{"id": 26, "trust": 5, "note": "goes by ZORBIN"}]})),
+        ]) + "\n")
+        write(t, "session/journal/Mercy.jsonl",
+              journal_entry("Mercy", "think", "I heard of zorbin from Bram.", '{"thought": "the zorbin fellow"}') + "\n")
+        write(t, "session/journal/Zorbin.jsonl", journal_entry("Zorbin", "internalize", "x", "{}") + "\n")
+        write(t, "session/run/notes_about_zorbin.log", "Zorbin arrived\n")
+
+    def test_intro_forms(self):
+        for intro in ("I'm Zorbin", "hi, call me Zorbin!", "my name is zorbin", "Name's Zorbin.", "Hello, I am Zorbin"):
+            with tempfile.TemporaryDirectory() as t:
+                self.session(t, intro)
+                s = scrubber({"model_exchanges": "include"}, kind="play-session")
+                rows, totals, data = store.scrub_source(t, s, keep_data=True)
+                self.assertEqual({n.lower() for n in s.self_names}, {"zorbin"}, intro)
+                blob = "".join(v.decode() for v in data.values())
+                names = " ".join(s.publish_path(r) for r in data)
+                self.assertIsNone(re.search(r"(?i)zorbin", blob), (intro, blob[:300]))
+                self.assertIsNone(re.search(r"(?i)zorbin", names), names)
+                self.assertIn("session/journal/Player.jsonl", names)
+                self.assertIn("notes_about_player.log", names)
+
+    def test_resident_names_are_not_learned(self):
+        """Tags, labels and graphs alone (no typed line) teach nothing: names residents give the
+        player are their words, not the player's."""
+        with tempfile.TemporaryDirectory() as t:
+            self.session(t, "hello there friend")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            _, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(s.self_names, set())
+            self.assertIn("Zorbin", "".join(v.decode() for v in data.values()))
+
+    def test_epithet_from_another_character(self):
+        """Maud's graph gives the player an epithet; Mercy repeats it. It is not learned."""
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            talk = "# You and a stranger (#26)\n\n# What you are answering\na stranger: “I'm Zorbin”"
+            write(t, "session/journal/Maud.jsonl", "\n".join([
+                journal_entry("Maud", "talk", talk, '{"say": "Hm."}'),
+                journal_entry("Maud", "consolidate", "notes", json.dumps(
+                    {"nodes": [{"key": "person:26", "props": {"known_name": "Wolfie"}}]})),
+            ]) + "\n")
+            write(t, "session/journal/Mercy.jsonl",
+                  journal_entry("Mercy", "think", "Maud says Wolfie is near.", '{"thought": "I will not fight Wolfie"}') + "\n")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            _, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(s.self_names, {"Zorbin"})
+            mercy = data["session/journal/Mercy.jsonl"].decode()
+            self.assertIn("I will not fight Wolfie", mercy)
+            self.assertIn("Wolfie", data["session/journal/Maud.jsonl"].decode())
+
+    def test_states_are_not_names(self):
+        s = scrubber(kind="play-session")
+        for line in ("I'm fine", "I'm lost", "I am new here", "call me later", "it's cold"):
+            s.self_names.clear()
+            s.owner_lines = {line}
+            s.finish_learning()
+            self.assertEqual(s.self_names, set(), line)
+
+    def test_player_name_option(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            write(t, "session/run/mind.log", "INFO Mercy saw Quix and Brummel by the well\n")
+            s = scrubber(kind="play-session", player_names=["Quix", "Brummel"])
+            _, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(data["session/run/mind.log"].decode(), "INFO Mercy saw Player and Player by the well\n")
+            old = store.Identity.from_runtime
+            store.Identity.from_runtime = classmethod(lambda cls, *a, **k: ident())
+            try:
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(store.main(["scrub", "--write", os.path.join(t, "w"), t, "--kind", "play-session",
+                                                 "--player-name", "Quix", "--player-name", "Brummel"]), 0)
+            finally:
+                store.Identity.from_runtime = old
+            with open(os.path.join(t, "w", "tree", "session", "run", "mind.log")) as f:
+                self.assertEqual(f.read(), "INFO Mercy saw Player and Player by the well\n")
+
+    def test_said_rows_limited_to_the_played_span(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "2026-11-11T15:15:35.0Z INFO playing character #26\n"
+                                               "2026-11-11T15:19:20.0Z INFO quit\n")
+            inside = store._iso_ms("2026-11-11T15:16:05Z")
+            after = store._iso_ms("2026-11-11T15:20:15Z")
+            write(t, "session/run/authority.jsonl",
+                  json.dumps({"subject": 26, "at_ms": inside, "text": "You said to a child: “typed by the owner”"}) + "\n" +
+                  json.dumps({"subject": 26, "at_ms": after, "text": "You said to a stranger: “said by the AI mind”"}) + "\n")
+            s = scrubber(kind="play-session")
+            store.scrub_source(t, s)
+            self.assertIn("typed by the owner", s.owner_lines)
+            self.assertNotIn("said by the AI mind", s.owner_lines)
+
+
+class GameWordName(unittest.TestCase):
+    """The player calls themself by a word the game also uses ("Strike"). Templates, prompts and
+    scripts stay byte-identical (the installed sha still matches); the game's ordinary word in
+    residents' speech stays; uses as a name are replaced; undecidable uses are replaced and listed."""
+
+    RHAI = "fn on_strike(who) { strike(who, 8) }\n// a strike deals 8; Strike is the first skill\n"
+
+    def build(self, t):
+        write(t, "session/run/client.log", "playing character #26\n")
+        write(t, "session/run/installed_source.rhai", self.RHAI)
+        sha = hashlib.sha256(self.RHAI.encode()).hexdigest()
+        write(t, "session/run/installed_script.txt",
+              f"database x\ninstalled sha256 {sha} ({len(self.RHAI)} chars; full text in installed_source.rhai)\n")
+        write(t, "session/skills.rhai", "// strike: 8 damage, Strike first\n")
+        system = "You can strike. Strike only when threatened."
+        write(t, "session/journal/system/abc.txt", system + "\n")
+        talk = "# You and a stranger (#26)\n\n# What you are answering\na stranger: “call me Strike”"
+        entries = [
+            json.dumps({"actor": "Bram", "purpose": "talk", "model": "m", "reply": '{"say": "I will land a strike on the wolf."}',
+                        "request": {"messages": [{"role": "system", "content": system},
+                                                 {"role": "user", "content": talk}]}}, ensure_ascii=False),
+            journal_entry("Bram", "think", "The stranger called «Strike» waved {Strike=#26}",
+                          json.dumps({"say": "Strike, come here.", "thought": "I told Strike about the well.",
+                                      "acts": [{"do": "strike", "target": {"id": 9}}]})),
+            journal_entry("Bram", "consolidate", "notes", json.dumps(
+                {"nodes": [{"key": "person:26", "props": {"known_name": "Strike"}}]})),
+            journal_entry("Bram", "think", "the wolves", '{"thought": "strike them down before dusk"}'),
+        ]
+        write(t, "session/journal/Bram.jsonl", "\n".join(entries) + "\n")
+        return system
+
+    def test_game_word(self):
+        with tempfile.TemporaryDirectory() as t:
+            system = self.build(t)
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            rows, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(s.self_names, {"Strike"})
+            # templates and scripts untouched, and the installed record still verifies
+            self.assertEqual(data["session/run/installed_source.rhai"].decode(), self.RHAI)
+            self.assertEqual(data["session/skills.rhai"].decode(), "// strike: 8 damage, Strike first\n")
+            self.assertEqual(data["session/journal/system/abc.txt"].decode(), system + "\n")
+            self.assertEqual(store.installed_sha_problems(rows, data), [])
+            j = [json.loads(l) for l in data["session/journal/Bram.jsonl"].decode().splitlines()]
+            self.assertEqual(j[0]["request"]["messages"][0]["content"], system)        # inline system prompt
+            self.assertIn("land a strike on the wolf", j[0]["reply"])                  # the ordinary word stays
+            r1 = json.loads(j[1]["reply"])
+            self.assertEqual(r1["say"], "Player, come here.")                          # addressed
+            self.assertEqual(r1["thought"], "I told Player about the well.")           # mid-sentence name
+            self.assertEqual(r1["acts"][0]["do"], "strike")                            # a game code
+            self.assertIn("called «Player»", j[1]["request"]["messages"][1]["content"])
+            self.assertIn("{Player=#26}", j[1]["request"]["messages"][1]["content"])
+            self.assertIn('"known_name": "Player"', j[2]["reply"])
+            # undecidable: replaced and listed, with the name masked by its length
+            self.assertEqual(json.loads(j[3]["reply"])["thought"], "player them down before dusk")
+            amb = [d for d in s.ambiguous if d["file"] == "session/journal/Bram.jsonl"]
+            self.assertEqual(len(amb), 1, amb)
+            self.assertIn("[6 chars] them down before dusk", amb[0]["context"])
+            self.assertNotIn("trike", amb[0]["context"])
+            self.assertEqual(amb[0]["replacement"], "player")
+            self.assertTrue(amb[0]["where"].startswith("row 3"))
+
+    def test_ambiguous_listed_in_review_and_template_untouched(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.build(t)
+            old = store.Identity.from_runtime
+            store.Identity.from_runtime = classmethod(lambda cls, *a, **k: ident())
+            try:
+                with redirect_stdout(io.StringIO()) as out:
+                    self.assertEqual(store.main(["scrub", "--write", os.path.join(t, "w"), t, "--kind", "play-session",
+                                                 "--decide", "model_exchanges=include"]), 0)
+            finally:
+                store.Identity.from_runtime = old
+            with open(os.path.join(t, "w", "ambiguous.md")) as f:
+                md = f.read()
+            self.assertIn("session/journal/Bram.jsonl", md)
+            self.assertIn("[6 chars] them down", md)
+            self.assertNotIn("trike them", md)
+            self.assertIn("sha matches the record", out.getvalue())
+            with open(os.path.join(t, "w", "tree", "session", "run", "installed_source.rhai")) as f:
+                self.assertEqual(f.read(), self.RHAI)
+
+    def test_older_record_names_its_file(self):
+        """Play-test 2's format: no installed_source.rhai; the record names skills.rhai."""
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            rules = "fn sight_in(light) { 48.0 }\n"
+            sha = hashlib.sha256(rules.encode()).hexdigest()
+            write(t, "session/skills.rhai", rules)
+            write(t, "session/run/installed_script.txt", f"revision 2\ninstalled sha256 {sha}\n"
+                                                         f"file      sha256 {sha} (/home/adaq/x/skills.rhai)\n")
+            s = scrubber(kind="play-session")
+            rows, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(store.installed_sha_problems(rows, data), [])
+            write(t, "session/skills.rhai", rules + "// changed\n")
+            s = scrubber(kind="play-session")
+            rows, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(len(store.installed_sha_problems(rows, data)), 1)
+
+    def test_installed_sha_is_a_hard_check(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.build(t)
+            # the owner's real first name in the script changes it: the check must refuse
+            write(t, "session/run/installed_source.rhai", self.RHAI + "// written for Ada\n")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            with self.assertRaises(store.Refused) as e:
+                store.pack_session(t, os.path.join(t, "p"), s, machine="test")
+            self.assertIn("owner-first-name", str(e.exception))
+            self.assertFalse(os.path.exists(os.path.join(t, "p", "MANIFEST.json")))
+
+
+class TrailingPunctuation(unittest.TestCase):
+    def test_short_line_without_its_punctuation(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "session/run/client.log", "playing character #26\n")
+            talk = "# You and a stranger (#26)\n\n# What you are answering\na stranger: “where am i ?”"
+            write(t, "session/journal/Bram.jsonl", "\n".join([
+                journal_entry("Bram", "talk", talk, '{"say": "Brackenford."}'),
+                journal_entry("Bram", "think", "He asked “where am I?” and then “Where  am i”.", '{"thought": "lost"}'),
+            ]) + "\n")
+            write(t, "session/run/mind.log", "INFO Bram: the stranger wonders where am I\n")
+            s = scrubber({"model_exchanges": "include"}, kind="play-session")
+            _, _, data = store.scrub_source(t, s, keep_data=True)
+            self.assertEqual(s.owner_lines, {"where am i ?"})
+            blob = "".join(v.decode() for v in data.values())
+            self.assertIsNone(re.search(r"(?i)where\s+am\s+i", blob), blob)
+
+
+class CredentialFiles(unittest.TestCase):
+    """Credential files are refused by name, never opened (an open() spy proves it), and listed
+    as held with the reason."""
+
+    def test_never_opened(self):
+        import builtins
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "playtest-9")
+            write(src, "session/run/client.log", "playing character #26\n")
+            planted = [write(src, rel, "hf" + "_" + _fake(_ALNUM, 34) + "\n") for rel in
+                       ("play3-state/tokens/player.token", "play3-state/tokens/README.txt", "session/run/a.key",
+                        ".env", "session/.env.local", "secrets/x.json", "session/run/id_ed25519",
+                        "session/run/admin.token", "creds.pem")]
+            # a tarball holding a token: the member must not be extracted
+            with tarfile.open(os.path.join(src, "state.tgz"), "w:gz") as tf:
+                tf.add(planted[0], arcname="tokens/player.token")
+                tf.add(os.path.join(src, "session/run/client.log"), arcname="session/run/client.log")
+            opened, extracted = [], []
+            real_open, real_extract = builtins.open, tarfile.TarFile.extractfile
+
+            def spy_open(f, *a, **k):
+                opened.append(os.path.abspath(str(f)) if not isinstance(f, int) else f)
+                return real_open(f, *a, **k)
+
+            def spy_extract(self, member):
+                extracted.append(getattr(member, "name", member))
+                return real_extract(self, member)
+            builtins.open, tarfile.TarFile.extractfile = spy_open, spy_extract
+            try:
+                s = scrubber(kind="play-session")
+                rows, totals, data = store.scrub_source(src, s, keep_data=True)
+                man = store.pack_session(src, os.path.join(t, "packed"), scrubber(kind="play-session"), machine="test")
+            finally:
+                builtins.open, tarfile.TarFile.extractfile = real_open, real_extract
+            for p in planted:
+                self.assertNotIn(os.path.abspath(p), opened, p)
+            self.assertNotIn("tokens/player.token", extracted)
+            st = {r["path"]: (r["status"], r["reason"]) for r in rows}
+            for rel in ("play3-state/tokens/player.token", "play3-state/tokens/README.txt", ".env",
+                        "session/run/admin.token", "state.tgz!tokens/player.token"):
+                self.assertEqual(st[rel], ("refused", "secret path, not read"), rel)
+            held = {h["path"]: h["reason"] for h in man["held"]}
+            self.assertEqual(held.get("play3-state/tokens/player.token"), "secret path, not read")
+            self.assertEqual(totals.counts.get("hf-token"), None)     # nothing was read to redact
 
 
 if __name__ == "__main__":

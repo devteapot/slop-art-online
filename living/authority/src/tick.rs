@@ -413,7 +413,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         let life = common::life_of(ctx, &c.kind);
         let age = common::age_days(&c, &w, now);
         if life.fraction(age, common::pace(&w)) >= life.deathline(c.id) {
-            crate::act::die(ctx, c.id, "old age", now, 0);
+            crate::act::die(ctx, c.id, "old age", now, 0, living_rules::outcome::death::OLD_AGE);
             dead_people += (c.kind == "person") as u32;
             continue;
         }
