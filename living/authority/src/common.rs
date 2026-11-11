@@ -741,9 +741,12 @@ pub fn stock_of(ctx: &ReducerContext, r: &ResourceNode) -> ResourceNode {
     ctx.db.resource_node().id().find(r.pool).unwrap_or_else(|| r.clone())
 }
 
+/// A node's amount now: what it held at `at_ms` and its regrowth since, at its kind's share of
+/// the rate in each season (`regrow_by_season`; none: full, and none in winter, as before).
 pub fn amount_now(ctx: &ReducerContext, r: &ResourceNode, now: u64) -> f32 {
     let (epoch, day, year) = calendar(ctx);
-    (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(r.max)
+    let by = scripts(ctx).regrow_seasons(&r.kind);
+    (r.amount + r.regen * living_rules::regrowth_ms(r.at_ms, now, epoch, day, year, &by) / 60_000.0).min(r.max)
 }
 
 thread_local! {

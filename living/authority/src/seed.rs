@@ -383,7 +383,7 @@ impl SeedTown {
 }
 
 /// A resident's household key (their own name when they live alone).
-fn household_of(r: &SeedResident) -> &str {
+pub(crate) fn household_of(r: &SeedResident) -> &str {
     if r.household.is_empty() {
         &r.name
     } else {
@@ -1020,7 +1020,7 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
     }
     if let Some(h) = hosted {
         plan_resources(ctx, map, &h.resources, now);
-        plan_structures(ctx, map, h, now);
+        plan_structures(ctx, map, h, None, now);
     }
     for (t, layout) in &settlements {
         settlement_resources(ctx, &map, t, layout.center, now);
@@ -1049,8 +1049,13 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
         ctx.db.artifact().insert(Artifact { id: 0, kind: a.kind.clone(), holder: STRUCTURE_BIT | st.id, author: 0, author_name: a.author_name.clone(), written_ms: 0, topic: a.topic.clone(), text: a.text.clone() });
     }
     let mut authored: Vec<(String, u32)> = Vec::new();
+    let mut households: std::collections::BTreeMap<String, u32> = Default::default();
     for (t, layout) in &settlements {
-        authored.extend(town(ctx, &map, t, layout, now));
+        authored.extend(town(ctx, &map, t, layout, &mut households, now));
+    }
+    // A plan's structures that belong to a household, now that its people and house exist.
+    if let Some(h) = hosted {
+        plan_structures(ctx, map, h, Some(&households), now);
     }
     settle_authored(ctx, &s, &authored, now);
     if let Some(h) = hosted {
@@ -1401,9 +1406,26 @@ fn put_authored(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, 
 
 /// A planned settlement's authored structures (`PlanSpec::structures`) and its lots' stores
 /// (`LotSpec::contents`, into the structure at the lot's door, which `island::build` placed).
-fn plan_structures(ctx: &ReducerContext, map: &living_rules::map::Map, h: &crate::island::Hosted, now: u64) {
-    let (mut placed, mut stocked) = (0, 0);
+/// With `owners` (households' owners by key, once the residents exist) only those that belong
+/// to a household (`owner: "household:<key>"`), owned by its house's owner; without, the rest.
+fn plan_structures(ctx: &ReducerContext, map: &living_rules::map::Map, h: &crate::island::Hosted, owners: Option<&std::collections::BTreeMap<String, u32>>, now: u64) {
+    let (mut placed, mut stocked, mut owned) = (0, 0, 0);
     for st in &h.structures {
+        if st.household.is_empty() == owners.is_some() {
+            continue;
+        }
+        if let Some(owners) = owners {
+            // `floor::check` refused a household the seed lacks; one that slips past is logged.
+            let Some(owner) = owners.get(&st.household).copied() else {
+                log::warn!("plan: a {} belongs to household {}, which has nobody in this world; left out", st.kind, st.household);
+                continue;
+            };
+            if living_rules::catalog::is_structure(&st.kind) {
+                put_authored(ctx, map, &st.kind, st.at, owner, &st.contents, st.fuel, now);
+                owned += 1;
+            }
+            continue;
+        }
         if st.kind.is_empty() {
             let own = h.lots.iter().position(|l| l.key == st.lot).and_then(|i| ctx.db.lot().id().find(i as u32)).map_or(0, |l| l.structure);
             if own == 0 {
@@ -1421,8 +1443,8 @@ fn plan_structures(ctx: &ReducerContext, map: &living_rules::map::Map, h: &crate
             log::warn!("plan: structure of a kind this world does not have, `{}`, left out", st.kind);
         }
     }
-    if placed > 0 || stocked > 0 {
-        log::info!("plan structures: {placed} placed, {stocked} lot stores filled");
+    if placed > 0 || stocked > 0 || owned > 0 {
+        log::info!("plan structures: {placed} placed, {stocked} lot stores filled, {owned} households' own placed");
     }
 }
 
@@ -1788,7 +1810,7 @@ fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, l
 /// the market square, a house per household along the streets, gates in the wall kept by the
 /// settlement's community, planted fields outside; residents with histories.
 /// Returns the authored residents by name (none for a town drawn from `occupations`).
-fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<(String, u32)> {
+fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, households: &mut std::collections::BTreeMap<String, u32>, now: u64) -> Vec<(String, u32)> {
     let center = layout.center;
     let c = ctx.db.community().insert(Community { id: 0, name: t.name.clone(), founder: 0, founded_ms: 0, home_x: center.0, home_y: center.1 });
     put(ctx, map, "campfire", layout.market[0], 0, now);
@@ -1801,7 +1823,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
     let (ids, authored): (Vec<u32>, Vec<(String, u32)>) = if t.residents.is_empty() {
         (drawn_households(ctx, map, t, layout, now), Vec::new())
     } else {
-        let a = authored_households(ctx, map, t, layout, now);
+        let a = authored_households(ctx, map, t, layout, households, now);
         (a.iter().map(|a| a.1).collect(), a)
     };
     // Stores on the market square.
@@ -1937,7 +1959,9 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
 /// children), each with the age, know-how, habits and belongings the seed gives them and a
 /// background row; their sheets and any parents in later settlements are resolved once every
 /// settlement has its people (`settle_authored`).
-fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<(String, u32)> {
+/// Each household's owner (its first member born, who owns its house) goes into `households` by
+/// its key, for what a plan gives the household (`owner: "household:<key>"`).
+fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, households: &mut std::collections::BTreeMap<String, u32>, now: u64) -> Vec<(String, u32)> {
     let (admin, minded) = common::mind_controller(ctx);
     let center = layout.center;
     let (life, pace) = (common::life_of(ctx, "person"), common::pace(&common::world(ctx)));
@@ -2019,6 +2043,9 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
     }
     for (h, key) in keys.iter().enumerate() {
         let owner = spawned.iter().find(|(j, ..)| household_of(&t.residents[*j]) == *key).map(|s| s.1).unwrap_or(0);
+        if owner != 0 {
+            households.entry(key.to_string()).or_insert(owner);
+        }
         if homes.get(h).is_some_and(|x| x.1) {
             house_at(ctx, map, home_of(h), owner, now, bound.get(h).is_some_and(|b| b.is_some()));
         }
@@ -2352,6 +2379,19 @@ mod tests {
         assert!(e.contains("structure `kiln`"), "{e}");
         let e = with(&|v| v["map"]["params"]["plans"][0]["lots"][0]["contents"] = serde_json::json!({"gold": 1})).unwrap_err();
         assert!(e.contains("item `gold`"), "{e}");
+        // A lot's own door structure must be a kind of the world (rules-3).
+        let e = with(&|v| v["map"]["params"]["plans"][0]["lots"][0]["structure"] = "silo".into()).unwrap_err();
+        assert!(e.contains("structure `silo`"), "{e}");
+        // A structure a household owns names a household of the residents; Cullet's 22 do.
+        let stores = |v: &serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array().unwrap().iter().filter(|st| st["owner"].is_string()).count();
+        assert_eq!(stores(&serde_json::from_str(text).unwrap()), 22);
+        let owned = |v: &mut serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array_mut().unwrap().iter_mut().find(|st| st["owner"].is_string()).unwrap().clone();
+        let first = owned(&mut serde_json::from_str(text).unwrap());
+        let at = |v: &mut serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array().unwrap().iter().position(|st| st == &first).unwrap();
+        let e = with(&|v| { let i = at(v); v["map"]["params"]["plans"][0]["structures"][i]["owner"] = "household:nobody".into(); }).unwrap_err();
+        assert!(e.contains("belongs to \"household:nobody\", which is no household of the seed's residents") && e.contains("tarn"), "{e}");
+        let e = with(&|v| v["towns"][0]["residents"] = serde_json::json!([])).unwrap_err();
+        assert!(e.contains("which is no household") && e.contains("the households are none"), "{e}");
     }
 
     #[test]
