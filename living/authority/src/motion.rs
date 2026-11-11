@@ -33,10 +33,16 @@ pub const FLAG_EARLY: u8 = 1;
 pub const FLAG_EACH: u8 = 2;
 /// A dash: heading at once, no ramp and no slowing at the end.
 pub const FLAG_AGILE: u8 = 4;
-/// A player's run (the intent is kept while the same key is held).
+/// A run, for any controller (a player's held key, a graph's or a mind's `run`, a flight): the
+/// body runs at `steer.run_pace` while it has breath and walks at `steer.pace` when it has
+/// none, running again once it has the `pools` law's `resume` (docs/STAMINA.md).
 pub const FLAG_RUN: u8 = 8;
 /// Stuck once already; re-planned (internal).
 const FLAG_STUCK: u8 = 16;
+/// A run out of breath, walking until it has enough to run again (internal).
+const FLAG_WINDED: u8 = 32;
+/// The run is draining breath now: its rate is on the vitals row (internal).
+const FLAG_DRAIN: u8 = 64;
 
 /// Minimum time between steering updates (except arrival at a spot).
 const MIN_STEP_MS: u64 = 40;
@@ -105,15 +111,92 @@ pub struct Goal {
     pub keep: f32,
     pub speed: f32,
     pub flags: u8,
+    /// A run's speed without breath (`speed` is the run's); the speed for any other goal.
+    pub pace: f32,
 }
 
 impl Goal {
     pub fn point(at: (f32, f32), speed: f32, flags: u8) -> Self {
-        Self { kind: GOAL_POINT, target: 0, at, keep: 0.0, speed, flags }
+        Self { kind: GOAL_POINT, target: 0, at, keep: 0.0, speed, flags, pace: speed }
     }
     pub fn creature(id: u32, keep: f32, speed: f32, flags: u8) -> Self {
-        Self { kind: GOAL_CREATURE, target: id, at: (0.0, 0.0), keep, speed, flags }
+        Self { kind: GOAL_CREATURE, target: id, at: (0.0, 0.0), keep, speed, flags, pace: speed }
     }
+    /// The same goal at a run of `speed`: without breath it goes at its own speed.
+    pub fn run(self, speed: f32) -> Self {
+        Self { pace: self.speed, speed, flags: self.flags | FLAG_RUN, ..self }
+    }
+}
+
+/// Keep a run's drain of breath in step with the body (`FLAG_DRAIN`): a run under way that is
+/// moving and has breath drains it; anything else (arrived, stopped, standing at a keep, out of
+/// breath) lets it come back. One vitals write at each change, none while it holds. Returns
+/// whether the steer row changed.
+fn breathe(ctx: &ReducerContext, b: &Body, st: &mut Steer, now: u64) -> bool {
+    let moving = b.vx != 0.0 || b.vy != 0.0;
+    let want = st.goal != GOAL_NONE && st.flags & FLAG_RUN != 0 && st.flags & FLAG_WINDED == 0 && moving;
+    let have = st.flags & FLAG_DRAIN != 0;
+    if want == have {
+        return false;
+    }
+    if want {
+        crate::breath::drain(ctx, b.id, common::pools_of(ctx, b.id, now).breath.run_per_s, now);
+        st.flags |= FLAG_DRAIN;
+    } else {
+        crate::breath::ease(ctx, b.id, now);
+        st.flags &= !FLAG_DRAIN;
+    }
+    true
+}
+
+/// A run's breath at a steering update: out of breath, it walks; with enough again, it runs.
+/// Returns whether the steer row changed.
+fn run_or_walk(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> bool {
+    if st.flags & FLAG_RUN == 0 || st.goal == GOAL_NONE {
+        return false;
+    }
+    let breath = crate::breath::stamina_now(ctx, b.id, now);
+    if st.flags & FLAG_WINDED == 0 && st.flags & FLAG_DRAIN != 0 && breath <= 0.05 {
+        st.flags |= FLAG_WINDED;
+        b.speed = st.pace;
+        return true;
+    }
+    if st.flags & FLAG_WINDED != 0 && breath >= common::pools_of(ctx, b.id, now).breath.resume {
+        st.flags &= !FLAG_WINDED;
+        b.speed = st.run_pace;
+        return true;
+    }
+    false
+}
+
+/// A running body looks again when its breath runs out, and a winded one when it can run again,
+/// so the speed changes exactly there (the vitals row and the motion segment agree).
+fn breath_due(ctx: &ReducerContext, b: &mut Body, st: &Steer, now: u64) {
+    if st.flags & FLAG_RUN == 0 || st.goal == GOAL_NONE || b.next_ms == IDLE {
+        return;
+    }
+    let Some(v) = ctx.db.vitals().id().find(b.id) else { return };
+    let at = if st.flags & FLAG_DRAIN != 0 {
+        living_rules::pools::reaches(v.stamina, v.stamina_rate, v.stamina_from_ms, v.at_ms, 0.0, now)
+    } else if st.flags & FLAG_WINDED != 0 {
+        let resume = common::pools_of(ctx, b.id, now).breath.resume;
+        living_rules::pools::refilled(v.stamina, v.stamina_rate, v.stamina_from_ms, v.at_ms, v.stamina_max, resume, now)
+    } else {
+        None
+    };
+    if let Some(t) = at {
+        b.next_ms = b.next_ms.min(t.max(now + MIN_STEP_MS));
+    }
+}
+
+/// End a run where the body stops (no steering update follows): its breath comes back.
+fn end_run(ctx: &ReducerContext, st: &mut Steer, id: u32, now: u64) -> bool {
+    if st.flags & FLAG_DRAIN == 0 {
+        return false;
+    }
+    crate::breath::ease(ctx, id, now);
+    st.flags &= !FLAG_DRAIN;
+    true
 }
 
 /// What steering tells the activity driving it.
@@ -128,7 +211,7 @@ pub fn speed_of(b: &Body) -> f32 {
 }
 
 fn fresh_steer(id: u32) -> Steer {
-    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0, look_on: false, look: 0.0 }
+    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0, look_on: false, look: 0.0, pace: 0.0, run_pace: 0.0 }
 }
 
 fn load_steer(ctx: &ReducerContext, id: u32) -> (Steer, bool) {
@@ -303,10 +386,20 @@ fn angle(from: (f32, f32), to: (f32, f32)) -> f32 {
     (to.1 - from.1).atan2(to.0 - from.0)
 }
 
+/// One steering update at `now`, with a run's breath: a run out of breath walks (and runs again
+/// when it can), the drain follows the body, and the next look comes when the breath changes it.
+fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Option<Event>, bool) {
+    let paced = run_or_walk(ctx, b, st, now);
+    let (ev, dirty) = steer_update(ctx, b, st, now);
+    let breathed = breathe(ctx, b, st, now);
+    breath_due(ctx, b, st, now);
+    (ev, dirty || paced || breathed)
+}
+
 /// One steering update at `now`: writes the new segment (from `resume_at`) into `b` and
 /// possibly `st`.
 /// Returns an event for the driving activity and whether `st` changed.
-fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Option<Event>, bool) {
+fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Option<Event>, bool) {
     let laws = common::laws(ctx);
     let moves = common::moves_of(ctx, b.id, now);
     let tune = moves.tuning(laws.road_speed);
@@ -672,10 +765,19 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
     st.gx = at.0;
     st.gy = at.1;
     st.keep = goal.keep;
-    st.flags = goal.flags;
+    // A run already under way keeps its drain (and needs no breath to start again).
+    let draining = st.flags & FLAG_DRAIN;
+    st.flags = goal.flags | draining;
     st.reported = false;
     st.plan_ms = 0;
+    st.pace = goal.pace;
+    st.run_pace = if goal.flags & FLAG_RUN != 0 { goal.speed } else { 0.0 };
     b.speed = goal.speed;
+    if goal.flags & FLAG_RUN != 0 && draining == 0 && crate::breath::stamina_now(ctx, id, now) < common::pools_of(ctx, id, now).breath.resume {
+        // Not enough breath to set off running: it walks until it has.
+        st.flags |= FLAG_WINDED;
+        b.speed = goal.pace;
+    }
     let (ev, _) = update(ctx, &mut b, &mut st, now);
     save_steer(ctx, st, exists);
     put(ctx, b, before);
@@ -686,9 +788,10 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
 pub fn stop(ctx: &ReducerContext, id: u32, now: u64) {
     let Some(mut b) = ctx.db.body().id().find(id) else { return };
     let (mut st, exists) = load_steer(ctx, id);
-    if exists && st.goal != GOAL_NONE {
+    if exists && (st.goal != GOAL_NONE || st.flags & FLAG_DRAIN != 0) {
         st.goal = GOAL_NONE;
         st.reported = false;
+        end_run(ctx, &mut st, id, now);
         save_steer(ctx, st, exists);
     }
     if b.next_ms == IDLE && b.path.is_empty() && b.vx == 0.0 && b.vy == 0.0 {
@@ -731,9 +834,10 @@ pub fn face(ctx: &ReducerContext, id: u32, toward: (f32, f32), now: u64) {
 /// the same transaction takes over with the body's momentum.
 pub fn brake(ctx: &ReducerContext, id: u32, now: u64) {
     let (mut st, exists) = load_steer(ctx, id);
-    if exists && st.goal != GOAL_NONE {
+    if exists && (st.goal != GOAL_NONE || st.flags & FLAG_DRAIN != 0) {
         st.goal = GOAL_NONE;
         st.reported = false;
+        end_run(ctx, &mut st, id, now);
         save_steer(ctx, st, exists);
     }
     let Some(mut b) = ctx.db.body().id().find(id) else { return };
@@ -788,6 +892,7 @@ pub fn intent(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, run: bool,
     st.tokens = tokens - 1.0;
     st.input_ms = now;
     let keep_speed = st.goal == GOAL_DIRECTION && st.flags & FLAG_RUN == run_flag;
+    let kept = (st.run_pace, st.pace);
     save_steer(ctx, st, exists);
     match unit {
         None => {
@@ -795,11 +900,16 @@ pub fn intent(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, run: bool,
             Ok(())
         }
         Some(u) => {
-            let speed = match ctx.db.body().id().find(id) {
-                Some(b) if keep_speed => b.speed,
-                _ => walk_speed() * if run { common::moves_of(ctx, id, now).run } else { 1.0 },
+            // A run costs breath and becomes a walk without it, as for every controller.
+            let (speed, pace) = match ctx.db.body().id().find(id) {
+                Some(_) if keep_speed && run => kept,
+                Some(b) if keep_speed => (b.speed, b.speed),
+                _ => {
+                    let walk = walk_speed();
+                    (walk * if run { common::moves_of(ctx, id, now).run } else { 1.0 }, walk)
+                }
             };
-            start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: u, keep: 0.0, speed, flags: run_flag }, now).map(|_| ())
+            start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: u, keep: 0.0, speed, flags: run_flag, pace }, now).map(|_| ())
         }
     }
 }
@@ -835,12 +945,12 @@ pub fn look(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, now: u64) ->
     if let Some(w) = want {
         st.look = w;
     }
-    let (gx, gy, flags) = (st.gx, st.gy, st.flags);
+    let (gx, gy, flags) = (st.gx, st.gy, st.flags & (FLAG_RUN | FLAG_EARLY | FLAG_EACH | FLAG_AGILE));
+    let (speed, pace) = if flags & FLAG_RUN != 0 { (st.run_pace, st.pace) } else { (b.speed, b.speed) };
     save_steer(ctx, st, exists);
     if walking && moving {
         // Steer again now, toward the look or back to the way.
-        let speed = b.speed;
-        start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: (gx, gy), keep: 0.0, speed, flags }, now).map(|_| ())
+        start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: (gx, gy), keep: 0.0, speed, flags, pace }, now).map(|_| ())
     } else if let (Some(w), false) = (want, moving) {
         let p = common::pos(&b, now);
         face(ctx, id, (p.0 + w.cos(), p.1 + w.sin()), now);
@@ -891,6 +1001,7 @@ pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<
     let (mut st, exists) = load_steer(ctx, id);
     if exists {
         st.goal = GOAL_NONE;
+        end_run(ctx, &mut st, id, now);
         save_steer(ctx, st, exists);
     }
     b.x = at.0;

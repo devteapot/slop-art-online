@@ -653,12 +653,14 @@ pub fn needs(v: &Vitals, now: u64) -> Needs {
     }
 }
 
-/// Re-anchor needs at `now`.
-pub fn settle(v: &mut Vitals, now: u64) {
+/// Re-anchor needs and the short pools at `now` (breath a drain took since the last anchor
+/// tires the body; `crate::breath::settle`).
+pub fn settle(ctx: &ReducerContext, v: &mut Vitals, now: u64) {
     let n = needs(v, now);
+    let p = pools_of(ctx, v.id, now);
     v.hp = n.hp;
     v.hunger = n.hunger;
-    v.energy = n.energy;
+    v.energy = crate::breath::settle(v, &p, n.energy, now);
     v.at_ms = now;
 }
 
@@ -832,6 +834,7 @@ pub fn hearing_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
 struct Hot {
     senses: Option<living_rules::script::Senses>,
     moves: Option<living_rules::script::Moves>,
+    pools: Option<living_rules::pools::Pools>,
     glow: Option<f32>,
 }
 
@@ -923,7 +926,18 @@ pub fn moves_of(ctx: &ReducerContext, id: u32, now: u64) -> living_rules::script
     hot(ctx, id, &w, now, "motion", |h| &mut h.moves, |sc, c| {
         sc.moves(c).unwrap_or_else(|e| {
             log::warn!("motion for {id}: {e}");
-            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0, wander_turn: 1.2, wander_keep_s: 0.0, top: f32::INFINITY }
+            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0, wander_turn: 1.2, wander_keep_s: 0.0, top: f32::INFINITY, charge: false }
+        })
+    })
+}
+
+/// A creature's short pools (the `pools` law: breath and focus), kept per state.
+pub fn pools_of(ctx: &ReducerContext, id: u32, now: u64) -> living_rules::pools::Pools {
+    let w = world(ctx);
+    hot(ctx, id, &w, now, "pools", |h| &mut h.pools, |sc, c| {
+        sc.pools(c).unwrap_or_else(|e| {
+            log::warn!("pools for {id}: {e}");
+            living_rules::pools::Pools::default()
         })
     })
 }

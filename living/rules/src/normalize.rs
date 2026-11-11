@@ -72,7 +72,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
 const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening", "work_hours"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, work_hours, raining, moving, believes, judged, chance, all, any, not";
+const CONDS: &str = "hunger, energy, health, stamina, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, work_hours, raining, moving, believes, judged, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -631,7 +631,7 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     let c = cmp(v, path, "hour")?;
                     json!({"hour": c})
                 }
-                "hunger" | "energy" | "health" => {
+                "hunger" | "energy" | "health" | "stamina" => {
                     let c = cmp(v, path, &key)?;
                     json!({key: c})
                 }

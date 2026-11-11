@@ -1308,7 +1308,24 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         rate_key: 0,
         hurt_ms: 0,
         hurt_by: 0,
+        stamina: 0.0,
+        stamina_max: 0.0,
+        stamina_rate: 0.0,
+        stamina_from_ms: 0,
+        focus: 0.0,
+        focus_max: 0.0,
+        focus_rate: 0.0,
+        focus_from_ms: 0,
     });
+    // Breath and focus full, as much as its tiredness allows (the `pools` law).
+    if let Some(mut v) = ctx.db.vitals().id().find(id) {
+        let p = common::pools_of(ctx, id, now);
+        v.stamina_max = p.stamina.cap(v.energy);
+        v.stamina = v.stamina_max;
+        v.focus_max = p.focus.cap(v.energy);
+        v.focus = v.focus_max;
+        ctx.db.vitals().id().update(v);
+    }
     // The young start from their species' young instinct (a baby cries and follows a parent).
     let graph = if c.stage == 0 { young_instinct(kind) } else { instinct(kind) };
     ctx.db.brain().insert(Brain { id, graph, revision: 1, plan: "instinct".into(), source: "instinct".into(), installed_ms: now });

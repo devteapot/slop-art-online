@@ -325,6 +325,11 @@ pub struct Steer {
     pub look_on: bool,
     #[default(0.0f32)]
     pub look: f32,
+    /// A goal that runs (`FLAG_RUN`): its speed walking (out of breath) and running (m/s).
+    #[default(0.0f32)]
+    pub pace: f32,
+    #[default(0.0f32)]
+    pub run_pace: f32,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
@@ -357,6 +362,28 @@ pub struct Vitals {
     pub rate_key: u32,
     pub hurt_ms: u64,
     pub hurt_by: u32,
+    /// Breath (`stamina`) and focus: each its level at `at_ms`, its cap (tiredness caps breath),
+    /// its signed rate per real second, and when that rate starts (`*_from_ms`, never before
+    /// `at_ms`): negative from `at_ms` while a run or a held guard drains it, the refill from the
+    /// last spend plus the pool's delay otherwise (`living_rules::pools::level`). Written when a
+    /// drain starts or stops and when something is spent, never per tick: a reader projects
+    /// `value + rate * (now - max(at_ms, from_ms)) / 1000` within 0..cap.
+    #[default(100.0f32)]
+    pub stamina: f32,
+    #[default(100.0f32)]
+    pub stamina_max: f32,
+    #[default(0.0f32)]
+    pub stamina_rate: f32,
+    #[default(0u64)]
+    pub stamina_from_ms: u64,
+    #[default(100.0f32)]
+    pub focus: f32,
+    #[default(100.0f32)]
+    pub focus_max: f32,
+    #[default(0.0f32)]
+    pub focus_rate: f32,
+    #[default(0u64)]
+    pub focus_from_ms: u64,
 }
 
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
@@ -1111,6 +1138,10 @@ pub struct SkillCard {
     pub needs: String,
     #[default("")]
     pub knows: String,
+    /// The pool `cost` is taken from (`combat_pool`): "stamina" or "focus" (`vitals`' columns
+    /// of that name), so the bar greys a slot without knowing skill names.
+    #[default("stamina")]
+    pub pool: String,
 }
 
 /// What others can see of a character in a fight: the health band at a glance and the move

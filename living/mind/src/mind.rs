@@ -449,6 +449,7 @@ impl Minds {
             hunger: (v.hunger + v.hunger_rate * m).clamp(0.0, 100.0),
             energy: (v.energy + v.energy_rate * m).clamp(0.0, 100.0),
             hp_rate: v.hp_rate,
+            breath: Some(living_rules::pools::level(v.stamina, v.stamina_rate, v.stamina_from_ms, v.at_ms, v.stamina_max, llm::now_ms())),
         })
     }
 

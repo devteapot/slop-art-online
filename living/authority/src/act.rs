@@ -162,10 +162,10 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
     let kind = ch.as_ref().map(|c| c.kind.clone()).unwrap_or_default();
     let age = ch.as_ref().map(|c| common::age_days(c, &w, now)).unwrap_or(20.0);
     let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-    let (hp, hunger, energy, hurt_by, hurt_ago) = ctx.db.vitals().id().find(id).map(|v| {
+    let (hp, hunger, energy, hurt_by, hurt_ago, (stamina, focus)) = ctx.db.vitals().id().find(id).map(|v| {
         let n = common::needs(&v, now);
-        (n.hp, n.hunger, n.energy, v.hurt_by, (v.hurt_ms != 0).then(|| now.saturating_sub(v.hurt_ms) as f32))
-    }).unwrap_or((0.0, 0.0, 0.0, 0, None));
+        (n.hp, n.hunger, n.energy, v.hurt_by, (v.hurt_ms != 0).then(|| now.saturating_sub(v.hurt_ms) as f32), crate::breath::levels(&v, now))
+    }).unwrap_or((0.0, 0.0, 0.0, 0, None, (0.0, 0.0)));
     let warm = warmth(ctx, at, now);
     ActorFacts {
         id,
@@ -195,6 +195,8 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         community: 0,
         home: String::new(),
         lit: common::lit_at(ctx, at),
+        stamina,
+        focus,
     }
 }
 
@@ -561,7 +563,7 @@ pub fn can(ctx: &ReducerContext, id: u32, skill: &str, target: Resolved, item: &
 
 /// `answers` is what an answer (accept, decline) names: a trade offer's id and a record's id
 /// (0: none).
-pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), now: u64) -> Result<(), String> {
+pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, now: u64) -> Result<(), String> {
     let sc = common::scripts(ctx);
     let shape = shape_of(&sc, skill);
     let aim = shape.map_or(Aim::None, |s| s.aim);
@@ -817,6 +819,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 keep: dist(here, target.at) + common::laws(ctx).flee_clear,
                 speed: sp * common::moves_of(ctx, id, now).flee,
                 flags: 0,
+                pace: sp * common::moves_of(ctx, id, now).flee,
             },
             "follow" if creature => Goal::creature(target.id as u32, r, sp, 0),
             "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
@@ -839,6 +842,18 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 Goal::point(at, sp, 0)
             }
         };
+        // Running on the way, for every controller alike, at the cost of breath: when asked
+        // (`run`), on a flight unless asked not to, and on the approach of a blow for a
+        // creature whose `motion` law charges (a wolf on the hunt). A dash or stepping aside
+        // has its own speed.
+        let moves = common::moves_of(ctx, id, now);
+        let runs = match skill {
+            _ if aim == Aim::Dash || aside => false,
+            "flee" => run.unwrap_or(true),
+            _ if creature && shape.is_some_and(|s| s.closes_in) => run.unwrap_or(moves.charge),
+            _ => run.unwrap_or(false),
+        };
+        let goal = if runs { goal.run(sp * moves.run) } else { goal };
         if skill == "follow" {
             act.ends_ms = now + (common::laws(ctx).follow_s * 1000.0) as u64;
         }
@@ -918,6 +933,10 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
         crate::town::shown(ctx, &sc, &act, at, now);
     }
     let menace = shape.is_some_and(|s| s.menace).then_some(act.victim).filter(|v| *v != 0);
+    // A held guard takes breath while it is up (and comes back once it drops).
+    if shape.is_some_and(|s| s.aim == Aim::Facing) {
+        crate::breath::drain(ctx, id, common::pools_of(ctx, id, now).breath.guard_per_s, now);
+    }
     if ctx.db.activity().id().find(id).is_some() {
         ctx.db.activity().id().update(act);
     } else {
@@ -955,6 +974,9 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
         if a.node == PLAYER {
             crate::combat::resume_move(ctx, id, now);
         }
+    }
+    if a.phase == 1 && aim_of(&sc, &a.skill) == Aim::Facing {
+        crate::breath::ease(ctx, id, now);
     }
     if a.phase == 0 {
         // Keep momentum: a movement that replaces this one takes over from the glide.
@@ -1076,6 +1098,9 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
     if timed || sc.shows().record(&a.skill) {
         let what = if ok { why.to_string() } else { format!("failed: {why}") };
         crate::combat::outcome(ctx, a.id, &a.skill, &what, now);
+    }
+    if a.phase == 1 && aim_of(&sc, &a.skill) == Aim::Facing {
+        crate::breath::ease(ctx, a.id, now);
     }
     if timed {
         // A dash or a guard has no release: its recovery starts when it ends.
@@ -1297,7 +1322,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
             }
             Effect::Vitals { hp, hunger, energy } => {
                 if let Some(mut v) = ctx.db.vitals().id().find(me) {
-                    common::settle(&mut v, now);
+                    common::settle(ctx, &mut v, now);
                     v.hp = (v.hp + hp).clamp(0.0, v.max_hp);
                     v.hunger = (v.hunger + hunger).clamp(0.0, 100.0);
                     v.energy = (v.energy + energy).clamp(0.0, 100.0);
@@ -1305,10 +1330,11 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     ctx.db.vitals().id().update(v);
                 }
             }
+            Effect::Spend { pool, amount } => crate::breath::spend(ctx, me, &pool, amount, now),
             Effect::Heal { amount } => {
                 let patient = a.target.id as u32;
                 if let Some(mut v) = ctx.db.vitals().id().find(patient) {
-                    common::settle(&mut v, now);
+                    common::settle(ctx, &mut v, now);
                     v.hp = (v.hp + amount).min(v.max_hp);
                     v.rate_key = 0;
                     ctx.db.vitals().id().update(v);
@@ -2087,7 +2113,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     let yielded = vc.kind == "person" && yielding(ctx, victim, &vc.kind, now);
     let struck_since_yield = yielded && yielded_ago(ctx, victim, now).is_some_and(|ago| v.hurt_ms >= now.saturating_sub(ago as u64) && v.hurt_by == attacker);
     let first_blow = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != attacker;
-    common::settle(&mut v, now);
+    common::settle(ctx, &mut v, now);
     v.hp = (v.hp - amount).max(0.0);
     v.hurt_ms = now;
     v.hurt_by = attacker;

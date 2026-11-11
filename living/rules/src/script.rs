@@ -573,6 +573,9 @@ pub struct Moves {
     /// The fastest a road takes a body (m/s): the road's bonus stops here, though a body that
     /// is faster on its own keeps its speed (infinite: no cap; a law without `top`).
     pub top: f32,
+    /// The approach to a blow (a `closes_in` skill at a creature) runs unless the act says
+    /// walk: a predator's charge (false: it walks unless the act says run).
+    pub charge: bool,
 }
 
 impl Moves {
@@ -1656,6 +1659,15 @@ impl Scripts {
         decode_moves(self.call("motion", ctx)?)
     }
 
+    /// Why a body walks slower than its pace (`slowed(a)`), in words its status and its mind
+    /// share; empty when it is not, or the script has no such law.
+    pub fn slowed(&self, ctx: &SkillCtx) -> String {
+        if !self.has("slowed") {
+            return String::new();
+        }
+        self.call("slowed", ctx).ok().and_then(|d| d.into_string().ok()).unwrap_or_default()
+    }
+
     /// A creature's short pools (`pools(a)`), kept per state; the shipped numbers when the
     /// script has no such law. The engine finishes the cap and the refill for the body's
     /// tiredness (`crate::pools::PoolLaw::cap`, `regen`).
@@ -2268,6 +2280,10 @@ fn decode_moves(d: Dynamic) -> Result<Moves, String> {
         wander_turn: g("wander_turn", 0.0, std::f32::consts::PI)?,
         wander_keep_s: g("wander_keep_s", 0.0, 3_600.0)?,
         top: if m.contains_key("top") { g("top", 0.5, 50.0)? } else { f32::INFINITY },
+        charge: match m.get("charge") {
+            None => false,
+            Some(v) => v.as_bool().map_err(|_| "motion: `charge` must be true or false".to_string())?,
+        },
     })
 }
 
@@ -2838,25 +2854,34 @@ mod tests {
         assert!(s.done("graze", &SkillCtx::default()).unwrap().contains(&Effect::Graze));
     }
 
-    /// How a creature moves besides its walk is a law per creature, with the values the engine
-    /// had (run 1.5 × walk, flight 1.15, stepping aside 0.8, turning 6 rad/s keeping 0.4 of its
-    /// speed in the sharpest turns, keeping 0.8 m from others at weight 0.9).
+    /// How a creature moves besides its walk is a law per creature: a person runs 1.85 times its
+    /// walk (4.8 m/s), animals 1.5 times (a wolf 5.1, charging at a hunt's approach), a flight
+    /// 1.15, stepping aside 0.8, turning 6 rad/s keeping 0.4 of its speed in the sharpest turns,
+    /// keeping 0.8 m from others at weight 0.9; no road takes anyone past 5.5 m/s.
     #[test]
     fn moves_are_a_law_per_creature() {
         let s = scripts();
-        let m = s.moves(&creature(false, false)).unwrap();
-        assert_eq!(m, Moves { run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0 });
-        assert_eq!(s.law_plan("motion").describe(), Vec::<String>::new(), "the shipped law reads nothing: one answer for everyone");
+        let mut person = creature(false, false);
+        person.actor.kind = "person".into();
+        let m = s.moves(&person).unwrap();
+        assert_eq!(m, Moves { run: 1.85, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: 5.5, charge: false });
+        assert_eq!(s.law_plan("motion").describe(), vec!["actor.kind".to_string()], "the shipped law reads only the kind");
+        let mut wolf = creature(false, false);
+        wolf.actor.kind = "wolf".into();
+        let w = s.moves(&wolf).unwrap();
+        assert_eq!((w.run, w.charge, w.top), (1.5, true, 5.5));
         let spec = &s.law_specs()["motion"];
         assert_eq!(spec.cadence, Cadence::Hot);
-        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains("Running is 1.5 times one's walk and a flight 1.15 times"), "{}", spec.about);
+        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains("A person runs 1.85 times its walk") && spec.about.contains("past 5.5 m/s"), "{}", spec.about);
         // A floor where wolves run harder: the law reads the kind, and only wolves change.
         let src = include_str!("../../scripts/skills.rhai").replace("fn motion(a)", "fn base_motion(a)");
         let f = Scripts::new(&format!("{src}\nfn motion(a) {{ let m = base_motion(a); if a.actor.kind == \"wolf\" {{ m.run = 2.0; }} m }}")).unwrap();
-        let mut wolf = creature(false, false);
-        wolf.actor.kind = "wolf".into();
-        assert_eq!((f.moves(&wolf).unwrap().run, f.moves(&creature(false, false)).unwrap().run), (2.0, 1.5));
+        assert_eq!((f.moves(&wolf).unwrap().run, f.moves(&person).unwrap().run), (2.0, 1.85));
         assert!(f.validate().is_ok());
+        // A law without `top` or `charge` (an older floor's): no cap, no charge.
+        let old = Scripts::new(&format!("{src}\nfn motion(a) {{ #{{ run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0 }} }}")).unwrap();
+        let o = old.moves(&wolf).unwrap();
+        assert_eq!((o.top, o.charge), (f32::INFINITY, false));
     }
 
     /// Sight and hearing are a law per creature in the script, with the values the engine had
@@ -3034,7 +3059,7 @@ mod tests {
 
     fn ctx() -> SkillCtx {
         SkillCtx {
-            actor: ActorFacts { id: 1, kind: "person".into(), hp: 100.0, hunger: 50.0, energy: 80.0, terrain: "grass".into(), ..Default::default() },
+            actor: ActorFacts { id: 1, kind: "person".into(), hp: 100.0, hunger: 50.0, energy: 80.0, terrain: "grass".into(), stamina: 100.0, focus: 100.0, ..Default::default() },
             ..Default::default()
         }
     }
@@ -3065,22 +3090,166 @@ mod tests {
         println!("{text}\n({} chars)", text.len());
     }
 
+    /// Breath and focus (docs/STAMINA.md): every move's cost and pool, refused with too little,
+    /// the pools law's numbers, a guard as long as breath lasts, and nothing of it from energy.
+    #[test]
+    fn moves_cost_breath_or_focus_and_too_little_refuses_them() {
+        let s = scripts();
+        for (skill, pool, cost) in [("strike", "stamina", 10.0), ("bowshot", "stamina", 6.0), ("dodge", "stamina", 20.0), ("jump", "stamina", 10.0), ("block", "stamina", 5.0), ("attack", "stamina", 8.0), ("throw", "stamina", 10.0), ("shoot", "stamina", 6.0), ("threaten", "stamina", 3.0), ("firebolt", "focus", 30.0), ("heal", "focus", 35.0)] {
+            assert_eq!(s.num_of("combat_cost", skill, -1.0), cost, "{skill}");
+            assert_eq!(s.text_of("combat_pool", skill).as_deref(), Some(pool), "{skill}");
+        }
+        assert_eq!(s.text_of("pool_word", "focus").as_deref(), Some("mana"), "the screen word is the world's");
+        let mut c = ctx();
+        c.actor.knows = vec!["fire_bolt".into(), "wound_tending".into()];
+        c.actor.inv = vec![("bow".into(), 1), ("arrow".into(), 3), ("spear".into(), 1)];
+        // Out of breath: the body's moves are refused; focus is apart.
+        c.actor.stamina = 4.0;
+        for skill in ["dodge", "jump", "block"] {
+            c.skill = skill.into();
+            assert_eq!(s.check(skill, &c).unwrap_err(), "out of breath", "{skill}");
+        }
+        c.actor.stamina = 20.0;
+        c.skill = "dodge".into();
+        assert!(s.check("dodge", &c).is_ok(), "a dodge with exactly its breath");
+        assert!(s.done("dodge", &c).unwrap().contains(&Effect::Spend { pool: "stamina".into(), amount: 20.0 }));
+        c.skill = "jump".into();
+        assert_eq!(s.done("jump", &c).unwrap(), vec![Effect::Spend { pool: "stamina".into(), amount: 10.0 }]);
+        // Fire takes mana, and too little is the world's word for it; breath does not help.
+        c.skill = "firebolt".into();
+        c.target = TargetFacts { class: "point".into(), ..Default::default() };
+        c.actor.focus = 29.0;
+        c.actor.stamina = 100.0;
+        assert_eq!(s.check("firebolt", &c).unwrap_err(), "not enough mana");
+        c.actor.focus = 30.0;
+        assert!(s.check("firebolt", &c).is_ok());
+        assert!(s.done("firebolt", &c).unwrap().contains(&Effect::Spend { pool: "focus".into(), amount: 30.0 }));
+        // A guard lasts as long as its breath: (breath - its cost) / 4 a second, at most its hold.
+        c.skill = "block".into();
+        c.qty = 8000;
+        c.actor.stamina = 100.0;
+        assert_eq!(s.duration_ms("block", &c).unwrap(), 8000);
+        c.actor.stamina = 25.0;
+        assert_eq!(s.duration_ms("block", &c).unwrap(), 5000);
+        c.actor.stamina = 5.0;
+        assert_eq!(s.duration_ms("block", &c).unwrap(), 200, "the briefest guard");
+        assert_eq!(s.done("block", &c).unwrap(), vec![Effect::Spend { pool: "stamina".into(), amount: 5.0 }]);
+        // An animal's bite takes breath too: a wolf out of breath waits for it.
+        let mut w = ctx();
+        w.actor.kind = "wolf".into();
+        w.actor.hunger = 90.0;
+        w.skill = "attack".into();
+        w.target = TargetFacts { class: "creature".into(), id: 2, kind: "deer".into(), alive: true, hp: 40.0, max_hp: 40.0, dist: 1.0, ..Default::default() };
+        assert!(s.check("attack", &w).is_ok());
+        assert!(s.done("attack", &w).unwrap().contains(&Effect::Spend { pool: "stamina".into(), amount: 8.0 }));
+        w.actor.stamina = 7.0;
+        assert_eq!(s.check("attack", &w).unwrap_err(), "out of breath");
+        // Holding a guard no longer tires (the rates of a guard are those of being awake).
+        let mut g = ctx();
+        g.actor.activity = "block".into();
+        let mut a = ctx();
+        a.actor.activity = String::new();
+        assert_eq!(s.rates(&g).unwrap().energy_per_min, s.rates(&a).unwrap().energy_per_min);
+    }
+
+    /// The pools law: the shipped numbers, deer with more breath, elders' slower back, tiredness
+    /// capping breath (50 at energy 0, 75 at 17.5, full from 35) and halving its refill below 10.
+    #[test]
+    fn the_pools_law_gives_breath_and_focus_in_real_seconds() {
+        let s = scripts();
+        let mut c = ctx();
+        c.actor.stage = "adult".into();
+        let p = s.pools(&c).unwrap();
+        assert_eq!(p, crate::pools::Pools::default(), "the shipped law is the default");
+        assert_eq!((p.stamina.max, p.stamina.regen_per_s, p.stamina.delay_ms, p.breath.run_per_s, p.breath.guard_per_s, p.breath.resume, p.breath.tires_per_point), (100.0, 25.0, 1000, 4.0, 4.0, 30.0, 0.02));
+        assert_eq!((p.focus.max, p.focus.regen_per_s, p.focus.delay_ms), (100.0, 3.0, 2000));
+        assert_eq!((p.stamina.cap(0.0), p.stamina.cap(17.5), p.stamina.cap(35.0)), (50.0, 75.0, 100.0));
+        assert_eq!((p.stamina.regen(9.9), p.stamina.regen(10.0)), (12.5, 25.0));
+        c.actor.stage = "elder".into();
+        assert!((s.pools(&c).unwrap().stamina.regen_per_s - 17.5).abs() < 1e-4);
+        c.actor.stage = "adult".into();
+        c.actor.kind = "deer".into();
+        assert_eq!(s.pools(&c).unwrap().stamina.max, 120.0);
+        assert_eq!(s.law_plan("pools").describe(), vec!["actor.kind".to_string(), "actor.stage".to_string()], "kept per kind and stage");
+        // Each number is a world law, changed on a running world with `set_world_law`.
+        let src = include_str!("../../scripts/skills.rhai");
+        let w = Scripts::new(&with_world_laws(src, &[("stamina_regen".into(), serde_json::json!(40)), ("cost_dodge".into(), serde_json::json!(15)), ("run_top".into(), serde_json::json!(6))])).unwrap();
+        c.actor.kind = "person".into();
+        assert_eq!(w.pools(&c).unwrap().stamina.regen_per_s, 40.0);
+        assert_eq!(w.num_of("combat_cost", "dodge", 0.0), 15.0);
+        assert_eq!(w.moves(&c).unwrap().top, 6.0);
+        // A law that leaves a number out keeps the shipped one; a wrong one is refused.
+        assert_eq!(decode_pools(Dynamic::from(Map::new())).unwrap(), crate::pools::Pools::default());
+        let mut bad = Map::new();
+        bad.insert("stamina".into(), Dynamic::from(3_i64));
+        assert!(decode_pools(Dynamic::from(bad)).is_err());
+    }
+
+    /// The walk: 2.6 m/s from the narrow `walk_base` law (a player's setting changes it with
+    /// `set_world_law`, and Cullet's overlay reads it too), times 0.8 when exhausted (it was 0.6),
+    /// and every slowdown says why in the words a status and a mind share.
+    #[test]
+    fn the_walk_is_the_walk_base_law_and_a_slowed_body_says_why() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let cullet_src = crate::floors::compose(src, include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
+        let walk = |s: &Scripts, energy: f32| {
+            let mut c = ctx();
+            c.actor.stage = "adult".into();
+            c.actor.energy = energy;
+            c.actor.genes = Default::default();
+            (s.move_speed(&c).unwrap(), s.slowed(&c))
+        };
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
+        let island = Scripts::new(src).unwrap();
+        let (w, why) = walk(&island, 80.0);
+        assert!(close(w, 2.6) && why.is_empty(), "{w} {why}");
+        let (w, why) = walk(&island, 20.0);
+        assert!(close(w, 2.6) && why.is_empty(), "tired on the island: the walk is the walk");
+        let (w, why) = walk(&island, 5.0);
+        assert!(close(w, 2.08) && why == "exhausted, so you walk slower", "{w} {why}");
+        let cullet = Scripts::new(&cullet_src).unwrap();
+        let (w, why) = walk(&cullet, 20.0);
+        assert!(close(w, 2.08) && why == "tired, so you walk slower", "{w} {why}");
+        let (w, why) = walk(&cullet, 5.0);
+        assert!(close(w, 2.08) && why == "exhausted, so you walk slower", "{w} {why}");
+        // A setting of 3.0: both worlds walk faster, with the same slowdowns.
+        let set = [("walk_base".to_string(), serde_json::json!(3.0))];
+        assert!(close(walk(&Scripts::new(&with_world_laws(src, &set)).unwrap(), 80.0).0, 3.0));
+        assert!(close(walk(&Scripts::new(&with_world_laws(&cullet_src, &set)).unwrap(), 20.0).0, 2.4));
+        // The run: 1.85 times the walk, 4.81 m/s; capped on a road at 5.5 (steer::road_pace).
+        let mut c = ctx();
+        c.actor.stage = "adult".into();
+        let m = island.moves(&c).unwrap();
+        let run = 2.6 * m.run;
+        assert!(close(run, 4.81));
+        assert_eq!(crate::steer::road_pace(run, 1.0, &m.tuning(1.4)), 5.5);
+        assert!(close(crate::steer::road_pace(2.6, 1.0, &m.tuning(1.4)), 3.64), "a road walk is as fast as before");
+    }
+
     #[test]
     fn starter_combat_skills_follow_the_rules() {
         let s = scripts();
         let mut c = ctx();
         let foe = TargetFacts { class: "creature".into(), id: 2, kind: "wolf".into(), alive: true, hp: 55.0, max_hp: 55.0, dist: 1.2, ..Default::default() };
-        // A strike: a short windup, a blow and its energy.
+        // A strike: a short windup, a blow and its breath (no tiredness: combat does not spend
+        // energy, docs/STAMINA.md).
         c.skill = "strike".into();
         c.target = foe.clone();
         assert!(s.check("strike", &c).is_ok());
         assert_eq!(s.duration_ms("strike", &c).unwrap(), 350);
         let fx = s.done("strike", &c).unwrap();
         assert!(fx.iter().any(|e| matches!(e, Effect::Damage { amount } if *amount > 5.0)), "{fx:?}");
-        assert!(fx.iter().any(|e| matches!(e, Effect::Vitals { energy, .. } if *energy < 0.0)), "{fx:?}");
+        assert!(fx.contains(&Effect::Spend { pool: "stamina".into(), amount: 10.0 }), "{fx:?}");
+        assert!(!fx.iter().any(|e| matches!(e, Effect::Vitals { .. })), "{fx:?}");
+        // Tiredness does not refuse a blow; breath does.
         c.actor.energy = 1.0;
-        assert_eq!(s.check("strike", &c).unwrap_err(), "too tired");
+        assert!(s.check("strike", &c).is_ok());
+        c.actor.stamina = 9.9;
+        assert_eq!(s.check("strike", &c).unwrap_err(), "out of breath");
+        c.actor.stamina = 10.0;
+        assert!(s.check("strike", &c).is_ok());
         c.actor.energy = 80.0;
+        c.actor.stamina = 100.0;
         // A bow shot needs a bow and an arrow, launches a missile, and its hit is damage.
         c.skill = "bowshot".into();
         c.target = TargetFacts { class: "place".into(), ..Default::default() };
@@ -3881,8 +4050,6 @@ fn rates(a) {
         hunger *= 0.5;
     } else if act == "rest" {
         energy = 6.0;
-    } else if act == "block" {
-        energy = -12.0;
     }
     if a.actor.hunger >= 100.0 {
         hp -= 4.0;

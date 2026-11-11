@@ -605,6 +605,11 @@ pub(crate) fn stage_name(s: u8) -> &'static str {
 fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather: Option<bool>, things: &[(&'static str, String, Vec2, u64, f32)], at: Vec2) -> Me {
     let c = conn.db.my_characters().id().find(&me);
     let v = conn.db.my_vitals().id().find(&me);
+    // Breath and focus as the row projects them (docs/STAMINA.md): a move short of either is refused.
+    let (stamina, focus) = v.as_ref().map_or((100.0, 100.0), |v| {
+        let now = now_ms.max(0.0) as u64;
+        (living_rules::pools::level(v.stamina, v.stamina_rate, v.stamina_from_ms, v.at_ms, v.stamina_max, now), living_rules::pools::level(v.focus, v.focus_rate, v.focus_from_ms, v.at_ms, v.focus_max, now))
+    });
     let (hp, hunger, energy) = v.map_or((100.0, 0.0, 100.0), |v| {
         let m = (now_ms - v.at_ms as f64).max(0.0) as f32 / 60_000.0;
         ((v.hp + v.hp_rate * m).clamp(0.0, v.max_hp), (v.hunger + v.hunger_rate * m).clamp(0.0, 100.0), (v.energy + v.energy_rate * m).clamp(0.0, 100.0))
@@ -635,6 +640,8 @@ fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather:
         age: 30.0,
         life: 0.4,
         room: 25,
+        stamina,
+        focus,
         ..Default::default()
     };
     Me { actor, night: false, hour: 12.0, raining: weather.unwrap_or(false) }

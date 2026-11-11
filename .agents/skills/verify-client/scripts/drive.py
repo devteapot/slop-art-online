@@ -565,6 +565,11 @@ class Run:
         self.check('skill_card is public' + ('' if scoped else ', and fighter (open build)'), public['status'] == 'applied' and
                    public['final']['counts']['skill_card'] >= 6, 'combat-public.json',
                    f"fighter {public['final']['counts']['fighter']}, skill_card {public['final']['counts']['skill_card']}")
+        cards = {c['skill']: c for c in public['final']['perception'].get('skill_cards', [])}
+        self.check('skill_card names each cost\'s pool: breath (stamina) for the body\'s moves, focus for fire and healing hands',
+                   cards and all(cards[k]['pool'] == 'stamina' for k in ('strike', 'bowshot', 'dodge', 'jump', 'block') if k in cards) and
+                   all(cards[k]['pool'] == 'focus' for k in ('firebolt', 'heal') if k in cards) and cards.get('dodge', {}).get('cost') == 20.0,
+                   'combat-public.json', {k: (c['pool'], c['cost']) for k, c in cards.items()})
         self.perception(identities, admin_token)
         self.presence(identities, admin_token)
         drop_file = self.directory / 'drop-request'
@@ -662,6 +667,15 @@ class Run:
                     and {h['speaker'] for h in p['my_heard']} <= mine)
         anonymous = own['anonymous']['final']['perception']
         spoke = {l: v['final']['perception']['my_heard'] for l, v in own.items() if l != 'anonymous'}
+        # Breath and focus (docs/STAMINA.md): each player's own row carries the pools, rested
+        # and full at join; the anonymous client gets none. The cards name each cost's pool.
+        rows = {l: v['final']['perception'].get('my_vitals_rows', []) for l, v in own.items()}
+        pooled = lambda r: (0 < r['stamina_max'] <= 120 and 0 <= r['stamina'] <= r['stamina_max'] + 1e-3 and 0 < r['focus_max'] and
+                            0 <= r['focus'] <= r['focus_max'] + 1e-3 and isinstance(r['stamina_from_ms'], int) and isinstance(r['focus_from_ms'], int))
+        self.check('my_vitals carries breath and focus (stamina, stamina_max, stamina_rate, stamina_from_ms, the same for focus) for my character only',
+                   all(rs and all(pooled(r) for r in rs) for l, rs in rows.items() if l != 'anonymous') and not rows['anonymous'], 'own-*.json',
+                   {l: rs for l, rs in rows.items()})
+
         self.check('my_heard holds each player\'s own lines, and none for an anonymous client', all(spoke.values()) and not anonymous['my_heard'], 'own-*.json',
                    ', '.join(f"{l}: {len(v)} lines" for l, v in spoke.items()))
         self.check('own-state views return only my characters\' rows', all(scoped_to_self(l, v) for l, v in own.items() if l != 'anonymous') and

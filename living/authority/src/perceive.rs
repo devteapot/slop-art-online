@@ -358,6 +358,17 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         you.insert("health".into(), json!(n.hp.round()));
         you.insert("hunger".into(), json!(n.hunger.round()));
         you.insert("energy".into(), json!(n.energy.round()));
+        // Breath and focus now, and why one walks slower if one does (the rules' words,
+        // which a player's status shows too).
+        let (breath, focus) = crate::breath::levels(&v, now);
+        you.insert("stamina".into(), json!(breath.round()));
+        if focus < v.focus_max - 0.5 {
+            you.insert(common::scripts(ctx).text_of("pool_word", "focus").unwrap_or_else(|| "focus".into()), json!(focus.round()));
+        }
+        let slowed = common::scripts(ctx).slowed(&living_rules::script::SkillCtx { actor: crate::act::facts(ctx, id, now), ..Default::default() });
+        if !slowed.is_empty() {
+            you.insert("slowed".into(), json!(slowed));
+        }
     }
     let pack: JMap<String, Value> = common::inv_list(ctx, id as u64).into_iter().map(|(k, q)| (k, json!(q))).collect();
     you.insert("pack".into(), Value::Object(pack));

@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|jump|heal|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|jump|breath|heal|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -291,8 +291,10 @@ def scene_kill(st):
         if u and "killed" in u["outcome"]:
             final = (h, u)
             break
-        if u and "too tired" in u["outcome"]:
-            break
+        if u and "out of breath" in u["outcome"]:
+            # Ten strikes take a bar of breath (10 each): wait for it to come back.
+            time.sleep(3)
+            continue
     dead = sql(st, f"SELECT alive, cause FROM character WHERE id = {d}")
     mine = sql(st, f"SELECT name FROM character WHERE id = {cid}")[0]["name"]
     # The death record names the killer as the victim knew them (perceived_of): the player's
@@ -451,6 +453,77 @@ def scene_jump(st):
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
 
 
+def my_vitals(st):
+    r = sql(st, "SELECT * FROM my_vitals", "player")
+    return r[0] if r else None
+
+
+def breath_of(v, now_ms):
+    """Breath now from the row (living_rules::pools::level), as a client projects it."""
+    start = max(v["at_ms"], v["stamina_from_ms"])
+    return max(0.0, min(v["stamina"] + v["stamina_rate"] * max(0, now_ms - start) / 1000, v["stamina_max"]))
+
+
+def scene_breath(st):
+    """Breath through the player's reducers (docs/STAMINA.md): `human_move` with run drains it
+    (the row's rate, written once at the start), letting go writes the refill a second on, and
+    standing it comes back with no row written; a dodge takes 20 and a jump 10; dodging on
+    with no time to get it back is refused "out of breath" (`my_combat` REFUSED, the use's
+    outcome). Everything is read through the player's own `my_vitals` view."""
+    cid = me(st)
+    time.sleep(2.5)
+    v0 = my_vitals(st)
+    check(st, "my_vitals carries breath and focus, rested and full", v0 and v0["stamina_max"] > 0 and abs(breath_of(v0, int(time.time() * 1000)) - v0["stamina_max"]) < 1.0 and v0["focus_max"] > 0, v0)
+    call(st, "human_move", [1.0, 0.0, False])
+    time.sleep(0.8)
+    walk = sql(st, f"SELECT speed FROM body WHERE id = {cid}")[0]["speed"]
+    call(st, "human_move", [1.0, 0.0, True])
+    time.sleep(0.8)
+    run = sql(st, f"SELECT speed FROM body WHERE id = {cid}")[0]["speed"]
+    v1 = my_vitals(st)
+    check(st, "a player's run is 1.85 times its walk and drains 4 breath a second from the row's anchor", walk and abs(run / walk - 1.85) < 0.02 and abs(v1["stamina_rate"] + 4.0) < 1e-3 and v1["stamina_from_ms"] == v1["at_ms"], {"walk": walk, "run": run, "row": v1})
+    time.sleep(1.5)
+    v1b = my_vitals(st)
+    check(st, "a held run writes no row while it lasts", v1b == v1, {"first": v1["at_ms"], "later": v1b["at_ms"]})
+    call(st, "human_move", [0.0, 0.0, False])
+    time.sleep(0.6)
+    v2 = my_vitals(st)
+    spent = v0["stamina_max"] - v2["stamina"]
+    check(st, "letting go of the run: its breath back from a second later, at 25 a second", abs(v2["stamina_rate"] - 25.0) < 1e-3 and v2["stamina_from_ms"] == v2["at_ms"] + 1000 and 6.0 < spent < 14.0, {"spent": spent, "row": v2})
+    time.sleep(2.0)
+    v3 = my_vitals(st)
+    check(st, "standing, breath comes back with no row written (the client projects it)", v3 == v2 and breath_of(v3, int(time.time() * 1000)) > v2["stamina"] + 5, {"row": v3, "now": breath_of(v3, int(time.time() * 1000))})
+    time.sleep(3.0)
+    p = body(st, cid)
+    full = breath_of(my_vitals(st), int(time.time() * 1000))
+    ready(st, "dodge")
+    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+    wait_outcome(st, "dodge", 3)
+    vd = my_vitals(st)
+    check(st, "a dodge takes 20 breath", abs(full - vd["stamina"] - 20.0) < 0.6, {"before": full, "row": vd})
+    time.sleep(1.5)
+    p = body(st, cid)
+    before = breath_of(my_vitals(st), int(time.time() * 1000))
+    ready(st, "jump")
+    call(st, "use_skill", ["jump", 0, p[0] + 2.0, p[1]])
+    wait_outcome(st, "jump", 3)
+    vj = my_vitals(st)
+    check(st, "a jump takes 10 breath", abs(before - vj["stamina"] - 10.0) < 0.6, {"before": before, "row": vj})
+    # Dodging on with no pause to get it back (cooldown 0.9 s, the refill starts 1 s after):
+    # the sixth or so is refused.
+    trail = []
+    for k in range(9):
+        p = body(st, cid)
+        ready(st, "dodge")
+        call(st, "use_skill", ["dodge", 0, p[0], p[1] + (3.0 if k % 2 else -3.0)])
+        u = wait_outcome(st, "dodge", 2)
+        trail.append(u and u["outcome"])
+        if u and "out of breath" in u["outcome"]:
+            break
+    told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")]
+    check(st, "dodging on without a pause is refused out of breath, and told (my_combat REFUSED)", trail and trail[-1] and "out of breath" in trail[-1] and len(trail) >= 3 and told, {"outcomes": trail, "told": told[-1:]})
+
+
 def scene_heal(st):
     cid = me(st)
     h0 = hp(st, cid)
@@ -509,7 +582,7 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "breath": scene_breath, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
 
 
 def main():

@@ -227,6 +227,8 @@ pub enum Cond {
     Hunger(Cmp),
     Energy(Cmp),
     Health(Cmp),
+    /// Breath now (0 to its cap; `pools` law).
+    Stamina(Cmp),
     Has(HasCond),
     Sees(Target),
     Near(NearCond),
@@ -686,7 +688,7 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
                 return Err("hailed must be 0.5..=600 seconds".into());
             }
         }
-        Cond::Hunger(c) | Cond::Energy(c) | Cond::Health(c) | Cond::Hour(c) => {
+        Cond::Hunger(c) | Cond::Energy(c) | Cond::Health(c) | Cond::Stamina(c) | Cond::Hour(c) => {
             if c.above.is_none() && c.below.is_none() {
                 return Err("comparison needs above or below".into());
             }
@@ -852,6 +854,7 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Hunger(x) => cmp("hunger", x),
         Cond::Energy(x) => cmp("energy", x),
         Cond::Health(x) => cmp("health", x),
+        Cond::Stamina(x) => cmp("stamina", x),
         Cond::Has(h) => format!("has {} {}", h.at_least, h.item),
         Cond::Sees(t) => format!("sees {}", describe_target(t)),
         Cond::Smells(t) => format!("smells {}", describe_target(t)),
