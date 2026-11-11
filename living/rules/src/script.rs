@@ -377,6 +377,9 @@ pub struct Laws {
     pub danger_near: f32,
     pub danger_far: f32,
     pub repeat_failure_s: f32,
+    /// Every blow, shot or bolt a character makes is told to it with how it came out, as far as
+    /// it sees (docs/COMBAT_MIND.md §3.1). Off: only notable skills and failures, as before.
+    pub force_outcomes: bool,
     /// Walking speed multiplier on road tiles.
     pub road_speed: f32,
     // ---- steering (see `steer.rs`; how each creature turns and keeps apart is its `motion`) ----
@@ -471,6 +474,7 @@ impl Default for Laws {
             danger_near: 8.0,
             danger_far: 12.0,
             repeat_failure_s: 120.0,
+            force_outcomes: true,
             road_speed: 1.4,
             slow_radius: 1.2,
             corner_radius: 0.9,
@@ -2084,6 +2088,7 @@ impl Scripts {
             danger_near: g("danger_near", l.danger_near),
             danger_far: g("danger_far", l.danger_far),
             repeat_failure_s: g("repeat_failure_s", l.repeat_failure_s),
+            force_outcomes: flag("force_outcomes", l.force_outcomes),
             road_speed: g("road_speed", l.road_speed),
             slow_radius: g("slow_radius", l.slow_radius).clamp(0.0, 8.0),
             corner_radius: g("corner_radius", l.corner_radius).clamp(0.0, 4.0),

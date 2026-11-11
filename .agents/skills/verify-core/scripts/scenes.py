@@ -2168,7 +2168,58 @@ def alarms(s):
         s.call("install_script", shipped)
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms}
+def outcomes(s):
+    """Whoever strikes or shoots is told how it came out (the `force_outcomes` law,
+    docs/COMBAT_MIND.md §3.1). Before 2026-11-11 a mind-held archer was never told how its
+    arrow went (0 of 10 tries in the wolves trials), while `attack` reported "hit for 7".
+    Three minded people (`spawn_crowd`, no mind service): an archer shoots a still target 6 m
+    off (told "struck …: hit for N" when the arrow lands), a striker beside the target strikes
+    it (told "hit for N"), the archer looses at an empty point past its sight (told it came to
+    nothing), and with the law off a hit is not told."""
+    a, b, c = s.people(3)
+    here = body_at(s, a)
+    s.call("place_at", b, here[0] + 6.0, here[1])
+    s.call("place_at", c, here[0] + 6.0, here[1] + 1.2)
+    s.call("grant_items", a, "bow", 1)
+    s.call("grant_items", a, "arrow", 20)
+    time.sleep(1.0)
+    gap = apart(s, a, b)
+    s.expect("archer and target 4-8 m apart, in the open", 4.0 <= gap <= 8.0, gap)
+
+    def own(actor, words):
+        return [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {actor}") if r["kind"] == "own" and words in r["text"]]
+
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"id": b}}}, {"wait": 60}]})
+    hit = s.wait(lambda: own(a, "You finished: bowshot") or own(a, "You failed to bowshot"), seconds=20)
+    s.rows(f"SELECT * FROM experience WHERE observer = {a}", "archer-told")
+    s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "archer-uses")
+    s.expect("the archer is told its arrow struck the target, with the damage",
+             any("struck" in r["text"] and ("hit for" in r["text"] or "got through" in r["text"]) for r in hit), [r["text"] for r in hit])
+
+    s.graph(c, {"seq": [{"do": {"skill": "strike", "target": {"id": b}}}, {"wait": 60}]})
+    blow = s.wait(lambda: own(c, "You finished: strike") or own(c, "You failed to strike"), seconds=20)
+    s.rows(f"SELECT * FROM experience WHERE observer = {c}", "striker-told")
+    s.expect("the striker is told its blow's outcome", any("hit for" in r["text"] or "got through" in r["text"] for r in blow), [r["text"] for r in blow])
+
+    # An arrow loosed at an empty point 20 m off (beyond day sight, 11 m) comes to nothing.
+    far = (here[0] - 20.0, here[1])
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"at": [far[0], far[1]]}}}, {"wait": 60}]})
+    gone = s.wait(lambda: [r for r in own(a, "You failed to bowshot") if any(w in r["text"] for w in ("out of your sight", "hit nothing", "struck a wall"))], seconds=20)
+    s.expect("an arrow that reaches no one is told as coming to nothing", bool(gone), [r["text"] for r in gone])
+
+    # The switch: with the law off, a hit is not told (the archer's lines stay as they were).
+    set_law(s, "force_outcomes", False)
+    before = len(own(a, "You finished: bowshot"))
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"id": b}}}, {"wait": 60}]})
+    s.wait(lambda: [u for u in s.rows(f"SELECT outcome FROM skill_use WHERE actor = {a}") if u["outcome"].startswith("struck")][1:], seconds=20)
+    time.sleep(1.0)
+    after = len(own(a, "You finished: bowshot"))
+    s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "archer-uses-law-off")
+    set_law(s, "force_outcomes", True)
+    s.expect("with force_outcomes off, a hit is not told", after == before, {"before": before, "after": after})
+
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "outcomes": outcomes}
 
 
 def goods(s):
