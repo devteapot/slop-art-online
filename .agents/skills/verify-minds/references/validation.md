@@ -6,6 +6,7 @@ Branch `rules-offers-2`, on the Spark, in the trial container `slop-trials-stdb`
 
 - `answers` (new) passes on `minds-offers2-a` and on the final code (`minds-offers2-final`): the deliberation showed `"offer": 1` in "asked of you" and "record 1)" in the dealings, the fake reply's `accept` (offer) and `decline` (record) were executed: "traded with Femi: 2 wood for 1 berries", the record `declined`, the proposer told "Datha declined your terms: you give 2 wood, they give 2 berries.".
 - `acts` passes on both. `dealings` passed on `minds-offers2-a` (before the main merge) and failed twice, then passed nine times on the final code (`minds-offers2-final`, `-final2` failed; `-final3`…`-final11` passed): in the failures the demander's `demand` act through admin `mind_act` made no record within 60 s. Its cause is not established: the driver did not keep what the demander was told, and now keeps `demander-experiences.json` either way.
+- After merging main `f047f04f` (`c63c372d`): `answers`, `acts` and `dealings` pass (`minds-offers2-m3`).
 
 ## 2026-11-11 fov-1: hearing what one cannot see (dev-box)
 

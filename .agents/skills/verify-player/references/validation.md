@@ -7,6 +7,7 @@ Branch `rules-offers-2` (origin/main merged at `5f7ba5b`), on the Spark, in the 
 - `answers.py` (new): 9 of 9 on `player-offers2-a`, `-b` and the final code (`player-offers2-final-answers`). On `-a` the outcome of a decline was said twice (the engine's note and the rules' line); the engine's note is gone.
 - `offers.py` 17 of 17 and `deal.py` 13 of 13 on fresh worlds (`player-offers2-b`, `-c`; final code `player-offers2-final-offers`, `-final-deal`). Run after `answers.py` on one world they failed 4 and 2 checks on its leftovers (berries in the pack, a declined record first in `my_records`): an order dependence of the drivers, noted in offers.md.
 - Not covered: the game client sending these acts (the laptop's ui-1; `ui::act_node` is covered by Cargo).
+- After merging main `f047f04f` (`c63c372d`): `offers.py` 17 of 17, `answers.py` 9 of 9 (`player-offers2-m3-*`).
 
 ## 2026-11-11 goods-2: making glass at a furnace that burns fuel (dev-box)
 

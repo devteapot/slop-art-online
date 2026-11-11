@@ -9,6 +9,7 @@ Branch `rules-offers-2` (from `rules-offers` `de0faea`, origin/main merged at `3
 - Migration: main's module (`b004e6e`) published fresh as `core-offers2-mig`, then this branch's updated in place (`launch --keep-data`): it kept ticking from tick 6,012 and its 233 `activity` rows read `offer = 0, record = 0` (`migrated.json`). `answers` on the migrated world passed 9 checks, then stopped on the driver's case-sensitive match of the decliner's outcome ("Declined …"), fixed since.
 - A shared `CARGO_TARGET_DIR` between two checkouts (a temporary main worktree and this one) linked the other checkout's `living-rules` as fresh; touching the sources rebuilt it. Keep one checkout per target dir.
 - Cargo: `cargo test -p living-rules` 210 pass with `answers_take_what_they_name`, `answers_carry_what_they_name`, `ui::tests::an_act_toward_an_offer_names_it`; `just living-check` ok.
+- After merging main `f047f04f` (`c63c372d`): `just living-check` ok, bindings regenerate identical, `answers` 17 of 17 (`core-offers2-m3-answers`).
 
 ## 2026-11-11 goods-2: item looks, make and feed shown, teaching a world's know-how (dev-box)
 
