@@ -168,6 +168,8 @@ A pass is also published through the asset board, the record of which version th
 
 - The nose wedge, the pale band and the fold are `character:face-types` `20261112-5c02f721-…` (`faces-close`: six types at three angles to the light, before and after) and `cast-64` `20261112-5c02f721-…` (the 64 built again, with `faces-before-after`). The six presets were rebaked and not published again.
 
+- Long hair, short hair and the hair's shading are `character:face-types` `20261112-PENDING-…` (`hair-short` and `hair-long`: every style before and after from five sides and at the game camera; `hair-people`: four whole people before and after from four sides and at the game camera; `hair-close`: four people close up; `hair-motion`: long hair on idle and walk frames; each with the reference's row), the six preset families' `20261112-PENDING-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-PENDING-…` (the 64 built again whole, with `faces-before-after`). The `20261112-c68bbe63-…` versions of the same families are this step before the back's spheres: on them long hair passes into the back on an idle frame. These sheets are photographed under the client's own hair light; the type sheets before them turned hair normals to the camera.
+
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
 `gen_person.sh` needs Blender and, for clips, the Kimodo library's takes (`KIMODO_DIR`, default `.local/kimodo/outputs/library`); it bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes the entries whose takes are all there, for a machine whose copy of the library is behind `clips.json` (on 2026-11-11 the dev-box had 30 of 67: the takes of the re-made town motions and of the new locomotion clips had not reached it). The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
@@ -1242,6 +1244,12 @@ Pass 3, after the nose wedge (2026-11-12). Three things the board showed: long s
 - **It is gathered behind the shoulders.** Below the collar's top each column is drawn toward the middle of the back and in to its surface as it hangs (`Hair.sheet(gather=…)`, `_walk`). A hanging sheet's own volume and its standing off the sheet under it now end at the nape.
 - **The hair in front of the ears ends at the jaw** (`front_end`). Hanging on to the chest it could not go behind the shoulder with the rest: it lay in front of it as a thin tail, and that tail's end was the hook that kicked forward at the collar.
 - **The two sides meet down the middle of the back** (`over(back_th=88)`), as parted hair does. They were fanned apart and a third sheet from the crown covered the gap; drawn in with the rest that sheet hung the hair's whole length as a narrow panel. It is gone, from `long`, `bob`, `bob_parted` and `shag`.
+- **It stays on the back when the body moves.** Hair hangs from the head. Combed 3 to 5 cm off the back it never met it; combed a few millimetres off, it passed into the smock as soon as the head tipped back (14° on a frame of the idle clip put its ends 5 cm inside). The file's spring block now holds it out:
+  - **Spheres whose backs are the garment's back** (`person.py back_spheres`): rows of four at six heights on `J_Bip_C_UpperChest`, `J_Bip_C_Chest` and `J_Bip_C_Spine`, 25 cm in radius, each through a point 7 mm behind the cloth, and each made no larger than leaves every hair joint clear at rest, so they do not move the hair as it was combed.
+  - **A second group of chains,** `HairBack`, for the chains behind the body, which collides with them. The chains beside the neck stay in `Hair` with the head, neck and shoulder spheres they had: they hang in front of the back's plane, inside any sphere large enough to be the back.
+  - **A joint of such a chain is one of the hair's own columns,** where it was the mean of the chain's columns: the mean of an arc lies inside the arc, in the body.
+  - **A joint's radius is 2 mm** (`hitRadius`, was 10), less than the hair's distance off the cloth; the older spheres are 8 mm larger to reach as far.
+  - The ends turn in 5 mm where they turned in 14.
 - **Over a coat: `.collar` files.** A shared style is combed over a smock. A coat's collar stands 4 cm higher and 3 cm wider, so hair that lies close on a smock cuts through it. The styles that hang past the collar (`long`, `tail`, `braid`; `person_params.COLLARED`) are also written as combed over a coat, each cut: `long.collar`, `long.2.collar` and so on, nine files. A person in a coat with one of those styles is given the `.collar` file in their line (`worn()`), as a person in a cap is given the `.cap` file. Over a jersey alone the plain file is used and stands about a centimetre off the back.
 
 **Short hair is one sheet.**
@@ -1264,17 +1272,18 @@ Pass 3, after the nose wedge (2026-11-12). Three things the board showed: long s
 
 - The ring's strength, width and height are its own settings (`hair_ring` 0.7, `hair_ring_width` 0.05, `hair_ring_shift` 0.35 in `style.rs`), and the files are made for those values.
 - A `.collar` file is loaded by the name in the person's line, like a `.cap` file. A composer that builds the hair's path from `styles.hair` needs no change; one that lists the hair files it knows needs the nine names.
+- **A composer must take a hair file's whole spring block:** every bone group (`long` has two, `Hair` and `HairBack`) and every collider group they name, on `J_Bip_C_Head`, `J_Bip_C_Neck`, `J_Bip_C_UpperChest`, `J_Bip_C_Chest` and `J_Bip_C_Spine` (found by name on the person, as the head's were). `compose.py` does this already. Without the back's spheres long hair passes into the back when the head tips. The game's own reader (`characters.rs rig_springs`) takes any number of groups and spheres as it is: a whole-person file needs nothing.
 - If the ring is wanted nearer the reference's, that is client work and two numbers: the teeth are 2.4 mm wide on our hair (`uv.x * 90` on a picture that repeats every 22 cm round the head) where the reference's strands make them about three times as wide, and the ring is drawn full strength all the way round where the reference's breaks at its strands.
 
 **What it costs.**
 
 | | Before | After |
 |---|---|---|
-| Hair files on disk | 50, 13.4 MB | 59, 16.9 MB (nine are `.collar` files, 3.3 MB) |
+| Hair files on disk | 50, 13.4 MB | 59, 16.9 MB (nine are `.collar` files, 3.1 MB) |
 | `crop` | 3,272 triangles near and 1,168 far, 0.23 MB | 4,404 near and 1,298 far, 0.29 MB |
 | `short` | 3,760 near and 1,254 far, 0.26 MB | 5,648 near and 1,520 far, 0.36 MB |
 | `tousled` | 3,796 near and 1,298 far, 0.26 MB | 4,796 near and 1,402 far, 0.31 MB |
-| `long` | 9,572 near and 2,464 far, 0.57 MB | 8,472 near and 2,080 far, 0.50 MB |
+| `long` | 9,572 near and 2,464 far, 0.57 MB | 8,472 near and 2,080 far, 0.51 MB |
 | `bob` | 5,304 near and 1,436 far, 0.33 MB | 5,148 near and 1,404 far, 0.32 MB |
 | Hair files Cullet's 64 wear | 30, 8.6 MB | 33, 10.2 MB (four people wear a `.collar` file) |
 | All shared files the 64 wear | 97, 35.3 MB | 100, 36.9 MB |
@@ -1288,6 +1297,7 @@ A short style costs more than its rings did: a sheet over the whole scalp has fa
 - **`tousled` is calmer than it was.** One sheet with its points turned out is tidier than rings of splayed tiles; the reference's loose hair has single strands lifting off, which ours has none of.
 - **A seam runs down the middle of the back** on parted styles, where the two sides meet. Close up one side can sit a millimetre or two over the other.
 - **`long` over a coat is fuller at the collar** than over a smock: it has to clear a collar 12 cm from the neck's axis.
+- **Held by joints, not by its surface.** A chain has a joint every 9 cm and the game holds those out of the back; between them, and at the sides of the back, an end can still dip a few millimetres into the cloth on a strong pose. `tail` and `braid` hang as tubes on one chain and have no back spheres.
 - **`long` on a bare type head** lies on a smock that is not there; on a person it lies on theirs.
 
 ### Type files
