@@ -10,6 +10,7 @@ The cluster at the bottom: the meters (health, energy) over the skill bar. Which
 - `labels-looks`: declared labels ("Bow shot", "Fire bolt") and icons; the jump has its own icon (`jump`, appended to `ICONS`).
 - `sheathe-draw`: sheathed at first ("sheathed" under the weapon slot), hostile slots greyed with "Sheathed: X draws your weapon", X draws and sheathes, the auto-draw when someone turns hostile (Settings › Play).
 - `refusal`: a press the rules refuse flashes its slot red and is noted in the rules' words ("No one there to strike"). Grey is a hint: a greyed slot's press is still sent.
+- `own-outcomes`: with the world's `force_outcomes` law (mind-act-outcome-far), each strike, shot or cast also gets an `own` row in `my_act_outcomes` and an `own` experience line ("You finished: bowshot. …", "it flew out of your sight"). The client makes notes and Log events only from `act` and `record` rows, so `own` rows show nowhere: the bar's refusal stays the one word on a strike, and there is no line per blow. `check.py own` draws, strikes three times at no one, shoots and casts at the ground, opens the Log, and checks the rows exist while no note or Log event (`extra.events` in the dump: the Log's last 12) repeats them.
 - `held`: Q held raises the guard; its slot shows the held ring.
 - `tooltip`: hovering a slot.
 

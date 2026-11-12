@@ -1362,7 +1362,34 @@ def pools(run, c):
     c.check(s, "refilled to its max again, the mana bar goes", "focus" not in ms("02"), str(list(ms("02"))))
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support}
+def own(run, c):
+    """mind-act-outcome-far (force_outcomes): my own strikes, shots and casts get an `own`
+    act_outcome row and experience line. The client takes notes and Log events only from `act`
+    and `record` rows, so the `own` rows add no note or Log line: no second word on a strike the
+    bar already answers, no line per blow. Drawn, three strikes at no one, a bow shot and a fire
+    bolt at the ground, then the Log."""
+    s = "own"
+    plan = ("ready;wait:2;key:KeyX:tap;wait:0.6;cursor:0.5,0.3;wait:0.3;tap;wait:0.7;tap;wait:0.7;tap;wait:0.7;"
+            "mouse:right:down;wait:0.5;mouse:right:up;wait:2;key:KeyR:down;wait:0.4;key:KeyR:up;wait:3;dump:01;"
+            "key:KeyL:tap;wait:0.6;shot:02_log;dump:02;key:KeyX:tap;wait:0.4;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    rows = sql(run, f"SELECT id, kind, ok, skill, what, why FROM act_outcome WHERE observer = {me} AND kind = 'own'") if me else []
+    texts = [r.get("text", "") for r in (sql(run, f"SELECT id, text FROM experience WHERE observer = {me} AND kind = 'own'") if me else [])]
+    c.check(s, "the authority told me how my shot and bolt came out (own rows)", len(rows) >= 2 and {"bowshot", "firebolt"} <= {r.get("skill") for r in rows}, str(rows)[:600])
+    d = {k: dump(out, k) or {} for k in ["01", "02"]}
+    shown = [n for k in d for n in (d[k].get("notes") or [])] + [e for k in d for e in ((d[k].get("extra") or {}).get("events") or [])]
+    words = [w for r in rows for w in [r.get("why", "")] if w] + [t for t in texts if t]
+    hit = [x for x in shown if any(w and (w in x or x in w) for w in words) or x.startswith("You finished") or x.startswith("You failed to")]
+    c.check(s, "no note or Log event repeats an own row", not hit, str(hit)[:400])
+    notes = d["01"].get("notes") or []
+    c.check(s, "no line per blow: at most one note per strike, none for the shot or bolt", len(notes) <= 3 and all(notes.count(n) <= 3 for n in notes), str(notes))
+    c.check(s, "the Log is open", "Log" in [w for w, _ in wins(d["02"])], str(wins(d["02"])))
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own}
 
 
 def main():

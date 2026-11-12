@@ -12,7 +12,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | Themes: Clear (default), Night, Linen, Walnut; F4 cycles, Settings › Play › Look sets, the settings file keeps; windows stay through a change | [themes.md](themes.md) | `check.py themes`; `LIVING_GAME_THEME=<t> check.py …` for each theme's stills |
 
 | Themes: Glass (default), Clear, Night, Linen, Walnut; F4 cycles, Settings › Play › Look sets, the settings file keeps; windows stay through a change | [themes.md](themes.md) | `check.py themes`; `LIVING_GAME_THEME=<t> check.py …` for each theme's stills |
-| The cluster and skill bar: the rules' places and looks, sheathe and draw (X), greyed with a reason, the rules' refusals, the held guard, the tooltip | [bar.md](bar.md) | `check.py bar` |
+| The cluster and skill bar: the rules' places and looks, sheathe and draw (X), greyed with a reason, the rules' refusals, the held guard, the tooltip | [bar.md](bar.md) | `check.py bar`; `check.py own` (own outcomes) |
 | Offers to me: a card per swap or proposal in the maker's window, Accept (the rules' skill on `offer`), refusals, Dismiss, a re-offer, terms | [offers.md](offers.md) | `check.py offers` |
 | The wheel: hold F on a person or a fuel fire, the held cursor picks a section, let go; pinned sections grey in place with the rules' reason; Esc and the hub send nothing; flick, digits; the cursor back to the pixel | [wheel.md](wheel.md) | `check.py wheel`; `check.py wheel-workplace` on a Cullet world |
 | The recipe grid: a way of making's products as cells, greyed with the rules' reasons, rows from the recipe, a cell sends the act | [grid.md](grid.md) | `check.py grid` on a Cullet world |
