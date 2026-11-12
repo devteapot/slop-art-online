@@ -2407,6 +2407,7 @@ def main():
                     "`head`: only what a face type's file holds (the whole head, the neck and hands, and the far head with --lod both): no hair, no clothes; "
                     "`face`: the whole head and neck alone, to photograph a type")
     ap.add_argument("--morphs", default="all", choices=("all", "client"), help=f"`client`: keep only the expressions the game drives ({', '.join(CLIENT_MORPHS)}); every expression costs each vertex of the face again")
+    ap.add_argument("--own-iris", action="store_true", help="with --parts head: the iris painted in this figure's own eye colour, as a whole person's is, in place of the one every type shares (to compare the two: eye_colours.py)")
     ap.add_argument("--overlay", default="", help="with --parts overlay: beard_<style>, stubble, lines or freckles")
     ap.add_argument("--keep", default="", help="with --parts keep: the parts to keep, by name, comma-separated (Jersey, Coat, Buttons, Smock, Trousers, Boots, Cap, CapPeak, Kerchief, KerchiefKnot)")
     ap.add_argument("--no-lines", action="store_true", help="leave out the shell lines at the jaw, ears and mouth (cage_head.CageFace._shell_lines), to compare")
@@ -2436,6 +2437,9 @@ def main():
     if a.parts in ("head", "face"):
         # A type's own face has nothing a person adds: age lines are an overlay style, like stubble.
         spec["look"].update(lines=0.0, stubble=0.0, freckles=0.0)
+    if a.parts == "head" and not a.own_iris:
+        # A type's file: its iris is the one every type shares.
+        spec["look"]["iris_shared"] = person_params.SHARED_IRIS
     if a.parts == "hair":
         # A shared style is coloured by the client, through the mesh tag: its own shades are
         # neutral, a little darker at the root than the tip, with no grey of its own.

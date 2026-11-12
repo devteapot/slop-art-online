@@ -373,14 +373,16 @@ def tint_skin(j, binary, hexc):
 
 
 def tint_eyes(j, binary, hexc, at=None):
-    """Stand in for the client's tag colour on the iris: the iris material's own picture, redrawn
-    in shades of this person's eye colour (each pixel's lightness against the picture's mean,
-    times the colour), as the client moves a picture's mean colour to the recipe's."""
+    """Stand in for the client's tag colour on the iris: the iris material's own picture,
+    recoloured by the client's rule (`eye_colours.recolor`): its source colour, the mean of the
+    texels the iris's vertices lie on, moved to the line's eye colour."""
     import io
 
     from PIL import Image
 
-    target = np.array([int(hexc.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)])
+    import eye_colours
+
+    target = eye_colours.linear([int(hexc.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)])
     done = set()
     for mesh in j["meshes"]:
         for p in mesh["primitives"]:
@@ -396,15 +398,13 @@ def tint_eyes(j, binary, hexc, at=None):
                 bv = j["bufferViews"][image["bufferView"]]
                 pic = np.array(Image.open(io.BytesIO(bytes(binary[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]]))).convert("RGB"), float) / 255
             else:
-                # The types' shared iris page (share.py types): the whole page is redrawn and kept
-                # in this file, since a page cannot be one person's colour.
+                # The types' shared iris (share.py types): the picture is redrawn and kept in
+                # this file, since a shared picture cannot be one person's colour.
                 pic = np.array(Image.open(os.path.join(os.path.dirname(os.path.abspath(at)), image.pop("uri"))).convert("RGB"), float) / 255
                 image["mimeType"] = "image/png"
-            lum = pic @ np.array([0.3, 0.59, 0.11])
-            out = np.clip(target[None, None, :] * (lum / max(float(lum.mean()), 1e-3))[..., None], 0.0, 1.0)
-            # Keep what is nearly white or black as it is (the light in the eye, the pupil).
-            keep = ((pic.min(axis=2) > 0.85) | (pic.max(axis=2) < 0.12))[..., None]
-            out = np.where(keep, pic, out)
+            pic = eye_colours.linear(pic)
+            uv = np.array(read_accessor(j, binary, p["attributes"]["TEXCOORD_0"])[0], float).reshape(-1, 2)
+            out = eye_colours.stored(eye_colours.recolor(pic, eye_colours.source_mean(pic, uv), target))
             data = io.BytesIO()
             Image.fromarray((out * 255 + 0.5).astype(np.uint8)).save(data, format="PNG")
             while len(binary) % 4:
