@@ -25,7 +25,7 @@ Since `stamina-1` (2026-11-11, [docs/STAMINA.md](../../../../docs/STAMINA.md)) a
   - `steer::tests::a_road_speeds_a_run_only_up_to_the_top_speed`.
   - `moves_are_a_law_per_creature` (the `run_share` law for people, 1.5 and `charge` for wolves, `top` the `run_top` law).
 - **Live, `scenes.py stamina` on a default-seed run (about 2 min):**
-  - **The run.** A person's run is the `run_share` law times its walk (`body.speed`; the scene reads the law in force). The row's rate is −`stamina_run` from its anchor. The scene sets `stamina_run` to 10 with `set_world_law`, so a 64 m line holds a run to empty and a second run.
+  - **The run.** A person's run is the `run_share` law times its walk (`body.speed`; the scene reads the law in force). The row's rate is −`stamina_run` from its anchor. The scene sets `stamina_run` to 14 with `set_world_law`, so a 64 m line holds a run to empty and a second run, even for a fast runner.
     - Out of breath, it walks, and the row says the refill starts at `at_ms + 1000`.
     - It runs again about 2.2 s later, at 30.
     - The row has at most 8 distinct `at_ms` over the whole run.

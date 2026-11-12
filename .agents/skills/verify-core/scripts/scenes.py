@@ -1402,9 +1402,11 @@ def stamina(s):
         walk = s.rows(f"SELECT speed FROM body WHERE id = {a}", "walk")[0]["speed"]
         s.graph(a, {"wait": 300})
         time.sleep(4)
-        # A drain that empties in 10 s instead of 25 (a world law changed on the running world),
-        # so the 64 m line holds a run to empty, its walk and a second run of 3 s.
-        law("stamina_run", 10.0)
+        # A drain that empties in about 7 s instead of 25 (a world law changed on the running
+        # world), so the 64 m line holds a run to empty, its walk and a second run of about 2 s
+        # even for a fast runner (genes: 5.5 m/s at run 1.65); at 10 one reached the line's end
+        # 0.45 s into the second run and the sampled rows missed its drain.
+        law("stamina_run", 14.0)
         s.call("place_at", a, *line[0])
         time.sleep(3)
         v0 = s.vitals(a, "before-run")
@@ -1425,7 +1427,7 @@ def stamina(s):
         share = law_value(s, "run_share")
         s.expect("a person runs the run_share law times its walk", walk and abs(run / walk - share) < 0.02, {"walk": walk, "run": run, "run_share": share})
         draining = [x for x in samples if x["vitals"]["stamina_rate"] < 0]
-        s.expect("the run drains breath at the law's rate, from the row's anchor", draining and all(abs(x["vitals"]["stamina_rate"] + 10.0) < 1e-3 and x["vitals"]["stamina_from_ms"] == x["vitals"]["at_ms"] for x in draining), draining[:1])
+        s.expect("the run drains breath at the law's rate, from the row's anchor", draining and all(abs(x["vitals"]["stamina_rate"] + 14.0) < 1e-3 and x["vitals"]["stamina_from_ms"] == x["vitals"]["at_ms"] for x in draining), draining[:1])
         winded = [i for i, x in enumerate(samples) if i and samples[i - 1]["speed"] > walk * 1.5 and abs(x["speed"] - walk) < 0.05]
         s.expect("out of breath, the run becomes a walk", winded, speeds)
         w = samples[winded[0]]["vitals"]

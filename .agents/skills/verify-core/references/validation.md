@@ -9,6 +9,11 @@ Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14
 - `living/rules/examples/corner_census.rs` on start-state dumps of fresh worlds (default, island, Cullet): every changed line goes from hidden to seen (0.44%, 0.77% and 0.65% of the lines near walls; 1, 1 and 0 of the resident lines within 30 m), none from seen to hidden, and no pair is seen one way only any more (9,896, 551,139 and 34,521 one-way pairs before).
 - Not changed: missiles (`combat.rs` `wall_along` samples the line and may stop at a corner point; docs/PERCEPTION.md), `Low`/`Drop` tiles and models' `eye_solid` (decided at hosting, upstream of the walk).
 
+## 2026-11-12 stamina-1 after merging main df98c680 (Spark)
+
+- **`core-st1l`, `stamina`: 26 of 26.** `core-st1k` had failed one check: a fast runner (5.49 m/s, its genes) reached the 64 m line's end 0.45 s into its second run, and the sampled rows missed that drain. The scene's drain is now 14 a second, not 10.
+- **Other surfaces on the same tree.** verify-player `player-st1c` 35 of 35, verify-client `client-st1d` 42 of 42, verify-minds `minds-st1c --case run` pass.
+
 ## 2026-11-12 stamina-1: breath, focus, running, fight length (Spark)
 
 Branch `stamina-1`, with look-2 merged (304f90d7 and later). Trial service `slop-trials-stdb` (2.14.1, port 3320); `scoped`; no minds.
