@@ -169,6 +169,7 @@ fn hand_back(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     ctx.db.character().id().update(c);
     crate::perception::set_player(ctx, p.player, p.id);
     // What the minds had going stops: a pending thought, decided acts, the activity under way.
+    crate::fast::cancel(ctx, p.id);
     ctx.db.deliberation().actor().delete(p.id);
     // (with what waited for its sleeping mind)
     ctx.db.slumber().actor().delete(p.id);

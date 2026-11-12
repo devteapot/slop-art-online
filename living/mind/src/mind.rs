@@ -32,6 +32,7 @@ pub mod rethink;
 mod sleep;
 mod talk;
 mod facts;
+mod fast;
 
 /// How much of a remembered thing's salience and confidence is kept after a step failed at it.
 const MISSED_WEAKEN: f64 = 0.5;
@@ -50,6 +51,8 @@ pub enum Event {
     Lived(Experience),
     /// With the rethink gate on: a percept of one of this service's characters.
     Percept(Experience),
+    /// A fast-lane request issued for one of this service's characters (mind/fast.rs).
+    Fast(FastAsk),
 }
 
 pub use lived::enabled as player_memory;
@@ -62,6 +65,8 @@ pub fn greet_audience() -> bool {
 
 #[derive(Default)]
 struct ActorMind {
+    /// The last fast-lane request (`fast_ask.issued_ms`) taken up (mind/fast.rs).
+    fast_issued: u64,
     consolidating: bool,
     deliberating: bool,
     /// A deliberation is running now (`deliberate`): conversation turns wait for it (talk.rs).
@@ -233,6 +238,8 @@ pub struct Minds {
     felt: Mutex<HashMap<u32, (Instant, Value)>>,
     /// The rethink gate in front of non-urgent deliberations (rethink.rs; `LIVING_RETHINK`).
     rethink: Option<rethink::Gate>,
+    /// The fast lane's route and limits (`rethink.json` `fast`; mind/fast.rs).
+    fast: fast::Config,
     rethink_track: Mutex<HashMap<u32, rethink::Track>>,
     rethink_stats: Mutex<rethink::Stats>,
     rethink_logged: Mutex<Option<Instant>>,
@@ -405,7 +412,7 @@ impl Minds {
                 llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
             }
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -1335,6 +1342,7 @@ impl Minds {
                     }
                     Some(Event::Lived(e)) => self.lived_add(e),
                     Some(Event::Percept(e)) => self.rethink_percept(&e),
+                    Some(Event::Fast(a)) => self.clone().fast_issued(a),
                     None => return Err(anyhow!("event channel closed")),
                 },
                 _ = tick.tick() => {
@@ -2005,7 +2013,7 @@ impl Minds {
                 if v["patch"].is_object() && (v["graph"].is_null() || v["graph"].is_string()) {
                     let label = v["patch"]["label"].as_str().unwrap_or("combat").to_string();
                     let node = v["patch"]["graph"].clone();
-                    v["graph"] = patch_branch(current.clone().unwrap_or(json!({"wait": 3})), &label, node);
+                    v["graph"] = living_rules::graph::patch_branch(current.clone().unwrap_or(json!({"wait": 3})), &label, node);
                 }
                 let (g, pruned) = living_rules::graph::from_value_lenient(v["graph"].clone()).map_err(|e| anyhow!(e))?;
                 Ok((v, g, pruned))
@@ -2503,64 +2511,6 @@ fn flat(v: &Value) -> String {
 
 /// Replace the branch labeled `label` in a graph (outside the reflex layer) with `node`,
 /// labeling the new branch; if no such branch exists, add it at top priority.
-fn patch_branch(graph: Value, label: &str, node: Value) -> Value {
-    let inner = match &graph["first"] {
-        Value::Object(o) if o.get("label").and_then(|l| l.as_str()) == Some("reflexes") => o["children"].as_array().and_then(|c| c.last()).cloned().unwrap_or(json!({"wait": 3})),
-        _ => graph,
-    };
-    let labeled = label_node(node, label);
-    fn replace(v: &mut Value, label: &str, with: &Value) -> bool {
-        match v {
-            Value::Object(o) => {
-                for key in ["first", "seq"] {
-                    if let Some(Value::Object(c)) = o.get(key) {
-                        if c.get("label").and_then(|l| l.as_str()) == Some(label) {
-                            *v = with.clone();
-                            return true;
-                        }
-                    }
-                }
-                o.values_mut().any(|x| replace(x, label, with))
-            }
-            Value::Array(a) => a.iter_mut().any(|x| replace(x, label, with)),
-            _ => false,
-        }
-    }
-    let mut inner = inner;
-    if replace(&mut inner, label, &labeled) {
-        return inner;
-    }
-    // Not found: the new branch takes priority over the existing behavior.
-    match inner.get("first") {
-        Some(Value::Array(children)) => {
-            let mut c = vec![labeled];
-            c.extend(children.iter().cloned());
-            json!({"first": c})
-        }
-        Some(Value::Object(o)) => {
-            let mut c = vec![labeled];
-            c.extend(o.get("children").and_then(|x| x.as_array()).cloned().unwrap_or_default());
-            json!({"first": {"label": o.get("label").cloned().unwrap_or(json!("plan")), "children": c}})
-        }
-        _ => json!({"first": [labeled, inner]}),
-    }
-}
-
-/// Ensure a patched branch carries its label (wrapping non-composite nodes).
-fn label_node(node: Value, label: &str) -> Value {
-    for key in ["first", "seq"] {
-        match node.get(key) {
-            Some(Value::Array(children)) => return json!({key: {"label": label, "children": children}}),
-            Some(Value::Object(o)) => {
-                let mut o = o.clone();
-                o.insert("label".into(), json!(label));
-                return json!({key: o});
-            }
-            _ => {}
-        }
-    }
-    json!({"first": {"label": label, "children": [node]}})
-}
 
 
 /// A stored attention cue (`memory::cue_entry`'s form) as the authority takes it.
@@ -2684,10 +2634,10 @@ mod tests {
         let g = json!({"first": {"label": "reflexes", "children": [{"wait": 1}, {"first": [
             {"first": {"label": "combat", "children": [{"do": "attack", "target": "attacker"}]}},
             {"do": "wander"}]}]}});
-        let p = patch_branch(g, "combat", json!({"first": [{"if": {"threatened": true}, "then": {"do": "dodge"}}, {"do": "attack", "target": "attacker"}]}));
+        let p = living_rules::graph::patch_branch(g, "combat", json!({"first": [{"if": {"threatened": true}, "then": {"do": "dodge"}}, {"do": "attack", "target": "attacker"}]}));
         let s = p.to_string();
         assert!(s.contains("dodge") && s.contains("wander") && !s.contains("reflexes"), "{s}");
-        let q = patch_branch(json!({"first": [{"do": "wander"}]}), "combat", json!({"do": "flee", "target": "attacker"}));
+        let q = living_rules::graph::patch_branch(json!({"first": [{"do": "wander"}]}), "combat", json!({"do": "flee", "target": "attacker"}));
         assert_eq!(q["first"][0]["first"]["label"], "combat");
         assert!(living_rules::graph::from_value(q).is_ok());
     }

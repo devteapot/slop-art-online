@@ -435,6 +435,8 @@ pub fn accepted(ctx: &ReducerContext, a: &Activity, now: u64) {
     };
     u.accepted_ms = now;
     ctx.db.skill_use().id().update(u);
+    // Seen by its victim, a move counts toward the fast lane's repeat trigger (never told).
+    crate::fast::move_started(ctx, a, now);
 }
 
 pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {

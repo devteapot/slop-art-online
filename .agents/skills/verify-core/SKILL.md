@@ -47,6 +47,8 @@ python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
 # Committed moves end early only by a wall or death (features/combat.md, about 30 s).
 python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
 # A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).
+# The fast lane's triggers: the repeat at the law's N, never told; unseen moves not counted (features/fast.md, about 2 min).
+python3 "$C/scenes.py" seen_again --run "$R" > "$E/seen_again.txt" 2>&1
 python3 "$C/scenes.py" dodge_told --run "$R" > "$E/dodge_told.txt" 2>&1
 # First sights in a crowd: everyone in sight is told, several in one line (features/sight.md, about 30 s).
 python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
@@ -54,6 +56,8 @@ python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&1
 # Attention cues under the cues_on law: once per thing, the cooldown and the gap, never a far figure, nothing off (features/cues.md, about 1.5 min).
 python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
+# First sights that ask for a thought under first_sight_thinks: refused then owed, the gap, never far or named, sleepers, with a cue (features/first-sight.md, about 4 min).
+python3 "$C/scenes.py" first_sight --run "$R" > "$E/first_sight.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
 # on an island run it also drives the told lines of `outcomes`).
 python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
