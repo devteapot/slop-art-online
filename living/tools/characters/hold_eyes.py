@@ -91,11 +91,14 @@ def _alive(pid):
 def _state(add=(), drop=(), owner=None):
     """The files held, each with the process that holds it: {path: pid}."""
     have = {}
-    if os.path.exists(STATE):
-        for line in open(STATE):
-            pid, _, path = line.rstrip("\n").partition("\t")
-            if path and pid.isdigit():
-                have[path] = int(pid)
+    try:
+        lines = open(STATE).read().splitlines()
+    except FileNotFoundError:  # none held, or another run removed the list between a check and a read
+        lines = []
+    for line in lines:
+        pid, _, path = line.partition("\t")
+        if path and pid.isdigit():
+            have[path] = int(pid)
     for p in add:
         have[p] = owner or os.getpid()
     for p in drop:
@@ -103,8 +106,9 @@ def _state(add=(), drop=(), owner=None):
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
     if have:
         open(STATE, "w").write("".join(f"{pid}\t{path}\n" for path, pid in have.items()))
-    elif os.path.exists(STATE):
-        os.remove(STATE)
+    else:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(STATE)
     return have
 
 

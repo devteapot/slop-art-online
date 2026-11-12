@@ -28,7 +28,15 @@
 //!   first four).
 //!
 //! - `recipe:<name>` or `recipe:<folk>:<seed>` in `LIVING_GAME_VIEW` shows a character recipe
-//!   (`assets/characters/recipes.json`; folks `adult`, `giant`, `small`) at its own height.
+//!   (`assets/characters/recipes.json`; folks `adult`, `giant`, `small`) at its own height; a
+//!   recipe with a person line is composed from shared files with `LIVING_GAME_COMPOSE=1`
+//!   (`characters/compose.rs`), as in the game.
+//! - `LIVING_GAME_VIEW_PLATE=1`: after each photograph, a second of the same view and pose with
+//!   the model hidden (`NN-<shot>.plate.png`): the background alone, to tell the model's pixels
+//!   from it (`colour_check.py`).
+//! - `LIVING_GAME_VIEW_JOINTS=<file>`: at each photograph, append a JSON line with every bone's
+//!   (`J_*`) place in the model's own frame, in metres (unturned, from its root), and its
+//!   scale: to compare two ways of building a person joint by joint.
 //!
 //! Files outside the asset folder are copied into `assets/view/` (git-ignored) first, since the
 //! asset server reads only under its root.
@@ -159,6 +167,8 @@ pub struct ViewState {
     /// The mood's fog distances: the day curve scales them every frame, and in the game the
     /// camera resets them first (camera::follow), so the view does that here.
     fog: Option<bevy::pbr::FogFalloff>,
+    /// Batch, `LIVING_GAME_VIEW_PLATE`: the model in focus is hidden for its shot's plate.
+    plate: bool,
 }
 
 /// Resolve the requested files to paths under the asset folder.
@@ -281,6 +291,11 @@ pub fn setup(
                 crate::characters::Recipe::random(0, "adult")
             })
         });
+        // A person line composes the person from shared files when the switch is on.
+        let (recipe, styled) = match recipe.map(|r| crate::characters::compose::prepare(&r, &assets)) {
+            Some((r, s)) => (Some(r), s),
+            None => (None, None),
+        };
         let file = &recipe.as_ref().map_or(token.clone(), |r| crate::lookdev::animated(&r.base));
         let json = glb_json(file);
         // A generated person's clips may come from the shared clip file (`anim::clip_file`).
@@ -305,6 +320,9 @@ pub fn setup(
             // A recipe's character: rigged for its face, shaped, recoloured and sprung.
             e.insert(crate::characters::Character { recipe: r, stride: 1.0 });
         }
+        if let Some(s) = styled {
+            e.insert(s);
+        }
     }
     commands.insert_resource(ViewState {
         files,
@@ -319,6 +337,7 @@ pub fn setup(
         started: 0.0,
         shift: (0.0, Vec3::ZERO),
         fog: cams.iter().next().map(|f| f.falloff.clone()),
+        plate: false,
     });
 }
 
@@ -375,7 +394,7 @@ pub fn layout(state: Res<ViewState>, mut items: Query<(&Item, &Fitted, &mut Tran
         let c = item.turn * fit.center;
         tf.translation.x = at - c.x + off.x;
         tf.translation.z = -c.z + off.z;
-        *vis.into_inner() = if !batch || item.index == state.focus { Visibility::Inherited } else { Visibility::Hidden };
+        *vis.into_inner() = if !batch || (item.index == state.focus && !state.plate) { Visibility::Inherited } else { Visibility::Hidden };
     }
 }
 
@@ -471,6 +490,7 @@ pub fn batch(
     meshes: Res<Assets<Mesh>>,
     target: Option<Res<crate::capture::Target>>,
     mut exit: MessageWriter<AppExit>,
+    bones: Query<(Option<&Name>, &GlobalTransform)>,
 ) {
     let Some(out) = state.out.clone() else { return };
     let now = time.elapsed_secs();
@@ -571,8 +591,45 @@ pub fn batch(
         return;
     };
     if now - at > settle {
+        if state.plate {
+            // The same view with the model hidden.
+            crate::capture::shot(&mut commands, target.as_deref(), dir.join(format!("{step:02}-{name}.plate.png")));
+            state.plate = false;
+            state.batch = (i, step + 1, now + 0.3);
+            return;
+        }
+        if let (Ok(path), Some(root)) = (std::env::var("LIVING_GAME_VIEW_JOINTS"), roots.iter().find(|(_, it)| it.index == i).map(|(e, _)| e)) {
+            write_joints(&path, &file, &name, root, &children, &bones);
+        }
         crate::capture::shot(&mut commands, target.as_deref(), dir.join(format!("{step:02}-{name}.png")));
-        state.batch = (i, step + 1, now + 0.3);
+        if std::env::var("LIVING_GAME_VIEW_PLATE").is_ok_and(|v| v == "1") {
+            state.plate = true;
+            state.batch = (i, step, now + 0.3);
+        } else {
+            state.batch = (i, step + 1, now + 0.3);
+        }
+    }
+}
+
+/// `LIVING_GAME_VIEW_JOINTS`: one JSON line of a model's bones (`J_*`) in its own frame (metres,
+/// from its root, unturned) and its scale.
+fn write_joints(path: &str, file: &str, shot: &str, root: Entity, children: &Query<&Children>, bones: &Query<(Option<&Name>, &GlobalTransform)>) {
+    use std::io::Write;
+    let Ok((_, g)) = bones.get(root) else { return };
+    let (scale, rot, at) = g.to_scale_rotation_translation();
+    let joints: serde_json::Map<String, serde_json::Value> = children
+        .iter_descendants(root)
+        .filter_map(|d| bones.get(d).ok())
+        .filter_map(|(n, b)| Some((n?, b)))
+        .filter(|(n, _)| n.as_str().starts_with("J_"))
+        .map(|(n, b)| {
+            let p = rot.inverse() * (b.translation() - at);
+            (n.as_str().to_string(), serde_json::json!([p.x, p.y, p.z]))
+        })
+        .collect();
+    let line = serde_json::json!({ "file": file, "shot": shot, "scale": scale.x, "joints": joints });
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "{line}");
     }
 }
 

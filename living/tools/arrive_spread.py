@@ -34,8 +34,9 @@ control is `<trial>:arrive-control`. Per run:
   after the same resident had asked once (a silent newcomer is asked again and again; a cost).
 - **Crowding** (arrive_report): `converge_60s`, `together_4m`.
 - **Guards** (feel_tune.py's definitions over the residents' lives, split by addressee):
-  `false_min`, false replies per minute (greet_report.py: turns that answered a resident's line
-  meant for someone else); `rep_res`/`rep_new`: the share of residents' own lines to residents (or
+  `false_min`, false replies per minute and `group_talk_min` answered room remarks per minute
+  (greet_report.py `reply_kind`, since strangers-measures: turns that answered a resident's line
+  naming someone else; never one naming the answerer); `rep_res`/`rep_new`: the share of residents' own lines to residents (or
   to no one) / to the newcomer that repeat an own line of the last 10 minutes; `led_res`: the
   share of residents' lines addressed to other residents that led to something within 180 s (a
   trade, lesson, gift, help, hosting or agreement it is part of, or a new plan of either naming
@@ -251,7 +252,7 @@ def proxy_score(lives, model):
 
 
 COLS = ["id_lines", "in_range", "acted_share", "heard_res", "contact_join_s", "heard_join_s", "lines_to", "far", "c_line", "c_watch", "c_pass",
-        "intro", "invite", "gave", "threat", "told", "reasks", "converge_60s", "together_4m", "false_min", "rep_res", "rep_new",
+        "intro", "invite", "gave", "threat", "told", "reasks", "converge_60s", "together_4m", "false_min", "group_talk_min", "rep_res", "rep_new",
         "led_res", "plc_res", "led_new", "score", "delib_ph", "talk_ph", "reused", "reused_ev", "carried_again", "usd", "usd_rh"]
 # Which direction is a cost: +1 when more is worse (for the "worse" marks of the guards).
 WORSE = {"false_min": 1, "rep_res": 1, "rep_new": 1, "led_res": -1, "converge_60s": 1, "together_4m": 1, "reasks": 1, "far": 1}
@@ -521,11 +522,14 @@ def main():
     ap.add_argument("--arrive-tools", default=str(HERE), help="directory holding arrive_report.py (branch exp-arrive)")
     ap.add_argument("--feel-model", help="a feel_tune fit's tune_result*.json, for the proxy-tuned score")
     ap.add_argument("--json")
+    ap.add_argument("--stands-only", action="store_true", help="in range during the stands only (before the st2b analysis), not the newcomer's walks too")
     ap.add_argument("--strangers", action="store_true", help="the strangers measures per run and resident (docs/STRANGERS.md)")
     ap.add_argument("--control", help="the control arm for every arm (`trial:variant`); default `<trial>:arrive-control`")
     a = ap.parse_args()
     global AR, FE, FT
     AR = load("arrive_report", a.arrive_tools)
+    if AR is not None and a.stands_only:
+        AR.WALKS = False
     if AR is None:
         sys.exit(f"no arrive_report.py in {a.arrive_tools}: pass --arrive-tools (a checkout of exp-arrive)/living/tools")
     import feel_excerpts as FE  # noqa: E402
@@ -570,6 +574,7 @@ def main():
                    "converge_60s": r["converge_60s"], "together_4m": r["together_4m"],
                    "false_min": round(fr["false_replies"] / fr["minutes"], 3) if fr and fr.get("minutes") else None,
                    "false": fr["false_replies"] if fr else None,
+                   "group_talk_min": round(fr["group_talk"] / fr["minutes"], 3) if fr and fr.get("minutes") and "group_talk" in fr else None,
                    "score": proxy_score(lives, model) if model else None,
                    "reused": r.get("reused_share"), "reused_ev": r.get("reused_events"), "carried_again": r.get("carried_again"),
                    "usd": r.get("usd"), **x, **g}

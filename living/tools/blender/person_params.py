@@ -393,6 +393,52 @@ def hexed(c):
     return "#" + "".join(f"{round(min(max(x, 0.0), 1.0) * 255):02x}" for x in c[:3])
 
 
+# Greying. A hair vertex carries how soon its lock goes grey (`_GREY`, in hair files): 1 / a, where
+# a lock is wholly grey once the person's `grey` reaches a, and a is spread evenly from GREY_FIRST
+# to GREY_LAST over a head's locks. A vertex's hair is the natural colour mixed toward the silver
+# by clamp(grey x _GREY, 0, 1): some locks grey early and wholly, the rest by degrees.
+GREY_FIRST, GREY_LAST = 0.15, 0.90
+
+
+def grey_mask(u):
+    """`_GREY` for a lock whose place among the head's locks is u (0 the first to go grey, 1 the last)."""
+    return 1.0 / (GREY_FIRST + (GREY_LAST - GREY_FIRST) * min(max(u, 0.0), 1.0))
+
+
+def grey_share(g):
+    """How grey a head is on the whole (0..1) at the look's `hair_grey` g: what a person's own
+    file showed, where a share of the locks was wholly grey and the rest three quarters of g."""
+    if g >= 0.95:
+        return 1.0
+    whole = smooth((g - 0.15) / 0.75)
+    return whole + (1 - whole) * min(1.0, 0.75 * max(g, 0.0))
+
+
+def grey_mean(amount):
+    """The mean of clamp(amount x _GREY, 0, 1) over a head's locks."""
+    import math
+    a, b = GREY_FIRST, GREY_LAST
+    if amount <= 0:
+        return 0.0
+    if amount >= b:
+        return 1.0
+    lo = max(amount, a)
+    return (lo - a) / (b - a) + amount * math.log(b / lo) / (b - a)
+
+
+def grey_amount(g):
+    """The `grey` a person's line carries for the look's `hair_grey` g: the amount at which the
+    mask's mix is as grey on the whole as the person's own file was (`grey_share`)."""
+    want = grey_share(g)
+    if want <= 0.004:
+        return 0.0
+    lo, hi = 0.0, GREY_LAST
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (mid, hi) if grey_mean(mid) < want else (lo, mid)
+    return round(hi, 3)
+
+
 def person_line(spec, recipe, male):
     """A person as the client composes one from shared files (docs/CHARACTERS.md, "The client
     format"): a type, identity values, the style files worn, colours, and proportions. The
@@ -409,10 +455,13 @@ def person_line(spec, recipe, male):
     # own file put its girth on below the shoulders only, so the shoulders give the girth back.
     props["shoulders"] = round(props.get("shoulders", 1.0) / g, 3)
     look = spec["look"]
-    # One colour for the hair: the natural colour gone as grey as this person's is (a per-person
-    # file greys lock by lock; a shared style takes one tint). The beard has its own.
-    grey = min(max(float(look.get("hair_grey", 0.0)), 0.0), 1.0)
-    colours = dict(skin=hexed(look["skin"]), hair=hexed(mix(look["hair_natural"], look["hair_silver"], grey)), beard=hexed(look["beard_colour"]))
+    # One colour for the hair: the natural colour gone as grey as this person's is on the whole.
+    # A client that mixes by the hair file's `_GREY` takes `hair_natural`, `hair_silver` and the
+    # line's `grey` in its place and greys lock by lock. The beard has its own.
+    grey = grey_amount(min(max(float(look.get("hair_grey", 0.0)), 0.0), 1.0))
+    colours = dict(skin=hexed(look["skin"]), hair=hexed(mix(look["hair_natural"], look["hair_silver"], grey_mean(grey))), beard=hexed(look["beard_colour"]))
+    if grey > 0.02:
+        colours.update(hair_natural=hexed(look["hair_natural"]), hair_silver=hexed(look["hair_silver"]))
     cloth_ = {}
     for name in pieces + head:
         base = name[:-2] if name[-2:] in ("-m", "-f") else name
@@ -441,6 +490,8 @@ def person_line(spec, recipe, male):
                 styles=dict(hair=hair, outfit=pieces + head, overlays=over))
     if spec["belly"] > 0.02:
         line["belly"] = round(spec["belly"], 3)
+    if grey > 0.02:
+        line["grey"] = grey
     return line
 
 
@@ -461,6 +512,10 @@ def from_type(tid):
 
 STYLES = ("tousled", "short", "crop", "shag", "swept", "sides", "balding", "bob", "bob_parted", "braids", "tail", "long", "bun", "braid", "kerchief")
 CAPPED = ("tousled", "short", "crop", "shag", "swept", "sides", "balding")  # the styles also written as worn under a cap (`<style>.cap`)
+# The styles that hang past the collar are also written as worn over a coat (`<style>.collar`, each
+# cut): a shared style is combed over a smock's low collar and back, and a coat's collar stands
+# 4 cm higher and 3 cm wider, so hair that lies close on the one cuts through the other.
+COLLARED = ("long", "tail", "braid")
 CUTS = 3  # how many cuts of each style are written: `<style>`, `<style>.2`, `<style>.3`, each with its own length, parting, fringe and volume
 STYLE_HEAD = "adult-f-b"  # the head every shared hair style is built on; a type's file carries its fit onto that type (hair_fit.py)
 
@@ -470,8 +525,9 @@ def from_style(style):
     every identity value at 0, and the style at the lengths and parting its own seed draws."""
     parts = style.split(".")
     style, under, cut = parts[0], ("cap" if parts[-1] == "cap" else ""), next((int(x) for x in parts[1:] if x.isdigit()), 1)
-    if style not in STYLES or (under and style not in CAPPED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + (cut > 1):
-        raise SystemExit(f"style {'.'.join(parts)!r}: one of {STYLES}, with `.2` to `.{CUTS}` for another cut and `.cap` for {CAPPED} under a cap")
+    collar = parts[-1] == "collar"
+    if style not in STYLES or (under and style not in CAPPED) or (collar and style not in COLLARED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + collar + (cut > 1):
+        raise SystemExit(f"style {'.'.join(parts)!r}: one of {STYLES}, with `.2` to `.{CUTS}` for another cut, `.cap` for {CAPPED} under a cap and `.collar` for {COLLARED} over a coat")
     male = style in ("short", "crop", "swept", "sides", "shag", "tousled", "balding")
     # Another cut is the same style from another seed: the generator draws its length, parting,
     # fringe, volume and curl from it, as it did for each person.
@@ -481,7 +537,7 @@ def from_style(style):
         # a seed draws almost none: until the sheets step this style's file had a full head of hair.
         hair["recede"] = (0.85, 1.0, 0.74)[cut - 1]
     return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style) + 100 * (cut - 1), sex="male" if male else "female", age=30, hair=hair, beard=dict(style="none", stubble=0.0),
-                build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none")))
+                build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none"), coat="coat" if collar else "smock"))
 
 
 # Outfit pieces as shared style files (gen_styles.sh): the outfit that makes each, and the parts of
@@ -564,6 +620,8 @@ def worn(spec):
     style = spec["hair"]["style"]
     cut = spec["seed"] % CUTS + 1  # which cut of the style this person wears
     hair = "kerchief" if head == "kerchief" else (f"{style}.cap" if head == "cap" and style in CAPPED else (style if cut == 1 or style == "kerchief" else f"{style}.{cut}"))
+    if coat == "coat" and style in COLLARED and head != "kerchief":
+        hair += ".collar"  # the cut as combed over a coat's collar
     return hair, top + [f"trousers-{form}", f"boots-{form}"], [head] if head else []
 
 

@@ -17,11 +17,16 @@ off the speaker's facing) and the journal (tokens):
   repeated word for word into its earlier row), `answered_5s`, answer latency median and p90 (s), and who answered: `by_nearest`
   (the resident nearest the player when it spoke), `by_addressed` (the one the line was for),
   `by_turn` (the answer came from a conversation turn rather than a deliberation);
-- `false_replies`: conversation turns that answered a resident's line meant for someone else,
-  either addressed (`to`) to another person, or said to no one while its speaker was in an
-  exchange with another (a line between the two within EXCHANGE_S before it); and
-  `overheard_turns`: all turns on residents' lines said to no one (the switches widen these);
-  both also per listening window of the player (`listen_false`);
+- `false_replies` (since 2026-11-12, `strangers-measures`; `reply_kind`): conversation turns that
+  answered a resident's line naming someone else, addressed (`to`) to another person or saying
+  another's name, and never one whose words name the answerer; `group_talk`: turns answering a
+  remark to the room that names no one; `overheard_turns`: all turns on residents' lines said to
+  no one; false replies also per listening window of the player (`listen_false`). Only the
+  player's own turns are left out: the joined newcomer (cast role `newcomer`) where there is one,
+  else the subject (the greeting and arrival trials' player); a resident who is a trial's subject
+  (Aldous in the strangers trials) is counted. Before, a room line said while its speaker was in
+  an exchange with another (within EXCHANGE_S) was false too, a line naming the answerer could be,
+  and the subject was always left out (docs/TRIALS.md, "Analysis of st2b");
 - `turns_min`: residents' conversation turns per minute; `talk_tok_min` and `tok_min`: model tokens
   per minute for talk turns and for everything, and `usd_h`: estimated dollars per hour at
   trials.py's prices (fake runs: 0).
@@ -65,6 +70,31 @@ def words(text):
     return (m.group(1) if m else base).strip()
 
 
+def named_in(text, names):
+    """Ids of the people whose name (full, or first name) the words of a line say."""
+    out = set()
+    for pid, name in names.items():
+        if not name:
+            continue
+        first = name.split()[0]
+        if re.search(rf"\b{re.escape(name)}\b", text) or (len(first) > 2 and re.search(rf"\b{re.escape(first)}\b", text)):
+            out.add(pid)
+    return out
+
+
+def reply_kind(text, to, speaker, answerer, names):
+    """What a turn by `answerer` on `speaker`'s line (its words `text`, addressed to `to`, 0 for
+    the room) was: "false" when the line names someone else (addressed to another, or saying
+    another's name), "group_talk" when it is a remark to the room that names no one, None when it
+    was for the answerer (addressed to them, or saying their name: never false)."""
+    said = named_in(text, names) - {speaker}
+    if answerer in said or to == answerer:
+        return None
+    if (to and to != answerer) or said:
+        return "false"
+    return "group_talk"
+
+
 def hearers(row):
     """An audience row's hearers as dicts (the SQL API gives a product as a list)."""
     out = []
@@ -85,7 +115,10 @@ def pct(xs, q):
 
 def run(d):
     cast = json.loads((d / "cast.json").read_text()) if (d / "cast.json").exists() else {}
-    P = (cast.get("roles", {}).get("subject") or [{}])[0].get("id")
+    # The player: the joined newcomer where a trial has one (the strangers trials, whose subject
+    # is a resident), else the subject (the greeting and arrival trials' joined player).
+    roles = cast.get("roles", {})
+    P = (roles.get("newcomer") or roles.get("subject") or [{}])[0].get("id")
     events = jl(d / "events.jsonl")
     lines = [e["human_line"] for e in events if "human_line" in e]
     listens = [(e["human_listen"]["from_ms"], e["human_listen"]["from_ms"] + e["human_listen"]["s"] * 1000) for e in events if "human_listen" in e]
@@ -94,7 +127,7 @@ def run(d):
     aud = {(a["speaker"], a["at_ms"]): hearers(a) for a in jl(d / "audience.jsonl")}
     names = {}
     for c in jl(d / "census.jsonl")[:1]:
-        names = {p["id"]: p["name"] for p in c.get("people", [])}
+        names = {p["id"]: p["name"] for p in c.get("people", []) if p.get("kind", "person") == "person"}
     mine = [r for r in speech if r["a"] == P]
     out = {"run": d.name, "player": P, "lines": {}, "examples": []}
     for kind in ("unaddressed", "addressed"):
@@ -140,7 +173,7 @@ def run(d):
         }
         out["examples"] += [{"kind": kind, **x, "by_name": names.get(x["by"]), "nearest_name": names.get(x["nearest"])} for x in rows]
     # Turns on residents' lines.
-    false, overheard, in_listen = 0, 0, 0
+    false, group, overheard, in_listen = 0, 0, 0, 0
     false_ex = []
     for t in talk:
         det = json.loads(t.get("detail") or "{}")
@@ -153,18 +186,15 @@ def run(d):
         C, to = t["actor"], line["b"]
         if to == 0:
             overheard += 1
-        other = None
-        if to not in (0, C):
-            other = to
-        elif to == 0:
-            prior = [s for s in speech if line["at_ms"] - EXCHANGE_S * 1000 <= s["at_ms"] < line["at_ms"] and ((s["a"] == a and s["b"] not in (0, C)) or (s["b"] == a and s["a"] != C))]
-            if prior:
-                other = prior[-1]["b"] if prior[-1]["a"] == a else prior[-1]["a"]
-        if other is not None:
+        kind = reply_kind(heard, to, a, C, names)
+        if kind == "group_talk":
+            group += 1
+        elif kind == "false":
             false += 1
             in_listen += any(f <= line["at_ms"] <= e for f, e in listens)
-            false_ex.append({"by": names.get(C, C), "line_by": names.get(a, a), "meant_for": names.get(other, other), "heard": heard, "said": det.get("reply", {}).get("say") if isinstance(det.get("reply"), dict) else None})
-    out["false_replies"], out["overheard_turns"], out["listen_false"] = false, overheard, in_listen
+            others = sorted(named_in(heard, names) - {a, C}) or ([to] if to else [])
+            false_ex.append({"by": names.get(C, C), "line_by": names.get(a, a), "meant_for": ", ".join(str(names.get(o, o)) for o in others), "heard": heard, "said": det.get("reply", {}).get("say") if isinstance(det.get("reply"), dict) else None})
+    out["false_replies"], out["group_talk"], out["overheard_turns"], out["listen_false"] = false, group, overheard, in_listen
     out["false_examples"] = false_ex[:5]
     # Cost: the journal's calls over the run's span.
     j = [r for f in sorted((d / "journal").glob("*.jsonl")) for r in jl(f)] if (d / "journal").exists() else []
