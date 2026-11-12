@@ -72,7 +72,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
 const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening", "work_hours"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, work_hours, raining, moving, believes, judged, chance, all, any, not";
+const CONDS: &str = "hunger, energy, health, stamina, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, work_hours, raining, moving, believes, judged, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -393,6 +393,22 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if let Some(Value::String(t)) = action.get("text").or_else(|| action.get("words")).or_else(|| action.get("message")) {
         out.insert("text".into(), json!(t.chars().take(400).collect::<String>()));
     }
+    // Running on the way: true or false (a word a model writes for it too).
+    match action.get("run").or_else(|| action.get("running")).or_else(|| action.get("hurry")) {
+        Some(Value::Bool(b)) => {
+            out.insert("run".into(), json!(*b));
+        }
+        Some(Value::String(w)) => match w.trim().to_lowercase().as_str() {
+            "true" | "yes" | "run" | "fast" => {
+                out.insert("run".into(), json!(true));
+            }
+            "false" | "no" | "walk" => {
+                out.insert("run".into(), json!(false));
+            }
+            _ => {}
+        },
+        _ => {}
+    }
     if skill == "rework" {
         let name = out.get("item").and_then(|i| i.as_str()).unwrap_or_default().to_string();
         let raw = action.get("item").or_else(|| action.get("what")).and_then(|i| i.as_str()).unwrap_or(&name);
@@ -615,7 +631,7 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     let c = cmp(v, path, "hour")?;
                     json!({"hour": c})
                 }
-                "hunger" | "energy" | "health" => {
+                "hunger" | "energy" | "health" | "stamina" => {
                     let c = cmp(v, path, &key)?;
                     json!({key: c})
                 }

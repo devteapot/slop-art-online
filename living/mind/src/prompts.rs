@@ -329,12 +329,12 @@ Nodes:
 - {{\"first\": [N, ...]}} priority: every check, the first child that is running or succeeds wins; higher children interrupt lower ones. Optional label: {{\"first\": [...], \"label\": \"...\"}}.
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
 - {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds, except that work already begun under it (sleep, rest, eat, gather, build, craft, cook, teach, write, read, plant...) is finished; walking, fleeing and fighting stop as soon as C no longer holds.
-- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically.{making}
+- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically. Add \"run\": true to run there instead (goto, follow, an attack's approach): it costs breath and is for hurry, flight and fights; out of breath you walk. A flight (flee) runs unless \"run\": false.{making}
 - {{\"say\": \"<the words>\", \"to\": T}} speak (each say node speaks at most once per 45 s).
 - {{\"wait\": seconds}}
 - {{\"think\": \"reason\"}} ask yourself to reconsider (non-blocking; ignored within 45 s of a decision, then at most once per 90 s). Put it where your plan runs out (e.g. last in a seq or as the final fallback), not where it is reached on every check.
 Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"above\": 60}}, \"has\": {{\"item\": \"food\"}}}}, \"then\": {{\"do\": \"eat\", \"item\": \"food\"}}}}
-Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100)
+Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100) {{\"stamina\": {{\"below\": 30}}}} (breath, 0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
   {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight looks (% of full: exact for yourself or one you appraised, else as its wound looks)
   {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
@@ -384,7 +384,7 @@ Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happe
 {\"do\": \"join\"|\"welcome\", \"target\": {\"id\": 6}}, {\"do\": \"found\", \"text\": \"a name\"}, {\"do\": \"threaten\", \"target\": {\"id\": 6}}, {\"do\": \"seize\", \"target\": {\"id\": 6}, \"item\": \"hide\", \"qty\": 2}, {\"do\": \"yield\", \"target\": {\"id\": 6}}, and any other single piece of work (build, craft, cook, store, take, plant). \
 {\"do\": \"rework\", \"item\": \"find food and eat\", \"graph\": {...the whole new version...}} reworks one of your ways (\"retire\": true instead drops it; a new name works out a new way; \
 item \"top level\" with a {\"desires\": [...]} graph changes what you weigh and how). \
-A single walk ({\"do\": \"goto\", \"target\": T}) can be a step before an act (e.g. goto a place, then build there); \
+A single walk ({\"do\": \"goto\", \"target\": T}, with \"run\": true to hurry at the cost of breath) can be a step before an act (e.g. goto a place, then build there); \
 following, fleeing, fighting, sleeping and resting are not acts: they are your graph. Words change nothing in the world by themselves: \
 if you agree to do something now, do it as an act.";
 
@@ -1063,10 +1063,19 @@ mod tests {
         use super::{felt_body, Body};
         let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(&Body { hp, max_hp: 100.0, hunger, energy, hp_rate, ..Default::default() });
         assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, rested, unhurt");
-        assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded; you are growing weaker");
+        assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded, walking slower; you are growing weaker");
         assert_eq!(b(70.0, 10.0, 90.0, 0.4), "well fed, well rested, a little hurt; your wounds are mending");
-        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive; you are growing weaker");
+        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive, walking slower; you are growing weaker");
         assert!(!b(55.0, 60.0, 40.0, 0.0).chars().any(|c| c.is_ascii_digit()));
+        // Breath, from the vitals row as the service reads it: out of breath below 20 (after a
+        // run or a fight), the status law's words; nothing said above.
+        let winded = |s: f64| {
+            let row = vec![("hp".to_string(), 100.0), ("max_hp".to_string(), 100.0), ("hunger".to_string(), 30.0), ("energy".to_string(), 60.0), ("at_ms".to_string(), 1000.0),
+                           ("stamina".to_string(), s), ("stamina_max".to_string(), 100.0), ("stamina_rate".to_string(), 25.0), ("stamina_from_ms".to_string(), 5000.0)];
+            felt_body(&Body { hp: 100.0, max_hp: 100.0, hunger: 30.0, energy: 60.0, row, now_ms: 2000, kind: "person".into(), stage: "adult".into(), ..Default::default() })
+        };
+        assert!(winded(5.0).contains("out of breath"), "{}", winded(5.0));
+        assert!(!winded(60.0).contains("out of breath"), "{}", winded(60.0));
     }
 
     #[test]

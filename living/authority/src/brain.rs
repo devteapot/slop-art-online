@@ -90,6 +90,8 @@ struct Ev<'a> {
     want: (String, u32),
     /// What a graph leaf's answer (accept, decline) names: a trade offer, a record (0: none).
     answers: (u64, u64),
+    /// The `run` of the action being started (a `Do` node's).
+    run: Option<bool>,
     /// Node of the activity in progress if it is work that completes on its own (see `latches`).
     latched: Option<u16>,
     /// A deliberate act holds the body: graph leaves wait, except reflexes (see `acts.rs`).
@@ -123,7 +125,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         cur = ctx.db.activity().id().find(id);
     }
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), latched: None, acting };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, latched: None, acting };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
@@ -147,7 +149,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     let g = common::compiled(ctx, id, st.revision)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), latched: None, acting: false };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, latched: None, acting: false };
     ev.sensed(t)
 }
 
@@ -219,7 +221,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         key = (key & !0b11_1101) | 1 | ((n.hunger >= c[0]) as u32) << 2 | ((n.hunger < c[1]) as u32) << 3 | ((n.energy > c[2]) as u32) << 4 | ((n.energy <= c[3]) as u32) << 5;
     }
     if let Ok(r) = law.map(|l| l.rates(&sctx.actor)) {
-        common::settle(&mut v, now);
+        common::settle(ctx, &mut v, now);
         v.hp_rate = r.hp_per_min;
         v.hunger_rate = r.hunger_per_min;
         v.energy_rate = r.energy_per_min;
@@ -480,6 +482,7 @@ impl<'a> Ev<'a> {
                 };
                 self.want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
                 self.answers = (a.offer.unwrap_or(0), a.record.unwrap_or(0));
+                self.run = a.run;
                 self.leaf(id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), graph::describe(n))
             }
             Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
@@ -576,7 +579,8 @@ impl<'a> Ev<'a> {
         }
         let want = std::mem::take(&mut self.want);
         let answers = std::mem::take(&mut self.answers);
-        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, self.now) {
+        let run = self.run.take();
+        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, self.now) {
             Ok(()) => {
                 self.running = Some(id);
                 self.status = self.ctx.db.activity().id().find(self.me.id).map(|a| a.label).unwrap_or(desc);
@@ -802,6 +806,7 @@ impl<'a> Ev<'a> {
             Cond::Hunger(x) => x.test(self.needs.hunger),
             Cond::Energy(x) => x.test(self.needs.energy),
             Cond::Health(x) => x.test(self.needs.hp),
+            Cond::Stamina(x) => x.test(crate::breath::levels(&self.vit, self.now).0),
             Cond::Has(h) => {
                 let n = if h.item == "food" { common::food_count(self.ctx, self.me.id as u64) } else { common::inv_count(self.ctx, self.me.id as u64, &h.item) };
                 n >= h.at_least

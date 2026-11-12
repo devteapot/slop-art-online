@@ -21,6 +21,7 @@ pub struct Moving {
     pub face_off: f32,
     pub face_turn: f32,
     pub face_turn_s: f32,
+    pub running: bool,
 }
 
 impl __sdk::InModule for Moving {
@@ -45,6 +46,7 @@ pub struct MovingCols {
     pub face_off: __sdk::__query_builder::Col<Moving, f32>,
     pub face_turn: __sdk::__query_builder::Col<Moving, f32>,
     pub face_turn_s: __sdk::__query_builder::Col<Moving, f32>,
+    pub running: __sdk::__query_builder::Col<Moving, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for Moving {
@@ -65,6 +67,7 @@ impl __sdk::__query_builder::HasCols for Moving {
             face_off: __sdk::__query_builder::Col::new(table_name, "face_off"),
             face_turn: __sdk::__query_builder::Col::new(table_name, "face_turn"),
             face_turn_s: __sdk::__query_builder::Col::new(table_name, "face_turn_s"),
+            running: __sdk::__query_builder::Col::new(table_name, "running"),
         }
     }
 }

@@ -32,7 +32,7 @@ Run the existing driver through the recorder using [SKILL.md](../SKILL.md). It s
 
 ## Moving as a law
 
-Since `laws-2` (2026-11-11) a creature's run, flight and step aside (as shares of its walk), its turn rate, the speed it keeps in sharp turns and its separation from others are the script's per-creature `motion(a)` law (docs/WORLD_RULES.md, "Laws"), asked through `common::moves_of`. `scenes.py moves` on a default-seed run: a person walks off (its cruising speed in `body.speed` is its walk), flees a second person (1.15 times that), then turns on the spot to face someone placed behind it (`body.turn` ±6 rad/s). An installed overlay with a flight of 2 and turning at 3 shows both changed; the shipped script is installed again at the end. Evidence: `moves-*.json`.
+Since `laws-2` (2026-11-11) a creature's run, flight and step aside (as shares of its walk), its turn rate, the speed it keeps in sharp turns and its separation from others are the script's per-creature `motion(a)` law (docs/WORLD_RULES.md, "Laws"), asked through `common::moves_of`. `scenes.py moves` on a default-seed run: a person walks off (its cruising speed in `body.speed` is its walk), flees a second person with `run: false` (1.15 times that) and by default (a run since `stamina-1`, the `run_share` law times; [breath.md](breath.md)), then turns on the spot to face someone placed behind it (`body.turn` ±6 rad/s). An installed overlay with a flight of 2 and turning at 3 shows both changed; the shipped script is installed again at the end. Evidence: `moves-*.json`.
 
 ## Admin placement
 

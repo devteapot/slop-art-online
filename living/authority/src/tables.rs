@@ -302,6 +302,12 @@ pub struct Body {
     pub face_turn: f32,
     #[default(0.0f32)]
     pub face_turn_s: f32,
+    /// Running now (docs/STAMINA.md): a run under way with breath, for every controller (a
+    /// player's run key, a graph's or a mind's `run`, a flight, a wolf's charge); false walking,
+    /// out of breath, standing, or dashing. Written with the motion, so a client draws the gait
+    /// the rules move (a run is not inferred from speed: walks differ by world and setting).
+    #[default(false)]
+    pub running: bool,
 }
 
 /// What a body is steering for (private; written when the goal changes, not per update).
@@ -335,6 +341,11 @@ pub struct Steer {
     pub look_on: bool,
     #[default(0.0f32)]
     pub look: f32,
+    /// A goal that runs (`FLAG_RUN`): its speed walking (out of breath) and running (m/s).
+    #[default(0.0f32)]
+    pub pace: f32,
+    #[default(0.0f32)]
+    pub run_pace: f32,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
@@ -367,17 +378,45 @@ pub struct Vitals {
     pub rate_key: u32,
     pub hurt_ms: u64,
     pub hurt_by: u32,
+    /// Breath (`stamina`) and focus: each its level at `at_ms`, its cap (tiredness caps breath),
+    /// its signed rate per real second, and when that rate starts (`*_from_ms`, never before
+    /// `at_ms`): negative from `at_ms` while a run or a held guard drains it, the refill from the
+    /// last spend plus the pool's delay otherwise (`living_rules::pools::level`). Written when a
+    /// drain starts or stops and when something is spent, never per tick: a reader projects
+    /// `value + rate * (now - max(at_ms, from_ms)) / 1000` within 0..cap.
+    #[default(100.0f32)]
+    pub stamina: f32,
+    #[default(100.0f32)]
+    pub stamina_max: f32,
+    #[default(0.0f32)]
+    pub stamina_rate: f32,
+    #[default(0u64)]
+    pub stamina_from_ms: u64,
+    #[default(100.0f32)]
+    pub focus: f32,
+    #[default(100.0f32)]
+    pub focus_max: f32,
+    #[default(0.0f32)]
+    pub focus_rate: f32,
+    #[default(0u64)]
+    pub focus_from_ms: u64,
 }
 
 impl Vitals {
     /// The row's columns (a world's `meters()` may name any of them). A column added to this
     /// table is added here and in [`Vitals::fields`], and nowhere else: the rules read the body
     /// by field name (`living_rules::script::BodyFacts`).
-    pub const FIELDS: [&'static str; 12] = ["id", "hp", "max_hp", "hunger", "energy", "at_ms", "hp_rate", "hunger_rate", "energy_rate", "rate_key", "hurt_ms", "hurt_by"];
+    pub const FIELDS: [&'static str; 20] = [
+        "id", "hp", "max_hp", "hunger", "energy", "at_ms", "hp_rate", "hunger_rate", "energy_rate", "rate_key", "hurt_ms", "hurt_by",
+        "stamina", "stamina_max", "stamina_rate", "stamina_from_ms", "focus", "focus_max", "focus_rate", "focus_from_ms",
+    ];
 
     /// The row's numeric fields by name, in [`Vitals::FIELDS`]'s order.
     pub fn fields(&self) -> Vec<(String, f64)> {
-        let v = [self.id as f64, self.hp as f64, self.max_hp as f64, self.hunger as f64, self.energy as f64, self.at_ms as f64, self.hp_rate as f64, self.hunger_rate as f64, self.energy_rate as f64, self.rate_key as f64, self.hurt_ms as f64, self.hurt_by as f64];
+        let v = [
+            self.id as f64, self.hp as f64, self.max_hp as f64, self.hunger as f64, self.energy as f64, self.at_ms as f64, self.hp_rate as f64, self.hunger_rate as f64, self.energy_rate as f64, self.rate_key as f64, self.hurt_ms as f64, self.hurt_by as f64,
+            self.stamina as f64, self.stamina_max as f64, self.stamina_rate as f64, self.stamina_from_ms as f64, self.focus as f64, self.focus_max as f64, self.focus_rate as f64, self.focus_from_ms as f64,
+        ];
         Self::FIELDS.iter().zip(v).map(|(k, v)| (k.to_string(), v)).collect()
     }
 }
@@ -1161,6 +1200,10 @@ pub struct SkillCard {
     pub needs: String,
     #[default("")]
     pub knows: String,
+    /// The pool `cost` is taken from (`combat_pool`): "stamina" or "focus" (`vitals`' columns
+    /// of that name), so the bar greys a slot without knowing skill names.
+    #[default("stamina")]
+    pub pool: String,
 }
 
 /// What others can see of a character in a fight: the health band at a glance and the move
@@ -1597,6 +1640,9 @@ pub struct MotionSeen {
     pub face_turn: f32,
     #[default(0.0f32)]
     pub face_turn_s: f32,
+    /// `body.running`, appended as the facing was.
+    #[default(false)]
+    pub running: bool,
 }
 
 /// An experience line of a player's character released to its client (private; frames,

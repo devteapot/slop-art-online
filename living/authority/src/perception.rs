@@ -97,21 +97,23 @@ pub struct Moving {
     pub face_off: f32,
     pub face_turn: f32,
     pub face_turn_s: f32,
+    /// Running now (`body.running`): the gait to draw, for any controller.
+    pub running: bool,
 }
 
 impl From<&Body> for Moving {
     fn from(b: &Body) -> Self {
-        Self { id: b.id, x: b.x, y: b.y, t_ms: b.t_ms, vx: b.vx, vy: b.vy, heading: b.heading, turn: b.turn, turn_s: b.turn_s, next_ms: b.next_ms, speed: b.speed, face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s }
+        Self { id: b.id, x: b.x, y: b.y, t_ms: b.t_ms, vx: b.vx, vy: b.vy, heading: b.heading, turn: b.turn, turn_s: b.turn_s, next_ms: b.next_ms, speed: b.speed, face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s, running: b.running }
     }
 }
 
 impl MotionSeen {
     pub fn of(id: u64, viewer: Identity, b: &Body) -> Self {
-        Self { id, viewer, motion: Motion::from(b), face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s }
+        Self { id, viewer, motion: Motion::from(b), face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s, running: b.running }
     }
     pub fn moving(&self) -> Moving {
         let m = &self.motion;
-        Moving { id: m.id, x: m.x, y: m.y, t_ms: m.t_ms, vx: m.vx, vy: m.vy, heading: m.heading, turn: m.turn, turn_s: m.turn_s, next_ms: m.next_ms, speed: m.speed, face_off: self.face_off, face_turn: self.face_turn, face_turn_s: self.face_turn_s }
+        Moving { id: m.id, x: m.x, y: m.y, t_ms: m.t_ms, vx: m.vx, vy: m.vy, heading: m.heading, turn: m.turn, turn_s: m.turn_s, next_ms: m.next_ms, speed: m.speed, face_off: self.face_off, face_turn: self.face_turn, face_turn_s: self.face_turn_s, running: self.running }
     }
     /// Write `m` into this row (the motion and the facing columns).
     pub fn set(&mut self, m: &Moving) {
@@ -119,6 +121,7 @@ impl MotionSeen {
         self.face_off = m.face_off;
         self.face_turn = m.face_turn;
         self.face_turn_s = m.face_turn_s;
+        self.running = m.running;
     }
 }
 

@@ -98,7 +98,7 @@ fn describe(c: &SkillCtx) -> String {
 /// The functions the engine calls with a context: `<skill>_check`, `_duration`, `_done`, `_hit`,
 /// `_missile`, and the need laws.
 pub const SKILL_PARTS: [&str; 5] = ["_check", "_duration", "_done", "_hit", "_missile"];
-pub const CTX_LAWS: [&str; 7] = ["rates", "body_state", "move_speed", "senses", "motion", "theft", "glow"];
+pub const CTX_LAWS: [&str; 9] = ["rates", "body_state", "move_speed", "senses", "motion", "theft", "glow", "pools", "slowed"];
 
 pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     if let Some(f) = s.borrowed.first() {
@@ -348,6 +348,14 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             }
             let d = p.ctx("motion", &c)?;
             super::decode_moves(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+            if s.has("pools") {
+                let d = p.ctx("pools", &c)?;
+                super::decode_pools(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+            }
+            if s.has("slowed") {
+                let d = p.ctx("slowed", &c)?;
+                d.into_string().map_err(|_| format!("install refused: slowed must return words (\"\" when not slowed) ({})", describe(&c)))?;
+            }
             // Senses and glow, with and without a torch in the pack, in lamplight or not, and in
             // twilight: within the law's own reach.
             for (torch, lit, twilight) in [(false, false, false), (true, false, false), (false, true, false), (false, false, true), (true, true, true)] {
@@ -623,10 +631,10 @@ pub(super) fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -
 pub fn actors() -> Vec<ActorFacts> {
     let all_items: Vec<(String, u32)> = catalog::item_names().into_iter().map(|i| (i, 3)).collect();
     let all_known: Vec<String> = catalog::technique_names();
-    let base = ActorFacts { id: 1, kind: "person".into(), hp: 70.0, hunger: 40.0, energy: 80.0, terrain: "grass".into(), age: 20.0, stage: "adult".into(), life: 0.3, kin_near: 2, pasture: 5.0, room: 25, ..Default::default() };
+    let base = ActorFacts { id: 1, kind: "person".into(), hp: 70.0, hunger: 40.0, energy: 80.0, terrain: "grass".into(), age: 20.0, stage: "adult".into(), life: 0.3, kin_near: 2, pasture: 5.0, room: 25, stamina: 100.0, focus: 100.0, ..Default::default() };
     vec![
         ActorFacts { inv: all_items, knows: all_known, practice: [("strike".to_string(), 30)].into(), community: crate::records::COMMUNITY | 2, home: "10,10".into(), ..base.clone() },
-        ActorFacts { id: 2, hp: 20.0, hunger: 100.0, energy: 0.0, terrain: "forest".into(), activity: "sleep".into(), stage: "elder".into(), age: 60.0, life: 0.95, near_shelter: true, hurt_by: 7, hurt_ago: Some(2_000.0), yielded_ago: Some(1_000.0), room: 12, ..base.clone() },
+        ActorFacts { id: 2, hp: 20.0, hunger: 100.0, energy: 0.0, stamina: 4.0, focus: 0.0, terrain: "forest".into(), activity: "sleep".into(), stage: "elder".into(), age: 60.0, life: 0.95, near_shelter: true, hurt_by: 7, hurt_ago: Some(2_000.0), yielded_ago: Some(1_000.0), room: 12, ..base.clone() },
         ActorFacts { id: 3, hunger: 60.0, energy: 50.0, terrain: "dirt".into(), activity: "rest".into(), stage: "child".into(), age: 6.0, life: 0.1, inv: vec![("berries".into(), 2)], ..base.clone() },
         ActorFacts { id: 4, energy: 30.0, stage: "infant".into(), age: 0.5, life: 0.01, near_fire: true, ..base.clone() },
         ActorFacts { id: 5, kind: "wolf".into(), hunger: 90.0, energy: 60.0, sensed: vec![("deer".into(), 1)], hurt_by: 9, hurt_ago: Some(5_000.0), activity: "block".into(), ..base.clone() },
@@ -695,6 +703,7 @@ mod tests {
         let s = Scripts::new(SKILLS).unwrap();
         let r = s.validate().unwrap();
         let (f, n) = r.heaviest().unwrap();
+        assert!(r.ops.contains_key("pools") && r.ops.contains_key("slowed"), "{r:?}");
         assert!(n * 2 <= LIMITS.operations, "{f} takes {n} operations; the limit is {}", LIMITS.operations);
         assert!(r.ops.contains_key("rates") && r.ops.contains_key("strike_done") && r.ops.contains_key("combat_cooldown") && r.ops.contains_key("perceived_of"), "{r:?}");
     }
