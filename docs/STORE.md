@@ -123,6 +123,11 @@ README.md                    the card; configs: instances, calls, rows, prompts,
   - `calls` has one row per model call, with `purpose`, `model`, `tokens`, `latency_ms` and `error` as columns, and the whole journal line as `entry`.
   - `rows` has one row per recorded row (`samples`, `thoughts`, `experiences`, `chronicle`, `graphs`, `mind_rows`, `events`, `census`), with `stream`, `at_ms` and the row as JSON text.
   - `prompts` holds each distinct system prompt once, as the mind's journal does.
+- **Analysis records** (since `trials-gate-live`, 2026-11-12). Some records are made from other batches' evidence, such as gate replays and judge items and labels, and have no instances of their own. Such a record is a batch folder whose `batch.json` says `"kind": "analysis"`. It lists its files (with sha256) and declares `models_in_outputs`, the models whose words it carries.
+  - `check_batch_complete` accepts it without instances.
+  - The declared models go into its manifest's `models`, so the same model gate holds it.
+  - Its files sit under `analysis/…` and pack into `files.tar.gz`; the four tables stay empty.
+  - First use: `gq1`, the rethink gate's quality test (docs/GATE_QUALITY.md). It is held: `mistral-small-latest`, `jev-1.14.0` and `claude-opus-5-5` are not yet read terms.
 - **Round trip.** `store.py fetch batch <name> --unpack` rebuilds the `trials.py` evidence layout, scrubbed (the self-test checks it file by file). Running `trial_evidence.py` or `trials.py report` on a fetched batch has not been tried yet.
 - **Format.** JSON Lines with gzip is used because it needs no dependencies. Parquet, the Hub's recommended format, can replace it later without changing the layout.
 
