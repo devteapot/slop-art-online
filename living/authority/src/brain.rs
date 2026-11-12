@@ -507,6 +507,29 @@ impl<'a> Ev<'a> {
                     self.status = format!("about to {}", graph::describe(n));
                     return St::Run;
                 }
+                // A queued line to someone is not said into the air (`speech_truth`): one the
+                // conversation has moved past is dropped, and one whose addressee is beyond what
+                // the way carries as it comes due is told to the speaker instead of said. (A way
+                // with a reach of its own, a whisper, refuses that in its check's words.)
+                if to != 0 && common::laws(self.ctx).speech_truth {
+                    if self.line_overtaken(id, to) {
+                        self.set_mark(id);
+                        self.status = format!("let go of {} (the talk moved on)", graph::describe(n));
+                        return St::Ok;
+                    }
+                    let sc = common::scripts(self.ctx);
+                    if let Some(w) = sc.way(way).filter(|w| w.reach <= 0.0) {
+                        if !crate::speech::within_reach(self.ctx, w, self.at, to, self.now) {
+                            return match crate::speech::unsaid(self.ctx, self.me.id, to, way, &s.text, self.now) {
+                                Ok(()) => {
+                                    self.set_mark(id);
+                                    St::Ok
+                                }
+                                Err(why) => self.say_failed(id, n, &why),
+                            };
+                        }
+                    }
+                }
                 match crate::speech::speak(self.ctx, self.me.id, &s.text, to, way, self.now) {
                     Ok(()) => {
                         self.set_mark(id);
@@ -526,6 +549,29 @@ impl<'a> Ev<'a> {
                 St::Ok
             }
         }
+    }
+
+    /// Whether a mind's plan's queued line to `to` (say node `id`) has been overtaken by the
+    /// conversation (`speech_truth`): since the plan was installed, or since this node last
+    /// spoke, `to` spoke to me (a line to me, or to no one in particular that the authority
+    /// marked as for me, salience 0.8 and above), or I spoke to them other than by this plan's
+    /// own say nodes (a conversation turn's reply). The plan's line was meant for a
+    /// conversation that has moved on; saying it now answers twice. Lines said in the plan's
+    /// own install (its deliberation's `say`) are not after it. Only a mind's plan: a routine's
+    /// or an instinct's say is the body's habit, not a line queued for one conversation.
+    fn line_overtaken(&self, id: u16, to: u32) -> bool {
+        let Some(brain) = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind") else { return false };
+        let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
+        let since = brain.installed_ms.max(own_mark);
+        // The times this plan's own say nodes spoke (their marks; a line is written at the
+        // moment its node is marked).
+        let own: Vec<u64> = self.st.marks.iter().filter(|m| m.node < DESIRE_MARK).map(|m| m.at_ms).collect();
+        let sc = common::scripts(self.ctx);
+        let words: Vec<&str> = sc.ways().iter().map(|w| w.kind.as_str()).collect();
+        self.ctx.db.experience().observer().filter(self.me.id).filter(|e| e.at_ms > since).any(|e| {
+            (e.kind == "said" && e.object == to && !own.contains(&e.at_ms))
+                || (e.subject == to && words.contains(&e.kind.as_str()) && (e.object == self.me.id || e.object == 0 && e.salience >= 0.8))
+        })
     }
 
     /// A say that cannot be spoken is a failure the body is told about, like a refused leaf
@@ -1100,6 +1146,17 @@ impl<'a> Ev<'a> {
         prev
     }
 
+    /// Seen too far away to make out less than `FAR_RECHECK_MS` ago (its mark is dropped once due).
+    fn far_wait(&mut self, id: u32) -> bool {
+        let now = self.now;
+        let Some(k) = self.st.seen.iter().position(|s| s.id == FAR_MARK | id) else { return false };
+        if now.saturating_sub(self.st.seen[k].at_ms) < FAR_RECHECK_MS {
+            return true;
+        }
+        self.st.seen.remove(k);
+        false
+    }
+
     /// Recently checked (fast path that avoids familiarity lookups every second).
     fn recently_seen(&mut self, key: u32) -> bool {
         let now = self.now;
@@ -1154,25 +1211,60 @@ impl<'a> Ev<'a> {
         let wolf_near = cands.iter().any(|c| &*c.kind == "wolf" && c.dist <= if was_near { laws.danger_far } else { laws.danger_near });
         let wolf_arrived = wolf_near && self.st.alerts & WOLF_NEAR == 0;
         self.st.alerts = if wolf_near { self.st.alerts | WOLF_NEAR } else { self.st.alerts & !WOLF_NEAR };
+        // Everyone in sight is perceived (docs/STRANGERS.md): each person (or one of one's own
+        // kind) seen for the first time is told, in a crowd too. First sights of one look go in
+        // one line, at most FIRST_SIGHTS_PER_LINE of them (more wait for the next look, unmarked);
+        // people whose names one does not know first, then the nearest. Other news (a wolf, someone
+        // again after a long time, danger close) stays at two lines a look.
         let mut announced = 0;
+        let mut firsts: Vec<(u32, (f32, f32), String, bool)> = Vec::new();
         for c in &cands {
-            if announced >= 2 {
-                break;
-            }
-            if crowded && &*c.kind == "person" && self.relation(c.id).is_none() {
-                continue;
+            let kin = &*c.kind == "person" || *c.kind == *me_kind;
+            if announced >= 2 || (kin && firsts.len() >= FIRST_SIGHTS_PER_LINE) {
+                // Only a first sight that still fits this look's line goes on; the rest are left
+                // for the next look, untouched (neither marked seen nor made familiar).
+                let fits = kin && firsts.len() < FIRST_SIGHTS_PER_LINE;
+                let recent = self.st.seen.iter().any(|s| s.id == c.id && now.saturating_sub(s.at_ms) < 90_000);
+                if !fits || recent || self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().is_some() {
+                    continue;
+                }
             }
             let danger = wolf_arrived && &*c.kind == "wolf" && c.dist <= laws.danger_near;
+            // Seen too far away to make out within the last 5 s: not looked at again yet.
+            if &*c.kind == "person" && self.far_wait(c.id) {
+                continue;
+            }
             if self.recently_seen(c.id) && !danger {
                 continue;
             }
-            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let Some(ch) = self.ctx.db.character().id().find(c.id) else { continue };
+            // A person too far away to make out (the `perceived_of` law's `far`) is not yet a
+            // first sight, nor someone seen again: who they are cannot be told. They stay in the
+            // scene as a figure; the look is retried in 5 s and told once they can be made out,
+            // and no `familiar` row is written from afar (far-label, docs/STRANGERS.md).
+            if ch.kind == "person" {
+                let due = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().map_or(true, |f| now.saturating_sub(f.last_ms) > day);
+                if due && crate::perception::regard(self.ctx, &self.me, &ch, now).far {
+                    // Not "seen": a far figure is looked at again in 5 s (its own mark, since
+                    // `recently_seen` keeps a mark alive while someone stays in sight).
+                    self.st.seen.retain(|s| s.id != c.id);
+                    self.st.seen.push(Seen { id: FAR_MARK | c.id, at_ms: now });
+                    if self.st.seen.len() > 96 {
+                        self.st.seen.remove(0);
+                    }
+                    continue;
+                }
+            }
+            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let who = common::label_for(self.ctx, &self.me, c.id);
             let doing = crate::perception::doing_of(self.ctx, c.id, (self.me.id, &me_kind, at), &cands, now).map(|d| format!(", {d}")).unwrap_or_default();
             let place = format!("{:.0} tiles {}{doing}", c.dist, direction(at, c.pos));
             let (text, sal) = match prev {
-                None if ch.kind == "person" || ch.kind == self.me.kind => (format!("For the first time you see {who}, {place}."), 0.45),
+                None if ch.kind == "person" || ch.kind == self.me.kind => {
+                    let named = who == ch.name;
+                    firsts.push((c.id, c.pos, format!("{who}, {place}"), named));
+                    continue;
+                }
                 None => (format!("You see {who} {place}."), 0.65),
                 Some(f) if now.saturating_sub(f.last_ms) > day => (format!("You see {who} again after a long time, {place}."), 0.25),
                 Some(_) if danger => {
@@ -1182,6 +1274,14 @@ impl<'a> Ev<'a> {
             };
             announced += 1;
             percept(self.ctx, &self.me, now, "saw", c.id, 0, c.pos, text, sal);
+        }
+        if !firsts.is_empty() {
+            // Unnamed first (a stable sort keeps the nearest first within each).
+            firsts.sort_by_key(|f| f.3);
+            let (subject, object) = (firsts[0].0, firsts.get(1).map_or(0, |f| f.0));
+            let pos = firsts[0].1;
+            let parts: Vec<String> = firsts.into_iter().map(|f| f.2).collect();
+            percept(self.ctx, &self.me, now, "saw", subject, object, pos, first_sight_text(&parts), 0.45);
         }
 
         // Sounds out of sight (only while sight depends on facing): someone or something heard
@@ -1378,8 +1478,38 @@ impl<'a> Ev<'a> {
     }
 }
 
-/// Whether `me`'s relationship to `other` fits a selector's relation filter.
+/// A person seen too far away to make out is looked at again after this long (`noticed`,
+/// `far_wait`), under a mark of their own in `seen` (`FAR_MARK | id`).
+const FAR_RECHECK_MS: u64 = 5_000;
+const FAR_MARK: u32 = 0x2000_0000;
+
+/// First sights of one look that share one line (`noticed`).
+const FIRST_SIGHTS_PER_LINE: usize = 8;
+
+/// "For the first time you see Bram, 3 tiles north, wait." One line for several seen together:
+/// "For the first time you see a stranger, 9 tiles west, wait; Bram, 3 tiles north; and Edda,
+/// 5 tiles east." Its experience's subject and object are the first two named in it.
+fn first_sight_text(parts: &[String]) -> String {
+    match parts {
+        [] => String::new(),
+        [one] => format!("For the first time you see {one}."),
+        [init @ .., last] => format!("For the first time you see {}; and {last}.", init.join("; ")),
+    }
+}
+
+/// Whether `me`'s relationship to `other` fits a selector's relation filter. Every creature
+/// filter of a graph goes through here: `sees`, `near`, `nearest` targets, `count` and
+/// `health_of`.
 fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
+    // With the world's `stranger_by_name` law, "stranger" is what the scene's word means:
+    // someone whose name I do not know (docs/STRANGERS.md). A relation row or its label does
+    // not count: feelings about someone are not knowing their name.
+    if want == "stranger" && common::laws(ctx).stranger_by_name {
+        return match (ctx.db.character().id().find(me), ctx.db.character().id().find(other)) {
+            (Some(a), Some(b)) => !crate::perception::knows_name(ctx, &a, &b),
+            _ => false,
+        };
+    }
     let r = ctx.db.relation().by_pair().filter((me, other)).next();
     let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
     let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
@@ -1429,6 +1559,14 @@ fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], start: usize) -> Ve
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn first_sights_of_one_look_share_one_line() {
+        let p = |v: &[&str]| super::first_sight_text(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(p(&["a stranger, 9 tiles west, wait"]), "For the first time you see a stranger, 9 tiles west, wait.");
+        assert_eq!(p(&["a stranger, 9 tiles west", "Bram, 3 tiles north"]), "For the first time you see a stranger, 9 tiles west; and Bram, 3 tiles north.");
+        assert_eq!(p(&["a", "b", "c"]), "For the first time you see a; b; and c.");
+    }
+
     #[test]
     fn a_row_of_gate_tiles_is_one_gate() {
         let t = |id: u64, kind: &str, owner: u32, x: f32, y: f32| (id, kind.to_string(), owner, (x, y), 0.0f32);

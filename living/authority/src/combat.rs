@@ -476,7 +476,7 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
                 ctx.db.missile().id().delete(m.id);
                 show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at, dir: (m.dx, m.dy), ..Default::default() });
                 outcome_of(ctx, m.use_id, "struck a wall", now);
-                act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Wall, at, now);
+                act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Wall, at, None, now);
             }
             _ => {
                 m.left -= step;
@@ -484,7 +484,7 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
                     ctx.db.missile().id().delete(m.id);
                     show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at: b, dir: (m.dx, m.dy), ..Default::default() });
                     outcome_of(ctx, m.use_id, "hit nothing", now);
-                    act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Nothing, b, now);
+                    act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Nothing, b, None, now);
                 } else {
                     m.x = b.0;
                     m.y = b.1;
@@ -517,7 +517,7 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
         show(ctx, now, Seen { kind: seen::DODGED, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
         show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: 0, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
         outcome_of(ctx, m.use_id, "dodged", now);
-        act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Dodged, at, now);
+        act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Dodged, at, None, now);
         return;
     }
     let effects = match act::missile_effects(ctx, m.owner, &m.skill, victim, now) {
@@ -525,22 +525,25 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
         Err(why) => {
             show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
             outcome_of(ctx, m.use_id, &why, now);
-            act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Refused(&why), at, now);
+            act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Refused(&why), at, None, now);
             return;
         }
     };
     show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
     // The blow comes from behind the missile's path.
     let from = (at.0 - m.dx * 2.0, at.1 - m.dy * 2.0);
+    // The one struck as the shooter perceives them, read before the blow (a kill removes the body,
+    // and the far label reads distance): the shooter's own record (`my_skill_uses`) and its line.
+    let seen = ctx.db.character().id().find(m.owner).map(|c| common::label_for(ctx, &c, victim)).unwrap_or_else(|| "someone".into());
     let mut dealt = String::new();
     for e in effects {
         if let living_rules::script::Effect::Damage { amount } = e {
             dealt = act::damage(ctx, m.owner, victim, amount, &m.skill, from, now);
         }
     }
-    outcome_of(ctx, m.use_id, &format!("struck {}: {dealt}", common::display(ctx, victim)), now);
+    outcome_of(ctx, m.use_id, &format!("struck {seen}: {dealt}"), now);
     let killed = ctx.db.character().id().find(victim).is_some_and(|v| !v.alive);
-    act::missile_told(ctx, m.owner, &m.skill, victim, if killed { act::Far::Killed } else if dealt.is_empty() { act::Far::Struck("it did no harm") } else { act::Far::Struck(&dealt) }, at, now);
+    act::missile_told(ctx, m.owner, &m.skill, victim, if killed { act::Far::Killed } else if dealt.is_empty() { act::Far::Struck("it did no harm") } else { act::Far::Struck(&dealt) }, at, Some(&seen), now);
 }
 
 /// A death: everyone who could see it is told, and the one who died learns who saw it.

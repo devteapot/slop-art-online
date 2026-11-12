@@ -140,6 +140,23 @@ The arithmetic above gives 2.2 s at 1.65 and 6.2 s at 1.85. The measured chases 
   - Residents ran in at most 0.3% of their moving samples; one resident ever ran (main: 0).
   - No one runs everywhere: the shipped graphs and seeded ways never ask to run.
 
+### After the merge (2026-11-12, main 12d96e66 against its first parent 9e8d372f)
+
+- **Hamlet at run 1.65** (`trials.py run --fake`, 4 × 12 min, batch `st1ham`):
+  - Residents ran in 0.0–0.2% of their moving samples (a moving body faster than 3.95 m/s or draining breath, sampled every 2 s).
+  - One resident in one replicate ran, while storing; it may have been a fast road walk. The median moving speed was 2.33–2.46 m/s.
+  - No one runs everywhere.
+- **Ecology** (`stage1-acts`: 16 deer, 3 wolves, compressed lives, 12-minute day; no mind service, instinct graphs; 2 worlds per arm, 62 min, 5.2 game days; sampled every minute):
+
+| World | Wolves (start → range → end) | Deer (start → peak → low → end) | Deer deaths: starved / killed / old age |
+|---|---|---|---|
+| main, 1 | 3 → 2–12 → 12 | 16 → 98 → 14 → 39 | 84 / 9 / 9 |
+| main, 2 | 3 → 3–8 → 6 | 16 → 89 → 15 → 32 | 72 / 6 / 10 |
+| pre-merge, 1 | 3 → 3–10 → 10 | 16 → 95 → 18 → 24 | 66 / 9 / 16 |
+| pre-merge, 2 | 3 → 3–7 → 6 | 16 → 99 → 18 → 22 | 73 / 6 / 15 |
+
+**Ecology result.** Both arms follow the same course: deer boom to about 90–99 by day 2.5, starve back to 14–18 by day 4, and recover. That boom and starvation is the seed's own (compressed lives, finite grass), on main and before it alike. The wolves' run, the halved bite and the new deer and wolf health moved neither population outside the pre-merge spread; one main world ended with 12 wolves against the pre-merge 10. Neither population collapsed or exploded because of this change, and no value was changed.
+
 ## Whether a body runs: `body.running`
 
 A client should draw the gait the rules move, not infer it from speed. A Settings walk of 3.0 or 3.4 m/s (`walk_base`) would otherwise read as a run.

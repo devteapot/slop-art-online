@@ -315,6 +315,7 @@ fn dump(
     typing: Res<say::Typing>,
     talk: Option<Res<crate::talk::Talk>>,
     (extra, model, pick): (DumpExtra, Res<model::HudModel>, Option<Res<crate::pick::Pick>>),
+    (notes, prompt): (Query<(&Node, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<verbs::ToastRow>>, Query<(&Node, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<prompt::Prompt>>),
 ) {
     let Some(path) = d.0.take() else { return };
     let size = cams.iter().find_map(|c| c.physical_viewport_size()).map_or(Vec2::new(1600.0, 900.0), |s| s.as_vec2());
@@ -336,9 +337,14 @@ fn dump(
         "top": ws.top().map(|w| w.name()),
         "menu": ws.menu,
         "acts": verbs.menu.as_ref().map(|m| serde_json::json!({"title": m.title, "group": m.group, "rows": m.rows().iter().map(|r| r.label()).collect::<Vec<_>>()})),
-        "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone())})),
+        "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone()), "tab": talk.as_ref().and_then(|t| t.tabbed.as_ref().map(|(p, e, c)| serde_json::json!({"prev": p, "earshot": e, "chose": c})))})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+        // Where the notes and the F prompt are drawn (UI px: x, y, w, h), those showing.
+        "rects": {
+            "notes": notes.iter().filter(|(n, c, _)| n.display != Display::None && c.size().x > 0.0).map(|(_, c, t)| { let tl = (t.affine().translation - c.size() / 2.0) / k; [tl.x, tl.y, c.size().x / k, c.size().y / k] }).collect::<Vec<_>>(),
+            "prompt": prompt.iter().find(|(n, c, _)| n.display != Display::None && c.size().x > 0.0).map(|(_, c, t)| { let tl = (t.affine().translation - c.size() / 2.0) / k; [tl.x, tl.y, c.size().x / k, c.size().y / k] }),
+        },
         // The pack's load and limit as its header shows them (while the pack is open).
         "pack": model.verbs.inventory.as_ref().map(|i| serde_json::json!({"carried": i.carried, "limit": i.limit, "items": i.rows.iter().map(|r| (r.0.clone(), r.1)).collect::<Vec<_>>()})),
         // My bars (`meters()`) and pills (`status_of`) as drawn.
@@ -385,6 +391,7 @@ pub struct DumpExtra<'w, 's> {
     heard: Option<Res<'w, crate::heardmark::HeardMarks>>,
     edge: Option<Res<'w, crate::sightedge::SightEdge>>,
     mouths: Option<Res<'w, crate::mouth::Mouths>>,
+    film: Res<'w, crate::post::Film>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -401,7 +408,7 @@ impl DumpExtra<'_, '_> {
         // Facing sight: whether it is on, the field's five values, whether this client can switch
         // it, and the heard marks (`facing.rs`, `heardmark.rs`).
         let fov = self.fov.as_ref().map(|f| {
-            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last, "walk": f.walk,
+            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last, "walk": f.walk, "walk_chips": f.walk_chips,
                 "sight": self.edge.as_ref().and_then(|e| e.senses.map(|s| s.sight)), "source": self.edge.as_ref().and_then(|e| e.source.map(|s| format!("{s:?}"))),
                 "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
         });
@@ -410,7 +417,7 @@ impl DumpExtra<'_, '_> {
             "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
-            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()),
+            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film,
             // Each speaking body's mouth now (`mouth.rs`), by character id.
             "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())})
     }

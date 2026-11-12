@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes pick turns look-walk bar offers wheel wheel-workplace grid support (default: all but support, wheel-workplace and grid, which need a Cullet world)
+  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes film pick turns look-walk bar offers wheel wheel-workplace grid support (default: all but support, wheel-workplace and grid, which need a Cullet world)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -13,7 +13,7 @@ and writes `.local/living/verify/RUN/ui/checks.json`. Exit 1 when any check fail
 Two residents are placed beside the player and held still for the talk and items scenarios
 (admin `place_at` and `set_behavior`: scene setup, not player acts).
 """
-import argparse, json, math, os, re, subprocess, sys, time
+import argparse, glob, json, math, os, re, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
@@ -74,6 +74,26 @@ class Checks:
         print(f"{'PASS' if ok else 'FAIL'}  {scenario}: {what}{('  (' + detail + ')') if detail and not ok else ''}", flush=True)
 
 
+def notes_clear(c, s, out):
+    """Notes and the F prompt never overlap (note-place-1): in every dump of the drive where both
+    show (`rects` in the dump, UI px), their rectangles do not intersect."""
+    both, hit = 0, []
+    for f in sorted(glob.glob(os.path.join(out, "*.json"))):
+        try:
+            r = (json.load(open(f)) or {}).get("rects") or {}
+        except (ValueError, OSError, AttributeError):
+            continue
+        p, ns = r.get("prompt"), r.get("notes") or []
+        if not p or not ns:
+            continue
+        both += 1
+        for n in ns:
+            if p[0] < n[0] + n[2] and n[0] < p[0] + p[2] and p[1] < n[1] + n[3] and n[1] < p[1] + p[3]:
+                hit.append((os.path.basename(f), [round(x) for x in p], [round(x) for x in n]))
+    c.check(s, "notes and the F prompt never overlap while both show", not hit, f"{both} dumps with both; overlapping {hit}")
+    return both
+
+
 def wins(d):
     return [(w["win"], w["anchor"]) for w in (d or {}).get("windows", [])]
 
@@ -105,6 +125,7 @@ def windows(run, c):
             "key:Escape:tap;wait:0.4;shot:11_esc_menu;dump:11;key:Escape:tap;wait:0.3;dump:12;quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "06", "07", "08", "09", "10", "11", "12"]}
     c.check(s, "nothing open on arrival", d["01"] and wins(d["01"]) == [] and not d["01"]["menu"], str(wins(d["01"])))
     c.check(s, "Menu button opens the Menu list", d["02"] and d["02"]["menu"])
@@ -139,6 +160,7 @@ def talk(run, c):
     # put back there just before the cursor goes to A (town life may walk them off).
     out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], syncs=["hold=refree", answer])
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     # The scene first: each resident where it landed is 1.5-3 m from me and in view, and they
     # stand apart on screen, before the pick and the Tab checks.
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
@@ -169,18 +191,42 @@ def talk(run, c):
     c.check(s, "their window stays after saying it", d["06"] and (f"Person{a}", "Left") in wins(d["06"]) and not d["06"]["typing"])
     # Up to eight: as many may be within earshot at a busy hour, nearest first, then the room.
     tabs = [(dump(out, f"07{k}") or {}).get("typing") or {} for k in "abcdefgh"]
-    # Who is in earshot, as the client has it (nearest first, Tab's order): B among them, then
-    # each Tab the next after whom the box addressed, its window following, then the room.
+    # Who is in earshot, as the client has it (nearest first, Tab's order): B among them.
     ear = ((d["06"] or {}).get("typing") or {}).get("earshot") or (tabs[0].get("earshot") if tabs else None) or []
     c.check(s, "who is in earshot: both residents beside me", a in ear and b in ear, f"earshot {ear}")
-    want, cur = [], a
-    for _ in tabs:
-        i = ear.index(cur) if cur in ear else -1
-        cur = ear[i + 1] if cur is not None and 0 <= i < len(ear) - 1 else (None if cur is not None else (ear[0] if ear else None))
-        want.append(cur)
+    # Each Tab against the earshot it went by (`typing.tab` in the dump: whom it came from, the
+    # list at that moment, whom it chose), since people walk in and out of earshot between
+    # presses at a busy hour: from someone in the list, the next after them, or the room after
+    # the last; from the room or someone gone from the list, the first. The press starts where
+    # the last one ended; the box then addresses whom it chose (or the room, if they are no
+    # longer perceived and so gone from the list too), its window following.
+    def nxt(prev, e):
+        if not e:
+            return prev
+        if prev in e:
+            i = e.index(prev)
+            return e[i + 1] if i + 1 < len(e) else None
+        return e[0]
     got = [t.get("to") for t in tabs]
-    n = (want.index(None) + 1) if None in want else len(want)
-    c.check(s, "Tab goes to the next in earshot each time, nearest first, the window following, then the room", got[:n] == want[:n] and None in want and all(t.get("window") == (f"Person{t['to']}" if t.get("to") else "Log") for t in tabs[:n]), f"earshot {ear}; tabs {got[:n]}; expected {want[:n]}")
+    steps, bad, lists = [], [], []
+    for k, t in enumerate(tabs):
+        tb = t.get("tab") or {}
+        e, prev, chose = tb.get("earshot") or [], tb.get("prev"), tb.get("chose")
+        lists.append(e)
+        start = a if k == 0 else got[k - 1]
+        win = t.get("window") == (f"Person{got[k]}" if got[k] else "Log")
+        ok = bool(tb) and prev == start and chose == nxt(prev, e) and (got[k] == chose or (got[k] is None and chose not in (t.get("earshot") or []))) and win
+        steps.append(f"{prev}->{got[k]} by {e}")
+        if not ok:
+            bad.append(k)
+    seen_all = [x for e in lists for x in e]
+    left = sorted({x for i, e in enumerate(lists) for x in e if any(x not in f for f in lists[i + 1:])})
+    # Reaching the room within the presses is required only while earshot held still: someone
+    # moving within it or leaving can put the room beyond the eighth press (each press is still
+    # checked against its own list above).
+    changed = any(e != lists[0] for e in lists) if lists else False
+    room = None in got or changed or (lists and min(len(e) for e in lists) >= len(tabs))
+    c.check(s, "Tab goes to the next in earshot at each press, nearest first, the window following, then the room", tabs and not bad and room, f"presses {steps}; wrong at {bad}; room reached {None in got}; earshot changed {changed}; left earshot meanwhile {left}; came in {sorted(set(seen_all) - set(ear))}")
     c.check(s, "Esc closes the box and its window", d["08"] and wins(d["08"]) == [] and not d["08"]["typing"], str(wins(d["08"])))
     c.check(s, "Log › People lists them; a click opens a person's window", d["10"] and any(w.startswith("Person") for w, _ in wins(d["10"])), str(wins(d["10"])))
     t11 = (d["11"] or {}).get("typing") or {}
@@ -219,6 +265,7 @@ def items(run, c):
     load = 'load=grant_items|{me}|"basket"|1;grant_items|{me}|"arrow"|10'
     out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"], syncs=['kit=grant_items|{me}|"berries"|4', load])
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06"]}
     c.check(s, "hold-F list › Their window opens their window", d["01"] and (f"Person{a}", "Left") in wins(d["01"]), str(wins(d["01"])))
     c.check(s, "I opens the pack beside their window", d["02"] and sorted(wins(d["02"])) == sorted([(f"Person{a}", "Left"), ("Pack", "Right")]) and inside(d["02"]) and apart(d["02"]), str(wins(d["02"])))
@@ -286,6 +333,35 @@ def themes(run, c):
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
 
 
+def film(run, c):
+    """The film (`post::Film`, Settings › Play › Film): a fresh settings file starts in Soft and
+    saves no choice; Settings sets Full and None and the file keeps the last; the next start reads
+    it back. Stills of the three modes from one place (`01_soft`, `03_screen`, `04_off`), the
+    unseen ground's edge in view, for the eye. `LIVING_GAME_FILM` must not be set."""
+    s = "film"
+    if os.environ.get("LIVING_GAME_FILM"):
+        c.check(s, "LIVING_GAME_FILM is unset (it overrides the settings file)", False, os.environ["LIVING_GAME_FILM"])
+        return
+    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "film")
+    st = os.path.join(out0, "settings.json")
+    if os.path.exists(st):
+        os.remove(st)
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
+    plan = ("ready;wait:3;dump:01;shot:01_soft;" + open_settings + "click:@settings:film:screen;wait:0.4;dump:02;shot:02_settings;key:Escape:tap;wait:0.8;dump:03;shot:03_screen;"
+            + open_settings + "click:@settings:film:off;wait:0.4;key:Escape:tap;wait:0.8;dump:04;shot:04_off;" + open_settings + "click:@settings:film:screen;wait:0.6;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    x = lambda k: ((dump(out, k) or {}).get("extra") or {})
+    c.check(s, "a fresh settings file starts in Soft and saves no choice", x("01").get("film") == "soft" and x("01").get("film_saved") is None, str((x("01").get("film"), x("01").get("film_saved"))))
+    c.check(s, "Settings › Play › Film › Full sets the screen film", x("02").get("film") == "screen" and x("03").get("film") == "screen", str((x("02").get("film"), x("03").get("film"))))
+    c.check(s, "None turns it off", x("04").get("film") == "off", str(x("04").get("film")))
+    c.check(s, "the log names each choice", log(out).count("settings: film: ") == 3)
+    saved = json.load(open(st)).get("film") if os.path.exists(st) else None
+    c.check(s, "the settings file keeps the last choice", saved == "screen", str(saved))
+    out2, code2, _ = drive(run, s, "ready;wait:2;dump:05;quit")
+    c.check(s, "the next start reads it back", (((dump(out2, "05") or {}).get("extra") or {}).get("film")) == "screen", str(((dump(out2, "05") or {}).get("extra") or {}).get("film")))
+
+
 def act(actor, a):
     """An admin `mind_act` for a resident, as its mind would decide (scene setup)."""
     inner = json.dumps(a, separators=(",", ":")).replace('"{me}"', "{me}")  # the player's id, filled in by drive.py
@@ -319,6 +395,7 @@ def offers(run, c):
     # Within reach (3 m: the rules refuse an accept from farther, "Out of reach").
     out, code, text = drive(run, s, plan, places=[f"{a}:-1.8:1.2", f"{b}:-0.6:2.2"], syncs=[kit, f"swap={swap}", f"dear={dear}", f"again={again}", f"terms={terms}"])
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"]}
     cards = lambda k: ((d[k] or {}).get("extra") or {}).get("cards") or []
     tags = lambda k: set(((d[k] or {}).get("tags") or {}).keys())
@@ -470,6 +547,7 @@ def bar(run, c):
             "key:KeyQ:down;wait:0.5;shot:05_block;dump:05;key:KeyQ:up;wait:0.3;key:KeyX:tap;wait:0.5;dump:06;quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06"]}
     ex = lambda k: (d[k] or {}).get("extra") or {}
     slot = lambda k, n: (ex(k).get("slots") or {}).get(f"bar:{n}") or {}
@@ -1214,6 +1292,7 @@ def wheel(run, c):
             + P + ";key:KeyF:down;wait:0.5;key:Digit1:tap;wait:0.6;dump:09;key:KeyF:up;wait:0.3;key:Escape:tap;wait:0.3;dump:10;quit").replace("{A}", str(a))
     out, code, text = drive(run, s, plan, places=[f"{a}:-1.8:1.2", f"{b}:2.0:-2.0"])
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]}
     w = lambda k: (d[k] or {}).get("wheel") or {}
     cur = lambda k: (((d[k] or {}).get("extra") or {}).get("cursor") or {})
@@ -1260,6 +1339,7 @@ def wheel_workplace(run, c):
     there = f"there=place_at|{{me}}|{f['x'] + 1.2}|{f['y']}"
     out, code, text = drive(run, s, plan, syncs=[there])
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["00", "01", "02", "03", "04"]}
     w = lambda k: (d[k] or {}).get("wheel") or {}
     secs = {x["dir"]: x for x in w("01").get("sections", [])}
@@ -1298,6 +1378,7 @@ def grid(run, c):
     me0 = None
     out, code, text = drive(run, s, plan, syncs=[there, kit])
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05"]}
     g = lambda k: (d[k] or {}).get("grid") or {}
     cells = lambda k: g(k).get("cells") or []
@@ -1324,8 +1405,12 @@ def walk_law(run, c):
     (`set_world_law`), as the authority records (`law_change`)."""
     s = "walk-law"
     plan = ("ready;wait:3;click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;dump:01;shot:01_walk;"
-            "click:@settings:walk:3.0;wait:4;dump:02;shot:02_walk_3;click:@settings:walk:2.6;wait:4;dump:03;quit")
-    out, code, text = drive(run, s, plan, extra=["--admin-link"])
+            "click:@settings:walk:3.0;wait:4;dump:02;shot:02_walk_3;click:@settings:walk:2.6;wait:4;dump:03;"
+            "sync:odd;wait:4;dump:04;shot:04_walk_2_8;sync:float;wait:4;dump:05;shot:05_walk_2_5999;click:@settings:walk:2.6;wait:4;dump:06;quit")
+    # A value none of the choices is, and 2.6 written as a float reads back (admin calls, as
+    # another client or an admin would set it).
+    syncs = ['odd=set_world_law|"walk_base"|"2.8"', 'float=set_world_law|"walk_base"|"2.5999"']
+    out, code, text = drive(run, s, plan, extra=["--admin-link"], syncs=syncs)
     c.check(s, "client ran and joined", code == 0, text[-300:])
     fs = lambda k: (((dump(out, k) or {}).get("extra") or {}).get("facing_sight") or {})
     c.check(s, "the row reads walk_base from the installed script (2.6 m/s)", abs((fs("01").get("walk") or 0) - 2.6) < 0.05 and "settings:walk:3.0" in ((dump(out, "01") or {}).get("tags") or {}), str(fs("01")))
@@ -1333,6 +1418,15 @@ def walk_law(run, c):
     changes = [r for r in sql(run, "SELECT name, old, new FROM law_change WHERE name = 'walk_base'")]
     c.check(s, "3.0 is written as the world's law and read back", abs((fs("02").get("walk") or 0) - 3.0) < 0.05 and any(r.get("new") == "3.0" for r in changes), f"{fs('02').get('walk')}; {changes}")
     c.check(s, "and 2.6 again", abs((fs("03").get("walk") or 0) - 2.6) < 0.05 and any(r.get("new") == "2.6" for r in changes), f"{fs('03').get('walk')}; {changes}")
+    # The chips (walk-chip-1): exactly the three choices, the current one selected; a value none
+    # of them is, one more chip, selected; never a chip repeating a choice.
+    chips = lambda k: fs(k).get("walk_chips") or []
+    sel = lambda k: [l for l, on in chips(k) if on]
+    c.check(s, "at 2.6: exactly the three chips, 2.6 selected", [l for l, _ in chips("03")] == ["2.6 m/s", "3.0 m/s", "3.4 m/s"] and sel("03") == ["2.6 m/s"] and sel("01") == ["2.6 m/s"] and len(chips("01")) == 3, f"{chips('01')}; {chips('03')}")
+    c.check(s, "at 3.0: three chips, 3.0 selected", len(chips("02")) == 3 and sel("02") == ["3.0 m/s"], str(chips("02")))
+    c.check(s, "at 2.8 (set elsewhere): four chips, the extra one 2.8, selected", [l for l, _ in chips("04")] == ["2.6 m/s", "3.0 m/s", "3.4 m/s", "2.8 m/s"] and sel("04") == ["2.8 m/s"] and "settings:walk:other" in ((dump(out, "04") or {}).get("tags") or {}), str(chips("04")))
+    c.check(s, "at 2.5999: the 2.6 chip, no fourth", len(chips("05")) == 3 and sel("05") == ["2.6 m/s"] and "settings:walk:other" not in ((dump(out, "05") or {}).get("tags") or {}), f"walk {fs('05').get('walk')}; {chips('05')}")
+    c.check(s, "2.6 chosen again: three chips", len(chips("06")) == 3 and sel("06") == ["2.6 m/s"], str(chips("06")))
 
 
 def pools(run, c):
@@ -1374,6 +1468,7 @@ def own(run, c):
             "key:KeyL:tap;wait:0.6;shot:02_log;dump:02;key:KeyX:tap;wait:0.4;quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    notes_clear(c, s, out)
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     rows = sql(run, f"SELECT id, kind, ok, skill, what, why FROM act_outcome WHERE observer = {me} AND kind = 'own'") if me else []
@@ -1389,7 +1484,123 @@ def own(run, c):
     c.check(s, "the Log is open", "Log" in [w for w, _ in wins(d["02"])], str(wins(d["02"])))
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own}
+UNHEARD_SPOT = (300.0, 330.0)
+
+
+def unheard(run, c):
+    """speech-truth (`speech_truth`, on by default): a line nobody could hear gets the authority's
+    truthful `silence` row and a `reach` act outcome. The client shows those words once, as a
+    quiet note; the Log does not repeat them (only my line's "did not hear you" mark), and a room
+    line nobody heard gets no client-made "No one in earshot" note beside them. A heard line gets
+    none. Speech carries 9 m and a person sees 11 m by day (6 m by night): the scene stands me on
+    open grass at noon (a scratch fixture) with one resident held 10 m away, seen but out of
+    earshot ("… is too far away: they could not have heard you."), then beside me."""
+    s = "unheard"
+    b = residents(run, 1)[0]
+    # Earlier scenes leave residents held where the player stood: anyone within 25 m of the spot
+    # (but me and B) is put 40 m east first, and stays (held, or walks back slowly).
+    people = {r["id"]: r.get("name") for r in sql(run, "SELECT id, name, kind FROM character WHERE kind = 'person'")}
+    near0 = [r for r in sql(run, "SELECT id, x, y FROM body") if r["id"] in people and r["id"] != b and people[r["id"]] != "Verifier"
+             and ((r["x"] - UNHEARD_SPOT[0]) ** 2 + (r["y"] - UNHEARD_SPOT[1]) ** 2) ** 0.5 < 25]
+    clear = ";".join(f"place_at|{r['id']}|{UNHEARD_SPOT[0] + 40}|{UNHEARD_SPOT[1] + 3 * i}" for i, r in enumerate(near0)) or "sql|SELECT id FROM world"
+    plan = ("ready;sync:noon;sync:clear;sync:spot;wait:2;sync:scene;wait:0.5;sync:bodies;wait:2;dump:00;"
+            "point:{B};wait:0.5;key:Enter:tap;wait:0.6;dump:01;type:Can you hear me over there?;enter;wait:0.6;dump:02a;wait:1.9;shot:01_far;dump:02;wait:3.2;shot:01_after;dump:02z;"
+            "cursor:0.5,0.12;wait:0.4;key:Enter:tap;wait:0.6;dump:03a;type:Is anyone here?;enter;wait:2.5;shot:02_room;dump:03;wait:10;dump:04;"
+            "wait:0.3;shot:03_log;dump:05;"
+            "sync:near;wait:2;point:{B};wait:0.5;key:Enter:tap;wait:0.6;type:Hello, now you are close.;enter;wait:3;shot:04_heard;dump:06;key:Escape:tap;wait:0.3;quit").replace("{B}", str(b))
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"clear={clear}", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}", "bodies=sql|SELECT id, x, y FROM body", f"near=place_at|{b}|(mx+1.6)|(my+1.2)"]
+    out, code, text = drive(run, s, plan, places=[f"{b}:0:10"], syncs=syncs)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    d = {k: dump(out, k) or {} for k in ["00", "01", "02", "03a", "03", "04", "05", "06"]}
+    # The premise: nobody but the held resident within 18 m of me as the scene began.
+    snap0 = ((sc.get("snaps") or {}).get("bodies") or [{}])[0]
+    rows_b = snap0.get("rows") or []
+    since = snap0.get("wall_ms", 0) - 2000
+    at = {r["id"]: (r["x"], r["y"]) for r in rows_b if "x" in r}
+    mine = at.get(me)
+    dist = lambda p: ((p[0] - mine[0]) ** 2 + (p[1] - mine[1]) ** 2) ** 0.5
+    near = sorted(i for i, p in at.items() if i in people and i not in (me, b) and dist(p) < 9.5) if mine else None
+    bd = round(dist(at[b]), 1) if mine and b in at else None
+    c.check(s, "scene: no one else within 9.5 m of me (speech carries 9 m); the resident held beyond 9 m, within sight (11 m)", near == [] and bd is not None and 9.0 < bd <= 11.0, f"me {mine}; within 9.5 m {near}; #{b} at {bd} m")
+    t1 = d["01"].get("typing") or {}
+    c.check(s, "addressing them far away: the box says out of earshot", t1.get("to") == b and "out of earshot" in (t1.get("label") or ""), json.dumps(t1))
+    reach = [r for r in (sql(run, f"SELECT id, kind, ok, code, what, why, other, at_ms FROM act_outcome WHERE observer = {me} AND code = 'reach'") if me else []) if r.get("at_ms", 0) >= since]
+    reach.sort(key=lambda r: r.get("at_ms", 0))
+    far = [r for r in reach if r.get("other") == b]
+    room = [r for r in reach if r.get("other") == 0]
+    c.check(s, "the authority: a reach row for the line to them and one for the room line", len(far) == 1 and len(room) == 1 and room[0].get("why") == "Nobody was near enough to hear you." and "could not have heard you" in far[0].get("why", ""), str(reach)[:600])
+    def shown(k, words):
+        return sum(1 for n in d[k].get("notes") or [] if words and words in n)
+    fw = far[0]["why"] if far else None
+    rw = room[0]["why"] if room else None
+    c.check(s, "the words for the line to them show once, as a note", fw is not None and shown("02", fw) == 1 and all(shown(k, fw) <= 1 for k in d), f"{fw!r} in notes {d['02'].get('notes')}")
+    c.check(s, "the words for the room line show once, as a note", rw is not None and shown("03", rw) == 1 and all(shown(k, rw) <= 1 for k in d), f"{rw!r} in notes {d['03'].get('notes')}")
+    L = log(out)
+    c.check(s, "no client-made room note beside them (No one in earshot heard you)", "talk: room note" not in L and not any("No one in earshot heard you" in n for k in d for n in d[k].get("notes") or []), str(d["04"].get("notes")))
+    ev = [e for k in ("05", "06") for e in ((d[k].get("extra") or {}).get("events") or [])]
+    c.check(s, "the Log does not repeat them", not any((fw and fw in e) or (rw and rw in e) or "could not have heard" in e or "near enough to hear" in e for e in ev), str(ev)[:400])
+    said = [r for r in (sql(run, f"SELECT id, kind, object, text, at_ms FROM experience WHERE observer = {me} AND kind = 'said' AND object = {b}") if me else []) if r.get("at_ms", 0) >= since]
+    c.check(s, "a heard line: said to them beside me, and no further reach row", len(said) == 2 and len(reach) == 2, f"said to #{b} in this drive: {len(said)}; reach rows {len(reach)}")
+    n6 = d["06"].get("notes") or []
+    # The note and the F prompt beside the one I point at: never over each other (the prompt
+    # moves to the head's other side, or waits while the note shows), and back after the note.
+    notes_clear(c, s, out)
+    d2 = [dump(out, k) or {} for k in ("02a", "02")]
+    pz = ((dump(out, "02z") or {}).get("rects") or {}).get("prompt")
+    c.check(s, "while the note shows I point at them; after it the prompt is back beside them", all((x.get("rects") or {}).get("notes") for x in d2) and any(h.get("id") == b for h in (d2[1].get("hovered") or [])) and pz is not None, f"notes {[(x.get('rects') or {}).get('notes') for x in d2]}, prompt {[(x.get('rects') or {}).get('prompt') for x in d2]}, after {pz}")
+    c.check(s, "a heard line: no reach note", not any("could not have heard" in n or "near enough to hear" in n or "out of earshot" in n for n in n6), str(n6))
+
+
+FAR = "someone too far away to make out"
+# verify-client's far_label.py's overlay: anyone farther than 4 m is too far to make out (as
+# Cullet's `perceived_of` does past 24 m), so the far case fits in view on the island.
+FAR_LAW = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
+
+
+def far(run, c):
+    """far-label in the client: someone too far away to make out keeps the authority's words in
+    the talk target (and the Log), while their plate and hover read "someone in blue" from the
+    colours drawn; close again, "a stranger in …". The colour words are presentation only:
+    nothing sent back carries them. The scene installs far_label.py's 4 m overlay of the shipped
+    script (admin `install_script`) and puts the shipped script back after."""
+    s = "far"
+    b = residents(run, 1)[0]
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    os.makedirs(out_dir, exist_ok=True)
+    shipped = open(os.path.join(ROOT, "living/scripts/skills.rhai")).read()
+    overlay = os.path.join(out_dir, "far-overlay.rhai")
+    open(overlay, "w").write(shipped.replace("fn perceived_of(p)", "fn base_perceived_of(p)", 1) + "\n" + FAR_LAW + "\n")
+    install = os.path.join(ROOT, "living/tools/install_script.py")
+    r = subprocess.run([sys.executable, install, f"verify-{run}", overlay], capture_output=True, text=True)
+    c.check(s, "the 4 m overlay is installed", r.returncode == 0, (r.stdout + r.stderr)[-300:])
+    line = "Hello over there."
+    plan = ("ready;sync:scene;wait:2.5;point:{B};wait:0.8;shot:01_near;dump:01;"
+            "sync:away;wait:3;point:{B};wait:0.8;shot:02_far;dump:02;key:Enter:tap;wait:0.6;shot:03_to_far;dump:03;"
+            f"type:{line};enter;wait:1.5;dump:04;key:Escape:tap;wait:0.3;"
+            "sync:back;wait:3;point:{B};wait:0.8;shot:05_close;dump:05;quit").replace("{B}", str(b))
+    syncs = [f"away=place_at|{b}|(mx+6.0)|(my)", f"back=place_at|{b}|(mx+2.0)|(my)"]
+    try:
+        out, code, text = drive(run, s, plan, places=[f"{b}:2:0"], syncs=syncs)
+    finally:
+        subprocess.run([sys.executable, install, f"verify-{run}"], capture_output=True, text=True)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ["01", "02", "03", "04", "05"]}
+    hov = lambda k: next((h.get("label") for h in d[k].get("hovered") or [] if h.get("id") == b), None)
+    near1, far2, near5 = hov("01"), hov("02"), hov("05")
+    c.check(s, "close up (2 m): the plate says a stranger in their colours", bool(near1) and near1.startswith("a stranger") and "too far" not in near1, f"{near1!r}")
+    c.check(s, "beyond the range (6 m): the plate says someone in their colours, or there is none", far2 is None or re.fullmatch(r"someone in [a-z]+( [a-z]+)?( and [a-z]+( [a-z]+)?)?", far2) is not None, f"{far2!r}; hovered {d['02'].get('hovered')}")
+    t3 = d["03"].get("typing") or {}
+    c.check(s, "the talk target carries the authority's words", t3.get("to") == b and FAR in (t3.get("label") or "") and " in " not in (t3.get("label") or "").replace(FAR, ""), json.dumps(t3))
+    L = log(out)
+    said = [x for x in sql(run, f"SELECT id, kind, object, text FROM experience WHERE kind = 'said' AND object = {b}") if line in x.get("text", "")]
+    c.check(s, "what I send carries my words and their id, no colour words", re.search(rf'say: "{re.escape(line)}" to #{b}\b', L) is not None and said and not any("someone in" in x.get("text", "") for x in said) and not re.search(r'(say|act)[^\n]*someone in ', L), f"{len(said)} said rows")
+    c.check(s, "close again: a stranger in their colours", bool(near5) and near5.startswith("a stranger"), f"{near5!r}")
+    notes_clear(c, s, out)
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far}
 
 
 def main():

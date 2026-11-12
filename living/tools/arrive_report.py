@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""What residents do about a newcomer who says nothing (docs/TRIALS.md, "Arrivals").
+"""What residents do about a newcomer who says nothing (docs/TRIALS.md, "Arrivals"; docs/STRANGERS.md).
+
+A newcomer who joins later (`newcomer` in the trial, cast role `newcomer`, event `newcomer_join`)
+is read as the newcomer and its join as its arrival; a run whose minds think only for some
+(`LIVING_ONLY` in `mind-env.json`) counts only those as residents. Unheard lines (the speaker's
+silence row, in either wording: "No answer from …" before `speech_truth`, "… could not have heard
+you." since) and re-asks are counted by arrive_spread.py, not here.
 
   arrive_report.py BATCH [BATCH...] [--root DIR] [--examples N] [--json OUT]
   arrive_report.py --journal DIR --subject ID --from-ms MS --to-ms MS [--examples N]
@@ -259,6 +265,16 @@ def _detail(t):
     return v if isinstance(v, dict) else {}
 
 
+def thinkers_of(d):
+    """Who the run's mind service thought for, when it was limited (`LIVING_ONLY` in
+    mind-env.json), else None (every person past infancy, or the census's `thinkers`)."""
+    p = d / "mind-env.json"
+    if not p.exists():
+        return None
+    only = json.loads(p.read_text()).get("LIVING_ONLY")
+    return {int(x) for x in only.split(",") if x.strip()} if only else None
+
+
 def windows_of(events, end_ms=None):
     """The silent stands (arrive) or listening windows (greet) as [(from_ms, to_ms)]. A stand
     the run's end cut short (no `_end` event) ends at `end_ms`, the run's last position sample,
@@ -279,7 +295,8 @@ def windows_of(events, end_ms=None):
 def run_report(d):
     cast = json.loads((d / "cast.json").read_text()) if (d / "cast.json").exists() else {}
     summary = json.loads((d / "summary.json").read_text()) if (d / "summary.json").exists() else {}
-    sid = (cast.get("roles", {}).get("subject") or [None])[0]
+    roles = cast.get("roles", {})
+    sid = (roles.get("newcomer") or roles.get("subject") or [None])[0]
     if isinstance(sid, dict):
         sid = sid.get("id")
     if sid is None:
@@ -292,16 +309,19 @@ def run_report(d):
     t0 = wins[0][0]
     # The newcomer's arrival: its `join` call (human.jsonl), else the first stand.
     walk = next((e["human_walk"]["from_ms"] for e in events if "human_walk" in e), None)
-    t_arrive = walk or t0
+    joined = next((e["newcomer_join"]["at_ms"] for e in events if "newcomer_join" in e), None)
+    t_arrive = joined or walk or t0
     inwin = lambda ms: any(a <= ms <= b for a, b in wins)
     names, minds = {}, set()
+    only = thinkers_of(d)
     for c in jl(d / "census.jsonl"):
         for p in c.get("people", []):
             names[p["id"]] = p["name"]
             # Thought for by the minds at some census: in `thinkers` (under `minds.max`), else any
             # person past infancy. Others live by their graphs and are left out of the residents.
-            if p.get("kind", "person") == "person" and p.get("stage", 2) >= 1 and p.get("alive", True) and (c.get("thinkers") is None or p["id"] in c["thinkers"]):
+            if p.get("kind", "person") == "person" and p.get("stage", 2) >= 1 and p.get("alive", True) and (c.get("thinkers") is None or p["id"] in c["thinkers"]) and (only is None or p["id"] in only):
                 minds.add(p["id"])
+    minds.discard(sid)
     prow = jl(d / "positions.jsonl")
     pos = [(r["ms"], {int(k): v for k, v in r["pos"].items()}) for r in prow]
     aimed = defaultdict(list)

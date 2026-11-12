@@ -450,14 +450,68 @@ def channels(s):
     r2, got2, _ = line_by(a, "Again!", 0, "call", "call-again")
     s.expect("call: a second within 6 s is refused in call_check's words", r2.returncode != 0 and "too soon to call out again: wait a few seconds" in (r2.stderr + r2.stdout) and not any(got2[w] for w in at), (r2.stderr or "")[-200:], fatal=False)
     time.sleep(6.5)
-    # Silence that tells the truth: e is seen (by day) but beyond the voice.
+    # Silence that tells the truth (`speech_truth`, on by default; docs/COMMUNICATION.md §15):
+    # e is seen (by day) but beyond the voice; d is out of sight.
+    seen_far = "A stranger is too far away: they could not have heard you."
+    unseen = "A stranger is out of earshot: they could not have heard you."
     r, got, t = line_by(a, "Can you hear me, e?", e, "say", "silence")
     sil = [x["text"] for x in got[a] if x["kind"] == "silence"]
-    want = ["A stranger is too far to hear you; call out or go closer."] if not night else ["No answer from a stranger; they don't seem to be within earshot."]
-    s.expect(f"silence: {'e, seen but beyond the voice, is too far to hear (call out or go closer)' if not night else 'at night e is not seen: no answer'}", sil == want, sil, fatal=False)
+    s.expect(f"silence: {'e, seen but beyond the voice, is too far away (the fact, no advice)' if not night else 'at night e is not seen: out of earshot'}", sil == [seen_far if not night else unseen], sil, fatal=False)
     time.sleep(GAP)
     r, got, t = line_by(a, "Can you hear me, d?", d, "say", "silence-unseen")
-    s.expect("silence: d, out of sight, gives no answer", [x["text"] for x in got[a] if x["kind"] == "silence"] == ["No answer from a stranger; they don't seem to be within earshot."], got[a], fatal=False)
+    s.expect("silence: d, out of sight, is out of earshot (never `No answer`)", [x["text"] for x in got[a] if x["kind"] == "silence"] == [unseen], got[a], fatal=False)
+    time.sleep(GAP)
+    # A line to the room: from d (10 m beyond e, 13 m beyond the player, more beyond the rest),
+    # nobody is near enough, and d is told so; from a (b at 1 m), no such row.
+    r, got, t = line_by(d, "Is anyone out here?", 0, "say", "room-nobody")
+    hearers_d = [w for w in at if w not in (d, deer) and any("anyone out here" in x["text"] for x in got[w])]
+    s.expect("room: a line to the room that nobody receives gives the speaker `Nobody was near enough to hear you.`",
+             r.returncode == 0 and not hearers_d and [(x["subject"], x["text"]) for x in got[d] if x["kind"] == "silence"] == [(0, "Nobody was near enough to hear you.")], (hearers_d, got[d]), fatal=False)
+    time.sleep(GAP)
+    r, got, t = line_by(a, "Good evening, all of you.", 0, "say", "room-heard")
+    s.expect("room: a line to the room that someone receives gives no `silence` row",
+             r.returncode == 0 and any("Good evening, all" in x["text"] for x in got[b]) and not [x for x in got[a] if x["kind"] == "silence"], got[a], fatal=False)
+    time.sleep(GAP)
+    # A player who speaks to someone out of earshot gets the same words, and an act outcome
+    # (code `reach`) its client can draw a note from.
+    t = now(s)
+    p.call("human_say", ["Can you hear me, d?", d])
+    time.sleep(1.0)
+    psil = [x for x in rows(p.id, t) if x["kind"] == "silence"]
+    outs = [o for o in s.rows(f"SELECT * FROM act_outcome WHERE observer = {p.id}") if psil and o["id"] == psil[0]["id"]]
+    s.expect("silence: the player gets the words and an act outcome (act, reach, not ok, the same words)",
+             len(psil) == 1 and psil[0]["text"].endswith("they could not have heard you.") and len(outs) == 1 and (outs[0]["kind"], outs[0]["code"], outs[0]["ok"], outs[0]["skill"], outs[0]["why"], outs[0]["other"]) == ("act", "reach", False, "say", psil[0]["text"], d),
+             (psil, outs), fatal=False)
+    time.sleep(GAP)
+    # A queued line (a graph's say) to e, due while e is beyond the voice: not said; a is told.
+    t = now(s)
+    s.graph(a, {"seq": [{"say": {"text": "Queued words for e.", "to": {"id": e}}}, {"wait": 60}]})
+    time.sleep(3.0)
+    s.graph(a, {"wait": 120})
+    chron = [x["text"] for x in s.rows("SELECT * FROM chronicle WHERE kind = 'speech'") if x["at_ms"] >= t and x["a"] == a]
+    told = [x["text"] for x in rows(a, t) if x["kind"] == "silence"]
+    heard_q = [w for w in at if w != a and any("Queued words for e." in x["text"] for x in rows(w, t))]
+    s.expect("queued: a planned line to e, out of earshot as it comes due, is not said, and a is told so",
+             not chron and not heard_q and told == [f"{seen_far if not night else unseen} You did not say your planned line: “Queued words for e.”."], (chron, heard_q, told), fatal=False)
+    time.sleep(GAP)
+    # The law off: speech-2's words, and the queued line said into the air.
+    s.call("set_world_law", "speech_truth", "false")
+    try:
+        r, got, t = line_by(d, "Anyone at all? (law off)", 0, "say", "room-off")
+        s.expect("law off: a room line nobody receives gives no row", not [x for x in got[d] if x["kind"] == "silence"], got[d], fatal=False)
+        time.sleep(GAP)
+        r, got, t = line_by(a, "Can you hear me, d? (law off)", d, "say", "silence-off")
+        s.expect("law off: d out of sight gives speech-2's `No answer`", [x["text"] for x in got[a] if x["kind"] == "silence"] == ["No answer from a stranger; they don't seem to be within earshot."], got[a], fatal=False)
+        time.sleep(GAP)
+        t = now(s)
+        s.graph(a, {"seq": [{"say": {"text": "Queued words for e, law off.", "to": {"id": e}}}, {"wait": 60}]})
+        time.sleep(3.0)
+        s.graph(a, {"wait": 120})
+        chron = [x["text"] for x in s.rows("SELECT * FROM chronicle WHERE kind = 'speech'") if x["at_ms"] >= t and x["a"] == a]
+        told = [x["text"] for x in rows(a, t) if x["kind"] == "silence"]
+        s.expect("law off: the queued line is said into the air, with speech-2's silence", len(chron) == 1 and "Queued words for e, law off." in chron[0] and told == ["A stranger is too far to hear you; call out or go closer." if not night else "No answer from a stranger; they don't seem to be within earshot."], (chron, told), fatal=False)
+    finally:
+        s.call("set_world_law", "speech_truth", "true")
     time.sleep(GAP)
     # Overheard names: b says c's name to c; whoever hears it in full and sees c learns it.
     r, got, t = line_by(b, f"{names[c]}, come over here.", c, "say", "names")

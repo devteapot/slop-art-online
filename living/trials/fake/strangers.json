@@ -1,0 +1,90 @@
+{
+ "about": "Proof only, for the strangers trial's measures (docs/STRANGERS.md, stage 0): latency.json's timings, plus: a think whose prompt holds a first sight of \"a stranger\" thinks of them (no line), and the compile of that decision writes a routine that walks to the nearest person matching relation \"stranger\" (with the stranger_by_name law off: anyone without a relation row; on: someone whose name one does not know). Real minds decide for themselves.",
+ "replies": {
+  "talk": {
+   "thought": "I heard you.",
+   "say": "verify fake: I heard you.",
+   "to": 0,
+   "acts": [],
+   "end": false,
+   "settled": null
+  }
+ },
+ "rules": [
+  {
+   "purpose": "think",
+   "contains": "For the first time you see a stranger",
+   "delay_s": 5.0,
+   "times": -1,
+   "reply": {
+    "thought": "verify fake: a stranger stands there; I have not seen them before.",
+    "intend": [
+     "verify fake stranger: go and see who the stranger is"
+    ],
+    "say": null,
+    "judgments": [],
+    "places": [],
+    "feeling": "curious",
+    "impulse": "look"
+   }
+  },
+  {
+   "purpose": "deliberate",
+   "contains": "verify fake stranger",
+   "delay_s": 4.0,
+   "times": -1,
+   "reply": {
+    "thought": "verify fake: I go and see the stranger.",
+    "plan": "verify fake: see who the stranger is",
+    "graph": {
+     "first": [
+      {
+       "if": {
+        "sees": {
+         "nearest": {
+          "kind": "person",
+          "relation": "stranger"
+         }
+        }
+       },
+       "then": {
+        "do": "goto",
+        "target": {
+         "nearest": {
+          "kind": "person",
+          "relation": "stranger"
+         }
+        }
+       }
+      },
+      {
+       "wait": 2
+      }
+     ]
+    },
+    "say": null,
+    "acts": []
+   }
+  },
+  {
+   "purpose": "think",
+   "delay_s": 5.0,
+   "times": -1
+  },
+  {
+   "purpose": "deliberate",
+   "delay_s": 4.0,
+   "times": -1
+  },
+  {
+   "purpose": "talk",
+   "delay_s": 1.5,
+   "times": -1
+  },
+  {
+   "purpose": "consolidate",
+   "delay_s": 2.0,
+   "times": -1
+  }
+ ]
+}

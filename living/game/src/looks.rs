@@ -9,6 +9,11 @@
 //!   "a child in red". When two strangers shown read alike, the second colour tells them apart
 //!   ("a stranger in blue and brown"). No role and no place.
 //! - Animals keep the projection's label ("a wolf").
+//! - **Too far to make out** (far-label: beyond the world's recognising range, Cullet's
+//!   `known_within` 24 m, known or not): the projection says "someone too far away to make out"
+//!   and no name. That text is what the Log, the talk target, act titles and notes show. Plates
+//!   and hover ([`Looks::plate`]) show "someone in blue" from the colours drawn: presentation only,
+//!   never in anything sent back (speech, addressing, acts, offers carry ids and my own words).
 //!
 //! Labels are kept for people no longer perceived, so a window or the log still names them as
 //! they were last seen. [`Looks::of`] is what every part of the UI shows.
@@ -19,9 +24,14 @@ use living_bindings::*;
 use spacetimedb_sdk::Table;
 use std::collections::HashMap;
 
+/// The projection's label for a person too far away to make out (far-label).
+pub const FAR: &str = "someone too far away to make out";
+
 #[derive(Resource, Default)]
 pub struct Looks {
     labels: HashMap<u32, String>,
+    /// Plates and hover for someone too far to make out: "someone in blue" (presentation only).
+    plates: HashMap<u32, String>,
     /// The top and second colours drawn, by id (sRGB hex), for portraits.
     pub colours: HashMap<u32, (Option<String>, Option<String>)>,
     /// When a name first arrived for someone (they were a stranger to me before).
@@ -33,6 +43,12 @@ impl Looks {
     /// How I name someone now, or as last perceived.
     pub fn of(&self, id: u32) -> Option<&str> {
         self.labels.get(&id).map(|s| s.as_str())
+    }
+
+    /// How a plate or hover names them: as [`Looks::of`], except someone too far away to make
+    /// out, by the colours drawn ("someone in blue"). Never sent anywhere.
+    pub fn plate(&self, id: u32) -> Option<&str> {
+        self.plates.get(&id).or_else(|| self.labels.get(&id)).map(|s| s.as_str())
     }
 
     /// The same, capitalised for the start of a line.
@@ -129,7 +145,10 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
             base.push((c.id, c.name.clone(), None, None));
             continue;
         }
-        looks.known.entry(c.id).or_insert(false);
+        // Too far to make out says nothing of whether I know them: no "name learned" later.
+        if c.label != FAR {
+            looks.known.entry(c.id).or_insert(false);
+        }
         if c.kind != "person" {
             base.push((c.id, c.label.clone(), None, None));
             continue;
@@ -146,17 +165,28 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
         };
         base.push((c.id, c.label.clone(), top, bottom));
     }
-    // "a child in red"; a second colour where two read alike.
+    // "a child in red"; a second colour where two read alike. Someone too far away to make out
+    // keeps the projection's words, and gets "someone in blue" for plates and hover only.
+    let far = |l: &str| l == FAR;
+    let shown = |l: &str| if far(l) { "someone".to_string() } else { l.to_string() };
     let first: Vec<String> = base.iter().map(|(_, l, t, _)| match t.as_deref().and_then(colour_name) {
-        Some(col) => format!("{l} in {col}"),
-        None => l.clone(),
+        Some(col) => format!("{} in {col}", shown(l)),
+        None => shown(l),
     }).collect();
     for (i, (id, l, t, b)) in base.iter().enumerate() {
         let twin = t.is_some() && first.iter().enumerate().any(|(j, f)| j != i && *f == first[i]);
-        let label = match (twin, t.as_deref().and_then(colour_name), b.as_deref().and_then(colour_name)) {
-            (true, Some(a), Some(c)) if a != c => format!("{l} in {a} and {c}"),
+        let dressed = match (twin, t.as_deref().and_then(colour_name), b.as_deref().and_then(colour_name)) {
+            (true, Some(a), Some(c)) if a != c => format!("{} in {a} and {c}", shown(l)),
             _ => first[i].clone(),
         };
+        let label = if far(l) { l.clone() } else { dressed.clone() };
+        if far(l) {
+            if looks.plates.get(id) != Some(&dressed) {
+                looks.plates.insert(*id, dressed);
+            }
+        } else {
+            looks.plates.remove(id);
+        }
         if looks.labels.get(id) != Some(&label) {
             looks.labels.insert(*id, label);
         }
@@ -164,6 +194,7 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
     if looks.labels.len() > 4096 {
         let live: std::collections::HashSet<u32> = seen.iter().map(|c| c.id).collect();
         looks.labels.retain(|id, _| live.contains(id));
+        looks.plates.retain(|id, _| live.contains(id));
     }
 }
 

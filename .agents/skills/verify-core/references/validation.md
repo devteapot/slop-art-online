@@ -1,5 +1,44 @@
 # Core validation record
 
+
+## 2026-11-12 fix-kill-name: told lines name others as the teller perceives them (Spark)
+
+Branch `fix-kill-name` from origin/main `c4e6b04d` (far-label in), the trial service (port 3320), private `CARGO_TARGET_DIR`. `core-kill2-034840-skirmish`: `outcomes` 11 of 11, its new `names_told` part driving every audited path among four strangers: a gift ("A stranger gave you 1 stone"), an offer and its acceptance ("A stranger and a stranger traded 1 stone for 1 berries"), a demand, teaching ("taught a stranger fire"), a bow shot ("struck a stranger: hit for 7"), a melee kill ("You finished: strike → person. killed a stranger (9)", before: "killed Agnes Fenner (9)") and the witness's "A stranger was killed by a stranger"; no told line or own `skill_use` outcome named one not introduced (`outcomes-names.json`). A first run (`core-kill-034622-skirmish`) passed with teaching broken off by the next step; the scene now waits for its outcome. verify-player `player-kill-035011`: `combat.py` 39 of 39 (the player's own kill record "killed an old stranger (6)"; the chronicle keeps "Tester killed Aldric Marrow"). `just living-check` passes.
+
+## 2026-11-12 far-label: someone too far away to make out (Spark) After merging main with speech-truth (`03d32e09`, `core-farlabel-c`, `core-farlabel-ch`): `stranger_filter` 9/9, `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7, speech `channels` 29/29.
+
+Branch `far-label` (`2095a272`, on strangers-1 `9b4fd9d2`), the trial service `slop-trials-stdb`, default seed, `scoped`. `core-farlabel-b`: `stranger_filter` 9/9 (law off and on as before; with an overlay making everyone past 4 m `far`: F, known, at 5 m is "someone too far away to make out" with its id and no name or community; A keeps name and community; N is "a stranger"; law on and N gone: F not waved at; a "stranger" relation about F is not written, about N it is; U gets no first sight at 5 m and "For the first time you see a stranger, 2 tiles northeast" at 2 m), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7. The first attempt (`core-farlabel-a`, `6e42c0b5`) failed the last check: a far figure's look was meant to be retried in 5 s by back-dating its `recently_seen` mark, but that mark is refreshed while someone stays in sight, so the first sight never came; fixed with a mark of its own (`FAR_MARK`, `far_wait`). Strangers-1's merge with main (`9b4fd9d2`, `core-strangers1m`): `crowd_sight` 8/8, `stranger_filter` 3/3.
+
+## 2026-11-12 strangers-1: first sights in a crowd, a graph's "stranger" under a law (Spark)
+
+Branch `strangers-1` (`0dd19571`/`f67b0263`), the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Evidence copied to `~/slop-strangers-logs/verify/`.
+
+- `crowd_sight` (new; `core-strangers1-b`): 8 of 8 pass, twice. An observer among 8 strangers within 4.5 m (a crowd of 9): 2 first-sight lines, 336 characters, all 8 named, 8 `familiar` rows; 2 more brought in: 1 line, 94 characters, both by id, both familiar. The same scene with `--baseline` on main `dc2ecfc8` (`core-strangers1-base2`, its own worktree and target dir): **0 lines** for the 8 and **0** for the 2.
+- `stranger_filter` (new): 3 of 3. Law off: the wave goes to A (same community, no relation row). `set_world_law stranger_by_name true`: it goes to N (relation "wary", name unknown).
+- `sight` 6/6, `senses` 7/7, `fov` 18/18 (`core-strangers1-c`), `doing` 7/7 on a fresh run (`core-strangers1-c`; main 7/7).
+- `doing` failed once on `core-strangers1-b` (a walk to a point ended between the scene and the read of activities: `goto → (10,10)` against `wait`). It passed on main and on a fresh run of this branch. The first attempt (`core-strangers1-a`) failed `stranger_filter` and `doing` because `crowd_sight` left its 11 people on the shared open line. The two new scenes now take a line clear of everyone, and move their actors off it at the end.
+- Not run: the other baseline scenes, speech, town, rhythm, lives.
+
+## 2026-11-12 speech-truth (Spark)
+
+Branch `speech-truth` (origin/main `a221a78e` merged). Trial service `slop-trials-stdb` (2.14.1). docs/COMMUNICATION.md §15.
+
+- `just living-check` passes (rules 249 lib tests among them, with `ways_of_speaking_are_read_from_the_script` updated for the reach in metres, and the `speech_truth` law test).
+- **Regression:** `speech.py regress` (`core-struth-regress`) against the base module (`core-struth-base`, a worktree at `a221a78e`, its own target dir). The diff (`speech-diff.json`) is identical over 75 rows except one, the intended outcome text. a's line to d (out of earshot, unseen) reads "A stranger is out of earshot: they could not have heard you." where the base read "No answer from a stranger; they don't seem to be within earshot." The `introduced` rows are as before.
+- **`speech.py channels`** (`core-struth-channels`): every check passes, the new ones among them:
+  - truthful silence to e (seen) and d (unseen);
+  - the player's line to d out of earshot: its row, and an `act_outcome` (act, reach);
+  - a graph's say to e out of earshot as it comes due: not said, and the speaker told "… You did not say your planned line: “Queued words for e.”.";
+  - `set_world_law speech_truth false`: speech-2's "No answer" and the queued line said into the air.
+- **`speech.py ways`** (`core-struth-ways`): passes.
+
+- **Coordinator's changes** (same branch, origin/main merged):
+  - the outcome states only the fact ("A stranger is too far away: they could not have heard you.", no "Call out or go closer.");
+  - a room line no one receives gives "Nobody was near enough to hear you." (subject 0).
+- Results:
+  - `regress` (`core-struth2-regress`) against `core-struth-base`: the same single intended difference over 75 rows;
+  - `channels` (`core-struth2-channels`) and `ways` (`core-struth2-ways`): every check passes. New: the room line from d with no person within 9 m gives the row; a's room line, heard by b, gives none; with the law off, d's room line gives no row.
+
 ## 2026-11-12 goods-3: building as recipes, tools on recipes, the carry count, the goods audit (laptop host)
 
 Branch `goods-3`, own container `goods3-stdb` (2.14.1, port 3333), `scoped`, no minds, private `CARGO_TARGET_DIR` under `.local/goods3/`.

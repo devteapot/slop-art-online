@@ -399,6 +399,17 @@ pub fn stranger(kind: &str, stage: u8) -> String {
     format!("{article} {kind}")
 }
 
+/// How one refers to someone the law does not name: a person too far away to make out
+/// (`Regard::far`) is "someone too far away to make out", whoever they are; otherwise as
+/// [`stranger`]. An animal keeps its kind ("a wolf") at any distance.
+pub fn unnamed(t: &Character, far: bool) -> String {
+    if far && t.kind == "person" {
+        living_rules::script::FAR_PERSON.into()
+    } else {
+        stranger(&t.kind, t.stage)
+    }
+}
+
 /// Build and dress as seen: from the settlement round the character's home.
 fn dress(ctx: &ReducerContext, c: &Character) -> (String, String) {
     let key = (c.home_x.to_bits(), c.home_y.to_bits());
@@ -430,7 +441,7 @@ pub fn project(ctx: &ReducerContext, observer: &Character, target: &Character, n
         Some(HealthSeen { band, exact: None }) => (band, -1.0, -1.0),
         Some(HealthSeen { band, exact: Some((hp, max)) }) => (band, hp.max(0.0).round(), max.round()),
     };
-    let label = if r.name { target.name.clone() } else { stranger(&target.kind, target.stage) };
+    let label = if r.name { target.name.clone() } else { unnamed(target, r.far) };
     Projection { name: if r.name { target.name.clone() } else { String::new() }, label, kind: target.kind.clone(), stage: target.stage, folk, style, band, hp, max_hp }
 }
 
@@ -463,8 +474,14 @@ pub fn labels(ctx: &ReducerContext, observer: &Character, ids: &[u32], now: u64)
     let knows = known_techniques(ctx, observer.id);
     ids.iter()
         .map(|id| match ctx.db.character().id().find(*id) {
-            Some(t) if regard_knowing(ctx, observer, &knows, &t, now).name => t.name,
-            Some(t) => stranger(&t.kind, t.stage),
+            Some(t) => {
+                let r = regard_knowing(ctx, observer, &knows, &t, now);
+                if r.name {
+                    t.name
+                } else {
+                    unnamed(&t, r.far)
+                }
+            }
             None => "someone".into(),
         })
         .collect()

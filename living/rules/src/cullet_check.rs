@@ -317,6 +317,11 @@ mod tests {
         let p = |dist: u16| crate::script::RegardIn { observer_kind: "person".into(), target_kind: "person".into(), known: true, dist, ..Default::default() };
         assert!(s.perceived_of(&p(24)).name && !s.perceived_of(&p(25)).name);
         assert_eq!(s.perceived_of(&p(30)).health, crate::script::Precision::None);
+        // Past it someone is too far away to make out, known or not; within it, not (far-label).
+        assert!(s.perceived_of(&p(25)).far && !s.perceived_of(&p(24)).far);
+        let stranger = |dist: u16| crate::script::RegardIn { known: false, ..p(dist) };
+        assert!(s.perceived_of(&stranger(40)).far && !s.perceived_of(&stranger(10)).far && !s.perceived_of(&stranger(10)).name);
+        assert!(!island().perceived_of(&p(40)).far);
         assert!(s.structure("lamp").lights > 0.0 && s.structure("campfire").lights > 0.0 && island().widest_light() == 0.0);
     }
 

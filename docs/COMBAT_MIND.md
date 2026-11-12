@@ -299,6 +299,24 @@ Batch `cm0`: `wolves`, 4 replicates, `--fake` (every model call answered at once
 - **Against the table in §2.3:** R1 confirms the "change approach while the fight is on" row's cause: the shortfall is mostly the model's time, not the plumbing. A fast lane with one call at about 2 s would put a new routine about 3 s after a blow, inside the 19 s p90 fight, where the two-call path at 8.6 s p50 mostly is not. The rows about noticing, carrying lessons and using stances cannot be shown with a fake model (its replies are fixed); R1 shows nothing about them, by design.
 - **Evidence:** `.local/living/trials/cm0/` and `.local/living/combat-mind/fight_audit-cm0-fake.json` on the Spark (git-ignored); `fight_mind_audit.py --fake` reads them. The batch's databases and minds were removed with `trials.py clean --batch cm0`; the evidence stays.
 
+### 5.2 What the told outcome lines cost in a battle (2026-11-12)
+
+§3.1's lines (`force_outcomes`) measured in a battle of minds, as agreed before R2. Build: origin/main `5d5ce4e1` (stamina-1, both combat facts and the attack-timing text in), module built on the Spark, trial service `slop-trials-stdb`. Scene: a scratch `verify-core` world on the default seed (`core-r2cost-025725`), **about 187 people alive** (186–188), plus **20 mind-held spear fighters** (`spawn_crowd(20, true)`, so their outcomes are told; no mind service), packed 1.5 m apart, each striking the nearest person in reach. Each arm is a fresh battle, timed by `bench.py` over a 22 s window (profiled tick spans, no subscribers); the fighters' new experience rows were read during the window, so the lines of those who died are counted. Tool: `living/tools/outcome_cost.py` (branch `arena-r2`).
+
+| | `force_outcomes` on | off |
+|---|---:|---:|
+| Blows a second (hits, dodged, blocked) | **9.2** | 8.9 |
+| Told strike lines a second (done + failed) | 14.4 (10.6 + 3.8) | 3.8 (failed only) |
+| `act_outcome` rows | 0 | 0 |
+| Tick p50 / p95 / p99 / max (ms) | 1.68 / 3.60 / 5.58 / 7.21 | 1.72 / 3.40 / 5.12 / 6.59 |
+| `tick.combat` work (ms a second) | 8.29 | 8.23 |
+| `tick.activity` work (ms a second) | 3.89 | 3.81 |
+
+- The law adds one experience row per resolved blow, to the striker only: about 10.6 rows a second at 9.2 blows a second. Failures are told either way, each refusal once per `repeat_failure_s`.
+- The tick does not show it: the differences between the arms are within one battle's variation. **At 20 fighters it is not material.**
+- `act_outcome` rows are written only for a character a person plays (`outcomes::write`): none here. A played character gets one per told line, kept with its newest 64 lines (`frame::LINES_SHOWN`).
+- Not measured: the contract's 200-character battle of minds, where the same rate would be about ten times this (a row per blow).
+
 R2 and R3 need the trial files written (fixtures only); this turn is docs-only, so they are described, not added. R2 before any of §3 is built: if minds already prepare and use routines for a pattern, §3.5 is not needed yet, and §3.2–3.4 are judged by how much they add.
 
 ## 6. What stays the same for players and AI, and what must never become a guard

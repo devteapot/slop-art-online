@@ -256,12 +256,21 @@ pub enum Precision {
     Exact,
 }
 
+/// How a person too far away to make out is called (`Regard::far`), by the authority's
+/// projection (players' `seen_*` labels, minds' scenes, percepts) and in memory with their id
+/// ("someone too far away to make out #77").
+pub const FAR_PERSON: &str = "someone too far away to make out";
+
 /// The `perceived_of` law's answer: which fields of the target the observer gets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Regard {
     /// Its name; otherwise a label (`a stranger`, `a wolf`).
     pub name: bool,
     pub health: Precision,
+    /// Too far away to make out (a law's `far`, e.g. Cullet's past `known_within`): who a person
+    /// is, and whose community they belong to, cannot be told. A person is then "someone too far
+    /// away to make out", known or not (docs/STRANGERS.md, far-label).
+    pub far: bool,
 }
 
 impl Regard {
@@ -270,7 +279,7 @@ impl Regard {
     pub fn default_for(p: &RegardIn) -> Self {
         let name = p.own || p.known || (p.observer_kind != "person" && p.observer_kind == p.target_kind);
         let health = if p.own || p.revealed.iter().any(|r| r == "health") { Precision::Exact } else { Precision::Band };
-        Self { name, health }
+        Self { name, health, far: false }
     }
 }
 
@@ -449,6 +458,13 @@ pub struct Laws {
     /// `audience` table), for the mind service's conversation rules (on since 2026-11-11, when
     /// `LIVING_GREET=nearest` became the minds' default).
     pub speech_audience: bool,
+    /// A line to someone tells the speaker the truth when they could not have heard it ("Bram
+    /// is too far away: they could not have heard you."), and a plan's queued line is not said
+    /// into the air: dropped once the conversation has moved past it, and when its addressee is
+    /// beyond the way's reach as it comes due, told to the speaker instead (docs/COMMUNICATION.md
+    /// §15). Off: `speech-2`'s words ("No answer from …" when the addressee is not seen), and a
+    /// queued line is said whenever it comes due.
+    pub speech_truth: bool,
     /// Real minutes after one's own birth, or one's youngest child's, before a grown person
     /// feels the longing for a child; the most nurturing feel it sooner ([`longing_wait_ms`]).
     pub longing_after_min: f32,
@@ -457,6 +473,10 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
+    /// relation row (or one labelled "stranger"); on, someone whose name one does not know
+    /// (`perception::knows_name`, the rule scenes and percepts name people by).
+    pub stranger_by_name: bool,
     /// A sound heard but not seen is near within this, close within the next (metres), and
     /// lingers this long after it was last heard (seconds).
     pub heard_near_m: f32,
@@ -517,9 +537,11 @@ impl Default for Laws {
             pasture_per_tile: 0.02,
             cry_prompts_carers: true,
             speech_audience: true,
+            speech_truth: true,
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            stranger_by_name: false,
             heard_near_m: 5.0,
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
@@ -1865,9 +1887,10 @@ impl Scripts {
             if let Some((_, t)) = world.iter().find(|(k, _)| k == topic) {
                 parts.push(t.trim().to_string());
             }
-            // The ways of speaking, each in its own words, in their order.
+            // The ways of speaking, each in its own words and with its reach in metres (from its
+            // spec and the world's hearing, as `speech_card` gives them), in their order.
             if topic == "speech" {
-                parts.extend(self.ways.iter().map(|w| format!("{} = {}", w.name, w.about.trim())));
+                parts.extend(self.ways.iter().map(|w| format!("{} ({}) = {}", w.name, w.reach_words(self.reach.hearing), w.about.trim())));
             }
             if parts.is_empty() {
                 continue;
@@ -2434,9 +2457,11 @@ impl Scripts {
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
             cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
             speech_audience: flag("speech_audience", l.speech_audience),
+            speech_truth: flag("speech_truth", l.speech_truth),
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
             heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
             heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
             heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),
@@ -2874,7 +2899,12 @@ fn decode_regard(r: Dynamic, p: &RegardIn) -> Result<Regard, String> {
         Some(Ok(h)) if h == "none" => Precision::None,
         Some(_) => return Err("perceived_of: `health` is \"exact\", \"band\" or \"none\"".into()),
     };
-    Ok(Regard { name, health })
+    let far = match r.get("far") {
+        None => false,
+        Some(v) => v.as_bool().map_err(|_| "perceived_of: `far` must be true or false")?,
+    };
+    // Someone too far to make out is never named.
+    Ok(Regard { name: name && !far, health, far })
 }
 
 /// A record's parties: a map of role → character id (or community party).
@@ -3052,7 +3082,11 @@ mod tests {
         assert_eq!(say.about, speech::WaySpec::say().about);
         say.about = speech::WaySpec::say().about;
         assert_eq!(say, speech::WaySpec::say());
-        assert!(s.world_text(&[]).contains("SPEAKING: say = Speak aloud."));
+        // Each way with its reach in metres, from its spec and the world's hearing (9 m here).
+        let t = s.world_text(&[]);
+        assert!(t.contains("SPEAKING: say (carries 9 m) = Speak aloud."), "{t}");
+        assert!(t.contains(" whisper (to someone within 1.5 m) = Whisper") && t.contains(" call (carries 22.5 m) = Call out"), "{t}");
+        assert_eq!((say.reach_words(12.0), whisper.reach_words(12.0), call.reach_words(12.0)), ("carries 12 m".into(), "to someone within 1.5 m".into(), "carries 30 m".into()));
         let src = include_str!("../../scripts/skills.rhai");
         let with = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap());
         // A way the engine cannot keep is refused, naming the key.
@@ -3070,7 +3104,7 @@ mod tests {
         assert_eq!(two.ways().iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["say", "whisper", "hush", "call"]);
         assert_eq!((w.carry, w.only_to, w.animals.as_str(), w.label.as_str()), (speech::Carry::Within(1.5), true, "", "Hush"));
         assert_eq!((w.carry_for(9.0), w.widest(9.0)), (1.5, 1.5));
-        assert!(two.world_text(&[]).contains("say = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper = Whisper to someone beside you (within 1.5 m)."));
+        assert!(two.world_text(&[]).contains("say (carries 9 m) = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper (to someone within 1.5 m) = Whisper to someone beside you (within 1.5 m)."));
         // A script with no ways at all speaks by today's `say`.
         let none = Scripts::new(&src.replace("_speech()", "_speech_old()")).unwrap();
         assert_eq!(none.way("say"), Some(&speech::WaySpec::say()));
@@ -3362,12 +3396,12 @@ mod tests {
         let sc = scripts();
         let base = RegardIn { observer_kind: "person".into(), target_kind: "person".into(), ..Default::default() };
         // A stranger: a label, and health only as a band.
-        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band });
+        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band, far: false });
         // Known by name; an appraisal shows exact health while it holds.
-        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band });
-        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact });
+        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band, far: false });
+        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact, far: false });
         // Oneself: everything. Animals know their own kind by name, and not people's.
-        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact });
+        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact, far: false });
         let wolf = RegardIn { observer_kind: "wolf".into(), target_kind: "wolf".into(), ..Default::default() };
         assert!(sc.perceived_of(&wolf).name);
         assert!(!sc.perceived_of(&RegardIn { target_kind: "person".into(), ..wolf }).name);
@@ -3376,7 +3410,12 @@ mod tests {
             assert_eq!(sc.perceived_of(&p), Regard::default_for(&p));
         }
         let blind = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: true, health: \"none\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
-        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None });
+        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None, far: false });
+        // A law may say someone is too far away to make out: never named then, known or not.
+        let far = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: p.target.known, far: p.dist > 20.0 }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        let known_at = |dist: u16| RegardIn { known: true, dist, ..base.clone() };
+        assert_eq!((far.perceived_of(&known_at(30)).name, far.perceived_of(&known_at(30)).far), (false, true));
+        assert_eq!((far.perceived_of(&known_at(10)).name, far.perceived_of(&known_at(10)).far), (true, false));
     }
 
     #[test]
@@ -3399,6 +3438,15 @@ mod tests {
         assert!(over("cry_prompts_carers", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
         // Who heard a line is kept by default (the minds' `LIVING_GREET=nearest` reads it); a world may turn it off.
         assert!(sc.laws().speech_audience && !over("speech_audience", serde_json::json!(false)).unwrap().speech_audience);
+        // What a graph's "stranger" means is off (no relation row) unless the world turns it on
+        // (someone whose name one does not know), and the words say which (docs/STRANGERS.md).
+        assert!(!sc.laws().stranger_by_name && over("stranger_by_name", serde_json::json!(true)).unwrap().stranger_by_name);
+        let shipped = include_str!("../../scripts/skills.rhai");
+        let about = |src: &str| Scripts::new(src).unwrap().laws_about().into_iter().find(|(k, _)| k == "stranger_by_name").map(|(_, t)| t).unwrap_or_default();
+        let on = with_world_laws(shipped, &[("stranger_by_name".into(), serde_json::json!(true))]);
+        assert_eq!((about(shipped).as_str(), about(&on).as_str()), ("in a routine, a stranger is someone one has no feelings about yet", "in a routine, a stranger is someone whose name one does not know"));
+        // A speaker is told the truth about a line no one addressed could hear (on by default); a world may turn it off.
+        assert!(sc.laws().speech_truth && !over("speech_truth", serde_json::json!(false)).unwrap().speech_truth);
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));

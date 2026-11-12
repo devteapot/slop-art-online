@@ -154,6 +154,12 @@ fn stored_type(rel: &str) -> &str {
         "RELATES"
     }
 }
+
+/// A person's node named as seen too far away to make out ("someone too far away to make out
+/// #77") takes a name or "a stranger #77" once they are made out, and never goes back
+/// (`apply`, `rename_people`; far-label).
+pub const FAR_NAME_KEPT: &str = living_rules::script::FAR_PERSON;
+
 const FIXED_LABELS: &[&str] = &["Concept", "Self", "Memory", "IdentityVersion", "Merged"];
 
 fn p(v: Value) -> BoltType {
@@ -268,7 +274,8 @@ impl Store {
                     "UNWIND $rows AS n
                      MERGE (c:Concept {run: $run, actor: $actor, key: n.key})
                      ON CREATE SET c.created_t = $t
-                     SET c += n.props, c.name = coalesce(n.name, c.name), c.updated_t = $t, c.thought = $thought
+                     SET c += n.props, c.name = CASE WHEN n.name STARTS WITH $far AND c.name IS NOT NULL AND NOT c.name STARTS WITH $far THEN c.name ELSE coalesce(n.name, c.name) END,
+                         c.updated_t = $t, c.thought = $thought
                      SET c.lived_under = CASE WHEN $lived IS NULL THEN c.lived_under ELSE [x IN coalesce(c.lived_under, []) WHERE x <> $lived] + $lived END
                      WITH c, n, [l IN labels(c) WHERE NOT l IN $fixed] AS old
                      CALL (c, n, old) {
@@ -282,7 +289,8 @@ impl Store {
                 .param("fixed", FIXED_LABELS.iter().map(|s| s.to_string()).collect::<Vec<_>>())
                 .param("t", t as i64)
                 .param("thought", thought)
-                .param("lived", p(json!(patch.lived_under))),
+                .param("lived", p(json!(patch.lived_under)))
+                .param("far", FAR_NAME_KEPT),
             )
             .await?;
         }
@@ -1236,6 +1244,9 @@ impl Store {
     /// that does not exist is not made. Run at each integration for the people its experiences
     /// involve, so a stranger's node takes the name once it is learned even when the model wrote
     /// nothing about them.
+    /// Renames people's nodes as the mind now remembers them (`Minds::remembered_as`); a node
+    /// named once someone was made out is never renamed back to "someone too far away to make out
+    /// #id" (`FAR_NAME_KEPT`).
     pub async fn rename_people(&self, actor: u32, names: &[(String, String)]) -> Result<()> {
         if names.is_empty() {
             return Ok(());
@@ -1245,11 +1256,12 @@ impl Store {
             .run(self.q(
                 "UNWIND $rows AS r
                  MATCH (c:Concept {run: $run, actor: $actor, key: r.key})
-                 WHERE coalesce(c.name, '') <> r.name
+                 WHERE coalesce(c.name, '') <> r.name AND NOT (r.name STARTS WITH $far AND c.name IS NOT NULL AND NOT c.name STARTS WITH $far)
                  SET c.name = r.name",
                 actor,
             )
-            .param("rows", p(Value::Array(rows))))
+            .param("rows", p(Value::Array(rows)))
+            .param("far", FAR_NAME_KEPT))
             .await?;
         Ok(())
     }
@@ -2196,6 +2208,10 @@ mod tests {
         assert_eq!(with_involved(&r.memories.iter().find(|m| m.0 == 10).expect("its memory").2, r.involved.get(&10)), "A stranger was teaching Lio to hunt with a spear. (with a stranger #77)");
         assert!(!r.memories.iter().any(|m| m.0 == 11), "{:?}", r.memories);
         s.rename_people(1, &[("person:77".into(), "Cal".into()), ("person:404".into(), "Nobody".into())]).await.unwrap();
+        // Seen far off again later: a node named once someone was made out keeps its name
+        // (far-label); a node only ever seen far off takes "a stranger #id" once made out.
+        s.rename_people(1, &[("person:77".into(), format!("{FAR_NAME_KEPT} #77"))]).await.unwrap();
+        s.rename_people(1, &[("person:200".into(), format!("{FAR_NAME_KEPT} #200"))]).await.unwrap();
         let r = s.recall(1, &cues.bounded(), 12, 3).await.unwrap();
         assert_eq!(r.involved.get(&10), Some(&vec!["Lio".to_string(), "Cal".to_string()]));
         let mut q = s.g.execute(query("MATCH (c:Concept {run: $run, actor: 1}) WHERE c.key STARTS WITH 'person:' RETURN c.key AS key, c.name AS name ORDER BY key").param("run", run.clone())).await.unwrap();
