@@ -28,6 +28,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | --- | --- |
 | `anim.rs` (`clip_file`), `lookdev.rs` (far models, face maps) | [crowd.md](crowd.md) |
 | `camera.rs`, `pointer.rs` | [turns.md](turns.md), [wheel.md](wheel.md) |
+| `characters.rs` (`recolor`, `shape`, spring bones), `characters/compose.rs` (people composed from type, style and overlay files), `perf.rs` (`diag`'s `batches:`), `view.rs` (`LIVING_GAME_VIEW_JOINTS`, `LIVING_GAME_VIEW_PLATE`) | [crowd.md](crowd.md) |
 | `combat.rs`, `weapon.rs` | [bar.md](bar.md) |
 | `controls.rs` (the look), `facing.rs`, `heardmark.rs`, `sightedge.rs`, `sightfield.rs` | [field.md](field.md) |
 | `envs.rs` (the cutaway fade) | [support.md](support.md) |
