@@ -1829,6 +1829,103 @@ def flee(s):
 
 
 
+def wall_spots(s, n=4):
+    """Points where a flight straight away from a threat runs into an inside corner within a
+    few metres: walkable, the way `d` blocked within 3.5 m and the way 45° round from it within
+    4.5 m, while a way 90° round has 9 m of open ground and 6 m behind (where the threat stands)
+    is open. Up to `n`, at least 30 m apart: (point, way)."""
+    W, H, walk = tile_grid(s)
+
+    def run(x, y, h, m):
+        c, sn = math.cos(h), math.sin(h)
+        k = 0.25
+        while k <= m:
+            if not (walk(x + c * k, y + sn * k) and walk(x + c * (k + 0.25), y + sn * (k + 0.25))):
+                return k - 0.25
+            k += 0.25
+        return m
+
+    out = []
+    for y in range(12, H - 12, 2):
+        for x in range(12, W - 12, 2):
+            if any(math.dist((x, y), q) < 30 for q, _ in out):
+                continue
+            px, py = x + 0.5, y + 0.5
+            if not walk(px, py):
+                continue
+            for k in range(8):
+                d = k * math.pi / 4
+                for turn in (math.pi / 4, -math.pi / 4):
+                    if run(px, py, d, 4.0) <= 3.5 and run(px, py, d + turn, 5.0) <= 4.5 and run(px, py, d - 2 * turn, 9.0) >= 9.0 and run(px, py, d + math.pi, 6.5) >= 6.5:
+                        out.append(((px, py), d))
+                        break
+                if out and out[-1][0] == (px, py):
+                    break
+            if len(out) >= n:
+                return out
+    return out
+
+
+def flee_wall(s):
+    """A person flees another into an inside corner (the way straight away blocked within
+    3.5 m, the way 45° round it too) with an open side: the flight takes the open side
+    (`steer::flee_way`) and gets clear, never "cornered" and never closing on the
+    threat by more than a stride. Default seed (the map's edge, water and town walls)."""
+    for c in s.rows("SELECT id, alive FROM character"):
+        if c["alive"]:
+            s.graph(c["id"], {"wait": 300})
+    people = [c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'person' AND alive = true")]
+    spots = wall_spots(s)
+    W, H, _ = tile_grid(s)
+    opaque = set()
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        opaque.update((cx * 16 + k % 16, cy * 16 + k // 16) for k, t in enumerate(data) if t in (4, 7))
+
+    def in_sight(a, b):
+        n = max(1, int(math.dist(a, b) * 4))
+        return math.dist(a, b) <= 11.0 and not any((int(a[0] + (b[0] - a[0]) * i / n), int(a[1] + (b[1] - a[1]) * i / n)) in opaque for i in range(n + 1))
+    s.expect("the map has inside corners with an open side", len(spots) >= 2, {"spots": spots})
+    results = []
+    for i, ((px, py), d) in enumerate(spots):
+        f, t = people[2 * i], people[2 * i + 1]
+        s.call("place_at", f, px, py)
+        s.call("place_at", t, px - 5.0 * math.cos(d), py - 5.0 * math.sin(d))
+        time.sleep(0.6)
+        start = apart(s, f, t)
+        since = max([r["id"] for r in s.rows(f"SELECT id FROM experience WHERE observer = {f}")] or [0])
+        s.graph(f, {"seq": [{"do": {"skill": "flee", "target": {"id": t}}}, {"wait": 300}]})
+        t0 = time.monotonic()
+        track, seen, goal = [], False, None
+        while time.monotonic() - t0 < 15:
+            track.append(apart(s, f, t))
+            fleeing = any(r["skill"] == "flee" for r in s.rows(f"SELECT skill FROM activity WHERE id = {f}"))
+            if fleeing and goal is None:
+                goal = s.rows(f"SELECT goal, target, gx, gy, keep FROM steer WHERE id = {f}", "steer")[0]
+            seen = seen or fleeing
+            if seen and not fleeing:
+                break
+            time.sleep(0.3)
+        track.append(apart(s, f, t))
+        # A plan step's failure is told at the graph's next evaluation.
+        time.sleep(1.5)
+        told = [r["text"] for r in s.rows(f"SELECT id, text FROM experience WHERE observer = {f}") if r["id"] > since]
+        cornered = any("cornered" in x for x in told)
+        seen_at_end = in_sight(body_at(s, f), body_at(s, t))
+        falls = [(a, b) for a, b in zip(track, track[1:]) if b < a - 1.0]
+        results.append({"spot": [px, py], "way": round(d, 3), "fleer": f, "threat": t, "start": start, "end": track[-1], "cornered": cornered, "seen_at_end": seen_at_end, "falls": falls, "goal": goal, "told": told[-4:], "track": track})
+        s.graph(f, {"wait": 300})
+    (s.out / f"{s.name}-flights.json").write_text(json.dumps(results, indent=2) + "\n")
+    s.expect("no flight is cornered", all(not r["cornered"] for r in results), [(r["spot"], r["told"]) for r in results if r["cornered"]])
+    # A flight ends `flee_clear` farther, or sooner once the threat is out of the fleer's sight
+    # (a graph's flee step ends when what it fled is no longer perceived: beyond day sight, 11 m,
+    # or behind a wall or rock).
+    s.expect("every flight gets clear: 6 m farther than it began, or out of the threat's sight", all(r["end"] >= r["start"] + 6.0 or not r["seen_at_end"] for r in results), [(r["spot"], r["start"], r["end"], r["seen_at_end"]) for r in results])
+    s.expect("no flight closes on the threat by more than a stride", all(not r["falls"] for r in results), [(r["spot"], r["falls"]) for r in results if r["falls"]])
+
+
 def open_patch(s, size=14, avoid=()):
     """The centre of a `size` × `size` square of walkable tiles (nothing that blocks sight or the
     foot in it), for movement that needs room on every side; with `avoid`, more than 12 m from
@@ -4209,7 +4306,7 @@ def owners(s):
         s.expect("someone of the owner's community is told whose it is, by name", entry is not None and owner_name in (entry.get("home_of"), entry.get("by")), {"entry": entry, "owner": owner_name})
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
 
 
 def goods(s):
