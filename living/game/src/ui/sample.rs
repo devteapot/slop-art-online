@@ -214,23 +214,25 @@ pub fn fill(
     model.log = log;
 
     // Me.
-    let mut statuses = vec![Status { kind: StatusKind::Hungry, tone: Tone::Warn }];
+    // Sample statuses as a world's `status_of` might say them (no world here).
+    let st_ = |name: &str, tone: Tone, text: &str| StatusView { name: name.into(), tone, text: text.into() };
+    let mut statuses = vec![st_("hungry", Tone::Warn, "Hungry")];
     let (hp, energy) = match (s.lowhp, s.cooldown) {
         (true, _) => (34.0, 41.0),
         (_, true) => (168.0, 22.0),
         _ => (168.0, 64.0),
     };
-    if energy < 35.0 {
-        statuses.push(Status { kind: StatusKind::Tired, tone: Tone::Warn });
+    if energy < 30.0 {
+        statuses.push(st_("tired", Tone::Warn, "Tired"));
     }
     if s.lowhp {
-        statuses.push(Status { kind: StatusKind::InCombat, tone: Tone::Bad });
-        statuses.push(Status { kind: StatusKind::Wasting, tone: Tone::Bad });
+        statuses.push(st_("wasting", Tone::Bad, "Losing health"));
     } else {
-        statuses.push(Status { kind: StatusKind::Recovering, tone: Tone::Good });
+        statuses.push(st_("recovering", Tone::Good, "Recovering"));
     }
+    let meters = vec![MeterView { name: "health".into(), label: "Health".into(), value: hp, max: 200.0 }, MeterView { name: "energy".into(), label: "Energy".into(), value: energy, max: 100.0 }];
     let hurt = if s.lowhp { if still { 0.6 } else { (1.0 - ((t % 2.4) / 0.8) as f32).clamp(0.0, 1.0) } } else { 0.0 };
-    model.me = Some(Me { name: my_name, hp, max_hp: 200.0, energy, max_energy: 100.0, statuses, hurt });
+    model.me = Some(Me { name: my_name, hp, max_hp: 200.0, energy, max_energy: 100.0, meters, statuses, pools: Vec::new(), hurt });
 
     // Skills.
     let cd = |total: f32, phase: f32| {

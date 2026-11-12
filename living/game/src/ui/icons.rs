@@ -73,6 +73,17 @@ pub enum ItemMark {
 
 pub const ITEM_MARKS: [ItemMark; 14] = [ItemMark::Berries, ItemMark::Bread, ItemMark::Meat, ItemMark::Arrow, ItemMark::Bow, ItemMark::Spear, ItemMark::Wood, ItemMark::Stone, ItemMark::Herb, ItemMark::Torch, ItemMark::Cloth, ItemMark::Tablet, ItemMark::Tool, ItemMark::Bundle];
 
+/// An item's drawing by its icon id, else by its group's place in the rules' `ITEM_GROUPS`
+/// (append-only: food, tool, material, garment, money, fuel, weapon, glass), so no item or group
+/// is named here; else the bundle.
+pub fn item_or_group(icon: &str, group: &str) -> ItemMark {
+    const BY_GROUP: [ItemMark; 8] = [ItemMark::Bread, ItemMark::Tool, ItemMark::Stone, ItemMark::Cloth, ItemMark::Tablet, ItemMark::Wood, ItemMark::Spear, ItemMark::Stone];
+    match item_mark(icon) {
+        ItemMark::Bundle => living_rules::ui::ITEM_GROUPS.iter().position(|g| *g == group).and_then(|i| BY_GROUP.get(i).copied()).unwrap_or(ItemMark::Bundle),
+        m => m,
+    }
+}
+
 /// The pack's drawing for an item, by words in its rules name (presentation only: an item the
 /// rules add gets the bundle until it is drawn).
 pub fn item_mark(item: &str) -> ItemMark {

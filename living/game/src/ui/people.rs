@@ -122,7 +122,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
             t.met.entry(who).or_default().introduced_ms = Some(e.at_ms);
             t.events.push((e.at_ms, wood::readable(&e.text)));
         } else if matches!(e.kind.as_str(), "act" | "record") {
-            t.events.push((e.at_ms, crate::verbs::outcome_text(&e.text).1));
+            t.events.push((e.at_ms, net.conn.as_ref().map_or_else(|| crate::verbs::outcome_text(&e.text).1, |c| crate::verbs::outcome_of(c, &e).1)));
         }
     }
     // A name the rules gave since: an event too.
@@ -774,10 +774,11 @@ pub fn proposals(conn: &DbConnection, now_ms: u64) -> Vec<Proposal> {
     out
 }
 
-/// One person's proposals to me, oldest first: the cards of their window, in order.
+/// One person's proposals, the cards of their window in order: those I can answer first, oldest
+/// first, then my own offer to them.
 fn of_person(ps: &[Proposal], from: u32) -> Vec<&Proposal> {
     let mut v: Vec<&Proposal> = ps.iter().filter(|p| p.from == from).collect();
-    v.sort_by_key(|p| (p.at_ms, p.key));
+    v.sort_by_key(|p| (matches!(p.key, Standing::Mine(_)), p.at_ms, p.key));
     v
 }
 
