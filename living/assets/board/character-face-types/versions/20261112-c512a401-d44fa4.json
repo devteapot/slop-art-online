@@ -1,0 +1,61 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-c512a401-d44fa4",
+ "published": "2026-11-12T02:07:24+01:00",
+ "imported": "2026-11-12T02:07:24+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, outfits: 26 shared outfit piece files and whole people composed from shared files (type, hair, outfit pieces; identity and build by bones). Each attached mesh matches the rule to 0.000 mm; against a person's own file clothes differ by 2 to 10 mm. Beards, stubble and lines are not overlay styles yet, so a composed man has none.",
+ "source": {
+  "commit": "c512a40160b295d7273dcfa34cb60d547504c889",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "4f480174924efff22b1e13cf41f01d1e33bb0c99439041803eed06bcedcd5c9b",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "people-composed-and-baked: three Cullet residents composed by compose.py --person from a type's file, a hair style's file and outfit piece files, with identity by bones and build by the recipe's proportions, above the same people from their own per-person files; both shown as recipes at their heights, moving on the shared clips; the vroid member is the reference in the same views; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-c512a401-d44fa4",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "50f68a5b3cc58b503d9fad42a34f0f8e44ed85a7e646d9e783f0920ff1db438c",
+   "shots": [
+    "people-composed-and-baked"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "5b5de833646ba97ae3787e6892abf1858d02ac5cad8b6597ee97e2ed6ae7935d",
+   "shots": [
+    "people-composed-and-baked"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "1640779bdcd2b63a74c1057e4a7f21fb52f82ee1c0b15974255e4fed6e720c4c",
+   "shots": [
+    "people-composed-and-baked"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
