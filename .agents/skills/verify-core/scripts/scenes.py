@@ -4539,7 +4539,67 @@ def owners_away(s, house, owner, owner_name, fellow, newcomer):
         s.call("install_script", base, check=False)
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "pursue_last_seen": pursue_last_seen, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
+
+def apart_intent(s):
+    """`apart` on the movement intents (docs/PACK_MIND.md, A5): bodies holding `keep_distance`
+    3-5 m from one standing person, bunched on one side at the start, spread round it when each
+    also keeps `apart` m from others of its own kind it sees, and stay bunched without it. The
+    same for four people and for four wolves (any kind; a wolf's `keep_distance` is no attack,
+    so no dare applies). Also: `apart` is refused on an intent that does not take it and out of
+    its range, and with no one of its kind near a body holds its band as before."""
+    c = open_patch(s, 16)
+    centre, *ring = s.people(5)
+    s.graph(centre, {"wait": 300})
+    s.call("place_at", centre, *c)
+    # Awake ones: a sleeper (a `slumber` row or a sleep under way) keeps lying where it is,
+    # whatever graph it is given, until something wakes it.
+    sleeping = {r["actor"] for r in s.rows("SELECT actor FROM slumber")} | {r["id"] for r in s.rows("SELECT id, skill FROM activity") if r["skill"] == "sleep"}
+    wolves = [w["id"] for w in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if w["stage"] >= 2 and w["id"] not in sleeping][:4]
+    s.expect("four grown wolves, awake, to use", len(wolves) == 4, {"awake": wolves, "asleep": sorted(sleeping)})
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    starts = [(-4.0, 0.0), (-4.0, 0.8), (-4.3, -0.7), (-3.7, 0.4)]
+
+    def coverage(ids):
+        t = now()
+        cx, cy = body_at(s, centre, t)
+        b = sorted(math.atan2(body_at(s, i, t)[1] - cy, body_at(s, i, t)[0] - cx) % (2 * math.pi) for i in ids)
+        gaps = [b[k + 1] - b[k] for k in range(len(b) - 1)] + [b[0] + 2 * math.pi - b[-1]]
+        dists = [math.dist(body_at(s, i, t), (cx, cy)) for i in ids]
+        near = min(math.dist(body_at(s, i, t), body_at(s, j, t)) for i in ids for j in ids if i < j)
+        return {"coverage": round(math.degrees(2 * math.pi - max(gaps)), 1), "dists": [round(d, 2) for d in dists], "nearest_pair": round(near, 2)}
+
+    out = {}
+    for kind, ids in (("people", ring), ("wolves", wolves)):
+        for arm, extra in (("without", {}), ("apart4", {"apart": 4}), ("apart6", {"apart": 6})):
+            for i, (dx, dy) in zip(ids, starts):
+                s.graph(i, {"wait": 300})
+                s.call("place_at", i, c[0] + dx, c[1] + dy)
+            time.sleep(1.5)
+            for i in ids:
+                s.graph(i, {"do": {"skill": "keep_distance", "target": {"id": centre}, "min": 3, "max": 5, "qty": 60, **extra}})
+            time.sleep(14)
+            out[f"{kind}-{arm}"] = coverage(ids)
+            for i in ids:
+                s.graph(i, {"wait": 300})
+            for i in ids:
+                s.call("place_at", i, c[0] + 12, c[1] + 12 + ids.index(i))
+            time.sleep(0.5)
+    (s.out / f"{s.name}-apart.json").write_text(json.dumps(out, indent=1) + "\n")
+    for kind in ("people", "wolves"):
+        w0, w4, w6 = out[f"{kind}-without"], out[f"{kind}-apart4"], out[f"{kind}-apart6"]
+        s.expect(f"{kind}: without apart they stay bunched on one side (coverage under 90°)", w0["coverage"] < 90, w0)
+        s.expect(f"{kind}: apart 4 spreads them round it (coverage at least 150°, nearest pair at least 3 m)", w4["coverage"] >= 150 and w4["nearest_pair"] >= 3.0, w4)
+        s.expect(f"{kind}: apart 6 spreads them wider than apart 4", w6["coverage"] > w4["coverage"], {"apart4": w4["coverage"], "apart6": w6["coverage"]})
+        s.expect(f"{kind}: with apart each still holds its band (2.5-5.5 m)", all(2.5 <= d <= 5.5 for d in w4["dists"] + w6["dists"]), {"apart4": w4["dists"], "apart6": w6["dists"]})
+    # Refusals: apart on an intent that does not take it, and out of its range.
+    a = ring[0]
+    for node, words in (({"do": {"skill": "back_off", "target": {"id": centre}, "apart": 4}}, "`apart` is for"),
+                        ({"do": {"skill": "circle", "target": {"id": centre}, "apart": 0.5}}, "from 1 to 12")):
+        r = s.call("set_behavior", a, json.dumps(node), check=False)
+        said = (r.stdout or "") + (r.stderr or "")
+        s.expect(f"refused: {words}", r.returncode != 0 and words in said, (r.returncode, said[-300:]))
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check, "pursue_last_seen": pursue_last_seen}
 
 
 def goods(s):
@@ -5051,6 +5111,7 @@ SCENES["committed"] = committed
 SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners
 SCENES["intents"] = intents
+SCENES["apart"] = apart_intent
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
 
