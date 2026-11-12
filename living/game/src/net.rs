@@ -83,6 +83,8 @@ const PERCEIVED: &[&str] = &[
     // Offers to me and mine (a few rows, each gone when taken, withdrawn or out of time), and my
     // records (an agreement proposed to me changes what Accept does): `ui/people.rs`.
     "SELECT * FROM my_offers",
+    // Whom my character knows by name (owner-known): a house is "{name}'s house" only then.
+    "SELECT * FROM my_known_names",
     "SELECT * FROM my_records",
     // What I hear but don't see (rows only while the world's `fov_on` law is on): `heardmark.rs`.
     "SELECT * FROM heard_sounds",

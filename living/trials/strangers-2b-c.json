@@ -1,0 +1,46 @@
+{
+ "extends": "strangers-c",
+ "title": "Strangers stage 2b: arm C, with a walk along the Strand",
+ "about": "Stage 2b (docs/STRANGERS.md): as `strangers-c`, but after its stand at the arrival point the newcomer walks the Strand as a player walks the town: down from the Counting House yard to the quay and west along it, past the Fish Steps (about 6 m off), where Ingrid Morrow mends; then it stands at the densest group. Plan-local to world: (510 + x, 784 - y); the Strand is y = 5.",
+ "human": {
+  "stands": [
+   {
+    "at": "arrival",
+    "s": 300
+   },
+   {
+    "walk": [
+     [
+      550.0,
+      779.0
+     ],
+     [
+      530.0,
+      779.0
+     ],
+     [
+      510.0,
+      779.0
+     ],
+     [
+      490.0,
+      779.0
+     ],
+     [
+      470.0,
+      779.0
+     ]
+    ],
+    "name": "the Strand",
+    "per_point_s": 45
+   },
+   {
+    "at": "group",
+    "s": 300
+   }
+  ]
+ },
+ "variants": [
+  "strangers-control"
+ ]
+}

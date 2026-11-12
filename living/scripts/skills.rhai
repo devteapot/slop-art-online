@@ -1597,6 +1597,12 @@ fn winded(a) {
 //              `<skill>_missile`), "facing" (a held guard), "dash" (a dodge), "none"
 //   timed      the combat timing above (one windup at a time, recovery, cooldown)
 //   rooted     a player's movement waits while it winds up
+//   committed  once started it runs its whole course (a windup to its release, a dash to its
+//              end), whoever controls the body: no movement key, new plan, condition that stops
+//              holding or target leaving sight ends it; its timing or something physical
+//              (death, a wall in a dash's way) does. Only a dash may cut in on a windup.
+//              A world may switch it per skill in its own laws (an overlay through
+//              `floors::compose`): `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }`.
 //   hostile    aimed at a creature, that creature is its victim and sees it coming
 //   reflex     it takes the body back from a deliberate act
 //   real_time  behavior of the moment: a graph's, not a one-off act's
@@ -1612,17 +1618,17 @@ fn winded(a) {
 //   needs      items the skill bar shows as missing (the check stays the rule)
 //   knows      techniques the skill bar shows as unknown
 // A dash moves `<skill>_dist(kind)` tiles at `<skill>_speed(kind)` tiles/s.
-fn strike_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
-fn bowshot_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
-fn firebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
+fn strike_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
+fn bowshot_combat() { #{ aim: "point", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
+fn firebolt_combat() { #{ aim: "point", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
 fn block_combat() { #{ aim: "facing", timed: true, reflex: true, real_time: true, hold_ms: 8000, arc: 75.0, takes: 0.25 } }
-fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
-fn dodge_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true } }
+fn heal_combat() { #{ aim: "self_or_ally", timed: true, committed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
+fn dodge_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true } }
 // A jump is a dash that does not evade: blows and missiles still land while you are in the air.
-fn jump_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true, evades: false } }
-fn attack_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
-fn shoot_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
-fn throw_combat() { #{ aim: "creature", timed: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn jump_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true, evades: false } }
+fn attack_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
+fn shoot_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn throw_combat() { #{ aim: "creature", timed: true, committed: true, hostile: true, reflex: true, real_time: true, force: true } }
 fn threaten_combat() { #{ aim: "creature", hostile: true, closes_in: true, menace: true } }
 fn yield_combat() { #{ reflex: true, force: true } }
 fn seize_combat() { #{ aim: "creature", dares: true } }

@@ -13,6 +13,23 @@ Branch `fix-sleep-thinking`, the trial service `slop-trials-stdb`, the fake mode
   - On the branch, 27 deliberations were "You woke up." requests, and only 1 "new day" was asked on its own (11 on main). The rest of those new days now wait and are asked on waking.
   - The remaining 6 "asleep" deliberations are what 30 s census sampling cannot separate: bodies that woke, thought, and slept again between two samples.
   - The fake's replies make "acts keep failing" the main cause in both variants (about 160), so the cut in a real-model batch should be larger. bi1 measured 23% of deliberations asked while asleep.
+## 2026-11-12 committed-moves, second pass (Spark)
+
+With origin/main `a07f5919` merged and `throw` committed: `minds-commit5-071222` `acts` passes.
+
+## 2026-11-12 committed-moves (Spark)
+
+Branch `committed-moves` from origin/main `2ff786aa`, the trial service, the fake model. `minds-commit-062424`: `acts` passes; `doing` failed on its fixture: the eye's first turn east was refused ("you already face it", which leaves no `skill_use` row) when it already faced east. The case now turns it west first and waits for the east turn's row; `minds-commit3-063146` `doing` passes.
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle` (from main `b657a344`), the trial service `slop-trials-stdb`, the fake model. New case `far-figure` (`minds-farhandle2-*`): 8/8. F, in M's relations as "Walker2 (#266)", stood 5 m off under an overlay making everyone past 4 m far:
+- the scene showed `{"id": 1000000059, "who": "someone too far away to make out"}`;
+- F's line read "Someone too far away to make out said: “Fine weather on the strand today.” {someone too far away to make out=#1000000059}";
+- no line tied the handle to Walker2 or #266;
+- a wave at the handle reached #266;
+- at 2 m the `made_out` row joined the handle to #266 and the scene named Walker2.
+
+The first attempt failed only because F's graph room line was never said; F now speaks by admin `mind_say`. The release mind's tests: 106 pass.
 
 ## 2026-11-12 move-intents (Spark)
 

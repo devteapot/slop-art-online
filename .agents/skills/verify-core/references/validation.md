@@ -8,8 +8,19 @@ Branch `fix-sleep-thinking` from origin/main `2ff786aa`, then merged with `49dfc
 - Regressions on `core-sleepreg1`: `tick` 6/6 and `skirmish` 8/8. `alarms`: 5 PASS; its last check, the meter refusal, failed with "meters: `stamina` is declared twice" instead of "not a my_vitals field". This branch does not change meters; the alarm checks themselves (told once, "Your body: …" asked, told again) pass. `infant` on its fixture (`core-sleepinf1`, about 2 h): 17 PASS, then the last check timed out. The fallback cry did reach exactly the nearest caring adult (#3), but its pending request reads "A baby is crying and looks warm, hungry", without the baby's name, which the check requires. No `slumber` row existed and the carers were resting, not asleep, so the deferral was not involved. The wording comes from `baby_known`, which this branch does not change. It was not rerun on main.
 - `just living-check` passes on the merged head. After merging main `c67bb6e1` (move-intents): `living-check` passes again and `sleeper` 8/8 (`core-sleepm3`).
 - Not run: needs, food, refusal, teach, seize, sight, senses, doing, moves, death-names, say, town, rhythm, lives, laws, lifecycle, family_laws, wildlife, flee, mechanics, steering, fov.
+## 2026-11-12 committed-moves, second pass: throw committed, a world switches it per skill (Spark)
+
+Branch `committed-moves` with origin/main `a07f5919` (move-intents) merged, the trial service. `core-commit5-070457` (default seed): `committed` 8/8, its new part: a routine dodging while it stands (`{"moving": false}`) runs its course (`made way`, 515 ms); with the world's overlay `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }` installed, the same routine's dodge is `broken off` (484 ms) and a jump still `made way`; the shipped script reinstalled. `doing_seen` 11/11, `refusal` 4/4. Island `core-commitk5-070835`: `skirmish` 8/8. Cargo: `script::tests::a_world_switches_committed_per_skill_in_its_own_laws`, `combat::committed_tests` (2). `just living-check` passes on this head.
+
+## 2026-11-12 committed-moves: a started committed move runs its course (Spark)
+
+Branch `committed-moves` from origin/main `2ff786aa` (doing-percept in), the trial service `slop-trials-stdb`, private `CARGO_TARGET_DIR`. Default seed `core-commit-060917`: `committed` (new) 4/4 (a dodge the open way 2.6 m in 516 ms; toward a wall 0.78 m in 166 ms; W killed inside its attack's windup: never released, no blow on Y); `doing_seen` 11/11, its former XFAIL now a pass (field on: the dodge `made way`, the blow missed); `tick` 6/6, `refusal` 4/4, `fov` 18/18; `stamina` failed once (the first walk-speed sample after the run caught a slowdown with 30 breath left: a goto run, untouched here) and passed 26/26 on rerun. Island `core-commitk-062220`: `skirmish` 8/8, `outcomes` 11/11. Cargo: `combat::committed_tests`, `script::tests` (the committed set). `just living-check` passes. After merging main `a07f5919`: `committed` 4/4 and `doing_seen` 11/11 (`core-commitm-065648`); `just living-check` passes on the merged head.
 
 ## 2026-11-12 move-intents: movement intents (Spark)
+
+## 2026-11-12 fix-far-silence (Spark)
+
+Branch `fix-far-silence` (`b9413029`), the trial service `slop-trials-stdb`, default seed. `core-fixfar-ch`: speech `channels` 31/31, with two new checks under an overlay making everyone past 8 m `far`. A line to e (seen, beyond the voice) reads "They are too far away: they could not have heard you." The player's line to d reads "They are out of earshot: they could not have heard you.", in its silence row and its `act_outcome` `why`. Unit test `speech::tests::a_far_figure_is_they_not_the_label_twice`. `just living-check` passed.
 
 Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-intents-053759` (evidence `.local/living/verify/core-intents-053759/`).
 
@@ -21,6 +32,10 @@ Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trial
 
 
 ## 2026-11-12 doing-percept: what someone is visibly doing (Spark)
+
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle`, `core-farhandle`. Results: `stranger_filter` 9/9 (the far check now expects a handle ≥ 1000000000 and no entry with F's id), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7; speech `channels` 29/29 (`core-farhandle-ch`).
 
 Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-doing-052655`.
 

@@ -633,6 +633,15 @@ impl<'a> Ev<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
+        // A committed move under way holds the body until it has run its course (a dash may cut
+        // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
+        if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
+            let own = a.node == id && a.revision == self.st.revision;
+            if !own && crate::combat::held_by(&common::scripts(self.ctx), &a, skill).is_err() {
+                self.status = a.label;
+                return St::Run;
+            }
+        }
         if self.acting {
             // A deliberate act holds the body: the graph's work waits for it, but a reflex
             // (flee, dodge, block, attack, throw) takes the body back at once.
@@ -794,10 +803,17 @@ impl<'a> Ev<'a> {
             // An id is whatever the scene listed under it: a creature first, else a structure or
             // a resource in sight (a depleted bush still resolves, so its own rule says it is bare
             // instead of the body being told it is not there).
-            Target::Id(id) => self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }).or_else(|| self.visible_thing(*id as u64)),
+            Target::Id(id) => {
+                // A mind names a figure it cannot make out by its sighting's handle (far-handle).
+                let id = &crate::far::resolve(self.ctx, self.me.id, *id);
+                self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }).or_else(|| self.visible_thing(*id as u64))
+            }
             Target::Named(name) => {
                 let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
-                let id = ids.into_iter().find(|id| self.ctx.db.character().id().find(*id).map_or(false, |c| c.name.eq_ignore_ascii_case(name)))?;
+                // Only someone whose name this character perceives now: a figure too far away to
+                // make out is not found by a name (it would tell who they are; far-handle).
+                let (ctx, me, now) = (self.ctx, &self.me, self.now);
+                let id = ids.into_iter().find(|id| ctx.db.character().id().find(*id).is_some_and(|c| c.name.eq_ignore_ascii_case(name) && crate::perception::regard(ctx, me, &c, now).name))?;
                 self.visible_creature(id)
             }
             Target::Nearest(f) => self.nearest(f),
@@ -1469,7 +1485,9 @@ impl<'a> Ev<'a> {
                 self.running = Some(a.node);
                 self.status = format!("{} (decided)", a.label);
                 self.path.clear();
-            } else if self.running != Some(a.node) || a.revision != self.st.revision {
+            } else if (self.running != Some(a.node) || a.revision != self.st.revision) && !crate::combat::committed(&common::scripts(ctx), &a) {
+                // A committed move (a dodge, a windup) runs its course though the branch that
+                // started it no longer holds (combat minds §3.2, committed-moves).
                 act::cancel(ctx, a, self.now, None);
             }
         }
