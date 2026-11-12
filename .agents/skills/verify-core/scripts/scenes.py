@@ -4459,6 +4459,38 @@ def apart_intent(s):
         said = (r.stdout or "") + (r.stderr or "")
         s.expect(f"refused: {words}", r.returncode != 0 and words in said, (r.returncode, said[-300:]))
 
+
+def howl_reach(s):
+    """A howl carries by its loudness (docs/PACK_MIND.md, decision 2): the shipped howl has no
+    range of its own but loudness 2, so it reaches twice each listener's hearing (18 m on a world
+    whose people hear 9 m), and, as loud as a shout, it wakes a sleeper within `wake_reach`
+    (`wake_loudness` 2). On an open line: a wolf howls; a person asleep 6 m off wakes, told the
+    howl; one awake 15 m off hears it; one 25 m off does not."""
+    line = open_line(s, length=30)
+    hearing = law_value(s, "wake_reach")
+    sleeping = {r["actor"] for r in s.rows("SELECT actor FROM slumber")} | {r["id"] for r in s.rows("SELECT id, skill FROM activity") if r["skill"] == "sleep"}
+    wolf = next(w["id"] for w in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if w["stage"] >= 2 and w["id"] not in sleeping)
+    near, mid, far = s.people(3)
+    s.graph(wolf, {"wait": 300})
+    s.call("place_at", wolf, *line[0])
+    s.call("place_at", near, *line[6])
+    s.call("place_at", mid, *line[15])
+    s.call("place_at", far, *line[25])
+    s.graph(near, {"seq": [{"do": "sleep"}, {"wait": 300}]})
+    # (`hearing` above is the wake reach: a loud sound wakes a sleeper within it)
+    s.wait(lambda: s.rows(f"SELECT * FROM slumber WHERE actor = {near}"), seconds=30)
+    s.graph(wolf, {"seq": [{"do": {"skill": "signal", "item": "howl"}}, {"wait": 300}]})
+    s.wait(lambda: s.told(mid, "a long howl", "signal"), seconds=20)
+    time.sleep(3)
+    heard = {who: [r["text"] for r in s.told(i, "a long howl", "signal")] for who, i in (("6 m, asleep", near), ("15 m", mid), ("25 m", far))}
+    (s.out / f"{s.name}-heard.json").write_text(json.dumps({"heard": heard, "wake_reach": hearing}, indent=1) + "\n")
+    s.expect("a person 15 m off hears the howl (within twice the island's 9 m)", bool(heard["15 m"]), heard)
+    s.expect("a person 25 m off does not (beyond 18 m)", not heard["25 m"], heard)
+    # (its graph, a sleep then a wait, may lay it down again once woken: what shows the waking
+    # is the line it is told, naming the howl)
+    woke = [t for t in s.told(near, "You woke up: ", "body") if "a long howl" in t["text"]]
+    s.expect("a sleeper 6 m off wakes, told of the howl", bool(woke), s.told(near, "You woke up", "body"))
+
 SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
 
 
@@ -4972,6 +5004,7 @@ SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners
 SCENES["intents"] = intents
 SCENES["apart"] = apart_intent
+SCENES["howl_reach"] = howl_reach
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
 

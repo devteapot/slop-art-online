@@ -263,7 +263,13 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
             || (me.parent_a != 0 && (c.parent_a == me.parent_a || c.parent_b == me.parent_a))
             || ctx.db.relation().by_pair().filter((c.id, from)).next().is_some()
     };
-    for (c, d) in minds_near(ctx, at, sig.range, now, &[from]) {
+    // How far it carries: its own range, or its loudness times each listener's own hearing
+    // (`Signal::reach`), gathered within the widest hearing any listener has.
+    let w = common::world(ctx);
+    for (c, d) in minds_near(ctx, at, sig.reach(common::widest_hearing(ctx)), now, &[from]) {
+        if sig.range <= 0.0 && d > sig.reach(common::senses_of(ctx, c.id, &w, now).hearing) {
+            continue;
+        }
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
         let heard = heard_by(&c);
         let (text, sal) = if c.kind == me.kind {

@@ -1,5 +1,12 @@
 # Core validation record
 
+## 2026-11-12 packs-2: a signal's reach from its loudness, the howl (Spark)
+
+Branch `packs-2` (on `packs` 10709c89), the trial service, private `CARGO_TARGET_DIR`.
+- Cargo `species::tests` passes 5/5. The new test checks the howl's reach: 18 m at 9 m hearing, 24 m at 12 m.
+- `core-howl-190750` (default seed): `howl_reach` passed 3 of 4 checks. It heard at 15 m, not at 25 m, and the sleeper at 6 m was told "You woke up: You hear a long howl from a wolf, west.". The fourth check failed on the fixture: the sleeper's own graph laid it down again, so its `slumber` row was back. The check now reads the waking line. `sleeper` passed 25/25 in the same world.
+- `core-howl2-191145`: `howl_reach` passes 4/4.
+
 ## 2026-11-12 packs: `apart` on the movement intents, wolves given the intents (Spark)
 
 Branch `packs` (origin/main `ce5e09b9` merged), the trial service `slop-trials-stdb`, private `CARGO_TARGET_DIR`.
