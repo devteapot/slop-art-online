@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """What a town's people cost in a connected client: before and after look-1 (docs/LOOK.md §5).
 
-    live_crowd.py --run RUN --out DIR --arm NAME=BINARY[:K=V,...] [--arm ...] [--repeat 3]
+    live_crowd.py --run RUN --out DIR --arm NAME=BINARY[@RUN][:K=V,...] [--arm ...] [--repeat 3]
                   [--still 30] [--far] [--perf FLAGS]
 
-Each arm is the release client at BINARY, with K=V set in its environment (an arm's look
-shim, `LIVING_GAME_PERF` flags such as `nolooks`). The arms run interleaved, `--repeat` times,
+Each arm is the release client at BINARY, with K=V set in its environment (`LIVING_GAME_PERF`
+flags such as `nolooks` as `PERF=…`), on the scratch world `verify-RUN`, or the arm's own `@RUN`
+(a client built against another module's bindings needs a world of that module). The arms run interleaved, `--repeat` times,
 each one through verify-ui's drive.py on the scratch world `verify-RUN`, as a player at its
 arrival with the game camera:
 
@@ -59,9 +60,10 @@ def peak_rss(pid_file, stop, out):
         stop.wait(1.0)
 
 
-def one(a, arm, binary, env, k, out):
+def one(a, arm, binary, env, k, out, run=None):
     name = f"cost-{arm}-{k}"
-    d = os.path.join(ROOT, ".local/living/verify", a.run, "ui", name)
+    run = run or a.run
+    d = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
     os.makedirs(d, exist_ok=True)
     frames = os.path.join(d, "frames.csv")
     perf = ",".join(x for x in ["frames", "diag", "hitch=50", a.perf, env.pop("PERF", "")] if x)
@@ -71,7 +73,7 @@ def one(a, arm, binary, env, k, out):
     plan = f"ready;wait:3;dump:t0;wait:{a.still};dump:t1;walk:90:8;walk:180:8;walk:270:8;dump:t2;quit"
     load0 = load()
     stop, rss = threading.Event(), [0.0]
-    cmd = [sys.executable, DRIVE, "--run", a.run, "--name", name, "--plan", plan, "--client", binary, "--timeout", "600"]
+    cmd = [sys.executable, DRIVE, "--run", run, "--name", name, "--plan", plan, "--client", binary, "--timeout", "600"]
     p = subprocess.Popen(cmd, env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     # drive.py prints the client's pid first.
     pid_file = os.path.join(d, "pid")
@@ -107,7 +109,7 @@ def one(a, arm, binary, env, k, out):
     first_sight = [l for l in hitches if re.search(r"\b[1-9]\d* (characters|converted)\b", l)]
     people = re.search(r"\[people (\d+), (\d+) materials, (\d+)k, (\d+) mesh-material pairs\]", views[-1]) if views else None
     opaque = re.search(r"opaque (\d+) sets", batches[-1]) if batches else None
-    r = dict(arm=arm, k=k, rc=p.returncode, load_start=round(load0, 1), load_end=round(load1, 1),
+    r = dict(arm=arm, run=run, k=k, rc=p.returncode, load_start=round(load0, 1), load_end=round(load1, 1),
              still_frames=len(still), p50_ms=pct(still, 50), p99_ms=pct(still, 99),
              walk_frames=len(walk), walk_max_ms=max(walk) if walk else None, walk_over_50=sum(1 for x in walk if x > 50),
              hitches=len(hitches), first_sight_hitches=len(first_sight), first_sight_max_ms=max([float(m.group(1)) for l in first_sight for m in [re.search(r"hitch: ([\d.]+) ms", l)] if m] or [0]) or None,
@@ -134,21 +136,22 @@ def main():
     for spec in a.arm:
         name, rest = spec.split("=", 1)
         binary, _, kv = rest.partition(":")
+        binary, _, run = binary.partition("@")
         env = dict(x.split("=", 1) for x in kv.split(",") if x) if kv else {}
-        arms.append((name, binary, env))
+        arms.append((name, binary, env, run or None))
     os.makedirs(a.out, exist_ok=True)
     out = []
     for k in range(a.repeat):
-        for name, binary, env in (arms if k % 2 == 0 else arms[::-1]):
-            one(a, name, binary, dict(env), k, out)
+        for name, binary, env, run in (arms if k % 2 == 0 else arms[::-1]):
+            one(a, name, binary, dict(env), k, out, run)
     summary = {}
-    for name, _, _ in arms:
+    for name, _, _, _ in arms:
         rs = [r for r in out if r["arm"] == name and r["rc"] == 0 and r["p50_ms"]]
         med = lambda key: statistics.median([r[key] for r in rs if r[key] is not None]) if any(r[key] is not None for r in rs) else None
         summary[name] = {key: med(key) for key in ("p50_ms", "p99_ms", "walk_max_ms", "first_sight_hitches", "first_sight_max_ms", "people_meshes", "people_materials", "people_pairs", "opaque_sets", "peak_rss_mib", "composed")}
         summary[name]["runs"] = len(rs)
         summary[name]["load"] = [min([r["load_start"] for r in rs] or [0]), max([r["load_end"] for r in rs] or [0])]
-    json.dump({"run": a.run, "far": a.far, "still_s": a.still, "arms": [(n, b, e) for n, b, e in arms], "runs": out, "summary": summary}, open(os.path.join(a.out, "live_crowd.json"), "w"), indent=1)
+    json.dump({"run": a.run, "far": a.far, "still_s": a.still, "arms": [(n, b, e, r or a.run) for n, b, e, r in arms], "runs": out, "summary": summary}, open(os.path.join(a.out, "live_crowd.json"), "w"), indent=1)
     for name, s in summary.items():
         print(name, json.dumps(s))
 
