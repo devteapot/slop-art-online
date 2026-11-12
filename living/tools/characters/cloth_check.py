@@ -7,7 +7,8 @@
 LINE.json is a person's line (`{"type", "proportions", "styles": {"outfit": [...]}, "belly"}`),
 or a `NAME.params.json` whose `person` is one. The person is posed the client's way: the type's
 skeleton with the line's proportions (characters.rs `bone_scale`, as person_check.py repeats it),
-the belly's bone forward, each piece's `Cloth` mesh skinned to the bones by name with its own bind
+the belly's bone forward and scaled as the spine is (`--old-belly`: not scaled, as before the
+body pass's client half), each piece's `Cloth` mesh skinned to the bones by name with its own bind
 matrices, and a clip's rotations on the bones (a clip keys rotations and the hips' place; the
 hips' place does not change what lies over what, so it is left at rest).
 
@@ -54,7 +55,7 @@ def quat(q):
 class Skeleton:
     """The type's bones with a line's proportions; `pose` gives each bone's skinning frame."""
 
-    def __init__(self, path, proportions, belly=0.0):
+    def __init__(self, path, proportions, belly=0.0, belly_scaled=True):
         j, _ = read_glb(path)
         self.nodes = [n for n in j["nodes"]]
         self.parent = {c: i for i, n in enumerate(self.nodes) for c in n.get("children", [])}
@@ -62,6 +63,8 @@ class Skeleton:
         self.rest = {i: np.array(n.get("translation", [0, 0, 0]), float) for i, n in enumerate(self.nodes)}
         self.scale = {i: person_check.bone_scale(n.get("name", ""), proportions) for i, n in enumerate(self.nodes)}
         b = self.index.get("J_Fit_Belly")
+        if b is not None and not belly_scaled:
+            self.scale[b] = None  # a client from before the body pass: the belly's bone has no scale
         if b is not None:
             self.rest[b] = self.rest[b] + np.array([0.0, 0.0, -belly * BELLY_M])
 
@@ -221,10 +224,11 @@ def main():
     ap.add_argument("--least", type=float, default=2.0, help="millimetres an inner piece may stand out of an outer one (default 2)")
     ap.add_argument("--json")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--old-belly", action="store_true", help="pose as a client from before the body pass does: `J_Fit_Belly` without the spine's scale")
     a = ap.parse_args()
     doc = json.load(open(a.line))
     line = doc.get("person", doc)
-    sk = Skeleton(os.path.join(a.types, line["type"] + ".glb"), line.get("proportions") or {}, float(line.get("belly", 0.0)))
+    sk = Skeleton(os.path.join(a.types, line["type"] + ".glb"), line.get("proportions") or {}, float(line.get("belly", 0.0)), belly_scaled=not a.old_belly)
     pieces = [Piece(os.path.join(a.styles, "outfit", n + ".glb")) for n in line["styles"]["outfit"]]
     pairs = [(i, o) for i in pieces for o in pieces if over(i, o)]
     library = clips_compare.clips(a.clips)[0] if a.clip and os.path.exists(a.clips) else {}

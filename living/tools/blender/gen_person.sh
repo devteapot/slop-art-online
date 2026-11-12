@@ -108,6 +108,12 @@ for p in "${people[@]}"; do
         python3 living/tools/characters/compose.py "$f" "$f" --params "$dir/$name.params.json"
       fi
     done
+    # The shared clip file (`clips=<preset>`) is read for its clips alone: its skeleton, its
+    # clips and the figure's bounds stay, and the person's meshes and pictures go
+    # (share.py clipfile). The builder's own copy beside it stays a whole person.
+    if [ "$name" = own-clips ]; then
+      python3 living/tools/characters/share.py clipfile "$dir/anim/$name.glb"
+    fi
   done
   rm -f "$log"
 done

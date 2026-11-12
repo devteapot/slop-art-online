@@ -1,6 +1,6 @@
 {
  "about": "Test cases for the look data (living/tools/characters/look_lines.py cases; docs/CHARACTERS.md, 'The look book'). Written with looks.json of the same generation.",
- "generation": "c4-aa393793",
+ "generation": "c4-e61b01c0",
  "key_hash": {
   "rule": "lk_ + the first 16 hex digits of SHA-256 over the UTF-8 canonical JSON of the line's drawn fields: type, height, proportions, identity, colors, styles, belly, grey; keys sorted at every depth, separators ',' and ':', no spaces",
   "cases": [
@@ -16,87 +16,92 @@
    },
    {
     "line": {
-     "type": "child-u-a",
-     "height": 1.47,
+     "type": "adult-f-b",
+     "height": 1.67,
      "proportions": {
-      "legs": 0.902,
-      "arms": 0.925,
-      "torso": 0.961,
-      "neck": 0.852,
-      "head": 1.191,
-      "shoulders": 0.913,
-      "build": 0.901
+      "legs": 1.075,
+      "arms": 0.9,
+      "torso": 0.84,
+      "shoulders": 0.584,
+      "build": 1.058,
+      "hips": 0.92,
+      "hands": 0.75,
+      "feet": 0.9,
+      "head": 0.989
      },
      "identity": {
-      "cranium_width": -0.611,
-      "cranium_depth": 0.54,
-      "cranium_height": 0.036,
-      "forehead": -0.126,
-      "brow_ridge": -0.148,
-      "face_length": -0.315,
-      "face_width": -0.571,
-      "front_breadth": -0.206,
-      "cheekbones": -0.138,
-      "cheekbone_height": 0.159,
-      "cheeks": 0.254,
-      "jaw_width": -0.704,
-      "jaw_angle": -0.611,
-      "jaw_square": -0.28,
-      "chin_length": 0.128,
-      "chin_width": 0.348,
-      "chin_forward": -0.077,
-      "eye_spacing": -0.36,
-      "eye_height": -0.143,
-      "socket_depth": -0.464,
-      "eye_size": 0.208,
-      "eye_open": 0.306,
-      "eye_tilt": -0.113,
-      "iris_size": 0.171,
-      "brow_height": 0.353,
-      "brow_tilt": 0.072,
-      "brow_thickness": -0.021,
-      "brow_length": -0.153,
-      "nose_length": -0.383,
-      "nose_width": -0.261,
-      "nose_bridge": -0.298,
-      "nose_tip": 0.002,
-      "mouth_height": 0.259,
-      "mouth_width": -0.2,
-      "lip_fullness": 0.127,
-      "mouth_curve": -0.023,
-      "ear_size": -0.006,
-      "ear_out": 0.013
+      "cranium_width": -0.332,
+      "cranium_depth": 0.079,
+      "cranium_height": 0.131,
+      "forehead": 0.241,
+      "brow_ridge": 0.707,
+      "face_length": -0.221,
+      "face_width": -0.093,
+      "front_breadth": -0.278,
+      "cheekbones": -0.023,
+      "cheekbone_height": -0.002,
+      "cheeks": -0.099,
+      "jaw_width": -0.526,
+      "jaw_angle": 0.204,
+      "jaw_square": 0.041,
+      "chin_length": -0.345,
+      "chin_width": 0.12,
+      "chin_forward": -0.158,
+      "eye_spacing": -0.171,
+      "eye_height": 0.148,
+      "socket_depth": -0.188,
+      "eye_size": 0.114,
+      "eye_open": -0.505,
+      "eye_tilt": -0.284,
+      "iris_size": -0.191,
+      "brow_height": -0.18,
+      "brow_tilt": -0.323,
+      "brow_thickness": 0.309,
+      "brow_length": 0.131,
+      "nose_length": 0.152,
+      "nose_width": -0.037,
+      "nose_bridge": 0.327,
+      "nose_tip": -0.296,
+      "mouth_height": 0.174,
+      "mouth_width": -0.302,
+      "lip_fullness": -0.007,
+      "mouth_curve": -0.077,
+      "ear_size": 0.268,
+      "ear_out": -0.013
      },
      "colors": {
-      "skin": "#e1b69d",
-      "hair": "#662e1a",
-      "beard": "#662e1a",
+      "skin": "#eac2aa",
+      "hair": "#131111",
+      "beard": "#131111",
       "outfit": {
-       "smock_58-m": "#596776",
-       "smock_bands-m": "#969286",
-       "jersey_smock-m": "#2c4e4c",
-       "apron_58-m": "#b5b1a3",
-       "trousers-m": "#2d2f36",
-       "boots-m": "#32271f"
+       "smock_58-f": "#406766",
+       "smock_bands-f": "#928d82",
+       "jersey_smock-f": "#2c4e4c",
+       "apron_58-f": "#b6b3a5",
+       "trousers-f": "#2d2f36",
+       "boots-f": "#32271f",
+       "kerchief": "#576677"
       },
-      "eyes": "#2c4053",
-      "eyes_natural": "#4c789e"
+      "eyes": "#384247",
+      "eyes_natural": "#6b808a"
      },
      "styles": {
-      "hair": "bob.2",
+      "hair": "kerchief",
       "outfit": [
-       "smock_58-m",
-       "smock_bands-m",
-       "jersey_smock-m",
-       "apron_58-m",
-       "trousers-m",
-       "boots-m"
+       "smock_58-f",
+       "smock_bands-f",
+       "jersey_smock-f",
+       "apron_58-f",
+       "trousers-f",
+       "boots-f",
+       "kerchief"
       ],
       "overlays": []
-     }
+     },
+     "belly": 0.063
     },
-    "canonical": "{\"colors\":{\"beard\":\"#662e1a\",\"eyes\":\"#2c4053\",\"eyes_natural\":\"#4c789e\",\"hair\":\"#662e1a\",\"outfit\":{\"apron_58-m\":\"#b5b1a3\",\"boots-m\":\"#32271f\",\"jersey_smock-m\":\"#2c4e4c\",\"smock_58-m\":\"#596776\",\"smock_bands-m\":\"#969286\",\"trousers-m\":\"#2d2f36\"},\"skin\":\"#e1b69d\"},\"height\":1.47,\"identity\":{\"brow_height\":0.353,\"brow_length\":-0.153,\"brow_ridge\":-0.148,\"brow_thickness\":-0.021,\"brow_tilt\":0.072,\"cheekbone_height\":0.159,\"cheekbones\":-0.138,\"cheeks\":0.254,\"chin_forward\":-0.077,\"chin_length\":0.128,\"chin_width\":0.348,\"cranium_depth\":0.54,\"cranium_height\":0.036,\"cranium_width\":-0.611,\"ear_out\":0.013,\"ear_size\":-0.006,\"eye_height\":-0.143,\"eye_open\":0.306,\"eye_size\":0.208,\"eye_spacing\":-0.36,\"eye_tilt\":-0.113,\"face_length\":-0.315,\"face_width\":-0.571,\"forehead\":-0.126,\"front_breadth\":-0.206,\"iris_size\":0.171,\"jaw_angle\":-0.611,\"jaw_square\":-0.28,\"jaw_width\":-0.704,\"lip_fullness\":0.127,\"mouth_curve\":-0.023,\"mouth_height\":0.259,\"mouth_width\":-0.2,\"nose_bridge\":-0.298,\"nose_length\":-0.383,\"nose_tip\":0.002,\"nose_width\":-0.261,\"socket_depth\":-0.464},\"proportions\":{\"arms\":0.925,\"build\":0.901,\"head\":1.191,\"legs\":0.902,\"neck\":0.852,\"shoulders\":0.913,\"torso\":0.961},\"styles\":{\"hair\":\"bob.2\",\"outfit\":[\"smock_58-m\",\"smock_bands-m\",\"jersey_smock-m\",\"apron_58-m\",\"trousers-m\",\"boots-m\"],\"overlays\":[]},\"type\":\"child-u-a\"}",
-    "key": "lk_0047dfba6873aa7a"
+    "canonical": "{\"belly\":0.063,\"colors\":{\"beard\":\"#131111\",\"eyes\":\"#384247\",\"eyes_natural\":\"#6b808a\",\"hair\":\"#131111\",\"outfit\":{\"apron_58-f\":\"#b6b3a5\",\"boots-f\":\"#32271f\",\"jersey_smock-f\":\"#2c4e4c\",\"kerchief\":\"#576677\",\"smock_58-f\":\"#406766\",\"smock_bands-f\":\"#928d82\",\"trousers-f\":\"#2d2f36\"},\"skin\":\"#eac2aa\"},\"height\":1.67,\"identity\":{\"brow_height\":-0.18,\"brow_length\":0.131,\"brow_ridge\":0.707,\"brow_thickness\":0.309,\"brow_tilt\":-0.323,\"cheekbone_height\":-0.002,\"cheekbones\":-0.023,\"cheeks\":-0.099,\"chin_forward\":-0.158,\"chin_length\":-0.345,\"chin_width\":0.12,\"cranium_depth\":0.079,\"cranium_height\":0.131,\"cranium_width\":-0.332,\"ear_out\":-0.013,\"ear_size\":0.268,\"eye_height\":0.148,\"eye_open\":-0.505,\"eye_size\":0.114,\"eye_spacing\":-0.171,\"eye_tilt\":-0.284,\"face_length\":-0.221,\"face_width\":-0.093,\"forehead\":0.241,\"front_breadth\":-0.278,\"iris_size\":-0.191,\"jaw_angle\":0.204,\"jaw_square\":0.041,\"jaw_width\":-0.526,\"lip_fullness\":-0.007,\"mouth_curve\":-0.077,\"mouth_height\":0.174,\"mouth_width\":-0.302,\"nose_bridge\":0.327,\"nose_length\":0.152,\"nose_tip\":-0.296,\"nose_width\":-0.037,\"socket_depth\":-0.188},\"proportions\":{\"arms\":0.9,\"build\":1.058,\"feet\":0.9,\"hands\":0.75,\"head\":0.989,\"hips\":0.92,\"legs\":1.075,\"shoulders\":0.584,\"torso\":0.84},\"styles\":{\"hair\":\"kerchief\",\"outfit\":[\"smock_58-f\",\"smock_bands-f\",\"jersey_smock-f\",\"apron_58-f\",\"trousers-f\",\"boots-f\",\"kerchief\"],\"overlays\":[]},\"type\":\"adult-f-b\"}",
+    "key": "lk_000f47c0d8aa4056"
    },
    {
     "line": {
@@ -197,8 +202,8 @@
     "age": 1.0,
     "stage": 0,
     "band": 0,
-    "look": "lp_8b270f5a656da347",
-    "line": "lk_471440b67b445727",
+    "look": "lp_3065dabe208a6201",
+    "line": "lk_120567af53642340",
     "bands": [
      0,
      1,
@@ -212,8 +217,8 @@
     "age": 4.0,
     "stage": 1,
     "band": 1,
-    "look": "lp_df173c30c3b8dfa2",
-    "line": "lk_a91170a0e68b56cb",
+    "look": "lp_23ec2b40af13c7d6",
+    "line": "lk_4632c8c384232b78",
     "bands": [
      1,
      2,
@@ -226,7 +231,7 @@
     "age": 11.0,
     "stage": 1,
     "band": 1,
-    "look": "lp_042121d508ed413c",
+    "look": "lp_f3a7f61b2c083e8a",
     "line": "lk_b689a9235631fe0f",
     "bands": [
      1,
@@ -240,8 +245,8 @@
     "age": 12.0,
     "stage": 1,
     "band": 2,
-    "look": "lp_08c4634c7b4a4b11",
-    "line": "lk_546b8c239f525b53",
+    "look": "lp_0bc594473a415a89",
+    "line": "lk_436f798280bfba08",
     "bands": [
      2,
      3,
@@ -253,8 +258,8 @@
     "age": 14.0,
     "stage": 1,
     "band": 2,
-    "look": "lp_63aada5c52f8f219",
-    "line": "lk_2bf5c26b887e5947",
+    "look": "lp_016d80a90c681f3f",
+    "line": "lk_f56a06e69454dcb0",
     "bands": [
      2,
      3,
@@ -266,8 +271,8 @@
     "age": 15.0,
     "stage": 2,
     "band": 2,
-    "look": "lp_661359867780379b",
-    "line": "lk_10711616dc5dfe51",
+    "look": "lp_767f3b33f5045d5c",
+    "line": "lk_dd9728d2af89c072",
     "bands": [
      2,
      3,
@@ -279,8 +284,8 @@
     "age": 17.0,
     "stage": 2,
     "band": 2,
-    "look": "lp_b050e2930f6fd8fd",
-    "line": "lk_8079507ad90ef697",
+    "look": "lp_b06496dd44b9a3c3",
+    "line": "lk_1111e9726fcead31",
     "bands": [
      2,
      3,
@@ -292,8 +297,8 @@
     "age": 18.0,
     "stage": 2,
     "band": 3,
-    "look": "lp_d0d73ccd9992c895",
-    "line": "lk_6752972fbeffcf2d",
+    "look": "lp_ce662c1882b1d5a7",
+    "line": "lk_5212bebd8f5df2bf",
     "bands": [
      3,
      4
@@ -304,7 +309,7 @@
     "age": 59.0,
     "stage": 2,
     "band": 3,
-    "look": "lp_32a4e93537036124",
+    "look": "lp_12933382040a88ac",
     "line": "lk_c0314bf12a48f17e",
     "bands": [
      3,
@@ -316,8 +321,8 @@
     "age": 61.0,
     "stage": 3,
     "band": 4,
-    "look": "lp_462149ddf24067f8",
-    "line": "lk_19a788644b24476e",
+    "look": "lp_8449e7c4c9ff47bd",
+    "line": "lk_56dfdef129f3ec4f",
     "bands": [
      4
     ]
@@ -327,8 +332,8 @@
     "age": 70.0,
     "stage": 3,
     "band": 4,
-    "look": "lp_5430b95b52478a84",
-    "line": "lk_20b3235430a63ee3",
+    "look": "lp_c68dd53ae0be7adf",
+    "line": "lk_5ec175213627ec13",
     "bands": [
      4
     ]

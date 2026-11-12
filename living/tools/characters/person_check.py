@@ -44,7 +44,10 @@ def bone_scale(name, p):
     lerp = lambda a, b, t: a + (b - a) * t
     chest = g * get("shoulders")
     side = name[8:] if name.startswith(("J_Bip_L_", "J_Bip_R_")) else None
+    # `J_Fit_Belly` takes the spine's own scale: the client's half of the body pass (2026-11-12).
+    # Before it the client gave the bone none, and what it carried was not scaled with a build.
     table = {"J_Bip_C_Hips": ("own", (g * get("hips"), 1.0, g * get("hips") ** 0.5)), "J_Bip_C_Spine": ("own", (g * lerp(1.0, get("hips"), 0.5), get("torso"), g)),
+             "J_Fit_Belly": ("own", (g * lerp(1.0, get("hips"), 0.5), get("torso"), g)),
              "J_Bip_C_Chest": ("own", (lerp(g, chest, 0.5), get("torso"), g)), "J_Bip_C_UpperChest": ("own", (chest, get("torso"), g)), "J_Bip_C_Neck": ("own", (g ** 0.8, get("neck"), g ** 0.8)),
              "J_Bip_C_Head": ("all", get("head"))}
     sides = {"Shoulder": ("own", (chest, g, g)), "UpperArm": ("own", (get("arms"), g, g)), "LowerArm": ("own", (get("arms"), g ** 0.85, g ** 0.85)), "Hand": ("all", get("hands")),

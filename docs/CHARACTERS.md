@@ -1919,9 +1919,9 @@ python3 living/tools/characters/cloth_check.py NAME.params.json [--clip idle,wal
 
 **What the client needs:** nothing in code. Proportions are in the lines, the `.m` hair files are named by the lines that wear them, and the back's spheres are in the hair files.
 
-- **One thing the client could do better, not needed for this:** `J_Fit_Belly` has no scale of its own, so what it carries is not scaled with `build`, `torso` or `hips`. Giving it the spine's scale (`bone_scale`: the same vector as `J_Bip_C_Spine`) would cure the lean and strong builds' waists above on both forms. If the client does, `Stance.maps` in `person.py` must give the belly the spine's scale too and the `-f` pieces be built again, in the same bundle.
+- **One thing the client does with the landing** ([the client's half](#the-body-the-landing)): `J_Fit_Belly` takes the spine's own scale. When this part was written it had none, and the `-f` pieces were written for that; they are written for the scaled bone since the landing.
 
-**Look keys change for every woman and girl from 12** (their lines' proportions), for girls under 12 and men who wear `long`, `tail` or `braids` (their hair file's name), and for no one else. The change lands with a new book generation; see [the look book](#the-look-book).
+**Look keys change for nearly everyone,** which I first reported as women alone: every woman and girl from 12 by her line's proportions; girls under 12 and men who wear `long`, `tail` or `braids` by their hair file's name; and most men and children by one or two levels in a jersey's colour, because a line's colour for a piece is measured on the built person and the jersey's shape changed with the cloth part. The change lands with a new book generation: [the body: the landing](#the-body-the-landing).
 
 **What still separates a woman's body from the reference's,** ordered by how much it shows:
 
@@ -1977,6 +1977,55 @@ The body pass, second part (2026-11-12, branch `char-4-body`): how the jersey, s
 2. **The cut.** A smock is still one bell from the waist and a coat a fitted tube; there is no seam, pleat, pocket or lapel that is modelled, only painted bands and patches.
 3. **Sleeves** are smooth tubes with no fold at the elbow, and on a woman's form the sleeve's head stands a little proud of the narrow shoulder.
 4. **Boots** are a man's sea boots made narrower.
+
+### The body: the landing
+
+The silhouettes and the cloth land together (2026-11-12, branch `char-4-body`, after the look-1 pair and looks-tex-1 were on main), as a pair with the client's half. The hands are parked on `char-4-hands` and land later.
+
+**The book's new generation: `c4-e61b01c0`.**
+
+- `look_lines.py book --town living/seeds/cullet.json` appended it: `generations` is `["c4-aa393793", "c4-e61b01c0"]`, and the book holds 1,655 lines, the 887 of the first generation, every one kept, and the 768 the new one adds. 119 lines are the same in both.
+- **Who changes:** 62 of the 64 residents' person entries, all 128 pool entries (548 of their 640 lines), and so everyone a world draws from the pool. See the silhouettes part above for why men's lines change too.
+- **Cullet's world data** (`living/seeds/worlds/cullet/looks.json`, `look-cases.json`) is at the new generation.
+- **The seed** was written by the seed tools, not by hand: `python3 living/tools/author_world.py cullet --compile-only`, then `python3 living/tools/cullet_plan.py`. `cullet_plan.py --check` passes, and `living/seeds/cullet.json` differs from before in its `looks` and its residents' `look` alone.
+- **Checked on the authority** (verify-generation, `generation.py --feature worlds --seeds cullet`, run `generation-worlds-20261112-230748`, on a scratch database): 344 checks, none failed. The world wears `c4-e61b01c0`, `look_line` holds 791 lines, the 64 residents have a look row each, every row resolves, and every one of the 791 keys is in the new book.
+
+**Moving a live world to the new generation (relook).** A world made before this landing wears `c4-aa393793`. Its keys are still in the book, so its people still draw, but a woman's old line has the old proportions and the new `-f` pieces are written for the new ones: she draws wrong (the upper body wide, the torso long) until the world is relooked. Men and children draw as before, a level or two off in a jersey's colour.
+
+1. Publish the world's module built from this landing's seed over the world, with its data kept (`living/tools/stdb publish …` without `--delete-data`, as any update; a world whose module is from before the update guard takes the guard first, [LOOK.md](LOOK.md), "The safe update path"). The seed compiled into the module now carries `looks` of generation `c4-e61b01c0`.
+2. As the world's admin: `living/tools/stdb call -s local <database> relook '"c4-e61b01c0"'`.
+3. What it does ([LOOK.md](LOOK.md) §4): it rewrites `look_line` with the seed's 791 lines and gives every living person one look row. A resident is matched by name and takes their own entry; everyone else (players, newcomers, anyone born since) takes a pool entry by their id. It writes `world.look_book` and one line in the chronicle. It is refused for any generation but the seed's.
+4. **What changes for whom:** every resident keeps their face, hair, colours and clothes, with the new form if a woman. **A person on a pool look keeps their pool entry's number, and that entry is a newly drawn person of the same seed:** the same type and colours, the new form. Clients redraw each person once, with a fade, when their key changes.
+5. **A floor world** reads its looks from the seed it was created with (`floor_seed`), not from the module. `relook` is refused there for any generation but that seed's, and how a floor is given a new seed is not written in [LOOK.md](LOOK.md); it was not tried here.
+6. **Other worlds' data follows the book.** A world whose seed was written against `c4-aa393793` (Brackenford's pool looks, if written before this) names pool entries of the old generation. It still resolves in the book and still draws wrong for women; write its world data again against the new generation and relook it the same way.
+
+**The client's half: `J_Fit_Belly` takes the spine's scale** (for the laptop; nothing in `living/game` was edited here).
+
+- **The change:** in `characters.rs` `bone_scale`, `J_Fit_Belly` gets the vector `J_Bip_C_Spine` gets, `Own(Vec3::new(g * lerp(1.0, p.hips, 0.5), p.torso, g))`. Nothing else: the bone's place already follows the spine (`tf.translation = (rest + belly) * v`).
+- **Why:** the bone carries the front of every jersey, coat, smock, apron and trousers' waist. Without a scale, what it carries does not follow a person's `build`, `torso` or `hips` while the cloth round it does.
+- **The files are written for it since this landing** (`person.py` `Stance.maps`; `person_check.py` and `cloth_check.py` pose the same way): on a client with the change, a belly's own vertices stand where the form puts them on every build.
+- **Until the client has it,** they stand off by this much (the piece's worst vertex, and the middle of the belly's own vertices; `cloth_check.py --old-belly` poses as the old client does):
+
+| Person | Off at most | At the median |
+|---|---|---|
+| a woman, standard build | 10.2 mm | 5.2 mm |
+| a lean woman (build 0.87), coat | 23.6 | 14.2 |
+| a heavy woman (build 1.16), smock | 16.2 | 10.1 |
+| a girl of 12 | 9.6 | 6.5 |
+| a man, standard build | 0 | 0 |
+| a lean man, coat | 19.6 | 9.3 |
+| a heavy man, coat | 23.7 | 11.3 |
+| a child of 8, coat | 12.8 | 6.5 |
+
+- Nothing comes through anything on either client (`cloth_check.py` with and without `--old-belly`, at rest, in `idle` and `walk`): the jersey and the trousers ride the bone together. What the old client shows is a front that is a centimetre or two too flat on the lean and too full on the heavy.
+
+**The clip file carries the skeleton and the clips, and no pictures** (`share.py clipfile`, run by `gen_person.sh` for `clips=<preset>`).
+
+- The shared clip file was the `man` preset whole, with the clips: 5.28 MB here with 29 clips, with his meshes, 15 morph targets and his atlas, which a client decoded and held for nothing.
+- It is now 2.61 MB: the skeleton's 82 nodes, the clips, and one mesh `Figure` of four points and no material, whose bounds are the figure's. The client measures a person's stride against the clip file's figure from its meshes' bounds (`lookdev::figure_height`), so the file still says how tall the figure stood (1.810 m), and the scene's `extras.clip_file.figure_height` says it too. The 29 clips are key for key what they were.
+- **The laptop bakes its own** from its full library, as before; the same command now writes the stripped file. It is not in the bundle.
+
+**The bundle is published twice,** `char-4-composed-<sha>.tar.gz` with PNG pictures and `char-4-composed-<sha>-ktx2.tar.gz` (`pictures.py bundle … --pictures ktx2`, [pictures as KTX2](#pictures-as-ktx2)), with `pictures.py check` on the second.
 
 ### The neck
 
