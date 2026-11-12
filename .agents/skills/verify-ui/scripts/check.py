@@ -1790,7 +1790,47 @@ def houses(run, c):
     c.check(s, "a house of mine: your house", aim("03") == ["your house"], str(aim("03")))
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death, "houses": houses}
+def shot(run, c):
+    """fix-missile-told in the client: an arrow on me is told as a shot, by the shooter as my
+    character perceives them when it sees them, else by the arrow alone; the weapon's note is
+    that line ("A stranger shot you with an arrow: hit for 7. Your weapon is drawn."), never an
+    "attacked" of ours beside it; an unseen shooter (the feed's id 0) is named, targeted and
+    plated by nothing. verify.py's player identity ("Striker", given a bow and arrows, held still)
+    shoots a fresh player at noon on open grass from 6 m (in sight), then, the weapon sheathed
+    again, from 16 m (beyond the 11 m one sees by day, within the bow's 22)."""
+    s = "shot"
+    subprocess.run([sys.executable, V, "player", "--run", run, "join", "Striker"], capture_output=True, text=True)
+    mine = sql_as_player(run, "SELECT * FROM my_characters")
+    striker = next((r["id"] for r in mine if r.get("alive")), None)
+    sname = next((r.get("name") for r in mine if r.get("id") == striker), "Striker")
+    c.check(s, "the shooter is a living player character", striker is not None, str(mine)[:200])
+    if striker is None:
+        return
+    for item, n in (("bow", 1), ("arrow", 6)):
+        call_admin(run, "grant_items", [striker, item, n])
+    call_admin(run, "set_behavior", [striker, json.dumps({"wait": 600})])
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}",
+             f"near=place_at|{striker}|(mx+6.0)|(my)", f"far=place_at|{striker}|(mx+16.0)|(my)", "shoot=player|use_skill|bowshot|{me}|(mx)|(my)"]
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:near;wait:2;dump:00;sync:shoot;wait:2.2;shot:01_seen;dump:01;"
+            "weapon:sheathe;wait:0.6;sync:far;wait:2.5;dump:02;sync:shoot;wait:2.5;shot:02_unseen;dump:03;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"shot-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, syncs=syncs, extra=["--token", tok, "--player", "Target"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("00", "01", "02", "03")}
+    seen = lambda k: {x.get("id") for x in d[k].get("seen") or []}
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    lines = sorted(sql(run, f"SELECT id, kind, subject, text, at_ms FROM experience WHERE observer = {me} AND kind = 'attacked'") if me else [], key=lambda r: r["at_ms"])
+    c.check(s, "the authority told both arrows as shots: by the shooter in sight, by the arrow alone unseen", len(lines) >= 2 and "shot you with" in lines[0]["text"] and lines[0]["subject"] == striker and "could not see" in lines[-1]["text"] and lines[-1]["subject"] == 0, str([(l["subject"], l["text"]) for l in lines])[:400])
+    n1 = d["01"].get("notes") or []
+    c.check(s, "in sight: the shooter is seen, and the note is the authority's shot, the weapon drawn", striker in seen("00") and any("shot you with" in n and "Your weapon is drawn" in n for n in n1) and not any("attacked you" in n for n in n1) and (d["01"].get("extra") or {}).get("drawn") is True, f"{n1}; seen {sorted(seen('00'))}")
+    n3 = d["03"].get("notes") or []
+    c.check(s, "out of sight: the shooter is not seen, and the note says the arrow came from somewhere unseen", striker not in seen("02") and any("could not see" in n for n in n3) and (d["03"].get("extra") or {}).get("drawn") is True, f"{n3}; seen {sorted(seen('02'))}")
+    c.check(s, "nothing targets or hovers the hidden shooter, and the target plate is not theirs", d["03"].get("targeted") != striker and not any(h.get("id") == striker for h in d["03"].get("hovered") or []), f"targeted {d['03'].get('targeted')}; hovered {d['03'].get('hovered')}")
+    c.check(s, "the shooter's name is nowhere", not any(sname in t for k in d for _, t in d[k].get("naming") or []), sname)
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death, "houses": houses, "shot": shot}
 
 
 def main():

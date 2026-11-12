@@ -43,6 +43,11 @@ pub struct Last {
     /// the same update as the death itself, so the death screen names my killer and the
     /// witnesses from this, as my character saw them, not from the authority's cause text.
     labels: HashMap<u32, String>,
+    /// When each creature was last among those I perceive (authority ms), and when I noticed my
+    /// death: a killer is named only if my character saw them just before ([`KILLER_SEEN_MS`]);
+    /// a missile's unseen shooter is not, whatever id the death row carries.
+    seen_ms: HashMap<u32, f64>,
+    died_ms: f64,
     /// Speech I heard, by experience id: `my_experience` holds only my newest lines (the
     /// authority's window, `frame::LINES_SHOWN`), so the log keeps what it has received.
     heard: BTreeMap<u64, Experience>,
@@ -89,15 +94,22 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     if last.labels.len() > 4096 {
         last.labels.clear();
     }
+    if last.seen_ms.len() > 4096 {
+        last.seen_ms.clear();
+    }
     for c in chars.values() {
         if last.labels.get(&c.id) != Some(&c.label) {
             last.labels.insert(c.id, c.label.clone());
         }
+        last.seen_ms.insert(c.id, now_ms);
     }
 
     // Death: the character I played is no longer alive.
     if let Some(prev) = last.id {
         if net.my_id.is_none() && mine.get(&prev).is_some_and(|c| !c.alive) {
+            if last.dead != Some(prev) {
+                last.died_ms = now_ms;
+            }
             last.dead = Some(prev);
         }
     }
@@ -111,7 +123,9 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     let perceived = |id: u32| looks.of(id).map(String::from).or_else(|| last.labels.get(&id).cloned());
     // The death row (`my_act_outcomes`, kind `death`): its code and, killed, the killer's id.
     let died = conn.db.my_act_outcomes().iter().filter(|o| o.kind == "death").max_by_key(|o| o.at_ms);
-    model.death = last.dead.and_then(|id| mine.get(&id)).map(|c| death(c, died.as_ref().filter(|o| o.other != 0).map(|o| o.other).or(combat.killer).and_then(perceived), died.as_ref())).map(|mut d| {
+    // The killer only if my character saw them just before it died (id 0 is no one).
+    let saw_then = |id: &u32| *id != 0 && last.seen_ms.get(id).is_some_and(|t| *t >= last.died_ms - KILLER_SEEN_MS);
+    model.death = last.dead.and_then(|id| mine.get(&id)).map(|c| death(c, died.as_ref().filter(|o| o.other != 0).map(|o| o.other).or(combat.killer).filter(saw_then).and_then(perceived), died.as_ref())).map(|mut d| {
         // Who saw it, as my character perceived (the authority's `WITNESS` rows).
         if !combat.witnesses.is_empty() {
             d.witnesses = Some(combat.witnesses.iter().map(|w| perceived(*w).unwrap_or_else(|| "someone".to_string())).collect());
@@ -425,6 +439,10 @@ fn death_words(code: Option<&str>, killer: Option<&str>) -> String {
         _ => "You died".to_string(),
     }
 }
+
+/// How recently my character must have seen its killer to name them on the death screen (ms):
+/// the death takes my perceived rows away in the same update.
+const KILLER_SEEN_MS: f64 = 2_000.0;
 
 /// Authority time lived, in words.
 pub fn lived(ms: u64) -> String {

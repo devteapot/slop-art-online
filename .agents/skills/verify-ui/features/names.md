@@ -7,6 +7,7 @@ The authority names others as the player's character perceives them: a known nam
 - `naming`: the dump's `naming` lists every person- or place-naming text on screen by where it shows (`plate`, `target`, `bubble`, `window`, `log`, `event`, `people`, `note`, `acts`, `wheel`, `grid`, `aim`, `talk`, `card`, `death`, `place`), with `known_names` (names the authority gave: `seen_characters.name`, mine) and `given_places` (`my_places`).
 - `guard`: on a world from a named seed (Cullet), a fresh player names no one and nowhere by a seed name it was not given.
 - `death`: an admin's cause naming someone shows "You died"; killed by a stranger, "Killed by a stranger in …".
+- `shot`: an arrow on me is told as a shot (fix-missile-told): the weapon's note is the authority's line ("A stranger shot you with an arrow: hit for 7. Your weapon is drawn."; unseen: "An arrow struck you from somewhere you could not see: …"), never our "attacked"; an unseen shooter (id 0 in the feed and the line) is named, targeted, plated and pointed at by nothing; the death screen names a killer only if my character saw them in the 2 s before it died, and a witness of id 0 is no one.
 - `houses`: a resident's house reads "house" to a stranger, "{name}'s house" once they said their name, and the player's own "your house".
 
 ## How to get to it (user POV)
@@ -19,6 +20,8 @@ Arrive in Cullet as a newcomer; point at people, hold F, press Enter, open the L
 - **Death.** `check.py --run $R death` (any seed): a fresh player killed by admin `kill(me, "killed by <a resident's real name>")` (code `other`) → `naming` `death` is exactly "You died", the name nowhere; then a fresh player struck dead by verify.py's player identity ("Striker", `$V player join`; the scene sets `dmg_strike` 40 and `cost_strike` 0 and restores 5 and 20) → "Killed by a stranger …", "Striker" nowhere.
 
 - **Houses.** `check.py --run $R houses` (any seed): a resident held 3 m off the arrival with a house placed by them (admin `place_structure(near, "house")`: owned by `near`); a fresh player at the arrival, `pointat:` the house → `naming` `aim` "house"; admin `mind_say` "I'm {name}." to the player (an introduction) → `known_names` has them and the aim reads "{name}'s house"; `place_structure` by the player → "your house".
+
+- **Shot.** `check.py --run $R shot` (island): verify.py's player identity ("Striker": a bow and 6 arrows by admin `grant_items`, held by `set_behavior`) shoots a fresh player at noon on open grass (300, 330) from 6 m (`player|use_skill|bowshot|{me}|(mx)|(my)`), then, after `weapon:sheathe`, from 16 m (beyond the 11 m one sees by day, within the bow's 22). Proof: the authority's `attacked` lines (owner SQL: subject the shooter, then 0), the notes, `extra.drawn`, `seen` (the shooter in sight at 6 m, not at 16 m), `targeted` and `hovered`, and the shooter's name in no `naming` text.
 
 ## Gotchas
 
