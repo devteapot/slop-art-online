@@ -114,3 +114,17 @@ The `say-way` case (`verify_minds.py --case say-way`) puts H (thought for) on a 
 4. **A line in "shout",** a way the world lacks. It is said aloud: B reads "A stranger said to you: …".
 
 It also checks that the think prompt names `"way": "say" or "whisper" or "call" (optional; default "say")`. Evidence: `say-way.json`, `prompt-say-way.txt`.
+
+## Ids are not words
+
+A mind is shown people by `#id` handles. Every speaking mind's system prompt (think, deliberate, fast, talk) carries one sentence, word for word the same (`prompts::IDS_NOT_SPOKEN`): the handles are for acts and memory and are never spoken; when it speaks, it names people by name or description. The `prompts::` test `every_speaking_mind_is_told_ids_are_never_spoken` checks the four prompts. Since fix-spoken-ids (2026-11-12): in r2e, 3 of 68 lines said by deliberations carried an id.
+
+A line that names someone by `#id` anyway is said without it by the speech primitive (docs/COMMUNICATION.md, "Ids are not words"). The speaker then gets a `spoken_as` experience: "Your line was said as “…”: you wrote “…”, and #ids are not words anyone hears.". The mind journals each one in `<journal>/outcomes/spoken_as.jsonl` (`actor`, `name`, `to`, `line`). trials.py counts them: `summary.json` `spoken_as` (total, by character, examples), and `report.md` "Ids said as words" with the batch's total. A high count means the prompt's sentence is not doing its work.
+
+`--case spoken-ids`: two adults side by side. The think reply says "Watch out, #<other> is here." (the decision speaks; a compile's `say` is dropped by design).
+1. `think_prompt_has_the_sentence_once` and `deliberate_prompt_has_the_sentence_once`: each system prompt sent holds it once.
+2. `spoken_without_the_id`: the chronicle line names the other without the id (by name, when the speaker knows it).
+3. `spoken_as_keeps_both`: the speaker's `spoken_as` row holds what it wrote and what was said.
+4. `journaled_with_both`: `outcomes/spoken_as.jsonl` has the line, with the speaker's name.
+
+Evidence: `spoken-ids.json`, `fake-requests.jsonl`, `journal/outcomes/spoken_as.jsonl`.
