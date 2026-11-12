@@ -2969,11 +2969,11 @@ def cues(s):
         near = s.wait(lambda: noticed(t2), 10)
         s.expect("V within 4 m is told", near and near[0]["subject"] == v, near)
         # What the world cannot watch for is kept, refused, with its reason.
-        set_cues(s, o, [cue("stance:x", at="no such place"), cue("stance:x", who="wolf", phase="winding up"), cue("stance:x", who="dragon"),
-                        cue("stance:x", thing="no_such_kind"), cue("stance:x", doing="strike"), cue("x", who="wolf")])
+        set_cues(s, o, [cue("stance:x", at="no such place"), cue("stance:x", who="wolf", phase="dancing"), cue("stance:x", who="dragon"),
+                        cue("stance:x", thing="no_such_kind"), cue("stance:x", doing="strike"), cue("x", who="wolf"), cue("stance:x", who="wolf", doing="strike", phase="winding up")])
         ref = [c["refused"] for c in sorted(rows(), key=lambda c: c["id"])]
-        s.expect("refusals: unknown place, a move's phase, no such creature, no such thing, a deed with no doer, serving nothing",
-                 len(ref) == 6 and all(ref) and "no place" in ref[0] and "phase" in ref[1] and "dragon" in ref[2] and "no_such_kind" in ref[3], ref)
+        s.expect("refusals: unknown place, no such phase, no such creature, no such thing, a deed with no doer, serving nothing; a wolf winding up a strike is watched",
+                 len(ref) == 7 and all(ref[:6]) and ref[6] == "" and "no place" in ref[0] and "not a phase" in ref[1] and "dragon" in ref[2] and "no_such_kind" in ref[3], ref)
         set_cues(s, o, [])
         s.expect("an empty set clears the cues", not rows(), rows())
     finally:

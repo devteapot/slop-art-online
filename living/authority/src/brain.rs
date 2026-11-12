@@ -1168,6 +1168,8 @@ impl<'a> Ev<'a> {
         if !due {
             return;
         }
+        // The scene `noticed` builds anyway, built first so the span times the cues' own work.
+        self.scene();
         let _span = common::span("brain.cues");
         let cues: Vec<Cue> = self.ctx.db.cue().actor().filter(me).filter(|c| c.refused.is_empty()).collect();
         if cues.is_empty() {
@@ -1221,11 +1223,19 @@ impl<'a> Ev<'a> {
                             continue;
                         }
                     }
-                    if !c.doing.is_empty() && !ctx.db.activity().id().find(n.id).is_some_and(|a| a.skill.eq_ignore_ascii_case(&c.doing)) {
-                        continue;
+                    // What it is visibly doing, and in which phase: what COMBAT_MIND 3.2's `doing`
+                    // condition reads (`perception::visibly`), under the same sight.
+                    let mut seen_doing = String::new();
+                    if !c.doing.is_empty() || !c.phase.is_empty() {
+                        let Some(v) = crate::perception::visibly(ctx, &scripts, n.id, now) else { continue };
+                        let want = living_rules::doing::Phase::parse(&c.phase);
+                        if (!c.doing.is_empty() && !v.is(&scripts, &c.doing)) || want.is_some_and(|p| !v.phase.fits(p)) {
+                            continue;
+                        }
+                        seen_doing = format!(", {} ({})", v.skill.replace('_', " "), v.phase.word());
                     }
                     let who = common::label_for(ctx, &self.me, n.id);
-                    let doing = if c.doing.is_empty() { String::new() } else { crate::perception::doing_of(ctx, n.id, (me, &self.me.kind, at), &creatures, now).map(|d| format!(", {d}")).unwrap_or_default() };
+                    let doing = seen_doing;
                     matched.push((i, n.id as u64, format!("{who}, {:.0} tiles {}{doing}", n.dist, direction(at, n.pos))));
                 }
             } else if !c.thing.is_empty() {

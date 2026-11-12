@@ -65,7 +65,12 @@ resident thought for and in range (within 12 m of the newcomer during a stand):
   joined (`tells_out`); `first_heard` (seconds from the join and who); `fs_cover`, persons past
   infancy within 12 m of the newcomer at some sample after the join who got a first-sight line
   naming it, of all such persons (the crowd fix: everyone in sight is perceived); `routines`,
-  compile replies whose graph uses `"relation": "stranger"`.
+  compile replies whose graph uses `"relation": "stranger"`;
+- attention cues (docs/ATTENTION.md, the `cues_on` law): for each resident who `asks`, and for
+  each teller (`tell_cues`), the last cue that fired for them before their first line to the
+  newcomer (or about it): the mind's `why` quoted in its `noticed` line, what it served
+  (`for_key`, from the run's `cue` rows in final.json, else the think reply that wrote that
+  `why`) and how many seconds before the line; per run `cue_fires` and `cue_firers`.
 
 **Spoken ids** (every run): `id_lines`, lines said aloud (speech.jsonl, the quoted words) holding
 `#<digits>`, and per speaker (`id_by`, in --json and the strangers section). An id is for acts and

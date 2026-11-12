@@ -584,9 +584,10 @@ fn notice_field_for(cooldown_s: f32, gap_s: f32) -> String {
     let span = |s: f32| if s >= 120.0 { format!("{:.0} minutes", s / 60.0) } else { format!("{s:.0} seconds") };
     format!(
         ", \"notice\": [{{\"for\": \"the stance key, project:<key> or goal:<its words> this is about\", \"who\": a person's id, \"unknown\" (anyone whose name you do not know) or a kind of creature, \
-\"doing\": \"a skill they are using\", \"thing\": \"a kind of resource or structure\", \"at\": \"one of your places\", \"within\": metres of it, \"near_me\": metres, \"why\": \"your own words\"}}] \
+\"doing\": \"what they are visibly doing (a skill)\", \"phase\": \"{}\", \"thing\": \"a kind of resource or structure\", \"at\": \"one of your places\", \"within\": metres of it, \"near_me\": metres, \"why\": \"your own words\"}}] \
 (optional: what, when you perceive it, should make you think about this again; every field given must hold for the same thing; {CUE_EXAMPLES}. \
 You are brought to think by it once per thing per {} and by all of them at most once in {}; you keep at most {}; listing only \"for\" stops watching for it. See # What you watch for)",
+        living_rules::doing::Phase::ALL.iter().map(|p| p.word()).collect::<Vec<_>>().join("|"),
         span(cooldown_s),
         span(gap_s),
         crate::memory::CUES
@@ -606,7 +607,10 @@ pub fn cue_line(c: &living_bindings::Cue, name: &dyn Fn(u32) -> String, now: u64
         what.push(format!("a {}", c.who));
     }
     if !c.doing.is_empty() {
-        what.push(format!("using {}", c.doing));
+        what.push(format!("doing {}", c.doing));
+    }
+    if !c.phase.is_empty() {
+        what.push(c.phase.clone());
     }
     if !c.thing.is_empty() {
         what.push(format!("a {}", c.thing.replace('_', " ")));

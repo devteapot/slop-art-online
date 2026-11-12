@@ -940,8 +940,11 @@ pub struct Cue {
     pub who_id: u32,
     /// `unknown` (a person whose name one does not know), a creature kind, or empty.
     pub who: String,
-    /// A skill the matched creature is using (its activity), or empty.
+    /// What the matched creature is visibly doing (`perception::visibly`: a skill's name, its
+    /// label, or a kind word such as `melee`), or empty.
     pub doing: String,
+    /// The phase it is visibly in (`living_rules::doing::Phase`'s words), or empty.
+    pub phase: String,
     /// A resource or structure kind, or empty.
     pub thing: String,
     /// One of the actor's own places the match must be within `within` metres of, or empty.

@@ -78,7 +78,7 @@ pub struct CueIn {
     pub who_id: u32,
     pub who: String,
     pub doing: String,
-    /// The phase of a move (`winding up`, …): refused until the authority perceives phases.
+    /// The phase it is visibly in (`winding up`, …; `living_rules::doing::Phase`).
     pub phase: String,
     pub thing: String,
     pub at: String,
@@ -662,6 +662,7 @@ pub fn set_cues(ctx: &ReducerContext, actor: u32, cues: Vec<CueIn>, now: u64) {
             who_id: c.who_id,
             who: clip(c.who.trim(), 40).to_lowercase(),
             doing: clip(c.doing.trim(), 40).to_lowercase(),
+            phase: clip(c.phase.trim(), 40).to_lowercase(),
             thing: clip(c.thing.trim(), 40).to_lowercase(),
             at: clip(c.at.trim(), 48),
             within: if c.within > 0.0 { c.within.min(48.0) } else { 20.0 },
@@ -672,9 +673,9 @@ pub fn set_cues(ctx: &ReducerContext, actor: u32, cues: Vec<CueIn>, now: u64) {
             set_ms: now,
             source: clip(&c.source, 120),
         };
-        let refused = cue_refusal(ctx, actor, &row, c.phase.trim());
+        let refused = cue_refusal(ctx, actor, &row);
         let row = Cue { refused, ..row };
-        let same = |o: &Cue| o.for_key == row.for_key && o.who_id == row.who_id && o.who == row.who && o.doing == row.doing && o.thing == row.thing && o.at.eq_ignore_ascii_case(&row.at) && o.within == row.within && o.near_me == row.near_me;
+        let same = |o: &Cue| o.for_key == row.for_key && o.who_id == row.who_id && o.who == row.who && o.doing == row.doing && o.phase == row.phase && o.thing == row.thing && o.at.eq_ignore_ascii_case(&row.at) && o.within == row.within && o.near_me == row.near_me;
         match old.iter().find(|o| same(o) && !kept.contains(&o.id)) {
             Some(o) => {
                 kept.push(o.id);
@@ -696,11 +697,12 @@ pub fn set_cues(ctx: &ReducerContext, actor: u32, cues: Vec<CueIn>, now: u64) {
 /// Why the world cannot watch for this cue (empty: it can). Only what perception reports can
 /// be watched for, by type: a person or creature, what it is doing, a resource or structure,
 /// near one of one's own places.
-fn cue_refusal(ctx: &ReducerContext, actor: u32, c: &Cue, phase: &str) -> String {
+fn cue_refusal(ctx: &ReducerContext, actor: u32, c: &Cue) -> String {
     let sc = common::scripts(ctx);
     let creature = c.who_id != 0 || !c.who.is_empty();
-    if !phase.is_empty() {
-        return format!("the phase of a move (\"{phase}\") is not something one can make out yet");
+    if !c.phase.is_empty() && living_rules::doing::Phase::parse(&c.phase).is_none() {
+        let words: Vec<&str> = living_rules::doing::Phase::ALL.iter().map(|p| p.word()).collect();
+        return format!("\"{}\" is not a phase one can see (one sees: {})", c.phase, words.join(", "));
     }
     if !c.for_key.starts_with("stance:") && !c.for_key.starts_with("project:") && !c.for_key.starts_with("goal:") {
         return "it serves no stance, project or goal".into();
@@ -711,7 +713,7 @@ fn cue_refusal(ctx: &ReducerContext, actor: u32, c: &Cue, phase: &str) -> String
     if !creature && c.thing.is_empty() && c.at.is_empty() {
         return "it names nothing to watch for".into();
     }
-    if !c.doing.is_empty() && !creature {
+    if (!c.doing.is_empty() || !c.phase.is_empty()) && !creature {
         return "what is being done needs someone doing it".into();
     }
     if c.who_id != 0 {
@@ -728,9 +730,6 @@ fn cue_refusal(ctx: &ReducerContext, actor: u32, c: &Cue, phase: &str) -> String
     }
     if !c.who.is_empty() && c.who != "unknown" && !living_rules::catalog::CREATURES.iter().any(|k| *k == c.who) {
         return format!("\"{}\" is not a kind of creature", c.who);
-    }
-    if !c.doing.is_empty() && !sc.skills().has(&c.doing) {
-        return format!("\"{}\" is not something one does", c.doing);
     }
     if !c.thing.is_empty() && !sc.skills().resources.iter().chain(sc.skills().structures.iter()).any(|k| k.name == c.thing) {
         return format!("\"{}\" is not a kind of thing one sees", c.thing);

@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-12 attention-cues: cues matched by type, a fire asks a thought (Spark)
+
+Branch `attention-cues` (origin/main `49dfc2cd` merged), the trial service `slop-trials-stdb`, default seed, `scoped`, private `CARGO_TARGET_DIR`. `scenes.py cues` (new; features/cues.md): `core-cuesf-064543` 14/14 on the merged build; before the merge `core-cues-061200` 14/14 (its first attempt stopped at a driver bug: `fired` reads back from SQL as `[subject, at_ms]`). Law off: nothing; on: one `noticed` line about N quoting the fixture `why` at 0.65 and a deliberation row with it; N back within the cooldown: nothing; U told only after the 15 s gap; under a `far` overlay V (unknown) and K (by id) at 6 m: nothing, V at 2 m: told; seven cues, six refused with their reasons and a wolf winding up a strike accepted; an empty set clears them. Rules test `attention_cues_are_the_world_s_laws`. In place (`core-inplace-064222`): main `49dfc2cd`'s module published fresh, a player joined, then this branch's with `--keep-data`: "Creating table `cue`", 265 characters kept, the clock on (tick 559 → 3801), experiences kept, doctor 7/7, and a cue written after the update fired. Not driven: `thing`, `doing`/`phase` and `near_me` matches.
+
 ## 2026-11-12 doing-percept: what someone is visibly doing (Spark)
 
 Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-doing-052655`.

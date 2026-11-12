@@ -1,5 +1,9 @@
 # Client protocol validation
 
+## 2026-11-12 attention-cues: the `cue` table and `mind_update` with cues (Spark)
+
+Branch `attention-cues` (origin/main `49dfc2cd` merged), the trial service, `scoped`. `client-cuesf-064543`: 43/43 PASS (before the merge `client-cues-061552`: 43/43). `cue` is in `PRIVATE` and refused to anonymous and player identities over WebSocket and HTTP SQL (`visibility.json`, 79 tables); the permission matrix (229 calls, 0 mismatches) sends `mind_update` with a cue, refused for another's character and for anonymous; for a player's own character it succeeds and keeps no cue (`cues-owner.json`: 0 rows on the three played characters). The probe's owner snapshot carries `cues`.
+
 ## 2026-11-12 owner-known (Spark)
 
 Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-owner4-050631`: 42/42 (`land_plan` private; `my_known_names` returns only the caller's own known names). An earlier run, `client-owner-043942`, failed "own mind and player effects" once: the first identity's `{"wait":30}` command had ended (28 s passed before the effects probe on a loaded machine) and its plan was back to "waiting for you"; on rerun the gap was 7 s and it passed. That is a harness timing gap, not this change; the drive's 30 s command is short for a slow machine.
