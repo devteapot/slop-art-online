@@ -26,6 +26,15 @@ python3 living/tools/trials.py clean --batch dry1
 - Every `summary.json` has `prompt_frame` (per purpose, the subject's journaled requests that opened with the player frame) and `out_of_character` (`ooc_lines`, `ooc_private`: [`ooc.py`](../../../../living/tools/ooc.py) over spoken and written lines and over private reply fields). Under `default` every purpose reads `character 0/n`; under `player-frame` every think, deliberate, talk and consolidation request is framed and starting identities are not ([frame.md](frame.md)).
 - From a git worktree, `build` copies each module into the container's `/wasm` mount (the starting checkout's `.local/living/trials/wasm/`) as `<module>-wt<tag>.wasm` and `run` publishes that copy; `actions.log` names it. The worktree needs its own `.local/living/trials/neo4j.env` and does not run `up` against a running stack.
 
+## The arrival trial (2026-11-11; kept as tooling, 2026-11-12)
+
+- `human.script: arrive` (`Player.arrive_session`; living/trials/arrive.json, docs/TRIALS.md, "Arrivals") joins after the world has lived `subject.join.after_s` seconds, walks (`goto` to the densest group's centre, re-aimed every 15 s) until two residents are within `within_m`, then stands silent `stand_s`, `stands` times, each next group sharing the fewest members with the last; it never speaks or gestures. Each stand is a `human_stand` / `human_stand_end` event pair with from/to ms, the group and who was within 12 m. It counts and approaches only residents the minds think for (`Player.is_mind`: past infancy, in `LIVING_ONLY` or the `minds.max` thinkers); the greeting script counts every resident.
+- `human.answer` (the `arrive-answer` trial): the player says that one line back to the first resident who addresses it (its own `speech` experience with the player as `object`), a `human_answer` event, then is silent.
+- `record` adds, beside `speech`, `talk` and `audience`: `experiences` (every experience row as it arrives, before minds integrate and delete it, to `experiences_all.jsonl`), `gestures` (`skill_use` rows of `wave`, `nod`, `face`, `appraise` to `gestures.jsonl`), `positions` (every person's position, heading and activity with the creature it is aimed at, to `positions.jsonl`) and `thoughts` (every thought row, with `detail.reasons`, to `thoughts_all.jsonl`). `living/tools/arrive_report.py BATCH` reads them.
+- A trial's `variants` lists the only variants it runs with (`arrive-answer`: `arrive-control` only); `minds.concurrency` sets `LIVING_CONCURRENCY` (default 64 under `minds.only: "all"` or `minds.max`, 4 for one thinker), recorded in `mind-env.json` and `summary.json`.
+- `living/trials/fake/arrive-answer.json` is a proof-only fake script: every thought whose scene has #13 in sight (the joined player of a hamlet world) says "Hello there. Are you new here?" to #13, so the answer and the exchange after it can be measured without a provider.
+- The newcomer laws and their `arrive-notice`/`-known`/`-wonder`/`-all` variants were rejected (2026-11-12) and are not in the code; they stay on `exp-arrive`.
+
 ## Life runs, resume and disk
 
 - A `"kind": "life"` trial spawns its subject with the admin-only `spawn_newcomer` (a player's `join`, thought for by the minds), keeps no timeline, restarts a mind that exits, writes `snapshots/hNN.json` hourly and pauses its database at the end. `trials.py life --batch B` writes `timeline.md` from rows.
@@ -48,3 +57,4 @@ Real batches spend money. Run them only when the user has authorized them. There
 - Determinism: a seed does not make inference repeatable; read spread across replicates.
 - Fake-model runs prove the plumbing (setup, timeline, sampling, journal, stop, cleanup), not what minds decide.
 - Population, latency or memory claims; see `AGENTS.md` and `docs/PERFORMANCE_CONTRACT.md`.
+- The trial service's open files: each live database holds file descriptors, and the trial container's soft limit is 1,024. With about 120 kept databases (2026-11-11) publishes fail with "cannot create a memfd: Too many open files" or `identity: timed out`. Clean kept batches before running wide.

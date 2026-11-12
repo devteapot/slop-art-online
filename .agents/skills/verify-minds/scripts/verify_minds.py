@@ -21,7 +21,7 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run')
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run', 'timings')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -36,7 +36,8 @@ SEE_PAST = 'you can see past it but not walk through it'
 
 class Run(shared.Run):
     def __init__(self, name):
-        super().__init__(name, prefix='minds')
+        # gate-*: the merge's scene gate (living/tools/scene_gate.py), databases verify-gate-*.
+        super().__init__(name, prefix='gate' if name.startswith('gate-') else 'minds')
 
     def request(self, actor, marker):
         self.admin('set_behavior', actor, json.dumps({'think': 'I finished my plan. verify ' + marker}))
@@ -217,6 +218,28 @@ def breath_case(run):
             'scene_stamina': scene['you']['stamina'], 'experiences': len(act)}
 
 
+# A line of `prompts::own_timings` ("- strike: winds up 350 ms …") or its heading.
+OWN_TIMING = re.compile(r'- [a-z_]+: (winds up \d|a dash at once|raised at once|takes effect at once)|How long the fighting moves you know take')
+
+
+def timings_told(run, actor, sent, fire_bolt):
+    """A mind is told the timing of the fighting moves its character knows, in its own prompt,
+    and never of one it does not know (LIVING_SKILL_TIMINGS; docs/COMBAT_MIND.md §3.7): bowshot
+    needs no technique, fire bolt needs fire_bolt. The shared system prompt states no timings."""
+    knows = {k['technique'] for k in run.private(f'SELECT * FROM know_how WHERE actor = {actor}', 'know-how')}
+    assert ('fire_bolt' in knows) == fire_bolt, knows
+    if os.environ.get('LIVING_SKILL_TIMINGS', '').strip().lower() in ('0', 'off', 'false'):
+        # The switch off: no timing line anywhere in what was sent.
+        assert sent and not any(OWN_TIMING.search(json.dumps(e['body'])) for e in sent), 'timings sent with LIVING_SKILL_TIMINGS off'
+        return
+    users = ['\n'.join(m.get('content', '') for m in e['body'].get('messages', []) if m.get('role') == 'user') for e in sent]
+    assert users and all('- bowshot: winds up 300 ms' in u and '- strike: winds up 350 ms' in u for u in users), users[0][-3000:]
+    assert all(('- firebolt: winds up 450 ms' in u) == fire_bolt for u in users), [u.count('firebolt') for u in users]
+    # The shared system prompt carries no one's own timings. (The world rules' COMBAT law says
+    # "An attack winds up for about 0.6-0.75 s": the script's own law text, not a skill's timing line.)
+    assert not any(OWN_TIMING.search(system_text(e['body'])) for e in sent), 'timings in the shared system prompt'
+
+
 def run_case(run, case):
     if case in ('animals', 'night', 'jev'):
         return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
@@ -260,6 +283,9 @@ def run_case(run, case):
                                    'say': None}, 'deliberate': basic_reply()}}
     if case == 'roundtrip':
         script['replies']['think']['say'] = 'verify minds round trip speech'
+    if case == 'timings':
+        # The positive control for roundtrip's timing check: this mind knows fire_bolt.
+        run.admin('grant_know_how', actor, 'fire_bolt')
     if case == 'acts':
         run.harness('player', 'join', 'MindsReceiver')
         other = run.sql("SELECT id FROM character WHERE name = 'MindsReceiver'", 'receiver')[0]['id']
@@ -356,6 +382,10 @@ def run_case(run, case):
         for part in ('SENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m',
                      'MOVING: How creatures move', 'FOOD: berries 12, fish 16', 'SETTLEMENTS: walls block the way'):
             assert all(part in m for m in told), part
+        timings_told(run, actor, sent, fire_bolt=False)
+    elif case == 'timings':
+        sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+        timings_told(run, actor, sent, fire_bolt=True)
     elif case == 'acts':
         run.wait(lambda: any(i['item'] == 'stone' and i['qty'] == 1 for i in run.sql(
             f'SELECT * FROM inventory WHERE owner = {other}', 'receiver-inventory-after')), 'give effect')
@@ -1655,17 +1685,22 @@ def speech_case(run):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--run', required=True, help='new suite name starting with minds-')
+    parser.add_argument('--run', required=True, help='new suite name starting with minds- (gate- for the merge scene gate)')
     parser.add_argument('--case', action='append', choices=CASES, help='repeat to select; default all')
+    parser.add_argument('--no-unit-tests', action='store_true',
+                        help="skip living-mind's cargo tests (the merge's scene gate runs them as its own case, mind-unit)")
     args = parser.parse_args()
-    if not re.fullmatch(r'minds-[a-zA-Z0-9-]+', args.run):
-        parser.error('--run must start with minds-')
+    if not re.fullmatch(r'(minds|gate)-[a-zA-Z0-9-]+', args.run):
+        parser.error('--run must start with minds- (or gate- for the merge scene gate)')
     with urllib.request.urlopen(os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/') + '/v1/ping', timeout=5) as response:
         assert response.status == 200
     suite = ROOT / '.local/living/verify' / args.run
     suite.mkdir(parents=True, exist_ok=False)
     for command, name in ((['cargo', 'build', '--manifest-path', 'living/Cargo.toml', '-p', 'living-mind', '--release'], 'build.log'),
                           (['cargo', 'test', '--manifest-path', 'living/Cargo.toml', '-p', 'living-mind', '--', '--nocapture'], 'cargo-tests.log')):
+        if args.no_unit_tests and name == 'cargo-tests.log':
+            (suite / name).write_text('skipped (--no-unit-tests)\n')
+            continue
         with (suite / name).open('w') as stream:
             subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, check=True)
     paths = ['living/mind/src/main.rs', 'living/mind/src/mind.rs', 'living/mind/src/mind/talk.rs',

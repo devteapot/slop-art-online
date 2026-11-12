@@ -18,13 +18,14 @@ BASE = ROOT / ".local/living/verify"
 
 class Scene:
     def __init__(self, run, name):
-        if not re.fullmatch(r"core-[a-z0-9-]+", run):
-            raise ValueError("use a core-* run name with lowercase letters, digits and hyphens")
+        # gate-*: the merge's scene gate (living/tools/scene_gate.py), databases verify-gate-*.
+        if not re.fullmatch(r"(core|gate)-[a-z0-9-]+", run):
+            raise ValueError("use a core-* (or the scene gate's gate-*) run name with lowercase letters, digits and hyphens")
         self.out = BASE / run
         state = json.loads((self.out / "state.json").read_text())
         self.db = state["db"]
         if self.db != "verify-" + run or not state.get("published"):
-            raise ValueError("use a published core-* run created by verify.py launch")
+            raise ValueError("use a published core-* or gate-* run created by verify.py launch")
         self.name = name
         self.results = {}
         self.log = self.out / f"{name}-actions.jsonl"

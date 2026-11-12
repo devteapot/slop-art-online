@@ -6,20 +6,27 @@ In the current worktree, which must be clean and have no commits that main lacks
   2. git merge --no-ff the branch, pinned to the commit it had when this started;
   3. run the check (`living/tools/check.py`: `just living-check` with step stamps), and
      stop without pushing if it fails or leaves the worktree dirty;
+  3b. with --scenes (or LIVING_MERGE_SCENES=1): the scene gate (living/tools/scene_gate.py),
+     real scenes on scratch verify-gate-* databases when the merge touches behaviour; it
+     stops without pushing when a case fails twice on the branch and passes on main;
   4. git push origin HEAD:main; when that is refused because main moved, fetch, merge the
      same branch commit onto the new main and check again (unchanged steps are skipped by
-     their stamps), up to --retries times.
+     their stamps), up to --retries times. The scene gate runs again only when the new main
+     commits touch behaviour themselves.
 Every git command it runs is printed, and a summary at the end says what happened.
 
-Usage: merge.py <branch> [-m MESSAGE] [--retries N] [--no-push] [--remote NAME] [--into BRANCH]
+Usage: merge.py <branch> [-m MESSAGE] [--retries N] [--no-push] [--scenes] [--remote NAME] [--into BRANCH]
   <branch>     a branch on the remote (preferred) or a local branch or commit
   -m MESSAGE   the merge commit's message (default "Merge <branch>")
   --retries N  merge again at most N times after main moved (default 5)
   --no-push    stop after a passing check (the merge commit stays in this worktree)
-Environment: LIVING_MERGE_CHECK replaces the check command (a shell command; for tests).
+  --scenes     run the scene gate after the check (also LIVING_MERGE_SCENES=1); its own
+               settings (server, red-on-main list) come from LIVING_GATE_* (scene_gate.py)
+Environment: LIVING_MERGE_CHECK replaces the check command (a shell command; for tests);
+LIVING_MERGE_SCENES_CMD replaces the scene gate command (for tests).
 Exit codes: 0 merged and pushed (or nothing to merge), 2 usage, 3 refused (worktree), 4 merge
 conflict, 5 check failed, 6 check left the worktree dirty, 7 main kept moving, 8 push failed,
-9 another git command failed.
+9 another git command failed, 10 the scene gate failed (or could not run).
 
 The push is a compare-and-swap (--force-with-lease on the main it merged onto): it lands only
 when main is still exactly the commit that was merged and checked, never over a main that
@@ -27,6 +34,7 @@ moved or was rewound meanwhile.
 """
 import fcntl
 import hashlib
+import json
 import os
 import shlex
 import subprocess
@@ -92,10 +100,10 @@ def summary(result):
     print(f"  = {result}", flush=True)
 
 
-def run_check(cmd, log_path):
+def run_check(cmd, log_path, what="check"):
     """Run the check, streaming its output to the terminal and a log; return (code, seconds)."""
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    say(f"check: {cmd}  (log {log_path})")
+    say(f"{what}: {cmd}  (log {log_path})")
     t0 = time.time()
     with open(log_path, "a") as log:
         p = subprocess.Popen(["bash", "-o", "pipefail", "-c", cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1)
@@ -117,6 +125,47 @@ def reset_to(sha, why):
     return True
 
 
+def scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, attempt):
+    """Run the scene gate on the checked merge; None when it passed (or was not needed this
+    attempt), else the exit code after the summary."""
+    tool = "living/tools/scene_gate.py"
+    cmd = os.environ.get("LIVING_MERGE_SCENES_CMD")
+    if not cmd and not os.path.isfile(tool):
+        done.append(f"attempt {attempt}: no scene gate in this tree ({tool}); scenes not run")
+        return None
+    if gate_base and not cmd:
+        # main moved since the gate passed: run it again only when the new main commits touch
+        # behaviour (each came through its own gate when they did not touch it together)
+        t = subprocess.run([sys.executable, tool, "touches", "--base", gate_base, "--head", base], capture_output=True, text=True)
+        if t.returncode == 1:
+            done.append(f"attempt {attempt}: scene gate kept from {gate_base[:10]} (main's new commits touch no behaviour)")
+            return None
+    cmd = cmd or f"{shlex.quote(sys.executable)} {tool} run --base {base} --json {shlex.quote(gate_json)}"
+    code, secs = run_check(cmd, log_path, "scenes")
+    record = {}
+    try:
+        with open(gate_json) as f:
+            record = json.load(f)
+    except (OSError, ValueError):
+        pass
+    if code == 0:
+        done.append(f"attempt {attempt}: scene gate {record.get('result', 'passed')} in {secs:.0f} s"
+                    + (f" (evidence {record['evidence']})" if record.get("evidence") else ""))
+        after = git("status", "--porcelain", "--untracked-files=all", quiet=True).stdout
+        if out("rev-parse", "HEAD") != merge_sha or after.strip():
+            print(after.rstrip())
+            done.append(f"attempt {attempt}: the scene gate changed HEAD or the worktree (above)")
+            summary("the scene gate changed the worktree; nothing pushed; HEAD left for a look")
+            return 6
+        return None
+    done.append(f"attempt {attempt}: merge {merge_sha[:10]}; scene gate {record.get('result') or 'FAILED'} (exit {code}) after {secs:.0f} s"
+                + (f"; evidence {record['evidence']}" if record.get("evidence") else ""))
+    restored = reset_to(start_head, "after the failed scene gate")
+    summary(f"scene gate failed; nothing pushed{'' if restored else ' (HEAD NOT restored, see above)'}. Inspect the merge with: "
+            f"git checkout --detach {merge_sha[:10]}  (log {log_path})")
+    return 10
+
+
 def main(argv):
     try:
         return run(argv)
@@ -128,6 +177,7 @@ def main(argv):
 
 def run(argv):
     branch, message, retries, push, remote, into = None, None, 5, True, "origin", "main"
+    scenes = os.environ.get("LIVING_MERGE_SCENES") == "1"
     args = list(argv)
     try:
         while args:
@@ -138,6 +188,8 @@ def run(argv):
                 retries = int(args.pop(0))
             elif a == "--no-push":
                 push = False
+            elif a == "--scenes":
+                scenes = True
             elif a == "--remote":
                 remote = args.pop(0)
             elif a == "--into":
@@ -215,6 +267,8 @@ def run(argv):
     message = message or f"Merge {branch}"
     log_path = os.path.join(STATE, time.strftime("%Y%m%d-%H%M%S") + f"-{branch.replace('/', '_')}.log")
     check_override = os.environ.get("LIVING_MERGE_CHECK")
+    gate_json = log_path[:-4] + "-scenes.json"
+    gate_base = None  # the main the scene gate last passed on
     attempt = 0
     while True:
         attempt += 1
@@ -272,6 +326,11 @@ def run(argv):
             summary("the check changed tracked or untracked files; nothing pushed; HEAD left at the merge for a look")
             return 6
         done.append(f"attempt {attempt}: merge {merge_sha[:10]} onto {base[:10]}; check passed in {secs:.0f} s")
+        if scenes:
+            gate = scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, attempt)
+            if gate is not None:
+                return gate
+            gate_base = base
         if not push:
             summary(f"checked, not pushed (--no-push); HEAD is the merge {merge_sha[:10]}")
             return 0
@@ -279,6 +338,9 @@ def run(argv):
         print(r.stdout.rstrip(), flush=True)
         if r.returncode == 0:
             done.append(f"pushed {merge_sha[:10]} to {remote}/{into}")
+            if scenes and os.path.isfile(gate_json) and into == "main":
+                # the merge is main now: cases that passed in its gate leave the red-on-main list
+                subprocess.run([sys.executable, "living/tools/scene_gate.py", "settle", "--record", gate_json, "--main", merge_sha])
             summary(f"merged {branch} into {into} as {merge_sha[:10]} in {time.time() - t_start:.0f} s ({attempt} attempt{'s' if attempt > 1 else ''})")
             return 0
         # judge by state, not by message: where is the remote main now?

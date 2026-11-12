@@ -1,5 +1,44 @@
 # Internal mind validation
 
+## 2026-11-12 arrive-2: exp-arrive's trial tooling on main, without the newcomer laws (Spark)
+
+Branch `arrive-2` (exp-arrive `1e63a30` with origin/main `a221a78` merged; the newcomer laws removed after the owner rejected them). Worktree, trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only. The branch's Rust is identical to main's; it changes trials.py, arrive_report.py, the arrive trials and docs.
+
+- `just living-check` exits 0. Every step was skipped: its inputs were identical to a tree that had already passed (`.local/living/arrive2/living-check-2.log`).
+- After merging origin/main `8c5b8530` (fix-dealings, strangers-lives): `just living-check` ran in full and exits 0 in 936 s (`living-check-3.log`). The Python tooling and fake run above did not change in that merge.
+- `minds-arrive2c-000819`: roundtrip, conversation, greet, alongside and parked pass. Two earlier attempts (`minds-arrive2-000308`, `minds-arrive2b-000749`) stopped at the mind's own tests: `llm::tests::unreachable_provider_holds_calls` returned 1.97 s and 1.62 s into a 2 s probe pause (load average 66–87). It also failed 1 of 3 runs alone. It is a pre-existing timing defect in main's llm.rs; this branch does not change it.
+- Trials `a2f1`: `arrive` and `arrive-answer` × `arrive-control`, 3 minutes, `--fake --fake-script living/trials/fake/arrive-answer.json`. Both ran to their duration with one mind start each, concurrency 64, and the laws guard passed. The fake's new trigger (#13 in the scene) made Ilsa address the player, who answered once (`human_answer`). `arrive_report.py a2f1` reports both runs (`.local/living/arrive2/a2f1-arrive-report.md`) after its fix for a stand cut short by the run's end. The databases were cleaned, and the tagged module was removed from the `/wasm` mount.
+
+## 2026-11-11 exp-arrive after merging main 6caebe2 (Spark)
+
+Trials `af8`: `arrive` and `arrive-answer` × control and `arrive-all`, 6 minutes, fake. All four ran to their duration with one mind start each and concurrency 64; the player answered once. `just living-check` exits 0 (`.local/living/arrive/living-check-6.log`).
+
+## 2026-11-11 exp-arrive after merging main 087be68 (Spark)
+
+Trials `af7`: `arrive` and `arrive-answer` × control and `arrive-all`, 6 minutes, fake. All four ran to their duration with one mind start each and concurrency 64. The answered resident replied in 1.5 s. `just living-check` exits 0 (`.local/living/arrive/living-check-5.log`).
+
+## 2026-11-11 exp-arrive after merging main accf27c (Spark)
+
+`reasons`, `frame`, `roundtrip` and `conversation` pass (`minds-arrive-m5-190947`). `just living-check` exits 0 (`.local/living/arrive/living-check-4.log`). Trials `af6`: `arrive` and `arrive-answer` × control and `arrive-all`, 10 minutes, with `minds.max` 11. All four ran to their duration with one mind start each, concurrency 64, and `carried_again` 0.
+
+## 2026-11-11 exp-arrive after merging main 62d861f and fix-stale-reasons 0209eb4 (Spark)
+
+- `reasons`, `conversation` and `roundtrip` pass (`minds-arrive-m4-185828`). The first attempt (`minds-arrive-m3-185610`) failed all three at launch, before any check ran: main's `skills.rhai` is 133,155 bytes, past the 128 KiB a single command-line argument may be (`OSError: Argument list too long` from `spacetime call install_script`). `verify.py launch` now installs it over HTTP with the owner's token. Main's `1b3b5dd` had also dropped the launch's keeping of a seed's own laws (it started from an older copy of `verify.py`); restored.
+- Trials: `af4` (`arrive` and `arrive-answer` × control and `arrive-all`, 9 minutes, `--fake-script living/trials/fake/arrive-answer.json`, concurrency 64): all ran to their duration. `carried_again` (from `detail.reasons`) was 0 in every run; the player answered once, and the resident replied.
+- `af3` before the merge: `arrive-answer`, concurrency 64 in `mind-env.json` and the summary, `LIVING_ONLY` without Tobin and the player's groups chosen among the minds.
+
+## 2026-11-11 exp-arrive: the arrival trial and the newcomer laws (Spark)
+
+Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only. The mind service is unchanged; the authority gained the newcomer laws (off by default), and the trial runner gained the scripted arrival player, `record` options, `subject.join.after_s`, `--fake-script` and worktree module names (features/trials.md).
+
+- Full suite `minds-arrive-172139` (load about 15, beside the paid greeting batch): roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink-llm, dealings and parked pass. Consolidation is its known XFAIL. `animals` failed at its known gap ("nothing new: no call", the 2026-11-11 lives-2 entry). `rethink` timed out waiting 40 s for its first gate, and passed alone (`minds-arrive-rt-175042`).
+- Trials free tier: `af1`, the `arrive` trial × five variants (`arrive-control`, `-notice`, `-known`, `-wonder`, `-all`), one replicate each, 14 minutes, `--fake --fake-script living/trials/fake/latency.json`. All five ran to their duration with every `record` file written. `arrive_report.py af1` reads them (docs/TRIALS.md, "Arrivals"). The first attempt hit the trial service's file-descriptor limit (about 120 kept databases); the coordinator cleaned up and raised the limit.
+
+
+## 2026-11-12 the timing of one's own known fighting moves (mind-skill-timings, Spark)
+
+Branch `mind-skill-timings` at c6af2ff6, the trial service (port 3320), fake model. Scoped maintain-verification-skill pass on `features/deliberation.md`: its citations brought to the current lines (`perceive.rs:270`, `mind.rs:1286`, `:1812`, authority `mind.rs:360`, `:409`, `brain.rs:517`), the `timings` case and `LIVING_SKILL_TIMINGS` mapped. Live: `minds-time3-234118` `roundtrip`, `acts`, `timings` pass, `minds-time3-off-234118-roundtrip` passes with the switch off; `reasons` passed in `minds-time3-233156`, and its later attempts stopped in the suite's own `cargo test -p living-mind` on two timing tests of `llm.rs` (`a_failed_poll_keeps_the_batch…`, `unreachable_provider_holds_calls`; the file is main's) at a load average of 76 on 20 cores.
+
 ## 2026-11-12 fix-dealings: `dealings` passes again on main (dev-box)
 
 Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 4–72 from other work.

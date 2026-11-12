@@ -115,6 +115,10 @@ $V cleanup --run <run> [--keep-db]
 
 Run cleanup after failed attempts too.
 
+## Scene gate
+
+`living/tools/scene_gate.py` (`just living-scene-gate`, and `just living-merge <branch> --scenes`, docs/TOOLING.md) runs a fixed set of this harness's cases on scratch `verify-gate-<stamp>-*` databases when a change touches behaviour: verify-core `tick`, `sight`, `senses`, `refusal`, `skirmish`; verify-minds `roundtrip`, `acts`, `dealings`, `conversation` (`--no-unit-tests`: the check ran them); verify-player `combat --scene all` (`combat.py` names each check's `scene`); `mind-unit`, living-mind's cargo tests. Fake model only, no Neo4j; the trial server `slop-trials-stdb` by default. The drivers accept `gate-*` run names for it (`scenes.py`, `verify_minds.py`, `verify_llm.Run`). A failing case runs again once on a fresh world and blocks only when it fails twice and passes on main; red on main too is reported and kept on the red-on-main list (`just living-scene-gate reds`; `reds --add/--drop`, `recheck` on origin/main). A listed part (`living-mind::<test>`, `combat:<scene>`) that fails is reported without failing its case. Known flakes under load, from the validation records: minds `dealings` (the demand or the rules' ask late), core `tick` (the pause after the giver's wait), player `combat` (staged fights in town geometry; its `kill` scene, listed), minds `conversation` (the talk-turn count once), living-mind's timing tests (`unreachable_provider_holds_calls`, listed); they get the same one retry, never a silent pass. Evidence: `.local/living/verify/gate-<stamp>/` (`gate.json`, each group's log) and each case's own run folder, printed per case. A change to one of these cases' drivers or names changes the gate: keep `CASES` in `scene_gate.py` in step.
+
 ## Safety rules
 
 - Only publish or delete `verify-*` databases. The same server holds paused reference worlds (`aske-coast*`, `stage*`). Never publish, reset, pause or delete them, and never run `living/tools/lab.py --reclaim`.
