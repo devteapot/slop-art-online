@@ -1456,6 +1456,130 @@ Switches in the fake proofs, to record again with the paid batch: greeting `near
 - The candidate count is a count, not a measure of who met whom. Two settlements a short walk apart still decide who sees whom, and names cross settlements only through the seeded ties.
 
 
+### Why the run-born do not pair: measures and the bi1 reading (2026-11-12)
+
+Branch `births-2-measures`, for [research idea 6](MIND_RESEARCH_IDEAS.md#6-why-the-run-born-do-not-pair). It is free: a reading of existing evidence and a fake run. It adds no rule and no nudge.
+
+`births_report.py` now writes a `why:` line for each person who came of age in the run: the run-born, and seeded children, marked `seeded child`. Each line gives:
+
+- when they came of age (`adult at`, real minutes from the start) and their adult minutes in the run;
+- their candidates at every census while adult (unrelated, unpaired adults, as `Pairing` counts them for the conceive attempts above): mean, peak, share of adult time with any, and a series every 30 minutes;
+- the share of their deliberations whose scene, the `{"creatures": […]}` the prompt carried, held a candidate;
+- the longing percepts their prompts carried ("You long for a child…", once per game time), and when the first came;
+- conceive attempts made as an adult, and the minutes from adulthood to the first;
+- deliberation and talk replies that **name** a candidate, **aim** an act or line at one (`target`/`to` ids: often asking to be taught, not courting), or speak of **partnering**, **longing** or **children** (keyword classes). Examples are printed (`--mentions N`).
+- the body's refusals, by reason, as the mind was told them;
+- the share of adult time with no mind (outside the census `thinkers`);
+- a time budget while adult, from census activities: sleep, work (gather, cook, store, take, give, teach, build, plant, keep, feed, read), idle (wait, wander, follow, rest, none), walk (goto), eat, social, family (conceive).
+
+Per run, `rb_tried_by_cands` gives run-born adults who ever tried, of all, by their mean candidates while adult (0, under 3, 3–6, 6 or more). `coa_*` gives the same for seeded children. `rb_scene_cand` is the mean scene share and `rb_longing` the longing percepts.
+
+```bash
+python3 living/tools/births_report.py --root /home/gooning/dev/slop-runs-arrive/.local/living/trials --attempts 0 --mentions 3 bi1
+```
+
+**bi1 read back.** The table sums the four worlds. "Thinking" means people with a mind for at least half their adult time. In the control the cap of 12 kept Nia, Hana, Sol, Bee and Jory on their graphs for 96–100% of their adult time.
+
+| | Run-born adults | Seeded children come of age |
+| --- | ---: | ---: |
+| People (thinking) | 19 (12) | 12 (12) |
+| Ever tried to conceive | **1** (Uma, provided) | **6** |
+| … within their first 179 minutes as adults | 1 | 5 |
+| By mean candidates: under 3 / 3–6 / 6 or more | 0 of 2 / 1 of 15 / 0 of 2 | – / 6 of 12 / – |
+| Mean candidates while adult (lowest person's mean) | 4.6 (2.1) | 4.0 (3.1) |
+| Share of adult time with at least one candidate | 1.0 for every person | 1.0 for every person |
+| Deliberations whose scene held a candidate (thinking) | 0.90 | 0.93 |
+| Longing percepts per thinking adult (with any) | 3.3 (11 of 12) | 5.2 (12 of 12) |
+| Adult minutes in the run (thinking, mean) | 179 | 284 |
+| Replies speaking of partnering / children / naming a candidate | 0.077 / 0.11 / 0.32 | 0.057 / 0.12 / 0.31 |
+| Time while adult: sleep / work / idle / walk | 0.46 / 0.15 / 0.29 / 0.09 | 0.38 / 0.09 / 0.43 / 0.10 |
+
+What it shows, and what it does not:
+
+- **Candidates and their sight were not missing.** Every run-born adult had at least one unrelated, unpaired adult available the whole time, 4.6 on average, and nine scenes in ten held one. Eleven of the twelve thinking run-born felt the longing.
+- **Yet one tried, against six of the seeded children.** The children had the same choice, 4.0 candidates, and talked of partnering and children as often. The difference is not the count of candidates, nor whether the longing was felt.
+- **Time explains only part of it.** The seeded children had 284 adult minutes in the run against 179. But five of them tried within their first 179 minutes as adults, against the one run-born.
+- **The run-born spent more of their adult time working and sleeping**, 0.15 and 0.46 against 0.09 and 0.38. Their mentions of candidates were mostly asking to be taught: "ask the one cooking fish (#14) to teach me cooking". This fits the journals' reading above, that they learned crafts first. It is a correlation over 12 and 12 people, not a cause.
+- **A lead for the paid batch.** Run-born identities start from a birth narrative. Ada (longing) said "I'm only little — Mama's arm is where I sleep" as an adult. Whether a run-born adult's sheet still describes a child is the next free reading (idea 6's `birth_identity_system` question). It is not measured here.
+- Nothing here is about the larger seed. bi1's worlds are the hamlet's twelve.
+
+**Fake proof** (`b3f`, 2026-11-12 13:30–14:10): `hamlet-6` for 40 minutes on the fake model. A script ([`fake/coming-of-age.json`](../living/trials/fake/coming-of-age.json)) makes every one of Wren Tarn's deliberations decide to start a family with Ivo Ashby. Nobody is born in 40 minutes, so the run-born count is 0. Three seeded children came of age, and each got a `why:` line:
+
+- **Wren** (adult at 14 minutes): 8 candidates on average, at most 9. All 3 of her adult deliberations had a candidate in the scene, and she felt the longing once, at 15 minutes. She made 4 attempts as an adult, out of 7 in all; the other 3 came while she was a child. Her replies spoke of partnering and children 3 times and named Ivo once. The body refused her 6 times in all: twice "not of an age to start a family" (her, while a child), three times "they are not of an age for it" (Ivo, until minute 21) and once "no # in sight". Her time while adult was idle 0.53 and sleep 0.47. By candidates, 1 of these 3 tried, in the 6-or-more band.
+- **Ivo** (adult at 21 minutes): 8.3 candidates, the longing at 20 minutes, no attempts.
+- **Lio** (adult at 34 minutes): asleep for his 6 adult minutes.
+
+`b3f` was cleaned with `trials.py clean`, which pauses each world before deleting it.
+
+### Does a run-born adult's identity still describe a child? (2026-11-12)
+
+Branch `births-identity`. Free: reading of code and of bi1's journals, nothing built. It follows the lead above: Ada, newly adult, said "I'm only little — Mama's arm is where I sleep."
+
+**The code: where "who you are" comes from.**
+
+- **The text.** `# Who you are` is `persona_text` ([mind.rs:1703](../living/mind/src/mind.rs)): the persona row's narrative, values, goals, pastimes, calling, traits and mood, then one's work and daily rhythm (`daily_life`, from the background), know-how and community. **It holds no age and no life stage.** The same text heads think, deliberate, consolidate and talk prompts.
+- **The body's age is perceived elsewhere.** The scene's `you` carries it, as `"age": "35 years (adult)"` ([perceive.rs:603](../living/authority/src/perceive.rs)). The scene goes only into think and deliberate prompts. A consolidation prompt carries no age: Dell's had no "N years (stage)" and no "adult" ([`consolidate_user`](../living/mind/src/prompts.rs)). Nor does a talk prompt: Ada's, below, had neither. The Neo4j `Self` node holds the name and the identity versions, nothing of the body ([memory.rs:196](../living/mind/src/memory.rs), `set_identity`).
+- **The first identity, by origin** ([`Origin::of`](../living/mind/src/mind.rs), mind.rs:161):
+  - **Seeded people** start from their authored sheet, which is written at their seeded age.
+  - **A child or infant with a parent** gets `birth_persona`, from `birth_identity_system` ([prompts.rs:492](../living/mind/src/prompts.rs)): "write the narrative … simple and short, **as a very young child**". It also writes `CHILD_OF` edges to the parents.
+  - **A run-born adult** whose mind first starts when they are already adult (the cap of 12 in bi1) falls to `Origin::Seed`. `seed_persona` finds no seed entry and returns. So **no persona** ("(no persona yet)" in every prompt) and **no `CHILD_OF` edges**, until a consolidation happens to write an identity.
+- **At a stage change** the authority's `grew` ([tick.rs:258](../living/authority/src/tick.rs)) gives one percept, at salience 0.8, and asks for a deliberation:
+  - "You have grown up: you are an adult now."
+  - "You are growing old: your body tires sooner and heals slower."
+  - (and "no longer a baby" for an infant who becomes a child)
+
+  **Nothing else changes the identity at a stage.** It changes only when a consolidation's reply carries `identity`. That is accepted when an experience in the batch is momentous (salience 0.9 or more; this one is 0.8), or when 8 minutes have passed since the last change (mind.rs:2307). So whether a child's self survives adulthood is the consolidation model's choice, given that one experience line, and never seen again: later consolidations carry no age.
+
+**The evidence: bi1, coming of age.** The prompts were read before and after each person's census turned adult. The script and its output are not committed; the quotes are from the journals.
+
+| | People | The "grown up" percept reached a consolidation | That consolidation rewrote the identity | No persona at all when adult |
+| --- | ---: | ---: | ---: | ---: |
+| Seeded children | 12 | 12 | **12**, every one "grown now" | 0 |
+| Run-born with a mind from childhood | 5 | 5 | **3** | 0 |
+| Run-born without a mind at adulthood (the cap) | 14 | 6, when their mind started | 6 | **14** |
+
+- **Seeded children rewrote at once.** Tobin (provided) went from "I am Tobin, small but useful. I carried my baby sister Uma home" at 14 years (child) to "I am Tobin, grown now — no longer the child trailing the berry bushes but one who owes debts and pays them", 4 minutes after. Lio (control) went from "Uncle Cal's trapping girl … my hands are still too young" to "as of last night I am grown — no longer Cal's trapping girl but a hunter in her own right".
+- **Dell (control) kept an infant's self.** At 14 years (child) and still at 15 years (adult), her prompt read: "It is warm. There is a big soft one that holds me and her heart goes thump-thump and I know her." The consolidation that carried "You have grown up: you are an adult now." (135 min) answered `identity: null`, with the summary "I'm grown now, but the lesson and her care are the same." Its own `# Who you are` read "I am Dell, small and warm, Mama's and Papa's little one". At 24 years (adult), an hour on: "I am Dell, Mama's and Papa's little one, and tonight I fed Lark warm from the fire". Only after her mother's death, at 49 years: "I am Dell, keeper of fires".
+- **Ada (longing)** at 15 years (adult): "I am Ada. I am small and I wander". Her consolidation with the percept (283 min) also answered `identity: null`. Ada's line was a talk turn, whose prompt has no age: "I'm only little — Mama's arm is where I sleep", under a `# Who you are` that said "I am small and sleepy, but I know now I can find my way."
+- **The other three run-born rewrote:**
+  - Teal (spaced), from "I am Teal. I am new. Everything is big and loud." to "I am Teal, grown now at Wenna's fire … Everyone fed me when I was small";
+  - Hollis, to "grown as of today — no longer the little one holding berries and waiting";
+  - Uma, to "I grew up in the night between one fire and the next … I am small no more".
+- **The run-born who first thought as adults began with nothing.** Vale (control) was adult at 161 min, with "(no persona yet)" until 258. Their first identity read "I am young and newly grown, with no kin I know of here … first waking memories among strangers who were kind". Meanwhile Brisk's identity named Vale his child: "father to Bee, Dell, Vale and Tobin". Lark, Pia, Nia, Hana, Sol, Bee, Jory (control) and Rook (longing) never had the percept consolidated. Their stage change came before their mind started.
+
+**The other direction: becoming an elder.** In bi1, 36 seeded people became elders before the last 5 minutes. No run-born person did: an elder is 408 minutes of age, longer than the run.
+
+- **The "growing old" percept reached a consolidation in all 36.** Of those consolidations, 33 rewrote the identity, 29 of them naming age. Oren (control): "my body has turned old — it tires sooner and heals slower, and I feel it in the evenings". Mara (longing): "the years run fast and I am on the long slope of mine". The three that answered null were Brisk (control), Cal and Ilsa (spaced).
+- **An hour later, age had dropped out of most narratives.** Only 7 of 32 still said anything of age: later consolidations rewrite the narrative from what happened, with no age in their prompt. After that the elder's age lives only in the think and deliberate scenes ("62 years (elder)"). Talk and consolidation never see it.
+- No elder's narrative claimed youth, so nothing contradicted the body. The fact was simply missing from every prompt but the scene.
+
+**Verdict: yes, there is a gap.** The body's age and stage never enter `# Who you are`, consolidation or talk. Whether a self follows the body depends on one consolidation reply to one 0.8 experience.
+
+- Seeded children had been consolidated through a whole childhood of lived days, and their models rewrote every time.
+- Run-born identities start from a deliberately infantile narrative. Two of five kept it into adulthood, and a talk turn spoke from it ("I'm only little").
+- Run-born whose mind starts late have no identity and no parents at all.
+- Elders rewrite when they turn, but lose the fact from their self within the hour.
+
+Whether this holds back pairing is **not shown**. Dell and Ada did not try. Uma, who rewrote herself as grown, was the only run-born to try, but Teal and Hollis also rewrote and did not.
+
+**The fix's shape (not built).** It must come only from what the mind already has: the body it perceives, and what it lived, consolidated as usual. There is no rewritten persona, no instruction to change voice, and no want.
+
+1. **The body's age and stage as a perceived fact, in every prompt's `# Who you are`.** The line would read, for example, "Your body: 15 years old, an adult since about a day." It comes from the same character row and life table that the scene's `you.age` already uses: `stage` and age from `born_ms`/`birth_age_days` at the world's pace and `life_years` law (the mind already reads `stage` in `body_now`, mind.rs:584), and how long ago the stage began from the same life table.
+   - It sits beside the persona, not inside it. The authored or lived narrative stays as written.
+   - It reaches consolidation and talk, which today never see it. So each consolidation judges "identity: null or …" against the body as it is now, not once.
+   - Elders keep the fact after their narrative moves on.
+   - It is one line of bodily truth, of the kind `felt_body` already gives for hunger and health.
+2. **The stage change kept as a lived event.** The authority's "You have grown up" / "You are growing old" percept stays as it is: an experience, consolidated like any other, remembered or not by the mind's own choice. The `Self` node could carry the perceived stage and its start (`stage`, `stage_since`), set from the character row when it changes, so the mind's self-memory and its projection agree with the body. Neither tells the person what to want.
+3. **A first identity for someone whose mind starts late, from facts.** Today a run-born adult who first thinks gets nothing. The fix gives them what `birth_persona` gives a newborn, but at their age:
+   - `CHILD_OF` edges to the parents on their character row;
+   - their home;
+   - the body line above;
+   - their lived experiences, consolidated as usual.
+
+   That is not a persona chosen for them: the first identity is drafted only from what is true of them. Under births-2's runner nobody's mind starts late while the cap of 48 does not bind. It still matters once it binds, and in any world with a cap.
+
+Not covered: whether the fact changes conduct (that needs a paid run); a newborn's mind that starts when it is already a child, whose birth identity still says "a very young child"; animals.
+
 ## The greeting trial (2026-11-11)
 
 Branch `exp-greet`. Status: fake proof (`gf4`, `gf5`, below) and paid batches [gr1/gr2](#greeting-batches-gr1gr2-2026-11-11). `nearest` + `concurrent` is the default since 2026-11-11; the `greet-control` variant runs the old rules (`off`, `wait`).

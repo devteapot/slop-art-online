@@ -9,7 +9,9 @@ opaque keys (docs/LOOK.md §2, §4, §5; docs/CHARACTERS.md, "The look book").
 `book` writes two files (docs/LOOK.md §5):
 
   living/game/assets/characters/looks.json    the book, a client asset (git-ignored): lines only
-      generation   "c4-" and 8 hex digits of a hash of every line key
+      generation   "c4-" and 8 hex digits of a hash of every line key of this writing
+      generations  every generation the book holds, oldest first: the book is append-only, and
+                   the lines of the book already at that path are kept (`--fresh` starts again)
       lines        {"lk_…": {person: the line as the composer reads it, words: LookWords}}
       decor        ["lk_…"]: lines for the island's background people, none of which a
                    character can wear
@@ -293,7 +295,18 @@ def book(a):
     if len(set(who_key.values())) != len(who_key):
         raise SystemExit("look_lines: two people came out with the same lines at every band")
     generation = "c4-" + hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()[:8]
-    out = dict(generation=generation, lines=dict(sorted(lines.items())), decor=decor, files=files_of(v["person"] for v in lines.values()))
+    # The book is append-only: a released world may still use a key of an earlier generation, so
+    # the lines of the book already there stay, and the generations it has held are listed,
+    # oldest first. `--fresh` starts the book again.
+    generations, kept = [], {}
+    if os.path.exists(a.book) and not a.fresh:
+        before = json.load(open(a.book))
+        generations = list(before.get("generations") or [before["generation"]])
+        kept = {k: v for k, v in before["lines"].items() if k not in lines}
+    if generation not in generations:
+        generations.append(generation)
+    every = dict(sorted({**kept, **lines}.items()))
+    out = dict(generation=generation, generations=generations, lines=every, decor=decor, files=files_of(v["person"] for v in every.values()))
     os.makedirs(os.path.dirname(a.book), exist_ok=True)
     json.dump(out, open(a.book, "w"), indent=1, ensure_ascii=False)
     # The world's data: whose each line is. Never shipped to a client.
@@ -306,7 +319,7 @@ def book(a):
     world_path = a.world or os.path.join(ROOT, "living", "seeds", "worlds", run, "looks.json")
     json.dump(world, open(world_path, "w"), indent=1, ensure_ascii=False)
     n = collections.Counter(b for who, b, *_ in entries if who[0] == "resident")
-    print(f"look_lines: generation {generation}: {len(lines)} lines: {len(people)} residents in {sum(n.values())} "
+    print(f"look_lines: generation {generation}{' (with ' + str(len(kept)) + ' lines kept from ' + ', '.join(generations[:-1]) + ')' if kept else ''}: {len(lines)} lines: {len(people)} residents in {sum(n.values())} "
           f"({', '.join(f'{n[b]} {BANDS[b]}' for b in range(5) if n[b])}; {len(built)} as built), {a.pool} pool people with five bands each, {len(decor)} decor lines; "
           f"{len(out['files'])} files named")
     print(f"  {os.path.relpath(a.book, ROOT)} ({os.path.getsize(a.book) // 1024} kB), {os.path.relpath(world_path, ROOT)} ({os.path.getsize(world_path) // 1024} kB)")
@@ -349,10 +362,11 @@ def cases(a):
 
 
 def wear(a):
-    """Write each outfit piece's slot and layer into its file's scene extras (`outfit`)."""
+    """Write each outfit piece's slot and layer into its file's scene extras (`outfit`). With
+    `--check`, write nothing and fail if a file lacks them or has others."""
     from merge_primitives import read_glb, write_glb
 
-    done = 0
+    done, off = 0, []
     for f in sorted(os.listdir(os.path.join(a.styles, "outfit"))):
         if not f.endswith(".glb"):
             continue
@@ -361,9 +375,14 @@ def wear(a):
         scene = j["scenes"][j.get("scene", 0)]
         want = dict(piece=f[:-4], **person_params.piece_wear(f[:-4]))
         if scene.get("extras", {}).get("outfit") != want:
+            if a.check:
+                off.append(f)
+                continue
             scene.setdefault("extras", {})["outfit"] = want
             write_glb(path, j, binary)
         done += 1
+    if off:
+        raise SystemExit(f"look_lines: {len(off)} outfit file(s) without their slot and layer in the scene's extras: {', '.join(off[:6])}{'…' if len(off) > 6 else ''}; run `look_lines.py wear`")
     print(f"look_lines: {done} outfit files carry their slot and layer")
 
 
@@ -377,12 +396,14 @@ def main():
     b.add_argument("--world", default="", help="where the world's data goes (default: living/seeds/worlds/<run>/looks.json)")
     b.add_argument("--pool", type=int, default=POOL, help="people in the pool")
     b.add_argument("--decor", type=int, default=DECOR, help="people in the decor pool")
+    b.add_argument("--fresh", action="store_true", help="start the book again: drop the lines and generations of the book already there")
     c = sub.add_parser("cases")
     c.add_argument("--town", required=True)
     c.add_argument("--world", default="")
     c.add_argument("--book", default=BOOK)
     w = sub.add_parser("wear")
     w.add_argument("styles")
+    w.add_argument("--check", action="store_true", help="write nothing; fail if a file lacks its slot and layer")
     a = ap.parse_args()
     dict(book=book, cases=cases, wear=wear)[a.cmd](a)
 
