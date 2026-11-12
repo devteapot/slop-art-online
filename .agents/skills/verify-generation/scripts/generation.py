@@ -18,7 +18,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".local/living/verify"
-SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "cullet", "floor-megacity-2k", "floor-megacity-4k", "cullet-laws", "cullet-laws-floor")
+SEEDS = ("realm", "valley", "authored-test", "aske-coast", "stage3-village", "island", "plan-test", "cullet", "floor-megacity-2k", "floor-megacity-4k", "cullet-laws", "cullet-laws-floor", "plan-test-floor")
 # An inventory row held by a structure (`tables::STRUCTURE_BIT`).
 STRUCTURE_BIT = 1 << 40
 # Seeds derived from a tracked seed in the run's directory (published through `--seed` with an
@@ -26,14 +26,17 @@ STRUCTURE_BIT = 1 << 40
 # compiled seed, and at 4096 m as a floor: a module built without a seed (`--seed none`) given
 # the seed at runtime by `create_floor`, which creates the land in scheduled steps (`genesis`).
 DERIVED = {"floor-megacity-2k": ("floor-megacity", {"size": 2048}), "floor-megacity-4k": ("floor-megacity", {"size": 4096})}
-FLOORS = ("floor-megacity-4k", "cullet-laws-floor")
+FLOORS = ("floor-megacity-4k", "cullet-laws-floor", "plan-test-floor")
 # Seeds with their own day and laws (`day_minutes`, `laws_file`; docs/CULLET_RULES.md): compiled in
 # (`cullet-laws`, its laws file read in by build.rs) and given to a floor module (`cullet-laws-floor`,
 # the same seed sent as living/tools/seed_text.py sends it). Both are created in the one call.
 LAWS_FLOORS = {"cullet-laws-floor": "cullet-laws"}
+# A runtime seed carrying look data (docs/LOOK.md §5): plan-test, with its `looks` fixture, given to
+# a floor module by `create_floor` (created in the one call).
+LOOKS_FLOORS = {"plan-test-floor": "plan-test"}
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine", "relation", "acquaintance", "world_law", "script", "rhythm")
+          "place", "routine", "relation", "acquaintance", "world_law", "script", "rhythm", "look", "look_line")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -156,6 +159,86 @@ def create_floor(run, d, seed):
     checks.append({"check": "no generation restarts", "pass": g.get("restarts") == 0, "detail": g.get("restarts")})
     again = harness("call", run, d / "create-floor-again.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin", "--expect-refusal", "already has its seed")
     checks.append({"check": "a second create_floor is refused", "pass": again == 0})
+    return checks
+
+
+def create_floor_looks(run, d, seed):
+    """Give a floor module a seed with look data, created in this call; returns the checks. On the
+    way: looks that do not resolve (a resident wearing an unknown entry, a line without words)
+    are refused, and nothing is written."""
+    checks = []
+    first = next(r for t in seed["towns"] for r in t.get("residents", []) if r.get("look"))
+    for label, edit, words in [("unknown-person", lambda b: b["towns"][0]["residents"].__setitem__(0, dict(first, look="lp_0000000000000000")), "not among `people`"),
+                               ("line-without-words", lambda b: b["looks"]["words"].pop(next(iter(b["looks"]["words"]))), "has no words")]:
+        bad = json.loads(json.dumps(seed))
+        edit(bad)
+        code = harness("call", run, d / f"create-floor-{label}.log", "create_floor", json.dumps([json.dumps(bad)]), "--as-admin", "--expect-refusal", words)
+        checks.append({"check": f"create_floor refuses a seed whose looks do not resolve: {label}", "pass": code == 0})
+    code = harness("call", run, d / "create-floor.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin")
+    checks.append({"check": "create_floor accepted the seed with its looks", "pass": code == 0})
+    again = harness("call", run, d / "create-floor-again.log", "create_floor", json.dumps([json.dumps(seed)]), "--as-admin", "--expect-refusal", "already has its seed")
+    checks.append({"check": "a second create_floor is refused", "pass": again == 0})
+    return checks
+
+
+def check_looks(seed, rows):
+    """A world's looks (docs/LOOK.md): with a seed's `looks`, the world wears its generation,
+    `look_line` holds each (person, band) line with its words, every seeded resident wears its
+    entry's line for its band, every living person has a look row whose line resolves, and no
+    animal has one; without looks, no look rows and an empty `look_book`."""
+    checks = []
+
+    def present(name, condition, detail=None):
+        checks.append({"check": name, "pass": bool(condition), "detail": detail})
+
+    w = rows["world"][0]
+    looks, lines, rows_look = seed.get("looks"), rows.get("look", []), rows.get("look_line", [])
+    alive = {c["id"]: c for c in rows["character"] if c["alive"]}
+    if not looks:
+        present("a seed without looks: no look rows, no look lines, an empty look_book", not lines and not rows_look and w.get("look_book", "") == "", {"look": len(lines), "look_line": len(rows_look)})
+        return checks
+    bands = ["infant", "child", "youth", "adult", "elder"]
+    want = {(p, bands.index(b) if b in bands else int(b), k) for p, m in looks["people"].items() for b, k in m.items()}
+    got = {(r["person"], r["band"], r["key"]) for r in rows_look}
+    present("the world wears the seed's look generation", w.get("look_book") == looks["generation"], {"look_book": w.get("look_book")})
+    present("look_line holds each person entry's line by band", got == want and len(rows_look) == len(want), {"rows": len(rows_look), "entries": len(want)})
+    # SQL's JSON gives a struct column as its fields in order (`LookWords`).
+    fields = ["form", "girth", "height", "hair", "top", "bottom", "head", "beard"]
+    as_words = lambda v: dict(zip(fields, v)) if isinstance(v, list) else v
+    defaults = {"form": "", "girth": 1, "height": 1, "hair": "", "top": "", "bottom": "", "head": "", "beard": ""}
+    words_ok = all(as_words(r["words"]) == dict(defaults, **looks["words"][r["key"]]) for r in rows_look if r["key"] in looks["words"])
+    present("each look_line carries its line's words", words_ok and all(r["key"] in looks["words"] for r in rows_look))
+    by_id = {r["id"]: r for r in lines}
+    keyed = {r["key"] for r in rows_look}
+    persons = [c for c in alive.values() if c["kind"] == "person"]
+    present("every living person has a look row", all(c["id"] in by_id for c in persons), {"people": len(persons), "rows": len(lines)})
+    present("every look row's line resolves in look_line, for its person and band", all((r["person"], r["band"], r["line"]) in got for r in lines), {"unresolved": [r["id"] for r in lines if (r["person"], r["band"], r["line"]) not in got][:10]})
+    present("no animal or dead character has a look row", all(i in alive and alive[i]["kind"] == "person" for i in by_id))
+    named = {r["name"]: r["look"] for t in seed.get("towns", []) + seed.get("villages", []) for r in t.get("residents", []) if r.get("look")}
+    wearing = [(c["name"], by_id.get(c["id"], {}).get("person")) for c in persons if c["name"] in named]
+    present("each seeded resident wears its own entry", wearing and all(p == named[n] for n, p in wearing), {"residents": len(wearing), "wrong": [x for x in wearing if x[1] != named[x[0]]][:10]})
+    pool = set(looks.get("pool", []))
+    others = [by_id[c["id"]]["person"] for c in persons if c["name"] not in named and c["id"] in by_id]
+    present("everyone else wears a pool entry" + ("" if others else " (none)"), all(p in pool for p in others), {"others": len(others)})
+    present("every line key is lk_ and 16 hex digits", all(re.fullmatch(r"lk_[0-9a-f]{16}", k) for k in keyed))
+    # char-4's cases for an authored world (worlds/<run>/look-cases.json, look_lines.py): the key
+    # rule over the drawn fields only, and residents of each band wearing the case's entry and line.
+    cases_file = ROOT / "living/seeds/worlds" / seed["run"] / "look-cases.json"
+    if cases_file.exists():
+        cases = json.loads(cases_file.read_text())
+        present("the cases are of the world's generation", cases["generation"] == looks["generation"], {"cases": cases["generation"]})
+        drawn = ("type", "height", "proportions", "identity", "colors", "styles", "belly", "grey")
+        canon = lambda line: json.dumps({k: line[k] for k in drawn if k in line}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        hashed = [(c["key"], "lk_" + hashlib.sha256(canon(c["line"]).encode()).hexdigest()[:16], canon(c["line"]) == c["canonical"]) for c in cases["key_hash"]["cases"]]
+        present("the key rule (lk_ + 16 hex of SHA-256 over the drawn fields' canonical JSON) gives each case's key; name and seed are left out", all(k == h and same for k, h, same in hashed), {"cases": len(hashed)})
+        by_name = {c["name"]: c for c in persons}
+        wrong = []
+        for c in cases["bands"]["cases"]:
+            ch = by_name.get(c["resident"])
+            row = by_id.get(ch["id"]) if ch else None
+            if not row or (row["person"], row["band"], row["line"], ch["stage"]) != (c["look"], c["band"], c["line"], c["stage"]):
+                wrong.append((c["resident"], row and (row["person"], row["band"], row["line"]), ch and ch["stage"]))
+        present(f"each band case's resident wears its entry, in its band, with its line, at its stage ({len(cases['bands']['cases'])} cases)", not wrong, {"wrong": wrong})
     return checks
 
 
@@ -362,6 +445,7 @@ def check_seed(seed, rows):
     present("seeded rhythms are as given (any rising hour, working hours, a second sleep)" + ("" if seeded else " (none: the seed gives none)"), not wrong, {"seeded": len(seeded), "wrong": wrong[:10]})
     if m.get("kind") == "land":
         checks.extend(check_land(seed, rows, size[0], tiles))
+    checks.extend(check_looks(seed, rows))
     return checks
 
 
@@ -1060,6 +1144,8 @@ def suite(args):
                 write(seed_path, derived)
             elif seed_name in LAWS_FLOORS:
                 seed_path = ROOT / f"living/seeds/{LAWS_FLOORS[seed_name]}.json"
+            elif seed_name in LOOKS_FLOORS:
+                seed_path = ROOT / f"living/seeds/{LOOKS_FLOORS[seed_name]}.json"
             else:
                 seed_path = directory / "malformed.json" if seed_name == "malformed" else ROOT / f"living/seeds/{seed_name}.json"
             # As the world receives it: a laws file read in (build.rs, seed_text.py).
@@ -1104,7 +1190,7 @@ def suite(args):
                     continue
                 if launch_code:
                     raise RuntimeError(f"launch failed; read {d}/launch.log")
-                floor_checks = create_floor_laws(active_run, d, seed_text(seed_path)) if seed_name in LAWS_FLOORS else create_floor(active_run, d, json.loads(seed_path.read_text())) if seed_name in FLOORS else []
+                floor_checks = create_floor_looks(active_run, d, seed_text(seed_path)) if seed_name in LOOKS_FLOORS else create_floor_laws(active_run, d, seed_text(seed_path)) if seed_name in LAWS_FLOORS else create_floor(active_run, d, json.loads(seed_path.read_text())) if seed_name in FLOORS else []
                 if floor_checks and not all(c["pass"] for c in floor_checks):
                     write(d / "checks.json", floor_checks)
                     raise RuntimeError(f"floor creation failed; read {d}/create-floor.log and genesis-final.json")
