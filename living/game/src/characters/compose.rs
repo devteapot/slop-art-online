@@ -52,8 +52,10 @@
 //! styles") are files of the person's own type (`lookdev/styles/overlay/<type>/<name>.glb`), thin
 //! blended layers over its face: they attach as body pieces do (the type's own inverse bind
 //! matrices, no `hair_fit`), carry the face's blink and open mouth (`lookdev::FaceMorphs`, driven
-//! with the face's), shade as the face's skin (with the shadow map beside their file) or as hair,
-//! and cast no shadow. A beard takes `colors.beard`, lines and freckles the skin's.
+//! with the face's) and cast no shadow. A beard and stubble (`…Overlay_00_HAIR`, `…FarOverlay_00_HAIR`
+//! for the far one) shade as hair and take `colors.beard`. Lines and freckles
+//! (`…FaceOverlay_00_FACE`) are a fixed-colour layer, as lips and blush are: drawn as a face
+//! part, unshaded, in their picture's own colours, untagged and without a shadow map ([`kind_of`]).
 //!
 //! **The belly** (`belly`, 0 to about 0.35) moves `J_Fit_Belly` forward by `belly` × 0.108 m (the
 //! file's -Z) from its rest when the scene comes in, and `shape` keeps it under the spine's girth.
@@ -262,6 +264,30 @@ pub fn figure_height(type_file: &str, styled: &Styled) -> Option<f32> {
     range.and_then(|(lo, hi)| (hi > lo).then_some(hi - lo))
 }
 
+/// Whether a style material is a face's skin, so lit by the shadow map beside its file when it
+/// has one (`…Face…_SKIN`). Lines and freckles were (`…FaceOverlay_00_SKIN`); since char-4's
+/// fixed-colour layer they are `…FaceOverlay_00_FACE` and are not.
+fn wants_face_map(name: &str) -> bool {
+    (name.ends_with("_SKIN") || name.contains("Skin")) && name.contains("Face")
+}
+
+/// How a style material is shaded, by its name, as `lookdev::convert` shades a character's own:
+/// hair (a beard and stubble too, `…Overlay_00_HAIR`) as hair; a face's skin with its shadow map
+/// as a face, else skin as skin; `…_FACE` and `…_EYE` as face parts, unshaded and in the file's
+/// own colours (lips and blush, `…FaceTint_00_FACE`; lines and freckles,
+/// `…FaceOverlay_00_FACE`); everything else plain. Which are tinted is `recolor`'s, by the same
+/// names: no `…_FACE` material takes a tag.
+fn kind_of(name: &str, face_map: bool) -> Kind {
+    let skin = name.ends_with("_SKIN") || name.contains("Skin");
+    match () {
+        _ if name.contains("_HAIR") => Kind::Hair,
+        _ if face_map && skin => Kind::Face,
+        _ if skin => Kind::Skin,
+        _ if name.contains("_FACE") || name.contains("_EYE") => Kind::FacePart,
+        _ => Kind::Plain,
+    }
+}
+
 /// What a style file brings to a type's person, worked out once per type and file.
 struct Plan {
     /// Bones only the style has: name, parent's name, local transform (parents first).
@@ -345,17 +371,10 @@ impl Composer<'_> {
         // As `lookdev::convert` gives a character's meshes by material name: hair as hair; a
         // face's skin (an overlay's lines and freckles) as a face, with the shadow map beside its
         // file, else as skin; eyes and lines as face parts; clothes plain.
-        let skin = name.ends_with("_SKIN") || name.contains("Skin");
         let map = format!("{}.face.png", file.trim_end_matches(".glb"));
-        let face_map = (skin && name.contains("Face") && exists(&map)).then_some(map);
+        let face_map = wants_face_map(name).then_some(map).filter(|m| exists(m));
         let face = face_map.clone().map(|m| self.assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(m));
-        let kind = match () {
-            _ if name.contains("_HAIR") => Kind::Hair,
-            _ if face.is_some() => Kind::Face,
-            _ if skin => Kind::Skin,
-            _ if name.contains("_FACE") || name.contains("_EYE") => Kind::FacePart,
-            _ => Kind::Plain,
-        };
+        let kind = kind_of(name, face.is_some());
         // The source colour the recolour moves to a person's: over the file's meshes in this
         // material. Without it (a picture not yet readable) the material is the file's own and
         // `recolor` finds it from the first mesh, as for any character.
@@ -608,6 +627,27 @@ mod tests {
         assert_eq!(p.styles.overlays, ["lines", "freckles"]);
         assert_eq!(p.belly, 0.12);
         assert_eq!(p.styles.hair.as_deref(), Some("bob"));
+    }
+
+    /// Lines and freckles are a fixed-colour face part, untagged, without a shadow map; a beard is
+    /// hair and takes the beard's colour (docs/CHARACTERS.md, "Overlay styles", and char-4's
+    /// fixed-colour lines and freckles).
+    #[test]
+    fn lines_and_freckles_are_drawn_in_their_own_colours() {
+        let lines = "M00_000_00_FaceOverlay_00_FACE";
+        assert!(!wants_face_map(lines));
+        assert!(matches!(kind_of(lines, false), Kind::FacePart));
+        assert!(matches!(kind_of("M00_000_00_FaceTint_00_FACE", false), Kind::FacePart));
+        assert!(matches!(kind_of("M00_000_00_Overlay_00_HAIR", false), Kind::Hair));
+        assert!(matches!(kind_of("M00_000_00_FarOverlay_00_HAIR", false), Kind::Hair));
+        // The old skin-tinted layer, for files before the change.
+        assert!(wants_face_map("M00_000_00_FaceOverlay_00_SKIN"));
+        assert!(matches!(kind_of("M00_000_00_FaceOverlay_00_SKIN", true), Kind::Face));
+        let colors = Colors { skin: Some("#e8bca3".into()), hair: Some("#332217".into()), beard: Some("#c7c7c2".into()), ..Default::default() };
+        assert_eq!(super::super::slot(lines, &colors), None);
+        assert_eq!(super::super::slot("M00_000_00_FaceTint_00_FACE", &colors), None);
+        assert_eq!(super::super::slot("M00_000_00_Overlay_00_HAIR", &colors).map(String::as_str), Some("#c7c7c2"));
+        assert_eq!(super::super::slot("M00_000_00_FarOverlay_00_HAIR", &colors).map(String::as_str), Some("#c7c7c2"));
     }
 
     /// compose.py `attach_hair`: a spring bone's inverse bind matrix is its own in the style's
