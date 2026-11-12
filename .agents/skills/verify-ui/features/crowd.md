@@ -8,7 +8,7 @@ What a town of generated people costs in the client and whether the client draws
 - `far`: a file built with `LOD=both` holds `Far*` mesh nodes on the same skeleton. Beyond `LIVING_GAME_FAR` metres (default 10, for a 1.75 m person, scaled by height) the far meshes show and the full ones hide. A far person comes back to the full model once it is `LIVING_GAME_FAR_BAND` (default 1.5 m) nearer.
 - `identity`: a recipe's `identity` values move a type's identity bones (`characters/identity.rs`) when the scene comes in; `LIVING_GAME_PERF=…` `RUST_LOG=living_game::characters=debug` logs each bone's transform (`identity: <recipe> <bone> t … r … s …`) to compare with compose.py's nodes.
 - `rebuild`: a character's scene spawned again is fitted, shaped, dressed and bound again (`characters::on_ready`), and a file is read once (`characters::SceneOf`).
-- `compose`: with `LIVING_GAME_COMPOSE=1` a recipe with a person line (`person`, the generator's `<name>.params.json` line) is composed from its type's file and the style files it names (`characters/compose.rs`): each file loaded once, its meshes and one toon material a file shared by everyone wearing it; hair and head pieces with the type's `hair_fit`; a hair style's spring bones under `J_Id_Cranium`; outfit pieces coloured by their own name in `colors.outfit`; overlays (`styles.overlays`: beards, stubble, lines, freckles, from `lookdev/styles/overlay/<type>/`) with the type's own bind matrices, blended over the face, shut and opened with its blink and mouth (`lookdev::FaceMorphs`, `rig`'s `faces`), a beard tinted by `colors.beard`, lines and freckles (`…FaceOverlay_00_FACE`) drawn as a fixed-colour face part, untagged and without a shadow map; the line's `belly` moves `J_Fit_Belly` forward by `belly` × 0.108 m; a beard's `FarOverlay` shows with the far head; `styles.hair` names a hair file with its cut (`tousled.2`). Off (the default) the same recipe is its whole `base` file. The far switch, outlines, identity bones, springs and shared clips work on both.
+- `compose`: by default (since compose-client-2; `LIVING_GAME_COMPOSE=0` turns it off) a recipe with a person line (`person`, the generator's `<name>.params.json` line) is composed from its type's file and the style files it names (`characters/compose.rs`): each file loaded once, its meshes and one toon material a file shared by everyone wearing it; hair and head pieces with the type's `hair_fit`; a hair style's spring bones under `J_Id_Cranium`; outfit pieces coloured by their own name in `colors.outfit`; overlays (`styles.overlays`: beards, stubble, lines, freckles, from `lookdev/styles/overlay/<type>/`) with the type's own bind matrices, blended over the face, shut and opened with its blink and mouth (`lookdev::FaceMorphs`, `rig`'s `faces`), a beard tinted by `colors.beard`, lines and freckles (`…FaceOverlay_00_FACE`) drawn as a fixed-colour face part, untagged and without a shadow map; a type's brows (`…FaceBrow_00_FACE`) take `colors.hair`; the line's `belly` moves `J_Fit_Belly` forward by `belly` × 0.108 m; a beard's `FarOverlay` shows with the far head; a greying person's hair greys lock by lock (`_GREY` into the mesh's second UVs, the shared hair toon's palette, `HairTints`, the tag's places and `grey`); every spring and collider group of a hair file comes across; `styles.hair` names a hair file with its cut (`tousled.2`). With `LIVING_GAME_COMPOSE=0` the same recipe is its whole `base` file; a recipe without a person line is its base file either way, which today is every live resident's (`live::recipe_for`). The far switch, outlines, identity bones, springs and shared clips work on both.
 - `clips`: `own-*` files (and `lookdev/types/`) take their clips from `lookdev/anim/own-clips.glb` when it is there. A file without clips of its own is given its player and bone targets (`anim::bind`). `LIVING_GAME_SHARED_CLIPS=0` plays each file's own clips.
 
 ## How to get to it
@@ -84,13 +84,14 @@ python3 living/tools/characters/compose_check.py <binary> .local/living/<run>/fi
 Colours, the town's people against their whole files, and sharing against one material a file:
 
 ```bash
-python3 living/tools/characters/colour_check.py <binary> .local/living/<run>/colour [name ...]   # default: the whole town; about 30 min for 64
+python3 living/tools/characters/colour_check.py <binary> .local/living/<run>/colour [name ...]   # default: the whole town; about 55 min for 64 (five arms, four shots)
 ```
 
 | Read | Pass |
 | --- | --- |
 | `colour.json` `summary.sharing` | `composed_vs_perfile` within `composed_vs_again` (two runs of the same thing): sharing materials changes no pixel beyond the runs' own noise |
 | `summary.delta_e` (head, torso, legs, face) | where a composed person's colours moved from their whole file's, by band (CIE76 ΔE of the band's mean); `summary.worst` names the bands to look at in the shots. Known movers: lines and blush on faces, aprons and smocks' sleeve bands |
+| `summary.eyes` (and `colour.json` `eyes`) | the iris body's CIE76 ΔE, from the `eyes` arm's pure-green irises: composed and whole each against the line's eye colour (`colors.eyes_natural`, else `colors.eyes`; both carry the lighting and the lights' glow), and `composed_vs_whole` once each whole close-up is laid onto its composed one (`whole_shift_px`). On char-4's `9207d6a8`: 22.8, 22.4 and 5.5 at the median. A child's close-up can miss the eyes (in the hair): judge the largest by eye. `REUSE=1` measures a run again without the client |
 
 Cost, the town's 64 as they are, both modes interleaved (`town` is each person's whole file, `composed` the same recipes with the switch on):
 
@@ -102,9 +103,10 @@ python3 $C … --runs x:town,x:composed,x:composed,x:town --repeat 3 --game-env 
 | Line | Pass |
 | --- | --- |
 | `people ready: 65 characters (64 composed) …` | 64 composed with the switch on, 0 off |
-| `people perf: … N mesh entities shown of M` | at the game camera (all far): 460 of 1,342 composed, 210 of 786 whole (Cullet's 97 shared files) |
-| `views: … [people …, P mesh-material pairs]` | the draws the people make once instanced: 99 composed against 210 whole at the game camera, 222 against 594 on the full model |
-| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 33 composed against 10 whole at the game camera, 69 against 84 on the full model. Style toons are keyed by content and source colour (`compose.rs`): they share only where the result is the same, so the count falls as the generator's pieces come to share one shading mean. `LIVING_GAME_PERF=filestyles` keys one a file, to compare |
+| `people perf: … N mesh entities shown of M` | at the game camera (all far): 460 of 1,406 composed, 210 of 850 whole (Cullet's 97 shared files; char-4 `d82e7762`, a face 7 primitives with the brows) |
+| `views: … [people …, P mesh-material pairs]` | the draws the people make once instanced: 104 composed against 210 whole at the game camera, 244 against 658 on the full model |
+| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 17 composed against 10 whole at the game camera, 53 against 84 on the full model. Style toons are keyed by content and source colour (`compose.rs`): they share only where the result is the same, so the count falls as the generator's pieces come to share one shading mean. `LIVING_GAME_PERF=filestyles` keys one a file, to compare |
+| `--perf matnames`: `view materials: <material name> ×N, …` | people's distinct materials in view by name: composed `M00_000_00_EyeIris_00_EYE ×1` and `M00_000_00_FaceBrow_00_FACE ×1` (one each, shared by every type), whole files ×64 an iris |
 | `assets: N meshes M MiB (… morph targets …)` and `batches: … textures … MiB` | composed far below whole: mesh data and morph targets, and GPU textures |
 
 ## Gotchas
@@ -112,5 +114,6 @@ python3 $C … --runs x:town,x:composed,x:composed,x:town --repeat 3 --game-env 
 - Run each binary once before measuring: Metal's shader cache is per binary, and a cold one gives a first run of 5 s frames.
 - macOS process memory (RSS, `footprint`) moves by gigabytes with the other agents' load. Use the `assets:` line for what the people hold.
 - `crowd.py`, `compose_check.py` and the foot-slide and stills harnesses each rewrite `recipes.json` for a run and restore it after. Never run two at once.
+- Composing is the default since compose-client-2: a run that means a town person's whole file (a foot-slide run as `LIVING_GAME_PLAYER=<town recipe>`, a view of one) sets `LIVING_GAME_COMPOSE=0`. `crowd.py`, `compose_check.py` and `colour_check.py` set it for their whole arms.
 - Other clients on the same GPU (another worker's tour or film) can make a run die about a second in with Metal's `Cannot allocate sample buffer` and `DeviceLost` (the `diag` flag's GPU counters). `crowd.py` then reports nulls for that run: check `ps` for other `living-game` processes and run it again.
 - The frame time is not a performance claim (docs/PERFORMANCE_CONTRACT.md): interleave the sets and report the load average.

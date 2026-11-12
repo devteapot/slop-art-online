@@ -78,7 +78,12 @@ fn main() {
     // The gltf crate names a custom attribute without its leading underscore (`Semantic::Extras`).
     let plugins = DefaultPlugins
         .set(AssetPlugin { file_path: lookdev::asset_root(), ..default() })
-        .set(bevy::gltf::GltfPlugin::default().add_custom_vertex_attribute("OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL));
+        .set(
+            bevy::gltf::GltfPlugin::default()
+                .add_custom_vertex_attribute("OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL)
+                // Hair's greying lock by lock (`_GREY`, characters/compose.rs).
+                .add_custom_vertex_attribute("GREY", characters::compose::ATTRIBUTE_GREY),
+        );
     let headless = capture::headless();
     if headless {
         // Scripted photographs: no window; the camera renders into an image (capture.rs).

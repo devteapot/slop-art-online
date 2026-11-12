@@ -1271,11 +1271,13 @@ def doing(s):
     """What one character perceives another doing, for AI bodies (docs/PERCEPTION.md, "Activity
     derived from the body"): its activity's label, unchanged by the derivation from the body,
     which applies only to a body moving under motion intent (a player's movement keys; no AI
-    body steers that way). On an open line an observer O stands at the west end; W1 walks to O
-    (goto), W2 walks in from 10 m to a spot near O (goto a point), F follows O, S stands by.
-    O's graph thinks (a `think` leaf), which writes O's deliberation scene: the `doing` of each
-    must be its activity's label, and none of their bodies steers by direction (`steer.goal`
-    3). About a minute: the observer can ask for a deliberation only 45 s after it arrives."""
+    body steers that way), with a creature target named as O perceives it (first-sight-crowd).
+    On an open line an observer O stands at the west end; W1 walks to O (goto), W2 walks in from
+    10 m to a spot near O (goto a point), F follows S, S stands by. O's graph thinks (a `think`
+    leaf), which writes O's deliberation scene: W1 reads "goto → you", F "follow → a stranger"
+    (S, whose name O does not know), W2 its point, S wait, and none of their bodies steers by
+    direction (`steer.goal` 3). About a minute: the observer can ask for a deliberation only 45 s
+    after it arrives."""
     line = open_line(s)
     (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
     obs, w1, w2, f, st = s.people(5)
@@ -1290,7 +1292,7 @@ def doing(s):
     time.sleep(max(1.5, 47.0 - (time.monotonic() - born)))
     near = list(line[1])
     s.graph(w2, {"seq": [{"do": {"skill": "goto", "target": {"at": [near[0], near[1] + 1.0]}}}, {"wait": 300}]})
-    s.graph(f, {"seq": [{"do": {"skill": "follow", "target": {"id": obs}}}, {"wait": 300}]})
+    s.graph(f, {"seq": [{"do": {"skill": "follow", "target": {"id": st}}}, {"wait": 300}]})
     s.graph(w1, {"seq": [{"do": {"skill": "goto", "target": {"id": obs}}}, {"wait": 300}]})
     stamp = lambda: next((d["updated_ms"] for d in s.rows(f"SELECT actor, updated_ms FROM deliberation WHERE actor = {obs}")), -1)
     before = stamp()
@@ -1301,11 +1303,13 @@ def doing(s):
     scene = json.loads(row["scene"])
     (s.out / f"{s.name}-scene.json").write_text(json.dumps(scene, indent=1, ensure_ascii=False) + "\n")
     seen = {c["id"]: c.get("doing") for c in scene.get("creatures", [])}
-    s.expect("the scene's doing is each AI body's activity label", all(seen.get(i) == a["label"] for i, a in acts.items() if i in seen) and len(seen.keys() & acts.keys()) >= 3, {"seen": seen, "labels": {i: a["label"] for i, a in acts.items()}})
+    named = {w1: "you", f: "a stranger"}
+    want = {i: (a["label"].rsplit(" → ", 1)[0] + " → " + named[i]) if i in named and " → " in a["label"] else a["label"] for i, a in acts.items()}
+    s.expect("the scene's doing is each AI body's activity, its creature target named as O perceives it", all(seen.get(i) == want[i] for i in acts if i in seen) and len(seen.keys() & acts.keys()) >= 3, {"seen": seen, "want": want, "labels": {i: a["label"] for i, a in acts.items()}})
     s.expect("a walk to a place reads goto → (x,y)", (seen.get(w2) or "").startswith("goto → ("), seen.get(w2))
-    s.expect("a follow reads follow → person", seen.get(f) == "follow → person", seen.get(f))
+    s.expect("a follow of someone O does not know reads follow → a stranger", seen.get(f) == "follow → a stranger", seen.get(f))
     s.expect("standing by reads wait", seen.get(st) == "wait", seen.get(st))
-    s.expect("a walk to the observer reads goto → person", seen.get(w1) == "goto → person", {"seen": seen.get(w1), "activity": acts.get(w1)}, fatal=False)
+    s.expect("a walk to the observer reads goto → you", seen.get(w1) == "goto → you", {"seen": seen.get(w1), "activity": acts.get(w1)}, fatal=False)
     s.expect("no AI body steers by direction (motion intent)", not [r for r in steer if r["goal"] == 3 and r["id"] in (obs, w1, w2, f, st)], [r for r in steer if r["id"] in (w1, w2, f, st)])
 
 
@@ -5181,6 +5185,117 @@ def first_sight(s):
 
 
 SCENES["first_sight"] = first_sight
+
+
+HF_TALK = {"kind": "talk", "summary": "verify-core heard_first: L speaks", "detail": "", "latency_ms": 0, "tokens": 0, "model": "fake", "reference": ""}
+
+
+def hf_decided(latency_ms):
+    """A deliberation's thought whose model calls took `latency_ms` (its decision read its scene that long ago)."""
+    return {"kind": "deliberate", "summary": "verify-core heard_first: O decides", "detail": "", "latency_ms": latency_ms, "tokens": 0, "model": "fake", "reference": ""}
+
+
+def heard_first(s):
+    """A line a mind decided to say to someone, coming due after it heard another address them
+    since its decision read its scene, waits under the `heard_first_rethinks` law
+    (docs/FIRST_SIGHT.md, "Crowds"; `speech::addressed_by_another`, `held_for_another`): it is
+    not said, the speaker is told ("You had not yet said … when you heard: …") and its mind is
+    asked to think again with that line as the reason. On an open line O, L and U stand within
+    3 m. No mind runs: O's decisions are delivered as the mind service delivers them
+    (`mind_say` carrying on, `mind_install` with a `say`), with the thought's latency standing
+    for when the decision read its scene. Checks:
+    - law off: after L says a line to U, O's line to U from a decision made 10 s before is said;
+    - law on: the same through `mind_say` and through `mind_install` is held, told and asked for;
+    - a decision made after L's line (latency 0: its prompt was built after it) is said;
+    - a line to U with nobody else speaking is said;
+    - a plan's say node to U (a mind's install) that comes due after L addressed U is held;
+    - L's line to someone else (not U) holds nothing.
+    The law is restored at the end."""
+    line = clear_line(s)
+    o, l, u, k = s.people(4)
+    for i, who in enumerate((o, l, u, k)):
+        s.call("place_at", who, line[2 * i][0], line[2 * i][1])
+        s.graph(who, {"wait": 300})
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    said_by = lambda who, since: [c for c in s.rows(f"SELECT at_ms, kind, a, b, text FROM chronicle WHERE kind = 'speech'") if c["a"] == who and c["at_ms"] >= since]
+    unsaid = lambda since: [e for e in s.rows(f"SELECT at_ms, kind, text FROM experience WHERE observer = {o}") if e["kind"] == "unsaid" and e["at_ms"] >= since]
+    pending = lambda: "\n".join(r["reason"] for r in s.rows(f"SELECT reason FROM deliberation WHERE actor = {o}"))
+    clear = lambda: s.call("mind_skip", o, now() + 60_000, hf_decided(0))
+
+    def l_says(text, to):
+        s.call("mind_say", l, text, to, "", 0, HF_TALK)
+        time.sleep(2.3)
+
+    try:
+        # Off.
+        set_law(s, "heard_first_rethinks", False)
+        clear()
+        t0 = now()
+        l_says("Morning to you, stranger. verify hf L1", u)
+        s.call("mind_say", o, "Who are you? verify hf O1", u, "", t0 - 10_000, hf_decided(10_000))
+        time.sleep(2.3)
+        s.expect("law off: O's line after L's is said", any("verify hf O1" in c["text"] for c in said_by(o, t0)), said_by(o, t0))
+        # On: mind_say (a deliberation carrying on).
+        set_law(s, "heard_first_rethinks", True)
+        s.wait(lambda: any(w["name"] == "heard_first_rethinks" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        clear()
+        t1 = now()
+        l_says("Good day, friend. verify hf L2", u)
+        s.call("mind_say", o, "Who are you? verify hf O2", u, "", t1 - 10_000, hf_decided(10_000))
+        time.sleep(1.5)
+        s.expect("on (mind_say): O's line is not said", not any("verify hf O2" in c["text"] for c in said_by(o, t1)), said_by(o, t1))
+        told = unsaid(t1)
+        s.expect("O is told what it had not said and the line it heard", told and "verify hf O2" in told[0]["text"] and "verify hf L2" in told[0]["text"] and told[0]["text"].startswith("You had not yet said"), told)
+        s.expect("O's mind is asked to think, with that as the reason", told and told[0]["text"] in pending(), pending())
+        # On: mind_install (a new plan with its own line).
+        clear()
+        t2 = now()
+        l_says("You'll be new here. verify hf L3", u)
+        s.call("mind_install", o, json.dumps({"wait": 300}), "verify hf plan", "Welcome. verify hf O3", u, t2 - 10_000, hf_decided(10_000))
+        time.sleep(1.5)
+        s.expect("on (mind_install): the install's line is not said", not any("verify hf O3" in c["text"] for c in said_by(o, t2)), said_by(o, t2))
+        s.expect("and is told and asked for", any("verify hf O3" in e["text"] for e in unsaid(t2)) and "verify hf O3" in pending(), {"told": unsaid(t2), "pending": pending()})
+        # A decision made after L's line (its calls began after it): said.
+        clear()
+        t3 = now()
+        l_says("Fair weather. verify hf L4", u)
+        s.call("mind_say", o, "And who might you be? verify hf O4", u, "", now(), hf_decided(0))
+        time.sleep(2.3)
+        s.expect("a decision whose prompt came after L's line: said", any("verify hf O4" in c["text"] for c in said_by(o, t3)), said_by(o, t3))
+        # Nobody else speaking: said (past the 10 s window of the lines above).
+        time.sleep(11)
+        clear()
+        t4 = now()
+        s.call("mind_say", o, "Still here? verify hf O5", u, "", t4 - 10_000, hf_decided(10_000))
+        time.sleep(2.3)
+        s.expect("no one else spoke to U: said", any("verify hf O5" in c["text"] for c in said_by(o, t4)), said_by(o, t4))
+        # L speaks to K, not U: nothing held (past the window of L's earlier lines to U).
+        time.sleep(11)
+        clear()
+        t5 = now()
+        l_says("K, the nets. verify hf L6", k)
+        s.call("mind_say", o, "Name yourself. verify hf O6", u, "", t5 - 10_000, hf_decided(10_000))
+        time.sleep(2.3)
+        s.expect("L's line to K holds nothing of O's line to U", any("verify hf O6" in c["text"] for c in said_by(o, t5)), said_by(o, t5))
+        # A plan's say node, coming due after L addressed U.
+        clear()
+        t6 = now()
+        plan = {"seq": [{"wait": 4}, {"say": {"text": "Where from? verify hf O7", "to": {"id": u}}}, {"wait": 300}]}
+        s.call("mind_install", o, json.dumps(plan), "verify hf say node", "", 0, now(), hf_decided(0))
+        time.sleep(1.0)
+        l_says("Come in from the rain. verify hf L7", u)
+        time.sleep(4)
+        s.expect("a plan's say node after L's line to U is not said", not any("verify hf O7" in c["text"] for c in said_by(o, t6)), said_by(o, t6))
+        s.expect("and is told and asked for", any("verify hf O7" in e["text"] for e in unsaid(t6)) and "verify hf O7" in pending(), {"told": unsaid(t6), "pending": pending()})
+        (s.out / f"{s.name}-told.json").write_text(json.dumps({"unsaid": unsaid(t1), "pending": pending()}, indent=1, ensure_ascii=False) + "\n")
+    finally:
+        set_law(s, "heard_first_rethinks", False, check=False)
+        for who in (o, l, u, k):
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, [o, l, u, k], dy=62)
+
+
+SCENES["heard_first"] = heard_first
 
 
 if __name__ == "__main__":
