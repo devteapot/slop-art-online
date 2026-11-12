@@ -1,5 +1,17 @@
 # Core validation record
 
+## 2026-11-12 packs: `apart` on the movement intents, wolves given the intents (Spark)
+
+Branch `packs` (origin/main `ce5e09b9` merged), the trial service `slop-trials-stdb`, private `CARGO_TARGET_DIR`.
+- **Cargo.** `living-rules` `steer::apart_tests`, 4 new tests. The geometry spreads four bodies from bunched to about 180° at `apart` 4, and to at least 240° at `apart` 6. The `Spacing` checks gained four `apart` cases. `steer::` and `normalize::` pass.
+- **`core-apart-175116` (default seed).** `apart` failed one check: two of the four wolves were asleep (`slumber`) and never moved. The scene now picks awake wolves. `intents` passed 24/24, the regression check for the unchanged intents.
+- **`core-apart2-175631`.** `apart` passes 12/12:
+  - people: coverage 28° without `apart`, 191° at 4 m (nearest pair 4.3 m), 213° at 6 m;
+  - wolves: 28°, then 170° (nearest pair 4.0 m), then 254°;
+  - every body stayed within its 3–5 m band;
+  - both refusals passed.
+- **Not measured.** The cost of `apart` on the tick. Per steering update of an intent that has it: one chunk gather within at most 12 m, and a sight test per same-kind body in it.
+
 ## 2026-11-12 committed-moves, second pass: throw committed, a world switches it per skill (Spark)
 
 Branch `committed-moves` with origin/main `a07f5919` (move-intents) merged, the trial service. `core-commit5-070457` (default seed): `committed` 8/8, its new part: a routine dodging while it stands (`{"moving": false}`) runs its course (`made way`, 515 ms); with the world's overlay `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }` installed, the same routine's dodge is `broken off` (484 ms) and a jump still `made way`; the shipped script reinstalled. `doing_seen` 11/11, `refusal` 4/4. Island `core-commitk5-070835`: `skirmish` 8/8. Cargo: `script::tests::a_world_switches_committed_per_skill_in_its_own_laws`, `combat::committed_tests` (2). `just living-check` passes on this head.

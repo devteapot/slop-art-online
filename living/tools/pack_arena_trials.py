@@ -73,6 +73,36 @@ C2R=running(C2)
 # C3 (docs/PACK_MIND.md §7, after A5): Muro's two rules with `apart`: hold 3-5 m from the
 # nearest person at a run while keeping 4 m from the other wolves one sees; bite as C1/C2 do.
 C3={"first":[FLEE,BITE,{"do":{"skill":"keep_distance","target":{"nearest":"person"},"min":3,"max":5,"run":True,"apart":4}}]}
+def keep_apart(prey):
+    """The spacing reflex (docs/PACK_MIND.md §5.7, decision 1): a weighted desire beside the
+    hunt. While a mate is within 3 m and the prey within 6 m, hold 3-5 m from the nearest prey at
+    a run keeping 4 m from the other wolves one sees; otherwise the hunt as the instinct had it.
+    It names a kind, as the instinct already does ("the nearest deer"), never one creature or
+    a role, and it is an ordinary part of the wolf's own graph, which its mind may change."""
+    return {"want": "keep apart from mates", "weight": {"base": 1.2}, "do": {"if": {
+        "cond": {"all": [{"near": {"target": {"nearest": "wolf"}, "within": 3}}, {"near": {"target": {"nearest": prey}, "within": 6}}]},
+        "then": {"do": {"skill": "keep_distance", "target": {"nearest": prey}, "min": 3, "max": 5, "run": True, "apart": 4}}}}}
+
+
+def with_reflex(name):
+    """A starting instinct (instincts.json) with the reflex beside each hunt: every branch that
+    attacks the nearest person or deer becomes desires of the hunt (weight 1) and the reflex."""
+    g = json.loads(json.dumps(json.load(open("living/seeds/instincts.json"))[name]))
+    def walk(n):
+        if isinstance(n, dict):
+            if "if" in n and isinstance(n["if"].get("then"), dict) and "do" in n["if"]["then"]:
+                d = n["if"]["then"]["do"]
+                t = d.get("target") if isinstance(d, dict) else None
+                if isinstance(d, dict) and d.get("skill") == "attack" and isinstance(t, dict) and t.get("nearest") in ("person", "deer"):
+                    n["if"]["then"] = {"desires": [keep_apart(t["nearest"]), {"want": "hunt", "weight": {"base": 1.0}, "do": {"do": d}}]}
+                    return n
+            return {k: walk(v) for k, v in n.items()}
+        if isinstance(n, list):
+            return [walk(x) for x in n]
+        return n
+    return walk(g)
+
+
 CAL_ABOUT="Calibration fixture (docs/PACK_MIND.md §5.6): graphs written by us, kept in this trial file only, never shipped; they measure whether the world lets wolves ring a person, not whether wolves do."
 if __name__=="__main__":
     for start in ("close","spread"):
@@ -84,6 +114,10 @@ if __name__=="__main__":
             about="Both sides with minds (wolves LIVING_ANIMAL_MINDS=salient,choose; people the default mix), starting from their instinct graphs; nothing in any prompt names a tactic (docs/PACK_MIND.md §5.5 guards).")
     arm("pack-minds-mixed-6v6", 6, 6, "spread", deer=True, minds=["subject","pack"],
         about="Both sides with minds, the island's deer left where they live (the mixed arm).")
+    REFLEX_ABOUT = ("The spacing reflex as a candidate for the wolves' starting instinct (docs/PACK_MIND.md §5.7, decision 1): "
+                    "instinct:wolf_bold with a weighted desire to keep apart from mates beside each hunt; kept in this trial file until the result is reported.")
+    for start,w,pp,people_g in (("close",3,3,"instinct:person"),("close",6,6,"instinct:person"),("spread",6,6,"instinct:person"),("stand",6,6,{"wait":900})):
+        arm(f"pack-reflex-{start}-{w}v{pp}", w, pp, "close" if start=="stand" else start, wolf_graph=with_reflex("wolf_bold"), people_graph=people_g, about=REFLEX_ABOUT)
     for name,gr in (("c1r",C1R),("c2r",C2R),("c3",C3)):
         for start,w,pp in (("close",3,3),("close",6,6)):
             arm(f"pack-{name}-{start}-{w}v{pp}", w, pp, start, wolf_graph=gr, about=CAL_ABOUT)

@@ -363,7 +363,7 @@ def intents_case(run):
     sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
     text = '\n'.join(str(m.get('content', '')) for e in sent for m in e['body'].get('messages', []))
     (run.directory / 'sent-prompt-intents.txt').write_text(text)
-    for line in ('- keep_distance(target, min, max, run, qty)', '- close_in(target, distance, run)', '- circle(target, radius, side, run, qty)', '- back_off(target, distance, run)', '- follow(target, distance, run, qty)'):
+    for line in ('- keep_distance(target, min, max, run, qty, apart)', '- close_in(target, distance, run, apart)', '- circle(target, radius, side, run, qty, apart)', '- back_off(target, distance, run)', '- follow(target, distance, run, qty)'):
         assert line in text, f'the reference documents {line}'
     assert 'm/s' in text and 'lost sight of them' in text, 'speeds and the sight rule from the laws'
     return {'status': 'pass', 'plan_routine': plan_row['graph'], 'steer': {k: st[k] for k in ('goal', 'target', 'keep', 'far', 'flags')},
