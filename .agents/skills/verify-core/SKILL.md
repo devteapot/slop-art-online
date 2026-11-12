@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: "Verify the living core authority's rules and its scheduled 60 Hz loop with offline Cargo checks and scripted scenes on verify-core-* scratch databases. Use when changing the tick, behavior graphs, deliberate acts, steering and movement, Rhai skills and specs, or a world law of any family: sight and senses, speech, pools and breath, fights and combat, needs and the body, life and life stages, goods and recipes, wildlife and remains, attention and first sights, town life, a world's day, records and dealings. Also the viewer's display sync. features/README.md maps each law and feature to its scene."
+description: "Verify the living core authority's rules and its scheduled 60 Hz loop with offline Cargo checks and scripted scenes on verify-core-* scratch databases. Use when changing the tick, behavior graphs, deliberate acts, steering and movement, Rhai skills and specs, or a world law of any family: sight, senses and perception, speech, pools and breath, fights and combat, needs and the body, life and life stages, goods and recipes, wildlife and remains, attention and first sights, town life, a world's day, records and dealings. Also the viewer's display sync. features/README.md maps each law and feature to its scene."
 ---
 
 # Verify the core rules and loop

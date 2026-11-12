@@ -67,15 +67,9 @@ def listing(args):
             print(f'  {path.relative_to(ROOT)}  {title(path)}')
 
 
-def added_at(path):
-    """The commit that added history.md (the layout change), or None before it is committed.
-    During a merge, the side being merged in counts too (main, when a branch merges it)."""
-    heads = ['HEAD'] + (['MERGE_HEAD'] if git('rev-parse', '-q', '--verify', 'MERGE_HEAD', check=False).strip() else [])
-    out = git('log', '--no-renames', '--diff-filter=A', '--format=%H', *heads, '--', str(path.relative_to(ROOT)), check=False).split()
-    return out[-1] if out else None
-
-
-def check(_args):
+def check(args):
+    """history.md is compared with the base's (origin/main): once main has the layout, a branch
+    whose merge carried old-file edits into history.md differs from it. Before then: not checked."""
     bad = []
     for skill in surfaces():
         old = skill / 'references/validation.md'
@@ -85,12 +79,10 @@ def check(_args):
             if not NAME.match(path.name):
                 bad.append(f'{path.relative_to(ROOT)}: not <YYYY-MM-DD>-<HHMM>-<branch-or-run>.md')
         history = skill / 'references/validation/history.md'
-        first = added_at(history)
-        if first and history.exists():
-            then = git('show', f'{first}:{history.relative_to(ROOT)}', check=False)
-            if then and then != history.read_text():
-                bad.append(f'{history.relative_to(ROOT)} differs from its state at {first[:10]}: '
-                           'history.md is closed; run --split')
+        base = git('show', f'{args.base}:{history.relative_to(ROOT)}', check=False)
+        if base and history.exists() and base != history.read_text():
+            bad.append(f'{history.relative_to(ROOT)} differs from {args.base}\'s: history.md is closed; '
+                       f'run --split (or, for a deliberate repair, say so in the branch\'s record)')
     for line in bad:
         print('FAIL', line)
     print(f'{len(bad)} problem(s) in {len(surfaces())} surfaces' if bad else f'ok: {len(surfaces())} surfaces')
@@ -160,7 +152,7 @@ def main():
     ap.add_argument('-n', type=int, default=1, help='records per surface (default 1)')
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--split', action='store_true')
-    ap.add_argument('--base', default='origin/main', help='for --split: the main the branch merged')
+    ap.add_argument('--base', default='origin/main', help='for --check and --split: the main the branch merged')
     ap.add_argument('--name', help='for --split: the record name (default: the current branch)')
     args = ap.parse_args()
     if args.check:

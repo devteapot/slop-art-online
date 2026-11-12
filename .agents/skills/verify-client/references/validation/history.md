@@ -78,12 +78,12 @@ Branch `lives-3` (four columns appended with defaults to the private `rhythm` ta
 
 ## 2026-11-11 rules-offers: `my_offers` (Spark)
 
-Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. The driver's view inventory and own-state set gained `my_offers`, and the probe reads it. A new offers step runs after `in-sight` ([perception.md](../features/perception.md)). `client-offers-20261111-184207` (scoped): 34 rows, all PASS. `client-offers-open-20261111-184616` (open): `my_offers` PASS, but "combat feed scoped to its viewer" FAILED: player-2's `my_combat` rows (kept 4 s) were gone before its probe, while a cargo build ran beside the suite. `client-offers-open2-20261111-184926` (open, rerun alone): all PASS but the known open-build `experience` XFAIL.
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. The driver's view inventory and own-state set gained `my_offers`, and the probe reads it. A new offers step runs after `in-sight` ([perception.md](../../features/perception.md)). `client-offers-20261111-184207` (scoped): 34 rows, all PASS. `client-offers-open-20261111-184616` (open): `my_offers` PASS, but "combat feed scoped to its viewer" FAILED: player-2's `my_combat` rows (kept 4 s) were gone before its probe, while a cargo build ran beside the suite. `client-offers-open2-20261111-184926` (open, rerun alone): all PASS but the known open-build `experience` XFAIL.
 
 ## 2026-11-11 eye-2: tile classes a client receives; presence timing (dev-box)
 
 Branch `eye-2` (from main `eead7a29`), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
-- Tile classes (new, [game-client.md](../features/game-client.md#tile-classes), `scripts/tile_classes.py`): every `terrain_chunk` of an island world through the probe (16,384 chunks). `client-eye2-tiles1` (drop-1's hosting): 4,116 drop and 61 low tiles, the rules' counts. `client-eye2v-tiles` (eye-2): 4,116 drop, 9,153 low and 35,161 wall tiles, the rules' counts.
+- Tile classes (new, [game-client.md](../../features/game-client.md#tile-classes), `scripts/tile_classes.py`): every `terrain_chunk` of an island world through the probe (16,384 chunks). `client-eye2-tiles1` (drop-1's hosting): 4,116 drop and 61 low tiles, the rules' counts. `client-eye2v-tiles` (eye-2): 4,116 drop, 9,153 low and 35,161 wall tiles, the rules' counts.
 - Fixed suite: `client-eye2v` and `client-eye2v2` each failed one check, "presence counts each open connection" (1 → 1 → 0, then 1 → 2 → 0; the dev-box was at load 45). The probe's holds counted from its own start, so the first connection closed before or right after the second opened. Presence is unchanged on this branch. The driver now waits up to 15 s for each expected count and holds the connections 30 s and 6 s (features/presence.md). `client-eye2v3`: 30 PASS, presence 1 → 2 → 1.
 
 ## 2026-11-11 goods-1 (dev-box)
@@ -156,7 +156,7 @@ Own scratch container `slop-townlife-stdb` (image `v2.14.1`) through a `docker` 
 The dev-box ran its own scratch container `slop-live-stdb` (image `v2.14.1`, own volume, `/wasm` from the worktree) through a `docker` name shim. The other worktrees' containers were not touched. The worktree was `c5a2c00`, with uncommitted `living/game` changes (the connected game client); the authority, rules and bindings were unchanged. Evidence was copied to the dev-box's `~/live-evidence/` before the worktree was removed.
 
 - **`client-live-suite`** (`run.py`, default seed) exited 0, with 13 PASS and the two known XFAILs. The base subscription received 685 body and 4 stats updates. The permission matrix made 164 calls with 0 mismatches. Reconnect recorded 1 drop and 2 connections.
-- **`client-live-1`** (`--seed island`) ran [game-client.md](../features/game-client.md):
+- **`client-live-1`** (`--seed island`) ran [game-client.md](../../features/game-client.md):
   - The real game client ran headless nine times. Every run logged `world kind: Land` and `digests match` (tiles `9d1884118850c39c`, heights `f860069dd92e1341`, layout `f59dcf9649678035`), with the land regenerated in 1.4 to 1.5 s.
   - It joined at the arrival point (512.5, 174.5), walked into the town through `goto` and `human_move`, and spoke. It received a line from the harness player (heard bubble and chat log), and after an admin `kill` showed the death screen, rejoined and played a new character.
   - Through the probe, `controller = :sender` returned only the player's character. The character ⋈ body join with `OR`ed chunk ranges returned 72 characters for 72 bodies.
@@ -248,7 +248,7 @@ These are real Rust SDK WebSocket observations after `on_applied`. Admin SQL doe
 | Anonymous experience privacy | XFAIL, KNOWN ISSUE. 3,374 received perceptions for 260 observers | `privacy-experience.json` |
 | Anonymous thought privacy | XFAIL, KNOWN ISSUE. Twelve thoughts for three actors, including scripted raw-detail markers | `privacy-thought.json` |
 
-Both XFAILs track [LIVING_HANDOFF.md, Still open](../../../../docs/LIVING_HANDOFF.md). `living/authority/src/tables.rs:417` makes `experience` public and `tables.rs:588` makes `thought` public. Both privacy assertions still require denial. They become XPASS and make the driver exit 1 when access is fixed. Missing foreign fixtures or a transport failure remains FAIL. Product code was unchanged.
+Both XFAILs track [LIVING_HANDOFF.md, Still open](../../../../../docs/LIVING_HANDOFF.md). `living/authority/src/tables.rs:417` makes `experience` public and `tables.rs:588` makes `thought` public. Both privacy assertions still require denial. They become XPASS and make the driver exit 1 when access is fixed. Missing foreign fixtures or a transport failure remains FAIL. Product code was unchanged.
 
 ## Identity-scoped deliberations
 

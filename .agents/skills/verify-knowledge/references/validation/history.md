@@ -129,7 +129,7 @@ The runner uses the shared harness's `authored-test` launch and doctor. Every at
 
 The final instructions ran end to end and exited zero. Launch was at 16:37:32 Europe/Zurich. Database cleanup was at 16:39:58. The only uncommitted product file was the pre-existing `living/viewer/src/clock.rs`. The world had nineteen seeded characters, five added walkers and one joined witness. One walker died in the death scene. Only Oren had a connected mind.
 
-Evidence root: `.local/living/verify/knowledge-1004-g/`. [results.json](../../../../.local/living/verify/knowledge-1004-g/results.json) records fourteen passing proof groups. [post-cleanup-check.json](../../../../.local/living/verify/knowledge-1004-g/post-cleanup-check.json) confirms that every referenced evidence file survives, all five named memory tests passed, both owned processes exited, the database answers SQL with 404, the container is absent and the journal was copied before its original was removed.
+Evidence root: `.local/living/verify/knowledge-1004-g/`. [results.json](../../../../../.local/living/verify/knowledge-1004-g/results.json) records fourteen passing proof groups. [post-cleanup-check.json](../../../../../.local/living/verify/knowledge-1004-g/post-cleanup-check.json) confirms that every referenced evidence file survives, all five named memory tests passed, both owned processes exited, the database answers SQL with 404, the container is absent and the journal was copied before its original was removed.
 
 ### Launch and doctor
 
