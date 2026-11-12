@@ -75,6 +75,7 @@ python3 living/tools/characters/compose_check.py <binary> .local/living/<run>/fi
 | `fidelity.json` `control_file_units.most_mm` | 0.000 for every person and shot (79 bones, `J_Fit_Belly` apart): the composing rule. In metres the control differs by the height fit only (`scale_ratio` within 0.3%) |
 | `control_file_units.belly_mm` | `belly` × 108 mm × the spine's girth scale (Joss Tarn: 0.217 → 25.05 mm); 0 without a belly |
 | `composed` | differs by the line's `build` and `shoulders` (the girth a whole file built into its meshes): 1.6 to 10 mm, most on the heaviest (Joss Tarn) |
+| `RUST_LOG=living_game::characters::compose=debug`: `compose: material <file>#<material> takes toon …` | every outfit piece's `Cloth` one toon, every hair cut's hair one, far beards one, each overlay its own (Cullet: 36 style toons) |
 | `composed/view.log` `rigged a VRoid model (… with N more meshes on its expressions)` | N = the overlays the person wears (Ode Pontil's beard and lines: 2) |
 | `sec_bones` | a hair style with spring chains brings the same count as the whole file (Tamsin's braid: 5 and 5) |
 | `composed/view.log` | `compose: … wears …: N meshes` once a person; no `could not be put on`, `did not load` or `joint … is neither` |
@@ -101,9 +102,9 @@ python3 $C … --runs x:town,x:composed,x:composed,x:town --repeat 3 --game-env 
 | Line | Pass |
 | --- | --- |
 | `people ready: 65 characters (64 composed) …` | 64 composed with the switch on, 0 off |
-| `people perf: … N mesh entities shown of M` | at the game camera (all far): 431 of 1,220 composed, 210 of 722 whole (Cullet's 95 shared files) |
-| `views: … [people …, P mesh-material pairs]` | the draws the people make once instanced: 97 composed against 210 whole at the game camera, 203 against 530 on the full model |
-| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 86 composed against 10 whole at the game camera, 116 against 84 on the full model. Style toons are keyed by content and source colour (`compose.rs`): they share only where the result is the same, so the count falls as the generator's pieces come to share one shading mean. `LIVING_GAME_PERF=filestyles` keys one a file, to compare |
+| `people perf: … N mesh entities shown of M` | at the game camera (all far): 460 of 1,342 composed, 210 of 786 whole (Cullet's 97 shared files) |
+| `views: … [people …, P mesh-material pairs]` | the draws the people make once instanced: 99 composed against 210 whole at the game camera, 222 against 594 on the full model |
+| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 33 composed against 10 whole at the game camera, 69 against 84 on the full model. Style toons are keyed by content and source colour (`compose.rs`): they share only where the result is the same, so the count falls as the generator's pieces come to share one shading mean. `LIVING_GAME_PERF=filestyles` keys one a file, to compare |
 | `assets: N meshes M MiB (… morph targets …)` and `batches: … textures … MiB` | composed far below whole: mesh data and morph targets, and GPU textures |
 
 ## Gotchas
