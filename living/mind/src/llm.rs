@@ -1762,43 +1762,50 @@ mod tests {
         assert_eq!(queue.in_flight, 0);
     }
 
+    /// The verify-llm fake model server, on a port it binds itself, answering from the moment
+    /// its READY line is read: no other process can take the port between a probe and the
+    /// server's bind, and a start slowed by host load is waited for, not cut off after a few
+    /// seconds of health polls (after which the tests' calls met a closed port).
+    struct FakeLlm {
+        child: std::process::Child,
+        port: u16,
+        _stdout: std::io::BufReader<std::process::ChildStdout>,
+    }
+
+    impl Drop for FakeLlm {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    fn fake_llm(log: &std::path::Path, script: Option<&std::path::Path>) -> FakeLlm {
+        use std::io::BufRead;
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut command = std::process::Command::new("python3");
+        command.arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py")).args(["--port", "0", "--log"]).arg(log);
+        if let Some(script) = script {
+            command.arg("--script").arg(script);
+        }
+        let mut child = command.stdout(std::process::Stdio::piped()).spawn().unwrap();
+        let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut line = String::new();
+        let _ = stdout.read_line(&mut line);
+        let port = line.strip_prefix("READY http://127.0.0.1:").and_then(|rest| rest.split('/').next()).and_then(|p| p.parse().ok());
+        let fake = FakeLlm { child, port: port.unwrap_or(0), _stdout: stdout };
+        assert!(port.is_some(), "the fake model server did not start: {line:?}");
+        fake
+    }
+
     #[tokio::test]
     async fn fake_transport_records_caching_usage_and_paced_429_recovery() {
-        struct Fake(std::process::Child);
-        impl Drop for Fake {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
         let directory = std::env::temp_dir().join(format!("living-transport-{}", now_ms()));
         std::fs::create_dir_all(&directory).unwrap();
-        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = socket.local_addr().unwrap().port();
-        drop(socket);
         let script = directory.join("script.json");
-        std::fs::write(&script, json!({"rules": [{"purpose": "consolidate", "usage": {"total_tokens": 17}}, {"purpose": "think", "status": 429, "headers": {"Retry-After": "0.2", "x-ratelimit-limit-req-minute": "6000", "x-ratelimit-limit-tokens-minute": "100000"}}]}).to_string()).unwrap();
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        std::fs::write(&script, json!({"rules": [{"purpose": "consolidate", "usage": {"total_tokens": 17}}, {"purpose": "think", "status": 429, "headers": {"Retry-After": "30.5", "x-ratelimit-limit-req-minute": "6000", "x-ratelimit-limit-tokens-minute": "100000"}}]}).to_string()).unwrap();
         let log = directory.join("requests.jsonl");
-        let mut fake = Fake(
-            std::process::Command::new("python3")
-                .arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py"))
-                .args(["--port", &port.to_string(), "--log"])
-                .arg(&log)
-                .arg("--script")
-                .arg(script)
-                .stdout(std::process::Stdio::null())
-                .spawn()
-                .unwrap(),
-        );
-        let http = reqwest::Client::new();
-        for _ in 0..100 {
-            if http.get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
-                break;
-            }
-            assert!(fake.0.try_wait().unwrap().is_none());
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
+        let fake = fake_llm(&log, Some(&script));
+        let port = fake.port;
         std::env::set_var("LIVING_TEST_TRANSPORT_KEY", "dummy-only");
         let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {"p": {
             "base_url": format!("http://127.0.0.1:{port}/v1"), "model": "m", "key_env": "LIVING_TEST_TRANSPORT_KEY",
@@ -1807,8 +1814,38 @@ mod tests {
         .unwrap();
         let llm = Llm::new(models, directory.join("journal")).unwrap();
         let messages = [Msg { role: "user", content: "hi".into() }];
-        let reply = llm.chat_in_lane("p", Attention::OnStage, "think", "first", &messages, Lane::Interactive).await.unwrap();
+        // The 429's Retry-After (30.5 s) blocks the profile from the moment its answer is read,
+        // and the one recovery attempt waits in the scheduler's queue. Timed on the scheduler's
+        // own clock and records, not on wall time around the call: the recovery is queued some
+        // unbounded time after the 429 is read (the failed call journals first), so a fixed
+        // margin on its measured queue wait failed under host load.
+        let first = llm.chat_in_lane("p", Attention::OnStage, "think", "first", &messages, Lane::Interactive);
+        tokio::pin!(first);
+        let (seen_queued, rate_limited_sent) = loop {
+            tokio::select! {
+                r = &mut first => panic!("the recovery went out inside the Retry-After: {:?}", r.map(|r| r.content)),
+                _ = tokio::time::sleep(Duration::from_millis(5)) => {}
+            }
+            let mut q = llm.scheduler.queue.lock().unwrap();
+            let rate = &q.rates["p"];
+            // The first request was admitted before its 429 came back, so a waiting call after
+            // the block is set is the recovery.
+            if rate.blocked_until > rate.last_sent && !q.waiting.is_empty() {
+                let seen = Instant::now();
+                let sent = rate.tokens.iter().find(|(id, ..)| *id == 1).unwrap().1;
+                assert!(rate.blocked_until >= sent + Duration::from_secs_f64(30.5), "the block covers the Retry-After");
+                assert_eq!(q.candidate(seen), None, "the queue holds the recovery while the block lasts");
+                // The limit lifts sooner (a test cannot wait 30 s): the block ends 200 ms on.
+                q.rates.get_mut("p").unwrap().blocked_until = seen + Duration::from_millis(200);
+                break (seen, sent);
+            }
+        };
+        llm.scheduler.changed.notify_waiters();
+        let reply = first.await.unwrap();
         assert_eq!(reply.tokens, 17);
+        let recovery_sent = llm.scheduler.queue.lock().unwrap().rates["p"].tokens.iter().find(|(id, ..)| *id == 2).unwrap().1;
+        assert!(recovery_sent >= seen_queued + Duration::from_millis(200), "the recovery leaves the queue when the block ends");
+        assert!(recovery_sent > rate_limited_sent);
         llm.chat_in_lane("p", Attention::OnStage, "think", "second", &messages, Lane::Interactive).await.unwrap();
         llm.chat("p", Attention::OnStage, "talk", "second", &messages).await.unwrap();
         let entries: Vec<Value> = std::fs::read_to_string(directory.join("journal/first.jsonl")).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
@@ -1819,7 +1856,8 @@ mod tests {
         assert_eq!(entries[1]["prompt_tokens"], 12);
         assert_eq!(entries[1]["completion_tokens"], 5);
         assert_eq!(entries[1]["cached_tokens"], 8);
-        assert!(entries[1]["queue_wait_ms"].as_u64().unwrap() >= 180);
+        // Queued no later than `seen_queued`, admitted no earlier than 200 ms after it.
+        assert!(entries[1]["queue_wait_ms"].as_u64().unwrap() >= 200, "the wait is journaled as queue wait: {}", entries[1]["queue_wait_ms"]);
         let mut uncached = llm.models.clone();
         uncached.profiles.get_mut("p").unwrap().prompt_cache_key = false;
         let uncached = Llm::new(uncached, directory.join("uncached-journal")).unwrap();
@@ -1839,28 +1877,11 @@ mod tests {
     /// referenced by `input_files`; a small one stays inline. Both carry the picked effort.
     #[tokio::test]
     async fn a_large_batch_is_uploaded_as_a_file() {
-        struct Fake(std::process::Child);
-        impl Drop for Fake {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
         let directory = std::env::temp_dir().join(format!("living-batch-{}", now_ms()));
         std::fs::create_dir_all(&directory).unwrap();
-        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = socket.local_addr().unwrap().port();
-        drop(socket);
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let log = directory.join("requests.jsonl");
-        let fake = Fake(std::process::Command::new("python3").arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py")).args(["--port", &port.to_string(), "--log"]).arg(&log).stdout(std::process::Stdio::null()).spawn().unwrap());
-        let http = reqwest::Client::new();
-        for _ in 0..100 {
-            if http.get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
+        let fake = fake_llm(&log, None);
+        let port = fake.port;
         std::env::set_var("LIVING_TEST_BATCH_KEY", "dummy-only");
         let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {"p": {
             "base_url": format!("http://127.0.0.1:{port}/v1"), "model": "m", "key_env": "LIVING_TEST_BATCH_KEY",
@@ -1904,33 +1925,15 @@ mod tests {
     /// that stopped is collected by the next one, from its file beside the journal.
     #[tokio::test]
     async fn a_failed_poll_keeps_the_batch_and_a_left_job_is_collected_after_a_restart() {
-        struct Fake(std::process::Child);
-        impl Drop for Fake {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
         let directory = std::env::temp_dir().join(format!("living-batch-poll-{}", now_ms()));
         std::fs::create_dir_all(&directory).unwrap();
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let start = |name: &str, poll_errors: i64| {
-            let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-            let port = socket.local_addr().unwrap().port();
-            drop(socket);
             let script = directory.join(format!("{name}.json"));
             std::fs::write(&script, json!({"batch": {"poll_errors": poll_errors}}).to_string()).unwrap();
             let log = directory.join(format!("{name}-requests.jsonl"));
-            let fake = Fake(std::process::Command::new("python3").arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py")).args(["--port", &port.to_string(), "--log"]).arg(&log).arg("--script").arg(&script).stdout(std::process::Stdio::null()).spawn().unwrap());
+            let fake = fake_llm(&log, Some(&script));
+            let port = fake.port;
             (fake, port, log)
-        };
-        let ready = |port: u16| async move {
-            for _ in 0..100 {
-                if reqwest::Client::new().get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
-                    return;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
         };
         std::env::set_var("LIVING_TEST_BATCH_POLL_KEY", "dummy-only");
         let models = |port: u16| -> ModelsFile {
@@ -1942,7 +1945,6 @@ mod tests {
 
         // One 500 on a poll: the job is polled again and answered; nothing is cancelled.
         let (fake, port, log) = start("one", 1);
-        ready(port).await;
         let llm = Llm::new(models(port), directory.join("journal-one")).unwrap();
         let out = llm.batch("p", Attention::OffStage, "reorganize", items(), poll, Duration::from_secs(20)).await.unwrap();
         assert!(out.len() == 2 && out.iter().all(|(_, r)| r.is_ok()), "the batch survives one failed poll");
@@ -1956,7 +1958,6 @@ mod tests {
 
         // Every poll fails: the job is given up after BATCH_POLL_FAILURES and cancelled.
         let (fake, port, log) = start("all", -1);
-        ready(port).await;
         let llm = Llm::new(models(port), directory.join("journal-all")).unwrap();
         let err = llm.batch("p", Attention::OffStage, "reorganize", items(), poll, Duration::from_secs(20)).await.err().expect("a job whose polls keep failing is given up");
         assert!(format!("{err:#}").contains("polls failed in a row"), "{err:#}");
@@ -1967,13 +1968,21 @@ mod tests {
         drop(fake);
 
         // A run stops while its job runs; the next run on the same journal collects it.
-        let (fake, port, _) = start("restart", 0);
-        ready(port).await;
+        // The run is stopped once its job is on file (not after a fixed 30 ms, which under
+        // load could end it before the job was sent); its first poll is an hour away.
+        let (fake, port, restart_log) = start("restart", 0);
         let journal = directory.join("journal-restart");
         {
             let llm = Llm::new(models(port), journal.clone()).unwrap();
-            let sent = tokio::time::timeout(Duration::from_millis(30), llm.batch("p", Attention::OffStage, "reorganize", items(), Duration::from_secs(5), Duration::from_secs(20))).await;
-            assert!(sent.is_err(), "the run stopped before its first poll");
+            let sent = llm.batch("p", Attention::OffStage, "reorganize", items(), Duration::from_secs(3600), Duration::from_secs(20));
+            tokio::pin!(sent);
+            while llm.pending_jobs().is_empty() {
+                tokio::select! {
+                    r = &mut sent => panic!("the batch ended before its first poll: {:?}", r.map(|r| r.len())),
+                    _ = tokio::time::sleep(Duration::from_millis(5)) => {}
+                }
+            }
+            assert!(lines(&restart_log).iter().all(|x| x.get("poll").is_none()), "the run stopped before its first poll");
         }
         let llm = Llm::new(models(port), journal.clone()).unwrap();
         let left = llm.pending_jobs();
@@ -2035,14 +2044,31 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("living-gate-{}", now_ms()));
         let llm = Llm::new(models, dir.clone()).unwrap();
         let msg = [Msg { role: "user", content: "hi".into() }];
-        let t = Instant::now();
+        let host = "http://127.0.0.1:9/v1";
+        // Timed on the scheduler's own clock and records, not on wall time around the calls:
+        // a stopwatch started outside a call is read some unbounded time before or after the
+        // instants the gate uses, and under host load it read 1.97 s against 2 s.
+        let sent = |llm: &Llm, id: u64| llm.scheduler.queue.lock().unwrap().rates["dead"].tokens.iter().find(|(t, ..)| *t == id).map(|(_, at, _)| *at);
+        assert!(llm.scheduler.queue.lock().unwrap().gates.is_empty(), "no gate before the first failure");
         assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
-        assert!(t.elapsed() < Duration::from_millis(1500), "the first failure is immediate");
-        // The probe is due GATE_PAUSE_MIN after the failure, which happened inside the first
-        // call (it then still journals before returning): measured from before that call, not
-        // from its return, which under load comes a few ms later (fix-dealings, 2026-11-12).
+        // The first call went out ungated, failed to connect (only that opens the gate) and
+        // set the probe GATE_PAUSE_MIN after the failure.
+        let (down_since, probe_at) = {
+            let q = llm.scheduler.queue.lock().unwrap();
+            let g = &q.gates[host];
+            assert_eq!((g.pause, g.probing), (GATE_PAUSE_MIN, None));
+            (g.down_since.expect("the refused connection opens the gate"), g.retry_at.unwrap())
+        };
+        assert!(sent(&llm, 1).unwrap() <= down_since && probe_at >= down_since + GATE_PAUSE_MIN);
         assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
-        assert!(t.elapsed() >= GATE_PAUSE_MIN, "the next call waits for the probe: {:?}", t.elapsed());
+        let probe_sent = sent(&llm, 2).expect("the second call went out as the probe");
+        assert!(probe_sent >= probe_at, "the next call waits for the probe: sent {:?} before it was due", probe_at.saturating_duration_since(probe_sent));
+        // The failed probe doubles the pause from its own failure.
+        let q = llm.scheduler.queue.lock().unwrap();
+        let g = &q.gates[host];
+        assert_eq!((g.pause, g.down_since, g.probing), (GATE_PAUSE_MIN * 2, Some(down_since), None));
+        assert!(g.retry_at.unwrap() >= probe_sent + GATE_PAUSE_MIN * 2);
+        drop(q);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2248,43 +2274,15 @@ mod tests {
     /// on the same profile. A capacity_overflow without an overflow is refused.
     #[tokio::test]
     async fn a_model_out_of_capacity_sends_listed_memory_work_to_the_overflow() {
-        struct Fake(std::process::Child);
-        impl Drop for Fake {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
         let directory = std::env::temp_dir().join(format!("living-capacity-{}", now_ms()));
         std::fs::create_dir_all(&directory).unwrap();
-        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = socket.local_addr().unwrap().port();
-        drop(socket);
         let script = directory.join("script.json");
         std::fs::write(&script, json!({"rules": [
             {"model": "a", "contains": "CAPACITY", "capacity": true, "times": -1},
             {"model": "a", "contains": "RATE", "status": 429, "headers": {"Retry-After": "0.1"}, "times": -1}]}).to_string()).unwrap();
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let log = directory.join("requests.jsonl");
-        let mut fake = Fake(
-            std::process::Command::new("python3")
-                .arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py"))
-                .args(["--port", &port.to_string(), "--log"])
-                .arg(&log)
-                .arg("--script")
-                .arg(script)
-                .stdout(std::process::Stdio::null())
-                .spawn()
-                .unwrap(),
-        );
-        let http = reqwest::Client::new();
-        for _ in 0..100 {
-            if http.get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
-                break;
-            }
-            assert!(fake.0.try_wait().unwrap().is_none());
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
+        let fake = fake_llm(&log, Some(&script));
+        let port = fake.port;
         std::env::set_var("LIVING_TEST_CAPACITY_KEY", "dummy-only");
         let base = format!("http://127.0.0.1:{port}/v1");
         let file = |capacity_overflow: Value, overflow: Value| {
