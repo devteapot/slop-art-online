@@ -372,6 +372,15 @@ pub fn addressed_by_another(ctx: &ReducerContext, speaker: u32, to: u32, since_m
         .max_by_key(|e| e.at_ms)
 }
 
+/// A mind's decided line that its way refused (`mind_install_way`, a deliberation's
+/// `mind_say`): not said, and told to the speaker in the rules' words: "You did not say “…”: a
+/// whisper needs someone to whisper to." The same row kind as a held line (`unsaid`).
+pub fn unsaid_refused(ctx: &ReducerContext, speaker: u32, to: u32, text: &str, why: &str, now: u64) {
+    let (Some(me), Some(b)) = (ctx.db.character().id().find(speaker), ctx.db.body().id().find(speaker)) else { return };
+    let why = why.trim().trim_end_matches('.');
+    percept(ctx, &me, now, "unsaid", to, speaker, pos(&b, now), format!("You did not say “{}”: {why}.", text.trim()), 0.45);
+}
+
 /// A mind's line to `to` that comes due after the speaker heard another address them since its
 /// decision (`heard_first_rethinks`, docs/FIRST_SIGHT.md "Crowds"): it is not said yet. The
 /// speaker is told, with the line it heard, and its mind is asked to think again with that in

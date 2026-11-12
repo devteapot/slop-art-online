@@ -4,7 +4,7 @@ The pack (I, or the Pack button) sits on the right anchor: one cell per item wit
 
 ## Sub-features
 
-- `pack`: cells, counts, carried / limit.
+- `pack`: cells, counts, carried / limit. The limit rises by the largest room among the containers carried (a basket: 20; a second adds nothing, it is not a sum); the load counts each item by its carry (an arrow 0.1).
 - `item-acts`: a click on an item lists its acts (eat, plant, drop, …) beside the cell.
 - `carry-window`: an item slid onto a person's window is given to them.
 - `carry-world`: an item slid onto a person in the world is given to them (the person hovered, else the nearest head within 70 px).
@@ -23,7 +23,8 @@ Preconditions: baseline; a resident placed beside the player; berries in the pac
 - **Their window and the pack.** `menu:f@id:<ID>;click:@acts:0:window` → `Person<ID>` Left; `key:KeyI:tap` → `Pack` Right.
 - **Item acts.** `click:@pack:berries` → dump `acts.rows` hold the rules' acts with berries.
 - **Carry onto the window.** `slide:@pack:berries>@win:Person<ID>:head:0.8` → log `verbs: berries let go on #<ID>: give berries`; a note "Give berries › person (gave 1 berries …)".
-- **Hold F › Give ›.** `menu:f@id:<ID>;click:@acts:0:give;click:@acts:1:berries` → a second `{"do":"give","item":"berries",…,"target":{"id":<ID>}}` in the log.
+- **Hold F › Give ›.** `menu:f@id:<ID>;click:@acts:0:give;click:@acts:1:berries` → a second `{"do":"give","item":"berries",…,"target":{"id":<ID>}}` in the log. Before Give ›, the dump's `acts.rows` start with `talk` and `their window`, and hold a `give` row.
+- **Load and limit.** `sync:load` (admin `grant_items`: a basket and ten arrows) between `dump:07` and `dump:08` → the dumps' `pack.limit` up by 20 (0 when a basket was carried already: the largest room, not a sum) and `pack.carried` up by at least 1.0 (ten arrows at 0.1, and the basket's own carry) and under 10.
 - **The authority.** Owner SQL `SELECT at_ms, text FROM experience WHERE observer = <me> AND kind = 'act'`: two outcomes "You did what you had decided: give berries → person (gave 1 berries to a stranger)" since the drive began; `… WHERE observer = <ID> AND kind = 'gift'`: two "A stranger gave you 1 berries". The scenario waits up to 10 s for both (the authority goes on after the client quits).
 - Scenario: `check.py --run $R items`.
 

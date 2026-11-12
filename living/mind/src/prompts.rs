@@ -174,6 +174,18 @@ fn ways_text() -> String {
     format!("\"way\": how you say it, {} (default \"say\"; {}), ", names.join(" or "), about.join(" "))
 }
 
+/// A decision's line may name its way (mind-say-way): the field in the think reply's `say`,
+/// naming the world's ways (the world text's SPEAKING section says what each is and how far it
+/// carries), when it has more than `say`. Nothing about when to use one.
+fn say_way_field() -> String {
+    let names = ways();
+    if names.len() < 2 {
+        return String::new();
+    }
+    let quoted: Vec<String> = names.iter().map(|w| format!("\"{w}\"")).collect();
+    format!(", \"way\": {} (optional; default \"say\")", quoted.join(" or "))
+}
+
 /// The ways of speaking the world's rules have (`<way>_speech()`), in their order.
 pub fn ways() -> Vec<String> {
     compiled().map(|s| s.ways().iter().map(|w| w.name.clone()).collect()).unwrap_or_else(|| vec!["say".into()])
@@ -586,7 +598,31 @@ pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2],
 /// the choices of a life: in replays of real moments, 2 in 12 minds acted on a longing for a
 /// child with the grammar in view, 11 in 12 without it).
 pub fn think_system() -> String {
-    think_system_in(frame(), crate::mind::projects::enabled())
+    framed_system(think_system_in(frame(), crate::mind::projects::enabled()), think_framing())
+}
+
+/// Whether the world's `think_framing` law holds (docs/FRAMING.md): the think prompt's neutral
+/// framing (N2 in the replay). Off in the bundled rules.
+pub fn think_framing() -> bool {
+    compiled().is_some_and(|s| s.laws().think_framing)
+}
+
+/// Today's framing sentence in the think system prompt, and the neutral one (N2) that replaces it
+/// under `think_framing`, word for word as replayed (docs/FRAMING.md).
+const TODAY_FRAMING: &str = "Start from why you are thinking now: that is what this moment of thought is about. Think about it as that person: what you make of it, and what you mean to do.";
+const NEUTRAL_FRAMING: &str = "What just happened is shown beside what you perceive. Think as that person about whatever matters to you now, which may or may not be what just happened, and decide what you mean to do.";
+/// The think prompt's reason section, and its name under `think_framing` (in the same place).
+const WHY_SECTION: &str = "\n# Why you are thinking now\n";
+const JUST_SECTION: &str = "\n# What just happened\n";
+
+/// The think system prompt with the neutral framing when `neutral`; today's, untouched, otherwise.
+fn framed_system(text: String, neutral: bool) -> String {
+    if neutral { text.replacen(TODAY_FRAMING, NEUTRAL_FRAMING, 1) } else { text }
+}
+
+/// The think user prompt with the reason's section renamed when `neutral`; untouched otherwise.
+fn framed_user(text: String, neutral: bool) -> String {
+    if neutral { text.replacen(WHY_SECTION, JUST_SECTION, 1) } else { text }
 }
 
 /// The think system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
@@ -602,11 +638,12 @@ Refer to people by the ids you see. Do not assume facts you have not perceived.\
 Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
 \"intend\": [\"each thing you mean to do, in plain words, in order (e.g. ask Borno (#5) to start a family with me; give Galy (#8) 2 berries; \
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
-\"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
+\"say\": {{\"text\": \"...\", \"to\": id or null{}}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}{}}}",
         opening(frame, THINK_OPENING),
         world_rules(),
+        say_way_field(),
         if projects { THINK_PROJECTS } else { "" },
         notice_field()
     ))
@@ -711,7 +748,7 @@ pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, 
     }
     out.push(Stability::Dynamic, format!("\n# What you perceive right now\n{scene}\n"));
     out.push(Stability::Dynamic, format!("\n# What you were doing\n{plan}\n"));
-    out.render()
+    framed_user(out.render(), think_framing())
 }
 
 /// Compiling: the body's expression of a decision already made (acts now, an intent over time).
@@ -1120,16 +1157,10 @@ Answer with ONE JSON object: {{\"feeling\": \"what you sense and feel, in plain 
     ))
 }
 
-/// What an animal choosing is told: what it would be told to feel an impulse, its pack when
-/// it decides for them, and the options.
-pub fn animal_choose_user(think_user: String, pack: &[String], options: &[String]) -> String {
+/// What an animal choosing is told: what it would be told to feel an impulse, and the
+/// options. It decides for itself alone (docs/PACK_MIND.md: the `pack` switch is retired).
+pub fn animal_choose_user(think_user: String, options: &[String]) -> String {
     let mut out = think_user;
-    if !pack.is_empty() {
-        out.push_str("\n# Your pack (what you pick, they do too, each in its own way)\n");
-        for p in pack {
-            out.push_str(&format!("- {p}\n"));
-        }
-    }
     out.push_str("\n# What you can do now\n");
     for (i, o) in options.iter().enumerate() {
         out.push_str(&format!("{i}. {o}\n"));
@@ -1595,6 +1626,32 @@ mod tests {
         assert_eq!(Frame::parse(Some("character")), Ok(Frame::Character));
         assert_eq!(Frame::parse(Some("player")), Ok(Frame::Player));
         assert!(Frame::parse(Some("Player")).is_err() && Frame::parse(Some("npc")).is_err());
+    }
+
+    /// The `think_framing` law (docs/FRAMING.md): off, the think prompts are today's, byte for
+    /// byte; on, the neutral sentence replaces today's once, and the reason's section is renamed
+    /// once, in the same place.
+    #[test]
+    fn think_framing_is_n2_on_and_today_off() {
+        for frame in [Frame::Character, Frame::Player] {
+            for projects in [false, true] {
+                let today = think_system_in(frame, projects);
+                assert_eq!(today.matches(TODAY_FRAMING).count(), 1, "{frame:?} {projects}");
+                assert_eq!(framed_system(today.clone(), false), today);
+                let on = framed_system(today.clone(), true);
+                assert_eq!(on.matches(NEUTRAL_FRAMING).count(), 1);
+                assert!(!on.contains(TODAY_FRAMING));
+                assert_eq!(on.replacen(NEUTRAL_FRAMING, TODAY_FRAMING, 1), today);
+            }
+        }
+        let c = context("Ivo");
+        let user = think_user(&c, "{\"creatures\": []}", "wait", "For the first time you see a stranger, 9 tiles west, wait.", "habit", "");
+        assert_eq!(user.matches(WHY_SECTION).count(), 1);
+        assert_eq!(framed_user(user.clone(), false), user);
+        let on = framed_user(user.clone(), true);
+        assert!(!on.contains("# Why you are thinking now") && on.matches(JUST_SECTION).count() == 1);
+        assert_eq!(on.find(JUST_SECTION), user.find(WHY_SECTION), "renamed where it stands");
+        assert_eq!(on.replacen(JUST_SECTION, WHY_SECTION, 1), user);
     }
 
     /// Without `LIVING_FRAME` the service runs the character frame, and the character frame is

@@ -100,6 +100,10 @@ fn laws() {
         // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
         // compares every shared answer with a fresh one and logs any difference.
         regard_cache: true, regard_cache_check: false,
+        // A bystander (one who sees an event it is not party to) is woken by what it sees at most
+        // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
+        // in full. 0: woken by each sight, as before.
+        witness_wake_ms: 500.0,
         // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
         // on a blow taken or when the same creature is seen to start the same move at it
         // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
@@ -114,6 +118,10 @@ fn laws() {
         // address them since one decided, is not said yet: one is told and thinks again with
         // that line in front of one (docs/FIRST_SIGHT.md, "Crowds"). Off: it is said.
         heard_first_rethinks: false,
+        // The think prompt's framing (docs/FRAMING.md): off, a mind starts from why it is
+        // thinking now; on, what just happened is shown beside what it perceives, and it thinks
+        // about whatever matters to it now (the neutral framing, replayed as N2).
+        think_framing: false,
         // Earshot (docs/COMMUNICATION.md §17): a person's scene says whom a line said now would
         // reach, at each way, among the people they perceive. Off: it is not told.
         earshot: false,
@@ -2479,19 +2487,19 @@ fn intent_sight() {
 }
 fn keep_distance_spec() {
     let l = laws();
-    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty"],
-       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
+    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty", "apart"],
+       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
        takes: intent_sight(), gives: "you between min and max metres from it, facing it" }
 }
 fn close_in_spec() {
-    #{ target: true, target_class: "creature", args: ["distance", "run"],
-       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
+    #{ target: true, target_class: "creature", args: ["distance", "run", "apart"],
+       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
        takes: intent_sight(), gives: "you within that distance of it" }
 }
 fn circle_spec() {
     let l = laws();
-    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty"],
-       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
+    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty", "apart"],
+       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
        takes: intent_sight(), gives: "you going round it at that distance" }
 }
 fn back_off_spec() {
@@ -2904,6 +2912,26 @@ fn perceived_of_law() {
        about: "You cannot read minds; what others say may be false. You only know what you perceived or were told. You know someone's name once they say it, or you are family, of one community, or close; until then they are a stranger to you." }
 }
 
+// ---- a person's look (docs/LOOK.md) ---------------------------------------------------------
+// Which of their lines a person wears: an infant's, a child's until `youth` years, a youth's until
+// `adult` years (a child or a grown person), an adult's, an elder's (life stages 0 and 3). Read
+// when a look is written (at a birth, a stage change, a band's due time); a world whose people
+// look grown sooner or later changes the ages.
+fn look_bands() { #{ youth: 12.0, adult: 18.0 } }
+fn look_bands_law() {
+    let b = look_bands();
+    #{ cadence: "event", topic: "",
+       about: `People look like children until ${short(b.youth)} years old, like youths until ${short(b.adult)}, then like adults until they grow old.` }
+}
+
+// Whom a mind's scene describes by look: "unnamed" (strangers and figures too far away to make
+// out), "all" (everyone in the scene) or "none".
+fn appearance_in_scene() { "unnamed" }
+fn appearance_in_scene_law() {
+    #{ cadence: "event", topic: "",
+       about: "You see how people look: their build, their clothes and, close enough, their hair; at a distance only a figure's height, build and clothes." }
+}
+
 fn dealings_law() {
     #{ cadence: "event", covers: ["record_text", "on_give", "on_store", "on_host", "on_expire", "due_by_dark"],
        about: "Agreements and demands are kept by the world: it counts what each side hands over, stores or hosts for the other, and tells both sides when an agreement is kept, broken or lapses at its dusk, and when a demand is met or goes unpaid." }
@@ -2965,8 +2993,10 @@ fn laws_about(l) {
         first_sight_thinks: if l.first_sight_thinks { "seeing someone you cannot place for the first time brings you to think" } else { "one thinks when something happens to one; a first sight is noticed, not thought over" },
         earshot: if l.earshot { "one knows whom one's words would reach if one spoke now, among the people one sees" } else { "one judges for oneself whom one's words would reach" },
         first_sight_gap_s: `a first sight brings one to think at most once in ${short(l.first_sight_gap_s)} s`,
+        think_framing: if l.think_framing { "a mind is shown what just happened and thinks about whatever matters to it now" } else { "a mind starts from why one is thinking now" },
         heard_first_rethinks: if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
+        witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },

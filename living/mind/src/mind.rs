@@ -235,7 +235,6 @@ pub struct Minds {
     /// and the pack decisions shared with members.
     animal_cfg: animal::Config,
     animal_sigs: Mutex<HashMap<u32, animal::Signature>>,
-    packs: Mutex<HashMap<u32, animal::PackDecision>>,
     /// Typed judgments refreshed in the background (judge.rs; `LIVING_JEV=1`).
     jev: Option<judge::Jev>,
     asked: Mutex<HashMap<u32, judge::Asked>>,
@@ -418,7 +417,7 @@ impl Minds {
                 llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
             }
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -1255,13 +1254,14 @@ impl Minds {
         rx.await?.map_err(|e| anyhow!("mind_consolidated: {e}"))
     }
 
+    /// Install a decision, its line said in `way` (`mind_install_way`; "" is `say`).
     #[allow(clippy::too_many_arguments)]
-    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, seen: u64, t: ThoughtIn) -> Result<()> {
+    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, way: String, seen: u64, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_install_then(actor, graph, plan, say, to, seen, t, move |_, r| {
+        self.conn.reducers.mind_install_way_then(actor, graph, plan, say, to, way, seen, t, move |_, r| {
             let _ = tx.send(flatten(r));
         })?;
-        rx.await?.map_err(|e| anyhow!("mind_install: {e}"))
+        rx.await?.map_err(|e| anyhow!("mind_install_way: {e}"))
     }
 
     /// Hand deliberate acts to the authority (carried out once each, in order).
@@ -2038,8 +2038,11 @@ impl Minds {
                     };
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
+                    // The line's way, as a talk reply names it (mind-say-way); one the world
+                    // lacks is said aloud.
+                    let way = talk::way_of(&v).unwrap_or_default();
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, say, to, String::new(), d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, say, to, way, d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
@@ -2082,9 +2085,10 @@ impl Minds {
                         model: reply.model.clone(),
                         reference: thought_ref.clone(),
                     };
-                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
+                    let way = talk::way_of(&v).unwrap_or_default();
+                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else if way.is_empty() || way == "say" { format!(" — says “{say}”") } else { format!(" — says ({way}) “{say}”") });
                     self.deliberation_says(actor, &say, to);
-                    self.install(actor, g.to_json(), plan.clone(), say, to, d.updated_ms, t).await?;
+                    self.install(actor, g.to_json(), plan.clone(), say, to, way, d.updated_ms, t).await?;
                     self.served_project(actor, served.as_deref(), &plan, &thought_ref).await;
                     return self.act(actor, acts, "deliberate").await;
                 }
@@ -2217,7 +2221,7 @@ impl Minds {
                         reference: thought_ref.clone(),
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
-                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, d.updated_ms, t).await;
+                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, String::new(), d.updated_ms, t).await;
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");

@@ -59,7 +59,7 @@ A first sight is the existing bookkeeping, unchanged: no `familiar` row for `(ob
 
 **When it re-arms:**
 - **Never for the same pair while the row lasts.** "You see X again after a long time" (no `familiar` touch for more than a game day, salience 0.25) is recognition of someone familiar, not a first sight. It does not ask.
-- **After forgetting.** The body keeps at most 256 `familiar` rows (`FAMILIAR_LIMIT`) and drops the oldest by `last_ms`. Someone dropped and later seen again is a first sight again, so it asks again. This happens only to a character that has seen more than 256 creatures since, which in practice means a city. The gap below bounds it there.
+- **After forgetting.** The body keeps at most 2,048 `familiar` rows (`FAMILIAR_LIMIT`; 256 before `battle-scale`, docs/BATTLE_SCALE.md). Over it, it drops the oldest by `last_ms`, but never one seen within the last minute or still in view. Someone dropped and later seen again is a first sight again, so it asks again. This happens only to a character that has seen more than 2,048 creatures and things since, which in practice means a city. The gap below bounds it there.
 - **After the person becomes placeable:** someone who told you their name is named in later lines, so they never ask.
 - **A new identity** (a new character after a death) is a new id with no rows, so it is a first sight to everyone.
 
@@ -184,7 +184,7 @@ Both are switched at runtime by `set_world_law` and read back from `world_law`, 
 - After the throttle that is 3.5–5.4 added per resident-hour, about +15–21%.
 - It is front-loaded. Once per pair, the rate falls as people become familiar. Hours of evidence do not exist.
 
-**A city** (no evidence; the bound). Where most people one passes can't be placed and the 256-row `familiar` cap forgets them, the gap is the limit: at most 3,600 / `first_sight_gap_s` added per resident-hour.
+**A city** (no evidence; the bound). Where most people one passes can't be placed and the `familiar` cap (2,048 rows since `battle-scale`) forgets them, the gap is the limit: at most 3,600 / `first_sight_gap_s` added per resident-hour.
 - At 300 s that is 12 an hour, about +60% on 18 an hour.
 - At 60 s it would be 60 an hour, which is why the default is 300 s.
 
@@ -309,3 +309,14 @@ This design adds no table, column, view, reducer, subscription or index. It read
 It writes `deliberation` rows through the existing path, so the mind service's existing subscription gets the same row kinds, and no client gets anything new. The owed set is thread-local, like `CUE_HELD`.
 
 The documentation was not fetched again for this design. The pages docs/ATTENTION.md recorded for the cue design on 2026-11-12 apply ([indexes](https://spacetimedb.com/docs/tables/indexes/), [performance](https://spacetimedb.com/docs/tables/performance/), [access permissions](https://spacetimedb.com/docs/tables/access-permissions/); docs 2.0.0, pinned 2.14.1). The build must check them again if it changes any storage.
+
+## Decisions on the crowd fixes (2026-11-12)
+
+The general coordinator decided on first-sight-crowd's two changes ("Crowds", above):
+1. **Naming whom someone walks to is always on.** It is a perception fact, like the `doing` line itself: no law.
+2. **`heard_first_rethinks` is allowed, off by default, as designed.**
+
+**Why it does not contradict "direct lines are always said".** That rule (docs/COMMUNICATION.md §15, the general coordinator, 2026-11-12) covers a line said into the air: an addressee who has left or is out of earshot. Such a line is said and told truthfully. `heard_first_rethinks` holds a direct line in one case only, and for a different reason:
+- **The gap it closes is an artifact of our latency.** A mind's scene is taken before its model call, which takes seconds. Meanwhile someone else spoke to the same person. A person deciding in the moment would have heard that before speaking.
+- **It applies only to lines heard after the decision, as defined:** after the later of the request's scene (`seen_ms`) and the start of the model calls (now less the thought's `latency_ms`). A line the prompt already held does not count.
+- **The mind gets the truthful event and decides again.** It is told what it had not yet said and the line it heard. Nothing tells it what to choose: it may say the same line, another, or nothing.

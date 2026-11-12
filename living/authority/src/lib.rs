@@ -12,6 +12,7 @@ mod combat;
 mod floor;
 mod frame;
 mod island;
+mod look;
 mod mind;
 mod motion;
 mod outcomes;
@@ -49,6 +50,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         height: living_rules::map::MAP_H,
         life_pace: 1.0,
         year_days: living_rules::YEAR_DAYS as u32,
+        look_book: String::new(),
     });
     ctx.db.clock().insert(Clock {
         id: 0,
@@ -164,6 +166,8 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     common::invalidate_scripts_rev();
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
+    // Looks change band by the life table and the `look_bands` law: their times follow.
+    look::retime_all(ctx, now);
     Ok(())
 }
 

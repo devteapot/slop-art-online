@@ -363,7 +363,7 @@ def intents_case(run):
     sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
     text = '\n'.join(str(m.get('content', '')) for e in sent for m in e['body'].get('messages', []))
     (run.directory / 'sent-prompt-intents.txt').write_text(text)
-    for line in ('- keep_distance(target, min, max, run, qty)', '- close_in(target, distance, run)', '- circle(target, radius, side, run, qty)', '- back_off(target, distance, run)', '- follow(target, distance, run, qty)'):
+    for line in ('- keep_distance(target, min, max, run, qty, apart)', '- close_in(target, distance, run, apart)', '- circle(target, radius, side, run, qty, apart)', '- back_off(target, distance, run)', '- follow(target, distance, run, qty)'):
         assert line in text, f'the reference documents {line}'
     assert 'm/s' in text and 'lost sight of them' in text, 'speeds and the sight rule from the laws'
     return {'status': 'pass', 'plan_routine': plan_row['graph'], 'steer': {k: st[k] for k in ('goal', 'target', 'keep', 'far', 'flags')},
@@ -1729,6 +1729,125 @@ def earshot_case(run):
     return {'status': 'pass', **result}
 
 
+@case('say-way')
+def say_way_case(run):
+    """A decision's line names its way of speaking (mind-say-way, `mind_install_way`,
+    docs/COMMUNICATION.md §18). On a quiet open line, H (thought for) stands with A 15 m east
+    (beyond a said line, within a call) and B 1 m west. H's think prompt names the optional
+    `"way"` of its `say`. Four think requests, each answered by the fake model with a line:
+    a call to A (A hears it from about 15 m; the chronicle keeps "<H> (call) to <A>"), a whisper to
+    no one (refused in the rules' words, told to H as `unsaid`, and the decision stands), a
+    whisper to B (B gets the words as a whisper), and a line in "shout", a way the world lacks
+    (said aloud: B hears "said to you")."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 3, True)
+    h, a, b = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    for who in (h, a, b):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 28)
+    run.admin('place_at', h, *line[10])
+    run.admin('place_at', a, *line[25])
+    run.admin('place_at', b, *line[9])
+    time.sleep(1.5)
+    think = lambda marker, say: {'purpose': 'think', 'contains': f'verify {marker}', 'times': 1,
+                                 'reply': {'thought': f'verify {marker}', 'intend': ['wait'], 'say': say}}
+    script = {'replies': {'think': {'thought': 'I listen.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}},
+              'rules': [think('way-call', {'text': 'Verify call: can you hear me down there?', 'to': a, 'way': 'call'}),
+                        think('way-whisper-none', {'text': 'Verify whisper to no one.', 'to': None, 'way': 'whisper'}),
+                        think('way-whisper-b', {'text': 'Verify whisper: keep this between us.', 'to': b, 'way': 'whisper'}),
+                        think('way-shout', {'text': 'Verify shout: said aloud instead.', 'to': b, 'way': 'shout'})]}
+    run.start(model(run, script), [h])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    rows = lambda who: run.private(f'SELECT * FROM experience WHERE observer = {who}', f'experiences-{who}')
+    def decide(marker, words):
+        run.admin('set_behavior', h, json.dumps({'think': f'I finished my plan. verify {marker}'}))
+        run.wait(lambda: any(words in r['text'] for who in (h, a, b) for r in rows(who) if r['kind'] in ('speech', 'whisper', 'said', 'unsaid')), f'the {marker} line', 60)
+        time.sleep(2.6)
+    decide('way-call', 'can you hear me down there')
+    decide('way-whisper-none', 'whisper to no one')
+    decide('way-whisper-b', 'keep this between us')
+    decide('way-shout', 'said aloud instead')
+    prompt = next((sent_text(e) for e in requests() if 'verify way-call' in sent_text(e)), '')
+    (run.directory / 'prompt-say-way.txt').write_text(prompt)
+    rh, ra, rb = rows(h), rows(a), rows(b)
+    find = lambda rs, words, kind=None: [r for r in rs if words in r['text'] and (kind is None or r['kind'] == kind)]
+    dist = round(math.dist(line[10], line[25]), 1)
+    thoughts = [t['summary'] for t in run.thoughts(h) if t['kind'] == 'deliberate']
+    checks = {
+        'think_format_names_the_way': '"way": "say" or "whisper" or "call" (optional; default "say")' in prompt,
+        'a_is_beyond_a_said_line_within_a_call': 9.0 < dist <= 22.5,
+        'call_reaches_a': bool(find(ra, 'can you hear me down there', 'speech')) and 'calls out to you' in (find(ra, 'can you hear me down there') or [{'text': ''}])[0]['text'],
+        # H's own row may be integrated (and deleted) by its mind already: the chronicle keeps the way.
+        'h_called_out': any(' (call) to ' in r['text'] and 'can you hear me down there' in r['text'] for r in run.private(f"SELECT * FROM chronicle WHERE kind = 'speech'", 'chronicle-speech') if r['a'] == h),
+        'whisper_to_no_one_is_refused_and_told': any(r['text'] == 'You did not say “Verify whisper to no one.”: a whisper needs someone to whisper to.' for r in find(rh, 'whisper to no one', 'unsaid')),
+        'refused_whisper_said_to_no_one': not any(find(rs, 'whisper to no one', k) for rs in (ra, rb) for k in ('speech', 'whisper')),
+        'decisions_stand': sum(1 for t in thoughts if 'verify way-' in t) >= 4,
+        'whisper_reaches_b_only': bool(find(rb, 'keep this between us', 'whisper')) and not find(ra, 'keep this between us'),
+        'a_way_the_world_lacks_is_said_aloud': bool(find(rb, 'said aloud instead', 'speech')) and any(r['text'].startswith('You said to') for r in find(rh, 'said aloud instead', 'said')),
+    }
+    result = {'h': h, 'a': a, 'b': b, 'dist_a': dist, 'h_rows': [r['text'] for r in rh if 'Verify' in r['text']],
+              'a_rows': [r['text'] for r in ra if 'Verify' in r['text']], 'b_rows': [r['text'] for r in rb if 'Verify' in r['text']], 'checks': checks}
+    (run.directory / 'say-way.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+@case('think-framing')
+def think_framing_case(run):
+    """The think prompt's framing is the world's `think_framing` law (docs/FRAMING.md). With the
+    law off, the think request the model is sent carries today's framing sentence and the section
+    "# Why you are thinking now". With it on (`set_world_law`), the system prompt is the same text
+    with that sentence replaced by the neutral one, word for word as replayed (N2), and the user
+    prompt has the same sections in the same order, the reason's renamed "# What just happened".
+    The law is restored at the end."""
+    today = ("Start from why you are thinking now: that is what this moment of thought is about. "
+             "Think about it as that person: what you make of it, and what you mean to do.")
+    neutral = ("What just happened is shown beside what you perceive. Think as that person about whatever "
+               "matters to you now, which may or may not be what just happened, and decide what you mean to do.")
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 1, True)
+    m = next(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    run.admin('set_behavior', m, json.dumps({'wait': 300}))
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    run.start(model(run, script), [m])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+    msgs = lambda e: {x.get('role'): str(x.get('content', '')) for x in e['body'].get('messages', [])}
+    heads = lambda u: [l for l in u.split('\n') if l.startswith('# ')]
+    asked = lambda marker: [msgs(e) for e in requests() if f'verify {marker}' in msgs(e).get('user', '')]
+    try:
+        run.admin('set_world_law', 'think_framing', 'false')
+        run.request(m, 'framing off')
+        off = run.wait(lambda: asked('framing off'), 'the think request with the law off', 90)[0]
+        run.admin('set_world_law', 'think_framing', 'true')
+        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        assert laws.get('think_framing') == 'true', laws
+        time.sleep(3.0)
+        run.request(m, 'framing on')
+        on = run.wait(lambda: asked('framing on'), 'the think request with the law on', 90)[0]
+    finally:
+        run.admin('set_world_law', 'think_framing', 'false')
+    (run.directory / 'prompt-off.json').write_text(json.dumps(off, indent=1))
+    (run.directory / 'prompt-on.json').write_text(json.dumps(on, indent=1))
+    renamed = [h.replace('# Why you are thinking now', '# What just happened') for h in heads(off['user'])]
+    checks = {
+        'off_system_has_today_once': off['system'].count(today) == 1 and neutral not in off['system'],
+        'off_user_has_why_section': '\n# Why you are thinking now\n' in off['user'] and '# What just happened' not in off['user'],
+        'on_system_is_off_with_the_sentence_replaced': on['system'] == off['system'].replace(today, neutral, 1),
+        'on_user_has_just_happened_not_why': '\n# What just happened\n' in on['user'] and '# Why you are thinking now' not in on['user'],
+        'on_user_sections_same_order_renamed': heads(on['user']) == renamed,
+    }
+    result = {'m': m, 'off_heads': heads(off['user']), 'on_heads': heads(on['user']), 'checks': checks}
+    (run.directory / 'think-framing.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('health-seen')
 def health_seen_case(run):
     """A mind in a fight is told its opponent's health as the band everyone sees, never as a
@@ -1795,10 +1914,11 @@ def health_seen_case(run):
 
 @case('animals')
 def animals_case(run):
-    """Cheaper animal minds (LIVING_ANIMAL_MINDS=salient,choose,pack; mind/animal.rs): one deer
-    picks one of a few options in one call and the graph built from it is installed; the deer it
-    sees reuse that decision without a call (pack); asked again with nothing new, it lives by
-    instinct without a call (salient)."""
+    """Cheaper animal minds (LIVING_ANIMAL_MINDS=salient,choose; mind/animal.rs): each deer of a
+    herd decides on its own, in its own `choose` call, and the graph built from its own pick is
+    installed; `pack` in the switch list (retired 2026-11-12, docs/PACK_MIND.md: one animal's
+    decision copied to the others it saw was shared hidden state) changes nothing; asked again
+    with nothing new, the lead lives by instinct without a call (salient)."""
     run.harness('launch')
     run.harness('doctor')
     person = next(p for p in sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id']) if p['alive'] and p['stage'] == 2)
@@ -1813,6 +1933,7 @@ def animals_case(run):
         run.admin('place_at', d, at['x'] + (i % 2), at['y'] + (i // 2))
     time.sleep(1.0)
     models = model(run, {})
+    # `pack` is passed on purpose: it is retired and must not make one deer decide for another.
     run.start(models, deer, extra_env={'LIVING_ANIMAL_MINDS': 'salient,choose,pack', 'LIVING_ANIMAL_PACK_S': '120'})
     detail = lambda t: json.loads(t['detail']) if t['detail'] else {}
     # A mind's install counts as having just thought: within its species' think_min_s (240 s)
@@ -1823,16 +1944,21 @@ def animals_case(run):
     ask(lead, 'animal-lead')
     first = run.wait(lambda: [t for t in run.thoughts(lead, 'lead-thoughts') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'choose'], 'a chosen option', 60)[0]
     d0 = detail(first)
-    assert d0['valid_pick'] and len(d0['options']) >= 3 and set(d0['pack']) >= set(rest), d0
+    assert d0['valid_pick'] and len(d0['options']) >= 3 and 'pack' not in d0, d0
     brain = run.sql(f'SELECT * FROM brain WHERE id = {lead}', 'lead-brain')[0]
     assert brain['source'] == 'mind' or d0['options'][d0['pick']].startswith('carry on'), brain
     for d in rest:
         ask(d, 'animal-member')
-    shared_ = {d: run.wait(lambda d=d: [t for t in run.thoughts(d, f'member-{d}') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'pack'], f'pack decision for {d}', 60)[0] for d in rest}
-    assert all(detail(t)['by'] == lead for t in shared_.values())
+    # Each of the others decides on its own: its own `choose` thought, never one made by the lead.
+    own = {d: run.wait(lambda d=d: [t for t in run.thoughts(d, f'member-{d}') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'choose'], f'own decision for {d}', 90)[0] for d in rest}
+    for d in deer:
+        copied = [t for t in run.thoughts(d, f'copied-{d}') if detail(t).get('mode') == 'pack' or detail(t).get('by') not in (None, d)]
+        assert not copied, (d, copied)
     chosen = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']
     compiled = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
-    assert len(chosen) == 1 and not compiled, (len(chosen), len(compiled))
+    assert len(chosen) == 3 and not compiled, (len(chosen), len(compiled))
+    # No prompt tells an animal that others will do what it picks.
+    assert not any('Your pack' in json.dumps(e) for e in chosen), 'a choose prompt still speaks for a pack'
     # The lead asked again with nothing new, once its thinking throttle (240 s after its chosen
     # option) has passed (since 2026-11-11 no dawn broadcast skips it). Wolves that would come
     # into view meanwhile are news; the scene removes those that range near the herd.
@@ -1844,8 +1970,9 @@ def animals_case(run):
     time.sleep(max(0.0, (first['at_ms'] + 245_000) / 1000 - time.time()))
     ask(lead, 'animal-again')
     run.wait(lambda: any(t['kind'] == 'instinct' for t in run.thoughts(lead, 'lead-again')), 'a request answered by instinct', 60)
-    assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 1, 'nothing new: no call'
-    return {'status': 'pass', 'lead': lead, 'pick': d0['options'][d0['pick']], 'weight': d0.get('weight'), 'members': rest, 'model_calls_for_three_deer': 1}
+    assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 3, 'nothing new: no call'
+    return {'status': 'pass', 'lead': lead, 'pick': d0['options'][d0['pick']], 'weight': d0.get('weight'), 'members': rest,
+            'own_decisions': {d: detail(t).get('pick') for d, t in own.items()}, 'model_calls_for_three_deer': 3}
 
 
 @case('night')

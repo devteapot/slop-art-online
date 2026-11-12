@@ -279,7 +279,14 @@ pub struct Regard {
     /// is, and whose community they belong to, cannot be told. A person is then "someone too far
     /// away to make out", known or not (docs/STRANGERS.md, far-label).
     pub far: bool,
+    /// How much of the target's look a mind is told (docs/LOOK.md §3): `Full` for oneself and
+    /// whoever is made out, `Far` for someone too far away to make out (a law's `far`), as a
+    /// law's `look` ("full", "far", "none") says otherwise. The look's key reaches a player's
+    /// client whenever the target is seen, whatever this is.
+    pub look: LookSeen,
 }
+
+pub use crate::look::LookSeen;
 
 impl Regard {
     /// The rule without a `perceived_of` law: names when known (animals know their own kind's),
@@ -287,7 +294,7 @@ impl Regard {
     pub fn default_for(p: &RegardIn) -> Self {
         let name = p.own || p.known || (p.observer_kind != "person" && p.observer_kind == p.target_kind);
         let health = if p.own || p.revealed.iter().any(|r| r == "health") { Precision::Exact } else { Precision::Band };
-        Self { name, health, far: false }
+        Self { name, health, far: false, look: LookSeen::Full }
     }
 }
 
@@ -511,12 +518,21 @@ pub struct Laws {
     /// scene the decision read, is not said yet: the speaker is told so and asked to think
     /// again with that line in front of it (first-sight-crowd, docs/FIRST_SIGHT.md). Off: said.
     pub heard_first_rethinks: bool,
+    /// The think prompt's framing (docs/FRAMING.md): off, today's ("Start from why you are
+    /// thinking now: that is what this moment of thought is about. …"); on, the neutral one
+    /// replayed as N2 ("What just happened is shown beside what you perceive. …", the reason's
+    /// section headed "# What just happened" where it stands).
+    pub think_framing: bool,
     /// A person's scene says whom a line said now would reach, at each way of speaking, among
     /// the people they perceive (earshot, docs/COMMUNICATION.md §17): a mind's deliberation scene
     /// ("who would hear you now") and a player's `my_earshot`. Off: neither is told.
     pub earshot: bool,
     /// How often a character's cues are checked against what it perceives (seconds).
     pub cue_check_s: f32,
+    /// A bystander, one who sees an event it is not party to, is woken by what it sees at most
+    /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
+    /// full. 0: woken by each, as before.
+    pub witness_wake_ms: f32,
     /// What each observer makes of each target (name known, the `perceived_of` answer) is
     /// computed once per transaction and shared (`perception::with_answers`). Off: every
     /// asker computes it afresh (the same answers; for measuring the cache).
@@ -613,7 +629,9 @@ impl Default for Laws {
             earshot: false,
             first_sight_gap_s: 300.0,
             heard_first_rethinks: false,
+            think_framing: false,
             cue_check_s: 1.0,
+            witness_wake_ms: 500.0,
             regard_cache: true,
             regard_cache_check: false,
             fast_lane_on: false,
@@ -971,6 +989,9 @@ pub struct Scripts {
     source: String,
     /// Law declarations that failed when read (an install refuses them).
     law_errors: RefCell<Vec<String>>,
+    /// `laws_about(laws())`, read once when the script compiles, under [`COMPILE_OPERATIONS`]
+    /// like the laws' other descriptions: what each world constant is, or why it could not be read.
+    about: Result<Vec<(String, String)>, String>,
     /// What each kind of structure does for those near it (its traits in `structures()`).
     structures: HashMap<String, StructureTraits>,
     /// Resource kinds' shares of their regrowth by season (`regrow_by_season`), when not the
@@ -1316,7 +1337,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default(), body: Default::default(), makings: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1356,6 +1377,9 @@ impl Scripts {
         s.ui = s.read_ui();
         // The body's meters: never fail the compile either (`meter_errors`, refused at install).
         s.body = s.read_body();
+        // The world constants' words: read once, with what is read once (they list every
+        // constant, and grow with a world's laws).
+        s.about = s.read_laws_about();
         s.engine.set_max_operations(LIMITS.operations);
         Ok(s)
     }
@@ -1959,12 +1983,22 @@ impl Scripts {
     /// What each world constant is (`laws_about(laws())`), by name: the script's words for the
     /// values in force. Empty when the script does not say.
     pub fn laws_about(&self) -> Vec<(String, String)> {
+        self.about.clone().unwrap_or_default()
+    }
+
+    /// Why `laws_about` could not be read when the script compiled, if it could not.
+    pub fn laws_about_error(&self) -> Option<&str> {
+        self.about.as_ref().err().map(|e| e.as_str())
+    }
+
+    /// `laws_about(laws())` as the compile reads it (under [`COMPILE_OPERATIONS`]).
+    fn read_laws_about(&self) -> Result<Vec<(String, String)>, String> {
         if !self.has("laws_about") {
-            return Vec::new();
+            return Ok(Vec::new());
         }
         let m = self.laws_map();
-        let Ok(d) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)) else { return Vec::new() };
-        d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect()
+        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)).map_err(|e| format!("laws_about: {e}"))?;
+        Ok(d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect())
     }
 
     /// The world's rules as minds are told them, built from the laws' descriptions: one line per
@@ -2192,6 +2226,49 @@ impl Scripts {
             }
         }
         Ok(l)
+    }
+
+    /// The world's look bands (docs/LOOK.md §4): the `look_bands()` law's `youth` and `adult`
+    /// ages in years (shipped `#{ youth: 12.0, adult: 18.0 }`); without the law, or with one that
+    /// fails (an install refuses it: `look_bands_law`), those defaults.
+    pub fn look_bands(&self) -> crate::look::LookBands {
+        self.look_bands_law().unwrap_or_default()
+    }
+
+    /// The `look_bands()` law's thresholds, or what is wrong with them: numbers of years, with
+    /// youth no later than adulthood.
+    pub fn look_bands_law(&self) -> Result<crate::look::LookBands, String> {
+        let d = crate::look::LookBands::default();
+        if !self.has("look_bands") {
+            return Ok(d);
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "look_bands", ()).map_err(|e| format!("look_bands: {e}"))?;
+        let out = out.try_cast::<rhai::Map>().ok_or("look_bands must return a map: #{ youth: 12.0, adult: 18.0 }")?;
+        if let Some(k) = out.keys().find(|k| !["youth", "adult"].contains(&k.as_str())) {
+            return Err(format!("look_bands: unknown key `{k}` (the keys are youth and adult)"));
+        }
+        let get = |k: &str, v: f32| -> Result<f32, String> { out.get(k).map_or(Ok(v), |d| number(d).map(|x| x as f32).ok_or(format!("look_bands: {k} must be a number of years"))) };
+        let b = crate::look::LookBands { youth: get("youth", d.youth)?, adult: get("adult", d.adult)? };
+        if !(b.youth >= 0.0 && b.adult >= b.youth) {
+            return Err(format!("look_bands: youth ({}) and adult ({}) must be ages in years, youth no later than adult", b.youth, b.adult));
+        }
+        Ok(b)
+    }
+
+    /// Whom a mind's scene describes by look (docs/LOOK.md §3): the `appearance_in_scene()` law,
+    /// "unnamed" (shipped and without the law: strangers and far figures), "all" or "none".
+    pub fn appearance_in_scene(&self) -> crate::look::AppearanceInScene {
+        self.appearance_in_scene_law().unwrap_or_default()
+    }
+
+    /// The `appearance_in_scene()` law's value, or what is wrong with it.
+    pub fn appearance_in_scene_law(&self) -> Result<crate::look::AppearanceInScene, String> {
+        if !self.has("appearance_in_scene") {
+            return Ok(Default::default());
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "appearance_in_scene", ()).map_err(|e| format!("appearance_in_scene: {e}"))?;
+        let v = out.into_string().map_err(|_| "appearance_in_scene must return \"unnamed\", \"all\" or \"none\"".to_string())?;
+        crate::look::AppearanceInScene::parse(&v).ok_or_else(|| format!("appearance_in_scene must return \"unnamed\", \"all\" or \"none\", not \"{v}\""))
     }
 
     /// How dark it is at `hour`, in the steps laws see it (`SkillCtx::dark`).
@@ -2585,7 +2662,9 @@ impl Scripts {
             earshot: flag("earshot", l.earshot),
             first_sight_gap_s: g("first_sight_gap_s", l.first_sight_gap_s).clamp(0.0, 3_600.0),
             heard_first_rethinks: flag("heard_first_rethinks", l.heard_first_rethinks),
+            think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
+            witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
@@ -3039,8 +3118,16 @@ fn decode_regard(r: Dynamic, p: &RegardIn) -> Result<Regard, String> {
         None => false,
         Some(v) => v.as_bool().map_err(|_| "perceived_of: `far` must be true or false")?,
     };
+    let look = match r.get("look").map(|v| v.clone().into_string()) {
+        None if far && !p.own => LookSeen::Far,
+        None => LookSeen::Full,
+        Some(Ok(l)) if l == "full" => LookSeen::Full,
+        Some(Ok(l)) if l == "far" => LookSeen::Far,
+        Some(Ok(l)) if l == "none" => LookSeen::None,
+        Some(_) => return Err("perceived_of: `look` is \"full\", \"far\" or \"none\"".into()),
+    };
     // Someone too far to make out is never named.
-    Ok(Regard { name: name && !far, health, far })
+    Ok(Regard { name: name && !far, health, far, look })
 }
 
 /// A record's parties: a map of role → character id (or community party).
@@ -3433,6 +3520,32 @@ mod tests {
     /// Attention cues (docs/ATTENTION.md): off by default, with their cooldown and gap as laws
     /// a world may set (`set_world_law`), clamped to sane bounds.
     #[test]
+    fn the_constants_words_are_read_with_the_compile_s_budget() {
+        // `laws_about` is read once per install, like the laws' other descriptions: a world whose
+        // words take more than the running world's MAX_OPERATIONS still installs, and a failure
+        // to read them is refused with its own reason, not as a constant without words.
+        let src = include_str!("../../scripts/skills.rhai");
+        let long = r#"fn laws_about(l) {
+            let m = base_laws_about(l);
+            let extra = "";
+            for i in 0..600 { if i % 300 == 0 { extra += " (and so on)"; } else if i < 0 { extra += "never"; } }
+            m.address_m = m.address_m + extra;
+            m
+        }"#;
+        let sc = Scripts::new(&crate::floors::compose(src, long).unwrap()).unwrap();
+        assert!(sc.laws_about_error().is_none(), "{:?}", sc.laws_about_error());
+        let about: std::collections::HashMap<String, String> = sc.laws_about().into_iter().collect();
+        assert!(about["address_m"].ends_with(" (and so on) (and so on)"), "{:?}", about.get("address_m"));
+        sc.validate().expect("installs: its words were read within the compile's budget");
+        // The same words asked under the running world's cap (the engine after the compile) are not read.
+        assert!(sc.engine.call_fn::<Dynamic>(&mut Scope::new(), &sc.ast, "laws_about", (sc.laws_map(),)).is_err(), "the test's words take more than {MAX_OPERATIONS} operations");
+        // Words that cannot be read at all are refused as such.
+        let broken = Scripts::new(&crate::floors::compose(src, "fn laws_about(l) { let m = base_laws_about(l); m.address_m = l.no_such_law.len(); m }").unwrap()).unwrap();
+        assert!(broken.laws_about_error().is_some());
+        assert!(broken.validate().unwrap_err().contains("laws_about"), "{:?}", broken.validate());
+    }
+
+    #[test]
     fn attention_cues_are_the_world_s_laws() {
         let src = include_str!("../../scripts/skills.rhai");
         let shipped = Scripts::new(src).unwrap();
@@ -3440,6 +3553,7 @@ mod tests {
         assert!(!l.cues_on);
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
+        assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
@@ -3448,6 +3562,7 @@ mod tests {
         assert!(l.cues_on && !l.regard_cache);
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (30.0, 0.0, 0.1));
         assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
+        assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
@@ -3483,6 +3598,20 @@ mod tests {
         assert_eq!(l.first_sight_gap_s, 3_600.0);
         let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
         assert!(about["first_sight_thinks"].contains("brings you to think"), "{about:?}");
+    }
+
+    /// The think prompt's framing (docs/FRAMING.md): today's by default, a world may set the
+    /// neutral one.
+    #[test]
+    fn think_framing_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(!shipped.laws().think_framing);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["think_framing"].contains("why one is thinking"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("think_framing".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().think_framing);
     }
 
     /// A line overtaken by someone else's (first-sight-crowd): off by default, a world may set it.
@@ -3602,12 +3731,12 @@ mod tests {
         let sc = scripts();
         let base = RegardIn { observer_kind: "person".into(), target_kind: "person".into(), ..Default::default() };
         // A stranger: a label, and health only as a band.
-        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band, far: false });
+        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band, far: false, look: LookSeen::Full });
         // Known by name; an appraisal shows exact health while it holds.
-        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band, far: false });
-        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact, far: false });
+        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band, far: false, look: LookSeen::Full });
+        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact, far: false, look: LookSeen::Full });
         // Oneself: everything. Animals know their own kind by name, and not people's.
-        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact, far: false });
+        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact, far: false, look: LookSeen::Full });
         let wolf = RegardIn { observer_kind: "wolf".into(), target_kind: "wolf".into(), ..Default::default() };
         assert!(sc.perceived_of(&wolf).name);
         assert!(!sc.perceived_of(&RegardIn { target_kind: "person".into(), ..wolf }).name);
@@ -3616,12 +3745,41 @@ mod tests {
             assert_eq!(sc.perceived_of(&p), Regard::default_for(&p));
         }
         let blind = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: true, health: \"none\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
-        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None, far: false });
+        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None, far: false, look: LookSeen::Full });
         // A law may say someone is too far away to make out: never named then, known or not.
         let far = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: p.target.known, far: p.dist > 20.0 }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
         let known_at = |dist: u16| RegardIn { known: true, dist, ..base.clone() };
         assert_eq!((far.perceived_of(&known_at(30)).name, far.perceived_of(&known_at(30)).far), (false, true));
         assert_eq!((far.perceived_of(&known_at(10)).name, far.perceived_of(&known_at(10)).far), (true, false));
+        // The look (docs/LOOK.md §3): made out, in full; too far away to make out, the far words;
+        // a law may say otherwise (a foggy world).
+        assert_eq!(far.perceived_of(&known_at(10)).look, LookSeen::Full);
+        assert_eq!(far.perceived_of(&known_at(30)).look, LookSeen::Far);
+        let fog = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ far: p.dist > 20.0, look: if p.dist > 10.0 {{ \"none\" }} else {{ \"full\" }} }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert_eq!(fog.perceived_of(&known_at(15)).look, LookSeen::None);
+        assert_eq!(fog.perceived_of(&known_at(5)).look, LookSeen::Full);
+        let bad = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ look: \"shade\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert!(bad.validate().unwrap_err().contains("`look` is"), "a look the engine does not know is refused at install");
+    }
+
+    #[test]
+    fn look_laws_are_read_and_checked() {
+        let sc = scripts();
+        assert_eq!(sc.look_bands(), crate::look::LookBands { youth: 12.0, adult: 18.0 });
+        assert_eq!(sc.appearance_in_scene(), crate::look::AppearanceInScene::Unnamed);
+        let with = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai").replace("fn look_bands()", "fn look_bands_old()").replace("fn appearance_in_scene()", "fn appearance_in_scene_old()")));
+        let late = with("fn look_bands() { #{ youth: 14.0, adult: 21.0 } }\nfn appearance_in_scene() { \"all\" }").unwrap();
+        assert_eq!(late.look_bands(), crate::look::LookBands { youth: 14.0, adult: 21.0 });
+        assert_eq!(late.appearance_in_scene(), crate::look::AppearanceInScene::All);
+        assert!(late.validate().is_ok());
+        for (bad, says) in [
+            ("fn look_bands() { #{ youth: 20.0, adult: 18.0 } }\nfn appearance_in_scene() { \"none\" }", "youth no later than adult"),
+            ("fn look_bands() { #{ youth: 12.0, adult: 18.0, elder: 60.0 } }\nfn appearance_in_scene() { \"none\" }", "unknown key `elder`"),
+            ("fn look_bands() { #{ youth: 12.0, adult: 18.0 } }\nfn appearance_in_scene() { \"strangers\" }", "not \"strangers\""),
+        ] {
+            let e = with(bad).unwrap().validate().unwrap_err();
+            assert!(e.contains(says), "{e}");
+        }
     }
 
     #[test]

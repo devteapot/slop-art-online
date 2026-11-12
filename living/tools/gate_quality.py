@@ -507,14 +507,21 @@ def cmd_live(a):
             by_actor.setdefault(g.get("actor"), []).append(g)
         eps = [ep for es in by_actor.values() for ep in holds_of(es)]
         held_s = sorted(((ep["release"] or ep["holds"][-1])["at_ms"] - ep["first"]["at_ms"]) / 1000 for ep in eps)
-        usd, unknown = known_usd([e for e in entries if e.get("purpose") != "rethink-gate"])
-        gate_usd, gate_unknown = known_usd([e for e in entries if e.get("purpose") == "rethink"])
+        # The providers' calls (DeepSeek, GLM) and the gate's Jev calls apart: Jev's price is local-only
+        # (docs/STORE.md, Model terms), so its dollars sit under the `jev` key, which the store's
+        # scrubber drops, and the top-level dollars are the providers' alone.
+        is_jev = lambda e: e.get("purpose") == "rethink" or str(e.get("model") or "").startswith("jev")
+        usd, unknown = known_usd([e for e in entries if e.get("purpose") != "rethink-gate" and not is_jev(e)])
+        gate_usd, gate_unknown = known_usd([e for e in entries if e.get("purpose") != "rethink-gate" and is_jev(e)])
+        jev_calls = sum(1 for e in entries if e.get("purpose") != "rethink-gate" and is_jev(e))
         r = {"instance": os.path.basename(inst), "variant": s.get("variant"), "minutes": minutes, "thinkers": thinkers,
-             "resident_hours": round(rh, 2), "usd": None if unknown else round(usd, 3),
-             "usd_known": round(usd, 3), "calls_cost_unknown": unknown,
-             "usd_per_resident_hour": None if unknown else round(usd / rh, 4),
+             "resident_hours": round(rh, 2), "provider_usd": None if unknown else round(usd, 3),
+             "provider_usd_known": round(usd, 3), "calls_cost_unknown": unknown,
+             "provider_usd_per_resident_hour": None if unknown else round(usd / rh, 4),
              "deliberations": len(thinks), "deliberations_per_resident_hour": round(len(thinks) / rh, 2),
-             "gate_usd": None if gate_unknown else round(gate_usd, 4), "verdicts": verdicts,
+             "jev": {"calls": jev_calls, "cost_usd": None if gate_unknown else round(gate_usd, 4),
+                     "usd_per_resident_hour_with_jev": None if (unknown or gate_unknown) else round((usd + gate_usd) / rh, 4)},
+             "verdicts": verdicts,
              "hold_episodes": len(eps), "released_by": {}, "held_s_p50": held_s[len(held_s) // 2] if held_s else None,
              "held_s_p90": held_s[int(len(held_s) * 0.9)] if held_s else None, "stopped_by": s.get("stopped_by"), "runaways": s.get("runaways")}
         for ep in eps:
@@ -535,6 +542,14 @@ def cmd_live(a):
                 else:
                     never += 1
         reacts.sort()
+        # Context, not a committed measure: the authority's own `stats` row (final.json): ticks since the
+        # world began and the largest gap between ticks. It is read from the database itself, so it does
+        # not depend on the server's database list (which no longer lists trial databases).
+        try:
+            st = (json.loads(Path(os.path.join(inst, "final.json")).read_text()).get("stats") or [{}])[0]
+        except (OSError, ValueError, IndexError, AttributeError):
+            st = {}
+        r.update({"ticks": st.get("ticks"), "max_tick_gap_ms": st.get("max_tick_gap_ms")})
         r.update({"failed_acts": len(reacts) + never, "reaction_s_p50": reacts[len(reacts) // 2] if reacts else None,
                   "reaction_s_p90": reacts[int(len(reacts) * 0.9)] if reacts else None, "no_deliberation_within_10_min": never})
         out.append(r)
@@ -542,10 +557,10 @@ def cmd_live(a):
     Path(os.path.join(a.batch_dir, "gate-live.json")).write_text(json.dumps(out, indent=1))
     for r in out:
         print(json.dumps(r))
-    print("\n| arm | runs | $ per resident-hour | deliberations per resident-hour | holds | held s p50 / p90 | reaction to a failed act s p50 (none in 10 min) |\n|---|---:|---:|---:|---:|---:|---:|")
+    print("\n| arm | runs | providers' $ per resident-hour | deliberations per resident-hour | holds | held s p50 / p90 | reaction to a failed act s p50 (none in 10 min) |\n|---|---:|---:|---:|---:|---:|---:|")
     for v, rs in sorted(by.items()):
         f = lambda k: " / ".join(str(r[k]) for r in rs)
-        print(f"| {v} | {len(rs)} | {f('usd_per_resident_hour')} | {f('deliberations_per_resident_hour')} | {f('hold_episodes')} | {f('held_s_p50')} / {f('held_s_p90')} | {f('reaction_s_p50')} ({f('no_deliberation_within_10_min')}) |")
+        print(f"| {v} | {len(rs)} | {f('provider_usd_per_resident_hour')} | {f('deliberations_per_resident_hour')} | {f('hold_episodes')} | {f('held_s_p50')} / {f('held_s_p90')} | {f('reaction_s_p50')} ({f('no_deliberation_within_10_min')}) |")
 
 
 def cmd_held(a):
