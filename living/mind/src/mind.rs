@@ -235,7 +235,6 @@ pub struct Minds {
     /// and the pack decisions shared with members.
     animal_cfg: animal::Config,
     animal_sigs: Mutex<HashMap<u32, animal::Signature>>,
-    packs: Mutex<HashMap<u32, animal::PackDecision>>,
     /// Typed judgments refreshed in the background (judge.rs; `LIVING_JEV=1`).
     jev: Option<judge::Jev>,
     asked: Mutex<HashMap<u32, judge::Asked>>,
@@ -418,7 +417,7 @@ impl Minds {
                 llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
             }
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
