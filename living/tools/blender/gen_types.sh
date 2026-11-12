@@ -33,7 +33,7 @@ one() {
   # Designed shadows: the planar proxy's normals and the drawn threshold map, one map a type.
   python3 living/tools/characters/face_shadow.py "$out/$t.glb" --png "$out/$t.face.png" > /dev/null
   python3 living/tools/characters/outline_normals.py "$out/$t.glb" > /dev/null
-  rm -f "$out/$t.atlas.png" "$out/$t.far.png" "$log"
+  rm -f "$out/$t.atlas.png" "$out/$t.far.png" "$out/$t.tint.png" "$out/$t.iris.png" "$log"
   python3 living/tools/characters/share.py list "$out/$t.glb" | head -1
 }
 export -f one

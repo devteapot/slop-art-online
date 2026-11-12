@@ -1123,8 +1123,8 @@ class CageFace(head_mesh.Face):
         ball = self.balls[side]
         m.add(head_mesh.turn(ip, ball, yaw, pitch), white, uv, faces, "iris", facing=head_mesh.FORWARD, eye=(side, 1.0))
         hs = look.get("light_side", 1.0)
-        for hx, hz_, hrx, hrz in ((0.36 * hs, 0.36, 0.25, 0.20), (-0.34 * hs, -0.46, 0.105, 0.09)):
-            n_ = 12
-            ring_ = [(cx + hx * rad, cz + hz_ * rad)] + [(cx + (hx + hrx * math.cos(2 * math.pi * i / n_)) * rad, cz + (hz_ + hrz * math.sin(2 * math.pi * i / n_)) * rad) for i in range(n_)]
+        for hx, hz_, ring in head_mesh.glints(hs):
+            n_ = len(ring)
+            ring_ = [(cx + hx * rad, cz + hz_ * rad)] + [(cx + (hx + a_) * rad, cz + (hz_ + b_) * rad) for a_, b_ in ring]
             gp = np.array([(x, iris_y(x, z) + 0.0006, z) for x, z in ring_])
             m.add(head_mesh.turn(gp, ball, 0.5 * yaw, 0.5 * pitch), (1.0, 1.0, 0.985), None, [(0, 1 + i, 1 + (i + 1) % n_) for i in range(n_)], "glint", facing=head_mesh.FORWARD, eye=(side, 0.5))

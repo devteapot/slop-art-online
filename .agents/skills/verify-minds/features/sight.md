@@ -11,9 +11,17 @@ Since 2026-11-09 (docs/PERCEPTION.md, "Minds see what their character sees"). Ev
 - `death-names` (since fix-death-labels, 2026-11-11): four spawned people. The victim founds a community and welcomes the mind's character (`mind_act` found/join/welcome); an authored relation (`set_background` sheet) makes the mind feel something for the victim. The mind is asked once while the victim lives (`prompt-alive.txt`), the victim yields and an outsider kills it with a spear, and the mind is asked again (`prompt-after-death.txt`). Asserted: one `acquaintance` row for the victim, the member's (`perception::remember_member` in `die`); the member's death experience begins with the victim's name; the killer's reads "was killed by you" and not its own name; a bystander reads "A stranger was killed by a stranger"; both prompts list the relation as `<victim> (#id)` (`known_as`), never `a stranger (#id)`, and the after-death prompt's experience line names the victim with its id tag (`<victim>=#id`). Texts in `death-names.json`.
 - `health-seen` (since fix-health-leak, 2026-11-11): two spawned strangers fight; A is thought for by the real mind service (the fake model's plans keep A attacking B), B by an `attack` graph. Fight reports (`act::fight_report`, urgent reasons) reach A's prompts. Asserted: every report sent before the appraisal ends with the band's words ("they look scratched."), no number and no `%`; after A appraises B (`mind_act`), a report inside the 20 s reveal ends "they have N of M health." with M B's full health; no prompt carries the old "theirs looks about N%". Texts in `health-seen.json`.
 
+## What someone is visibly doing
+
+Since `doing-percept` (2026-11-12; docs/PERCEPTION.md, "What someone is visibly doing"). `perceive::scene_json` gives each creature in sight a `visibly` entry read from the rows a player's client draws (`perception::visibly`: its `fighter` move by its timing, else its `doing` row): `is` (the skill), `phase` (`living_rules::doing::Phase`), `at` (`you`, or the id of a target in sight). The graph grammar in `living/mind/src/prompts.rs` documents the `doing` condition beside `health_of`.
+
+- `doing`: a resident faces another 3 m east who holds up a guard (`block`, held, a `fighter` row with `act`). The pending request's scene lists the other with `visibly` `{is: block, phase: holding}`, with `at: you` only when the other's guard happens to face the eye (a guard has no target; its drawn aim decides); the think prompt the fake model is sent carries it; the deliberate prompt's grammar carries `{"doing": {"who": "person", "is": "strike", "phase": "winding up"` and `about to release`. Evidence: `scene.json`, `sent-prompts.txt`, `result.json`.
+- What the routine does with it on the tick, the field, the far label and beyond sight are verify-core's ([doing](../../verify-core/features/doing.md)).
+
 ## Driving it
 
 ```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case doing
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case sight
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case death-names
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case health-seen

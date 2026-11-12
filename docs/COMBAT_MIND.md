@@ -40,7 +40,7 @@ Everything here is on `main` unless marked.
 ### 1.2 What a character perceives of a fight
 
 - **On novelty and danger** (`saw`): "A wolf is close: 7 tiles west, attack → person." What a creature is doing, how far and which way, with hysteresis, not every second.
-- **Blows taken** (`attacked`): "A wolf attacked you (13 damage)." The attacker as the victim knows it; not which skill, nor from how far.
+- **Blows taken** (`attacked`): "A wolf attacked you (13 damage)." The attacker as the victim knows it; not which skill, nor from how far. Since fix-missile-told (2026-11-12) a missile is told as a shot: "A stranger shot you with an arrow: hit for 7", or "An arrow struck you from somewhere you could not see: hit for 7"; melee blows are as before.
 - **One's own melee outcome** (`own`): "You finished: attack → wolf. hit for 7." Defences: "You blocked Grim's blow", "Grim dodged your attack", "Your blow missed: …".
 - **Refusals and failed decisions:** "You failed to bowshot → #308: bowshot is not ready yet (0.2 s)", "What you had decided did not work out: …".
 - **Fight reports** (`act.rs` `fight_report`): while people fight, at least 3 s apart, when health crosses a quarter, three blows come to nothing, three land or one's defence works three times, else after 12 s: "The fight with Grim: you have been hit 3 times … Your health 61; theirs looks about 70%." It is a reason to think. *(Finding: "theirs looks about 70%" is exact health; others otherwise see only a band, `fighter.band`. That is a perception leak, separate from this design.)*
@@ -168,6 +168,7 @@ Each change is general: it serves any time-critical thing a character does, with
 - **Change, percept:** when a creature someone is fighting or watching starts a move aimed at them, the observer's experience names it and the distance once per move kind and fight, then folds repeats ("Grim winds up a fire bolt at you from 12 m" once, then "… again (×3)"). These are words for memory and recall to work on; nothing counts or classifies them for the mind.
 - **General use:** a child reaching the edge of a terrace, a seller packing up a stall, someone reaching for what you hold.
 - **Data path:** the condition is one primary-key read of a row the tick already reads in the chunk cache; percepts are bounded per move and witness and folded; no new table. Players already receive the same rows through `seen_fighters`.
+- **Built** (`doing-percept`, 2026-11-12; [perception](PERCEPTION.md#what-someone-is-visibly-doing)): the condition as `{"doing": {"who", "is", "phase", "at_me", "within"}}` and each seen creature's `visibly` in a mind's scene. Changes from the text above: `is` takes a skill's name, its label or a kind word (`hostile`, `melee`, `missile`, `guard`, `dash`, an act card's look); the windup is split into `winding up` and `about to release` (its halves, as the clip's run-up and its approach to the peak), plus `under way` for an act card; no `left_ms` (the drawing shows a phase, not milliseconds). The folded experience percept above is not built yet.
 
 ### 3.3 Movement as intent the body carries out (steering, rules)
 
