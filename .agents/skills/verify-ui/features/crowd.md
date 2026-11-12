@@ -91,7 +91,7 @@ python3 living/tools/characters/colour_check.py <binary> .local/living/<run>/col
 | --- | --- |
 | `colour.json` `summary.sharing` | `composed_vs_perfile` within `composed_vs_again` (two runs of the same thing): sharing materials changes no pixel beyond the runs' own noise |
 | `summary.delta_e` (head, torso, legs, face) | where a composed person's colours moved from their whole file's, by band (CIE76 ΔE of the band's mean); `summary.worst` names the bands to look at in the shots. Known movers: lines and blush on faces, aprons and smocks' sleeve bands |
-| `summary.eyes` (and `eye_rows`) | the iris body's CIE76 ΔE against the line's eye colour (`colors.eyes_natural`, else `colors.eyes`), composed and whole, from the `eyes` arm's pure-green irises; people with their eyes shut in the shot left out |
+| `summary.eyes` (and `colour.json` `eyes`) | the iris body's CIE76 ΔE, from the `eyes` arm's pure-green irises: composed and whole each against the line's eye colour (`colors.eyes_natural`, else `colors.eyes`; both carry the lighting and the lights' glow), and `composed_vs_whole` once each whole close-up is laid onto its composed one (`whole_shift_px`). On char-4's `9207d6a8`: 22.8, 22.4 and 5.5 at the median. A child's close-up can miss the eyes (in the hair): judge the largest by eye. `REUSE=1` measures a run again without the client |
 
 Cost, the town's 64 as they are, both modes interleaved (`town` is each person's whole file, `composed` the same recipes with the switch on):
 
@@ -105,7 +105,7 @@ python3 $C … --runs x:town,x:composed,x:composed,x:town --repeat 3 --game-env 
 | `people ready: 65 characters (64 composed) …` | 64 composed with the switch on, 0 off |
 | `people perf: … N mesh entities shown of M` | at the game camera (all far): 460 of 1,406 composed, 210 of 850 whole (Cullet's 97 shared files; char-4 `d82e7762`, a face 7 primitives with the brows) |
 | `views: … [people …, P mesh-material pairs]` | the draws the people make once instanced: 104 composed against 210 whole at the game camera, 244 against 658 on the full model |
-| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 17 composed against 9 whole at the game camera, 53 against 76 on the full model. Style toons are keyed by content and source colour (`compose.rs`): they share only where the result is the same, so the count falls as the generator's pieces come to share one shading mean. `LIVING_GAME_PERF=filestyles` keys one a file, to compare |
+| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 17 composed against 10 whole at the game camera, 53 against 84 on the full model. Style toons are keyed by content and source colour (`compose.rs`): they share only where the result is the same, so the count falls as the generator's pieces come to share one shading mean. `LIVING_GAME_PERF=filestyles` keys one a file, to compare |
 | `--perf matnames`: `view materials: <material name> ×N, …` | people's distinct materials in view by name: composed `M00_000_00_EyeIris_00_EYE ×1` and `M00_000_00_FaceBrow_00_FACE ×1` (one each, shared by every type), whole files ×64 an iris |
 | `assets: N meshes M MiB (… morph targets …)` and `batches: … textures … MiB` | composed far below whole: mesh data and morph targets, and GPU textures |
 
