@@ -375,6 +375,32 @@ The arena is a [trial](TRIALS.md) like the combat arenas ([COMBAT_MIND.md §4.1]
   - Move no routine, stance or graph from an arena into a seed.
   - Delete the arena worlds once the evidence is taken.
 
+### 5.6 Amendments before the first measured run (2026-11-12, branch `packs`)
+
+Found while building step 0, from two pipeline probes (`pk0`, `pk1`, 4 minutes each, not counted as evidence). Written before any baseline run. The measures and targets of §5.4–5.5 are unchanged except where said.
+
+- **Starts.** Day sight is 11 m, wolves do not smell people, and the bold instinct attacks only a person within 10 m. So the two starts are:
+  - *close*: the pack in a cluster about 3 m across, its centre about 10 m west of the people's centre, every wolf in sight of them. M1 is reported for close starts but not read: arriving together is the placement's doing.
+  - *spread*: the wolves 15–35 m west of the people, in a 120° sector (bearings 138–210°), each at least 9 m from the others (3 wolves at 15, 25 and 35 m; 6 wolves at 15, 20, 25, 28, 30 and 35 m). They start out of sight, so arriving together needs a wolf to wait or gather. This replaces "a 25–40 m ring at random bearings at least 60° apart". For 6 wolves that rule forces an even ring, which would put the encirclement in by placement.
+- **The arena is cleared.** The island's other wolves are moved to the map's far corner and kept still (`wait`). Outside the mixed arm, so are its deer.
+- **People.** The people are adults of Brackenford, with items and routines cleared, on `instinct:person`. That instinct never strikes back (§1.2), so under instincts the people's blows, and with them M4's assist rate, are empty.
+- **ΔG on close starts.** The wolves are in sight from the first sample. "Before" is then G at the first sample.
+- **Not run in step 1: ordinary wolves at night.** No admin reducer sets a wolf's hunger. Ordinary wolves dare a person only when desperate (hunger 85) or, by the instinct's branch, at night with hunger 88. The bold night arm stays.
+- **A harness bug, fixed.** The trial runner wrote a background as `"bold": true`, and the authority reads `"bold":true` from the text (`act.rs`). So no trial before this one ever had a bold pack: the island pack trial `pack-mind` included. Its wolves were seeded bold, and their seed backgrounds were intact. `trials.py` now writes backgrounds compact. The authority's text match is fragile, but it is left as it is (a rules change, not needed here).
+- **Sampling.** `record.bodies` reads five tables per sample, concurrently (2.14.1's SQL endpoint takes one statement a request). The rate actually reached is reported per run.
+- **The calibration fixtures (step 2).** Both live in their trial files only.
+  - **C1, "sides".** Each wolf circles the nearest person at 4 m on an assigned side, alternating left and right, and bites, with chance 0.3 a check, when within 3.5 m. The sides are assigned by us, so this shows only whether steering and the bite let wolves on different sides form a ring.
+  - **C2, "Muro with today's grammar".** No sides are assigned. Each wolf, in order: flees when badly hurt; if another wolf is within 3 m and a person within 6 m, backs off 4 m from that wolf; if a person is within 3.5 m, attacks with chance 0.3 a check; otherwise keeps 3–5 m from the nearest person.
+  - **Reading.** If C2 reaches M2's 180° at k ≥ 3, a keep-apart reflex is expressible today, and under the owner's rule below it may go in the starting instinct. If only C1 reaches it, the gap is in what a wolf can perceive or steer by (A4, A5). If neither does, the physics blocks encirclement.
+
+### 5.7 Decisions (owner, 2026-11-12)
+
+1. **The spacing reflex** is allowed in the wolves' starting instinct, but only if calibration (step 2) shows it is needed. It takes the form of a weighted desire ("keep apart from mates") in the starting graph. The wolf's own mind must be able to revise it, and it names no target and no role. The rule it was made under: the starting instinct holds individual drives, as it already holds "attack the nearest deer". It never holds a group plan.
+2. **The howl's reach** becomes the howl's loudness in its sound spec, under the same loudness rule that wakes sleepers (`fix-sleep-talk`). The 150 m arm measures the difference. The result goes to the owner before the shipped value changes.
+3. **`carry`** is on hold.
+4. **The hidden `pack` copying** is retired in this work (`LIVING_ANIMAL_MINDS=pack` is ignored with a warning). verify-minds `animals` checks that each animal of a herd makes its own decision.
+5. **The paid step** is approved up to $10, but only after battle-scale's fixes 1–3 are on main. The thresholds are committed before the first paid call, and the owner is asked before it starts.
+
 ## 6. Plan and cost, smallest first
 
 | Step | What | Tier | Cost |

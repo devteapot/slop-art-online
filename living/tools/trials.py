@@ -22,6 +22,7 @@ TRIALS_NEO4J_CONTAINER, TRIALS_NEO4J_PORT). Databases are always `verify-trial-<
 the runner never publishes or deletes anything else. Evidence: .local/living/trials/<batch>/.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import math
@@ -1317,7 +1318,10 @@ class Instance:
                     b = self.rows(f"SELECT * FROM brain WHERE id = {actor}")
                     if b:
                         self.saved_graphs[actor] = json.loads(b[0]["graph"])
-                self.call("set_behavior", actor, json.dumps(self.graph_of(s["graph"], actor)))
+                # `graphs`: one graph per member, in order (cycling), for fixtures whose members
+                # differ (docs/PACK_MIND.md §5.6, the calibration "sides").
+                g = s["graphs"][i % len(s["graphs"])] if "graphs" in s else s["graph"]
+                self.call("set_behavior", actor, json.dumps(self.graph_of(g, actor)))
             elif kind == "items":
                 for item, qty in s["items"].items():
                     self.call("grant_items", actor, item, qty)
@@ -1646,24 +1650,28 @@ class Instance:
         where = " OR ".join(f"id = {i}" for i in ids)
         (self.dir / "arena.json").write_text(json.dumps({"trial": self.trial["name"], "variant": self.variant, "replicate": self.rep,
                                                          "arena": self.trial.get("arena", {}), "roles": self.roles, "end": end}, indent=1))
+        pool = concurrent.futures.ThreadPoolExecutor(5)
         while not getattr(self, "_bodies_stop", False):
             tick = time.time()
             try:
+                # The five reads at once (2.14.1's SQL endpoint takes one statement a request), so
+                # a sample costs about one round trip.
+                chars, bodies, fighters, acts, vitals = pool.map(self.rows, [f"SELECT {cols} FROM {t} WHERE {where}" for t, cols in (
+                    ("character", "id, alive, cause"), ("body", "*"), ("fighter", "*"), ("activity", "*"), ("vitals", "*"))])
                 now = self.now_ms()
-                chars = self.rows(f"SELECT id, alive, cause FROM character WHERE {where}")
                 alive = {c["id"]: c["alive"] for c in chars}
                 out = {}
-                for b in self.rows(f"SELECT * FROM body WHERE {where}"):
+                for b in bodies:
                     dt = max(0.0, (min(now, b["next_ms"]) - b["t_ms"]) / 1000)
                     head = b.get("heading") or 0.0
                     head += (b.get("turn") or 0.0) * min(dt, b.get("turn_s") or 0.0)
                     face = head + (b.get("face_off") or 0.0) + (b.get("face_turn") or 0.0) * min(dt, b.get("face_turn_s") or 0.0)
                     out[str(b["id"])] = [round(b["x"] + b["vx"] * dt, 2), round(b["y"] + b["vy"] * dt, 2), round(math.atan2(math.sin(face), math.cos(face)), 3), bool(b.get("running"))]
-                fighter = {str(f["id"]): [f["band"], f["act"], f["act_ms"], f["release_ms"], f["until_ms"], f["target"]] for f in self.rows(f"SELECT * FROM fighter WHERE {where}")}
+                fighter = {str(f["id"]): [f["band"], f["act"], f["act_ms"], f["release_ms"], f["until_ms"], f["target"]] for f in fighters}
                 act = {str(a["id"]): [a["skill"], a["target"][1] if isinstance(a.get("target"), list) and a["target"] and a["target"][0] == 3 else 0]
-                       for a in self.rows(f"SELECT * FROM activity WHERE {where}")}
+                       for a in acts}
                 hp = {str(v["id"]): [round(v["hp"] + v.get("hp_rate", 0.0) * max(0.0, (now - v["at_ms"]) / 60000), 2), v["max_hp"], round(v["hunger"], 1)]
-                      for v in self.rows(f"SELECT * FROM vitals WHERE {where}")}
+                      for v in vitals}
                 self.emit("bodies", {"t": self.t(), "ms": now, "b": out, "hp": hp, "dead": {str(c["id"]): c.get("cause", "") for c in chars if not c["alive"]}, "f": fighter, "act": act})
                 for r in down_roles:
                     if not any(alive.get(i) for i in self.roles.get(r, [])):
