@@ -212,7 +212,8 @@ pub fn apply(ctx: &ReducerContext, sctx: &SkillCtx, e: Effect, now: u64) -> Resu
                     return Err("one of its parties is not there".into());
                 }
                 if *p < COMMUNITY && open_count(ctx, *p) >= MAX_OPEN {
-                    return Err(format!("{} has too many dealings in hand already", if *p == me as u64 { "you".to_string() } else { common::name_of(ctx, *p as u32) }));
+                    let seen = |id: u32| ctx.db.character().id().find(me).map(|c| common::capitalized(&common::label_for(ctx, &c, id))).unwrap_or_else(|| common::name_of(ctx, id));
+                    return Err(format!("{} too many dealings in hand already", if *p == me as u64 { "You have".to_string() } else { format!("{} has", seen(*p as u32)) }));
                 }
             }
             make(ctx, &kind, if status.is_empty() { "open" } else { &status }, me, &parties, &terms, due_after(ctx, now, due_h), now);
