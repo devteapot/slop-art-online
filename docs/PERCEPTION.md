@@ -226,6 +226,32 @@ What one character perceives of another is not a fixed set of public columns. It
 - **The death record** (since `feedback-1`). `character.cause` names a killer as the victim perceived them at the blow (`common::label_for` with the victim as observer): "killed by a stranger", "killed by a wolf", or a name the victim knew. It reaches the player's death screen through `my_characters`, so it says only what the character knew. The chronicle's `killing` and `death` rows keep real names as audit truth ([mind feedback](MIND_FEEDBACK.md#7-the-death-record-names-what-the-victim-knew)).
 - **`appraise`.** A skill declared in `skills.rhai` like any other (`appraise_check`, `_duration` 1.5 s, `_done` → `#{ op: "reveal", what: "health", secs: 20.0 }`, `_shows` a gesture, `skill_io`, the catalog's help). The new effect `reveal` writes a `reveal` row (observer, target, what, until); the observer is told what it saw ("You look a stranger over: 100 of 100 health."). It is open to players (`human_act`) and minds (a graph leaf or a deliberate act) alike. Ended reveals are deleted once a second by an index range.
 
+### Told lines name others as the teller perceives them (fix-kill-name, 2026-11-12)
+
+Every line a character is told about someone else names them as that character perceives them: a name it was told, else "a stranger" (or "a baby", "a child", a creature's kind), or the far label (`someone too far away to make out`, far-label) when they are beyond making out (`perception::label`, `common::label_for`). Records (the chronicle, `skill_use` as the authority keeps it for admins, logs) keep real names. A label that reads distance is taken while the body is still there: a kill or a death removes it, and a label read afterwards would see no distance (never the far label, and under a law that names only within knowing distance, a name).
+
+Audit, every path that names a target or another person in a told line:
+
+| Path | Where | Before | Now |
+|---|---|---|---|
+| A melee kill told to the killer (`attack`, `strike`, any blow at release) and its `skill_use` outcome (`my_skill_uses`) | `act.rs:2264-2267` (`damage`) | "killed Agnes Fenner (9)" | "killed a stranger (9)", read before `die` |
+| A missile's outcome in the shooter's `skill_use` (`my_skill_uses`) | `combat.rs:537,544` (`strike`) | "struck Wren: hit for 7" | "struck a stranger: hit for 7", read before the blow |
+| A missile's told line (struck, killed, dodged, refused) | `act.rs:1096-1112` (`missile_told`, the label from `combat.rs:546` when it struck) | as perceived, but read after a kill | as perceived, read before the blow |
+| Witnesses told of a death (`{a} was killed by {b}`) | `act.rs:2471` (`die`, `witnessed` fills `{a}`/`{b}` per witness, `perceive.rs:78`) | filled after the body was removed (no distance) | filled while the body is still there |
+| A signal heard by others of the signaller's kind | `perceive.rs:133-156` (`heard_by`) | the signaller's real name ("Mira, a baby, is crying") | as each hearer perceives them ("A baby is crying") |
+| An infant's cry to listeners and its carers' reasons | `perceive.rs:187-205`, `:267`, `:290` (`baby_known`, `cry_seen`, `cry_unseen`) | the baby's real name to every listener | its name only to a listener who knows it, else "a baby" |
+| A dealing refused because the other party has too many in hand | `records.rs:216` | the party's real name | as the maker perceives them |
+| Starting a family refused because the partner is still raising young | `act.rs:1920` (`bond`) | the partner's real name | as the actor perceives them |
+| A gift, a seizure, teaching, a trade, a welcome, told to the actor | `act.rs:1394` (`seen_as`), `:1486`, `:1499`, `:1563`, `:1667`, `:1732` | already as perceived | unchanged |
+| A gift, an offer, a trade, a lesson, told to the other party | `act.rs:1483`, `:1637`, `:1664`, `:1559` (`label_cap`) | already as perceived | unchanged |
+| A demand or an agreement, to the parties and witnesses | `records.rs` record templates (`{actor}`, `{target}`, `{id:n}` filled per reader) | already as perceived | unchanged |
+| A yield, to the one yielded to and to the yielder | `act.rs` `yield_to` (`to_seen`, `label_cap`) | already as perceived | unchanged |
+| An action's own label ("strike → person") | `act.rs` (the target's kind) | no names | unchanged |
+
+Not changed, on purpose: hearing someone call another by name (`speech.rs:201`, "You heard … call … by name") is how a name is learned; a community's name is public (`records.rs` fill); the chronicle (`speech.rs:114`, `act.rs` `chronicle` lines) is a record. Found and left for a decision: a structure's owner is named in a mind's scene ("Agnes Fenner's house", `brain.rs:1361`) and in "You notice a house built by …", whoever looks; an act's failure can name its target by its internal id ("You failed to strike → #316: out of breath"), which is a mind's handle for things in its scene but can be spoken.
+
+Verified by verify-core `scenes.py outcomes` (its names check): four strangers give, offer and trade, demand, teach, shoot and strike one another until one dies with a witness standing by, and no line any of them was told, and no outcome in their `skill_use`, names one they were not introduced to.
+
 ### Activity derived from the body
 
 Fifth change (2026-11-11, branch `fix-perceived-moving`). Human-controlled and AI-controlled characters share physical rules, so the same body behaviour must be perceived the same way whoever controls it. Before this change it was not. A player who moves takes the controls (`player_controls` in `lib.rs`): its graph becomes `{"wait":60}` with the plan "moving yourself", and its body then moves by motion intent (`motion::intent`, steering goal `GOAL_DIRECTION`), not by a walking skill. What others perceived it doing was its `activity` row's label, which said `wait` while it walked. An AI character walking the same line at the same observer read `goto → person`. In the owner's play-test the residents therefore never saw the player walk up to them.

@@ -2924,6 +2924,65 @@ def outcomes(s):
     set_law(s, "force_outcomes", True)
     s.expect("with force_outcomes off, a hit is not told", after == before, {"before": before, "after": after})
 
+    names_told(s)
+
+
+def names_told(s):
+    """Every told line names others as the teller perceives them (fix-kill-name): a name it was
+    told, else "a stranger" (or "a baby", the far label), never a real name it does not know.
+    Four strangers (`spawn_crowd`) act on each other through the ordinary acts: a gift, an offer
+    and its acceptance (a trade), a demand, teaching, a bow shot, and a melee strike until the
+    one struck dies, with a fourth standing by as witness. Then no line any of them was told,
+    and no outcome in their `skill_use`, carries the name of one of the others it has not been
+    introduced to (`acquaintance`). Before fix-kill-name a melee kill read "killed Agnes Fenner",
+    and an arrow's record "struck Wren"."""
+    p, q, r, w = s.people(4)
+    here = body_at(s, p)
+    for who, (dx, dy) in ((q, (1.2, 0.0)), (r, (0.0, 1.2)), (w, (2.5, 2.5))):
+        s.call("place_at", who, here[0] + dx, here[1] + dy)
+    s.call("grant_items", p, "stone", 3)
+    s.call("grant_items", p, "spear", 1)
+    s.call("grant_items", p, "bow", 1)
+    s.call("grant_items", p, "arrow", 10)
+    s.call("grant_items", q, "berries", 3)
+    s.call("grant_items", r, "berries", 3)
+    s.call("grant_know_how", p, "fire")
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    time.sleep(1.0)
+    s.act(p, {"do": "give", "target": {"id": q}, "item": "stone", "qty": 1})
+    s.act(p, {"do": "offer", "target": {"id": q}, "item": "stone", "qty": 1, "want": "berries", "want_qty": 1})
+    time.sleep(3.0)
+    s.act(q, {"do": "accept", "target": {"id": p}})
+    s.act(p, {"do": "demand", "target": {"id": r}, "item": "berries", "qty": 1, "text": "a toll"})
+    time.sleep(3.0)
+    s.act(p, {"do": "teach", "target": {"id": q}, "item": "fire"})
+    # Teaching takes a while: wait for its outcome (done or not) before the next scene.
+    s.wait(lambda: [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {p}") if e["kind"] == "act" and "teach" in e["text"]], seconds=90, every=2)
+    # A shot at the witness-to-be, then the strike that kills r, the witness standing by.
+    s.graph(p, {"seq": [{"do": {"skill": "bowshot", "target": {"id": w}}}, {"wait": 60}]})
+    time.sleep(3.0)
+    s.call("place_at", w, here[0] + 2.5, here[1] + 2.5)
+    s.graph(p, {"seq": [{"do": {"skill": "strike", "target": {"id": r}}}, {"wait": 1}]})
+    s.wait(lambda: not [c for c in s.rows(f"SELECT id, alive FROM character WHERE id = {r}") if c["alive"]], seconds=120, every=2)
+    s.graph(p, {"wait": 60})
+    time.sleep(2.0)
+    people = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM character") if c["id"] in (p, q, r, w)}
+    known = {(a["observer"], a["known"]) for a in s.rows("SELECT * FROM acquaintance") if a["observer"] in people}
+    lines = [e for e in s.rows("SELECT id, observer, kind, text, at_ms FROM experience", "names-lines") if e["observer"] in people and e["at_ms"] >= t0]
+    uses = [u for u in s.rows("SELECT id, actor, skill, outcome FROM skill_use", "names-uses") if u["actor"] in people]
+
+    def leaks(observer, text):
+        return [n for i, n in people.items() if i != observer and (observer, i) not in known and re.search(rf"\b{re.escape(n)}\b", text or "")]
+    bad = [(e["observer"], e["kind"], e["text"][:120], leaks(e["observer"], e["text"])) for e in lines if leaks(e["observer"], e["text"])]
+    bad += [(u["actor"], "skill_use:" + u["skill"], (u["outcome"] or "")[:120], leaks(u["actor"], u["outcome"])) for u in uses if leaks(u["actor"], u["outcome"])]
+    kill = [e["text"] for e in lines if e["observer"] == p and e["kind"] == "own" and "killed" in e["text"]]
+    seen_death = [e["text"] for e in lines if e["observer"] == w and "killed" in e["text"]]
+    told = {k: [e["text"][:90] for e in lines if k in e["text"]][:3] for k in ("gave", "offer", "traded", "demand", "taught", "teach", "bowshot", "strike", "killed")}
+    (s.out / f"{s.name}-names.json").write_text(json.dumps({"people": people, "known": sorted(known), "told_p": told, "kill": kill, "witness": seen_death, "leaks": bad}, indent=1) + "\n")
+    s.expect("the killer is told the kill (a melee kill of a stranger)", bool(kill), [e["text"] for e in lines if e["observer"] == p][-8:])
+    s.expect("the witness is told of the death", bool(seen_death), [e["text"] for e in lines if e["observer"] == w][-8:])
+    s.expect("no told line or own outcome names someone the teller does not know", not bad, bad[:8])
+
 
 SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter}
 

@@ -128,7 +128,14 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
         }
         ctx.db.mind_state().id().update(st);
     }
-    let heard = if sig.heard.is_empty() { format!("{} makes {}", me.name, sig.sound) } else { sig.heard.replace("{name}", &me.name) };
+    // Each hearer names the signaller as it perceives them (a name it knows, "a stranger", "a
+    // baby", the far label), never by a name it was not told.
+    let heard_by = |c: &Character| {
+        let who = common::label_for(ctx, c, from);
+        let line = if sig.heard.is_empty() { format!("{who} makes {}", sig.sound) } else { sig.heard.replace("{name}", &who) };
+        // "{name}, a baby, is crying" for one who does not know the baby: "a baby is crying".
+        common::capitalized(&line.replace(&format!("{who}, {who}, "), &format!("{who} ")))
+    };
     // Who cares about the signaller: its parents, its siblings, anyone with feelings about it.
     let cares = |c: &Character| {
         me.parent_a == c.id
@@ -138,6 +145,7 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
     };
     for (c, _) in minds_near(ctx, at, sig.range, now, &[from]) {
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
+        let heard = heard_by(&c);
         let (text, sal) = if c.kind == me.kind {
             (format!("{heard} ({name}), {dir}."), sig.salience)
         } else {
@@ -175,9 +183,35 @@ fn cry_carers(nearby: &[(u32, f32, bool, bool)]) -> Vec<u32> {
         .map(|c| vec![c.0]).unwrap_or_default()
 }
 
-fn pending_infant_cry(reason: &str, name: &str) -> bool {
-    reason.contains(&format!("{name}, a baby, is crying and looks "))
-        || reason.contains(&format!("You hear {name} crying."))
+/// The crying baby's name as a listener knows it; `None` when it does not (it hears "a baby").
+fn baby_known(ctx: &ReducerContext, listener: &Character, baby: &Character) -> Option<String> {
+    let l = common::label_for(ctx, listener, baby.id);
+    (l == baby.name).then_some(l)
+}
+
+/// A seen cry, in the listener's terms: "Mira, a baby, is crying and looks hungry" or "A baby
+/// is crying and looks hungry".
+fn cry_seen(known: Option<&str>, looks: &str) -> String {
+    match known {
+        Some(n) => format!("{n}, a baby, is crying and looks {looks}"),
+        None => format!("A baby is crying and looks {looks}"),
+    }
+}
+
+/// A cry heard and not seen: "You hear Mira crying" or "You hear a baby crying".
+fn cry_unseen(known: Option<&str>) -> String {
+    match known {
+        Some(n) => format!("You hear {n} crying"),
+        None => "You hear a baby crying".into(),
+    }
+}
+
+fn pending_infant_cry(reason: &str, known: Option<&str>) -> bool {
+    let seen = match known {
+        Some(n) => format!("{n}, a baby, is crying and looks "),
+        None => "A baby is crying and looks ".into(),
+    };
+    reason.contains(&seen) || reason.contains(&format!("{}.", cry_unseen(known)))
 }
 
 fn cry_prompt_due(state: &InfantCry, carer: u32, now: u64, pending_cry: bool) -> bool {
@@ -215,7 +249,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     let needs = infant_needs(state);
     let old = ctx.db.infant_cry().infant().find(baby.id);
     let mut cry = cry_state(old.as_ref(), baby.id, needs);
-    let heard = format!("{}, a baby, is crying and looks {}", baby.name, state.looks());
+    let looks = state.looks();
     let nearby = people_near(ctx, at, range, now, &[baby.id]);
     let carers = cry_carers(&nearby.iter().filter(|(c, _)| c.stage >= 2).map(|(c, d)| {
         let parent = baby.parent_a == c.id || baby.parent_b == c.id;
@@ -230,8 +264,9 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
             let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
             let text = if c.kind == "person" {
                 let visible = ctx.db.body().id().find(c.id).is_some_and(|b| crate::perception::sees(ctx, c.id, &b, at, &common::world(ctx), &common::map(ctx), now));
-                if visible { format!("{heard}, {dir}.") }
-                else { format!("You hear {} crying, {dir}.", baby.name) }
+                let known = baby_known(ctx, &c, baby);
+                if visible { format!("{}, {dir}.", cry_seen(known.as_deref(), &looks)) }
+                else { format!("{}, {dir}.", cry_unseen(known.as_deref())) }
             } else { format!("You hear a baby crying, {dir}.") };
             percept(ctx, &c, now, "signal", baby.id, 0, at, text, if c.kind == "person" { 0.8 } else { 0.64 });
         }
@@ -248,10 +283,11 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     cry.prompted.retain(|p| carers.contains(&p.carer) || now.saturating_sub(p.at_ms) < CRY_REMINDER_MS);
     for carer in carers {
         let pending = ctx.db.deliberation().actor().find(carer);
-        let pending_cry = pending.as_ref().is_some_and(|d| pending_infant_cry(&d.reason, &baby.name));
+        let known = ctx.db.character().id().find(carer).and_then(|cc| baby_known(ctx, &cc, baby));
+        let pending_cry = pending.as_ref().is_some_and(|d| pending_infant_cry(&d.reason, known.as_deref()));
         if cry_prompt_due(&cry, carer, now, pending_cry) {
             let visible = ctx.db.body().id().find(carer).is_some_and(|b| crate::perception::sees(ctx, carer, &b, at, &common::world(ctx), &common::map(ctx), now));
-            let reason = if visible { heard.clone() } else { format!("You hear {} crying.", baby.name) };
+            let reason = if visible { cry_seen(known.as_deref(), &looks) } else { format!("{}.", cry_unseen(known.as_deref())) };
             if pending.as_ref().is_some_and(|d| d.reason.contains(&reason)) { continue; }
             let urgent = state.cold || state.starving || state.wound != living_rules::script::Wound::None;
             if request(ctx, carer, &reason, now, urgent) {
@@ -699,9 +735,13 @@ mod tests {
             ("You hear Nora crying.", true),
         ] {
             let pending = Some(reason);
-            let pending_cry = pending.is_some_and(|reason| pending_infant_cry(reason, "Mira"));
+            let pending_cry = pending.is_some_and(|reason| pending_infant_cry(reason, Some("Mira")));
             assert_eq!(cry_prompt_due(&cry, 1, 130_000, pending_cry), due, "{reason}");
         }
+        // A carer who does not know the baby's name was told "a baby" and matches that.
+        assert!(pending_infant_cry("A new day.\nA baby is crying and looks hungry", None));
+        assert!(pending_infant_cry("You hear a baby crying.", None));
+        assert!(!pending_infant_cry("You hear Mira crying.", None));
     }
 
     #[test]
