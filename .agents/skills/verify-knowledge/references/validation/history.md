@@ -1,8 +1,16 @@
 # Knowledge validation
 
-## 2026-11-12 far-label (Spark) After merging main (`03d32e09`, `minds-strangers-far3-032043`): `strangers.py` 10/10.
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle`, trial Neo4j (:7699). `strangers.py` 10/10, `names.py` 7/7. The ignored tests `a_far_figure_joins_the_person` (new) and `strangers_stay_apart` pass:
+- after the made-out merge the figure's deed is recalled from `person:15`;
+- `person:<handle>` is `:Merged`.
+
+## 2026-11-12 far-label (Spark)
 
 Branch `far-label` (`18b7754b`), trial Neo4j `slop-trials-neo4j` (:7699). `names.py` 7/7 (it was not executable: `chmod +x`), `strangers.py` 10/10, and the ignored test `memory::tests::strangers_stay_apart` with the far-name guard (a node named "Cal" or "a stranger #200" is not renamed to "someone too far away to make out #id") passes. Not run: the full `verify_knowledge.py` runner.
+
+After merging main (`03d32e09`, `minds-strangers-far3-032043`): `strangers.py` 10/10.
 
 ## 2026-11-12 fix-stranger-merge: two strangers stay two people (Spark)
 
@@ -59,6 +67,7 @@ Main at `7837320` (the merge of `fix-death-labels`: `die` keeps the dead's name 
 - `player_memory.py --mode direct` (`knowledge-pmem-vd-20261111-160643`): all five proofs pass, including the death phase.
 - `player_memory.py --mode batch`: the first run (`knowledge-pmem-vdb-20261111-161258`) failed at `assert 'player memory on' in log`: the mind logged only its subscription before the driver read the log, which the driver reads once right after `world subscribed:`. A harness timing fault under load, not this change; the rerun (`knowledge-pmem-vdb2-20261111-161447`) passes all five.
 - The dead's name kept by its community is not asserted by these runners; `verify-minds`' `death-names` case (this date) and `verify-core`'s `death-names` scene cover it.
+
 ## 2026-11-11 projects (exp-projects, DGX Spark)
 
 Worktree from `origin/main` `e09365b`, branch `exp-projects` (the `LIVING_PROJECTS=1` experiment: docs/LIVING_CORE.md, "Projects"), against the trial server `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`) beside a running trial batch, fake model only. `knowledge-20261111-132650`: all proofs pass, including the new ignored test `projects_are_pursued_served_ended_and_faded` (taken up, revised with since kept, served and reinforced, an ended one closed with `outcome` and refused when served, every unreinforced one faded at a 90-minute fade, history kept). The shared harness needed one fix first: the trial server publishes its port on `0.0.0.0` and `verify.py local_urls` accepted only `127.0.0.1` bindings (a failed `minds-20261111-131717` launch; fixed in the same change).
@@ -120,7 +129,7 @@ The runner uses the shared harness's `authored-test` launch and doctor. Every at
 
 The final instructions ran end to end and exited zero. Launch was at 16:37:32 Europe/Zurich. Database cleanup was at 16:39:58. The only uncommitted product file was the pre-existing `living/viewer/src/clock.rs`. The world had nineteen seeded characters, five added walkers and one joined witness. One walker died in the death scene. Only Oren had a connected mind.
 
-Evidence root: `.local/living/verify/knowledge-1004-g/`. [results.json](../../../../.local/living/verify/knowledge-1004-g/results.json) records fourteen passing proof groups. [post-cleanup-check.json](../../../../.local/living/verify/knowledge-1004-g/post-cleanup-check.json) confirms that every referenced evidence file survives, all five named memory tests passed, both owned processes exited, the database answers SQL with 404, the container is absent and the journal was copied before its original was removed.
+Evidence root: `.local/living/verify/knowledge-1004-g/`. [results.json](../../../../../.local/living/verify/knowledge-1004-g/results.json) records fourteen passing proof groups. [post-cleanup-check.json](../../../../../.local/living/verify/knowledge-1004-g/post-cleanup-check.json) confirms that every referenced evidence file survives, all five named memory tests passed, both owned processes exited, the database answers SQL with 404, the container is absent and the journal was copied before its original was removed.
 
 ### Launch and doctor
 

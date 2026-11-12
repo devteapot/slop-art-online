@@ -17,13 +17,13 @@ Pick one, and say which:
 
 ## Edit scope
 
-Only edit the verification skill's own directory (its SKILL.md, features/, and any harness scripts it owns). Never edit product code during a run: a behavior the map describes that the app no longer does is either doc drift (fix the map) or a product regression (report it, don't paper over it in docs).
+Only edit the verification skill's own directory (its SKILL.md, features/, references/ and any harness scripts it owns). Never edit product code during a run: a behavior the map describes that the app no longer does is either doc drift (fix the map) or a product regression (report it, don't paper over it in docs).
 
 ## Pass
 
 0. **Locate the target.** Find the verification skill to maintain: the project-local skill whose body has launch/drive sections and a feature map (`.claude/skills/verify/`, or `.claude/skills/verify-*/` from an older generator). Several candidates → ask which one; none → stop and point at `/create-verification-skill` instead of inventing a target.
 
-1. **Index hygiene.** Read the feature map README and glob its sibling files. Fix missing, extra, duplicate, or dead entries. Lightweight; no generated inventory.
+1. **Index hygiene.** Read the feature map README and glob its sibling files. Fix missing, extra, duplicate, or dead entries, and keep the table rows sorted alphabetically. Lightweight; no generated inventory.
 
 2. **Source wave.** One read-only subagent per feature file, launched concurrently. Each explains "how does this user-facing feature work?" from source, flags likely doc drift with citations, and returns one concise live-verification recipe. Children never drive the app and never edit files. Return shape: feature summary / source entry points / likely drift or none / one recipe.
 
@@ -35,4 +35,10 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
 
 6. **Ship or stop.** For changed: one PR of proven corrections, re-read every changed file first. For clean or blocked: no PR, report the outcome and the coverage honestly.
 
-Keep concise run notes (features covered, unreachable prerequisites, confirmed drift, outcome) in a scratch location; don't commit them.
+Whatever the outcome, hold three layout rules (local change, see `.agents/vendored-skills.md`), so branches that each add a feature never edit the same lines:
+
+- **Records:** write the pass's result as a new file, `references/validation/<YYYY-MM-DD>-<HHMM>-<branch-or-run>.md`. Never edit an existing record, including to correct it; a correction is a new file that names the one it corrects.
+- **Description:** keep the SKILL.md `description` a stable summary of what the surface owns and when to use it. A new feature or law goes in as a row of the feature map, not a clause of the description. Change the description only when the surface's scope changes, and check then that it still names the areas a worker would search by.
+- **Cases:** a case or scenario the pass adds registers itself where it is defined (a decorator, or a dict filled at definition), never in a central tuple; `--case` and the listing come from the registry.
+
+Keep working notes in a scratch location and don't commit them. What the pass proved (features covered, unreachable prerequisites, confirmed drift, outcome) goes in the run's new validation file.

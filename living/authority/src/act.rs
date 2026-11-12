@@ -10,6 +10,7 @@ use living_rules::catalog;
 use living_rules::combat::{Aim, Shape};
 use living_rules::map::chunk_of;
 use living_rules::script::{ActorFacts, Effect, SkillCtx, TargetFacts};
+use living_rules::steer::Spacing;
 use spacetimedb::rand::Rng;
 use spacetimedb::{ReducerContext, Table};
 
@@ -527,6 +528,54 @@ fn speed(ctx: &ReducerContext, id: u32, now: u64) -> f32 {
     sc.move_speed(&c).unwrap_or(2.5)
 }
 
+/// How near `close_in` comes when it names no distance (metres).
+const CLOSE_IN_M: f32 = 1.0;
+/// How far `back_off` gets when it names no distance (metres).
+const BACK_OFF_M: f32 = 4.0;
+
+/// Whether a movement intent may start: its distances make sense (`Spacing::check`, for a
+/// player's node too, which no lenient front end has read), it is held to a creature (`back_off`
+/// may be from a place), not to oneself, and the creature is perceived now by the one sight rule
+/// or by scent, as its steering will keep testing it (`motion::FLAG_SIGHT`). `back_off` needs
+/// room behind it.
+#[allow(clippy::too_many_arguments)]
+fn intent_check(ctx: &ReducerContext, id: u32, skill: &str, target: &Resolved, spacing: &Spacing, here: (f32, f32), me: &Body, node: u16, now: u64) -> Result<(), String> {
+    spacing.check(skill)?;
+    let creature = target.class == 3;
+    if creature && target.id as u32 == id {
+        return Err(format!("{skill} is movement relative to someone else, not yourself"));
+    }
+    if !creature && skill != "back_off" {
+        return Err(format!("{skill} is held to a creature; to be at a place, goto"));
+    }
+    if creature {
+        let tb = ctx.db.body().id().find(target.id as u32).ok_or("they are gone")?;
+        let tp = pos(&tb, now);
+        let d = dist(here, tp);
+        let w = common::world(ctx);
+        // Already in sight (resolved from what the body perceives, or a player's view): the keep
+        // margins hold. A player's own check is its perceived set's.
+        let kept = node != PLAYER || ctx.db.perceived().viewer().filter(ctx.sender()).any(|p| p.body == tb.id);
+        let seen = crate::perception::in_sight(ctx, &common::map(ctx), id, here, common::facing_at(me, now), tb.id, tp, d, &w, now, kept) || common::scent_of(&me.kind).is_some_and(|s| s.reaches(&tb.kind, d));
+        if !seen {
+            refuse(living_rules::outcome::act::UNSEEN);
+            return Err("you cannot see them".into());
+        }
+    }
+    if skill == "back_off" {
+        let map = common::map(ctx);
+        let from = target.at;
+        let open = [0.0f32, 0.6, -0.6, 1.2, -1.2].into_iter().any(|spread| {
+            let base = (here.1 - from.1).atan2(here.0 - from.0) + spread;
+            map.free(here.0 + base.cos() * 1.5, here.1 + base.sin() * 1.5)
+        });
+        if !open && dist(here, from) < spacing.distance.unwrap_or(BACK_OFF_M) {
+            return Err("cornered".into());
+        }
+    }
+    Ok(())
+}
+
 /// Start an action for behavior node `node`. `cur` is the current activity, if any.
 #[allow(clippy::too_many_arguments)]
 /// Whether the rules would let a skill go ahead now (the `can` condition): the check an action
@@ -578,7 +627,9 @@ pub fn refusal() -> &'static str {
 
 /// `answers` is what an answer (accept, decline) names: a trade offer's id and a record's id
 /// (0: none).
-pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, now: u64) -> Result<(), String> {
+/// `spacing` is a movement intent's distances (`living_rules::steer::INTENTS`).
+#[allow(clippy::too_many_arguments)]
+pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64) -> Result<(), String> {
     refuse(living_rules::outcome::act::REFUSED);
     let sc = common::scripts(ctx);
     let shape = shape_of(&sc, skill);
@@ -593,7 +644,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         // too: a 4 s wait does not carry on a 30 s one).
         // A run asked for (or a walk) that the body is not doing is a new start.
         let same_pace = run.map_or(true, |r| r == motion::runs(ctx, id));
-        if a.node == ORPHAN && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item && a.qty == qty && same_pace {
+        // A movement intent starts afresh: its distances are its steering's, not the activity's.
+        let intent = living_rules::steer::INTENTS.contains(&skill) && skill != "follow";
+        if a.node == ORPHAN && !intent && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item && a.qty == qty && same_pace {
             let mut a = a.clone();
             a.node = node;
             a.revision = revision;
@@ -741,6 +794,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
         _ => {}
     }
+    if living_rules::steer::INTENTS.contains(&skill) {
+        intent_check(ctx, id, skill, &target, &spacing, here, &me, node, now)?;
+    }
     // A turn and nothing else: already facing its target, there is nothing to do.
     if sc.shows().get(skill).is_some_and(|s| s.turn) && target.class != 0 && !(target.class == 3 && target.id as u32 == id) {
         if living_rules::social::bearing(here, common::facing_at(&me, now), target.at) < common::laws(ctx).face_slack {
@@ -748,7 +804,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
     }
     let r = reach(ctx, skill);
-    let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow") || aim == Aim::Dash || aside;
+    let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow" | "keep_distance" | "close_in" | "circle" | "back_off") || aim == Aim::Dash || aside;
     // A skillshot at a point and a guard turn toward their point; they never walk to it.
     let in_place = target.class == 4 && matches!(aim, Aim::Point | Aim::Facing);
     let mut needs_approach = !in_place && target.class != 0 && target.class != 5 && (moving_skill || dist(here, target.at) > r);
@@ -844,8 +900,21 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 speed: sp * common::moves_of(ctx, id, now).flee,
                 flags: 0,
                 pace: sp * common::moves_of(ctx, id, now).flee,
+                far: 0.0,
             },
-            "follow" if creature => Goal::creature(target.id as u32, r, sp, 0),
+            // Movement intents: held to the creature by perception (`motion::FLAG_SIGHT`).
+            "follow" if creature => Goal::held(motion::GOAL_CREATURE, target.id as u32, target.at, spacing.distance.unwrap_or(r), 0.0, sp, 0),
+            "close_in" => Goal::held(motion::GOAL_CREATURE, target.id as u32, target.at, spacing.distance.unwrap_or(CLOSE_IN_M), 0.0, sp, motion::FLAG_EARLY),
+            "keep_distance" => {
+                let (near, far) = spacing.band(dist(here, target.at));
+                Goal::held(motion::GOAL_BAND, target.id as u32, target.at, near, far, sp, 0)
+            }
+            "circle" => {
+                let radius = spacing.radius.unwrap_or(dist(here, target.at)).clamp(living_rules::steer::CIRCLE_MIN_M, living_rules::steer::INTENT_MAX_M);
+                Goal::held(motion::GOAL_ORBIT, target.id as u32, target.at, radius, spacing.side.unwrap_or(1.0), sp, 0)
+            }
+            "back_off" if creature => Goal::held(motion::GOAL_FLEE, target.id as u32, target.at, spacing.distance.unwrap_or(BACK_OFF_M), 0.0, sp, 0),
+            "back_off" => Goal { kind: motion::GOAL_FLEE, target: 0, at: target.at, keep: spacing.distance.unwrap_or(BACK_OFF_M), speed: sp, flags: 0, pace: sp, far: 0.0 },
             "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
             _ if aside => Goal::point(target.at, sp * common::moves_of(ctx, id, now).aside, 0),
@@ -878,8 +947,10 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             _ => run.unwrap_or(false),
         };
         let goal = if runs { goal.run(sp * moves.run) } else { goal };
-        if skill == "follow" {
-            act.ends_ms = now + (common::laws(ctx).follow_s * 1000.0) as u64;
+        if matches!(skill, "follow" | "keep_distance" | "circle") {
+            // Held for its own seconds, else as long as one follow lasts; then it is done.
+            let secs = if qty > 0 { qty as f32 } else { common::laws(ctx).follow_s };
+            act.ends_ms = now + (secs * 1000.0) as u64;
         }
         if let Some(first) = motion::start(ctx, id, goal, now)? {
             if aim == Aim::Dash {
@@ -995,9 +1066,9 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
     }
     if timed {
         crate::combat::act_until(ctx, id, now);
-        if a.node == PLAYER {
-            crate::combat::resume_move(ctx, id, now);
-        }
+        // A movement a player asked for while the move held the body (whoever started it:
+        // a committed move holds a player's keys too, `combat::rooted_now`).
+        crate::combat::resume_move(ctx, id, now);
     }
     if a.phase == 1 && aim_of(&sc, &a.skill) == Aim::Facing {
         crate::breath::ease(ctx, id, now);
@@ -1208,9 +1279,9 @@ fn finish_as(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64, c
             let until = crate::combat::recovering(ctx, a.id, &a.skill, now);
             crate::combat::act_until(ctx, a.id, until);
         }
-        if a.node == PLAYER {
-            crate::combat::resume_move(ctx, a.id, now);
-        }
+        // A movement a player asked for while the move held the body (whoever started it:
+        // a committed move holds a player's keys too, `combat::rooted_now`).
+        crate::combat::resume_move(ctx, a.id, now);
     }
     if ok {
         common::practise(ctx, a.id, &a.skill);
@@ -1236,12 +1307,12 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
         return complete(ctx, a, now);
     }
     match a.skill.as_str() {
-        "follow" => {
+        "follow" | "keep_distance" | "circle" => {
             motion::brake(ctx, a.id, now);
             finish(ctx, a, true, "", now);
         }
         // A movement that found itself already there.
-        "goto" | "wander" | "flee" => finish(ctx, a, true, "", now),
+        "goto" | "wander" | "flee" | "close_in" | "back_off" => finish(ctx, a, true, "", now),
         s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, "", now),
         // Approaches are driven by steering events.
         _ => {
@@ -1315,9 +1386,9 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
             finish(ctx, a, false, &why, now)
         }
         Event::Arrived => match a.skill.as_str() {
-            "goto" | "wander" | "flee" => finish(ctx, a, true, "", now),
+            "goto" | "wander" | "flee" | "close_in" | "back_off" => finish(ctx, a, true, "", now),
             s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, "made way", now),
-            "follow" => {}
+            "follow" | "keep_distance" | "circle" => {}
             _ => {
                 let here = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
                 let Some(tp) = target_pos(ctx, &a.target, now) else {
@@ -2118,6 +2189,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.line_heard().speaker().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
+    ctx.db.cue().actor().delete(id);
     ctx.db.judged().actor().delete(id);
     ctx.db.mind_cursor().actor().delete(id);
     ctx.db.act_queue().actor().delete(id);

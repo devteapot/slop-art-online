@@ -149,6 +149,12 @@ pub fn voice_m() -> f32 {
     compiled().and_then(|s| s.way("say").map(|w| w.carry_for(s.reach().hearing))).unwrap_or(9.0)
 }
 
+/// Whether the world's `cues_on` law holds (docs/ATTENTION.md): minds are asked what should
+/// bring them to think, and the authority watches for it.
+pub fn cues_on() -> bool {
+    compiled().is_some_and(|s| s.laws().cues_on)
+}
+
 /// Whether the world's rules tell a speaker the truth about a line no one addressed could hear
 /// (the `speech_truth` law; on in the bundled rules).
 pub fn speech_truth() -> bool {
@@ -552,11 +558,80 @@ Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 s
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
 \"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
-\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}}}",
+\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}{}}}",
         opening(frame, THINK_OPENING),
         world_rules(),
-        if projects { THINK_PROJECTS } else { "" }
+        if projects { THINK_PROJECTS } else { "" },
+        notice_field()
     ))
+}
+
+/// The reply field for attention cues (docs/ATTENTION.md) while the world's `cues_on` law
+/// holds; empty otherwise. It says what a cue is and what the world does with one, never what
+/// to watch for: its examples are placeholders, with no person, duty or situation in them
+/// (`cue_examples_name_no_one`).
+fn notice_field() -> String {
+    let Some(s) = compiled().filter(|s| s.laws().cues_on) else { return String::new() };
+    let l = s.laws();
+    notice_field_for(l.cue_cooldown_s, l.cue_gap_s)
+}
+
+/// The placeholder examples of the cue field.
+const CUE_EXAMPLES: &str = "e.g. {\"for\": \"<stance key>\", \"who\": \"wolf\", \"near_me\": 30, \"why\": \"...\"}, \
+{\"for\": \"project:<key>\", \"who\": 12, \"doing\": \"<skill>\", \"why\": \"...\"}, {\"for\": \"goal:<its words>\", \"thing\": \"<kind>\", \"at\": \"<one of your places>\", \"why\": \"...\"}";
+
+fn notice_field_for(cooldown_s: f32, gap_s: f32) -> String {
+    let span = |s: f32| if s >= 120.0 { format!("{:.0} minutes", s / 60.0) } else { format!("{s:.0} seconds") };
+    format!(
+        ", \"notice\": [{{\"for\": \"the stance key, project:<key> or goal:<its words> this is about\", \"who\": a person's id, \"unknown\" (anyone whose name you do not know) or a kind of creature, \
+\"doing\": \"what they are visibly doing (a skill)\", \"phase\": \"{}\", \"thing\": \"a kind of resource or structure\", \"at\": \"one of your places\", \"within\": metres of it, \"near_me\": metres, \"why\": \"your own words\"}}] \
+(optional: what, when you perceive it, should make you think about this again; every field given must hold for the same thing; {CUE_EXAMPLES}. \
+You are brought to think by it once per thing per {} and by all of them at most once in {}; you keep at most {}; listing only \"for\" stops watching for it. See # What you watch for)",
+        living_rules::doing::Phase::ALL.iter().map(|p| p.word()).collect::<Vec<_>>().join("|"),
+        span(cooldown_s),
+        span(gap_s),
+        crate::memory::CUES
+    )
+}
+
+/// One line of # What you watch for: what the cue serves and watches for, in the mind's own
+/// words, and what came of it (how often it brought the person to think, or why the world does
+/// not watch for it). `name` says how the person knows someone by id.
+pub fn cue_line(c: &living_bindings::Cue, name: &dyn Fn(u32) -> String, now: u64) -> String {
+    let mut what: Vec<String> = Vec::new();
+    if c.who_id != 0 {
+        what.push(format!("{} (#{})", name(c.who_id), c.who_id));
+    } else if c.who == "unknown" {
+        what.push("anyone whose name you do not know".into());
+    } else if !c.who.is_empty() {
+        what.push(format!("a {}", c.who));
+    }
+    if !c.doing.is_empty() {
+        what.push(format!("doing {}", c.doing));
+    }
+    if !c.phase.is_empty() {
+        what.push(c.phase.clone());
+    }
+    if !c.thing.is_empty() {
+        what.push(format!("a {}", c.thing.replace('_', " ")));
+    }
+    if !c.at.is_empty() {
+        what.push(format!("within {:.0} m of {}", c.within, c.at));
+    }
+    if c.near_me > 0.0 {
+        what.push(format!("within {:.0} m of you", c.near_me));
+    }
+    let why = if c.why.is_empty() { String::new() } else { format!(" (\"{}\")", c.why) };
+    let came = if !c.refused.is_empty() {
+        format!(": not watched, {}", c.refused)
+    } else if c.fires == 0 {
+        String::new()
+    } else {
+        let last = c.fired.iter().map(|f| f.at_ms).max().unwrap_or(0);
+        let ago = now.saturating_sub(last) / 60_000;
+        format!(": made you think {} time{}, last {}", c.fires, if c.fires == 1 { "" } else { "s" }, if ago == 0 { "just now".to_string() } else { format!("{ago} min ago") })
+    };
+    format!("for {}: {}{why}{came}", c.for_key, what.join(", "))
 }
 
 /// What a deliberation is told of projects (`LIVING_PROJECTS=1`), and the reply field naming
@@ -662,11 +737,12 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
- \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
+ \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}{}}}",
         opening(frame, CONSOLIDATE_OPENING),
         if lessons() { LESSON } else { "" },
         if projects { CONSOLIDATE_PROJECTS } else { "" },
-        world_rules()
+        world_rules(),
+        notice_field()
     ))
 }
 
@@ -769,6 +845,9 @@ pub struct Ctx<'a> {
     pub experiences: Vec<String>,
     /// Agreements, demands and one's people's standing, as the world keeps them (its records).
     pub dealings: Vec<String>,
+    /// Attention cues as the world keeps them (`None`: the `cues_on` law is off and the
+    /// section is left out).
+    pub cues: Option<Vec<String>>,
 }
 
 fn common(c: &Ctx, out: &mut Segments) {
@@ -810,6 +889,15 @@ fn common(c: &Ctx, out: &mut Segments) {
     }
     for j in &c.judgments {
         out.push(Stability::Dynamic, format!("- {j}\n"));
+    }
+    if let Some(cues) = &c.cues {
+        out.push(Stability::Dynamic, "\n# What you watch for (each makes you think when you perceive it)\n");
+        if cues.is_empty() {
+            out.push(Stability::Dynamic, "(nothing)\n");
+        }
+        for q in cues {
+            out.push(Stability::Dynamic, format!("- {q}\n"));
+        }
     }
     out.push(Stability::Character, "\n# Places you remember\n");
     if c.places.is_empty() {
@@ -1204,7 +1292,22 @@ mod tests {
             places: vec![format!("place-{name}")],
             experiences: vec![format!("dynamic-experience-{name}")],
             dealings: vec![format!("dynamic-dealing-{name}")],
+            cues: None,
         }
+    }
+
+    /// The cue field's examples and its schema name no one and no duty: what a mind watches
+    /// for is its own (docs/ATTENTION.md).
+    #[test]
+    fn cue_examples_name_no_one() {
+        let field = notice_field_for(600.0, 60.0).to_lowercase();
+        let examples = CUE_EXAMPLES.to_lowercase();
+        assert!(field.contains(&examples));
+        for w in ["stranger", "newcomer", "arriv", "visitor", "outsider", "foreigner", "guest", "intruder", "guard", "keeper", "watchman", "sentry", "gate", "door", "role", "duty", "clerk", "tally", "ledger", "book", "creditor", "debtor", "fisher", "counting"] {
+            assert!(!field.contains(w), "the cue field mentions \"{w}\": {field}");
+        }
+        assert!(!examples.contains("unknown"), "no example watches for people one does not know");
+        assert!(field.contains("10 minutes") && field.contains("60 seconds"));
     }
 
     fn fixture(purpose: &str, name: &str, kind: &str) -> (String, String) {

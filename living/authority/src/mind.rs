@@ -69,6 +69,25 @@ pub struct PlaceIn {
     pub y: f32,
 }
 
+/// One attention cue as the mind projects it (docs/ATTENTION.md; the `Cue` table).
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct CueIn {
+    /// `stance:<key>`, `project:<key>` or `goal:<key>`: what it serves.
+    pub for_key: String,
+    pub why: String,
+    pub who_id: u32,
+    pub who: String,
+    pub doing: String,
+    /// The phase it is visibly in (`winding up`, …; `living_rules::doing::Phase`).
+    pub phase: String,
+    pub thing: String,
+    pub at: String,
+    pub within: f32,
+    pub near_me: f32,
+    /// The thought that wrote it (its journal reference).
+    pub source: String,
+}
+
 #[derive(SpacetimeType, Clone, Debug)]
 pub struct MindUpdate {
     pub persona: Option<PersonaIn>,
@@ -81,6 +100,9 @@ pub struct MindUpdate {
     /// The relations, judgments and places given are the complete current set (projected
     /// from the mind); rows not among them are removed.
     pub replace: bool,
+    /// The complete set of attention cues (docs/ATTENTION.md), replacing the actor's when
+    /// present; `None` leaves them as they are.
+    pub cues: Option<Vec<CueIn>>,
 }
 
 const MAX_THOUGHTS: usize = 60;
@@ -497,7 +519,7 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
 /// Project consolidated mind state: persona, relations, beliefs, judgments, places.
 #[spacetimedb::reducer]
 pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Result<(), String> {
-    authorize_projection(ctx, actor)?;
+    let who = authorize_projection(ctx, actor)?;
     let now = common::now_ms(ctx);
     if update.replace {
         let keep: Vec<u32> = update.relations.iter().map(|r| r.other).collect();
@@ -612,8 +634,108 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             ctx.db.place().id().delete(*id);
         }
     }
+    // Only a mind keeps attention cues: a character a person plays sees with the player's eyes,
+    // so cues written for one (its player memory, or the player's own call) are not kept.
+    if let Some(cues) = update.cues {
+        let played = !who.ai || crate::presence::played(ctx, actor);
+        set_cues(ctx, actor, if played { Vec::new() } else { cues }, now);
+    }
     if let Some(t) = update.thought {
         add_thought(ctx, actor, t, now);
     }
     Ok(())
+}
+
+/// Replace `actor`'s attention cues with `cues` (at most `CUES_PER_ACTOR`, the first ones kept).
+/// A cue the world cannot watch for is kept with its reason in `refused` and never matched, so
+/// the mind is told why (its prompt lists the set) and the inspector shows it. A cue that is
+/// unchanged keeps its row, its fires and its cooldowns.
+pub fn set_cues(ctx: &ReducerContext, actor: u32, cues: Vec<CueIn>, now: u64) {
+    let old: Vec<Cue> = ctx.db.cue().actor().filter(actor).collect();
+    let mut kept: Vec<u64> = Vec::new();
+    for c in cues.into_iter().take(CUES_PER_ACTOR) {
+        let row = Cue {
+            id: 0,
+            actor,
+            for_key: clip(c.for_key.trim(), 80),
+            why: clip(c.why.trim(), 160),
+            who_id: c.who_id,
+            who: clip(c.who.trim(), 40).to_lowercase(),
+            doing: clip(c.doing.trim(), 40).to_lowercase(),
+            phase: clip(c.phase.trim(), 40).to_lowercase(),
+            thing: clip(c.thing.trim(), 40).to_lowercase(),
+            at: clip(c.at.trim(), 48),
+            within: if c.within > 0.0 { c.within.min(48.0) } else { 20.0 },
+            near_me: c.near_me.clamp(0.0, 256.0),
+            refused: String::new(),
+            fired: Vec::new(),
+            fires: 0,
+            set_ms: now,
+            source: clip(&c.source, 120),
+        };
+        let refused = cue_refusal(ctx, actor, &row);
+        let row = Cue { refused, ..row };
+        let same = |o: &Cue| o.for_key == row.for_key && o.who_id == row.who_id && o.who == row.who && o.doing == row.doing && o.phase == row.phase && o.thing == row.thing && o.at.eq_ignore_ascii_case(&row.at) && o.within == row.within && o.near_me == row.near_me;
+        match old.iter().find(|o| same(o) && !kept.contains(&o.id)) {
+            Some(o) => {
+                kept.push(o.id);
+                if o.why != row.why || o.refused != row.refused || o.source != row.source {
+                    ctx.db.cue().id().update(Cue { id: o.id, fired: o.fired.clone(), fires: o.fires, set_ms: o.set_ms, ..row });
+                }
+            }
+            None => {
+                let r = ctx.db.cue().insert(row);
+                kept.push(r.id);
+            }
+        }
+    }
+    for o in old.into_iter().filter(|o| !kept.contains(&o.id)) {
+        ctx.db.cue().id().delete(o.id);
+    }
+}
+
+/// Why the world cannot watch for this cue (empty: it can). Only what perception reports can
+/// be watched for, by type: a person or creature, what it is doing, a resource or structure,
+/// near one of one's own places.
+fn cue_refusal(ctx: &ReducerContext, actor: u32, c: &Cue) -> String {
+    let sc = common::scripts(ctx);
+    let creature = c.who_id != 0 || !c.who.is_empty();
+    if !c.phase.is_empty() && living_rules::doing::Phase::parse(&c.phase).is_none() {
+        let words: Vec<&str> = living_rules::doing::Phase::ALL.iter().map(|p| p.word()).collect();
+        return format!("\"{}\" is not a phase one can see (one sees: {})", c.phase, words.join(", "));
+    }
+    if !c.for_key.starts_with("stance:") && !c.for_key.starts_with("project:") && !c.for_key.starts_with("goal:") {
+        return "it serves no stance, project or goal".into();
+    }
+    if creature && !c.thing.is_empty() {
+        return "it watches for a creature and a thing at once".into();
+    }
+    if !creature && c.thing.is_empty() && c.at.is_empty() {
+        return "it names nothing to watch for".into();
+    }
+    if (!c.doing.is_empty() || !c.phase.is_empty()) && !creature {
+        return "what is being done needs someone doing it".into();
+    }
+    if c.who_id != 0 {
+        if c.who_id == actor {
+            return "one does not watch for oneself".into();
+        }
+        let Some(other) = ctx.db.character().id().find(c.who_id) else { return format!("there is no one #{}", c.who_id) };
+        let met = ctx.db.familiar().by_actor_thing().filter((actor, FAM_CREATURE | c.who_id as u64)).next().is_some()
+            || ctx.db.relation().by_pair().filter((actor, c.who_id)).next().is_some()
+            || ctx.db.character().id().find(actor).is_some_and(|me| crate::perception::knows_name(ctx, &me, &other));
+        if !met {
+            return format!("you have never seen #{}", c.who_id);
+        }
+    }
+    if !c.who.is_empty() && c.who != "unknown" && !living_rules::catalog::CREATURES.iter().any(|k| *k == c.who) {
+        return format!("\"{}\" is not a kind of creature", c.who);
+    }
+    if !c.thing.is_empty() && !sc.skills().resources.iter().chain(sc.skills().structures.iter()).any(|k| k.name == c.thing) {
+        return format!("\"{}\" is not a kind of thing one sees", c.thing);
+    }
+    if !c.at.is_empty() && !ctx.db.place().actor().filter(actor).any(|p| p.name.eq_ignore_ascii_case(&c.at)) {
+        return format!("you know no place called \"{}\"", c.at);
+    }
+    String::new()
 }

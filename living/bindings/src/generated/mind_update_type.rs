@@ -5,6 +5,7 @@
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 use super::belief_in_type::BeliefIn;
+use super::cue_in_type::CueIn;
 use super::judgment_in_type::JudgmentIn;
 use super::persona_in_type::PersonaIn;
 use super::place_in_type::PlaceIn;
@@ -21,6 +22,7 @@ pub struct MindUpdate {
     pub places: Vec<PlaceIn>,
     pub thought: Option<ThoughtIn>,
     pub replace: bool,
+    pub cues: Option<Vec<CueIn>>,
 }
 
 impl __sdk::InModule for MindUpdate {
