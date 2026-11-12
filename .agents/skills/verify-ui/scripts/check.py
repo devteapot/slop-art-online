@@ -1751,7 +1751,46 @@ def death(run, c):
     c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and words[0].startswith("Killed by a stranger") and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}")
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death}
+def houses(run, c):
+    """owner-known in the client: a structure is named by its kind, "{name}'s {kind}" only once
+    my character knows the owner by name (`my_known_names`), "your {kind}" when mine. The scene
+    holds a resident beside the arrival and puts a house by them (admin `place_structure`: owned
+    by them); a fresh player points at it ("house"); the resident says their name to the player
+    (admin `mind_say`, the speech minds use: an introduction), and it reads "{name}'s house"; a
+    house put by the player reads "your house"."""
+    s = "houses"
+    b = residents(run, 1)[0]
+    bname = (sql(run, f"SELECT id, name FROM character WHERE id = {b}") or [{}])[0].get("name", "")
+    arrive = (sql(run, "SELECT arrive_x, arrive_y FROM land") or [{}])[0]
+    ax, ay = arrive.get("arrive_x", 0.0), arrive.get("arrive_y", 0.0)
+    call_admin(run, "set_behavior", [b, json.dumps({"wait": 600})])
+    call_admin(run, "place_at", [b, ax + 3.0, ay + 3.0])
+    time.sleep(1.0)
+    before = {r["id"] for r in sql(run, "SELECT id FROM structure")}
+    call_admin(run, "place_structure", [b, "house"])
+    theirs = [r for r in sql(run, f"SELECT id, kind, owner, x, y FROM structure WHERE owner = {b}") if r["id"] not in before]
+    c.check(s, "a house of the resident's beside the arrival", len(theirs) == 1, str(theirs))
+    if not theirs:
+        return
+    h = theirs[0]
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    syncs = [f"spot=place_at|{{me}}|{ax}|{ay - 2.0}", f'intro=mind_say|{b}|"I\'m {bname}."|{{me}}|""|0|{thought}', 'mine=place_structure|{me}|"house"']
+    plan = (f"ready;wait:2;sync:spot;wait:2;pointat:{h['x']},{h['y']};wait:1.2;shot:01_house;dump:01;"
+            f"sync:intro;wait:3;pointat:{h['x']},{h['y']};wait:1.2;shot:02_theirs;dump:02;"
+            f"sync:mine;wait:2;pointat:{ax + 0.8},{ay - 2.0};wait:1.2;shot:03_mine;dump:03;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"houses-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, syncs=syncs, extra=["--token", tok, "--player", "Lodger"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    aim = lambda k: [t for w, t in (dump(out, k) or {}).get("naming") or [] if w == "aim"]
+    every = [t for k in ("01", "02", "03") for _, t in (dump(out, k) or {}).get("naming") or []]
+    c.check(s, "a stranger's house: the kind alone, no owner", aim("01") == ["house"] and not any(bname in t for _, t in (dump(out, "01") or {}).get("naming") or []), f"{aim('01')}; owner {bname!r}")
+    known = (dump(out, "02") or {}).get("known_names") or []
+    c.check(s, "told their name, I know them (my_known_names)", bname in known, f"{bname!r} in {known[:8]}")
+    c.check(s, "then it is their house, by name", aim("02") == [f"{bname}'s house"], str(aim("02")))
+    c.check(s, "a house of mine: your house", aim("03") == ["your house"], str(aim("03")))
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death, "houses": houses}
 
 
 def main():

@@ -815,12 +815,21 @@ fn things(conn: &DbConnection, now_ms: f64) -> Vec<(&'static str, String, Vec2, 
 /// What `id` is called, as I perceive it.
 /// A list's title for what it acts on (a person's is `looks.rs`'s).
 /// A target's title: a person or creature as `Looks` names them (the one way the client names
-/// anyone), a thing by its kind.
-fn label_of_aim(looks: &crate::looks::Looks, aim: &Aim) -> String {
+/// anyone), a structure as my character may call it ([`thing_title`]), anything else by its kind.
+fn label_of_aim(looks: &crate::looks::Looks, conn: &DbConnection, me: u32, aim: &Aim) -> String {
     match aim {
         Aim::Me => "Yourself".into(),
-        Aim::Thing { kind, .. } => crate::ui::label(&pretty(kind)),
+        Aim::Thing { class, kind, id, .. } => crate::ui::label(&thing_title(conn, me, class, kind, *id)),
         Aim::Creature { id } => looks.cap(*id),
+    }
+}
+
+/// A thing's title: a structure through `looks::structure_name` (its owner only as my character
+/// knows them: the authority's `owner_shown` law), anything else by its kind.
+fn thing_title(conn: &DbConnection, me: u32, class: &str, kind: &str, id: u64) -> String {
+    match conn.db.structure().id().find(&id).filter(|_| class == "structure") {
+        Some(s) => crate::looks::structure_name(conn, me, kind, s.owner),
+        None => pretty(kind),
     }
 }
 
@@ -837,17 +846,17 @@ struct Toward {
 /// A creature's title is left empty here: whoever shows one names them through `Looks`
 /// (`label_of_aim`, the hint's `aim_name`).
 ///
-/// Houses, stores and workplaces are named by their kind. An owner ("Bram's house", "a house")
-/// comes only from the authority's perceived label for that structure, once the rules give one;
-/// never from `structure.owner`, `land.params` (its plan lots' names) or the seed, which name
-/// owners and buildings the player's character may not know (docs/STRANGERS.md).
+/// Houses, stores and workplaces: "your house", "Bram's house" only when my character knows the
+/// owner by name (`my_known_names`, the authority's `owner_shown` law), else the kind alone
+/// (`looks::structure_name`). Never from `land.params` (no names since owner-known) or the seed,
+/// which name owners and buildings the player's character may not know.
 fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim) -> Toward {
     match aim {
         Aim::Me => Toward { title: "Yourself".into(), target: None, open: true, requests: false },
         Aim::Thing { class, kind, at, id, amount, .. } => {
             let mut t = thing_facts(class, kind, *id, *amount, at.distance(my_at));
             fire_facts(conn, rules, &mut t, me);
-            Toward { title: pretty(kind), target: Some(t), open: true, requests: false }
+            Toward { title: thing_title(conn, me.actor.id, class, kind, *id), target: Some(t), open: true, requests: false }
         }
         Aim::Creature { id } => match creature_facts(conn, rules, *id, 0.0) {
             Some(t) => Toward { title: String::new(), requests: t.kind == me.actor.kind && t.kind == "person", target: Some(t), open: true },
@@ -1216,14 +1225,14 @@ pub fn input(
     let is_person = |aim: &Aim| matches!(aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == "person"));
     let open = |v: &mut Verbs, aim: Aim, item: Option<String>| {
         let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
-        let title = label_of_aim(&looks, &aim);
+        let title = label_of_aim(&looks, conn, me, &aim);
         let person = is_person(&aim);
         let at = v.place_next.take();
         v.menu = Some(Menu { aim, title, choices, group: None, item, person, at, more: false });
     };
     // A wheel where the world's `menus()` gives the target's place one, else the list.
     let wheel_or_list = |v: &mut Verbs, aim: Aim, held: bool, at: Vec2| {
-        let title = label_of_aim(&looks, &aim);
+        let title = label_of_aim(&looks, conn, me, &aim);
         match wheel_toward(conn, sc, &rules.skills, &facts(&aim), my_at, &aim, is_person(&aim), title, at) {
             Some(mut w) => {
                 w.held = held;
