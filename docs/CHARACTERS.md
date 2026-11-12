@@ -2,7 +2,7 @@
 
 The game's people are made by our own tool: a set of parameters goes in, a rigged, painted, animated character file comes out. This replaces VRoid Studio bases (decision 2 of [the small city](SMALL_CITY.md)). The owner's bar is VRoid's quality close up, from a parameterized tool of our own.
 
-**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns; hair as shared style files; outfits as shared style files; overlays; the hair's finish; hair as sheets):**
+**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns; hair as shared style files; outfits as shared style files; overlays; the hair's finish; hair as sheets; step 6, the eyes' drawing, lips and blush):**
 
 - **The bar is the reference character:** the VRoid model the game has used so far (`lookdev/vroid-Sendagaya_Shino.glb`; the asset board's control `vroid=recipe:shino`), close up included. The owner accepted pass 1 as the base and said of it: "a step up … but still far away from the reference model we have been using so far. That is kind of what we want to get to".
 - **Pass 1 (`char-2`):** faces and the parameter model. A seed or a parameter file gives a repeatable person of any sex and age from 1 to about 80, with real eye openings, a mouth that opens, 15 expressions under VRoid's names, stubble and six beard styles, age lines and freckles. One command makes a household or a whole town and its check page.
@@ -69,7 +69,11 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **`long` is long and `balding` is bald.** A style's file drew its length and its receding from the style its seed would have picked, so `long` ended at the jaw, `bob` at the shoulders, and `balding` had a full head.
   - **Cheaper:** 50 hair files, 13.4 MB, where they were 17.0; a bob is 5,300 triangles near and 1,400 far, where it was 10,800 and 2,500.
   - **Photographs hold the eyes open**, as a rule of the photo tools (`hold_eyes.py`).
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the eyes' drawing, the face's painted softness, clothes and silhouette, hands, and hair's shading (one colour with a soft band, where the reference paints a hard highlight and a dark edge).
+- **Pass 3, step 6** ([the eyes, lips and blush](#the-eyes-lips-and-blush)).
+  - **The eyes are drawn as the reference draws its own:** a broad dark lash band over the whole lid with an ink line along the lid's edge, flicks along its top and a fan of them at the outer corner; an iris with a thin dark rim, a darker upper half, a glow rising from the bottom and one large highlight; a lower line on the outer part only. The depths of step 3 and the `EyeIris` primitive are as they were.
+  - **Lips and blush are a layer of their own over the skin,** in a fixed colour the client neither shades nor recolours. Painted into the skin, the skin's recolouring washed them out at every tone; as a layer they hold across Cullet's skin tones.
+  - **One shading mean a class** ([one shading mean a class](#one-shading-mean-a-class)): outfit pieces, hair and far beards can each share one material; every piece a person wears has a colour in their line.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's shading (one colour with a soft band, where the reference paints a hard highlight and a dark edge) and long hair standing off the back, the brows' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -155,6 +159,8 @@ A pass is also published through the asset board, the record of which version th
 - The hair finish is `character:face-types` `20261112-334790f0-…`: six type and style pairs before and after from the front, three-quarter and side and at the game camera, with hair normals turned to the camera in place of the client's rim light; the three cuts of six styles; far heads without and with a far beard. The six presets and `cast-64` were not published again.
 
 - Hair as sheets is `character:face-types` `20261112-789ee65c-…`: eight type and style pairs as locks and as sheets from the front, three-quarter and side and at the game camera; every style as sheets from four sides; the three cuts of six styles; six presets whole under the client's own shading. Eyes are held open by the photo tool from this version on. The six presets and `cast-64` were not published again: their clips could not be baked on this machine ([hair as sheets](#hair-as-sheets)).
+
+- Step 6 is `character:face-types` `20261112-d11b32d5-…` (the eyes close up, faces before and after, lips and blush across Cullet's skin tones), the six preset families' `20261112-3213cdc8-…` (rebaked with clips from the completed library, `marker_check` passed) and `cast-64` `20261112-d11b32d5-…` (the 64 built again whole).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -1137,6 +1143,71 @@ Pass 3, after the hair's finish (2026-11-12). The reference draws hair as broad 
 
 **What the client needs:** nothing. A person's `styles.hair` names the same files, with the same meshes (`Hair`, `FarHair`, the tie in cloth), bones and attributes.
 
+### The eyes, lips and blush
+
+Pass 3, step 6 (2026-11-12). The eyes were the first thing that separated a close-up of ours from the reference: thin lash lines and a plainer iris. Lips and blush were painted into the skin, and the client's skin recolouring washed them out.
+
+**The eyes** (`head_mesh.py` `_lines` and `glints`, `face_paint.py` `paint_iris`):
+
+| Part | Before | Now |
+|---|---|---|
+| Upper lash | A line 3 to 4 mm high on an eye 21 mm high, thin at the inner corner, running down the outer side of the eye in a long tail | A band over the whole lid, its height a share of the open eye's by the type's lash weight (about a quarter on a woman's or a child's eye, a seventh on a man's), thickest past the middle and thinner toward both corners, in a deep red-brown |
+| The lid's edge | The band's own lower edge | An ink line along it, near black: it holds the eye's shape from a distance |
+| Flicks | Thin strands at the outer end (a woman's nine, a child's four, a man's none) | Broad points along the band's top that lean toward the outer corner, a fan of up to four at the outer corner, two short ones at the inner. A man's eye has none |
+| The outer corner | The band ran on down the lid's slope, which bracketed the eye | It ends in a point, outward and a little up |
+| Lower lash | A line from the middle to the outer corner | The outer part only, with a few short points under the outer corner on a woman's or a child's eye |
+| The fold above the lid | Over the lid's edge | Clear of the band, above it |
+| Iris | A body in the iris's colour with rays, a pale ring and a pale crescent low down | A thin dark rim; a darker, greyer upper half with a cool arc under the lid; a warm glow rising from the bottom toward the pupil, hottest low down; a tall soft pupil; faint rays |
+| Highlights | Two round ones inside the iris | One large leaning oval high on the lit side, reaching over the iris's rim, and a small one low on the other side |
+
+- **Unchanged:** the eye's depths from step 3 (the iris 4 mm behind the lid, the white 15 mm), the white cut to the lid's opening, and the iris as its own `EyeIris` primitive with its own picture, so the client's eye-colour tag works as before. The glow leans warm in the picture; the client's recolouring gathers hues round the person's eye colour, so it stays a lighter, warmer tone of it.
+- **Colours are darker in the file than they look.** The client draws a face's parts unshaded, which comes out lighter than lit skin. The band, the ink line and the lips' and blush's pigments are set for how they render.
+- **Not changed:** the brows. The reference draws a brow as one tapered stroke; ours are still strands.
+
+**Lips and blush** (`face_paint.py` `paint_skin`, `person.py` `make_face`):
+
+- **Why they washed out.** The client recolours a person's skin by moving the skin picture's mean colour to theirs, with hues gathered round it. Lips and blush were hues of that picture, so they came out as skin.
+- **Now they are a layer of their own.** The skin's own faces under the paint (812 triangles on `adult-f-b`), a hair's width out, with the skin's weights and its two expressions, as a seventh primitive of the `Face` mesh. Its material is `M00_000_00_FaceTint_00_FACE`, blended, with a small picture of its own (the skin's layout at half size, pigment with an alpha, 12 kB).
+- **Held fixed, not tinted.** The client draws a material named `…_FACE` as it draws the lash lines: unshaded, and in the file's own colours. So the layer needs nothing new from the client and no tag. Each pigment is one colour for everyone, laid over whatever skin is under it: the lips at 72 to 78% of a type's lip strength, the blush at 56% of its blush.
+- **Judged across Cullet's skin tones** on the board's `lips-blush-sweep`: the woman preset with her skin set by a recipe colour, through the client's own recolouring, at six tones from the town's lightest (`#f4d5c3`) to its darkest (`#ac7e62`) and one darker than anyone in it (`#7a573f`). Before, the lips are close to skin-coloured at every tone and the blush is faint or gone. After, both hold at all six. On the tone beyond Cullet the lips come out lighter than the skin and the blush redder than it should: a fixed pigment has that limit, and a tag of their own for lips and blush is what would lift it.
+- **The far head** still has lips and blush in its skin picture. They are two or three texels there.
+
+**What it costs.** A type's file goes from 1.06 to 1.15 MB on average (the 21 types from 22.2 to 24.1 MB): 144 more triangles in the lines, 812 in the layer, and its picture. A near face is seven primitives where it was six, so one more draw.
+
+**What the client needs:** nothing. For the laptop coordinator to know: a type's `Face` has a seventh primitive (`…FaceTint_00_FACE`, blended); a composed person's beard overlay lies over it as it lies over the skin.
+
+**The photo tools hold the animated copy too.** For a recipe the game draws `anim/<name>.glb` when there is one, and that copy still blinked on a clip's frame. `hold_eyes.py` now holds a file's animated copy with it, and records which run holds a file, so a run starting does not release another's.
+
+### One shading mean a class
+
+Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed people (`compose-1`, Cullet's 64). Mesh data for people fell from 270 to 39 MiB and textures from 354 to 213 MiB, but materials on people rose from 20 to 96 at the play camera and the frame from 4.7 to 7.1 ms. With style materials shared in a test that got the colours wrong, composed people were about as fast as whole files. So the cost was materials: every hair cut, outfit piece, overlay and far beard was one of its own.
+
+**Why they could not be shared.** The client tints a person's pieces through each mesh's tag: a material holds the mean colour of what it draws, and the shader moves that mean to the person's colour. Every file's mean differed, so a material could be shared by the people wearing one file and no further.
+
+**What changed.** `living/tools/characters/shade_mean.py` gives each class one mean, and `gen_styles.sh` runs it on every file it writes. `shade_mean.py --check living/game/assets/lookdev/styles` reads every file back: 150 files, 228 meshes and pictures, none off its class's mean.
+
+| Class | Material | Picture | What is equal in every file | Tint |
+|---|---|---|---|---|
+| Outfit pieces (28 files) | `M00_001_01_Cloth_01_CLOTH` | none | Vertex colours are grey shading; the mesh's mean lightness, by area and in linear light, is 0.30, for `Cloth` and `FarCloth` | `colors.outfit[<piece>]`: every piece a person wears now has one |
+| Hair (50 files) | `M00_000_Hair_00_HAIR` | the one shared picture of strands | The mean vertex colour of a mesh's outer surfaces (its lighter half by area) is 0.78, for `Hair` and `FarHair` | `colors.hair` |
+| Far beards | `M00_000_00_FarOverlay_00_HAIR` | none | One grey, 0.71, as before | `colors.beard` |
+| Overlays (72 files) | per file | each its own | The picture's mean grey over what it covers is 0.90 | hair or skin, as before |
+
+**What the client may key on.** For outfit pieces, hair and far beards: the material's kind and content, which is the key of the laptop's shared-materials test (`sharestyles`). Every piece's `Cloth` material is now the same material, and so is every hair cut's. The mean a shared material holds is right whichever tagged mesh it is measured from.
+
+- **A hair style's tie** has the cloth's material and no tag, and keeps its own colour. It is never what the mean is measured from, since only tagged meshes are measured.
+- **Hair's mean is its picture's, and the client should take the whole picture's.** Measured at each mesh's own vertices, as the client measures a mean today, it runs from 0.49 (`crop`) to 0.57 (`kerchief`) in linear light: short hair uses more of the picture's dark root and tip. A shared hair material that held the first cut's mean would make everyone's hair up to 8% lighter or darker by which cut came first. The whole picture's mean is 0.55 (linear grey), the same for all, since the picture is one file.
+- **Overlays stay a material a file.** Each has a picture of its own, and lines and freckles are lit with their type's shadow map. The 64 wear 28 of them. One material a class would need the pictures laid on shared pages, and lines and freckles drawn as lips and blush now are (a fixed colour with an alpha, no shadow map). That is not done here.
+
+**Lines and freckles come out fainter in the client than they were drawn** (found here, not fixed). The client moves an overlay picture's mean to the tag's colour. A beard's mean becoming the beard's colour is right. Lines and freckles are tagged with the skin's colour, so their mean becomes the skin's own colour, and only what is darker than their mean shows: a freckle's core comes out 11% darker than the skin where it was drawn about 40% darker, a line's core 26% darker, and their soft edges a little lighter than the skin. `compose.py` multiplied the picture by the colour, which is why the overlay step's pictures looked right; it now tints as the client does. The remedy is the one lips and blush have: lines and freckles as a fixed colour with an alpha in a `…_FACE` material, which the client must then leave untinted (today it tags those two overlays by name). That would also free them from their type's shadow map, which is what sharing their material needs. It wants both sides at once, so it is not done here.
+
+**What a piece's colour is now.** A piece is grey, so its colour is only the person's. What was another hue inside a piece (a coat's patches, its lining, the hem's weathering) is a lighter or darker tone of the piece's colour, as the client's recolouring already made it.
+
+- **Every piece worn has a colour in the person's line.** The line named a colour for the jersey, the coat or smock and headwear. It now names one for the **apron** (`#b4b1a3`), the **trousers** (`#353840`) and the **boots** (`#332820`) too: the cloth every resident's were built in (`person_params.PIECE_COLOURS`).
+- **A smock's sleeve bands are a piece of their own,** `smock_bands-m` and `-f` (320 triangles, 0.04 MB), with their own colour in the line, as the apron is. The bands were faces of the smock in another cloth, and would have taken the smock's hue. A piece needs nothing new from the client; a second tag inside one file would have needed a second mesh and a new key. A person in a smock wears the bands, so wears one more piece.
+
+**Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
+
 ### Type files
 
 `living/tools/blender/gen_types.sh` writes `lookdev/types/<type>.glb` for the 21 types, with `<type>.face.png` (the face's shadow map) and `<type>.params.json` beside each. A file holds:
@@ -1483,6 +1554,15 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
+**After step 6**, judged on the board's `eyes-close`, `faces-close` and `lips-blush-sweep` sheets with the reference beside ours, ordered by how much it shows:
+
+1. **Hair.** Long hair stands off the back as one flat plane where the reference's falls close to it; the shading is one colour with a soft band where the reference paints a hard highlight and a dark edge; short styles read as clumps from behind. Next.
+2. **The brows** are strands where the reference draws one tapered stroke.
+3. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top, its glow hotter. At the game camera an eye is two or three pixels and the difference does not show.
+4. **The nose's wedge** reads as a hard triangle in three-quarter view (unchanged; the owner's answer on step 4b is awaited).
+5. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+6. **Clothes and silhouette, hands** (unchanged).
+
 **After hair as sheets**, judged on the board's `hair-sheets` sheets with the reference beside ours, ordered by how much it shows:
 
 1. **The eyes' drawing:** thin lash lines and a plainer iris. Step 6, next.
@@ -1583,7 +1663,8 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 6. **Hair and outfits as shared style files.** Done ([hair styles](#hair-styles), [outfit pieces](#outfit-pieces)): a whole person composes from a type's file, a hair style and outfit pieces. Overlays, the apron, eye colour and bellies followed ([overlay styles](#overlay-styles)). Left: a far model's overlays; a strong chest.
 7. **Hair finish.** Done ([hair finish and cuts](#hair-finish-and-cuts)): the fringe, the ends, the temple; three cuts of every style; far beards.
 8. **Hair as sheets.** Done ([hair as sheets](#hair-as-sheets)).
-9. **The eyes' drawing, lips and blush** (the face's paint; lips and blush out of the skin texture). Next.
-10. **Later:** the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
+9. **The eyes' drawing, lips and blush.** Done ([the eyes, lips and blush](#the-eyes-lips-and-blush)).
+10. **Long hair close to the back,** then **hair's shading** (the reference's hard highlight and dark edge) with the short styles' clumps. Next.
+11. **Later:** the brows as one stroke; the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
 
 Each pass page sets two references beside ours: the VRoid control, and a still from Blue Protocol's published character material (one of the owner's named art references), for comparison only. The stills are kept outside the repository, in `~/archive/asset-board/references/blue-protocol/`, with their sources.
