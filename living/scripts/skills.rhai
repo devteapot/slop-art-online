@@ -2479,19 +2479,19 @@ fn intent_sight() {
 }
 fn keep_distance_spec() {
     let l = laws();
-    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty"],
-       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
+    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty", "apart"],
+       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
        takes: intent_sight(), gives: "you between min and max metres from it, facing it" }
 }
 fn close_in_spec() {
-    #{ target: true, target_class: "creature", args: ["distance", "run"],
-       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
+    #{ target: true, target_class: "creature", args: ["distance", "run", "apart"],
+       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
        takes: intent_sight(), gives: "you within that distance of it" }
 }
 fn circle_spec() {
     let l = laws();
-    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty"],
-       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
+    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty", "apart"],
+       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
        takes: intent_sight(), gives: "you going round it at that distance" }
 }
 fn back_off_spec() {

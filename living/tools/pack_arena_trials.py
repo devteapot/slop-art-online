@@ -70,6 +70,9 @@ def running(g):
     return g
 C1R=running(C1)
 C2R=running(C2)
+# C3 (docs/PACK_MIND.md §7, after A5): Muro's two rules with `apart`: hold 3-5 m from the
+# nearest person at a run while keeping 4 m from the other wolves one sees; bite as C1/C2 do.
+C3={"first":[FLEE,BITE,{"do":{"skill":"keep_distance","target":{"nearest":"person"},"min":3,"max":5,"run":True,"apart":4}}]}
 CAL_ABOUT="Calibration fixture (docs/PACK_MIND.md §5.6): graphs written by us, kept in this trial file only, never shipped; they measure whether the world lets wolves ring a person, not whether wolves do."
 if __name__=="__main__":
     for start in ("close","spread"):
@@ -81,7 +84,7 @@ if __name__=="__main__":
             about="Both sides with minds (wolves LIVING_ANIMAL_MINDS=salient,choose; people the default mix), starting from their instinct graphs; nothing in any prompt names a tactic (docs/PACK_MIND.md §5.5 guards).")
     arm("pack-minds-mixed-6v6", 6, 6, "spread", deer=True, minds=["subject","pack"],
         about="Both sides with minds, the island's deer left where they live (the mixed arm).")
-    for name,gr in (("c1r",C1R),("c2r",C2R)):
+    for name,gr in (("c1r",C1R),("c2r",C2R),("c3",C3)):
         for start,w,pp in (("close",3,3),("close",6,6)):
             arm(f"pack-{name}-{start}-{w}v{pp}", w, pp, start, wolf_graph=gr, about=CAL_ABOUT)
         arm(f"pack-{name}-stand-6v6", 6, 6, "close", wolf_graph=gr, people_graph={"wait":900},
