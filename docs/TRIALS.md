@@ -1659,7 +1659,9 @@ Branch `births-identity`. Free: reading of code and of bi1's journals, nothing b
 
 Whether this holds back pairing is **not shown**. Dell and Ada did not try. Uma, who rewrote herself as grown, was the only run-born to try, but Teal and Hollis also rewrote and did not.
 
-**The fix's shape (not built).** It must come only from what the mind already has: the body it perceives, and what it lived, consolidated as usual. There is no rewritten persona, no instruction to change voice, and no want.
+**Built since (2026-11-12, `self-body`):** shapes 1 and 3 below, and shape 2 as an unchanged percept, without the `Self` node's `stage`. The body line is in every prompt, and a grown mind's first identity comes from facts. See [the plan with the identity fix](#the-plan-with-the-identity-fix-and-the-sleep-fixes-in-the-build-2026-11-12) and verify-minds `body`.
+
+**The fix's shape (as designed).** It must come only from what the mind already has: the body it perceives, and what it lived, consolidated as usual. There is no rewritten persona, no instruction to change voice, and no want.
 
 1. **The body's age and stage as a perceived fact, in every prompt's `# Who you are`.** The line would read, for example, "Your body: 15 years old, an adult since about a day." It comes from the same character row and life table that the scene's `you.age` already uses: `stage` and age from `born_ms`/`birth_age_days` at the world's pace and `life_years` law (the mind already reads `stage` in `body_now`, mind.rs:584), and how long ago the stage began from the same life table.
    - It sits beside the persona, not inside it. The authored or lived narrative stays as written.
