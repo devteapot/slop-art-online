@@ -95,6 +95,9 @@ P=$R-drop
 mkdir -p ".local/living/verify/$P"
 python3 "$V" launch --run "$P" --seed plan-test > ".local/living/verify/$P/launch.txt" 2>&1
 python3 "$C/scenes.py" drop --run "$P" > ".local/living/verify/$P/drop.txt" 2>&1
+# Whose a thing is and what places are called (features/sight.md#owners): the public land row
+# without names, land_plan with them; a newcomer told "house", the owner's community its name.
+python3 "$C/scenes.py" owners --run "$P" > ".local/living/verify/$P/owners.txt" 2>&1
 python3 "$V" cleanup --run "$P" > ".local/living/verify/$P/cleanup.txt" 2>&1
 
 # Dealings on the world's records on an island world (about 3 min): agreements, demands, regard

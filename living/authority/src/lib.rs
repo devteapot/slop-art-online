@@ -139,6 +139,8 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
         sc.validate()?
     };
     log::info!("install_script: {}", checked.summary());
+    // A world made before owner-known: its public land row loses its names, once.
+    crate::island::scrub_land(ctx);
     // The body's meters name fields of this world's vitals row.
     if let Some(e) = sc.meters_unknown(&Vitals::FIELDS).first() {
         return Err(format!("install refused: {e}"));

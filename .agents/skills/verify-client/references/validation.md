@@ -1,5 +1,9 @@
 # Client protocol validation
 
+## 2026-11-12 owner-known (Spark)
+
+Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-owner4-050631`: 42/42 (`land_plan` private; `my_known_names` returns only the caller's own known names). An earlier run, `client-owner-043942`, failed "own mind and player effects" once: the first identity's `{"wait":30}` command had ended (28 s passed before the effects probe on a loaded machine) and its plan was back to "waiting for you"; on rerun the gap was 7 s and it passed. That is a harness timing gap, not this change; the drive's 30 s command is short for a slow machine.
+
 ## 2026-11-12 far-label (Spark) After merging main (`03d32e09`, `client-far3-031340`): `far_label.py` 3/3.
 
 Branch `far-label` (`2095a272`/`18b7754b`), the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-farlabel-023653`: exit 0. New `far_label.py`, `client-far2-024145`: 3/3 (through the SDK probe the player's `seen_characters` labels a stranger at 2 m "a stranger", one at 6 m "someone too far away to make out", neither named; the far one brought to 2 m becomes "a stranger"). The first attempt (`client-far-024057`) read the probe's events wrongly (the rows were right); the script now reads `tables`.

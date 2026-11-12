@@ -313,10 +313,44 @@ pub fn layout(p: &Planned) -> Layout {
     Layout { center: p.centre, gates: p.gates.clone(), houses: p.homes.clone(), market: p.market.clone(), fields: p.fields.clone(), lots: p.lots.clone() }
 }
 
+/// Write the `land` row with its public parameters (`living_rules::land::public_params`: no
+/// names) and keep the full ones in the private `land_plan` (owner-known).
+pub fn keep_land(ctx: &ReducerContext, mut info: LandInfo) {
+    let full = std::mem::take(&mut info.params);
+    info.params = public_of(&full);
+    ctx.db.land().insert(info);
+    ctx.db.land_plan().id().delete(0);
+    ctx.db.land_plan().insert(LandPlan { id: 0, params: full });
+}
+
+/// The public form of a land's parameters as JSON text. Parameters the world was made from parse;
+/// should they not, the public row gets the defaults' `{}` rather than anyone's names.
+fn public_of(full: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(full)
+        .ok()
+        .and_then(|v| living_rules::land::public_params(&v).ok())
+        .map_or_else(|| "{}".to_string(), |v| v.to_string())
+}
+
+/// A world made before owner-known keeps its names in the public row: the next script install
+/// (every `living-publish`) moves them to `land_plan` and leaves the public row without them. Once.
+pub fn scrub_land(ctx: &ReducerContext) {
+    if ctx.db.land_plan().id().find(0).is_some() {
+        return;
+    }
+    if let Some(mut row) = ctx.db.land().id().find(0) {
+        let full = row.params.clone();
+        row.params = public_of(&full);
+        ctx.db.land().id().update(row);
+        ctx.db.land_plan().insert(LandPlan { id: 0, params: full });
+        log::info!("scrub_land: the public land row no longer carries names (kept in land_plan)");
+    }
+}
+
 /// The `land` row, lot rows and the structures at their doors (owners are set as households
 /// move in).
 pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
-    ctx.db.land().insert(h.info.clone());
+    keep_land(ctx, h.info.clone());
     build_lots(ctx, h, 0..h.lots.len(), now);
 }
 

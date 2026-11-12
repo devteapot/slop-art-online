@@ -115,7 +115,7 @@ pub fn validate_traced(s: &Scripts, limits: super::Limits) -> Result<(Report, Ve
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 15] = ["perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
+pub const ENGINE_LAWS: [&str; 16] = ["owner_shown", "perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.

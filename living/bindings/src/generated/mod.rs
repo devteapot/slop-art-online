@@ -112,7 +112,10 @@ pub mod judgment_type;
 pub mod kill_reducer;
 pub mod know_how_table;
 pub mod know_how_type;
+pub mod known_name_type;
 pub mod land_info_type;
+pub mod land_plan_table;
+pub mod land_plan_type;
 pub mod land_table;
 pub mod law_change_table;
 pub mod law_change_type;
@@ -156,6 +159,7 @@ pub mod my_fighter_table;
 pub mod my_heard_table;
 pub mod my_inventory_table;
 pub mod my_know_how_table;
+pub mod my_known_names_table;
 pub mod my_offer_type;
 pub mod my_offers_table;
 pub mod my_places_table;
@@ -389,7 +393,10 @@ pub use judgment_type::Judgment;
 pub use kill_reducer::kill;
 pub use know_how_table::*;
 pub use know_how_type::KnowHow;
+pub use known_name_type::KnownName;
 pub use land_info_type::LandInfo;
+pub use land_plan_table::*;
+pub use land_plan_type::LandPlan;
 pub use land_table::*;
 pub use law_change_table::*;
 pub use law_change_type::LawChange;
@@ -433,6 +440,7 @@ pub use my_fighter_table::*;
 pub use my_heard_table::*;
 pub use my_inventory_table::*;
 pub use my_know_how_table::*;
+pub use my_known_names_table::*;
 pub use my_offer_type::MyOffer;
 pub use my_offers_table::*;
 pub use my_places_table::*;
@@ -1112,6 +1120,7 @@ pub struct DbUpdate {
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
     land: __sdk::TableUpdate<LandInfo>,
+    land_plan: __sdk::TableUpdate<LandPlan>,
     law_change: __sdk::TableUpdate<LawChange>,
     line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
@@ -1132,6 +1141,7 @@ pub struct DbUpdate {
     my_heard: __sdk::TableUpdate<LineHeard>,
     my_inventory: __sdk::TableUpdate<Inventory>,
     my_know_how: __sdk::TableUpdate<KnowHow>,
+    my_known_names: __sdk::TableUpdate<KnownName>,
     my_offers: __sdk::TableUpdate<MyOffer>,
     my_places: __sdk::TableUpdate<Place>,
     my_readiness: __sdk::TableUpdate<Readiness>,
@@ -1320,6 +1330,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "land" => db_update
                     .land
                     .append(land_table::parse_table_update(table_update)?),
+                "land_plan" => db_update
+                    .land_plan
+                    .append(land_plan_table::parse_table_update(table_update)?),
                 "law_change" => db_update
                     .law_change
                     .append(law_change_table::parse_table_update(table_update)?),
@@ -1380,6 +1393,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_know_how" => db_update
                     .my_know_how
                     .append(my_know_how_table::parse_table_update(table_update)?),
+                "my_known_names" => db_update
+                    .my_known_names
+                    .append(my_known_names_table::parse_table_update(table_update)?),
                 "my_offers" => db_update
                     .my_offers
                     .append(my_offers_table::parse_table_update(table_update)?),
@@ -1685,6 +1701,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.land = cache
             .apply_diff_to_table::<LandInfo>("land", &self.land)
             .with_updates_by_pk(|row| &row.id);
+        diff.land_plan = cache
+            .apply_diff_to_table::<LandPlan>("land_plan", &self.land_plan)
+            .with_updates_by_pk(|row| &row.id);
         diff.law_change = cache
             .apply_diff_to_table::<LawChange>("law_change", &self.law_change)
             .with_updates_by_pk(|row| &row.id);
@@ -1865,6 +1884,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_know_how = cache
             .apply_diff_to_table::<KnowHow>("my_know_how", &self.my_know_how)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_known_names = cache
+            .apply_diff_to_table::<KnownName>("my_known_names", &self.my_known_names)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_offers = cache
             .apply_diff_to_table::<MyOffer>("my_offers", &self.my_offers)
             .with_updates_by_pk(|row| &row.id);
@@ -2030,6 +2052,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "land" => db_update
                     .land
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "land_plan" => db_update
+                    .land_plan
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "law_change" => db_update
                     .law_change
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2089,6 +2114,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_known_names" => db_update
+                    .my_known_names
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_offers" => db_update
                     .my_offers
@@ -2385,6 +2413,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "land" => db_update
                     .land
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "land_plan" => db_update
+                    .land_plan
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "law_change" => db_update
                     .law_change
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2444,6 +2475,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_known_names" => db_update
+                    .my_known_names
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_offers" => db_update
                     .my_offers
@@ -2656,6 +2690,7 @@ pub struct AppliedDiff<'r> {
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
+    land_plan: __sdk::TableAppliedDiff<'r, LandPlan>,
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
     line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
@@ -2676,6 +2711,7 @@ pub struct AppliedDiff<'r> {
     my_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     my_inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     my_know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    my_known_names: __sdk::TableAppliedDiff<'r, KnownName>,
     my_offers: __sdk::TableAppliedDiff<'r, MyOffer>,
     my_places: __sdk::TableAppliedDiff<'r, Place>,
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
@@ -2811,6 +2847,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
+        callbacks.invoke_table_row_callbacks::<LandPlan>("land_plan", &self.land_plan, event);
         callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
         callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
@@ -2851,6 +2888,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<KnowHow>("my_know_how", &self.my_know_how, event);
+        callbacks.invoke_table_row_callbacks::<KnownName>(
+            "my_known_names",
+            &self.my_known_names,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<MyOffer>("my_offers", &self.my_offers, event);
         callbacks.invoke_table_row_callbacks::<Place>("my_places", &self.my_places, event);
         callbacks.invoke_table_row_callbacks::<Readiness>(
@@ -3645,6 +3687,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
         land_table::register_table(client_cache);
+        land_plan_table::register_table(client_cache);
         law_change_table::register_table(client_cache);
         line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
@@ -3665,6 +3708,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_heard_table::register_table(client_cache);
         my_inventory_table::register_table(client_cache);
         my_know_how_table::register_table(client_cache);
+        my_known_names_table::register_table(client_cache);
         my_offers_table::register_table(client_cache);
         my_places_table::register_table(client_cache);
         my_readiness_table::register_table(client_cache);
@@ -3761,6 +3805,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "judgment",
         "know_how",
         "land",
+        "land_plan",
         "law_change",
         "line_heard",
         "line_seen",
@@ -3781,6 +3826,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_heard",
         "my_inventory",
         "my_know_how",
+        "my_known_names",
         "my_offers",
         "my_places",
         "my_readiness",

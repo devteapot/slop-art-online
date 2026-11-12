@@ -3182,6 +3182,54 @@ def names_told(s):
     s.expect("no told line or own outcome names someone the teller does not know", not bad, bad[:8])
 
 
+def owners(s):
+    """Whose a structure is, and what places are called, reach only those who know (owner-known,
+    docs/PERCEPTION.md). On a world with an authored plan (`--seed plan-test`, or `cullet`):
+    the public `land` row's params carry none of the seed's lot, spot or street names, which the
+    private `land_plan` keeps; a newcomer standing at a resident's house is told only "house" (no
+    `by` or `home_of` in its deliberation scene, no "built by" in what it notices, the owner's
+    name nowhere), while the owner, and someone of the owner's community, are told whose it is."""
+    seed = json.loads((ROOT / "living/seeds" / f"{json.loads((s.out / 'state.json').read_text())['seed']}.json").read_text())
+    plan = seed["map"]["params"]["plans"][0]
+    names = sorted({l["name"] for l in plan["lots"] if l.get("name")} | {sp["name"] for l in plan["lots"] for sp in l.get("spots", [])} | {st["id"] for st in plan.get("streets", []) if st.get("id")})
+    public = s.rows("SELECT params FROM land", "land-public")[0]["params"]
+    private = s.rows("SELECT params FROM land_plan", "land-private")
+    s.expect("the public land row carries none of the seed's lot, spot or street names", not [n for n in names if f'"{n}"' in public], [n for n in names if f'"{n}"' in public][:6])
+    s.expect("land_plan (private) keeps the full parameters with the names", private and all(f'"{n}"' in private[0]["params"] for n in names[:5]), len(private))
+    s.expect("the public land row is no bigger than the full parameters (no defaults written out)", private and len(public) <= len(private[0]["params"]), f"{len(public)} vs {len(private[0]['params']) if private else None} bytes")
+    people = {c["id"]: c for c in s.rows("SELECT id, name, alive, kind FROM character")}
+    owned = [h for h in s.rows("SELECT id, kind, owner, x, y FROM structure", "owned") if h["owner"] and h["kind"] != "remains" and people.get(h["owner"], {}).get("alive")]
+    houses = sorted(owned, key=lambda h: h["kind"] != "house")
+    s.expect("a structure with a living owner", bool(houses), len(houses))
+    members = {m["member"]: m["community"] for m in s.rows("SELECT member, community FROM membership")}
+    house = next((h for h in houses if h["owner"] in members and any(o != h["owner"] and c == members[h["owner"]] and people.get(o, {}).get("alive") and people[o]["kind"] == "person" for o, c in members.items())), houses[0])
+    owner = house["owner"]
+    owner_name = people[owner]["name"]
+    fellow = next((o for o, c in members.items() if o != owner and c == members.get(owner) and people.get(o, {}).get("alive") and people[o]["kind"] == "person"), None)
+
+    def scene_of(who, marker):
+        s.call("place_at", who, house["x"] + 1.5, house["y"] + 1.5)
+        time.sleep(1.0)
+        s.call("set_behavior", who, json.dumps({"think": f"I finished my plan. verify owners {marker}"}))
+        row = s.wait(lambda: s.rows(f"SELECT * FROM deliberation WHERE actor = {who}"), seconds=60, every=2)[0]
+        (s.out / f"{s.name}-scene-{marker}.json").write_text(row["scene"] + "\n")
+        scene = json.loads(row["scene"])
+        entry = next((x for x in scene.get("structures", []) if x.get("id") == house["id"]), None)
+        s.call("set_behavior", who, json.dumps({"wait": 120}))
+        return scene, entry, row["scene"]
+
+    newcomer = s.people(1)[0]
+    scene, entry, text = scene_of(newcomer, "newcomer")
+    s.expect("the newcomer's scene shows the structure without whose it is", entry is not None and "by" not in entry and "home_of" not in entry, entry)
+    noticed = [e["text"] for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {newcomer}") if house["kind"] in e["text"]]
+    s.expect("the newcomer's own lines and scene never name the owner", owner_name not in text and not [t for t in noticed if owner_name in t or "built by" in t], noticed[:4])
+    scene, entry, _ = scene_of(owner, "owner")
+    s.expect("the owner is told the structure is its own", entry is not None and ("home_of" in entry or "by" in entry), entry)
+    if fellow:
+        scene, entry, _ = scene_of(fellow, "fellow")
+        s.expect("someone of the owner's community is told whose it is, by name", entry is not None and owner_name in (entry.get("home_of"), entry.get("by")), {"entry": entry, "owner": owner_name})
+
+
 SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter}
 
 
@@ -3691,6 +3739,7 @@ SCENES["fights"] = fights
 SCENES["chase"] = chase
 SCENES["doing_seen"] = doing_seen
 SCENES["doing_cost"] = doing_cost
+SCENES["owners"] = owners
 
 
 def main():

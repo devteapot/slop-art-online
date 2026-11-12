@@ -2805,6 +2805,15 @@ fn communities_law() {
 
 fn purpose_law() { #{ cadence: "event", topic: "purpose", about: "beyond staying alive, how you spend your days is yours to decide, from who you are and what you want." } }
 
+// Whether an observer is told whose a structure is ("Agnes Fenner's house"): `o.knows`, it knows
+// the owner's name; `o.shows`, the structure shows its owner (its kind's `shows_owner` in
+// `structures()`, a sign or marker); `o.kind`, the structure's kind. A world may extend it.
+fn owner_shown(o) { o.knows || o.shows }
+fn owner_shown_law() {
+    #{ cadence: "event", topic: "",
+       about: "whose a building or a thing is shows only to one who knows the owner by name, or when it shows its owner (a sign); otherwise it is just a house, a store, a hearth." }
+}
+
 fn perceived_of_law() {
     #{ cadence: "event", topic: "others",
        about: "You cannot read minds; what others say may be false. You only know what you perceived or were told. You know someone's name once they say it, or you are family, of one community, or close; until then they are a stranger to you." }
