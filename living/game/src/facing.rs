@@ -42,6 +42,14 @@ pub const KEY: KeyCode = KeyCode::F5;
 /// The Spark is adding it (`walk_base`, default 2.6 m/s); rename here when its name lands.
 pub const WALK_LAW: &str = "walk_base";
 pub const WALK_CHOICES: [f32; 3] = [2.6, 3.0, 3.4];
+/// How close the law's value must be to a choice to be that choice (m/s; floats read back from
+/// text, 2.6 against 2.5999).
+pub const WALK_TOL: f32 = 0.05;
+
+/// The choice the world's walk speed is, if it is one of [`WALK_CHOICES`].
+pub fn walk_choice(walk: f32) -> Option<f32> {
+    WALK_CHOICES.iter().copied().find(|c| (c - walk).abs() < WALK_TOL)
+}
 
 /// Facing sight as this client knows it.
 #[derive(Resource, Default)]
@@ -66,6 +74,8 @@ pub struct FovState {
     pub note: Option<(String, f64)>,
     /// The world's walking speed law ([`WALK_LAW`]) as the installed script has it, if it has it.
     pub walk: Option<f32>,
+    /// The walk speed chips Settings shows now (label, selected), for the UI dump.
+    pub walk_chips: Vec<(String, bool)>,
     /// The script revision `walk` was read for.
     walk_rev: Option<u32>,
 }
@@ -279,6 +289,14 @@ fn link(mut admin: NonSendMut<AdminLink>, mut st: ResMut<FovState>, net: NonSend
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_walk_speed_is_a_choice_within_the_tolerance() {
+        assert_eq!(super::walk_choice(2.6), Some(2.6));
+        assert_eq!(super::walk_choice(2.5999), Some(2.6));
+        assert_eq!(super::walk_choice(3.02), Some(3.0));
+        assert_eq!(super::walk_choice(2.8), None);
+    }
+
     use super::*;
 
     #[test]

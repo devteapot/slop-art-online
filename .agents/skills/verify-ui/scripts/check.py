@@ -1405,8 +1405,12 @@ def walk_law(run, c):
     (`set_world_law`), as the authority records (`law_change`)."""
     s = "walk-law"
     plan = ("ready;wait:3;click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;dump:01;shot:01_walk;"
-            "click:@settings:walk:3.0;wait:4;dump:02;shot:02_walk_3;click:@settings:walk:2.6;wait:4;dump:03;quit")
-    out, code, text = drive(run, s, plan, extra=["--admin-link"])
+            "click:@settings:walk:3.0;wait:4;dump:02;shot:02_walk_3;click:@settings:walk:2.6;wait:4;dump:03;"
+            "sync:odd;wait:4;dump:04;shot:04_walk_2_8;sync:float;wait:4;dump:05;shot:05_walk_2_5999;click:@settings:walk:2.6;wait:4;dump:06;quit")
+    # A value none of the choices is, and 2.6 written as a float reads back (admin calls, as
+    # another client or an admin would set it).
+    syncs = ['odd=set_world_law|"walk_base"|"2.8"', 'float=set_world_law|"walk_base"|"2.5999"']
+    out, code, text = drive(run, s, plan, extra=["--admin-link"], syncs=syncs)
     c.check(s, "client ran and joined", code == 0, text[-300:])
     fs = lambda k: (((dump(out, k) or {}).get("extra") or {}).get("facing_sight") or {})
     c.check(s, "the row reads walk_base from the installed script (2.6 m/s)", abs((fs("01").get("walk") or 0) - 2.6) < 0.05 and "settings:walk:3.0" in ((dump(out, "01") or {}).get("tags") or {}), str(fs("01")))
@@ -1414,6 +1418,15 @@ def walk_law(run, c):
     changes = [r for r in sql(run, "SELECT name, old, new FROM law_change WHERE name = 'walk_base'")]
     c.check(s, "3.0 is written as the world's law and read back", abs((fs("02").get("walk") or 0) - 3.0) < 0.05 and any(r.get("new") == "3.0" for r in changes), f"{fs('02').get('walk')}; {changes}")
     c.check(s, "and 2.6 again", abs((fs("03").get("walk") or 0) - 2.6) < 0.05 and any(r.get("new") == "2.6" for r in changes), f"{fs('03').get('walk')}; {changes}")
+    # The chips (walk-chip-1): exactly the three choices, the current one selected; a value none
+    # of them is, one more chip, selected; never a chip repeating a choice.
+    chips = lambda k: fs(k).get("walk_chips") or []
+    sel = lambda k: [l for l, on in chips(k) if on]
+    c.check(s, "at 2.6: exactly the three chips, 2.6 selected", [l for l, _ in chips("03")] == ["2.6 m/s", "3.0 m/s", "3.4 m/s"] and sel("03") == ["2.6 m/s"] and sel("01") == ["2.6 m/s"] and len(chips("01")) == 3, f"{chips('01')}; {chips('03')}")
+    c.check(s, "at 3.0: three chips, 3.0 selected", len(chips("02")) == 3 and sel("02") == ["3.0 m/s"], str(chips("02")))
+    c.check(s, "at 2.8 (set elsewhere): four chips, the extra one 2.8, selected", [l for l, _ in chips("04")] == ["2.6 m/s", "3.0 m/s", "3.4 m/s", "2.8 m/s"] and sel("04") == ["2.8 m/s"] and "settings:walk:other" in ((dump(out, "04") or {}).get("tags") or {}), str(chips("04")))
+    c.check(s, "at 2.5999: the 2.6 chip, no fourth", len(chips("05")) == 3 and sel("05") == ["2.6 m/s"] and "settings:walk:other" not in ((dump(out, "05") or {}).get("tags") or {}), f"walk {fs('05').get('walk')}; {chips('05')}")
+    c.check(s, "2.6 chosen again: three chips", len(chips("06")) == 3 and sel("06") == ["2.6 m/s"], str(chips("06")))
 
 
 def pools(run, c):
