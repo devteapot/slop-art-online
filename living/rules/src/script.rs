@@ -438,8 +438,13 @@ pub struct Laws {
     /// How long a played character stands without any connection of its person before the
     /// world's minds take it over (seconds; docs/PLAYER_MEMORY.md).
     pub takeover_s: f32,
-    /// How long one `follow` lasts before the follower looks again, seconds.
+    /// How long one `follow` lasts before the follower looks again, seconds (also how long a
+    /// `keep_distance` or a `circle` lasts when it names no time).
     pub follow_s: f32,
+    /// A movement held to a creature (`follow`, `keep_distance`, `circle`, `close_in`,
+    /// `back_off`) goes by where it was last seen while it is out of sight, and ends when it has
+    /// not been seen for this many seconds (`steer::INTENTS`).
+    pub lost_after_s: f32,
     /// `read` with nothing named reads the nearest sign within this many metres.
     pub read_sign_m: f32,
     /// Others of one's own kind within this many metres count as kin near (`a.actor.kin_near`).
@@ -533,6 +538,7 @@ impl Default for Laws {
             flee_clear: 9.0,
             takeover_s: 30.0,
             follow_s: 12.0,
+            lost_after_s: 2.0,
             read_sign_m: 8.0,
             kin_near_m: 4.0,
             trade_window_s: 180.0,
@@ -2485,6 +2491,7 @@ impl Scripts {
             flee_clear: g("flee_clear", l.flee_clear).clamp(1.0, 60.0),
             takeover_s: g("takeover_s", l.takeover_s).clamp(0.0, 3_600.0),
             follow_s: g("follow_s", l.follow_s).clamp(0.5, 600.0),
+            lost_after_s: g("lost_after_s", l.lost_after_s).clamp(0.0, 60.0),
             read_sign_m: g("read_sign_m", l.read_sign_m).clamp(0.0, 64.0),
             kin_near_m: g("kin_near_m", l.kin_near_m).clamp(0.0, 32.0),
             trade_window_s: g("trade_window_s", l.trade_window_s).clamp(1.0, 3_600.0),
@@ -3235,7 +3242,7 @@ mod tests {
         assert_eq!(with(|k| k.latch), "build cook craft eat experiment feed gather give make plant read rest sleep store take teach write");
         assert_eq!(with(|k| k.notable), "attack build conceive cook craft feed give make store take threaten yield");
         assert_eq!(with(|k| k.moving), "eat signal wait");
-        assert_eq!(with(|k| k.moment), "flee follow graze rest sleep wait wander");
+        assert_eq!(with(|k| k.moment), "circle flee follow graze keep_distance rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
         assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
@@ -3798,7 +3805,7 @@ mod tests {
         let real: Vec<&str> = s.skills().names().filter(|n| sh.real_time(n)).collect();
         let mut real = real;
         real.sort();
-        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
+        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "keep_distance", "circle", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
         let mut reflex: Vec<&str> = s.skills().names().filter(|n| sh.reflex(n)).collect();
         reflex.sort();
         assert_eq!(reflex, sorted(vec!["flee", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"]));
