@@ -807,6 +807,28 @@ pub struct Artifact {
 
 pub const FAM_ARTIFACT: u64 = 4 << 40;
 
+/// A figure seen too far away to make out, as one observer's mind knows it (far-handle): its
+/// handle (`FAR_HANDLE_BASE + id`) names the figure in that mind's scene and experiences in
+/// place of the person's id, for one sighting (a figure out of sight for `far::SIGHTING_GAP_MS`
+/// is a new sighting). Acts, graph targets and speech that name the handle reach the person.
+/// When the observer can make them out, `made_out_ms` is set and the observer is told whom the
+/// handle was (an experience with subject the person and object the handle), so its memory joins
+/// the two. Private; read by the authority only. A few rows per observer, bounded (`far::prune`).
+#[spacetimedb::table(accessor = far_handle,
+    index(accessor = by_observer_target, btree(columns = [observer, target])))]
+#[derive(Clone, Debug)]
+pub struct FarHandle {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u32,
+    pub first_ms: u64,
+    pub last_ms: u64,
+    pub made_out_ms: u64,
+}
+
 /// Bodily familiarity: regions, creatures and structures a character has encountered.
 /// Recognition, not knowledge: it decides what is new enough to become an experience.
 /// `thing` = FAM_REGION | chunk, FAM_CREATURE | id, or FAM_STRUCTURE | id. Bounded per actor.

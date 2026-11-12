@@ -263,6 +263,12 @@ pub enum Precision {
 /// ("someone too far away to make out #77").
 pub const FAR_PERSON: &str = "someone too far away to make out";
 
+/// Where the handles of figures too far away to make out begin (far-handle): a mind's scene and
+/// experiences name such a figure by a handle of its own sighting, never by the person's id, so
+/// nothing else in a prompt (relations, community, memory) can tie the figure to a name. No
+/// character, structure or resource id reaches it.
+pub const FAR_HANDLE_BASE: u32 = 1_000_000_000;
+
 /// The `perceived_of` law's answer: which fields of the target the observer gets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Regard {
@@ -1344,7 +1350,7 @@ impl Scripts {
                 continue;
             }
             let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
-            const KNOWN: &[&str] = &["aim", "timed", "rooted", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
+            const KNOWN: &[&str] = &["aim", "timed", "rooted", "committed", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
             if let Some(k) = m.keys().find(|k| !KNOWN.contains(&k.as_str())) {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", KNOWN.join(", ")));
             }
@@ -1366,6 +1372,7 @@ impl Scripts {
                 aim,
                 timed: flag("timed")?,
                 rooted: flag("rooted")?,
+                committed: flag("committed")?,
                 hostile: flag("hostile")?,
                 reflex: flag("reflex")?,
                 // A dash evades unless it says otherwise; nothing else does.
@@ -3784,6 +3791,9 @@ mod tests {
         assert_eq!(with(|x| x.missile), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.aim == Aim::Point), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.rooted), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot"]));
+        // Committed (combat minds §3.2, committed-moves): every windup and the dashes, the same for
+        // every controller.
+        assert_eq!(with(|x| x.committed), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot", "throw", "dodge", "jump"]));
         assert_eq!(with(|x| x.hostile), sorted(vec!["attack", "throw", "shoot", "threaten", "strike", "bowshot", "firebolt"]));
         assert_eq!(with(|x| x.force), sorted(vec!["attack", "throw", "shoot", "yield", "strike", "bowshot", "firebolt"]));
         assert_eq!(with(|x| x.dares), sorted(vec!["attack", "seize", "strike"]));
@@ -3867,6 +3877,21 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
     /// past that with the same words as before; a world's own kind of store holds its own and is
     /// found wherever a storage is asked for by name (`like`). Cullet's four stores hold theirs,
     /// and a crate anyone builds there is the shipped storage again.
+    #[test]
+    fn a_world_switches_committed_per_skill_in_its_own_laws() {
+        // A world's laws (an overlay through `floors::compose`, as a seed's `laws_file` is
+        // installed) may make one skill uncommitted without touching code; the others keep theirs.
+        let src = include_str!("../../scripts/skills.rhai");
+        let w = Scripts::new(&crate::floors::compose(src, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }").unwrap()).unwrap();
+        let sh = w.shapes();
+        assert!(!sh.get("dodge").unwrap().committed);
+        assert!(sh.get("jump").unwrap().committed && sh.get("strike").unwrap().committed && sh.get("throw").unwrap().committed);
+        // The rest of the dodge's shape is the shipped one, and no `base_dodge` skill appears.
+        assert_eq!(sh.get("dodge").unwrap().aim, crate::combat::Aim::Dash);
+        assert!(sh.get("dodge").unwrap().evades && sh.get("base_dodge").is_none());
+        assert!(scripts().shapes().get("dodge").unwrap().committed);
+    }
+
     #[test]
     fn a_store_holds_what_its_kind_holds() {
         let shipped = scripts();

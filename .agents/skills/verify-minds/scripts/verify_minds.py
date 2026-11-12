@@ -22,7 +22,7 @@ spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
          'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run', 'timings', 'queued', 'doing',
-         'intents')
+         'intents', 'far-figure')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -396,6 +396,8 @@ def run_case(run, case):
         return drop_case(run)
     if case == 'death-names':
         return death_names_case(run)
+    if case == 'far-figure':
+        return far_figure_case(run)
     if case == 'health-seen':
         return health_seen_case(run)
     if case == 'resident':
@@ -1003,8 +1005,13 @@ def doing_case(run):
     run.admin('set_behavior', eye, json.dumps({'wait': 300}))
     run.admin('place_at', eye, *e)
     run.admin('place_at', other, e[0] + 3.0, e[1])
-    run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] + 4.0, e[1]]}}}, {'wait': 300}]}))
-    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['outcome']], 'the eye turned to the other', 20)
+    # Turned away first, then to the other: a graph's turn to where it already faces is refused
+    # ("you already face it") and leaves no `skill_use` row, and the eye may face east already;
+    # after the turn west, the turn east is a real one with its row (`body.heading` is the
+    # segment's start, not the facing now).
+    run.admin('set_behavior', eye, json.dumps({'seq': [{'first': [{'do': {'skill': 'face', 'target': {'at': [e[0] - 4.0, e[1]]}}}, {'wait': 0.1}]}, {'wait': 1.5},
+                                                       {'first': [{'do': {'skill': 'face', 'target': {'at': [e[0] + 4.0, e[1]]}}}, {'wait': 0.1}]}, {'wait': 300}]}))
+    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['aim_x'] > e[0] and u['outcome']], 'the eye turned to the other', 20)
     run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'block', 'qty': 5000}}]}))
     run.wait(lambda: [f for f in run.private(f'SELECT * FROM fighter WHERE id = {other}', 'fighter-other') if f['act'] != 0], 'the guard is up', 20)
     script = {'replies': {'think': {'thought': 'They hold up a guard.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
@@ -1114,6 +1121,91 @@ def death_names_case(run):
     (run.directory / 'death-names.json').write_text(json.dumps(texts, indent=2))
     assert all(checks.values()), checks
     return {'status': 'pass', **texts}
+
+
+FAR = 'someone too far away to make out'
+FAR_HANDLE_BASE = 1_000_000_000
+
+
+def far_figure_case(run):
+    """A mind cannot name someone it cannot make out (far-handle, docs/STRANGERS.md §1). The mind's
+    character M and its neighbour F share a community, and F is in M's relations (the prompt lists
+    "F (#id)"). An overlay of `perceived_of` makes everyone past 4 m `far` (as Cullet's law past
+    24 m). F stands 5 m from M and says a line. M's prompt shows a figure too far away to make out
+    under a handle of its own (not F's id), F's line tagged with that handle, and nowhere ties the
+    figure to F's name or id. M acts on the handle (a wave reaches F). F comes within 2 m: M is
+    told whom the figure was (the handle joined to F's id), and the scene names F."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    m, f = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    fname = names[f]
+    for who in (m, f):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    act = lambda who, node: run.admin('mind_act', who, [json.dumps(node)], 'verify-minds')
+    run.admin('place_near', f, m)
+    act(m, {'do': 'found', 'text': f'Verify Strand {m}'})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {m}', 'm-membership'), 'community founded', 20)
+    act(f, {'do': 'join', 'target': {'id': m}})
+    run.wait(lambda: run.sql(f'SELECT * FROM join_request WHERE asker = {f}', 'join-request'), 'join request', 20)
+    act(m, {'do': 'welcome', 'target': {'id': f}})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {f}', 'f-membership'), 'neighbour welcomed', 20)
+    run.admin('set_background', m, json.dumps({'sheet': {'narrative': 'I keep the strand with my neighbour.', 'values': ['care'], 'goals': ['keep the strand'],
+        'mood': 'settled', 'relations': [{'id': f, 'trust': 50, 'affinity': 50, 'label': 'neighbour', 'note': 'lives two doors down'}]}}))
+    # Everyone past 4 m is too far away to make out.
+    shipped = (ROOT / 'living/scripts/skills.rhai').read_text()
+    overlay = shipped.replace('fn perceived_of(p)', 'fn base_perceived_of(p)', 1) + \
+        '\nfn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }\n'
+    (run.directory / 'far-overlay.rhai').write_text(overlay)
+    subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db, str(run.directory / 'far-overlay.rhai')], check=True, cwd=ROOT, capture_output=True, timeout=120)
+    try:
+        body = run.sql(f'SELECT * FROM body WHERE id = {m}', 'm-body')[0]
+        run.admin('place_at', f, body['x'] + 5.0, body['y'])
+        time.sleep(2.0)
+        script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        run.start(model(run, script), [m])
+        # F says a line to the room, as the world's minds say one (`mind_say`, admin).
+        run.admin('mind_say', f, 'Fine weather on the strand today.', 0, 'say', 0, {'kind': 'talk', 'summary': 'verify far-figure line', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''})
+        time.sleep(2.0)
+        requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+        sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+        asked = lambda marker: [sent_text(e) for e in requests() if f'verify {marker}' in sent_text(e)]
+        run.admin('set_behavior', m, json.dumps({'think': 'I finished my plan. verify far'}))
+        prompt = run.wait(lambda: asked('far'), 'prompt with the far figure', 60)[0]
+        (run.directory / 'prompt-far.txt').write_text(prompt)
+        handles = sorted({int(h) for h in re.findall(r'"id": ?(\d{10,})', prompt) if int(h) >= FAR_HANDLE_BASE})
+        figure = [l for l in prompt.split('\n') if FAR in l]
+        tied = [l for l in prompt.split('\n') if any(str(h) in l for h in handles) and (fname in l or f'#{f})' in l or f'=#{f}' in l or f'"id": {f}' in l or f'"id":{f}' in l)]
+        checks = {
+            'scene_has_a_far_figure_by_handle': bool(handles) and any(FAR in l for l in figure),
+            'scene_has_no_entry_with_f_id': not re.search(r'"id": ?%d\b' % f, prompt),
+            'relations_list_names_f': f'{fname} (#{f})' in prompt,
+            'f_line_tagged_by_handle': any('Fine weather' in l and any(f'=#{h}' in l for h in handles) and f'#{f}' not in l and fname not in l for l in prompt.split('\n')),
+            'nothing_ties_the_figure_to_f': not tied,
+        }
+        # The mind acts on the handle: a wave reaches F.
+        if handles:
+            t0 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+            act(m, {'do': 'wave', 'target': {'id': handles[0]}})
+            waves = run.wait(lambda: [u for u in run.private(f'SELECT * FROM skill_use WHERE actor = {m}', 'waves') if u['skill'] == 'wave' and u['at_ms'] >= t0], 'the wave at the handle', 20)
+            checks['an_act_on_the_handle_reaches_f'] = waves[0]['target'] == f
+        # Brought within 2 m: M is told whom the figure was; the scene names F.
+        run.admin('place_at', f, body['x'] + 2.0, body['y'])
+        time.sleep(21.0)
+        run.admin('set_behavior', m, json.dumps({'think': 'I finished my plan. verify near'}))
+        near = run.wait(lambda: asked('near'), 'prompt with F made out', 60)[0]
+        (run.directory / 'prompt-near.txt').write_text(near)
+        made = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {m}', 'experiences-m') if e['kind'] == 'made_out']
+        checks['made_out_joins_handle_to_f'] = any(e['subject'] == f and e['object'] in handles for e in made)
+        checks['near_scene_names_f'] = bool(re.search(r'"id": ?%d\b' % f, near)) and f'"{fname}"' in near
+    finally:
+        subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db], cwd=ROOT, capture_output=True, timeout=120)
+    result = {'f': f, 'name': fname, 'handles': handles, 'figure_lines': figure[:4], 'tied': tied, 'made_out': [e['text'] for e in made], 'checks': checks}
+    (run.directory / 'far-figure.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
 
 
 def health_seen_case(run):

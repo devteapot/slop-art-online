@@ -530,6 +530,28 @@ def channels(s):
     time.sleep(1.0)
     learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == p.id and x["since_ms"] >= t)
     s.expect("names: saying a given name (Mara of Mara Quill) introduces to those in earshot", learned == sorted(w for w in (a, b, c, e, d) if math.dist(at[p.id], at[w]) <= 9.0), learned, fatal=False)
+    time.sleep(GAP)
+    # Someone too far away to make out (fix-far-silence): with an overlay of `perceived_of` that
+    # makes everyone past 8 m `far` (as Cullet's law does past 24 m), the label is not followed by
+    # "is too far away": the words say "They are …", in the silence row and the player's outcome.
+    shipped = (scenes.ROOT / "living/scripts/skills.rhai").read_text()
+    far_law = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 8.0 { r.name = false; r.health = "none"; r.far = true; } r }'
+    s.call("install_script", scenes.compose(shipped, {"perceived_of": far_law}))
+    try:
+        r, got, t = line_by(a, "Can you hear me, far one?", e, "say", "silence-far")
+        sil = [x["text"] for x in got[a] if x["kind"] == "silence"]
+        want = "They are too far away: they could not have heard you." if not night else "They are out of earshot: they could not have heard you."
+        s.expect("far: a line to e, too far away to make out, reads `They are …`, not the label twice", sil == [want] and not any("make out is" in x for x in sil), sil, fatal=False)
+        time.sleep(GAP)
+        t = now(s)
+        p.call("human_say", ["Can you hear me, far one?", d])
+        time.sleep(1.0)
+        psil = [x for x in rows(p.id, t) if x["kind"] == "silence"]
+        outs = [o for o in s.rows(f"SELECT * FROM act_outcome WHERE observer = {p.id}") if psil and o["id"] == psil[0]["id"]]
+        s.expect("far: the player's silence and act outcome to d say `They are out of earshot …`",
+                 [x["text"] for x in psil] == ["They are out of earshot: they could not have heard you."] and len(outs) == 1 and outs[0]["why"] == psil[0]["text"], (psil, outs), fatal=False)
+    finally:
+        s.call("install_script", shipped, check=False)
 
 
 def metrics(s):

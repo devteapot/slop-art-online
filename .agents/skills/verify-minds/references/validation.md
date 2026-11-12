@@ -1,5 +1,23 @@
 # Internal mind validation
 
+## 2026-11-12 committed-moves, second pass (Spark)
+
+With origin/main `a07f5919` merged and `throw` committed: `minds-commit5-071222` `acts` passes.
+
+## 2026-11-12 committed-moves (Spark)
+
+Branch `committed-moves` from origin/main `2ff786aa`, the trial service, the fake model. `minds-commit-062424`: `acts` passes; `doing` failed on its fixture: the eye's first turn east was refused ("you already face it", which leaves no `skill_use` row) when it already faced east. The case now turns it west first and waits for the east turn's row; `minds-commit3-063146` `doing` passes.
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle` (from main `b657a344`), the trial service `slop-trials-stdb`, the fake model. New case `far-figure` (`minds-farhandle2-*`): 8/8. F, in M's relations as "Walker2 (#266)", stood 5 m off under an overlay making everyone past 4 m far:
+- the scene showed `{"id": 1000000059, "who": "someone too far away to make out"}`;
+- F's line read "Someone too far away to make out said: “Fine weather on the strand today.” {someone too far away to make out=#1000000059}";
+- no line tied the handle to Walker2 or #266;
+- a wave at the handle reached #266;
+- at 2 m the `made_out` row joined the handle to #266 and the scene named Walker2.
+
+The first attempt failed only because F's graph room line was never said; F now speaks by admin `mind_say`. The release mind's tests: 106 pass.
+
 ## 2026-11-12 move-intents (Spark)
 
 Branch `move-intents`, the trial service, the fake model, `--no-unit-tests` (the check ran the mind's build). `minds-intents-061748`: `intents` (new) passes. The prompt documents the five intents with their arguments, m/s and "lost sight of them". The plan `keep_distance` 3–6 m is kept as the `current plan` routine `{"do":{"skill":"keep_distance","target":{"id":7},"qty":120,"min":3.0,"max":6.0}}`, and `steer` is goal 5 (keep 3, far 6, flag 128). The character backs off at its walk (3.37 m/s) when the other walks at it. Earlier attempts placed the two in town at night, where a wall hid one ("no #7 in sight"); the case now uses an open row. Not run: the other cases (the scene gate runs roundtrip, acts, dealings, conversation).

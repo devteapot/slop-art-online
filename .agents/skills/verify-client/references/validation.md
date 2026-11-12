@@ -1,5 +1,9 @@
 # Client protocol validation
 
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle`: `far_label.py` 3/3 (players' rows are unchanged: they keep real ids).
+
 ## 2026-11-12 fix-unseen-killer-id (Spark)
 
 Branch `fix-unseen-killer-id` from `7729fc9b`, the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-unseen-061951`: 42/42 (no schema change: `vitals.hurt_by`, `act_outcome.other` and `combat_seen.target` keep their columns; private tables and caller-scoped views as before).
