@@ -16,8 +16,9 @@ in each file: a jersey under a smock under its bands and its apron; trousers und
 smock and an apron; a jersey tucked into the trousers) it measures, frame by frame, how far the inner piece's vertices
 stand outside the outer piece's surface: at each inner vertex, the nearest of the outer piece's
 outward-facing vertices within 4 cm, and the distance along that vertex's normal; a
-vertex whose nearest is at the outer piece's open edge (a hem, a neck hole) is past the piece
-and is not counted. It prints the
+vertex whose nearest is at the outer piece's open edge (a hem, a neck hole), or more than
+15 mm to the side of it (what shows in a coat's open front), is past the piece and is not
+counted. It prints the
 worst of each pair in each clip and fails (exit 1) if anything stands out by more than `--least`
 millimetres (default 2). Sleeves are left out: an arm swings through a skirt in any clip that
 swings it, and that is the clip's, not the clothes'.
@@ -175,7 +176,7 @@ def over(inner, outer):
     return inner.slot == "upper" and inner.layer == 0 and outer.slot == "lower"
 
 
-def through(inner, pi, outer, po, no, axis, reach=0.04):
+def through(inner, pi, outer, po, no, axis, reach=0.04, beside=0.015):
     """How far each of the inner piece's vertices stands outside the outer piece (metres; nan where
     the outer piece is not near)."""
     keep = ~outer.on_arm
@@ -183,7 +184,15 @@ def through(inner, pi, outer, po, no, axis, reach=0.04):
         return np.full(len(pi), np.nan)
     c = axis[np.argmin(((po[keep][:, None, :] - axis[None, :, :]) ** 2).sum(axis=2), axis=1)]
     out_face = (no[keep] * (po[keep] - c)).sum(axis=1) > 0
-    q, n, rim = po[keep][out_face], no[keep][out_face], outer.rim[keep][out_face]
+    # A solid piece (a coat with its lining) has no open edge: its edge is where its outward
+    # faces meet the ones that face in. Those vertices and their neighbours count as its rim.
+    facing = np.zeros(len(po), bool)
+    facing[np.where(keep)[0][out_face]] = True
+    turn = facing[outer.tris].any(axis=1) & ~facing[outer.tris].all(axis=1)
+    edge = np.zeros(len(po), bool)
+    edge[outer.tris[turn].ravel()] = True
+    edge[outer.tris[edge[outer.tris].any(axis=1)].ravel()] = True
+    q, n, rim = po[keep][out_face], no[keep][out_face], (outer.rim | edge)[keep][out_face]
     if not len(q):
         return np.full(len(pi), np.nan)
     depth = np.full(len(pi), np.nan)
@@ -193,7 +202,11 @@ def through(inner, pi, outer, po, no, axis, reach=0.04):
         d2 = ((pi[i][:, None, :] - q[None, :, :]) ** 2).sum(axis=2)
         k = d2.argmin(axis=1)
         near = (d2[np.arange(len(i)), k] < reach * reach) & ~rim[k]
-        depth[i[near]] = ((pi[i[near]] - q[k[near]]) * n[k[near]]).sum(axis=1)
+        out = ((pi[i] - q[k]) * n[k]).sum(axis=1)
+        # Under the piece, not beside it: a coat is a solid with no open edge, and what shows in
+        # its open front is not through it. The nearest vertex must be nearly straight above.
+        near &= d2[np.arange(len(i)), k] - out * out < beside * beside
+        depth[i[near]] = out[near]
     return depth
 
 

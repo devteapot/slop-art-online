@@ -1910,7 +1910,7 @@ python3 living/tools/characters/cloth_check.py NAME.params.json [--clip idle,wal
 - A skirt's panels now start to follow the thigh at the hip joint and have most of it a hand below (`torso_w`: from rest height 0.95 over 0.20, where it was from 0.93 over 0.25), and the trouser leg's top ring turns a quarter with the hips (it was an eighth). After: nothing through any smock, on either form, lean, heavy or child, at rest, in `idle` or in `walk`.
 - This changes the weights of the `-m` smocks, aprons, coats and trousers too. Their rest shape is the same.
 - **A vertex the belly's bone shares is written again** for the weights it ends with (`belly_weights`, `Stance.written`): the belly's bone has no scale in the client, so on the scaled form a jersey's front stood 3 to 5 mm out of the trousers it is tucked into.
-- **Left for the cloth part, as measured:** a jersey's collar through a coat's at the upper chest (3.4 mm on a man, 5.0 on a woman, 2 to 8 vertices, at rest too); the jersey's front through the trousers' waist on a lean or a strong build of either form (6 to 7 mm), because the belly's bone is not scaled with `build`.
+- **Left for the cloth part, as measured:** the jersey's front through the trousers' waist on a lean or a strong build of either form (6 to 7 mm), because the belly's bone is not scaled with `build`. (A jersey's collar "through a coat's" by 3 to 5 mm, reported with this part, was the check's mistake: see [the body: cloth](#the-body-cloth).)
 
 **What did not change:** the rest skeleton, the clips, every `-m` piece's rest shape, the men's, boys' and children's types, their hair, the faces, the pages' layout (`same.py`-style comparison against the last bundle: 144 of 216 shared files the same to a micrometre before the skirt's weights).
 
@@ -1928,6 +1928,52 @@ python3 living/tools/characters/cloth_check.py NAME.params.json [--clip idle,wal
 4. **The bust** stands 0.4% of the height before the waist's front against 0.7, and the chest under the arms is 12.9 wide against 14.0: the cage has one ring between the bust and the armhole.
 5. **The neck** is 3.7% of the height at its narrowest against 4.1.
 6. **The calf,** under the boot: 4.4 against 5.3.
+
+### The body: cloth
+
+The body pass, second part (2026-11-12, branch `char-4-body`): how the jersey, smock, coat and trousers sit on the corrected bodies, at rest and on the `idle` and `walk` clips, with `cloth_check.py`'s numbers before and after.
+
+**One of the two faults handed over was not one.**
+
+- **"A jersey's collar through a coat's" was the check's mistake.** The vertices it named are the jersey's middle front, showing in the coat's open front, 25 mm to the side of the coat's edge. A coat is a solid with no open edge, so the check did not see that they lie beside it and not under it. `cloth_check.py` now counts a vertex only if the nearest of the outer piece's vertices is nearly straight above it (within 15 mm to the side). With that the pair is clear on both forms, at rest and in both clips.
+
+**What was wrong, measured on Cullet's 64 residents and 23 test lines** (every outfit on both forms, lean, heavy, strong, a girl of 12 and of 15, an old woman, two children). People with anything through by more than 2 mm, the median of their worst, and the most:
+
+| Clip | before | after |
+|---|---|---|
+| at rest, `idle`, `talk`, `wave`, `bow_shoot` | 34 of 87 (the jersey out of the trousers' waist: 4.0 to 7.5 mm, 37 mm on a heavy man) | none |
+| `walk` | the same 34; on main also a thigh through a skirt, 2.4 to 5.6 mm | none |
+| `walk_brisk` | 49 of 64 residents, 17.1 mm, 26.6 | 17 of 87, 5.1 mm, 7.6 |
+| `run` | 36 of 64, 8.0 mm, 18.9 | 2 of 87, 2.5 mm, 3.0 |
+| `sneak` | 49 of 64, 13.7 mm, 22.8 | 7 of 87, 5.4 mm, 26.7 |
+| `sit_idle` | 51 of 64, 12.7 mm, 16.6 | 7 of 87, 3.9 mm, 37.3 |
+| `sword_slash` | 51 of 64, 12.3 mm, 21.5 | 48 of 87, 4.2 mm, 38.3 |
+| `gather` | 60 of 64, 18.6 mm, 39.0 | 82 of 87, 8.7 mm, 35.2 |
+| `sit_down` | 64 of 64, 30.4 mm, 39.4 | 85 of 87, 27.6 mm, 39.4 |
+
+- The clips past `walk` were first measured part way through (after the folds, before the skirt rode the thighs, and with the check before its last correction), on the residents alone. They are a fair before for the skirts and no more.
+- **What is left in a brisk walk** is the inside of the lifted thigh, near the knee, through the panel between the legs: 3 to 9 vertices in 2 of 16 frames, where the thigh is 53° up. A panel between the legs takes half of each and cannot follow both.
+- **Sitting down, gathering and a sword's slash are not solved.** A hip bent 90° is past what weights alone do for a skirt or a coat; `sit_idle`, once seated, is mostly clear.
+
+**What changed:**
+
+- **The trousers' waist follows the belly's bone** (`BELLY_PARTS`), with the same weights by place as the jersey tucked into it. Before, the bone carried the jersey's front and not the waistband: the two parted on any build but the standard one, because the bone is not scaled with `build`, and a belly stood out over the waistband as a shelf (31 to 37 mm on the heavy). Now a belly rounds the waistband out with it.
+- **The jersey is tucked in** (`upper_garment`'s `tuck`): below the trousers' top it lies 3 mm off the body where it lay 8, and its ribbed hem 6 where it lay 11, a millimetre inside the waistband. That millimetre showed as slivers of jersey through the back of the waistband on both forms. The check's 2 mm did not catch it; the photographs did.
+- **A skirt lies on the thighs** (`torso_w`): its panels ride the same side's upper leg, 0.97 of it in front and 0.80 behind, from just under the hip joint (rest height 0.97, whole 14 cm below). With the silhouettes it was 0.85 and 0.55 from 0.95 over 20 cm, which was enough for the walk and not for a thigh 45° up. Seated, a skirt now lies on the lap.
+- **A smock's skirt hangs in folds** (`FOLDS`, `FOLD_DEEP`): five soft flutes round it, nothing at the hips and 2.6 cm in and out at the hem, the middle of the front on a crest. The apron lies on the same folds. The hem is a scalloped line where it was a circle. A coat's skirt is left smooth.
+- **Collars** were looked at close up at rest and on `idle_look`, `nod`, `shake_head` and `walk` (the roll neck, a coat's stand collar, a smock's low one, on a woman, a girl, a man and a child): no neck through a collar and no gap opening. Nothing was changed.
+- **The check** learnt two things on the way: a vertex counts only if the outer piece's nearest vertex is nearly straight above it, and a solid piece's rim is where its outward faces meet its lining. Both stop it reading what shows in a coat's open front as through the coat.
+
+**Files:** every outfit piece of both forms (the trousers' and jerseys' weights and the jersey's tucked part; the smocks' and aprons' skirts). Types and hair are not changed by this part.
+
+**What the client needs:** nothing.
+
+**What still separates our clothes from the reference's,** ordered by how much it shows:
+
+1. **Nothing moves by itself.** A skirt follows the thighs and the hips by weights; it does not swing, lag or settle. The reference's skirt is on spring bones. Ours could be: the hair's spring groups and the back's spheres are the same machinery.
+2. **The cut.** A smock is still one bell from the waist and a coat a fitted tube; there is no seam, pleat, pocket or lapel that is modelled, only painted bands and patches.
+3. **Sleeves** are smooth tubes with no fold at the elbow, and on a woman's form the sleeve's head stands a little proud of the narrow shoulder.
+4. **Boots** are a man's sea boots made narrower.
 
 ### The neck
 

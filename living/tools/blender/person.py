@@ -420,21 +420,27 @@ def torso_w(z, x, skirt=False, front=False):
                 t = smooth((z - za) / (zb - za))
                 w = [(na, 1 - t), (nb, t)]
                 break
-    if skirt and z < 0.95:
-        # A skirt's panels follow the legs' stride: up to half the same side's upper leg at the hem.
-        # They start to at the hip joint and have most of it a hand below: a thigh that lifts
-        # carries its trouser leg whole, and a skirt that waited until mid-thigh to follow let the
-        # thigh's top come through its front at every step (cloth_check.py: by 2 to 5 mm in the
-        # walk, and by 13 on a woman's form, whose skirt lies closer).
-        t = (0.85 if front else 0.55) * smooth((0.95 - z) / 0.20)
-        side = min(abs(x) / 0.07, 1.0)
+    if skirt and z < 0.97:
+        # A skirt lies on the thighs: its panels ride the same side's upper leg, nearly whole in
+        # front and most of the way behind, from just under the hip joint, as the trouser leg
+        # under them does. Between the legs a panel takes half of each and tents from one to the
+        # other. (It was 0.85 and 0.55 of the leg from mid-thigh: cloth_check.py found a thigh
+        # through its skirt by 2 to 5 mm in the walk, 13 on a woman's form, and by 16 to 23 mm
+        # in a brisk walk, where the thigh lifts 45 degrees.)
+        t = (0.97 if front else 0.80) * smooth((0.97 - z) / 0.14)
+        side = min(abs(x) / 0.04, 1.0)
         left = t * (0.5 + 0.5 * side if x <= 0 else 0.5 - 0.5 * side)
         right = t - left
         w = [(n, v * (1 - t)) for n, v in w] + [("J_Bip_L_UpperLeg", left), ("J_Bip_R_UpperLeg", right)]
     return blend(*w)
 
 
-def torso_point(z, k, d=0.0, skirt=0.0, n=NT, edge=None):
+# A skirt hangs in folds: FOLDS soft flutes round it, nothing at the hips and FOLD_DEEP metres
+# in and out at the hem, the middle of the front on a crest.
+FOLDS, FOLD_DEEP, FOLD_FROM, FOLD_OVER = 5, 0.026, 0.92, 0.34
+
+
+def torso_point(z, k, d=0.0, skirt=0.0, n=NT, edge=None, folds=0.0):
     """Column k (0 front, n/4 the left side, n/2 back) of the torso's ring at height z, offset d."""
     sx = sz = 1.0
     girth = GIRTH
@@ -457,6 +463,10 @@ def torso_point(z, k, d=0.0, skirt=0.0, n=NT, edge=None):
         a, b = a + fa * skirt, b + fb * skirt
     a, b = a + d, b + d
     phi = 2 * PI * k / n
+    if folds:
+        wave = math.cos(FOLDS * phi)
+        ripple = folds * FOLD_DEEP * smooth((FOLD_FROM - z) / FOLD_OVER) * math.copysign(abs(wave) ** 0.7, wave)
+        a, b = a + ripple, b + ripple
     if edge is not None:
         # The front edge of an open coat: this column stands `edge` metres off the centre line.
         phi = math.asin(min(edge / a, 1.0) ** (1 / 0.85))
@@ -474,12 +484,13 @@ def arm_w(x):
     return blend(("J_Bip_L_Shoulder", sh), ("J_Bip_L_UpperArm", (1 - sh) * (1 - lower)), ("J_Bip_L_LowerArm", lower * (1 - hand)), ("J_Bip_L_Hand", lower * hand))
 
 
-def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None, neck_d=None):
+def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None, neck_d=None, tuck=None, folds=0.0):
     """The left half of a torso-and-arms garment at offset d from the body.
 
     zs: ring heights from the hem up to the armpit ring (exclusive of it); hem / cuff / collar
     add those rims; front(z) gives an open coat's edge distance (the garment then starts at
-    column 1); tag_fn(kind, column, row) -> tag.
+    column 1); tag_fn(kind, column, row) -> tag. tuck: (height, metres): below that height the
+    garment lies that much closer to the body, tucked into what is worn over it there.
     """
     half = NT // 2
     k0 = 1 if front else 0
@@ -488,8 +499,10 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     sk = skirt > 0
     cuff = (cuff[0] + ARM_OUT, cuff[1])  # callers give the cuff for a shoulder at -0.185
 
+    off = (lambda z: d - tuck[1] * smooth((tuck[0] - z) / 0.04)) if tuck else (lambda z: d)
+
     def col_point(z, k):
-        return torso_point(z, k, d, skirt, edge=front(z) if front and k == 1 else None)
+        return torso_point(z, k, off(z), skirt, edge=front(z) if front and k == 1 else None, folds=folds)
 
     rows = []
     for z in zs:
@@ -590,7 +603,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     for j, (dz, dd) in enumerate(hem):
         cur = []
         for k in ks:
-            pos = torso_point(z0 + dz, k, d + dd, skirt, edge=front(z0 + dz) if front and k == 1 else None)
+            pos = torso_point(z0 + dz, k, off(z0 + dz) + dd, skirt, edge=front(z0 + dz) if front and k == 1 else None, folds=folds)
             cur.append(part.v(pos, torso_w(z0, pos.x, sk)))
         for i in range(len(ks) - 1):
             k = ks[i]
@@ -2216,6 +2229,10 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             Part("Jersey"), 0.008, [0.975, 1.01, 1.08, 1.16, 1.24, 1.32],
             hem=[(-0.030, 0.003), (-0.034, -0.006)], cuff=(-0.700, [(-0.012, 0.003), (-0.026, 0.003), (-0.028, -0.004)]),
             collar=[(0.011, -0.002, blend(("J_Bip_C_Neck", 0.8), ("J_Bip_C_UpperChest", 0.2))), (0.022, -0.002, neck), (0.026, -0.005, neck), (0.020, -0.009, neck)], tag_fn=jtag,
+            # Tucked into the trousers (their top is at 1.087, 12 mm off the body): below it the
+            # jersey lies 3 mm off the body where it lay 8, and its ribbed hem 11, a millimetre
+            # inside the waistband, which showed through the back of it as slivers.
+            tuck=(1.10, 0.005),
         ).mirrored()
         obs.append(build(p, arm, MAT["cloth"], jersey_colour(spec["jersey"])))
         chest = blend(("J_Bip_C_UpperChest", 0.75), ("J_Bip_C_Neck", 0.25))
@@ -2259,15 +2276,15 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
 
             p = upper_garment(
                 Part("Smock"), 0.018, zs, hem=[(-0.004, -0.008)], cuff=(-0.655, [(-0.022, 0.004), (-0.024, -0.004)]),
-                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, neck_d=0.014,
+                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, neck_d=0.014, folds=1.0,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
             # The bands round the sleeves, in another cloth: over the smock's own sleeve, a hair's
             # width out. Its own part, so a shared smock's bands are a piece with its own colour.
-            p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag, neck_d=0.0148).mirrored()
+            p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag, neck_d=0.0148, folds=1.0).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"], bands=True)))
             if apron:
-                p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag, neck_d=0.0158).mirrored()
+                p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag, neck_d=0.0158, folds=1.0).mirrored()
                 obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
         # Trousers, tucked into the boots.
         p = trousers(Part("Trousers"), 0.012).mirrored()
@@ -2403,7 +2420,10 @@ def bake_shade(obs, strength=0.50, reach=0.11):
         attr.data.foreach_set("color", data.ravel())
 
 
-BELLY_PARTS = ("Jersey", "Coat", "Buttons", "Smock", "Apron")
+# The trousers too: a jersey is tucked into them, and where the belly's bone carried the jersey's
+# front and not the waistband, the two parted on any build but the standard one (the bone is not
+# scaled with a person's build) and a belly stood out over the waistband as a shelf.
+BELLY_PARTS = ("Jersey", "Coat", "Buttons", "Smock", "Apron", "Trousers")
 BELLY_REACH = 0.108  # metres the belly's bone moves forward for a belly of 1 (the torso's half depth)
 
 
