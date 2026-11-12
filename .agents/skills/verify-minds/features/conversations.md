@@ -101,3 +101,16 @@ The `room-address` case (`verify_minds.py --case room-address`) spawns four peop
 5. `addressed_line_has_no_room_detail`: the line to K, as H overheard it, has no "to the room".
 
 Evidence: `room-address.json`, `prompt-address.txt`.
+
+## A decision's line names its way
+
+Since `mind-say-way` (2026-11-12, docs/COMMUNICATION.md §18), a think reply's `say` takes an optional `"way"`. The mind service reads it as a talk reply's (`talk::way_of`) and installs through `mind_install_way`, or passes it to `mind_say` when the decision carries on. The line goes to `speech::speak` in that way. A refused line is told to the speaker as an `unsaid` row in the rules' words, and the decision stands.
+
+The `say-way` case (`verify_minds.py --case say-way`) puts H (thought for) on a quiet open line (`open_line`), A 15 m east and B 1 m west. The fake model answers four think requests, each by its marker (`rules` with `contains`), with a line:
+
+1. **A call to A.** A's row reads "A stranger calls out to you from about 15 m: …". The chronicle keeps "<H> (call) to <A>". H's own row may already be integrated by its mind.
+2. **A whisper to no one.** H gets "You did not say “Verify whisper to no one.”: a whisper needs someone to whisper to." No one receives the words, and the decision's thought stands.
+3. **A whisper to B.** B gets a `whisper` row, and A nothing.
+4. **A line in "shout",** a way the world lacks. It is said aloud: B reads "A stranger said to you: …".
+
+It also checks that the think prompt names `"way": "say" or "whisper" or "call" (optional; default "say")`. Evidence: `say-way.json`, `prompt-say-way.txt`.
