@@ -2067,8 +2067,29 @@ class Instance:
 
 
 def delete_db(db):
+    """Delete a trial database, its world paused first: SpacetimeDB 2.14.1 can panic, and take
+    the whole trial server down, when a database is deleted while its world still ticks (the
+    trial service went down that way on 2026-11-12 at 12:52). A world that cannot be paused and
+    read back as paused is not deleted."""
     if not db.startswith(PREFIX):
         raise RuntimeError(f"refusing to delete {db}")
+    tok = admin_token()
+    code, body = http(f"/v1/database/{db}/call/set_paused", [True], tok)
+    if code == 404:
+        return True
+    paused = False
+    for _ in range(10):
+        c, b = http(f"/v1/database/{db}/sql", "SELECT paused FROM world", tok, raw=True)
+        if c == 404:
+            return True
+        if c == 200 and "true" in b.lower():
+            paused = True
+            break
+        time.sleep(1)
+    if not paused:
+        print(f"not deleting {db}: its world could not be paused ({code} {body.strip()[:160]})", file=sys.stderr)
+        return False
+    time.sleep(2)
     sh("docker", "exec", CONTAINER, "spacetime", "delete", "-s", "local", db, "-y", check=False)
     return http(f"/v1/database/{db}/sql", "SELECT 1 FROM world", raw=True)[0] == 404
 
