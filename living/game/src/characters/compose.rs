@@ -138,6 +138,18 @@ impl HairTints {
 /// under one 8-bit step, so sharing moves no colour the screen shows.
 pub const SAME_SOURCE: f32 = 0.004;
 
+impl Person {
+    /// Every file the person is composed from, under the asset folder: the type's, then hair,
+    /// outfit pieces and overlays, as [`prepare`] wears them.
+    pub fn files(&self) -> Vec<String> {
+        let mut out = vec![format!("{TYPES}/{}.glb", self.kind)];
+        out.extend(self.styles.hair.iter().map(|h| format!("{STYLES}/hair/{h}.glb")));
+        out.extend(self.styles.outfit.iter().map(|o| format!("{STYLES}/outfit/{o}.glb")));
+        out.extend(self.styles.overlays.iter().map(|o| format!("{STYLES}/overlay/{}/{o}.glb", self.kind)));
+        out
+    }
+}
+
 /// Outfit pieces worn on the head: attached with the type's `hair_fit`, as hair is.
 const HEAD_PIECES: [&str; 2] = ["cap", "kerchief"];
 

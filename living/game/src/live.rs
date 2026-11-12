@@ -229,6 +229,10 @@ struct Shown {
     /// How far the body's gaits are the running family's (0–1), eased toward its row's
     /// `running` ([`family`]).
     run_w: f32,
+    /// The look it was drawn from (`characters::seen`): its key (empty for a VRoid recipe) and
+    /// band. A change redraws the person in place ([`swap_look`]).
+    look: String,
+    band: u8,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -296,6 +300,11 @@ pub struct Live {
     /// they have been fading (s), whose they were, and whether they stay a moment as a faint
     /// figure first (the memory look under trial, `sightedge::Look`).
     leaving: Vec<(Entity, f32, u32, bool)>,
+    /// People redrawn in place for a new look ([`swap_look`]): the old body, kept drawn and
+    /// moving with the new until the new is fitted, then faded out as the new fades in.
+    swaps: Vec<(Entity, Entity, u32)>,
+    /// The world's look generation has been checked against the book (one warning at connect).
+    looks_checked: bool,
 }
 
 impl Live {
@@ -461,13 +470,60 @@ fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, 
 }
 
 
-/// The recipe a person is drawn from: seeded by the land and their id, in the folk and dress
-/// of the projection (`ui/looks.rs` names strangers by it). Mine is `LIVING_GAME_PLAYER` if set.
-pub fn recipe_for(land_seed: u64, c: &SeenCharacter, mine: bool) -> crate::characters::Recipe {
-    let seed = land_seed.wrapping_mul(0x9E37_79B9).wrapping_add(c.id as u64);
-    if mine {
-        return std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::random(seed, "adult"));
+/// The recipe a person is drawn from (docs/LOOK.md §5), mine as anyone's (my own row's look):
+/// the line their projected look names in the look book, composed from shared files, at the
+/// line's own height. Without one (no key, a key the book lacks, a file not on disk, no book, or
+/// composing turned off) a VRoid recipe seeded by the land and their id, in the folk and dress of
+/// the projection, as before looks; each such case is one warning line a session.
+pub fn recipe_for(book: Option<&crate::characters::book::LookBook>, land_seed: u64, c: &SeenCharacter) -> crate::characters::Recipe {
+    use crate::characters::book::{warn_once, Miss};
+    let seen = crate::characters::seen::of(c);
+    let drawn = match book {
+        _ if !crate::characters::compose::enabled() => None,
+        None => Some(Err(Miss::NoBook)),
+        Some(b) => Some(b.recipe(&seen.look)),
+    };
+    match drawn {
+        Some(Ok(r)) => r,
+        Some(Err(m)) => {
+            warn_once(&m);
+            vroid_for(land_seed, c)
+        }
+        None => vroid_for(land_seed, c),
     }
+}
+
+/// Redraw a shown person for a new look where and as they are: a new body from the new recipe
+/// with the old one's transform and motion, fading in once it is fitted (`fade.rs` holds a fade
+/// until then). The old body stays drawn and moving with it until then (`Live::swaps`), and then
+/// fades out, so the person never leaves the screen.
+#[allow(clippy::too_many_arguments)]
+fn swap_look(commands: &mut Commands, assets: &AssetServer, live: &mut Live, q: &mut Query<Drawn>, (id, mine): (u32, bool), c: &SeenCharacter, land_seed: u64, now: crate::characters::seen::Seen) {
+    let Some(old) = live.shown.get(&id).map(|s| s.entity) else { return };
+    let Ok((tf, _, _, _, motion, _)) = q.get(old) else { return };
+    let (tf, motion) = (*tf, motion.clone());
+    let mut recipe = recipe_for(crate::characters::book::book(), land_seed, c);
+    if recipe.person.is_none() {
+        recipe.height *= stage_scale(c.stage);
+    }
+    let new = crate::characters::spawn(commands, assets, &recipe, tf.translation, 0.0);
+    commands.entity(new).insert((tf, motion, crate::fade::Fade::appearing()));
+    if mine {
+        commands.entity(new).insert((crate::gait::Feet, crate::gait::Logged(id)));
+    } else if crate::gait::logged_other() == Some(id) {
+        commands.entity(new).insert(crate::gait::Logged(id));
+    }
+    let s = live.shown.get_mut(&id).unwrap();
+    info!("looks: #{id} redrawn for band {} ({} → {})", now.band, if s.look.is_empty() { "VRoid" } else { &s.look }, if recipe.person.is_some() { now.look.as_str() } else { "VRoid" });
+    (s.entity, s.look, s.band) = (new, now.look, now.band);
+    live.heights.insert(id, recipe.height);
+    live.swaps.push((old, new, id));
+}
+
+/// A person's VRoid recipe: seeded by the land and their id, in the folk and dress of the
+/// projection (drawn at their life stage's scale, [`stage_scale`]).
+pub fn vroid_for(land_seed: u64, c: &SeenCharacter) -> crate::characters::Recipe {
+    let seed = land_seed.wrapping_mul(0x9E37_79B9).wrapping_add(c.id as u64);
     match folk_of(c) {
         (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
         (folk, None) => crate::characters::Recipe::random(seed, folk),
@@ -522,9 +578,20 @@ fn bodies(
         for (e, ..) in live.leaving.drain(..) {
             commands.entity(e).despawn();
         }
+        for (old, ..) in live.swaps.drain(..) {
+            commands.entity(old).despawn();
+        }
         live.heights.clear();
+        live.looks_checked = false;
         return;
     };
+    // The world's look generation against the book's, once a connection.
+    if !live.looks_checked && conn.db.world().iter().next().is_some() {
+        live.looks_checked = true;
+        if let Some(w) = crate::characters::seen::generation_warning(&crate::characters::seen::world_generation(), crate::characters::book::book()) {
+            warn!("{w}");
+        }
+    }
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
     // Walking or running clips: the laws' split, read again when the installed script changes.
@@ -554,6 +621,26 @@ fn bodies(
         }
         keep
     });
+    // People redrawn for a new look: the old body moves with the new until the new is fitted,
+    // then fades out as the new fades in (a crossfade in place, never a gap).
+    for (old, new, id) in std::mem::take(&mut live.swaps) {
+        let current = live.shown.get(&id).is_some_and(|s| s.entity == new);
+        if !current || q.get(new).is_ok_and(|d| d.1.is_some()) {
+            match fades.get_mut(old) {
+                Ok(mut f) => {
+                    f.target = 1.0;
+                    live.leaving.push((old, 0.0, id, false));
+                }
+                Err(_) => commands.entity(old).despawn(),
+            }
+            continue;
+        }
+        if let Ok([from, mut to]) = q.get_many_mut([new, old]) {
+            *to.0 = *from.0;
+            *to.4 = from.4.clone();
+        }
+        live.swaps.push((old, new, id));
+    }
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
     let mut talking: HashSet<u32> = me
         .map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
@@ -633,8 +720,11 @@ fn bodies(
             let size = character.as_ref().map_or(1.0, |c| stage_scale(c.stage));
             let (entity, height, person, beast) = if body.kind == "person" {
                 let c = character.as_ref().unwrap();
-                let mut recipe = recipe_for(island.land.seed, c, mine);
-                recipe.height *= stage_scale(c.stage);
+                let mut recipe = recipe_for(crate::characters::book::book(), island.land.seed, c);
+                // A line carries its own height; a VRoid recipe is scaled by life stage.
+                if recipe.person.is_none() {
+                    recipe.height *= stage_scale(c.stage);
+                }
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
                 (e, recipe.height, true, false)
             } else if let Some(e) = crate::bodies::spawn_beast(&mut commands, &assets, &body.kind, at, yaw_of(Vec2::new(h.cos(), h.sin())), size) {
@@ -652,9 +742,20 @@ fn bodies(
             } else if crate::gait::logged_other() == Some(id) {
                 commands.entity(entity).insert(crate::gait::Logged(id));
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 } });
+            let look = character.as_ref().filter(|_| person).map(crate::characters::seen::of).unwrap_or_default();
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, band: look.band });
             live.heights.insert(id, height);
             continue;
+        }
+        // A new look for someone drawn (a band change; a key their row now carries): redrawn
+        // in place.
+        if live.shown.get(&id).is_some_and(|s| s.person) {
+            if let Some(c) = conn.db.seen_characters().id().find(&id) {
+                let now = crate::characters::seen::of(&c);
+                if live.shown.get(&id).is_some_and(|s| s.look != now.look || s.band != now.band) {
+                    swap_look(&mut commands, &assets, &mut live, &mut q, (id, mine), &c, island.land.seed, now);
+                }
+            }
         }
         let s = live.shown.get_mut(&id).unwrap();
         let family = family(row.as_ref().map(|r| r.running), &mut s.run_w, dt, split);

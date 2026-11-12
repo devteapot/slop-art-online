@@ -151,7 +151,17 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
         return;
     }
     let Some(island) = island else { return };
-    let recipes = crate::characters::Recipe::every_piece();
+    let mut recipes = crate::characters::Recipe::every_piece();
+    // And the fewest composed people that between them wear every type and style file in the
+    // look book (`book::LookBook::covering`), so no composed material or mesh layout is first
+    // drawn when someone comes into sight (`LIVING_GAME_PERF=nolooks` leaves them out, to
+    // measure that hitch).
+    let looks: Vec<crate::characters::Recipe> = match crate::characters::book::book() {
+        Some(b) if crate::characters::compose::enabled() && !crate::perf::has("nolooks") => b.covering(&[]).iter().filter_map(|k| b.recipe(k).ok()).collect(),
+        _ => Vec::new(),
+    };
+    let n_looks = looks.len();
+    recipes.extend(looks);
     let at = island.start;
     let spawned = recipes
         .iter()
@@ -162,7 +172,7 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
             crate::characters::spawn(&mut commands, &assets, r, Vec3::new(p.x, island.height(p.x, p.y), p.y), a)
         })
         .collect::<Vec<_>>();
-    info!("loading: {} prewarm characters wear every outfit piece", spawned.len());
+    info!("loading: {} prewarm characters wear every outfit piece ({n_looks} composed, every type and style file in the look book)", spawned.len());
     loading.prewarm = Some(spawned);
 }
 
