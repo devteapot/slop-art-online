@@ -1887,7 +1887,7 @@ Lengths in percent of the figure's height unless a row says H:
 
 **How a woman's form is built.** Every file keeps the one rest skeleton, so clips, pieces and types still share it. A woman's form is two things that are one design:
 
-- **The standard woman's proportions** (`person_params.WOMAN`): `legs` 1.075, `torso` 0.84, `arms` 0.90, `shoulders` 0.60, `hips` 0.92, `hands` 0.84 (0.75 until [the hands part](#the-body-hands) made a man's hand smaller), `feet` 0.90. They are scales on bones, which the client already applies from a person's line. With them her joints stand where the reference's do: the hip joint at 55.4% of her height, the neck's at 83.1, 13.4 between the shoulder joints, the arm 26.8 from shoulder to wrist, the hand 0.65 of a head, and she is 6.93 heads tall.
+- **The standard woman's proportions** (`person_params.WOMAN`): `legs` 1.075, `torso` 0.84, `arms` 0.90, `shoulders` 0.60, `hips` 0.92, `hands` 0.75, `feet` 0.90. They are scales on bones, which the client already applies from a person's line. With them her joints stand where the reference's do: the hip joint at 55.4% of her height, the neck's at 83.1, 13.4 between the shoulder joints, the arm 26.8 from shoulder to wrist, the hand 0.65 of a head, and she is 6.93 heads tall.
 - **Her pieces are written for those scales** (`person.py`, `Stance` and `WOMAN_FORM`). The form is given as she stands in the game: at each height, as a percent of her height, the torso's half width, half depth and how far its middle stands before the hips' joint, 24 rows read from the reference's cuts. A ring of a garment is looked up at the height it will stand at and written wider by what the bones will take off it. So a jersey's waist is 12.5 cm from the axis in the file and 10.9 on her, and its chest at the armholes 20 cm in the file and 12 on her.
 - **Only proportions are taken from the reference,** as for the face's anchors: numbers measured on its cuts, nothing of its mesh.
 - **The neck hole stays round.** The upper chest's bone is scaled 0.60 across and the neck's is not, so the yoke's last rings, the collars and the neck's foot are written wider by their own weights' scale (`across`). Women's type files change for this: the neck's foot, 14 mm at most.
@@ -2030,7 +2030,7 @@ The silhouettes and the cloth land together (2026-11-12, branch `char-4-body`, a
 **The bundle is published twice,** `char-4-composed-<sha>.tar.gz` with PNG pictures and `char-4-composed-<sha>-ktx2.tar.gz` (`pictures.py bundle … --pictures ktx2`, [pictures as KTX2](#pictures-as-ktx2)), with `pictures.py check` on the second.
 ### The body: hands
 
-The body pass, third part (2026-11-12, branch `char-4-body`). Measured first (`living/tools/characters/reference/hand.py`), then built again from the measured shares.
+The body pass, third part (2026-11-13, branch `char-4-hands`, on top of [the landing](#the-body-the-landing)). Measured first (`living/tools/characters/reference/hand.py`), then built again from the measured shares.
 
 ```bash
 python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/vroid-Sendagaya_Shino.glb --json shino.json --mask shino.png
@@ -2047,12 +2047,12 @@ python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/typ
 3. **The palm was half the hand** (0.51) and the fingers short: the middle 0.50 for 0.57, the little finger 0.37 for 0.46.
 4. **The thumb was short and set high:** 0.50 of the hand from a first joint 0.13 up the palm; the reference's is 0.65 from beside the wrist (0.02), with its first bone inside the ball of the thumb.
 5. **The palm was thin and narrow:** 0.13 thick and 0.41 across for 0.20 and 0.47.
-6. **A man's hand was 0.87 of a head** ("large working hands"). The reference's is a woman's, 0.64; a living man's is about 0.75.
+6. **A man's hand is 0.87 of a head** ("large working hands", since the spike). The reference's is a woman's, 0.64; a living man's is about 0.75. This part does not change it: see below.
 
 | Shares of the hand's own length, unless said | Shino | Vivi | woman before | woman | man before | man |
 |---|---|---|---|---|---|---|
-| The hand, in heads | 0.64 | 0.57 | 0.65 | 0.66 | 0.87 | 0.79 |
-| The hand, mm | 150 | 121 | 167 | 170 | 222 | 203 |
+| The hand, in heads | 0.64 | 0.57 | 0.65 | 0.66 | 0.87 | 0.88 |
+| The hand, mm | 150 | 121 | 167 | 169 | 222 | 226 |
 | Palm (wrist to the middle finger's first joint) | 0.45 | 0.45 | 0.51 | 0.44 | 0.51 | 0.44 |
 | Across the knuckles | 0.47 | 0.50 | 0.41 | 0.45 | 0.41 | 0.45 |
 | Thick at the knuckles | 0.20 | 0.21 | 0.13 | 0.18 | 0.13 | 0.18 |
@@ -2071,7 +2071,8 @@ python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/typ
 **What changed** (`person.py`: `HAND_LEN`, `HAND_FINGERS`, `HAND_THUMB`, `HAND_PALM`, `FINGER_TAPER`, `FINGER_DROP`):
 
 - **The hand is a table of shares of its own length,** read from the reference: each finger's first joint, its three bones, its radius and its splay; the thumb's root, bones, splay and slope; the palm's stations. `make_hand` and `finger_joints` build from it. The far model's mitten follows the same lengths.
-- **A man's hand is 20 cm, 0.78 of a head** (it was 22.2). A woman's is the line's `hands`, 0.84 of that (`WOMAN`): 0.66 of a head, as before.
+- **The hand's size is left as it was:** a man's 22.2 cm (`HAND_LEN`; 0.88 of a head as measured now, 0.87 before), a woman's the line's `hands`, 0.75 of that: 0.66 of a head. A size is a proportion, and a woman's is in her line; a smaller hand for men or women would change every line's key and need another generation and another relook. I built it once at 20 cm for a man (0.79 of a head) and took it back for that reason. **It is a decision for the owner:** if men's hands are to be a living man's, it is `HAND_LEN` 0.195 and `hands` 0.86 for women, with a new generation.
+- **No line changes with this part,** so the book stays at `c4-e61b01c0` and no world needs a relook for it.
 - **Pose.** At rest the fingers fan and slope as the reference's do. The clips already curl the fingers (`animate.py`: 18° in the relaxed poses, more on a grip) and are not changed; on the new rest they give the reference's relaxed hand, where on flat parallel pegs they gave a bent paddle.
 - **This changes the rest skeleton:** the 30 finger joints of the two hands, and nothing else. So every file is built again on it (the 21 types, 74 hair files, 28 outfit pieces, 72 overlays), and the clips are baked again. `skeleton_check.py` passes on the set.
 

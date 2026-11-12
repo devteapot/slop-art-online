@@ -178,11 +178,10 @@ def deep_update(base, extra):
 # The standard woman: scales on the bones of the one rest skeleton every file shares, set so that
 # her joints stand where the reference's do as shares of her height (reference/body.py on the
 # reference: the hip joint at 55.4%, the neck's at 83.1%, 13.4% between the shoulder joints, 9.5%
-# between the hips', the arm 26.8% from shoulder to wrist, the hand 0.65 of a head long: 0.84 of a
-# man's, which is 0.78 of a head since the hands part). With
+# between the hips', the arm 26.8% from shoulder to wrist, the hand 0.65 of a head long). With
 # them a woman stands 6.93 heads tall, as the reference does. person.py writes a woman's pieces
 # for these scales (`Stance`), so the two are one design: change them together.
-WOMAN = dict(legs=1.075, torso=0.84, arms=0.90, shoulders=0.60, hips=0.92, hands=0.84, feet=0.90)
+WOMAN = dict(legs=1.075, torso=0.84, arms=0.90, shoulders=0.60, hips=0.92, hands=0.75, feet=0.90)
 
 
 def womanly(age, male):

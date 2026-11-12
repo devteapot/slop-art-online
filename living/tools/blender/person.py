@@ -190,7 +190,11 @@ PARENT = {
 # the palm was half the hand (the reference's is 0.45), the four fingers lay parallel and as
 # thick at the tip as at the root, the little finger was 0.37 of the hand (0.46) and the thumb
 # half of it from a root well up the palm (0.65, from beside the wrist).
-HAND_LEN = 0.200  # a man's hand, metres: 0.78 of a head (it was 0.222, "large working hands": 0.87)
+# A man's hand, metres: 0.87 of a head, the "large working hands" it has had since the spike. The
+# hands part changed the hand's form and left its size: a size is a proportion, a person's line
+# carries it for a woman (`hands`), and changing it would change every line's key for a matter
+# of taste. A living man's is about 0.75 of a head (0.195 m here).
+HAND_LEN = 0.2224
 HAND_K = 1.0  # a hand against that; a woman's is the line's `hands`
 HAND_FINGERS = {
     "Index": ((0.440, 0.110, 0.000), (0.221, 0.137, 0.159), 0.0700, 5.0),
