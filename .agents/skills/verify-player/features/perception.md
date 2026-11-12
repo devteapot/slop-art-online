@@ -8,7 +8,7 @@ Since 2026-11-09 (docs/PERCEPTION.md, "What an observer perceives of a target").
 - `human_act {"do": "appraise", "target": {"id": N}}` is carried out (`skill_use` outcome "a stranger has 100 of 100 health"), and the appraiser's `seen_characters` row for N then carries exact `hp`/`max_hp`; a bystander beside it still has `hp` -1 and a band. The appraiser's `my_experience` holds "You look a stranger over: … of … health."
 - After the reveal's 20 s the appraiser sees a band again.
 - The appraiser says "Hello, I am <name>." and the bystander, who heard it, perceives the appraiser by name (`name`, `label`) and its experience reads "<name> said: …".
-- **A walking player is perceived walking** (since `fix-perceived-moving`, docs/PERCEPTION.md "Activity derived from the body"). A player walking at a resident by `human_move` is in the resident's deliberation scene as `"doing": "walk → person"` (before: `wait`), and the resident's first sight of it reads "…, 8 tiles east, walk → person.". Standing, it reads `wait`. An AI resident walking the same line by `goto` reads `goto → person`, unchanged. A bystander player's client gets the same for both: the body moving in `seen_bodies`, no `seen_doing` row.
+- **A walking player is perceived walking** (since `fix-perceived-moving`, docs/PERCEPTION.md "Activity derived from the body"). A player walking at a resident by `human_move` is in the resident's deliberation scene as `"doing": "walk → you"` (before fix-perceived-moving: `wait`; until first-sight-crowd: `walk → person`), and the resident's first sight of it reads a walk ("…, 8 tiles east, walk → you."). Standing, it reads `wait`. An AI resident walking the same line by `goto` reads `goto → you`: whom someone goes to is named as the observer perceives them since first-sight-crowd. A bystander player's client gets the same for both: the body moving in `seen_bodies`, no `seen_doing` row.
 - The game client sends the same act from its **V** key (or the script step `gesture:appraise[:ID]`), at the creature under or nearest the cursor, else the nearest within 6 m, people or animals. While the row carries `hp`, the nameplate shows and carries a small `hp / max` under its bar; when the reveal ends the readout goes ([verify-client game-client](../../verify-client/features/game-client.md)).
 
 ## How to get to it (user POV)
@@ -26,7 +26,7 @@ On an island run (`$V launch --run $R --seed island`; best with `LIVING_PERCEPTI
 What others perceive of a walking player:
 
 ```bash
-.agents/skills/verify-player/scripts/approach.py --run "$R"            # the fix: walk → person
+.agents/skills/verify-player/scripts/approach.py --run "$R"            # the fix: walk → you (the target named as R perceives it, since first-sight-crowd)
 .agents/skills/verify-player/scripts/approach.py --run "$R" --expect-wait  # the pre-fix authority: wait
 ```
 

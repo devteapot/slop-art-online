@@ -154,9 +154,43 @@ Of homes that can be checked, 67% are right and 33% wrong. Houses stand about 6 
 **Said.** Lines placing a home are common in the hamlet, where people visit each other: 106 in bi1, against 5–12 in the others. Examples: "first light finds me at Teodor's door with his fish"; "I've a fish to carry to Ilsa's hearth east". The audit does not judge whether a spoken home was right.
 
 **What is missing (stated, not proposed).**
-- Whose a house is should not depend on where its owner stands. Today it does, through `owner_label` → `label_for`. Players are affected the same way.
+- Whose a house is should not depend on where its owner stands. Today it does, through `owner_label` → `label_for`. A player's client names houses from `my_known_names`, which does not read distance; the lines a player is told from the authority (a theft from someone's store) did. *(Corrected 2026-11-12 by house-owner-label, §3: this line said players were affected the same way.)*
 - A household is shown by one owner's name. A partner or child who lives there is not named with the house.
 - Nothing tells the mind "lives at" as a perception. It infers it from labels and talk, which is the intended path, but it infers from the flickering label.
+
+## 3. Follow-up: the house-label fix (house-owner-label, 2026-11-12)
+
+Branch `house-owner-label`. The rule, as approved: a house names its owner when the viewer knows them (`perception::knows_name`, the shared regard answer) or when the house shows its owner (`owner_shown`, the kind's `shows_owner`). Where the owner stands never matters. Details and checks: [PERCEPTION.md](PERCEPTION.md#whose-a-thing-is-and-what-places-are-called-owner-known-2026-11-12).
+
+**Every place the label is built.**
+- The authority, `common::owner_label`: a mind's scene (`by`, `home_of`); its notice lines ("You notice a house built by …"); its region summary ("you see Wenna Reed's house").
+- A witnessed theft, "{a} took … from {b}'s storage": `{b}` was the owner's person label, with distance. It now uses `perceive::witnessed_owned`.
+- The client: `looks::structure_name`, from `structure.owner` and `my_known_names`. It never read distance and is unchanged.
+- A second leak, found by verify-minds and fixed: lines about an owned thing carried the owner as their subject. The mind service then tagged them with the owner's far handle ("… built by Walker2 {someone too far away to make out=#1000000046}"). An owner the line did not name was still tied to it. Now the owner is carried only when the line names them, by id (`percept_owned`).
+
+**Mara's case: labelling, not memory, as far as the record shows.**
+- In bi1 control, before her consolidation wrote "Oren's house by the reeds" at (34, 21), her scenes showed the house at (38.5, 24.5), 6 m from that spot, 19 times. Every time it read as `home_of: "a stranger"`: it is Wenna's house, and Wenna was away.
+- Oren's own house, at (68.5, 17.5), was named 22 times and labelled "a stranger" 9 times.
+- The only nearby line naming Oren's house was a region summary at (30, 16): "you see Wenna Reed's house, campfire, Wenna Reed's storage, Oren Hale's house". It gives no positions, and Oren's house was 38 m away.
+- So she had a nameless house beside her and Oren's name in a list. With the fix, that house reads "Wenna Reed", the only label it could take for her.
+- Whether a model still forms such beliefs with right labels needs a paid run. A fake model writes canned memories, so a fake run can show only the labels; see the fake hamlet run below.
+- The summary line's lack of positions remains. It is memory's raw material, not a label.
+
+**The fake hamlet run** (`hol1`, `hamlet` × 1, 20 minutes, the fake model, Cullet's laws with `known_within` 24 m; built from this branch).
+- `homes_audit.py`: of 970 house sightings in think and deliberate scenes, 824 name the owner, 146 show none (the viewer does not know the owner by name), and **0** read as a far or unnamed figure. In bi1 it was 51% (20,820 of 40,999).
+- No homes were kept as places and no lines placed one, because the fake model writes no such memories. Whether wrong home beliefs still form with right labels is a paid question.
+- Evidence: `.local/living/trials/hol1/` in this worktree. The world was deleted by `trials.py clean` (paused first, SQL 404).
+
+**A note for later (#5): the talk prompt and one's own pack and letters.**
+- A conversation turn (`talk_user`, `prompts.rs`) shows who one is, the other, recall, lately, the scene line, the body, standing proposals and dealings (`between`), and the conversation. It shows **neither the pack nor the know-how**. Iteration 8's lines were never merged.
+- Measured on bi1 control's 556 talk turns, from each speaker's latest think scene: "- You carry (as you last looked): …" and "- You know how to: …" add 102 characters on average (p50 103, max 136), about 25–30 tokens. That is about 1.3% of the mean talk prompt (2,268 tokens).
+- The lines are dynamic, so they are uncached input: about $0.000004–0.000009 per talk call at glm-flash or deepseek-flash input prices (`trials.py` `PRICES`).
+- Per batch: bi1 (2,283 talk calls) about 68k tokens, $0.01–0.02; st2b (1,085) about 32k tokens, under $0.01.
+- Not changed: it waits until a batch shows confabulation rising.
+
+**The client (`living/game`).** No change is needed for this bug: `looks::structure_name` already names an owner from `my_known_names`, never from distance. Two differences remain from what minds are told, for later:
+1. A world's own `owner_shown` law: the client hard-codes `knows` and does not call the compiled script. It could use `Scripts::owner_shown(known, shows, kind)` from `living_rules`, which it already compiles.
+2. `shows_owner`: no shipped kind sets it. A kind that did would name its owner to minds, but the client would still say "storage". The client would need the kind's trait (`Scripts::structure(kind).shows_owner`) and the owner's name for an owner not in `my_known_names`. No player row carries that name today, so it would need an authority view: a shape change, not proposed here.
 
 ## Not covered
 
