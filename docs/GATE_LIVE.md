@@ -1,4 +1,4 @@
-# The live gate check (batch `gl1`): prepared, not run
+# The live gate check (batch `gl1`): run 2026-11-12
 
 Branch `trials-gate-live`, 2026-11-12. This is the live test that [GATE_QUALITY](GATE_QUALITY.md) and idea #3 of [MIND_RESEARCH_IDEAS](MIND_RESEARCH_IDEAS.md) ask for before the rethink gate can be on by default. The general coordinator approved it (about $16). It runs after the earshot stage and the fs1 re-run, so the Cullet runs do not overlap.
 
@@ -102,6 +102,129 @@ python3 living/tools/gate_quality.py held .local/living/trials/gl1 .local/living
 python3 living/tools/arrive_spread.py --strangers --control gate-live:gate-off-ds .local/living/trials/gl1
 python3 living/tools/trials.py clean --batch gl1                            # pauses each world before deleting it
 ```
+
+## Results (batch `gl1`, 2026-11-12 18:21–19:02)
+
+**Run:**
+- **Build:** main `c13a31df`, plus `gate_quality.py`'s tick context. Module and mind rebuilt with `trials.py build gate-live`.
+- **Script:** as prepared above, 3 runs per arm, `--parallel 3`. The three control runs went first (18:21–18:42) and the three gated runs second (18:42–19:02), so the arms ran in different 20-minute windows of provider load.
+- **Every run stopped by duration,** with no runaway, no outage, one mind start and 63 minds (21.0–21.1 resident-hours).
+- **Switches (`mind-env.json`, `models.json`):**
+  - `LIVING_RETHINK=jev` in `gate-jev-ds` only;
+  - concurrency 64; no world laws beyond main's;
+  - the `people` mix with think on `deepseek-flash`;
+  - deliberate on stage `deepseek-flash@low`, off stage `glm-flash`; talk `deepseek-flash`; consolidate, reorganize and the rest `glm-flash`.
+- **Spend:** the providers' calls (DeepSeek, GLM) cost **$15.88** (control $8.36, gated $7.52). The gate's own Jev questions are on top. They are priced from the local prices file (every Jev call had a known cost, none unknown) and are not published (docs/STORE.md, Model terms).
+- **The stop rule did not fire:** the spend stayed under $18, and 0 of the gate's 1,395 verdicts were `fallback`.
+
+### Against the target spread
+
+| Measure | `gate-off-ds` (r1/r2/r3) | `gate-jev-ds` (r1/r2/r3) | Target for the gated arm | In shape? |
+|---|---|---|---|---|
+| $ per resident-hour, providers' calls | 0.133 / 0.134 / 0.131 | 0.112 / 0.126 / 0.119 | mean below the off arm's lowest run by ≥ 8% | providers alone: 9.1% below (10.2% below the off mean). **With Jev's questions, as the measure is defined, it does not clear the 8% line.** That figure is in the local record. **Borderline: not met.** |
+| deliberations per resident-hour | 20.45 / 20.12 / 20.04 | 16.42 / 18.65 / 18.03 | 15–35% fewer | **12.4% fewer: not met** |
+| hold episodes judged `harmful` (80 sampled of 139) | – | 6 (7.5%) | ≤ 10%; out of shape above 20% | **met** |
+| holds where the moment needed `now` | – | 24 (30%); 14 released within 60 s or by an urgent merge, 10 held 68–384 s | ≤ 10%, each released within 60 s or by an urgent merge | **not met** |
+| reaction to a failed act, p50 (s) | 64.4 / 65.4 / 67.3 | 51.8 / 52.6 / 32.7 | within the off spread, or ≤ 30 s longer | **met (faster)** |
+| failed acts with no deliberation within 10 min | 14 / 13 / 16 | 11 / 19 / 13 | ≤ the off arm's highest + 5 (21) | **met** |
+| strangers classes, `together_4m`, `converge_60s` | asks 1/3/3, approaches 2/1/0, inward 0/0/1, unaware 19/20/17, tells 0/1/0; `together_4m` 0/1/1; `converge_60s` 1/2/1 | asks 2/1/2, approaches 5/2/0, inward 0/1/0, unaware 17/15/21, tells 0/0/0; `together_4m` 1/2/2; `converge_60s` 1/2/2 | within the off arm's spread | **met** (every class within the off spread; both arms outside STRANGERS.md's C bands the same way, with unaware high) |
+| first heard line to the newcomer (s after the join) | 299 / 611 / 620 | none / none / 478 | within the off arm's spread | **not met**: no heard line in 2 of 3 gated runs (residents with a heard line 0/0/1 against 1/2/3) |
+| guards: false replies a minute, repeated lines, talk that led to something (net of placebo) | false 0.45/0.35/0.70; rep 0/0/0.03; led 0.29/0.04/0.72 | false 0.15/0.45/0.15; rep 0.21/0.02/0; led 0.33/0.78/0.25 | within the off spread | **met** (`arrive_spread.py`: within spread on every guard) |
+
+Other columns from `arrive_spread.py` (disjoint from the control's range, `<`):
+- **Lines said:** 522–628 against 642–712. The gated arm speaks less.
+- **Reused-reason events:** 41–48 against 49–70.
+- **Talk turns:** 11.6–13.1 an hour against 13.1–15.6, within spread.
+
+### The gate's behaviour live
+
+- **Verdicts (r1/r2/r3):**
+
+  | Verdict | r1 | r2 | r3 |
+  |---|---:|---:|---:|
+  | first | 61 | 62 | 62 |
+  | rethink | 281 | 326 | 313 |
+  | hold | 90 | 64 | 122 |
+  | urgent | 4 | 5 | 5 |
+
+- **Holds are 16–28% of the judged (non-first) verdicts,** less than the all-minds replay's 27% at its high end. That is why deliberations fell 12%, not 15–35%.
+- **Hold episodes:** 49, 43 and 47.
+  - Held p50 65–91 s and p90 277–321 s.
+  - Released by a yes 107 times and by an urgent merge once. 31 were still held when their run ended.
+
+### Held triggers judged as delayed (80 episodes, two blind judges)
+
+- **Agreement:** the judges agreed on the cost of waiting in 10 of 10 doubly judged items, and on what the moment needed in 8 of 10.
+- **What the held moment needed:**
+
+  | needed | holds |
+  |---|---:|
+  | nothing | 17 |
+  | could wait | 19 |
+  | soon | 20 |
+  | now | 24 |
+
+- **What waiting cost:**
+
+  | cost of waiting | holds |
+  |---|---:|
+  | none | 42 |
+  | small | 32 |
+  | harmful | 6 |
+
+- **Addressed when the deliberation came:** 45 yes, 7 no, 28 not applicable (nothing needed, or nothing ran before the end).
+- **The six harmful holds are one pattern: someone was addressing the character, or the body kept failing the same act, and the gate held for 2–6 minutes.**
+  - Posy was talking to her at the heaps as her plan ended. She was held 384 s, and Posy went unanswered.
+  - Pacing through 29 re-checks while Tilly's question went unanswered (255 s).
+  - Juno waiting for him to sit, 281 s.
+  - Vessa asking again and again for a successor, 135 s.
+  - A missed chance to ask Benedikt before he slept, 262 s.
+  - Late for a lesson while pacing, 246 s.
+- **The `now` holds held past 60 s** (10 of 24) are the same kinds of moment.
+
+### Ticks (context, not a committed measure)
+
+- **Source.** Read from the authority's own `stats` row in `final.json`. The server's database list no longer shows trial databases: `spacetime list` shows none of `gl1`'s, so a sampler that reads it cannot see them.
+- **Ticks in the run:** control 70.6–70.7 thousand, gated 72.1–72.3 thousand (about 59 and 60 a second).
+- **Largest gap between ticks:** 22–27 ms against 18–19 ms.
+- **Not a gate effect.** The arms ran in different windows, with other sessions' batches on the machine; this says nothing about the gate itself.
+
+### Reading
+
+**Not in shape for default-on.** Four measures were not met:
+- the cost saving is borderline once the gate's questions are counted;
+- deliberations fell 12%, short of the 15–35% band;
+- 30% of holds came at moments that needed an answer now, 10 of them held for over a minute;
+- in 2 of 3 gated runs the newcomer never heard a line.
+
+What was met:
+- the harmful share (7.5%);
+- reaction to failed acts, which was faster;
+- the strangers classes and the guards, within the control's spread.
+
+The harm has one shape: someone is waiting on this character (a line *to* it not yet answered, an invitation, a lesson), or the body keeps failing the same act.
+- **What the gate's state shows.** It counts lines the character said that went unanswered (`spoke_to_without_answer`). Incoming speech appears only among what was perceived, with nothing marking that someone waits on an answer.
+- **What its questions do.** Neither question treats repeated failures of one act as a broken plan before `would_repeat` holds it.
+
+**What a fix would need to do, for the general coordinator and the owner to decide:**
+- treat a line addressed to the character, or a wait on it, and a repeated failure of the same act as reasons the gate never holds;
+- then run this check again.
+
+That is a change to the gate's urgent rules, not to the world.
+
+### Evidence
+
+`~/dev/slop-gate-live/.local/living/trials/gl1/` (the store's run record for this batch):
+- the six instances with their journals and rows;
+- `gate-live.json`, with providers' dollars at top level and Jev's under `jev`, which the scrubber drops;
+- `arrive-spread.md` and `arrive-spread.json`;
+- `held/`: the rubric, the items, the key and the judges' labels.
+- **Key fragments:** a grep of the record and the preflight for every 12-character window of the three key values, and for key-like patterns, found **0**.
+- **Cleanup:**
+  - each instance paused its world before deleting it, at the end of its run (`delete_db`);
+  - all six databases answer 404;
+  - `trials.py clean` removed the Neo4j minds.
+  - `clean` itself lists databases with `spacetime list`, so it would miss a kept trial database now.
 
 ## Fake smoke run
 

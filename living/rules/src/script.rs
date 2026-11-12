@@ -511,6 +511,11 @@ pub struct Laws {
     /// scene the decision read, is not said yet: the speaker is told so and asked to think
     /// again with that line in front of it (first-sight-crowd, docs/FIRST_SIGHT.md). Off: said.
     pub heard_first_rethinks: bool,
+    /// The think prompt's framing (docs/FRAMING.md): off, today's ("Start from why you are
+    /// thinking now: that is what this moment of thought is about. …"); on, the neutral one
+    /// replayed as N2 ("What just happened is shown beside what you perceive. …", the reason's
+    /// section headed "# What just happened" where it stands).
+    pub think_framing: bool,
     /// A person's scene says whom a line said now would reach, at each way of speaking, among
     /// the people they perceive (earshot, docs/COMMUNICATION.md §17): a mind's deliberation scene
     /// ("who would hear you now") and a player's `my_earshot`. Off: neither is told.
@@ -617,6 +622,7 @@ impl Default for Laws {
             earshot: false,
             first_sight_gap_s: 300.0,
             heard_first_rethinks: false,
+            think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
             regard_cache: true,
@@ -976,6 +982,9 @@ pub struct Scripts {
     source: String,
     /// Law declarations that failed when read (an install refuses them).
     law_errors: RefCell<Vec<String>>,
+    /// `laws_about(laws())`, read once when the script compiles, under [`COMPILE_OPERATIONS`]
+    /// like the laws' other descriptions: what each world constant is, or why it could not be read.
+    about: Result<Vec<(String, String)>, String>,
     /// What each kind of structure does for those near it (its traits in `structures()`).
     structures: HashMap<String, StructureTraits>,
     /// Resource kinds' shares of their regrowth by season (`regrow_by_season`), when not the
@@ -1321,7 +1330,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default(), body: Default::default(), makings: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1361,6 +1370,9 @@ impl Scripts {
         s.ui = s.read_ui();
         // The body's meters: never fail the compile either (`meter_errors`, refused at install).
         s.body = s.read_body();
+        // The world constants' words: read once, with what is read once (they list every
+        // constant, and grow with a world's laws).
+        s.about = s.read_laws_about();
         s.engine.set_max_operations(LIMITS.operations);
         Ok(s)
     }
@@ -1964,12 +1976,22 @@ impl Scripts {
     /// What each world constant is (`laws_about(laws())`), by name: the script's words for the
     /// values in force. Empty when the script does not say.
     pub fn laws_about(&self) -> Vec<(String, String)> {
+        self.about.clone().unwrap_or_default()
+    }
+
+    /// Why `laws_about` could not be read when the script compiled, if it could not.
+    pub fn laws_about_error(&self) -> Option<&str> {
+        self.about.as_ref().err().map(|e| e.as_str())
+    }
+
+    /// `laws_about(laws())` as the compile reads it (under [`COMPILE_OPERATIONS`]).
+    fn read_laws_about(&self) -> Result<Vec<(String, String)>, String> {
         if !self.has("laws_about") {
-            return Vec::new();
+            return Ok(Vec::new());
         }
         let m = self.laws_map();
-        let Ok(d) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)) else { return Vec::new() };
-        d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect()
+        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)).map_err(|e| format!("laws_about: {e}"))?;
+        Ok(d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect())
     }
 
     /// The world's rules as minds are told them, built from the laws' descriptions: one line per
@@ -2590,6 +2612,7 @@ impl Scripts {
             earshot: flag("earshot", l.earshot),
             first_sight_gap_s: g("first_sight_gap_s", l.first_sight_gap_s).clamp(0.0, 3_600.0),
             heard_first_rethinks: flag("heard_first_rethinks", l.heard_first_rethinks),
+            think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
@@ -3439,6 +3462,32 @@ mod tests {
     /// Attention cues (docs/ATTENTION.md): off by default, with their cooldown and gap as laws
     /// a world may set (`set_world_law`), clamped to sane bounds.
     #[test]
+    fn the_constants_words_are_read_with_the_compile_s_budget() {
+        // `laws_about` is read once per install, like the laws' other descriptions: a world whose
+        // words take more than the running world's MAX_OPERATIONS still installs, and a failure
+        // to read them is refused with its own reason, not as a constant without words.
+        let src = include_str!("../../scripts/skills.rhai");
+        let long = r#"fn laws_about(l) {
+            let m = base_laws_about(l);
+            let extra = "";
+            for i in 0..600 { if i % 300 == 0 { extra += " (and so on)"; } else if i < 0 { extra += "never"; } }
+            m.address_m = m.address_m + extra;
+            m
+        }"#;
+        let sc = Scripts::new(&crate::floors::compose(src, long).unwrap()).unwrap();
+        assert!(sc.laws_about_error().is_none(), "{:?}", sc.laws_about_error());
+        let about: std::collections::HashMap<String, String> = sc.laws_about().into_iter().collect();
+        assert!(about["address_m"].ends_with(" (and so on) (and so on)"), "{:?}", about.get("address_m"));
+        sc.validate().expect("installs: its words were read within the compile's budget");
+        // The same words asked under the running world's cap (the engine after the compile) are not read.
+        assert!(sc.engine.call_fn::<Dynamic>(&mut Scope::new(), &sc.ast, "laws_about", (sc.laws_map(),)).is_err(), "the test's words take more than {MAX_OPERATIONS} operations");
+        // Words that cannot be read at all are refused as such.
+        let broken = Scripts::new(&crate::floors::compose(src, "fn laws_about(l) { let m = base_laws_about(l); m.address_m = l.no_such_law.len(); m }").unwrap()).unwrap();
+        assert!(broken.laws_about_error().is_some());
+        assert!(broken.validate().unwrap_err().contains("laws_about"), "{:?}", broken.validate());
+    }
+
+    #[test]
     fn attention_cues_are_the_world_s_laws() {
         let src = include_str!("../../scripts/skills.rhai");
         let shipped = Scripts::new(src).unwrap();
@@ -3491,6 +3540,20 @@ mod tests {
         assert_eq!(l.first_sight_gap_s, 3_600.0);
         let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
         assert!(about["first_sight_thinks"].contains("brings you to think"), "{about:?}");
+    }
+
+    /// The think prompt's framing (docs/FRAMING.md): today's by default, a world may set the
+    /// neutral one.
+    #[test]
+    fn think_framing_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(!shipped.laws().think_framing);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["think_framing"].contains("why one is thinking"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("think_framing".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().think_framing);
     }
 
     /// A line overtaken by someone else's (first-sight-crowd): off by default, a world may set it.
