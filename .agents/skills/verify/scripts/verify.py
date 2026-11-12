@@ -449,6 +449,23 @@ def cleanup(a):
         observer(argparse.Namespace(run=a.run, action="stop"))
         st = load(a.run)
     if st.get("published") and not getattr(a, "keep_db", False) and st["db"].startswith(PREFIX):
+        # Pause the world first: SpacetimeDB 2.14.1 can panic, and take the whole server down,
+        # when a database is deleted while its world still ticks (the trial service went down
+        # that way on 2026-11-12 at 12:52; living/tools/trials.py delete_db does the same).
+        tok = admin_token()
+        code, body = http(f"/v1/database/{st['db']}/call/set_paused", [True], tok)
+        paused = code == 404
+        for _ in range(10):
+            if paused:
+                break
+            c, b = http(f"/v1/database/{st['db']}/sql", "SELECT paused FROM world", tok, raw=True)
+            paused = c == 404 or (c == 200 and "true" in b.lower())
+            if not paused:
+                time.sleep(1)
+        if not paused:
+            save(st)
+            sys.exit(f"not deleting {st['db']}: its world could not be paused ({code} {body.strip()[:160]}); pause it, then rerun cleanup")
+        time.sleep(2)
         stdb("delete", "-s", "local", st["db"], "-y", check=False)
         # Trust the server, not the CLI's exit status: a deleted database answers SQL with 404.
         code, body = http(f"/v1/database/{st['db']}/sql", "SELECT 1 FROM world", raw=True)

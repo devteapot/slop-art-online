@@ -548,6 +548,9 @@ class Face:
         uv = [((IRIS_COL0 + IRIS_PX / 2 + side * -a * half * IRIS_WIDE * 0 + a * half * IRIS_WIDE) / ATLAS, 1 - (IRIS_PX / 2 - b * half) / ATLAS) for a, b in disc_]
         faces = [(0, 1 + i, 1 + (i + 1) % seg) for i in range(seg)] + [(1 + i, 1 + seg + i, 1 + seg + (i + 1) % seg, 1 + (i + 1) % seg) for i in range(seg)]
         m.add(turn(on_ball(ball, xs, zs, 0.0006), ball, yaw, pitch), white, uv, faces, "iris", facing=FORWARD, eye=(side, 1.0))
+        # The iris's lights: the same disc a quarter of a millimetre before it, in the lips' and
+        # blush's layer (face_paint.iris_lights), which the client does not recolour.
+        m.add(turn(on_ball(ball, xs, zs, 0.00085), ball, yaw, pitch), white, uv, faces, "lights", facing=FORWARD, eye=(side, 1.0))
         # Highlights: both eyes are lit from the same side. They follow the eye half way,
         # as a reflection does.
         hs = look.get("light_side", 1.0)
@@ -664,32 +667,14 @@ class Face:
         self._strip(m, [at(s, z + w) for s, z, w in zip(s4, z4, w4)], [at(s, z - w) for s, z, w in zip(s4, z4, w4)], look["skin_line"], look["skin_line"], "line", 0.0009)
 
     def _brow(self, m, side, state):
-        hf, look = self.hf, self.look
-        n = 14
-        top, bot = brow_shape(hf, side, state, n)
+        """A brow as the reference draws its own: one tapered stroke in one colour, standing
+        just off the skin (`brow_shape`, `brow_width`). It is a material of its own under
+        VRoid's name for it (`FaceBrow`), which the client colours with the person's hair."""
+        look = self.look
+        top, bot = brow_shape(self.hf, side, state, ts=BROW_TS)
         c = look["brow"]
-        # A soft shape under the hairs, so the brow still reads from far off.
-        under = mix3(c, look["skin"], 0.12)
-        self._strip(m, [(x, lerp(zb, zt, 0.88)) for (x, zt), (_, zb) in zip(top, bot)], [(x, lerp(zb, zt, 0.12)) for (x, zt), (_, zb) in zip(top, bot)], under, mix3(under, (0, 0, 0), 0.12), "brow", 0.0010)
-        # The hairs: strands as the hair's locks are in small, growing up at the inner end and
-        # sweeping along the brow toward its tail.
-        rng = random.Random(f"brow/{look.get('seed', 0)}/{side}")
-        count = look.get("brow_hairs", 24)
-        for i in range(count):
-            t = (i + rng.uniform(0.1, 0.9)) / count
-            j = min(int(t * (n - 1)), n - 2)
-            f = t * (n - 1) - j
-            (xa, za), (xb, zb_) = top[j], top[j + 1]
-            (xc, zc), (xd, zd) = bot[j], bot[j + 1]
-            xt, zt, zl = lerp(abs(xa), abs(xb), f), lerp(za, zb_, f), lerp(zc, zd, f)
-            w = zt - zl
-            root = (xt, lerp(zl, zt, rng.uniform(0.05, 0.55)))
-            slope = math.atan2(zb_ - za, abs(xb) - abs(xa))
-            a = slope + math.radians(lerp(72, 14, smooth(t / 0.45)) + rng.uniform(-9, 9))
-            ln = max(w, 0.0012) * lerp(1.15, 1.9, smooth(t / 0.5)) * rng.uniform(0.8, 1.15) * (1 - 0.35 * smooth((t - 0.75) / 0.25))
-            tone = rng.uniform(-0.16, 0.16)
-            col = mix3(c, (0, 0, 0), -tone) if tone < 0 else mix3(c, look["skin"], tone * 0.8)
-            self._strand(m, side, root, a, ln, 0.00055 + 0.085 * max(w, 0.001), bend=-0.18, cols=(col, mix3(col, look["skin"], 0.25)), mat="brow", off=0.0012)
+        # A little darker along the lower edge: the stroke has a top and a bottom.
+        self._strip(m, top, bot, c, mix3(c, (0, 0, 0), 0.10), "brow", 0.0011)
 
     def _strand(self, m, side, root, angle, length, width, bend, cols, mat, off, rise=None):
         """One hair on the face: a tapering card from `root` (front view: |x|, z) along `angle`
@@ -798,22 +783,43 @@ class Face:
                     m.fm.append("face")
 
 
-def brow_shape(hf, side, state=None, n=14):
+# Where along a brow its stroke has points (0 its inner end, 1 its tail): close together where
+# the inner end rounds, and toward the tail's point.
+BROW_TS = (0.0, 0.012, 0.03, 0.06, 0.10, 0.15, 0.21, 0.28, 0.36, 0.44, 0.52, 0.60, 0.68, 0.75, 0.81, 0.86, 0.90, 0.935, 0.965, 0.985, 1.0)
+
+
+# A brow's stroke at its thickest, as a share of the type's brow thickness. The types' numbers
+# were set for a soft shape under hairs that reached past it.
+BROW_STROKE = 1.15
+
+
+def brow_width(t):
+    """A brow's thickness along it, as a share of its greatest: a brush stroke. It begins
+    rounded at the inner end at half its thickness, is full from a fifth of the way out to
+    two fifths, and from there narrows to a point at the tail."""
+    t = np.asarray(t, float)
+    swell = 0.50 + 0.50 * smooth(t / 0.20)
+    cap = np.clip(t / 0.035, 0.0, 1.0) ** 0.5
+    taper = 1.0 - np.clip((t - 0.40) / 0.60, 0.0, 1.0) ** 1.6
+    return swell * cap * taper
+
+
+def brow_shape(hf, side, state=None, n=14, ts=None):
     """A brow's upper and lower edges in the front view, from its inner end out: two lists of
-    (x, z). `state` raises or lowers its ends (expressions)."""
+    (x, z), at `n` even steps or at `ts`. `state` raises or lowers its ends (expressions)."""
     state = state or {}
     x0 = hf.eye_x - hf.eye_w * 1.02 - 0.0015
     x1 = hf.eye_x + hf.eye_w * (1.12 + 0.30 * (hf.brow_len - 1)) + 0.002
     x0 = max(x0, 0.0085)
     top, bot = [], []
     peak = 0.62
-    for i in range(n):
-        t = i / (n - 1)
+    for t in ts if ts is not None else [i / (n - 1) for i in range(n)]:
         x = lerp(x0, x1, t)
         arch = hf.brow_arch * (math.sin(math.pi * min(t / peak, 1.0) * 0.5) if t < peak else math.cos(math.pi * 0.5 * ((t - peak) / (1 - peak)) ** 1.15) ** 0.9)
         z = hf.eye_z + hf.eye_up + hf.brow_up + arch + hf.brow_tilt * (2 * t - 1) - 0.0012 * (t > peak) * ((t - peak) / (1 - peak))
         z += lerp(state.get("brow_in", 0.0), state.get("brow_out", 0.0), smooth(t * 1.2))
-        w = hf.brow_w * (0.55 + 0.45 * smooth(t / 0.16)) * (1 - 0.88 * smooth((t - 0.45) / 0.55) ** 1.2)
+        # Never quite nothing: the ends are slivers, not faces without area.
+        w = max(hf.brow_w * BROW_STROKE * float(brow_width(t)), 0.00014)
         top.append((side * x, z + 0.55 * w))
         bot.append((side * x, z - 0.45 * w))
     return top, bot

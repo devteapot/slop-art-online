@@ -372,15 +372,45 @@ def tint_skin(j, binary, hexc):
                 p["attributes"]["COLOR_0"] = append_accessor(j, binary, array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()]), ct, typ, norm, None)
 
 
+def tint_brows(j, binary, hexc):
+    """Stand in for the client's tag colour on the brows (`…FaceBrow_00_FACE`, which takes the
+    hair's): a grey material as the client tints one (toon.wesl `recolor`): the colour's hue
+    and saturation everywhere, the value multiplied down to the colour's from the mesh's mean
+    by area, or lightened toward white where the colour is above that mean."""
+    t = np.array(linear(hexc), float)
+    tv = float(t.max())
+    for mesh in j["meshes"]:
+        for p in mesh["primitives"]:
+            if "FaceBrow" not in j["materials"][p["material"]]["name"] or "COLOR_0" not in p["attributes"]:
+                continue
+            values, (ct, typ, norm) = read_accessor(j, binary, p["attributes"]["COLOR_0"])
+            n = 4 if typ == "VEC4" else 3
+            v = np.array(values, dtype=np.float64).reshape(-1, n)
+            unit = {5126: 1.0, 5123: 65535.0, 5121: 255.0}[ct]
+            pos = np.array(read_accessor(j, binary, p["attributes"]["POSITION"])[0], float).reshape(-1, 3)
+            idx = np.array(read_accessor(j, binary, p["indices"])[0], np.int64).reshape(-1, 3)
+            area = 0.5 * np.linalg.norm(np.cross(pos[idx[:, 1]] - pos[idx[:, 0]], pos[idx[:, 2]] - pos[idx[:, 0]]), axis=1)
+            weight = np.zeros(len(pos))
+            for k in range(3):
+                np.add.at(weight, idx[:, k], area / 3)
+            g = v[:, :3].mean(axis=1) / unit
+            mv = max(float((v[:, :3] * weight[:, None]).sum(axis=0).max() / weight.sum() / unit), 1e-4)
+            val = g * tv / mv if tv <= mv else 1.0 - (1.0 - g) * max((1.0 - tv) / max(1.0 - mv, 1e-4), 1e-4)
+            v[:, :3] = np.clip(np.clip(val, 0.0, 1.0)[:, None] * (t / max(tv, 1e-6))[None, :], 0.0, 1.0) * unit
+            p["attributes"]["COLOR_0"] = append_accessor(j, binary, array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()]), ct, typ, norm, None)
+
+
 def tint_eyes(j, binary, hexc, at=None):
-    """Stand in for the client's tag colour on the iris: the iris material's own picture, redrawn
-    in shades of this person's eye colour (each pixel's lightness against the picture's mean,
-    times the colour), as the client moves a picture's mean colour to the recipe's."""
+    """Stand in for the client's tag colour on the iris: the iris material's own picture,
+    recoloured by the client's rule (`eye_colours.recolor`): its source colour, the mean of the
+    texels the iris's vertices lie on, moved to the line's eye colour."""
     import io
 
     from PIL import Image
 
-    target = np.array([int(hexc.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)])
+    import eye_colours
+
+    target = eye_colours.linear([int(hexc.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)])
     done = set()
     for mesh in j["meshes"]:
         for p in mesh["primitives"]:
@@ -396,15 +426,13 @@ def tint_eyes(j, binary, hexc, at=None):
                 bv = j["bufferViews"][image["bufferView"]]
                 pic = np.array(Image.open(io.BytesIO(bytes(binary[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]]))).convert("RGB"), float) / 255
             else:
-                # The types' shared iris page (share.py types): the whole page is redrawn and kept
-                # in this file, since a page cannot be one person's colour.
+                # The types' shared iris (share.py types): the picture is redrawn and kept in
+                # this file, since a shared picture cannot be one person's colour.
                 pic = np.array(Image.open(os.path.join(os.path.dirname(os.path.abspath(at)), image.pop("uri"))).convert("RGB"), float) / 255
                 image["mimeType"] = "image/png"
-            lum = pic @ np.array([0.3, 0.59, 0.11])
-            out = np.clip(target[None, None, :] * (lum / max(float(lum.mean()), 1e-3))[..., None], 0.0, 1.0)
-            # Keep what is nearly white or black as it is (the light in the eye, the pupil).
-            keep = ((pic.min(axis=2) > 0.85) | (pic.max(axis=2) < 0.12))[..., None]
-            out = np.where(keep, pic, out)
+            pic = eye_colours.linear(pic)
+            uv = np.array(read_accessor(j, binary, p["attributes"]["TEXCOORD_0"])[0], float).reshape(-1, 2)
+            out = eye_colours.stored(eye_colours.recolor(pic, eye_colours.source_mean(pic, uv), target))
             data = io.BytesIO()
             Image.fromarray((out * 255 + 0.5).astype(np.uint8)).save(data, format="PNG")
             while len(binary) % 4:
@@ -478,6 +506,8 @@ def main():
             tint_skin(j, binary, cols["skin"])
         if cols.get("eyes"):
             tint_eyes(j, binary, cols["eyes"], a.out)
+        if cols.get("hair"):
+            tint_brows(j, binary, cols["hair"])
     if a.hair:
         colour = linear(a.hair_colour) if a.hair_colour else None
         added = attach(j, binary, a.hair, a.out, colour)
