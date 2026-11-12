@@ -397,10 +397,26 @@ def from_type(tid):
                 build=dict(height=body["height_m"][1], weight=body.get("weight", 0.0), muscle=body.get("muscle", 0.0)), skin=dict(tone=0.25, freckles=0.0, weathered=0.0), beard=dict(style="none", stubble=0.0))
 
 
+STYLES = ("tousled", "short", "crop", "shag", "swept", "sides", "bob", "bob_parted", "braids", "tail", "long", "bun", "braid")
+STYLE_HEAD = "adult-f-b"  # the head every shared hair style is built on; a type's file carries its fit onto that type (hair_fit.py)
+
+
+def from_style(style):
+    """The figure a shared hair style's file is built on (`style:<name>`): the standard head with
+    every identity value at 0, and the style at the lengths and parting its own seed draws."""
+    if style not in STYLES:
+        raise SystemExit(f"style {style!r}: not one of {STYLES}")
+    male = style in ("short", "crop", "swept", "sides", "shag", "tousled")
+    return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style), sex="male" if male else "female", age=30, hair=dict(style=style), beard=dict(style="none", stubble=0.0),
+                outfit=dict(headwear="none"))
+
+
 def from_variant(name):
     """A preset's name, `type:<face type>` (the type's own figure) or `<seed>:<kind>` (man, woman, elder_man, elder_woman, boy, girl)."""
     if name.startswith("type:"):
         return from_type(name[5:])
+    if name.startswith("style:"):
+        return from_style(name[6:])
     if ":" in name:
         seed, kind = name.split(":")
         sex, lo, hi = KINDS[kind]

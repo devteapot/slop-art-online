@@ -28,6 +28,8 @@ one() {
   fi
   python3 living/tools/merge_primitives.py "$out/$t.glb" "$out/$t.glb.tmp" > /dev/null && mv "$out/$t.glb.tmp" "$out/$t.glb"
   python3 living/tools/face_normals.py "$out/$t.glb" "$out/$t.glb.tmp" --png "$out/$t.face.png" > /dev/null && mv "$out/$t.glb.tmp" "$out/$t.glb"
+  # How the shared hair styles' head is laid onto this type's (hair_fit.py), in the scene's extras.
+  python3 living/tools/characters/hair_fit.py "$t" "$out/$t.glb" > /dev/null
   # Designed shadows: the planar proxy's normals and the drawn threshold map, one map a type.
   python3 living/tools/characters/face_shadow.py "$out/$t.glb" --png "$out/$t.face.png" > /dev/null
   python3 living/tools/characters/outline_normals.py "$out/$t.glb" > /dev/null

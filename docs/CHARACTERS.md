@@ -2,7 +2,7 @@
 
 The game's people are made by our own tool: a set of parameters goes in, a rigged, painted, animated character file comes out. This replaces VRoid Studio bases (decision 2 of [the small city](SMALL_CITY.md)). The owner's bar is VRoid's quality close up, from a parameterized tool of our own.
 
-**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns):**
+**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns; hair as shared style files):**
 
 - **The bar is the reference character:** the VRoid model the game has used so far (`lookdev/vroid-Sendagaya_Shino.glb`; the asset board's control `vroid=recipe:shino`), close up included. The owner accepted pass 1 as the base and said of it: "a step up … but still far away from the reference model we have been using so far. That is kind of what we want to get to".
 - **Pass 1 (`char-2`):** faces and the parameter model. A seed or a parameter file gives a repeatable person of any sex and age from 1 to about 80, with real eye openings, a mouth that opens, 15 expressions under VRoid's names, stubble and six beard styles, age lines and freckles. One command makes a household or a whole town and its check page.
@@ -42,6 +42,11 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Per-vertex outline width in the files** (`_OUTLINE_WIDTH`: none on lids, lashes and lines, heavier along the jaw, lighter on hair), beside the outline normals, which stay separate from the lighting normals.
   - **Close up the jaw's line reads; at the game camera it does not** on the near head, and is one darker pixel row on the far head. A line that holds its width on screen needs the client's outline pass; the exact need is written there.
   - Cost: 496 triangles and 37 kB a type file (4%).
+- **Pass 3, hair** ([hair styles](#hair-styles)).
+  - **Why hair looks washed out and half transparent close up: the client's rim light,** added in one pale colour whatever the surface's own, which on dark hair is several times the hair's colour; and the film gradient near the top of the frame. Not alpha (the hair is opaque), not the shared strand picture (the same bytes), and no normals of ours avoid it. Where and what is written for the laptop.
+  - **Hair is 13 shared style files** (`lookdev/styles/hair/<style>.glb`, 4.4 MB together), each built once on one standard head, with its far mesh, its spring chains under `J_Id_Cranium`, neutral shades for the tag to colour, and no clips.
+  - **Each type's file carries a fit** of the standard head onto its own (`hair_fit`), so one style sits on all 21 types.
+  - **A head composes from a type file and a style file the client's way:** read as glTF it matches the generator's rule to 0.000 mm, and Blender's reading agrees to 0.007 mm.
 - **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: how the hair is finished, the eyes' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
@@ -735,6 +740,119 @@ Pass 3's fifth step (2026-11-12). A figure's outline today is its silhouette: th
 
 **On the board** (`character:face-types` and the six presets): the lines on two bare type heads from five sides; four presets close up with step 4b above step 5; the head at the game camera pixel for pixel, near and far, with and without; the reference beside each.
 
+### Hair styles
+
+Pass 3, after step 5 (2026-11-12).
+
+**Why hair looks washed out and half transparent close up.** Four suspects, each tested on the `woman` preset with one thing changed at a time (the board's `hair-wash-tests`):
+
+| Suspect | Test | Result |
+|---|---|---|
+| Alpha | The file's hair material is opaque and single-sided. The face's skin painted green | No green shows through the fringe. Hair is not blended. (Green does show beside the eye, where there is a real gap between locks at the temple.) |
+| The shared strand picture | The same file with its strand picture embedded, as before step 1 | The embedded picture and `lookdev/strands.png` are the same bytes (SHA-1 `7d891fb6…`), and the hair's colour on screen is the same to within 5 of 255. |
+| Normals | Hair normals as built; blended wholly toward the head's capsule; all turned to face the front camera | As built and wholly blended look the same as today's 0.35 blend. Turned to the camera, the grey veil on the side locks is gone from the front, and from behind (now facing away) the whole head goes pale: back of the head 123, 90, 71 becomes 164, 142, 122. |
+| The client's shading | Reading `toon.wesl` and `edges.wesl`, and the fringe at three heights in the frame | See below. |
+
+- **The cause is the rim light on hair.** `toon.wesl`'s fragment adds `rim_light(fr, lit, rim_strength) * sun` to every surface, with `rim_strength = toon.rim.a` (0.35) for everything but faces and face parts. `rim_light` (`toon_light.wesl`) is `toon.rim.rgb * pow(fr, toon.band.w) * strength * (0.35 + 0.65 * lit)`: a pale cream (1.0, 0.95, 0.85), added, whatever the surface's own colour. On skin or cloth that is a soft edge. On dark hair, whose own colour is about 0.05 in linear light, an added 0.1 to 0.35 is two to seven times the hair itself, across every lock that turns from the viewer: the side curtains seen from the front, the whole outline. That is the washed-out, half-transparent look. Hair then gets a second rim of its own in `hair_light` (`toon.hair.w`, tinted by the hair).
+- **The film gradient adds to it at the top of the frame.** `edges.wesl` ends with a screen blend of `edges.grade.rgb * edges.grade.a * pow(1.0 - uv.y, 2.0)` (0.22 at the very top). The same fringe is 146, 117, 99 when the crown sits at 0.17 of the frame's height and 133, 99, 77 at 0.65. A close-up puts hair exactly there.
+- **The reference shows the same,** for the same reason.
+- **It is the client's, and nothing in `living/game` was changed.** For the laptop: in `toon.wesl`, where `rim_strength` is chosen, hair (`is_kind(4.0)`) should not take the general rim at `toon.rim.a`: either none (it has `hair_light`'s own, in its own hue) or a strength of its own as faces have (`toon.face.w`). More generally the rim could be scaled by the surface's own lightness, so it never exceeds what it lights. The film gradient is a look decision; it could spare dark pixels by being a tint and not a screen.
+- **No normals of ours avoid it:** the rim follows the angle to the viewer, and any normal that hides it from one side shows it from another.
+
+**Shared style files.** `living/tools/blender/gen_styles.sh` writes `lookdev/styles/hair/<style>.glb` for the 13 styles (`person_params.STYLES`), about 40 seconds for all.
+
+```bash
+living/tools/blender/gen_styles.sh                                    # the 13 style files
+python3 living/tools/characters/hair_fit.py --table                   # every type's fit onto the standard head
+python3 living/tools/characters/compose.py TYPE.glb OUT.glb --hair STYLE.glb --hair-colour '#6a3a22' --drop Far [--params NAME.params.json]
+```
+
+| | |
+|---|---|
+| Built on | the standard head, `adult-f-b` with every identity value 0 (`person.py --variant style:<name> --parts hair`), at the lengths and parting the style's own seed draws |
+| `Hair` | the cap and the locks, one material (`…_HAIR`), weighted to `J_Bip_C_Head`'s identity bones by where each vertex lies, and to the style's spring chains |
+| `FarHair` | the far mesh on the same skeleton |
+| Skeleton | the `J_Bip_*` bones and the 25 identity bones, as a type's file has, so every joint is found by name; the spring chains (`J_Sec_Hair<chain>_<joint>`) hang under `J_Id_Cranium` |
+| Colour | neutral shades, 0.86 at the root to 1.0 at the tip, for the client's tag to tint; the strand picture is the one shared file |
+| Also | `_OUTLINE_NORMAL`, `_OUTLINE_WIDTH` (0.7); the file's VRM block lists the spring chains |
+| Not in it | a head, clothes, clips |
+
+| Style | `Hair` triangles | `FarHair` | Spring bones | File | Other meshes |
+|---|---|---|---|---|---|
+| `bob` | 6,432 | 1,600 | 0 | 0.40 MB | |
+| `bob_parted` | 9,252 | 2,146 | 0 | 0.55 MB | |
+| `braid` | 6,156 | 1,714 | 4 | 0.40 MB | the tie, in cloth |
+| `braids` | 5,640 | 1,882 | 8 | 0.40 MB | the ties |
+| `bun` | 5,124 | 1,474 | 0 | 0.33 MB | |
+| `crop` | 2,808 | 940 | 0 | 0.21 MB | |
+| `long` | 8,664 | 1,906 | 16 | 0.51 MB | |
+| `shag` | 5,532 | 1,300 | 0 | 0.34 MB | |
+| `short` | 3,396 | 1,012 | 0 | 0.24 MB | |
+| `sides` | 2,076 | 688 | 0 | 0.16 MB | |
+| `swept` | 3,512 | 862 | 0 | 0.24 MB | |
+| `tail` | 4,956 | 1,168 | 3 | 0.32 MB | the tie |
+| `tousled` | 3,704 | 1,030 | 0 | 0.26 MB | |
+
+- 4.4 MB for the 13. `kerchief` is not a style file: it is headwear, and comes with outfits.
+- A style's file skips `face_normals.py`'s blend of hair normals toward the head (that tool needs a face in the file); the tests above show no visible difference.
+
+**One style on every type: `hair_fit`.** The types' skulls differ from the standard's by up to 5.4 mm (root mean square over the region hair grows on). Each type's file carries, in its scene's extras, the matrix that lays the standard skull onto its own: a scale about the cranium's pivot and a shift, fitted by least squares (`hair_fit.py`; `gen_types.sh` writes it).
+
+| Type | Skull from the standard's, as built | After the fit | Most | Scale (across, up, depth) |
+|---|---|---|---|---|
+| `child-u-a` | 2.3 mm | 1.7 mm | 8.3 mm | 1.012, 1.008, 1.009 |
+| `child-u-b` | 2.4 mm | 1.5 mm | 9.4 mm | 1.015, 1.012, 1.017 |
+| `child-u-c` | 2.6 mm | 1.6 mm | 9.6 mm | 1.016, 1.014, 1.020 |
+| `youth-f-a` | 0.8 mm | 0.6 mm | 2.5 mm | 0.997, 0.997, 0.995 |
+| `youth-f-b` | 0.0 mm | 0.0 mm | 0.2 mm | 1.000, 1.000, 1.000 |
+| `youth-f-c` | 0.7 mm | 0.6 mm | 2.8 mm | 1.002, 1.003, 1.003 |
+| `youth-m-a` | 4.0 mm | 1.8 mm | 4.2 mm | 0.967, 0.984, 0.967 |
+| `youth-m-b` | 3.8 mm | 1.7 mm | 3.8 mm | 0.969, 0.987, 0.969 |
+| `youth-m-c` | 3.9 mm | 1.8 mm | 3.9 mm | 0.968, 0.989, 0.969 |
+| `adult-f-a` | 0.8 mm | 0.7 mm | 2.5 mm | 0.998, 0.997, 0.995 |
+| `adult-f-b` | 0.0 mm | 0.0 mm | 0.0 mm | 1.000, 1.000, 1.000 |
+| `adult-f-c` | 0.7 mm | 0.6 mm | 2.9 mm | 1.002, 1.003, 1.003 |
+| `adult-m-a` | 4.8 mm | 2.1 mm | 4.7 mm | 0.959, 0.982, 0.961 |
+| `adult-m-b` | 4.7 mm | 2.0 mm | 4.5 mm | 0.959, 0.985, 0.962 |
+| `adult-m-c` | 4.8 mm | 2.1 mm | 4.8 mm | 0.958, 0.987, 0.962 |
+| `elder-f-a` | 1.5 mm | 1.4 mm | 8.8 mm | 1.000, 1.001, 0.997 |
+| `elder-f-b` | 1.5 mm | 1.4 mm | 9.0 mm | 1.002, 1.004, 1.000 |
+| `elder-f-c` | 1.9 mm | 1.6 mm | 8.8 mm | 1.003, 1.007, 1.001 |
+| `elder-m-a` | 5.3 mm | 2.3 mm | 5.1 mm | 0.952, 0.980, 0.956 |
+| `elder-m-b` | 5.3 mm | 2.2 mm | 4.9 mm | 0.953, 0.983, 0.957 |
+| `elder-m-c` | 5.4 mm | 2.3 mm | 5.4 mm | 0.951, 0.985, 0.957 |
+
+- Every generated head sits at the same place in its file (the chin at 1.535 m), so the matrix is in the file's own space and needs no other frame.
+
+**How the client attaches a style** (`compose.py`, `attach_hair`, is this rule applied to a file):
+
+1. Take the style's `Hair` mesh as it is, with its weights. Beyond the far switch take `FarHair`.
+2. **Joints by name:** each joint the style's skin names is the person's own bone of that name. The bones only the style has (its spring chains) are added under the person's `J_Id_Cranium`, each at `hair_fit` × its rest in the style's file.
+3. **Inverse bind matrices:** for each joint, the inverse of that joint's rest in the type's file (which is the type's own inverse bind matrix for it) times `hair_fit`. A hair vertex then stands at `hair_fit` × its place in the style's file, and follows the identity bones from there.
+4. **Colour** by the mesh tag, as recipes recolour hair today.
+5. The spring chains are listed in the style's VRM block; add them to the person's.
+6. The style's other meshes (a tie, in cloth) attach the same way.
+
+**Proved on a file.** A man of `adult-m-a`, the type furthest from the standard, with 38 drawn identity values (distance 0.32 from his type):
+
+| | Hair vertices | Root mean square | Most |
+|---|---|---|---|
+| `tousled` (no spring bones): the composed file as a glTF reader evaluates it, against the generator's rule | 2,033 | 0.000 mm | 0.000 mm |
+| `long` (16 spring bones added): the same | 4,502 | 0.000 mm | 0.000 mm |
+| `long`: Blender reading the composed file, against `compose.py` reading it | 4,502 | 0.007 mm | 0.067 mm |
+
+- The generator's rule here is the baked person: every hair vertex through `hair_fit`, then through the identity bones' matrices by its weights (`cage_head.bone_matrices`), a spring chain moving as the cranium's bone does.
+- **Against hair built on the type itself** the fitted style is not the same hair: 4.2 mm away on `adult-m-a` with `tousled` (root mean square; 7.6 mm at the 95th percentile), 3.1 mm on `child-u-a` with `bob`, 2.6 mm on `elder-f-c` with `bun`. Unfitted it is 5.2, 3.3 and 2.6 mm. Another head grows slightly different hair (the hairline and the locks are placed from the head's own surface), so this measures the difference between two valid heads of hair, not only the misfit.
+- **Judged by eye** on five types and six styles (the board's `styles-on-types`): no scalp shows through and no style floats.
+
+**What a shared style gives up.** A person's hair was drawn from eight numbers (length, parting, fringe, volume, curl and so on); a shared style has the one set its file was built with. Variety within a style then comes from colour and from more style files, each about 0.3 MB. Greying lock by lock, which was a person's, is not in a style file.
+
+**What the client needs for hair styles** (for the laptop coordinator):
+
+1. Attach a style by the six steps above. The one new thing beside what outfit pieces do today is `hair_fit` in the inverse bind matrices, and adding the style's own bones.
+2. The rim on hair, as above.
+3. Until outfits are style files too, a person cannot be spawned whole from a type file: `gen_person.sh` still writes one file a person, with its own hair.
+
 ### Type files
 
 `living/tools/blender/gen_types.sh` writes `lookdev/types/<type>.glb` for the 21 types, with `<type>.face.png` (the face's shadow map) and `<type>.params.json` beside each. A file holds:
@@ -1047,6 +1165,8 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
+**After the hair step**, the list below stands, with its first item split: the wash and the half-transparent look are the client's rim light and film gradient ([hair styles](#hair-styles)), and the hair's finish (a blocky fringe, ragged ends, gaps at the temple) is ours and was not changed in this step, which made hair shared, not better.
+
 **After pass 3's fifth step (lines)**, judged on the board with the reference beside ours, ordered by how much it shows:
 
 1. **Hair.** Close up it looks washed out and half transparent in every shot, and its finish is as it was: a blocky fringe, ragged ends, gaps at the temple on the new head. Next.
@@ -1126,7 +1246,7 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 3. **The cage head for each type, with the rig in it.** Done in pass 3's third step ([the cage head](#the-cage-head)): 21 types from one script, accepted against the reference's measured sections, with its eye depths, outline normals, the trimmed ranges and the type files. Left from it: lips and blush out of the skin texture (with step 6's paint), the style files for hair and outfits, the age direction inside a band, and a second look at bindless colours with the laptop.
 4. **Designed shadows.** Done in pass 3's fourth step ([designed shadows](#designed-shadows)): a planar proxy's normals and a threshold map from script-drawn shapes at 16 light angles, one map a type, in the client's existing format. Left from it: the far head still shades by its own round normals, and the shapes' onset angles wait on the owner's eye.
 5. **Lines where the form turns.** Done in pass 3's fifth step ([lines](#lines-where-the-form-turns)): shell lines at the jaw, chin, ears and mouth in the files, per-vertex outline width in the files, the client's need written out, and the data a post-process inner line would take.
-6. **Hair,** ahead of the eyes (the dev-box coordinator's order, 2026-11-12): why it looks washed out and half transparent close up (alpha, normals or shading), and hair as shared style files (`lookdev/styles/hair/<style>.glb`), so a person can be spawned from a type file. Outfit style files follow.
+6. **Hair as shared style files.** Done ([hair styles](#hair-styles)): the wash traced to the client's rim light and film gradient, 13 style files, a fit in each type's file, and a head composed from a type file and a style file the client's way. Left: outfit style files, so a whole person composes; the hair's finish; a style's variety (more files, or a few values on spring and fringe bones).
 7. **The eyes' drawing, lips and blush** (the face's paint; lips and blush out of the skin texture).
 8. **Later:** the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
 
