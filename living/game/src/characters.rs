@@ -739,7 +739,10 @@ fn bone_scale(name: &str, p: &Proportions) -> Option<BoneScale> {
     let chest = g * p.shoulders;
     Some(match (name, side) {
         ("J_Bip_C_Hips", _) => Own(Vec3::new(g * p.hips, 1.0, g * p.hips.sqrt())),
-        ("J_Bip_C_Spine", _) => Own(Vec3::new(g * lerp(1.0, p.hips, 0.5), p.torso, g)),
+        // The belly bone (under the spine, `compose::belly_offset`) takes the spine's own scale:
+        // its vertices are the waist's front, and kept at the base's girth they stood 6-7 mm in
+        // from the spine's on lean and strong builds.
+        ("J_Bip_C_Spine" | "J_Fit_Belly", _) => Own(Vec3::new(g * lerp(1.0, p.hips, 0.5), p.torso, g)),
         ("J_Bip_C_Chest", _) => Own(Vec3::new(lerp(g, chest, 0.5), p.torso, g)),
         ("J_Bip_C_UpperChest", _) => Own(Vec3::new(chest, p.torso, g)),
         ("J_Bip_C_Neck", _) => Own(Vec3::new(g.powf(0.8), p.neck, g.powf(0.8))),
@@ -1683,6 +1686,24 @@ pub fn springs(
 mod tests {
     use super::*;
     use bevy::world_serialization::{WorldInstanceReady, WorldInstanceSpawner};
+
+    /// The belly bone scales with the spine, for every build and both widths of hips, so the
+    /// waist's front keeps the spine's girth (it stood 6-7 mm in on lean and strong builds).
+    #[test]
+    fn the_belly_bone_scales_with_the_spine() {
+        let own = |s: Option<BoneScale>| match s {
+            Some(BoneScale::Own(v)) => v,
+            other => panic!("not scaled in its own frame: {other:?}"),
+        };
+        for (build, hips, torso) in [(0.82, 0.94, 0.97), (0.9, 1.0, 1.0), (1.22, 1.08, 1.03), (1.35, 0.9, 1.1)] {
+            let p = Proportions { build, hips, torso, ..default() };
+            let spine = own(bone_scale("J_Bip_C_Spine", &p));
+            assert_eq!(own(bone_scale("J_Fit_Belly", &p)), spine, "build {build}, hips {hips}");
+            assert_ne!(spine, Vec3::ONE);
+        }
+        // At the base's own proportions there is nothing to do, for the belly as for the spine.
+        assert_eq!(own(bone_scale("J_Fit_Belly", &Proportions::default())), Vec3::ONE);
+    }
 
     /// The `.thumb.png` contract (docs/CHARACTERS.md, pictures.py, bc7ktx): the cells `Thumb::of`
     /// makes, premultiplied, in 16 bits, read back by `Thumb::from_image` to 1/65535; a wrong size
