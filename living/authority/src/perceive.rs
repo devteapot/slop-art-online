@@ -150,7 +150,7 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
     let sig = sp.signals.get(name).ok_or_else(|| format!("a {} has no `{name}` signal", me.kind))?;
     let at = ctx.db.body().id().find(from).map(|b| pos(&b, now)).ok_or("no body")?;
     if name == "cry" && me.kind == "person" && me.stage == 0 && common::scripts(ctx).has("body_state") {
-        return infant_cry(ctx, &me, at, sig.range, now);
+        return infant_cry(ctx, &me, at, sig.range, sig.loudness, now);
     }
     // Calling the same call again within 45 s is still the same call, not news.
     if let Some(mut st) = ctx.db.mind_state().id().find(from) {
@@ -180,7 +180,7 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
             || (me.parent_a != 0 && (c.parent_a == me.parent_a || c.parent_b == me.parent_a))
             || ctx.db.relation().by_pair().filter((c.id, from)).next().is_some()
     };
-    for (c, _) in minds_near(ctx, at, sig.range, now, &[from]) {
+    for (c, d) in minds_near(ctx, at, sig.range, now, &[from]) {
         let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
         let heard = heard_by(&c);
         let (text, sal) = if c.kind == me.kind {
@@ -188,6 +188,10 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
         } else {
             (format!("You hear {} from a {}, {dir}.", sig.sound, me.kind), (sig.salience * 0.8).min(0.7))
         };
+        // A loud signal wakes a sleeper near enough (its spec's `loudness`), whoever plays it.
+        if wakes(ctx, d, sig.loudness) && asleep(ctx, c.id) {
+            request_waking(ctx, c.id, &text, now, Wake::Sound);
+        }
         percept(ctx, &c, now, "signal", from, 0, at, text, sal);
         if c.kind == me.kind && sig.salience >= 0.7 && c.ai && (!sig.kin_only || cares(&c)) {
             request_deliberation(ctx, c.id, &format!("{heard} ({name}), {dir}."), now);
@@ -274,14 +278,14 @@ pub fn infant_distress(ctx: &ReducerContext, baby: &Character, at: (f32, f32), n
     let Ok(state) = crate::act::body_state(ctx, baby.id, now) else { return };
     if state.cold || state.starving || state.wound != living_rules::script::Wound::None {
         if let Some(sig) = common::species(&baby.kind).and_then(|s| s.signals.get("cry").cloned()) {
-            let _ = infant_cry(ctx, baby, at, sig.range, now);
+            let _ = infant_cry(ctx, baby, at, sig.range, sig.loudness, now);
         }
     } else if ctx.db.infant_cry().infant().find(baby.id).is_some_and(|r| r.needs != infant_needs(state)) {
         ctx.db.infant_cry().infant().delete(baby.id);
     }
 }
 
-fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32, now: u64) -> Result<String, String> {
+fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32, loudness: f32, now: u64) -> Result<String, String> {
     let state = crate::act::body_state(ctx, baby.id, now)?;
     let needs = infant_needs(state);
     let old = ctx.db.infant_cry().infant().find(baby.id);
@@ -297,7 +301,7 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     let emit = cry.heard_ms == 0 || now.saturating_sub(cry.heard_ms) >= 45_000;
     if emit {
         cry.heard_ms = now;
-        for (c, _) in minds_near(ctx, at, range, now, &[baby.id]) {
+        for (c, d) in minds_near(ctx, at, range, now, &[baby.id]) {
             let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
             let text = if c.kind == "person" {
                 let visible = ctx.db.body().id().find(c.id).is_some_and(|b| crate::perception::sees(ctx, c.id, &b, at, &common::world(ctx), &common::map(ctx), now));
@@ -305,6 +309,10 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
                 if visible { format!("{}, {dir}.", cry_seen(known.as_deref(), &looks)) }
                 else { format!("{}, {dir}.", cry_unseen(known.as_deref())) }
             } else { format!("You hear a baby crying, {dir}.") };
+            // A cry is loud: it wakes a sleeper near enough, whoever's baby it is.
+            if wakes(ctx, d, loudness) && asleep(ctx, c.id) {
+                request_waking(ctx, c.id, &text, now, Wake::Sound);
+            }
             percept(ctx, &c, now, "signal", baby.id, 0, at, text, if c.kind == "person" { 0.8 } else { 0.64 });
         }
     }
@@ -327,8 +335,8 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
             let reason = if visible { cry_seen(known.as_deref(), &looks) } else { format!("{}.", cry_unseen(known.as_deref())) };
             if pending.as_ref().is_some_and(|d| d.reason.contains(&reason)) { continue; }
             let urgent = state.cold || state.starving || state.wound != living_rules::script::Wound::None;
-            // A cry of distress wakes a sleeping carer; any other waits until it wakes.
-            if request(ctx, carer, &reason, now, urgent, urgent.then_some(Wake::Cry)) {
+            // (a carer the cry did not wake, above, is asked when it wakes)
+            if request(ctx, carer, &reason, now, urgent, None) {
                 record_cry_prompt(&mut cry, carer, now);
             }
         }
@@ -355,8 +363,60 @@ pub enum Wake {
     Attack,
     /// An alarm of one's own body that asks for a thought (brain.rs, `alerts`).
     Body,
-    /// One's infant crying in distress (cold, starving or hurt) where its carer can hear it.
-    Cry,
+    /// A sound loud and near enough (`wakes`): a call or a shout, a baby's cry, a fight.
+    Sound,
+}
+
+/// Whether a sound of `loudness` (its spec's: a way's, a signal's, a blow's; a voice is 1),
+/// `d` metres away, wakes a sleeper who hears it (the `wake_loudness` and `wake_reach` laws).
+pub fn wakes(ctx: &ReducerContext, d: f32, loudness: f32) -> bool {
+    let l = common::laws(ctx);
+    loudness > 0.0 && loudness >= l.wake_loudness && d <= l.wake_reach
+}
+
+/// The noise of something at `at` as loud as `loudness` (a blow landing: the noise of a fight),
+/// heard within `range`: every sleeper it wakes (`wakes`) wakes, whoever plays it, told by
+/// `told` (given the sleeper and the direction of the noise). Not `exclude`.
+pub fn noise(ctx: &ReducerContext, at: (f32, f32), loudness: f32, range: f32, exclude: &[u32], told: impl Fn(&Character, &str) -> String, now: u64) {
+    let l = common::laws(ctx);
+    if loudness <= 0.0 || loudness < l.wake_loudness {
+        return;
+    }
+    for (c, _) in minds_near(ctx, at, range.min(l.wake_reach), now, exclude) {
+        if asleep(ctx, c.id) {
+            let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
+            request_waking(ctx, c.id, &told(&c, dir), now, Wake::Sound);
+        }
+    }
+}
+
+/// How many lines heard while asleep a sleeper keeps for its waking (the latest).
+pub const HEARD_ASLEEP_KEPT: usize = 20;
+
+/// A line whose words reached `c` while it slept and did not wake it (`heard`, in its terms):
+/// kept for its waking, with a reason for its mind to think on then. Not told now.
+#[allow(clippy::too_many_arguments)]
+pub fn heard_asleep(ctx: &ReducerContext, c: &Character, speaker: u32, to: u32, at: (f32, f32), heard: &str, salience: f32, now: u64) {
+    ctx.db.heard_asleep().insert(HeardAsleep { id: 0, actor: c.id, speaker, to, x: at.0, y: at.1, text: heard.to_string(), salience, at_ms: now });
+    let mut kept: Vec<HeardAsleep> = ctx.db.heard_asleep().actor().filter(c.id).collect();
+    if kept.len() > HEARD_ASLEEP_KEPT {
+        kept.sort_by_key(|r| r.id);
+        for r in &kept[..kept.len() - HEARD_ASLEEP_KEPT] {
+            ctx.db.heard_asleep().id().delete(r.id);
+        }
+    }
+    // (asleep, so it waits in its `Slumber`)
+    request_deliberation(ctx, c.id, &format!("While you slept, you heard: {heard}"), now);
+}
+
+/// What `c` heard while asleep, told now that it is awake (whoever plays it), as heard then.
+pub fn heard_on_waking(ctx: &ReducerContext, c: &Character, now: u64) {
+    let mut rows: Vec<HeardAsleep> = ctx.db.heard_asleep().actor().filter(c.id).collect();
+    rows.sort_by_key(|r| r.id);
+    for r in rows {
+        ctx.db.heard_asleep().id().delete(r.id);
+        percept(ctx, c, now, "heard_asleep", r.speaker, r.to, (r.x, r.y), format!("While you slept, you heard: {}", r.text), r.salience * 0.5);
+    }
 }
 
 /// Ask the mind to reconsider for a reason that wakes a sleeping body (`Wake`): a sleeper wakes,
@@ -386,6 +446,7 @@ fn wake_body(ctx: &ReducerContext, c: &Character, why: &str, now: u64) -> Option
     let at = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let why = why.lines().next().unwrap_or("").trim();
     percept(ctx, c, now, "body", c.id, 0, at, format!("You woke up: {why}"), 0.5);
+    heard_on_waking(ctx, c, now);
     Some(row.map(|r| (r.reason, r.arrived)).unwrap_or_default())
 }
 
@@ -419,6 +480,7 @@ pub fn slept(ctx: &ReducerContext, c: &Character, now: u64) {
             ctx.db.slumber().actor().delete(c.id);
             let at = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
             percept(ctx, c, now, "body", c.id, 0, at, "You woke up.".into(), 0.2);
+            heard_on_waking(ctx, c, now);
             if !r.reason.is_empty() {
                 let mut reason = "You woke up.".to_string();
                 let mut arrived = living_rules::reasons::first(&reason, now);
