@@ -50,6 +50,19 @@ EYE_COLOURS = dict(
     blue=(0.30, 0.47, 0.62), grey=(0.42, 0.50, 0.54), green=(0.33, 0.48, 0.33), hazel=(0.47, 0.40, 0.20), amber=(0.60, 0.40, 0.14),
     brown=(0.36, 0.23, 0.13), dark_brown=(0.21, 0.14, 0.10),
 )
+# The iris every face type shares is painted in this colour (face_paint.shared_iris), and the
+# client recolours it to a person by moving its source colour to the line's eye colour. An amber
+# as light as the lightest eye colour above and as strong as the strongest, so the client only
+# ever turns its hue and darkens it: a colour above the source's is pushed toward white instead,
+# which greys the pupil.
+SHARED_IRIS = (0.66, 0.551, 0.165)
+# That picture's source colour as the client learns it (linear light): the mean of the texels
+# the iris's vertices lie on. It is about a quarter as light as the colour the iris is painted
+# with, since the vertices crowd the dark rim and the pupil. `eye_colours.py --check` holds
+# every type's iris to it.
+SHARED_IRIS_SOURCE = (0.09883, 0.06980, 0.01522)
+# How much of a picture's spread of hue the client keeps when it recolours (characters.rs).
+HUE_SPREAD = 0.4
 # How drawn the whole town's faces are (docs/CHARACTERS.md, "Style"): 0 keeps the proportions of
 # life that pass 1 had, 1 is the VRoid control's drawing (eyes low on the head and tall, a short
 # fine lower face, a small nose and mouth, a larger head). Grown men and the old take less of it.
@@ -342,7 +355,7 @@ def resolve(p):
         hair=hair, hair_tip=hair_tip, hair_natural=natural, hair_natural_tip=natural_tip, hair_silver=silver, hair_grey=grey, brow=brow, lash=lash, lash_tip=mix(lash, (0.42, 0.20, 0.14), 0.6),
         lash_k=(0.66 + 0.74 * fem + 0.34 * child * (1 - masc) + 0.12 * child) * (1 + STYLE["lash"] * drawn), lash_wing=0.14 + 0.22 * fem + 0.06 * child, wing_lift=0.10 + 0.22 * fem,
         lashes=int(round(9 * fem + 5 * child * (1 - masc) + 2 * child * masc)), lashes_low=int(round(4 * fem + 2 * child * (1 - masc))),
-        brow_hairs=int(round(22 + 8 * masc * teen + 4 * elder)), fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
+        fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
         lower=clip(0.35 + 0.45 * fem + 0.2 * child, 0, 1), iris=colour(p["eyes"]["colour"], EYE_COLOURS, "eyes.colour"),
         white_shade=mix((0.62, 0.60, 0.68), shade, 0.25),
     )
@@ -473,7 +486,10 @@ def person_line(spec, recipe, male):
             cloth_[name] = hexed(tone)
     colours["outfit"] = cloth_
     if isinstance(look.get("iris"), (tuple, list)):
-        colours["eyes"] = hexed(look["iris"])
+        # `eyes` is what the client moves the shared iris's source colour to; `eyes_natural` is
+        # the eye colour itself, which the iris's body then has.
+        colours["eyes"] = hexed(eye_line_colour(look["iris"]))
+        colours["eyes_natural"] = hexed(look["iris"])
     # The details worn as overlay styles, by the same thresholds a glance would use.
     over = []
     if spec["beard"] in BEARD_FORMS:
@@ -589,6 +605,27 @@ def from_overlay(spec):
 HEAD_PIECES = dict(cap=(dict(headwear="cap"), ("Cap", "CapPeak")), kerchief=(dict(headwear="kerchief"), ("Kerchief", "KerchiefKnot")))
 
 
+# Where an outfit piece is worn and how far out: its slot (`upper`, `lower`, `feet` or `head`)
+# and its layer within the slot, 0 innermost. A client finds the outermost upper and lower
+# piece by these (for a colour chip, say) and need not read a piece's name. `trim` marks a
+# piece that is a garment's trimming and not a garment: the smock's bands of other cloth.
+PIECE_WEAR = dict(
+    jersey=("upper", 0), jersey_coat=("upper", 0), jersey_smock=("upper", 0), coat=("upper", 1), smock=("upper", 1), smock_bands=("upper", 2), apron=("upper", 3),
+    trousers=("lower", 0), boots=("feet", 0), cap=("head", 0), kerchief=("head", 0),
+)
+
+
+def piece_wear(name):
+    """An outfit piece's slot and layer (`PIECE_WEAR`), by its file's name: `smock_58-f`."""
+    base = name[:-2] if name[-2:] in ("-m", "-f") else name
+    kind = base if base in PIECE_WEAR else base.rsplit("_", 1)[0]
+    slot, layer = PIECE_WEAR[kind]
+    out = dict(slot=slot, layer=layer)
+    if kind == "smock_bands":
+        out["trim"] = True
+    return out
+
+
 def piece_parts(name):
     base = name[:-2] if name[-2:] in ("-m", "-f") else name
     return (PIECES.get(base) or HEAD_PIECES[base])[1]
@@ -643,6 +680,30 @@ def from_variant(name):
     if name not in PRESETS:
         raise SystemExit(f"variant {name!r}: not one of {sorted(PRESETS)} or <seed>:<kind> with kind in {sorted(KINDS)}")
     return copy.deepcopy(PRESETS[name])
+
+
+def eye_line_colour(colour):
+    """The colour a person's line carries for eyes of this colour (sRGB 0..1, both).
+
+    The client moves the shared iris's source colour to the line's. The source is not the
+    colour the iris is painted with (`SHARED_IRIS_SOURCE` against `SHARED_IRIS`), so with the
+    eye colour itself in the line the client made the iris's body about three times lighter
+    than it, and greyed the pupil of any eye lighter than the source. This is the colour to
+    move the source to for the body to come out the eye colour: the step in hue, saturation and
+    value that takes `SHARED_IRIS` to its source, taken from the eye colour, as the client's
+    rule undoes it (toon.wesl `recolor`: value and saturation by ratio, hue by the distance from
+    the source's, kept at `HUE_SPREAD`)."""
+    import colorsys
+
+    lin = lambda c: [((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c]
+    sto = lambda c: [1.055 * x ** (1 / 2.4) - 0.055 if x > 0.0031308 else 12.92 * x for x in c]
+    bh, bs, bv = colorsys.rgb_to_hsv(*lin(SHARED_IRIS))
+    mh, ms, mv = colorsys.rgb_to_hsv(*SHARED_IRIS_SOURCE)
+    th, ts, tv = colorsys.rgb_to_hsv(*lin(colour[:3]))
+    d = bh - mh
+    d -= round(d)
+    # Never above the source's own: there the client lightens instead of scaling.
+    return tuple(sto(colorsys.hsv_to_rgb((th - HUE_SPREAD * d) % 1.0, min(ts * ms / bs, ms), min(tv * mv / bv, mv))))
 
 
 def set_path(p, text):

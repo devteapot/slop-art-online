@@ -112,6 +112,9 @@ pub struct WaySpec {
     pub animals: String,
     /// Seconds between two lines of this way (at least the speaking limit, 2 s).
     pub gap_s: f32,
+    /// How loud a line is (a voice 1): one loud enough wakes a sleeper near enough (the
+    /// `wake_loudness` and `wake_reach` laws).
+    pub loudness: f32,
     /// Longer lines are cut to this many characters.
     pub max_chars: usize,
     /// A technique the speaker must know ("" none).
@@ -133,7 +136,7 @@ pub struct WaySpec {
 /// The keys a `<way>_speech()` map may have.
 pub const WAY_TRAITS: &[&str] = &[
     "about", "label", "order", "to", "words", "noticed", "kind", "said", "said_to", "heard", "heard_to", "heard_to_you", "animals", "gap_s", "max_chars", "needs", "reach", "needs_sight", "introduces",
-    "names", "salience",
+    "names", "salience", "loudness",
 ];
 
 /// The way every line takes when none is named, and the one a script without ways speaks by.
@@ -163,6 +166,7 @@ impl WaySpec {
             heard_to_you: "{a} said to you".into(),
             animals: "a person's voice".into(),
             gap_s: 2.0,
+            loudness: 1.0,
             max_chars: 400,
             needs: String::new(),
             reach: 0.0,
@@ -329,6 +333,7 @@ pub fn way_of(name: &str, m: &Map) -> Result<WaySpec, String> {
         // A way for one ear alone reaches no animal unless it says so.
         animals: text(m, "animals", if only_to { "" } else { &base.animals })?,
         gap_s,
+        loudness: num(m, "loudness", base.loudness as f64, 0.0, 100.0)? as f32,
         max_chars: num(m, "max_chars", base.max_chars as f64, 1.0, 400.0)? as usize,
         needs: text(m, "needs", "")?,
         reach,

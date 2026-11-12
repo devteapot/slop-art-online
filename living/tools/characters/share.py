@@ -167,10 +167,12 @@ def atlas_users(j, which=None):
     return by_image
 
 
-def move_uvs(j, binary, materials, col, row, n, tile, window=(0.0, 0.0, 1.0, 1.0)):
+def move_uvs(j, binary, materials, col, row, n, tile, window=(0.0, 0.0, 1.0, 1.0), also=None):
     """Move the UVs of every primitive that wears one of `materials` into tile (col, row) of an
     n×n page, half a texel inside its edges. `window`: the part of the picture the tile holds
-    (u0, v0, u1, v1), when it is not the whole of it."""
+    (u0, v0, u1, v1), when it is not the whole of it. `also`: a second block of the picture and
+    where the page has it, for UVs that lie in it: ((u0, v0, u1, v1), (page u0, v0, u1, v1),
+    its side in texels)."""
     u0, v0, u1, v1 = window
     e = 0.5 / tile
     seen = set()
@@ -190,6 +192,12 @@ def move_uvs(j, binary, materials, col, row, n, tile, window=(0.0, 0.0, 1.0, 1.0
             for k in range(a["count"]):
                 o = base + k * stride
                 u, t = struct.unpack_from("<2f", binary, o)
+                if also is not None and also[0][0] - 1e-4 <= u <= also[0][2] + 1e-4 and also[0][1] - 1e-4 <= t <= also[0][3] + 1e-4:
+                    (a0, b0, a1, b1), (p0, q0, p1, q1), px = also
+                    e2 = 0.5 / px
+                    u, t = min(max((u - a0) / (a1 - a0), e2), 1 - e2), min(max((t - b0) / (b1 - b0), e2), 1 - e2)
+                    struct.pack_into("<2f", binary, o, p0 + u * (p1 - p0), q0 + t * (q1 - q0))
+                    continue
                 u, t = (u - u0) / (u1 - u0), (t - v0) / (v1 - v0)
                 struct.pack_into("<2f", binary, o, (col + min(max(u, e), 1 - e)) / n, (row + min(max(t, e), 1 - e)) / n)
             a.pop("min", None)
@@ -262,6 +270,10 @@ FAR_MEAN = (0.777, 0.4985, 0.369)
 # (u 0.203 to 0.797, v 0.604 to 0.859 on every type): only that is kept, at the picture's own
 # scale, so the page is 1600 x 720 where whole tiles would make it 2560 x 2560.
 TYPE_PAGES = dict(far=(256, FAR_MEAN, (0.0, 0.0, 1.0, 1.0)), tint=(512, None, (0.1875, 0.59375, 0.8125, 0.875)))
+# The iris's lights (face_paint.iris_lights) lie in the lip layer's picture where the atlas has
+# the iris, outside the window: this block of the picture (u0, v0, u1, v1). They are the same in
+# every type, so the page holds them once, in the corner of its last tile, which no type has.
+TYPE_LIGHTS = (0.625, 0.0, 0.8125, 0.1875)
 
 
 def _linear(a):
@@ -297,7 +309,8 @@ def _rgb(h):
 
 
 def types(files, out_dir):
-    """Lay the face types' far pictures, irises and lip layers out on the three shared pages."""
+    """Lay the face types' far pictures, irises and lip layers (with the iris's lights) out on
+    the three shared pages."""
     import numpy as np
 
     from merge_primitives import read_accessor
@@ -326,6 +339,8 @@ def types(files, out_dir):
         else:
             sheets[kind] = Image.new("RGB", whole, tuple(int(round(float(x) * 255)) for x in _stored(np.array(mean))))
     done = 0
+    iris = None
+    lights = None
     for f in files:
         t = os.path.splitext(os.path.basename(f))[0]
         if t not in order:
@@ -344,6 +359,27 @@ def types(files, out_dir):
             if im.size != (side, side):
                 im = im.resize((side, side), Image.LANCZOS)
             uv = np.vstack([np.array(read_accessor(j, binary, p["attributes"]["TEXCOORD_0"])[0], float).reshape(-1, 2) for mesh in j["meshes"] for p in mesh["primitives"] if p.get("material") in mats])
+            also = None
+            if kind == "tint":
+                # The iris's lights: their block goes to the last tile's corner, once for all.
+                a0, b0, a1, b1 = TYPE_LIGHTS
+                lit = (uv[:, 0] > a0 - 1e-4) & (uv[:, 0] < a1 + 1e-4) & (uv[:, 1] > b0 - 1e-4) & (uv[:, 1] < b1 + 1e-4)
+                if lit.any():
+                    if len(order) >= n * n:
+                        raise SystemExit("share: the pages have no spare tile for the iris's lights")
+                    box = (int(round(side * a0)), int(round(side * b0)), int(round(side * a1)), int(round(side * b1)))
+                    block = np.asarray(im.crop(box)).astype(int)
+                    at = ((n - 1) * size[kind][0], (n - 1) * size[kind][1])
+                    if lights is None and set(record["types"]) - {os.path.splitext(os.path.basename(x))[0] for x in files}:
+                        lights = np.asarray(sheets[kind].crop((at[0], at[1], at[0] + box[2] - box[0], at[1] + box[3] - box[1]))).astype(int)
+                    if lights is None:
+                        lights = block
+                        sheets[kind].paste(im.crop(box), at)
+                    elif lights.shape != block.shape or np.abs(lights - block).max() > 1:
+                        raise SystemExit(f"share: {f}: the lights in its iris are not the ones the other types share")
+                    w_, h_ = sheets[kind].size
+                    also = (TYPE_LIGHTS, (at[0] / w_, at[1] / h_, (at[0] + block.shape[1]) / w_, (at[1] + block.shape[0]) / h_), block.shape[0])
+                    uv = uv[~lit]
             if uv[:, 0].min() < window[0] - 1e-4 or uv[:, 0].max() > window[2] + 1e-4 or uv[:, 1].min() < window[1] - 1e-4 or uv[:, 1].max() > window[3] + 1e-4:
                 if window != (0.0, 0.0, 1.0, 1.0):
                     raise SystemExit(f"share: {f}: its {kind} mesh uses the picture outside the window the page keeps ({uv.min(axis=0).round(3)} to {uv.max(axis=0).round(3)}, window {window})")
@@ -367,9 +403,28 @@ def types(files, out_dir):
                     a = _rgb(h)
                 im = Image.fromarray((_stored(a) * 255 + 0.5).astype(np.uint8), "RGB")
             sheets[kind].paste(im.crop(cell[kind]), (col * size[kind][0], row * size[kind][1]))
-            move_uvs(j, binary, set(mats), col, row, n, min(size[kind]), window)
+            move_uvs(j, binary, set(mats), col, row, n, min(size[kind]), window, also)
             point_at(j, ii, os.path.join(out_dir, f"types-{kind}.png"), f)
             moved.append(kind)
+        # The iris: one picture for every type (person_params.SHARED_IRIS), named by path. No tile
+        # and no move of the UVs: every type's is the same picture.
+        mats = [mi for mi in range(len(j.get("materials", []))) if material_image(j, mi) is not None and j["images"][material_image(j, mi)].get("name", "").endswith(".iris")
+                and "bufferView" in j["images"][material_image(j, mi)]]
+        if mats:
+            ii = material_image(j, mats[0])
+            pic = np.asarray(Image.open(io.BytesIO(image_bytes(j, binary, ii))).convert("RGB"))
+            path = os.path.join(out_dir, "types-iris.png")
+            # Types paged before and not in this call keep the picture they point at; when every
+            # one of them is paged again here, the picture is this call's.
+            if iris is None and os.path.exists(path) and set(record["types"]) - {os.path.splitext(os.path.basename(x))[0] for x in files}:
+                iris = np.asarray(Image.open(path).convert("RGB"))
+            if iris is None:
+                iris = pic
+                Image.fromarray(pic, "RGB").save(path)
+            elif iris.shape != pic.shape or np.abs(iris.astype(int) - pic.astype(int)).max() > 1:
+                raise SystemExit(f"share: {f}: its iris is not the picture the other types share ({path}); build the types with the shared iris")
+            point_at(j, ii, path, f)
+            moved.append("iris")
         if moved:
             write_glb(f, j, compact(j, binary))
             record["types"][t] = dict(col=col, row=row, pages=sorted(set(record["types"].get(t, {}).get("pages", [])) | set(moved)))
