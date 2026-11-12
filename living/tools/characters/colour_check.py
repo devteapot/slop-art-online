@@ -29,7 +29,10 @@ What it reports (OUT/colour.json, and a summary on stdout):
    person's colours moved, not which surface).
 
 It rewrites recipes.json for the runs and restores it after: never run it beside crowd.py or
-compose_check.py. SHOTS overrides the shots, SIZE the frame. Needs numpy and pillow.
+compose_check.py. SHOTS overrides the shots, SIZE the frame. PERSON_LINES=<file> takes each person's line
+from a file of person lines (`{"people": {name: line}}`, as char-4 hands them over) in place of
+their `<name>.params.json`'s; ARMS=whole,composed runs only those arms (the sharing check then
+reports nothing). Needs numpy and pillow.
 """
 import json
 import os
@@ -44,6 +47,9 @@ RECIPES = os.path.join(REPO, "living/game/assets/characters/recipes.json")
 LOOK = os.path.join(REPO, "living/game/assets/lookdev")
 SHOTS = os.environ.get("SHOTS", "idle@1.0/front,idle@1.0/back,idle@1.0/0:6:0.32:0.92")
 ARMS = [("whole", "0", ""), ("composed", "1", ""), ("perfile", "1", "filestyles"), ("again", "1", "")]
+if os.environ.get("ARMS"):
+    ARMS = [a for a in ARMS if a[0] in os.environ["ARMS"].split(",")]
+LINES = json.load(open(os.environ["PERSON_LINES"]))["people"] if os.environ.get("PERSON_LINES") else {}
 BANDS = [("head", 0.0, 0.17), ("torso", 0.17, 0.52), ("legs", 0.52, 1.0)]
 
 binary, out = sys.argv[1], os.path.abspath(sys.argv[2])
@@ -66,7 +72,7 @@ original = open(RECIPES).read()
 book = json.loads(original)
 for n in people:
     params = json.load(open(os.path.join(LOOK, "lod", f"own-{n}.params.json")))
-    r = dict(name=f"town-{n}", base=f"lookdev/lod/own-{n}.glb", **params["recipe"], person=params["person"])
+    r = dict(name=f"town-{n}", base=f"lookdev/lod/own-{n}.glb", **params["recipe"], person=LINES.get(n, params["person"]))
     book["recipes"] = [x for x in book["recipes"] if x["name"] != r["name"]] + [r]
 try:
     with open(RECIPES, "w") as f:
