@@ -458,6 +458,7 @@ pub struct DumpExtra<'w, 's> {
     edge: Option<Res<'w, crate::sightedge::SightEdge>>,
     mouths: Option<Res<'w, crate::mouth::Mouths>>,
     film: Res<'w, crate::post::Film>,
+    shine: Res<'w, crate::style::HairShine>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -485,7 +486,7 @@ impl DumpExtra<'_, '_> {
             "lines": self.talks.lines.values().rev().take(12).rev().map(|l| serde_json::json!({"speaker": l.speaker, "to": l.to, "mine": l.mine, "how": l.how, "text": l.text})).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
-            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film,
+            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine,
             // Each speaking body's mouth now (`mouth.rs`), by character id.
             "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())})
     }

@@ -126,6 +126,8 @@ server-only or 80 ms RTT outcome intervals and do not establish compliance.
 See [retained performance evidence](REALTIME_PERFORMANCE.md#independent-physical-clocks-24)
 and the [independent clock implementation](INDEPENDENT_PHYSICAL_CLOCK.md).
 
+**The 200-character battle (2026-11-12, diagnosis only):** [battle scale](BATTLE_SCALE.md) measures a battle of 100 and 200 minded fighters on the island. It collapses within minutes, from 42 to under 2 steps a second. The cause is in waking and noticing, not in writing what was seen: every fight start wakes every onlooker, every evaluation re-checks everything in sight for novelty, and a per-character familiarity cap of 256 forgets what is still in view, so remains are noticed again and again. It proposes a fix within the no-attention-cap rule; nothing is built yet.
+
 Future performance work should name the failing requirement, hypothesized cause,
 measured result and remaining gap. Average world updates/s is a diagnostic, not
 the completion criterion. Preserve original failed outcomes and historical targets.
