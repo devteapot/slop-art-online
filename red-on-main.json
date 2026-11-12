@@ -10,5 +10,17 @@
     "reason": "scene fixture stale: its 'meter over a field the row lacks' overlay adds stamina, a shipped meter since stamina-1, so install refuses 'stamina is declared twice' (fix on fix-alarms-infant)",
     "skill": "verify-core",
     "times": 0
+  },
+  "infant": {
+    "case": "infant",
+    "first_main": "41d40f50",
+    "first_seen": "2026-11-12T11:01:51+01:00",
+    "last_evidence": ".local/living/verify/core-maininf2 (Spark)",
+    "last_main": "41d40f50",
+    "last_seen": "2026-11-12T11:01:51+01:00",
+    "owner": "verify-core",
+    "reason": "scene expects the fallback carer's cry request to name the baby; since fix-kill-name a cry names it only to who knows it ('A baby is crying'), so the wait times out (fix on fix-alarms-infant)",
+    "skill": "verify-core",
+    "times": 0
   }
 }
