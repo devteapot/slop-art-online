@@ -2858,9 +2858,15 @@ def stranger_filter(s):
         firsts = lambda: [r for r in s.rows(f"SELECT at_ms, subject, object, text FROM experience WHERE observer = {o}") if r["at_ms"] >= t0 and "first time you see" in r["text"] and u in (r["subject"], r["object"])]
         early = firsts()
         s.call("place_at", u, line[2][0], line[2][1] - 1.0)
-        late = s.wait(firsts, 15) if not early else early
+        # Within 25 s: the far figure is looked at again 5 s after each look, on O's own look slot.
+        try:
+            late = s.wait(firsts, 25) if not early else early
+        except TimeoutError:
+            late = []
+        bodies = {b["id"]: (b["x"], b["y"]) for b in s.rows(f"SELECT id, x, y FROM body WHERE id = {o} OR id = {u}")}
+        gap = math.dist(bodies[o], bodies[u]) if o in bodies and u in bodies else None
         s.expect("U at 5 m (too far to make out) gets no first sight; within 4 m it does, as a stranger",
-                 not early and late and "a stranger" in late[0]["text"] and FAR not in late[0]["text"], {"at_5m": early, "at_2m": late})
+                 not early and late and "a stranger" in late[0]["text"] and FAR not in late[0]["text"], {"at_5m": early, "at_2m": late, "o_to_u_m": gap})
     finally:
         s.call("install_script", shipped, check=False)
         set_law(s, "stranger_by_name", False, check=False)
