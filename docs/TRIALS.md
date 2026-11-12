@@ -208,6 +208,71 @@ Approved by the general coordinator at about $2.7, after the ordinary-think repl
 
 **Switches:** as fs1f, plus `think_framing` on.
 
+### Results (fs1n, 2026-11-12 21:06–21:27): the stop rule tripped (`converge_60s` 5)
+
+**What ran.**
+- **Commit:** main `05e94978` (think-framing on), in `~/slop-trials-fs1`.
+- **Smoke:** a free fake run first (`fs1ns`, 6 minutes). It ran to duration and read both laws back. All 98 think requests carried "# What just happened" and none "# Why you are thinking now"; the system prompt carried the neutral sentence.
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. Both laws were read back from `world_law`.
+- **Cleanup:** the world was paused before deletion; no database is left.
+
+**Cost:** $2.45 (glm-5-3-flash 1,292 calls $1.90; deepseek-v4-1-flash 331 calls $0.55).
+
+**Switches:** `first_sight_thinks` on (gap 300 s), `think_framing` on (N2), the naming fix; `heard_first_rethinks` and `earshot` off. Otherwise as fs1f: far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | fs1 C | fs1f | fs1h | fs1e | **fs1n** | target |
+|---|---|---|---|---|---|---|
+| in range | 18 | 22 | 22 | 35 | 25 | about 18–24 |
+| asks | 1 | 11 | 12 | 22 | **12** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 3 | 1 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 8 | 7 | 3–8 |
+| unaware | 12 | 3 | 2 | 2 | 5 (20%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 | 5 | 1 (Amara Okoro) | 1–4 |
+| first heard line after the join | 91.6 s | 320.7 s | 307.8 s | 96.0 s | **14.3 s, Benedikt Orme** | within 5 minutes |
+| `converge_60s` (old definition) | 2 | 6 | 10 | 10 | **5** | ≤3 |
+| of it: heard / unheard | 2 / 0 | 6 / 2 | 5 / 6 | 8 / 7 | 3 / 3 | — |
+| `together_4m` | 2 | 2 | 2 | 3 | 1 | ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | 10 | 8 | — |
+| lines to the newcomer / out of earshot / residents heard by it | 1 / 0 / 1 | 21 / 7 / 5 | 21 / 12 / 3 | 31 / 16 / 10 | 18 / 11 / 5 | — |
+| re-asks | 0 | 7 | 6 | 1 | 3 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 | 39 → 36 | 26 → 24 | — |
+| **first-sight-only thoughts that speak to the newcomer / speak or mean to** | — | 10 / 15 of 19 (53% / 79%) | 11 / 18 of 24 (46% / 75%) | 22 / 33 of 36 (61% / 92%) | **12 / 15 of 24 (50% / 62%)** | — |
+| false replies / group talk, a minute | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | 0.45 / 0.65 | 0.20 / 0.05 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | 0.07; +0.28 | 0.04; 0.00 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | 22.4 / 13.5 | 18.9 / 10.7 | — |
+| tick mean / > 10 ms / > 25 ms / > 50 ms | 0.88 ms / 28 / 2 / 0 | 0.82 ms / 14 / 1 / 0 | 0.82 ms / 18 / 0 / 0 | not captured | 1.12 ms / 132 / 17 / 6 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 | 0 | 0 |
+| cost | $2.48 | $2.66 | $2.73 | $2.69 | $2.45 | — |
+
+**What N2 changed, live** (one replicate, so indicative):
+- **The live share of first-sight thoughts that speak to the newcomer did not fall:** 50%, against 46–61% in the other first-sight arms.
+- **Fewer meant to:** 62% spoke or meant to, against 75–92%. The replay on fs1e's own prompts had shown a larger drop (67% → 47% speaking). Live thoughts differ from the replayed ones (other moments, other scenes).
+- **Crowding was lower than fs1h and fs1e, though still over the band:** `converge_60s` 5 (3 heard, 3 unheard), `together_4m` 1.
+- **False replies and group talk fell to C's level:** 0.20 and 0.05.
+- **Deliberations per resident-hour came back to C's 18.9.**
+- **Aldous asked** (6 s after the join, from 23.9 m, unheard): "a tally keeper does well to know every face and every newcomer's business, courteously".
+- **Still out of shape:** asks (12), and lines called from out of earshot (11 of 18).
+- **Tick time was higher** (mean 1.12 ms, 132 ticks over 10 ms) than in fs1's runs. Other batches were on the server after the quiet window; tick time was not part of the question.
+
+**The asks: 12 residents, each with the reason its own thought gave** (`fs1_asks.py`; grouped by hand; a thought giving two reasons is in both):
+
+| reason | askers | in their words |
+|---|---|---|
+| **manners** (7) | Aldous, Oswin, Roos, Hana, Gwil, Ren, Ingrid | Aldous: "…, courteously"; Oswin: "new faces in a growing town should be met before gossip makes them"; Roos: "New faces in Cullet are worth a greeting"; Hana: "give a civil word across the road"; Gwil: "I'd not let a new face stand silent in my town"; Ren: "deserves a greeting before anyone else decides what to make of them"; Ingrid: "I'll keep an eye and a civil word ready" |
+| **curiosity** (4) | Benedikt, Roos, Lark, Bram | Benedikt: "curiosity bids me at least offer a word"; Roos: "and a name, if they'll give one"; Lark: "a newcomer might be news from over the water, which is exactly the sort of thing I watch for"; Bram: "new faces are rare in Cullet, and I'd know who's come among us" |
+| **duty or role** (2) | Aldous, Ren | Aldous: "a tally keeper does well to know every face and every newcomer's business"; Ren: "Cullet's first outsider on my watch" |
+| **others asking** (0) | — | — |
+| **greeted first** (0) | — | — |
+| **something else** (2) | Ife, Suri | Ife, a child: "grown-ups would want to know". Suri: "not mine to mind this afternoon"; her line went to the newcomer all the same. |
+
+Against fs1e (manners 13, curiosity 10, duty 4, others 3, else 3 of 22): fewer askers in all, and manners still first. None was pulled by others asking.
+
+**Measurement note.** The fs1 tools read the reason under "# Why you are thinking now". N2 renames it "# What just happened", so they now read either (`fs1_measures.py`, `fs1_held.py`, `fs1_cluster.py`). A first pass had counted 0 first-sight thoughts.
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1n` and `fs1ns` and the journals `verify-trial-fs1n*`, archived in `~/archive/trials/fs1n-20261112.tar.gz` (14 MB). The archive also holds `fs1n-spread.md`, `fs1n-m.json`, `fs1n-asks.json`, the metrics and spend logs and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
 ## First sight fs1e (2026-11-12) — one combined arm: first sight, heard_first and earshot; target, written before any paid call
 
 Approved by the general coordinator at about $2.7. It runs after the earshot stage, and only when the general coordinator says so.
