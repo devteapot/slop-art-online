@@ -1585,7 +1585,7 @@ mod tests {
 
 /// The way of speaking a reply names (`"way"` beside or inside `say`): `None` when it names
 /// none, `say` when it names one the world's rules do not have.
-fn way_of(v: &Value) -> Option<String> {
+pub(crate) fn way_of(v: &Value) -> Option<String> {
     let named = v["way"].as_str().or_else(|| v["say"]["way"].as_str())?.trim().to_lowercase().replace([' ', '-'], "_");
     if named.is_empty() {
         return None;

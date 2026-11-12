@@ -148,6 +148,7 @@ pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_fast_done_reducer;
 pub mod mind_install_reducer;
+pub mod mind_install_way_reducer;
 pub mod mind_judged_reducer;
 pub mod mind_patch_reducer;
 pub mod mind_routines_reducer;
@@ -447,6 +448,7 @@ pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_fast_done_reducer::mind_fast_done;
 pub use mind_install_reducer::mind_install;
+pub use mind_install_way_reducer::mind_install_way;
 pub use mind_judged_reducer::mind_judged;
 pub use mind_patch_reducer::mind_patch;
 pub use mind_routines_reducer::mind_routines;
@@ -687,6 +689,16 @@ pub enum Reducer {
         seen_ms: u64,
         thought: ThoughtIn,
     },
+    MindInstallWay {
+        actor: u32,
+        graph: String,
+        plan: String,
+        say: String,
+        say_to: u32,
+        way: String,
+        seen_ms: u64,
+        thought: ThoughtIn,
+    },
     MindJudged {
         actor: u32,
         items: Vec<JudgedIn>,
@@ -822,6 +834,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindFastDone { .. } => "mind_fast_done",
             Reducer::MindInstall { .. } => "mind_install",
+            Reducer::MindInstallWay { .. } => "mind_install_way",
             Reducer::MindJudged { .. } => "mind_judged",
             Reducer::MindPatch { .. } => "mind_patch",
             Reducer::MindRoutines { .. } => "mind_routines",
@@ -968,6 +981,25 @@ impl __sdk::Reducer for Reducer {
                 plan: plan.clone(),
                 say: say.clone(),
                 say_to: say_to.clone(),
+                seen_ms: seen_ms.clone(),
+                thought: thought.clone(),
+            }),
+            Reducer::MindInstallWay {
+                actor,
+                graph,
+                plan,
+                say,
+                say_to,
+                way,
+                seen_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_install_way_reducer::MindInstallWayArgs {
+                actor: actor.clone(),
+                graph: graph.clone(),
+                plan: plan.clone(),
+                say: say.clone(),
+                say_to: say_to.clone(),
+                way: way.clone(),
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
