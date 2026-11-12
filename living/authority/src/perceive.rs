@@ -344,6 +344,12 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
     request(ctx, id, reason, now, false);
 }
 
+/// As `request_deliberation`, saying whether the request was taken (false: no mind, or a mind
+/// asked again within its species' `think_min_s` of its last thought with nothing pending).
+pub fn ask_to_think(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bool {
+    request(ctx, id, reason, now, false)
+}
+
 fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool) -> bool {
     let Some(c) = ctx.db.character().id().find(id) else { return false };
     // Infants run on their instincts; they get a mind when they become children.
