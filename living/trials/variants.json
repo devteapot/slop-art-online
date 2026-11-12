@@ -209,5 +209,12 @@
    "cues_on": true,
    "first_sight_thinks": true
   }
+ },
+ "pack-minds": {
+  "about": "Pack arena with minds on both sides (docs/PACK_MIND.md): people on the models file's default, wolves routed by its species map, LIVING_ANIMAL_MINDS=salient,choose (no pack: retired). fast_lane_on stays off (the world law's default).",
+  "models": {},
+  "env": {
+   "LIVING_ANIMAL_MINDS": "salient,choose"
+  }
  }
 }

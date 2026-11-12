@@ -1494,6 +1494,10 @@ class Instance:
                    RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
         # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY);
         # with `minds.max` for at most that many at a time (`thinkers`, kept by `slots`).
+        # `minds.roles`: the service thinks for every member of these roles (an arena where both
+        # sides have minds: docs/PACK_MIND.md), not the subject alone.
+        if self.trial.get("minds", {}).get("roles"):
+            env["LIVING_ONLY"] = ",".join(str(i) for r in self.trial["minds"]["roles"] for i in self.roles.get(r, []))
         if self.trial.get("minds", {}).get("only") == "all":
             env.pop("LIVING_ONLY")
             if self.trial["minds"].get("max"):

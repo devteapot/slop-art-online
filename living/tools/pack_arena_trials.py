@@ -17,8 +17,14 @@ base={
  "record":{"bodies":{"hz":5},"uses":True},
  "variants":["instinct"],
 }
-def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold", deer=False, about=None):
+def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold", deer=False, about=None, minds=None):
     t=json.loads(json.dumps(base))
+    if minds:
+        # Both sides think (docs/PACK_MIND.md §6 steps 5-6): every person and wolf of the arena.
+        t["minds"]={"roles":minds,"concurrency":16}
+        t["variants"]=["pack-minds"]
+        t["record"]["thoughts"]=True
+        t["record"]["experiences"]=True
     t["arena"]={"people":"subject","wolves":"pack","night":night,"start":start,"deer":deer}
     t["subject"]={"pick":{"kind":"person","stage":2,"count":people,"bg":{"town":"Brackenford"}},"clear_items":True,"clear_routines":True}
     t["cast"]={"pack":{"pick":{"kind":"wolf","stage":2,"count":wolves,"nearest":{"arrival":True}}},
@@ -57,6 +63,11 @@ if __name__=="__main__":
         for w,p in ((3,3),(6,3),(3,6),(6,6)):
             arm(f"pack-{start}-{w}v{p}", w, p, start)
     arm("pack-spread-6v6-night", 6, 6, "spread", night=True)
+    for start in ("close","spread"):
+        arm(f"pack-minds-{start}-6v6", 6, 6, start, minds=["subject","pack"],
+            about="Both sides with minds (wolves LIVING_ANIMAL_MINDS=salient,choose; people the default mix), starting from their instinct graphs; nothing in any prompt names a tactic (docs/PACK_MIND.md §5.5 guards).")
+    arm("pack-minds-mixed-6v6", 6, 6, "spread", deer=True, minds=["subject","pack"],
+        about="Both sides with minds, the island's deer left where they live (the mixed arm).")
     for name,g in (("c1",C1),("c2",C2)):
         for start,w,pp in (("close",3,3),("close",6,6),("spread",6,6)):
             arm(f"pack-{name}-{start}-{w}v{pp}", w, pp, start, wolf_graph=g, about=CAL_ABOUT)
