@@ -15,7 +15,8 @@ import shutil
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "characters"))
+# Appended, not put first: the characters folder has a `page.py` of its own, and the board's must win.
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "characters"))
 import hold_eyes  # noqa: E402
 
 # A shot is (name, view spec). View specs are the asset view's: `front`, `game`,
