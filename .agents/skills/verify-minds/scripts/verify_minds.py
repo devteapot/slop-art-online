@@ -2780,6 +2780,180 @@ def queued_case(run):
     return {'status': 'pass', 'off': off, 'on': on}
 
 
+# A year of age every 20 real seconds on Cullet's day (48 minutes) and laws (90-year lives,
+# adult from 15, old from 59.5): year = year_days 4 x pace x 48 min.
+BODY_PACE = 20 / (4 * 48 * 60)
+
+
+def body_seed(run):
+    """The hamlet (12 people, two settlements, Cullet's day and laws) on a fast life pace, with
+    a child who comes of age and an adult who grows old a couple of minutes in, written under
+    this run's directory and named relative to living/seeds (as trials name derived seeds)."""
+    seed = json.loads((ROOT / 'living/seeds/hamlet.json').read_text())
+    seed['run'] = 'verify-body'
+    seed['life_pace'] = BODY_PACE
+    for t in seed['towns'] + seed['villages']:
+        for r in t['residents']:
+            if r['name'] == 'Lio Reed':
+                r['age'] = 7.0       # adult (15) about 160 s after world creation
+            if r['name'] == 'Cal Reed':
+                r['age'] = 51.0      # old (59.5) about 170 s after
+    path = run.directory / 'body-seed.json'
+    path.write_text(json.dumps(seed, indent=1))
+    return os.path.relpath(path.with_suffix(''), ROOT / 'living/seeds')
+
+
+def prompts_of(run, name):
+    """Every request the fake model got for `name`, oldest first: (purpose, prompt text). Think,
+    deliberate and consolidate prompts head `# Who you are (Name)`; talk and reorganize prompts
+    `# Who you are\nName`."""
+    out = []
+    path = run.directory / 'fake-requests.jsonl'
+    for line in path.read_text().splitlines() if path.exists() else []:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        text = '\n'.join(m.get('content', '') for m in (e.get('body') or {}).get('messages', []) if isinstance(m.get('content'), str))
+        if f'# Who you are ({name})' in text or f'# Who you are\n{name}\n' in text:
+            out.append((e.get('purpose'), text))
+    return out
+
+
+def body_lines(text):
+    return re.findall(r'^Your body: [^\n]*$', text, re.M)
+
+
+@case('body')
+def body_case(run):
+    """The body's age and stage in every prompt's "# Who you are" (prompts::body_line), and a
+    first identity from facts for a mind that starts once its character is grown (Origin::Grown).
+
+    1. Coming of age: Lio Reed is a child when his mind starts; after his character row turns
+       adult, his next talk prompt and his next consolidation prompt say "an adult for".
+    2. Growing old: Cal Reed's prompts say "an adult" before and "old for" after.
+    3. A late-starting run-born mind: Brisk and Edda Marrow (graph-only) start a family; the
+       child is born and grows up with no mind; the mind is then restarted with it. Its first
+       identity is written from facts with no model call (no identity request for it), names its
+       parents, and has no values, goals, pastimes or mood; its first prompt carries it and the
+       adult body line. With LIVING_PRIVACY_NEO4J set (privacy.py's scratch Neo4j), its mind
+       also holds CHILD_OF edges to both parents and the `parent` relation rows are projected."""
+    rel = body_seed(run)
+    target = Path(os.environ['CARGO_TARGET_DIR']) / 'verify-body' if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-body'
+    run.harness('launch', '--seed', str((ROOT / 'living/seeds' / rel).resolve()) , '--target-dir', str(target))
+    run.harness('doctor')
+    people = {p['name']: p for p in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people')}
+    lio, cal, brisk, edda = (people[n]['id'] for n in ('Lio Reed', 'Cal Reed', 'Brisk Marrow', 'Edda Marrow'))
+    assert people['Lio Reed']['stage'] == 1 and people['Cal Reed']['stage'] == 2, people
+    # The couple lives on graphs (no mind) and starts a family.
+    run.admin('place_near', edda, brisk)
+    for a, b in ((brisk, edda), (edda, brisk)):
+        run.admin('grant_items', a, 'berries', 6)
+        run.admin('set_behavior', a, json.dumps({'seq': [{'do': 'conceive', 'target': {'id': b}}, {'wait': 600}]}))
+    run.harness('player', 'join', 'BodyListener')
+    me = run.sql("SELECT id FROM character WHERE name = 'BodyListener'", 'player')[0]['id']
+    run.admin('place_near', me, lio)
+    script = {'replies': {'think': {'thought': 'I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'Someone speaks to me.', 'say': 'verify body: I hear you.', 'end': True},
+                          'consolidate': {'summary': 'verify body summary', 'identity': None, 'nodes': [], 'edges': []}},
+              'rules': [{'purpose': 'consolidate', 'delay_s': 1, 'times': -1}]}
+    models = model(run, script)
+    neo = os.environ.get('LIVING_PRIVACY_NEO4J') and os.environ.get('LIVING_PRIVACY_NEO4J_ENV')
+    extra = {}
+    if neo:
+        container, uri = os.environ['LIVING_PRIVACY_NEO4J'].split(':', 1)
+        pw = next(l.split('=', 1)[1].strip() for l in Path(os.environ['LIVING_PRIVACY_NEO4J_ENV']).read_text().splitlines() if l.startswith('LIVING_NEO4J_PASSWORD='))
+        extra = {'LIVING_NEO4J': 'on', 'LIVING_NEO4J_URI': uri, 'LIVING_NEO4J_PASSWORD': pw}
+    run.start(models, [lio, cal], seed=rel, extra_env=extra)
+    stage = lambda who, save: run.sql(f'SELECT * FROM character WHERE id = {who}', save)[0]['stage']
+
+    said = [0]
+
+    def talked(words, skip, seconds=150):
+        """Lines to Lio, standing beside him, until a talk prompt after the first `skip` carries
+        `words` in its body line (the first line of an exchange may be answered by a thought)."""
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            run.admin('place_near', me, lio)
+            run.harness('player', 'say', f'verify body: line {said[0]}, can you hear me?', '--to', str(lio))
+            said[0] += 1
+            end = time.monotonic() + 8
+            while time.monotonic() < end:
+                hits = [b for p, t in prompts_of(run, 'Lio Reed')[skip:] if p == 'talk' for b in body_lines(t) if words in b]
+                if hits:
+                    return hits
+                time.sleep(0.5)
+        raise RuntimeError(f'no talk prompt with {words!r} in {seconds}s')
+
+    # Before: a child's body line.
+    talked('a child for', 0)
+    n_before = len(prompts_of(run, 'Lio Reed'))
+    run.wait(lambda: stage(lio, 'lio-stage') == 2, 'Lio comes of age', 240)
+    seen_at = len(prompts_of(run, 'Lio Reed'))
+    def after(purpose, who='Lio Reed', words='an adult for', skip=seen_at):
+        return [b for p, t in prompts_of(run, who)[skip:] if p == purpose for b in body_lines(t) if words in b]
+    # The first talk and the first consolidation prompts after he came of age: none says a child.
+    talk_after = talked('an adult for', seen_at)
+    first_talk = next(b for p, t in prompts_of(run, 'Lio Reed')[seen_at:] if p == 'talk' for b in body_lines(t))
+    cons_after = run.wait(lambda: after('consolidate'), 'the next consolidation prompt carries the adult body line', 240)
+    first_cons = next(b for p, t in prompts_of(run, 'Lio Reed')[seen_at:] if p == 'consolidate' for b in body_lines(t))
+    # Growing old.
+    cal_before = [b for p, t in prompts_of(run, 'Cal Reed') for b in body_lines(t)]
+    run.wait(lambda: stage(cal, 'cal-stage') == 3, 'Cal grows old', 240)
+    cal_seen = len(prompts_of(run, 'Cal Reed'))
+    run.admin('set_behavior', cal, json.dumps({'think': 'I finished my plan. verify body old'}))
+    cal_after = run.wait(lambda: after('deliberate', 'Cal Reed', 'old for', cal_seen) or after('think', 'Cal Reed', 'old for', cal_seen), 'Cal\'s next prompt says old', 120)
+    # The couple's child, born and grown with no mind.
+    child = run.wait(lambda: next((c for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'children')
+                                   if c['parent_a'] in (brisk, edda) and c['parent_b'] in (brisk, edda)), None), 'a child born to Brisk and Edda', 240)
+    cid, cname = child['id'], child['name']
+    run.wait(lambda: stage(cid, 'child-stage') == 2, f'{cname} grows up with no mind', 420)
+    run.note(f'{cname} (#{cid}) is grown; restarting the mind with it')
+    shared.stop(run.mind)
+    subscriptions = run.log().count('world subscribed:')
+    run.env['LIVING_ONLY'] = ','.join(map(str, [lio, cal, cid]))
+    run.launch_mind()
+    run.wait(lambda: run.log().count('world subscribed:') > subscriptions, 'the restarted mind subscribed')
+    persona = run.wait(lambda: run.private(f'SELECT * FROM persona WHERE id = {cid}', 'grown-persona'), f'{cname}\'s first identity', 60)[0]
+    thoughts = run.thoughts(cid, 'grown-thoughts')
+    first = [t for t in thoughts if 'grown before my mind began' in t['summary']]
+    parents = sorted(people[n]['name'] for n in ('Brisk Marrow', 'Edda Marrow'))
+    narrative = persona['narrative']
+    run.admin('set_behavior', cid, json.dumps({'think': 'I finished my plan. verify body grown'}))
+    grown_prompt = run.wait(lambda: [t for p, t in prompts_of(run, cname) if p in ('think', 'deliberate')], f'{cname}\'s first prompt', 90)[0]
+    identity_calls = [p for p, t in prompts_of(run, cname) if p == 'consolidate' and ('Newborn:' in t or 'world holds about' in t)]
+    checks = {
+        'lio_child_line_before': n_before > 0,
+        'lio_talk_after': talk_after[0], 'lio_consolidate_after': cons_after[0],
+        'lio_next_talk_is_adult': 'an adult for' in first_talk, 'lio_next_consolidation_is_adult': 'an adult for' in first_cons,
+        'cal_first_adult': next((b for b in cal_before if 'an adult for' in b), None), 'cal_after': cal_after[0],
+        'grown_first_identity_thought': bool(first) and first[0]['model'] == 'facts',
+        'grown_names_parents': all(n in narrative for n in parents),
+        'grown_no_invented_wants': not persona['values'] and not persona['goals'] and not persona['pastimes'] and not persona['mood'] and not persona['calling'],
+        'grown_no_identity_call': not identity_calls,
+        'grown_prompt_has_identity': narrative in grown_prompt,
+        'grown_prompt_body_line': next((b for b in body_lines(grown_prompt) if 'an adult for' in b), None),
+    }
+    if neo:
+        q = (f"MATCH (s:Concept {{run: '{run.db}', actor: {cid}, key: 'self'}})-[r:CHILD_OF]->(p) RETURN p.key AS k, r.lived_under AS by;")
+        out = subprocess.run(['docker', 'exec', '-i', container, 'sh', '-c', 'NEO4J_PASSWORD="${NEO4J_AUTH#*/}" cypher-shell -a bolt://localhost:7687 -u neo4j --format plain'],
+                             input=q, capture_output=True, text=True, timeout=60)
+        (run.directory / 'grown-child-of.txt').write_text(out.stdout + out.stderr)
+        checks['grown_child_of'] = all(f'person:{p}' in out.stdout for p in (brisk, edda))
+        rels = run.wait(lambda: [r for r in run.private(f'SELECT * FROM relation WHERE actor = {cid}', 'grown-relations') if r['label'] == 'parent'], 'parent relations projected', 60)
+        checks['grown_parent_relations'] = sorted(r['other'] for r in rels) == sorted((brisk, edda))
+        clean = subprocess.run(['docker', 'exec', '-i', container, 'sh', '-c', 'NEO4J_PASSWORD="${NEO4J_AUTH#*/}" cypher-shell -a bolt://localhost:7687 -u neo4j --format plain'],
+                               input=f"MATCH (n) WHERE n.run = '{run.db}' DETACH DELETE n;", capture_output=True, text=True, timeout=60)
+        checks['neo4j_cleaned'] = clean.returncode == 0
+    else:
+        checks['neo4j'] = 'skipped: set LIVING_PRIVACY_NEO4J and LIVING_PRIVACY_NEO4J_ENV to check CHILD_OF and parent relations'
+    (run.directory / 'body.json').write_text(json.dumps({'checks': checks, 'grown': {'id': cid, 'name': cname, 'narrative': narrative,
+        'persona': persona}, 'lio': talk_after + cons_after, 'cal': cal_after}, indent=2))
+    ok = all(v for k, v in checks.items() if k != 'neo4j')
+    return {'status': 'pass' if ok else 'fail', 'checks': checks}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', help='new suite name starting with minds- (gate- for the merge scene gate)')

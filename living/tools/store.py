@@ -33,6 +33,7 @@ import glob
 import gzip
 import hashlib
 import io
+import importlib.util
 import json
 import os
 import platform
@@ -2444,6 +2445,9 @@ def _isolate_hub_env():
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
 
+STORE_VENV_PYTHON = os.path.expanduser("~/.slop-store-venv/bin/python")
+
+
 class HFBackend(Backend):
     """Hugging Face datasets. Publishing needs the --yes-publish flag AND publish_enabled in the
     machine-local config; the check runs before huggingface_hub is imported. Every call passes the
@@ -2471,6 +2475,21 @@ class HFBackend(Backend):
                           f"{self.cfg.get('_local_config', LOCAL_CONFIG)} once the owner has agreed")
         if not self.namespace:
             raise Refused("backends.hf.namespace is not set in the machine-local config")
+        self.need_library()
+
+    def need_library(self):
+        """Fail before packing, not at the upload: huggingface_hub lives in its own venv
+        (docs/STORE.md, "Library"), not in the system Python that `just living-store` runs."""
+        if self._api is not None or "huggingface_hub" in sys.modules:
+            return
+        try:
+            found = importlib.util.find_spec("huggingface_hub") is not None
+        except (ImportError, ValueError):
+            found = False
+        if not found:
+            raise Refused(f"huggingface_hub is not installed for {sys.executable}. Run the store with "
+                          f"{tilde(STORE_VENV_PYTHON)} (create it: python3 -m venv ~/.slop-store-venv && "
+                          f"~/.slop-store-venv/bin/pip install huggingface_hub; docs/STORE.md, \"Library\")")
 
     def repo_id(self, repo):
         name = (self.cfg.get("repos") or {}).get(repo, repo)
@@ -2483,6 +2502,7 @@ class HFBackend(Backend):
 
     def api(self):
         if self._api is None:
+            self.need_library()
             _isolate_hub_env()
             from huggingface_hub import HfApi  # imported only past the gate or for a fetch
             self._api = HfApi(token=self.token())
