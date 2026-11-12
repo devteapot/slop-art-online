@@ -460,6 +460,12 @@ def bar(run, c):
     c.check(s, "a strike at no one is refused, in the rules' words, on the slot and as a note", slot("04", "Primary").get("refused") is True and len(notes) > 0, str((slot("04", "Primary"), notes)))
     c.check(s, "Q held raises the guard: its slot shows held", slot("05", "Skill1").get("held") is True, str(slot("05", "Skill1")))
     c.check(s, "X again sheathes it", ex("06").get("drawn") is False, str(ex("06").get("drawn")))
+    # The bars and pills from the world's rules: `meters()` (the shown ones, in order) and
+    # `status_of` (a plain status is the body's words when all is well: no pill).
+    me = (d["01"] or {}).get("me") or {}
+    ms = me.get("meters") or []
+    c.check(s, "the bars are the world's shown meters (health, energy), each within its max", [m["name"] for m in ms] == ["health", "energy"] and all(0 <= m["value"] <= m["max"] + 1e-3 and m["label"] for m in ms), str(ms))
+    c.check(s, "the pills are the rules' statuses, none plain", all(x["tone"] != "Plain" for x in me.get("statuses") or []), str(me.get("statuses")))
 
 
 def cursor(d):

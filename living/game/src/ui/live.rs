@@ -339,7 +339,8 @@ fn my_body(sc: &living_rules::script::Scripts, row: &impl spacetimedb_sdk::__cod
         })
         .collect();
     let facts = living_rules::script::BodyFacts::of(kind, stage, night, &fields, sc.meters(), now_ms.max(0.0) as u64);
-    let statuses = sc.status_of(&facts).map(|v| v.iter().map(|s| StatusView { name: s.name.clone(), tone: Tone::parse(&s.tone), text: s.text.clone() }).collect()).unwrap_or_default();
+    // A `plain` status is the body's words when all is well (a mind's "rested"): no pill.
+    let statuses = sc.status_of(&facts).map(|v| v.iter().map(|s| StatusView { name: s.name.clone(), tone: Tone::parse(&s.tone), text: s.text.clone() }).filter(|s| s.tone != Tone::Plain).collect()).unwrap_or_default();
     (meters, statuses)
 }
 

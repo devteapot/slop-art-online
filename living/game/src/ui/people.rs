@@ -774,10 +774,11 @@ pub fn proposals(conn: &DbConnection, now_ms: u64) -> Vec<Proposal> {
     out
 }
 
-/// One person's proposals to me, oldest first: the cards of their window, in order.
+/// One person's proposals, the cards of their window in order: those I can answer first, oldest
+/// first, then my own offer to them.
 fn of_person(ps: &[Proposal], from: u32) -> Vec<&Proposal> {
     let mut v: Vec<&Proposal> = ps.iter().filter(|p| p.from == from).collect();
-    v.sort_by_key(|p| (p.at_ms, p.key));
+    v.sort_by_key(|p| (matches!(p.key, Standing::Mine(_)), p.at_ms, p.key));
     v
 }
 

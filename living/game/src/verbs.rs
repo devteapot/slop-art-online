@@ -1518,11 +1518,12 @@ pub fn input(
 }
 
 /// An outcome line's note, from its structured row (`my_act_outcomes`, joined by the line's
-/// id): what was done, or the rules' own words for why not. A line whose row has not come
-/// (an older line, a row not yet here) is read from its words.
+/// id): whether it worked from the row; done, the line's words (they say what came of it,
+/// "traded with …: 2 berries for 1 wood"); refused, the rules' own words for why. A line whose
+/// row has not come (an older line, a row not yet here) is read from its words.
 pub fn outcome_of(conn: &DbConnection, e: &Experience) -> (Option<bool>, String) {
     match conn.db.my_act_outcomes().id().find(&e.id) {
-        Some(o) if o.ok => (Some(true), crate::ui::label(&o.what)),
+        Some(o) if o.ok => (Some(true), outcome_text(&e.text).1),
         Some(o) if !o.why.trim().is_empty() => (Some(false), crate::ui::label(o.why.trim().trim_end_matches('.'))),
         Some(o) => (Some(false), crate::ui::label(&o.what)),
         None => outcome_text(&e.text),
