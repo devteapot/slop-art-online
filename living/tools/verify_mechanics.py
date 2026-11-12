@@ -19,6 +19,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import world_delete  # noqa: E402  (pause a world before deleting it)
 
 ROOT = Path(__file__).resolve().parents[2]
 STDB = os.environ.get("LIVING_STDB", str(ROOT / "living/tools/stdb"))
@@ -346,8 +348,11 @@ def main():
     if a.out:
         Path(a.out).write_text(json.dumps(report, indent=2) + "\n")
     # The scratch world would otherwise keep ticking (and writing its log) forever.
-    stdb("delete", "-s", "local", db, "-y")
-    sys.exit(0 if ok else 1)
+    # Paused and read back as paused before the delete (world_delete.py: a busy world's delete can
+    # take SpacetimeDB 2.14.1 down).
+    deleted, why = world_delete.cli_pause_and_delete(lambda *a: subprocess.run([STDB, *a], capture_output=True, text=True), db)
+    print(f"{db}: {why}")
+    sys.exit(0 if ok and deleted else 1)
 
 
 if __name__ == "__main__":

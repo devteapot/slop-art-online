@@ -6,7 +6,8 @@
 //!   how the edge of sight is drawn (not seen now, limited view, fade; F2 cycles it too), how
 //!   unseen ground looks (memory by default, grey, wash, lantern, shadows, hatch), facing sight
 //!   (on/off, its five values and its switch where the launcher allows it: `ui/facing.rs`), the
-//!   film (soft by default, full as before film-1, or none: `post::Film`), the
+//!   film (soft by default, full as before film-1, or none: `post::Film`), the hair shine (crown
+//!   by default, soft, or today's ring: `style::HAIR_SHINES`), the
 //!   weapon drawing itself when something attacks you, and key hints and first-time tips (with
 //!   "Show tips again").
 //! - **Controls:** the skill-key preset ("Q E R, plus 1–9", "1–9 only", "My own") and every
@@ -123,6 +124,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 row(pg, f, "Edge of sight", "How what you can't see now is drawn (F2)", |c| kit::seg(c, f, "settings:sight", &[("Not seen now", "unseen"), ("Limited view", "limited"), ("Fade", "fade")]));
                 row(pg, f, "Unseen ground", "How ground you don't see now looks, with \"not seen now\"", |c| kit::seg(c, f, "settings:look", &crate::sightedge::Look::ALL.map(|l| (l.label(), l.name()))));
                 row(pg, f, "Film", "The warm haze from the top of the screen. Soft keeps dark colours; Full lifts them too", |c| kit::seg(c, f, "settings:film", &crate::post::Film::ALL.map(|m| (m.label(), m.name()))));
+                row(pg, f, "Hair shine", "The highlight on hair. Crown lies over the crown and stays off a fringe", |c| kit::seg(c, f, "settings:hair", &crate::style::HairShine::choices()));
                 row(pg, f, "Weapon", "Draw it by itself when something attacks you", |c| kit::toggle(c, "settings:auto_draw"));
                 // Facing sight: on/off, the switch where the launcher allows it, and the field's
                 // five values (filled by `ui/facing.rs`).
@@ -199,7 +201,7 @@ pub fn update(
     (mut input, mut edge, mut tips, mut lw): (ResMut<crate::controls::Input>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<super::tips::Tips>, ResMut<crate::twist::LookWalk>),
     (keys, mouse, time): (Res<ButtonInput<KeyCode>>, Res<ButtonInput<MouseButton>>, Res<Time>),
     open: Res<super::win::Windows>,
-    (mut theme, mut film): (ResMut<super::ThemeState>, ResMut<crate::post::Film>),
+    (mut theme, mut film, mut shine): (ResMut<super::ThemeState>, ResMut<crate::post::Film>, ResMut<crate::style::HairShine>),
 ) {
     let mut changed = false;
     if !open.is_open(Win::Settings) {
@@ -258,6 +260,14 @@ pub fn update(
                     changed = true;
                 }
             }
+            "settings:hair" => {
+                if let Some(s) = crate::style::HairShine::parse(value) {
+                    info!("settings: hair shine: {value}");
+                    *shine = s;
+                    prefs.hair_shine = Some(value.into());
+                    changed = true;
+                }
+            }
             "settings:preset" if value != "own" => {
                 *binds = Binds::preset(if value == "numbers" { Preset::Numbers } else { Preset::Letters });
                 changed = true;
@@ -301,6 +311,7 @@ pub fn update(
     let look = edge.as_ref().map(|e| e.look.name());
     let control = if input.control == crate::controls::Control::Cursor { "cursor" } else { "travel" };
     let (pg, preset, theme_now, look_walk, film_now) = (*page, binds.preset.name(), theme.name.key(), lw.base().to_string(), film.name());
+    let shine_now = shine.name();
     kit::light(&mut lit, |t| {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
@@ -312,6 +323,7 @@ pub fn update(
             "settings:theme" => Some(value == theme_now),
             "settings:look_walk" => Some(value == look_walk),
             "settings:film" => Some(value == film_now),
+            "settings:hair" => Some(value == shine_now),
             _ => match t {
                 "settings:auto_draw" => Some(prefs.auto_draw),
                 "settings:tips" => Some(prefs.tips),
@@ -343,9 +355,10 @@ pub fn update(
 }
 
 /// The settings file's Play settings, once at start, unless the environment sets them
-/// (`LIVING_GAME_CONTROL`, `LIVING_SIGHT_EDGE`, `LIVING_GAME_LOOK_WALK`, `LIVING_GAME_FILM`, used by
+/// (`LIVING_GAME_CONTROL`, `LIVING_SIGHT_EDGE`, `LIVING_GAME_LOOK_WALK`, `LIVING_GAME_FILM`,
+/// `LIVING_GAME_HAIR_SHINE`, used by
 /// headless captures).
-pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>, edge: Option<ResMut<crate::sightedge::SightEdge>>, mut lw: ResMut<crate::twist::LookWalk>, mut film: ResMut<crate::post::Film>, mut done: Local<bool>) {
+pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>, edge: Option<ResMut<crate::sightedge::SightEdge>>, mut lw: ResMut<crate::twist::LookWalk>, mut film: ResMut<crate::post::Film>, mut shine: ResMut<crate::style::HairShine>, mut done: Local<bool>) {
     if *done {
         return;
     }
@@ -358,6 +371,9 @@ pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>,
     }
     if let (Some(m), None) = (prefs.film.as_deref().and_then(crate::post::Film::parse), crate::post::Film::from_env()) {
         *film = m;
+    }
+    if let (Some(s), None) = (prefs.hair_shine.as_deref().and_then(crate::style::HairShine::parse), crate::style::HairShine::from_env()) {
+        *shine = s;
     }
     let Some(mut e) = edge else { return };
     if let (Some(m), true) = (prefs.sight_edge.as_deref().and_then(crate::sightedge::Mode::parse), std::env::var("LIVING_SIGHT_EDGE").is_err()) {

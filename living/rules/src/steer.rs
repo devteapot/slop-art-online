@@ -424,6 +424,76 @@ pub struct Spacing {
     pub side: Option<f32>,
     /// `close_in`, `follow`: how near to come; `back_off`: how far to get.
     pub distance: Option<f32>,
+    /// `keep_distance`, `close_in`, `circle`: keep this far from others of one's own kind
+    /// that one sees, while holding the intent (docs/PACK_MIND.md, A5). How far, never where.
+    pub apart: Option<f32>,
+}
+
+/// The widest `apart` an intent may ask (m): beyond about one's sight it would not be seen.
+pub const APART_MAX_M: f32 = 12.0;
+/// The narrowest (m): steering already keeps bodies about this far apart.
+pub const APART_MIN_M: f32 = 1.0;
+/// The intents that take `apart`.
+pub const APART_INTENTS: [&str; 3] = ["keep_distance", "close_in", "circle"];
+
+/// The push away from seen others of one's kind (`mates`, positions) within `apart` m of `me`:
+/// the sum of the unit ways from each to `me`, each weighted by how far inside `apart` it is
+/// (1 touching, 0 at the edge). Zero when none is that near.
+pub fn apart_push(me: (f32, f32), mates: &[(f32, f32)], apart: f32) -> (f32, f32) {
+    let (mut x, mut y) = (0.0f32, 0.0f32);
+    if apart <= 0.0 {
+        return (x, y);
+    }
+    for q in mates {
+        let (dx, dy) = (me.0 - q.0, me.1 - q.1);
+        let d = dx.hypot(dy);
+        if d >= apart {
+            continue;
+        }
+        let w = 1.0 - d / apart;
+        if d < 1e-3 {
+            // On top of each other: a fixed way out, the same for both, so they part.
+            x += w;
+            continue;
+        }
+        x += dx / d * w;
+        y += dy / d * w;
+    }
+    (x, y)
+}
+
+/// How strongly the push bends the way an intent takes (against the way's unit length).
+pub const APART_WEIGHT: f32 = 1.5;
+
+/// The way a body holding an intent round `at` takes with `apart` from its mates (`push`, from
+/// [`apart_push`]): `way` (None: it stands, in its band) bent by the push; standing in its band,
+/// along the band, to the side the push points (round `at`, never in or out of the band).
+/// `None` when there is no push and it stands.
+pub fn apart_way(me: (f32, f32), at: (f32, f32), way: Option<f32>, push: (f32, f32)) -> Option<f32> {
+    let strength = push.0.hypot(push.1);
+    if strength < 1e-3 {
+        return way;
+    }
+    match way {
+        Some(w) => Some((w.sin() + APART_WEIGHT * push.1).atan2(w.cos() + APART_WEIGHT * push.0)),
+        None => {
+            // Along the circle about `at` through `me`: the tangent the push leans to.
+            let (dx, dy) = (me.0 - at.0, me.1 - at.1);
+            let d = dx.hypot(dy);
+            if d < 1e-3 {
+                return Some(push.1.atan2(push.0));
+            }
+            let (tx, ty) = (-dy / d, dx / d);
+            let along = push.0 * tx + push.1 * ty;
+            // A push straight in or out (a mate directly behind or ahead): no side is nearer;
+            // stay standing rather than leave the band.
+            if along.abs() < 0.05 * strength {
+                return None;
+            }
+            let s = along.signum();
+            Some((s * ty).atan2(s * tx))
+        }
+    }
 }
 
 /// A side word: `left` (+1) or `right` (-1), as one faces what one circles.
@@ -444,6 +514,14 @@ impl Spacing {
                 if !v.is_finite() || !(0.0..=INTENT_MAX_M).contains(&v) {
                     return Err(format!("{skill}: `{k}` is metres from 0 to {INTENT_MAX_M}"));
                 }
+            }
+        }
+        if let Some(a) = self.apart {
+            if !APART_INTENTS.contains(&skill) {
+                return Err(format!("{skill}: `apart` is for {} (keeping apart from your own kind while you hold it)", APART_INTENTS.join(", ")));
+            }
+            if !a.is_finite() || !(APART_MIN_M..=APART_MAX_M).contains(&a) {
+                return Err(format!("{skill}: `apart` is metres from {APART_MIN_M} to {APART_MAX_M}"));
             }
         }
         match skill {
@@ -778,6 +856,10 @@ mod tests {
         assert!(Spacing::default().check("circle").is_ok(), "a circle at the distance one is");
         assert!(Spacing { distance: Some(0.0), ..Default::default() }.check("back_off").is_err());
         assert!(Spacing { distance: Some(60.0), ..Default::default() }.check("follow").is_err());
+        assert!(Spacing { apart: Some(4.0), ..Default::default() }.check("keep_distance").is_ok());
+        assert!(Spacing { apart: Some(4.0), ..Default::default() }.check("back_off").unwrap_err().contains("`apart` is for"));
+        assert!(Spacing { apart: Some(0.5), ..Default::default() }.check("circle").unwrap_err().contains("from 1 to 12"));
+        assert!(Spacing { apart: Some(f32::NAN), ..Default::default() }.check("close_in").is_err());
         assert_eq!((side_of("Left"), side_of("clockwise"), side_of("up")), (Some(1.0), Some(-1.0), None));
     }
 
@@ -854,5 +936,78 @@ mod tests {
         // Boxed in: nowhere farther from the threat.
         let m = walled(64, 64, &[((31, 31), (33, 31)), ((31, 33), (33, 33)), ((31, 31), (31, 33)), ((33, 31), (33, 33))]);
         assert_eq!(flee_way(&m, (32.5, 32.5), (30.0, 32.5), 0.0, 9.0, 11.0, c), None);
+    }
+}
+
+#[cfg(test)]
+mod apart_tests {
+    use super::*;
+
+    #[test]
+    fn the_push_is_away_from_mates_inside_apart_only() {
+        let p = apart_push((0.0, 0.0), &[(2.0, 0.0), (10.0, 0.0)], 4.0);
+        assert!(p.0 < -0.4 && p.1.abs() < 1e-6, "{p:?}");
+        assert_eq!(apart_push((0.0, 0.0), &[(5.0, 0.0)], 4.0), (0.0, 0.0));
+        assert_eq!(apart_push((0.0, 0.0), &[(1.0, 0.0)], 0.0), (0.0, 0.0));
+    }
+
+    #[test]
+    fn standing_in_the_band_a_mate_moves_one_round_the_target_not_in_or_out() {
+        // Target at the origin; me 4 m east; a mate 1.5 m north of me (also about 4 m out).
+        let me = (4.0, 0.0);
+        let push = apart_push(me, &[(3.7, -1.5)], 4.0);
+        let w = apart_way(me, (0.0, 0.0), None, push).expect("moves");
+        // Round the circle: tangent at (4, 0) is ±y; away from the mate at -y is +y (south).
+        assert!((w - std::f32::consts::FRAC_PI_2).abs() < 0.05, "{w}");
+        // A mate straight behind (farther out on the same ray): no side, stays.
+        let push = apart_push(me, &[(6.0, 0.0)], 4.0);
+        assert_eq!(apart_way(me, (0.0, 0.0), None, push), None);
+    }
+
+    #[test]
+    fn moving_the_way_is_bent_away_from_the_mate() {
+        let me = (0.0, 0.0);
+        let push = apart_push(me, &[(0.0, 1.0)], 4.0);
+        // Going east with a mate just south (+y): bent north (negative angle).
+        let w = apart_way(me, (10.0, 0.0), Some(0.0), push).unwrap();
+        assert!(w < -0.3, "{w}");
+        // No mate near: the way is unchanged.
+        assert_eq!(apart_way(me, (10.0, 0.0), Some(0.0), (0.0, 0.0)), Some(0.0));
+    }
+
+    /// Four bodies start bunched on one side of a target at the origin and each, every step,
+    /// holds 3-5 m from it and keeps `apart` m from the others: Muro et al.'s two rules with
+    /// this module's geometry, stepping 0.2 m. Returns the coverage they end at (degrees).
+    fn spread_round(apart: f32) -> f32 {
+        let mut p: Vec<(f32, f32)> = vec![(-4.0, 0.0), (-4.0, 0.6), (-4.2, -0.5), (-3.8, 0.3)];
+        for _ in 0..600 {
+            let snapshot = p.clone();
+            for i in 0..p.len() {
+                let mates: Vec<(f32, f32)> = snapshot.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, q)| *q).collect();
+                let way = band_way(p[i], (0.0, 0.0), 3.0, 5.0, 0).map(|(w, _)| w);
+                let push = apart_push(p[i], &mates, apart);
+                if let Some(w) = apart_way(p[i], (0.0, 0.0), way, push) {
+                    p[i] = (p[i].0 + 0.2 * w.cos(), p[i].1 + 0.2 * w.sin());
+                }
+            }
+        }
+        let mut b: Vec<f32> = p.iter().map(|q| q.1.atan2(q.0).rem_euclid(2.0 * PI)).collect();
+        b.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        let gaps: Vec<f32> = (0..b.len()).map(|i| if i + 1 < b.len() { b[i + 1] - b[i] } else { b[0] + 2.0 * PI - b[i] }).collect();
+        for q in &p {
+            let d = q.0.hypot(q.1);
+            assert!((2.5..=5.5).contains(&d), "{d}");
+        }
+        (2.0 * PI - gaps.iter().cloned().fold(0.0, f32::max)).to_degrees()
+    }
+
+    #[test]
+    fn mates_who_each_follow_the_rule_spread_round_a_standing_target() {
+        // 4 m apart on a circle of about 4 m is about 60° between neighbours: four span about
+        // 180° (from bunched within 1 m: under 20°). Wider apart, wider round.
+        let c4 = spread_round(4.0);
+        assert!(c4 >= 170.0, "{c4}");
+        let c6 = spread_round(6.0);
+        assert!(c6 >= 240.0 && c6 > c4, "{c6} {c4}");
     }
 }

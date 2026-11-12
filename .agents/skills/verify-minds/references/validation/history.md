@@ -1,5 +1,20 @@
 # Internal mind validation
 
+## 2026-11-12 packs: `apart` in the grammar (Spark)
+
+Branch `packs`, the trial service, the fake model, `--no-unit-tests`.
+- `minds-packs2-181550` `intents` failed only on the old expected lines: the reference now reads `keep_distance(target, min, max, run, qty, apart)`, `close_in(target, distance, run, apart)` and `circle(target, radius, side, run, qty, apart)`, each with the spec's `apart` sentence.
+- With the case's lines updated, `minds-packs3-181702` `intents` passes.
+
+## 2026-11-12 packs: the `pack` switch retired (Spark)
+
+Branch `packs` from origin/main `9e8a8a87`, the trial service `slop-trials-stdb`, the fake model, private target dir. `minds-packs-133930`: `animals` (rewritten) passes. The switches were `salient,choose,pack` with `LIVING_ANIMAL_PACK_S=120`, so the retired word was passed on purpose:
+- each of the three deer made its own `choose` call (picks 2, 3 and 1), three calls in all;
+- no thought had `mode: pack` or another deer's `by`;
+- no choose prompt had a `# Your pack` section;
+- no compile request was made;
+- the lead, asked again after its 240 s throttle, was answered by instinct with no fourth call. The final step the feature map listed as a known gap passed in this run.
+
 ## 2026-11-12 committed-moves, second pass (Spark)
 
 With origin/main `a07f5919` merged and `throw` committed: `minds-commit5-071222` `acts` passes.

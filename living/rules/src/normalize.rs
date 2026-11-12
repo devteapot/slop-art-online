@@ -515,8 +515,9 @@ fn spacing(out: &mut Map<String, Value>, action: &Map<String, Value>, skill: &st
         }
         _ => s.distance = num(&["distance", "dist", "keep", "gap", "metres", "meters"], "distance")?,
     }
+    s.apart = num(&["apart", "apart_m", "spread", "keep_apart"], "apart")?;
     s.check(skill).map_err(|e| format!("{path}.do: {e}"))?;
-    for (k, v) in [("min", s.min), ("max", s.max), ("radius", s.radius), ("side", s.side), ("distance", s.distance)] {
+    for (k, v) in [("min", s.min), ("max", s.max), ("radius", s.radius), ("side", s.side), ("distance", s.distance), ("apart", s.apart)] {
         if let Some(v) = v {
             // Kept to the centimetre, as written (an f32 widened as is reads 0.800000011920929).
             out.insert(k.into(), json!((v as f64 * 100.0).round() / 100.0));
