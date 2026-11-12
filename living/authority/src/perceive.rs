@@ -438,6 +438,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
         let seen = crate::perception::project(ctx, &me, &ch, now);
+        // Too far away to make out: neither who they are nor whose community (far-label).
+        let far = ch.kind == "person" && seen.name.is_empty() && seen.label == living_rules::script::FAR_PERSON;
         let mut o = JMap::new();
         o.insert("id".into(), json!(c.id));
         if !seen.name.is_empty() {
@@ -445,7 +447,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         } else if ch.kind == "person" {
             o.insert("who".into(), json!(seen.label));
         }
-        if my_community.is_some() && ctx.db.membership().member().find(c.id).map(|m| m.community) == my_community {
+        if !far && my_community.is_some() && ctx.db.membership().member().find(c.id).map(|m| m.community) == my_community {
             o.insert("community".into(), json!("yours"));
         }
         o.insert("kind".into(), json!(ch.kind));

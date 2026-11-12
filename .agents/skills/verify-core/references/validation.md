@@ -1,5 +1,19 @@
 # Core validation record
 
+## 2026-11-12 far-label: someone too far away to make out (Spark) After merging main with speech-truth (`03d32e09`, `core-farlabel-c`, `core-farlabel-ch`): `stranger_filter` 9/9, `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7, speech `channels` 29/29.
+
+Branch `far-label` (`2095a272`, on strangers-1 `9b4fd9d2`), the trial service `slop-trials-stdb`, default seed, `scoped`. `core-farlabel-b`: `stranger_filter` 9/9 (law off and on as before; with an overlay making everyone past 4 m `far`: F, known, at 5 m is "someone too far away to make out" with its id and no name or community; A keeps name and community; N is "a stranger"; law on and N gone: F not waved at; a "stranger" relation about F is not written, about N it is; U gets no first sight at 5 m and "For the first time you see a stranger, 2 tiles northeast" at 2 m), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7. The first attempt (`core-farlabel-a`, `6e42c0b5`) failed the last check: a far figure's look was meant to be retried in 5 s by back-dating its `recently_seen` mark, but that mark is refreshed while someone stays in sight, so the first sight never came; fixed with a mark of its own (`FAR_MARK`, `far_wait`). Strangers-1's merge with main (`9b4fd9d2`, `core-strangers1m`): `crowd_sight` 8/8, `stranger_filter` 3/3.
+
+## 2026-11-12 strangers-1: first sights in a crowd, a graph's "stranger" under a law (Spark)
+
+Branch `strangers-1` (`0dd19571`/`f67b0263`), the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Evidence copied to `~/slop-strangers-logs/verify/`.
+
+- `crowd_sight` (new; `core-strangers1-b`): 8 of 8 pass, twice. An observer among 8 strangers within 4.5 m (a crowd of 9): 2 first-sight lines, 336 characters, all 8 named, 8 `familiar` rows; 2 more brought in: 1 line, 94 characters, both by id, both familiar. The same scene with `--baseline` on main `dc2ecfc8` (`core-strangers1-base2`, its own worktree and target dir): **0 lines** for the 8 and **0** for the 2.
+- `stranger_filter` (new): 3 of 3. Law off: the wave goes to A (same community, no relation row). `set_world_law stranger_by_name true`: it goes to N (relation "wary", name unknown).
+- `sight` 6/6, `senses` 7/7, `fov` 18/18 (`core-strangers1-c`), `doing` 7/7 on a fresh run (`core-strangers1-c`; main 7/7).
+- `doing` failed once on `core-strangers1-b` (a walk to a point ended between the scene and the read of activities: `goto → (10,10)` against `wait`). It passed on main and on a fresh run of this branch. The first attempt (`core-strangers1-a`) failed `stranger_filter` and `doing` because `crowd_sight` left its 11 people on the shared open line. The two new scenes now take a line clear of everyone, and move their actors off it at the end.
+- Not run: the other baseline scenes, speech, town, rhythm, lives.
+
 ## 2026-11-12 speech-truth (Spark)
 
 Branch `speech-truth` (origin/main `a221a78e` merged). Trial service `slop-trials-stdb` (2.14.1). docs/COMMUNICATION.md §15.

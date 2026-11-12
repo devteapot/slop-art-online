@@ -497,12 +497,31 @@ impl Minds {
     /// (the scene's `id`, the `#id` of experience tags): "a stranger #77". Two people one does
     /// not know by name are two nodes with two names, never one shared "a stranger" that
     /// recall and the model fold together; the node takes the name once it is learned.
+    /// A person `me` has only perceived too far away to make out (every experience of theirs
+    /// that involves them reads "someone too far away to make out") is remembered as that, with
+    /// the id: "someone too far away to make out #77", known or not; once made out they become
+    /// "a stranger #77" or their name, and the store never names them from afar again
+    /// (`memory::FAR_NAME_KEPT`; far-label, docs/STRANGERS.md).
     pub(super) fn remembered_as(&self, me: u32, other: u32) -> String {
         match self.conn.db.character().id().find(&other) {
+            Some(o) if o.kind == "person" && self.only_far(me, other) => format!("{} #{other}", living_rules::script::FAR_PERSON),
             Some(o) if self.knows_name(me, &o) => o.name,
             Some(o) => format!("{} #{other}", unnamed_label(&o.kind, o.stage)),
             None => format!("someone #{other}"),
         }
+    }
+
+    /// Whether every experience of `me`'s that involves `other` (subject or object) told them as
+    /// too far away to make out; false when none involves them.
+    fn only_far(&self, me: u32, other: u32) -> bool {
+        let mut any = false;
+        for e in self.experiences(me).iter().filter(|e| e.subject == other || e.object == other) {
+            if !e.text.contains(living_rules::script::FAR_PERSON) {
+                return false;
+            }
+            any = true;
+        }
+        any
     }
 
     fn name(&self, id: u32) -> String {

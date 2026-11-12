@@ -240,6 +240,38 @@ def mind_concurrency(trial):
     return 64 if m.get("only") == "all" or m.get("max") else 4
 
 
+def residents_from(seed, spec):
+    """A seed with some residents' authored entries (sheet, rhythm, places, kit: the whole
+    resident) taken from another commit's version of the same seed (`world.residents_from`:
+    `ref`, a git revision, and `names`). For arms that must differ only in some lives: the
+    strangers trial's C and S run the Quill, Morrow and Sato entries from before the lives were
+    written (dc2ecfc8^), L and LS main's (docs/STRANGERS.md). Every name must exist in both; the
+    resolved commit goes in the seed's `trial_residents_from` (read by trials, not the authority)."""
+    ref, names = spec["ref"], list(spec["names"])
+    sha = sh("git", "-C", ROOT, "rev-parse", "--short", ref).stdout.strip()
+    old = json.loads(sh("git", "-C", ROOT, "show", f"{sha}:living/seeds/{spec.get('seed', seed['run'])}.json").stdout)
+
+    def residents(x, acc):
+        if isinstance(x, dict):
+            if "sheet" in x and "name" in x:
+                acc[x["name"]] = x
+            for v in x.values():
+                residents(v, acc)
+        elif isinstance(x, list):
+            for v in x:
+                residents(v, acc)
+        return acc
+    then, now = residents(old, {}), residents(seed, {})
+    missing = [n for n in names if n not in then or n not in now]
+    if missing:
+        raise RuntimeError(f"residents_from {ref}: {missing} not in both seeds")
+    for n in names:
+        now[n].clear()
+        now[n].update(json.loads(json.dumps(then[n])))
+    seed["trial_residents_from"] = {"ref": ref, "commit": sha, "names": names}
+    return seed
+
+
 def patch_skills(text, trial, variant):
     """A skills file with the trial's `skills_patch`, then the variant's, applied: each entry is
     name -> [old, new], a law value changed in place. An old text that does not occur exactly
@@ -260,6 +292,8 @@ def world_seed(world):
     mind both read (LIVING_SEED is resolved under living/seeds/, so a relative path works)."""
     base = json.loads((ROOT / "living/seeds" / f"{world['seed']}.json").read_text())
     merged = deep_merge(base, {"rules": world.get("rules", {}), **world.get("overrides", {})})
+    if world.get("residents_from"):
+        merged = residents_from(merged, world["residents_from"])
     text = json.dumps(merged, indent=1)
     name = f"trial-{world['seed']}-{hashlib.sha256(text.encode()).hexdigest()[:8]}"
     path = OUT / "seeds" / f"{name}.json"
@@ -423,9 +457,14 @@ class Player:
         rows = [c for c in self.inst.rows(f"SELECT * FROM character WHERE name = '{self.name}'") if c["alive"]]
         return max(c["id"] for c in rows)
 
+    @property
+    def pid(self):
+        """The player's character: the trial's subject, or the newcomer once it joined (`newcomer`)."""
+        return getattr(self, "id", None) or self.inst.subject
+
     def me(self):
-        b = self.inst.bodies([self.inst.subject])
-        return b.get(self.inst.subject)
+        b = self.inst.bodies([self.pid])
+        return b.get(self.pid)
 
     def walk_toward(self, target, seconds):
         """Steer toward a point in 3 s pulses (a held direction key)."""
@@ -457,7 +496,7 @@ class Player:
 
     def residents_near(self, within, minds=False):
         here = self.me()
-        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject and (not minds or self.is_mind(c))]
+        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] not in (self.inst.subject, self.pid) and (not minds or self.is_mind(c))]
         pos = self.inst.bodies([c["id"] for c in people])
         near = sorted(((dist(here, pos[c["id"]]), c) for c in people if c["id"] in pos and here), key=lambda x: x[0])
         return [(d, c) for d, c in near if d <= within]
@@ -466,7 +505,7 @@ class Player:
         return self.call("human_act", json.dumps(node))
 
     def body(self):
-        rows = self.inst.rows(f"SELECT * FROM body WHERE id = {self.inst.subject}")
+        rows = self.inst.rows(f"SELECT * FROM body WHERE id = {self.pid}")
         return rows[0] if rows else None
 
     def hold(self, seconds):
@@ -490,10 +529,10 @@ class Player:
         `object`) gets `answer_due`, said back to that resident; then the player is silent again. The answer is a `human_answer` event
         with the line it answers."""
         inst = self.inst
-        rows = sorted(inst.rows(f"SELECT * FROM experience WHERE observer = {inst.subject} AND id > {getattr(self, 'heard_cursor', 0)}"), key=lambda r: r["id"])
+        rows = sorted(inst.rows(f"SELECT * FROM experience WHERE observer = {self.pid} AND id > {getattr(self, 'heard_cursor', 0)}"), key=lambda r: r["id"])
         for r in rows:
             self.heard_cursor = max(getattr(self, "heard_cursor", 0), r["id"])
-            if r["kind"] == "speech" and r["object"] == inst.subject and r["subject"] != inst.subject and \
+            if r["kind"] == "speech" and r["object"] == self.pid and r["subject"] != self.pid and \
                     any(self.is_mind(c) for c in inst.rows(f"SELECT * FROM character WHERE id = {r['subject']}")):
                 text = self.answer_due
                 self.answer_due = None
@@ -509,7 +548,7 @@ class Player:
         trial (`minds`) counts only residents a mind thinks for (a group of graph-run residents
         could never answer) and shares as few members with `avoid` as can be.
         Returns (centre, member ids)."""
-        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject and (not minds or self.is_mind(c))]
+        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] not in (self.inst.subject, self.pid) and (not minds or self.is_mind(c))]
         pos = self.inst.bodies([c["id"] for c in people])
         ids = [c["id"] for c in people if c["id"] in pos]
         best = None
@@ -644,14 +683,95 @@ class Player:
             inst.emit("events", {"t": inst.t(), "human_error": repr(e)[:300]})
         inst.emit("events", {"t": inst.t(), "human_left": True, "takeover_due_s": 30})
 
+    def join_newcomer(self, spec):
+        """A newcomer who joins later (`newcomer`: `name`, and `at_hour`, the world hour it joins
+        at, or `after_s`): the world and its minds live first, so the residents have seen each
+        other and may have written routines; the newcomer is the one first seen later
+        (docs/STRANGERS.md). The join is a `newcomer_join` event, and the newcomer a cast role."""
+        inst = self.inst
+        while not inst.stopped_by:
+            hour = hour_of(inst.now_ms(), inst.rows("SELECT * FROM world")[0])
+            if ("at_hour" in spec and hour >= spec["at_hour"]) or ("at_hour" not in spec and inst.t() >= spec.get("after_s", 0)):
+                break
+            time.sleep(2)
+        self.id = self.join()
+        inst.roles.setdefault("newcomer", []).append(self.id)
+        here = self.me()
+        land = getattr(inst, "land", None) or {}
+        inst.emit("events", {"t": inst.t(), "newcomer_join": {"id": self.id, "name": self.name, "at_ms": inst.now_ms(), "hour": round(hour_of(inst.now_ms(), inst.rows("SELECT * FROM world")[0]), 2),
+                                                              "at": [round(x, 1) for x in here] if here else None,
+                                                              "arrival_point": [land.get("arrive_x"), land.get("arrive_y")] if land else None}})
+        inst.note_role("newcomer", self.id)
+        inst.log(f"newcomer {self.name}#{self.id} joined at {here}")
+        return self.id
+
+    def approach_group(self, seconds=150, within=5.0, avoid=()):
+        """Walk to the densest group of residents thought for by the minds (`group`, re-chosen
+        and re-aimed every 15 s, a `goto` to a point as the client's click-to-walk does) until two
+        of them are within `within` m (or, after 90 s, one within 3 m); then a short step toward
+        them, so that the player faces into the group (from exp-arrive). Returns its members."""
+        start, end, last = time.time(), time.time() + seconds, 0.0
+        members = []
+        while time.time() < end:
+            if len(self.residents_near(within, minds=True)) >= 2:
+                break
+            if time.time() - start > 90 and self.residents_near(3, minds=True):
+                break
+            if time.time() - last >= 15:
+                centre, members = self.group(avoid=avoid, minds=True)
+                if centre:
+                    self.act({"do": "goto", "target": {"at": [round(centre[0], 1), round(centre[1], 1)]}})
+                last = time.time()
+            time.sleep(2.0)
+        here = self.me()
+        pos = self.inst.bodies([c["id"] for _, c in self.residents_near(8)])
+        if here and pos:
+            cx = sum(p[0] for p in pos.values()) / len(pos)
+            cy = sum(p[1] for p in pos.values()) / len(pos)
+            dx, dy = cx - here[0], cy - here[1]
+            n = (dx * dx + dy * dy) ** 0.5 or 1.0
+            self.call("human_move", dx / n, dy / n, False)
+            time.sleep(0.4)
+        self.call("human_move", 0.0, 0.0, False)
+        return members
+
+    def stands_session(self, spec):
+        """The strangers trial (docs/STRANGERS.md section 6; `script: arrive` with `stands` a list): a newcomer
+        who says and does nothing. It joins (`newcomer`) at the arrival point, then stands
+        silent at each of `stands` in turn: `{"at": "arrival", "s": 300}` where it is (the arrival
+        point, as at a gate), `{"at": "group", "s": 300}` after walking to the densest group of
+        residents (`approach_group`). Then it stays where it is to the end of the run. It never
+        speaks, gestures or names itself, so it stays a stranger. Each stand is a `human_stand`
+        event (from/to ms, who was within 12 m at its start) for arrive_report.py; `human_walk`
+        marks the arrival (its join) and each walk."""
+        inst, end = self.inst, time.time() + spec.get("minutes", 20) * 60
+        try:
+            if inst.trial.get("newcomer"):
+                self.join_newcomer(inst.trial["newcomer"])
+            avoid = ()
+            for k, st in enumerate(spec.get("stands") or []):
+                inst.emit("events", {"t": inst.t(), "human_walk": {"stand": k, "from_ms": inst.now_ms(), "to": st.get("at")}})
+                members = self.approach_group(seconds=spec.get("walk_s", 150), within=spec.get("within_m", 5.0), avoid=avoid) if st.get("at") == "group" else []
+                near = [(round(d, 1), c["id"], c["name"]) for d, c in self.residents_near(12)]
+                inst.emit("events", {"t": inst.t(), "human_stand": {"stand": k, "at_kind": st.get("at"), "from_ms": inst.now_ms(), "s": st.get("s", 300), "group": members, "near": near,
+                                                                    "at": [round(x, 1) for x in (self.me() or (0, 0))]}})
+                self.hold(min(st.get("s", 300), max(0, end - time.time() - 5)))
+                inst.emit("events", {"t": inst.t(), "human_stand_end": {"stand": k, "to_ms": inst.now_ms()}})
+                avoid = tuple(members) + tuple(i for _, i, _ in near)
+            self.hold(max(0, end - time.time()))
+        except Exception as e:  # recorded, never raised into the run
+            inst.emit("events", {"t": inst.t(), "human_error": repr(e)[:300]})
+        inst.emit("events", {"t": inst.t(), "human_left": True, "takeover_due_s": 30})
+
     def session(self, spec):
         """About `minutes` of play: walk to the town, forage, meet people and tell them a plan,
         make a camp by the gate, then leave (stop calling). `script: greet` plays the greeting
-        trial instead (`greet_session`), `script: arrive` the arrival trial (`arrive_session`)."""
+        trial instead (`greet_session`), `script: arrive` the arrival trial (`arrive_session`, or
+        `stands_session` when `stands` lists the stands)."""
         if spec.get("script") == "greet":
             return self.greet_session(spec)
         if spec.get("script") == "arrive":
-            return self.arrive_session(spec)
+            return self.stands_session(spec) if isinstance(spec.get("stands"), list) else self.arrive_session(spec)
         inst, end = self.inst, time.time() + spec.get("minutes", 20) * 60
         try:
             centre = inst.anchor({"town": spec.get("town", "Brackenford")})
@@ -816,7 +936,7 @@ class Instance:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.journal = ROOT / ".local/living/journal" / self.db
         self.roles, self.saved_graphs, self.mind, self.t0 = {}, {}, None, None
-        self.cursor = {"thought": 0, "experience": 0, "chronicle": 0, "talk": 0, "audience": 0, "all_experience": 0, "gesture": 0}
+        self.cursor = {"thought": 0, "experience": 0, "chronicle": 0, "talk": 0, "audience": 0, "all_experience": 0, "gesture": 0, "all_thought": 0}
         self.jpos = {}
         self.tokens = Counter()
         self.calls = Counter()
@@ -926,6 +1046,19 @@ class Instance:
             raise RuntimeError("laws guard: " + "; ".join(problems))
         ran = source if source is not None else readback
         (self.dir / "skills.sha256").write_text(hashlib.sha256(ran.encode()).hexdigest() + "\n")
+        # A variant's world laws (`world_laws`, name -> value), set as an admin sets them on a live
+        # world (`set_world_law`), after the laws guard; read back from `world_law`.
+        wl = variant.get("world_laws") or {}
+        for name, value in wl.items():
+            code, body = http(f"/v1/database/{self.db}/call/set_world_law", [name, json.dumps(value)], self.shared["token"])
+            if code != 200:
+                raise RuntimeError(f"set_world_law {name} {value}: {code} {body[:300]}")
+        if wl:
+            got = {r["name"]: json.loads(r["value"]) for r in self.rows("SELECT * FROM world_law")}
+            if any(got.get(k) != v for k, v in wl.items()):
+                raise RuntimeError(f"world laws not in force: wanted {wl}, world_law has {got}")
+            (self.dir / "world_laws.json").write_text(json.dumps(got, indent=1))
+            self.log(f"world laws set (set_world_law): {wl}; world_law now {got}")
         self.log(f"laws guard passed: the `script` row read back is the {'source sent' if source is not None else 'creation-time script, kept'}"
                  f"{'; the seed laws are composed as the world composed them' + (' (overlay found; module from ' + tag + ')' if built is None else '') + f'; day_ms {day_ms}' if overlay else ''}")
         how = "kept the world's own laws (keep_laws, no install)" if source is None else f"skills installed from {skills.relative_to(ROOT)}"
@@ -981,6 +1114,8 @@ class Instance:
                 continue
             if "stage" in spec and c["stage"] != spec["stage"]:
                 continue
+            if "name" in spec and c["name"] != spec["name"]:
+                continue
             if any(bg.get(k) != v for k, v in spec.get("bg", {}).items()):
                 continue
             grp = bg.get("town") or bg.get("band")
@@ -1024,6 +1159,15 @@ class Instance:
         self.cast_info = {r: [{"id": i, "name": chars[i]["name"], "kind": chars[i]["kind"], "background": self.census_cache[1].get(i, {})} for i in ids] for r, ids in self.roles.items()}
         (self.dir / "cast.json").write_text(json.dumps({"roles": self.cast_info, "subject_genome": genome}, indent=1))
         self.log("cast: " + ", ".join(f"{r}={[chars[i]['name'] + '#' + str(i) for i in ids]}" for r, ids in self.roles.items()))
+
+    def note_role(self, role, cid):
+        """Add a character who came later (a newcomer who joined) to cast.json's roles."""
+        path = self.dir / "cast.json"
+        cast = json.loads(path.read_text()) if path.exists() else {"roles": {}}
+        row = next(iter(self.rows(f"SELECT * FROM character WHERE id = {cid}")), {})
+        cast["roles"].setdefault(role, []).append({"id": cid, "name": row.get("name"), "kind": row.get("kind")})
+        path.write_text(json.dumps(cast, indent=1))
+        self.save()
 
     def anchor(self, a, member=0):
         w, h = self.world["width"], self.world["height"]
@@ -1729,6 +1873,10 @@ class Instance:
             self.call("spawn_newcomer", name)
             self.roles["subject"] = [max(c["id"] for c in self.rows(f"SELECT * FROM character WHERE name = '{name}'"))]
         self.cast()
+        if self.trial.get("newcomer"):
+            # A newcomer joins later, in the human session (`Player.join_newcomer`).
+            self.player = Player(self, self.trial["newcomer"]["name"])
+            self.roles.setdefault("newcomer", [])
         self.status = "preparing"
         # A repurposed resident starts empty-handed and without its old routines. A spawned
         # newcomer, a joined player (whose rows only the player may act on) and an animal do not.
@@ -1845,7 +1993,7 @@ class Instance:
                                 "stopped_by": self.stopped_by, "fake": bool(self.opts.fake), "minutes_planned": self.opts.minutes or self.trial.get("minutes", 15),
                                 "runaways": self.runaway_seen, "mind_starts": len(self.starts), "outages": self.outages,
                                 "day_ms": (getattr(self, "world", None) or {}).get("day_ms"),
-                                "concurrency": getattr(self, "concurrency", None) or mind_concurrency(self.trial)})
+                                "concurrency": getattr(self, "concurrency", None) or mind_concurrency(self.trial), "world_laws": self.shared["variants"][self.variant].get("world_laws") or {}})
             (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
             keep = self.opts.keep_db or self.trial.get("keep_db")
             if self.published and not keep and self.status != "failed-keep":
@@ -1874,6 +2022,21 @@ def jsonl(path):
         except ValueError:
             pass
     return out
+
+
+SPOKEN_ID = re.compile(r"#\d+")
+
+
+def spoken_ids(speech):
+    """Lines said aloud whose words hold a `#<digits>` id (`record.speech`): an id is for acts and
+    memory ("a stranger #77" is a memory handle), never for speech, so this should be 0. Per
+    speaker id; the words are the quoted part of the chronicle line ("A to B: “...”")."""
+    by = Counter()
+    for r in speech:
+        m = re.search(r"“(.*)”", r.get("text") or "", re.S)
+        if SPOKEN_ID.search(m[1] if m else (r.get("text") or "").split(": ", 1)[-1]):
+            by[str(r.get("a"))] += 1
+    return {"lines": sum(by.values()), "by_speaker": dict(by), "of": len(speech)} if speech else None
 
 
 def summarize(d, trial, extra):
@@ -2046,6 +2209,7 @@ def summarize(d, trial, extra):
                 per_day[day]["tokens"] += r.get("tokens") or 0
         s["by_game_day"] = {k: dict(v) for k, v in sorted(per_day.items())}
     s["memories_remembered"] = remembered
+    s["spoken_ids"] = spoken_ids(jsonl(d / "speech.jsonl"))
     frame_probes(s, S, chron, j)
     s["exchanges"] = [{"ref": r["_ref"], "purpose": r.get("purpose"), "model": r.get("model"), "tokens": r.get("tokens"),
                        "reply": excerpt(r.get("reply"))} for r in j if r.get("purpose") in ("deliberate", "think", "talk")][:40]
@@ -2644,7 +2808,7 @@ def reclaim(a):
 def resummarize(a):
     """Recompute every instance's summary from its kept evidence (after a probe changes)."""
     bdir = OUT / a.batch
-    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms", "outages", "concurrency")
+    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms", "outages", "concurrency", "world_laws")
     for p in sorted(bdir.glob("*/summary.json")):
         old = json.loads(p.read_text())
         extra = {k: old.get(k) for k in keep}
