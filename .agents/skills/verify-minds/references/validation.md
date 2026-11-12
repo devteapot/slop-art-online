@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-12 doing-percept (Spark)
+
+Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb`, the fake model, private target dir. `minds-doing-053436`: `doing` (new) passes: the pending request's scene lists the other, holding a guard 3 m in front, with `visibly` `{"is": "block", "phase": "holding"}`; the think prompt carries it; the deliberate prompt's grammar documents `{"doing": ...}`. `fov` passes alongside. The mind's non-ignored tests (105) pass. Not run: the other cases. After merging main `dd2c8569`, with the check allowing a guard's `at: you` (its drawn aim): `minds-doingm-055740` `doing` passes.
+
 ## 2026-11-12 far-label (Spark) After merging main with speech-truth (`03d32e09`, `minds-farlabel3-031420`): `roundtrip`, `queued` and `conversation` pass.
 
 Branch `far-label` (`18b7754b`), the trial service `slop-trials-stdb`, the fake model. `minds-farlabel-024238`: `roundtrip` and `conversation` pass (the release mind's non-ignored tests, 104, pass too). Not run: the other cases.
