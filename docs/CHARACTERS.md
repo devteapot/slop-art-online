@@ -78,6 +78,7 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Short hair is one sheet** from the whorl to the hairline, where it was rings of tiles.
   - **The highlight is one hard ring and the shadow one edge:** both are the client's, and every sheet's normals now come from one smooth shape so they are not broken into patches. The client needs nothing new.
 - **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris stays a type's own: shared, the client's recolouring gave some types another eye colour.
+- **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
 - **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the brows' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
@@ -708,7 +709,7 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
   2. the far side plane, from the silhouette in to the cheek's corner line (60° to 72°, `SIDE_ON`, `SIDE_FULL`);
   3. the edge crossing the front as the corner line scaled toward the middle, so it follows the cheek's own contour; it reaches the middle at 96° (`MIDDLE`, `CROSS`);
   4. between the brow and the nose's base the edge runs a third of the way ahead toward the bridge (72° to 86°, `SOCKET_ON`, `SOCKET`): the socket's shade, fading out over the 5 cm below the nose's base;
-  5. below the nose the far half waits, by nothing at the nose's base and 8° at the chin (`WAIT`), so the edge leans as it comes down and is not one line down the middle of the face;
+  5. below the nose the far half no longer waits (`WAIT` 0, since [the neck step](#the-neck)): at 8° the far cheek was in shade while the jaw under it kept its light, a lighter patch on the lower face with an edge. The edge is one contour from the temple to the chin;
   6. a band along the far jaw from 60° (`JAW_ON`), and the near jaw's later.
 - **Nothing holds its light inside the shade:** no cheek triangle, no bright near side of the nose.
 - **Interpolated** between each pair of drawings by their distance fields, then blurred by 1.4 mm (`SOFT_MM`), so every edge is a pixel or two soft at close range.
@@ -1371,6 +1372,43 @@ Pass 3, 2026-11-12, from the laptop's cost table: with people composed from shar
 - **To share the materials.** The game's own path (`lookdev.rs convert`) makes one material for each distinct content, so far heads and lip layers become one each with no change. A composer that keys a type's materials by its file must key these two by content instead, as it does a style file's: `M00_000_00_Body_01_SKIN` and `M00_000_00_FaceTint_00_FACE`.
 - **Nothing for the colour.** Every far tile has the one mean, so whichever type's mesh teaches the material its mean, it is right for all.
 - **UVs stay inside a tile,** half a texel in from its edge. Nothing wraps.
+
+### The neck
+
+Pass 3, 2026-11-12, from the owner on the cast's faces: "the neck is still off, seems too big? maybe the issue are the attachment point to the head". Measured against the reference with a new tool beside ref-1's (`living/tools/characters/reference/neck.py`): horizontal cuts of the skin from the jaw down, the pivots and the seam, on any character file.
+
+**What the measure found.** Shares of the head's greatest width; "under the jaw" is 0.06 of the head's height below the chin.
+
+| | Neck's width under the jaw | Its depth | Its middle behind the face's front | `J_Bip_C_Head` above the chin, behind the front | `J_Bip_C_Neck` below the chin, behind the front |
+|---|---|---|---|---|---|
+| The reference (both files) | 0.29 to 0.31 | 0.29 to 0.31 | 0.54 to 0.55 | 0.14 to 0.15, 0.53 to 0.54 | 0.18 to 0.19, 0.57 to 0.58 |
+| Ours before (five types) | 0.56 to 0.60 | 0.65 to 0.69 | 0.52 to 0.57 | 0.12 to 0.13, 0.53 to 0.59 | 0.28 to 0.30, 0.58 to 0.64 |
+| Ours after | 0.29 to 0.31, a man 0.36 | 0.29 to 0.32, a man 0.37 | 0.53 to 0.59 | as before | as before |
+
+- **The neck was twice the reference's, across and deep.** The head's skin ran from the whole jaw line down a funnel to a ring 11 cm across, 4.5 cm below the chin; half way in and half way down. From the front the neck was as wide as the lower face; from the side it began behind the chin and ended at the back of the skull.
+- **With clothes it was wider still.** A garment's neck hole lay 6.6 cm from the axis whatever the neck, and collars rose from there: just under the jaw a woman in a smock measured 0.69 of her head's width and a man in a coat 0.97.
+- **The attachment.** The reference's neck is a column that meets the head just under the jaw, with the jaw's underside nearly level over it. Ours met the head 0.175 of its height below the chin, by way of the funnel. That, and not the pivots, is what read as a wrong attachment: the pivots are within 0.03 of a head's width of the reference's in height for the head and 0.10 lower for the neck, and are unchanged.
+
+**What changed** (`head_form.neck_radius`, `cage_head.py`, `person.py`):
+
+- **One radius for the neck,** 3.16 cm for a woman, 3.56 for a man, 3.04 for a child, 3.4 for a boy of 16: 0.31 and 0.36 of the head's width. The reference has no man; a grown man's neck is drawn thicker. The head's neck ring, the neck's tube and the garments' neck holes all take it.
+- **The head's ring is just under the jaw** (`NECK_RING_Z`, 1.519 m with the chin at 1.535: 0.06 of the head's height, where it was 0.175), and the row under the jaw runs three quarters of the way in to the column while dropping a third of the way: a nearly level underside that overhangs the neck.
+- **The neck's axis is a centimetre further forward** (`NECK_Y`).
+- **Garments close round the neck.** A neck hole is the neck's radius plus 4 mm and the garment's own distance off the body, which a smock and a coat now reduce at the neck (`neck_d`). The jersey's roll collar is 2.6 cm high where it was 5.8 and ended above the chin; the coat's stands 4.2 cm and flares 0.9 where it stood 6 and flared 2.6. The yoke rises from the shoulders to the smaller hole, which is the slope of the shoulders into the neck.
+- **Hair is combed over the new collars** (`make_hair`: `cone`, `back`, measured again on the rebuilt pieces), and the neck's collider for hair chains is the neck's radius.
+- **Still 21 of 21 types within 0.03 H** of what they were built to (`cage_accept.py`).
+
+**The grey patches at the neck** on the cast sheet were the jersey's collar: its upper rings stood inside the old funnel under the jaw, and where a pose brought them outside the skin they showed as flat shapes in the jersey's colour (cream on one girl, olive on another). With a column for a neck and collars that end below the chin there is nothing inside the skin to show.
+
+**The faint lighter region on the lower face** was the last of the pale band: the shadow map let the far half below the nose fill 8° later than the cheek above it (`WAIT` in `face_shadow.py`, 20° at first), so at the cast's light the far cheek was in shade and the jaw under it lit. It is 0 now, and the far side's shade is one contour from the temple to the chin.
+
+**What the client needs:** nothing in `living/game`. Every file that has a neck or lies against one changed and must be taken together: the 21 types, the 28 outfit pieces and the 59 hair files (a piece's neck hole and a hair file's fall are made for the new neck; old pieces on new types leave a gap round the neck). The 72 overlays must be built again on the new heads, since a beard lies on the jaw's underside.
+
+**What is left:**
+
+- **The pivots are where they were.** `J_Bip_C_Neck` is 0.10 of a head's width lower against the chin than the reference's (about 2 cm), and both joints up to 0.06 further back. Moving them changes the rest pose every clip plays on, so it was left for a step of its own with the clips rebaked.
+- **An adult's neck axis is 0.03 to 0.04 of a head's width further back than the reference's** (a child's matches).
+- **On a person whose chin is longer than the type's** (an identity value), the ring is at the chin's own height and the underside has no drop.
 
 ### What the client needs for types
 
