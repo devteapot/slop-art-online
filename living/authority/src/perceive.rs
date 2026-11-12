@@ -97,6 +97,30 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
     }
 }
 
+/// A missile striking `object` at `at`, shot by `subject`: everyone who sees where it struck
+/// is told, by `seen` when it also sees the shooter ("{a} shot {b} with an arrow"), else by
+/// `unseen`, which names only the one struck ("An arrow struck {b}"; the percept's subject 0).
+/// The sight rule and the labels are `witnessed`'s.
+#[allow(clippy::too_many_arguments)]
+pub fn witnessed_shot(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subject: u32, object: u32, seen: &str, unseen: &str, salience: f32, exclude: &[u32]) {
+    let w = common::world(ctx);
+    let map = common::map(ctx);
+    let r = crate::perception::widest_sight(ctx, &w, now);
+    for (c, d) in minds_near(ctx, at, r, now, exclude) {
+        let Some((eye, heading)) = ctx.db.body().id().find(c.id).map(|b| (pos(&b, now), common::facing_at(&b, now))) else { continue };
+        if !crate::perception::in_sight(ctx, &map, c.id, eye, heading, object, at, d, &w, now, false) {
+            continue;
+        }
+        let sees_shooter = crate::perception::sees_creature(ctx, c.id, subject, now);
+        let (template, ids) = if sees_shooter { (seen, vec![subject, object]) } else { (unseen, vec![object]) };
+        let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
+        let (a, b) = if sees_shooter { (named.next().unwrap_or_default(), named.next().unwrap_or_default()) } else { (String::new(), named.next().unwrap_or_default()) };
+        let text = rendered(template, &a, &b, object != 0 && c.id == object);
+        let sal = if &*c.kind != "person" { salience * 0.5 } else { salience };
+        percept(ctx, &c, now, kind, if sees_shooter { subject } else { 0 }, object, at, text, sal);
+    }
+}
+
 /// A witnessed event's words for one onlooker: `{a}` and `{b}` become `a` and `b` (the first
 /// `{a}` capitalized when it begins the sentence). The one it was done to reads it as done to
 /// them: "was killed by you", "from your storage", not their own name in the third person.
