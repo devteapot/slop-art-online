@@ -122,14 +122,14 @@ fn glow(a) {
     0.0
 }
 
+// The shipped law with Cullet's own words, and the carried-light glow as one more reach (so a
+// later addition to the shipped law still reaches Cullet).
 fn senses_law() {
-    #{
-        cadence: "hot",
-        topic: "senses",
-        covers: ["glow"],
-        reach: #{ day: sight_in("day"), night: sight_in("torch"), hearing: hearing_of_people(), glow: carried_light_seen() },
-        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are someone too far away to make out, and you cannot tell whose community they belong to. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`,
-    }
+    let l = base_senses_law();
+    l.covers = ["glow"];
+    l.reach.glow = carried_light_seen();
+    l.about = `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are someone too far away to make out, and you cannot tell whose community they belong to. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`;
+    l
 }
 
 // Who a figure is, only within `known_within` metres: farther off someone is too far away to
