@@ -860,6 +860,29 @@ pub struct MindCursor {
     pub updated_ms: u64,
 }
 
+/// A fast re-plan asked of a character's mind (docs/FAST_LANE.md, `fast.rs`), one row per
+/// character while a trigger waits or is being served (private; the mind service reads it). The
+/// trigger's words are the event as the character perceived it, with no count.
+#[spacetimedb::table(accessor = fast_ask)]
+pub struct FastAsk {
+    #[primary_key]
+    pub actor: u32,
+    /// The newest trigger, as perceived ("You were struck by a stranger …", "A stranger winds up
+    /// an attack at you").
+    pub reason: String,
+    /// When the newest trigger came, and the oldest not yet served (a waiting row older than the
+    /// `fast_lane_stale_s` law is dropped).
+    pub trigger_ms: u64,
+    pub first_ms: u64,
+    /// When it was issued to the mind service (0: waiting its turn), and the character's last issue
+    /// (the `fast_lane_gap_s` law).
+    pub issued_ms: u64,
+    pub last_issued_ms: u64,
+    /// The installed graph it was issued against (`brain.installed_ms`): a patch lands only if the
+    /// plan is still that one.
+    pub base_ms: u64,
+}
+
 /// A sleeping body (one in a `sleep` act, or between two sleeps of one night: a sleep that ends
 /// unrested is slept again) and the reasons to think that arrived while it slept. A sleeper's
 /// mind thinks only on what wakes the body (`perceive::Wake`); everything else waits here and is
@@ -875,6 +898,26 @@ pub struct Slumber {
     /// The deferred reasons and their arrival times (as `Deliberation`, living_rules::reasons).
     pub reason: String,
     pub arrived: String,
+}
+
+/// A line whose words reached a sleeping body that it did not wake for (perceive.rs,
+/// `heard_asleep`): told to it, whoever plays it, as heard while asleep once it wakes, and only
+/// then. At most `perceive::HEARD_ASLEEP_KEPT` per sleeper, the latest.
+#[spacetimedb::table(accessor = heard_asleep)]
+pub struct HeardAsleep {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub speaker: u32,
+    pub to: u32,
+    pub x: f32,
+    pub y: f32,
+    /// The line as the sleeper's body received it, in its own terms ("Femi says to you: “…”").
+    pub text: String,
+    pub salience: f32,
+    pub at_ms: u64,
 }
 
 /// A pending request for the mind to reconsider, with a perceived scene snapshot (JSON).

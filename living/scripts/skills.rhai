@@ -48,6 +48,9 @@ fn laws() {
         trade_window_s: 180.0, join_window_s: 300.0,
         // Speech to no one in particular is for the only listener within this many metres.
         address_m: 6.0,
+        // A sound at least this loud (its spec's `loudness`: a voice 1, a call 2.5, a baby's
+        // cry 2.5, the blows of a fight 2) wakes a sleeper within this many metres who hears it.
+        wake_loudness: 2.0, wake_reach: 8.0,
         // A creature in a player's sight stays seen until this far beyond it (metres); a chase
         // is lost beyond this share of the chaser's sight.
         keep_seen_m: 1.0, chase_lost_share: 1.4,
@@ -97,6 +100,12 @@ fn laws() {
         // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
         // compares every shared answer with a fresh one and logs any difference.
         regard_cache: true, regard_cache_check: false,
+        // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
+        // on a blow taken or when the same creature is seen to start the same move at it
+        // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
+        // world at most `fast_lane_rate` are issued a second and `fast_lane_inflight` at once;
+        // a character's start `fast_lane_gap_s` apart; a trigger waiting `fast_lane_stale_s` is dropped.
+        fast_lane_on: false, seen_again_n: 3.0, fast_lane_rate: 2.0, fast_lane_inflight: 4.0, fast_lane_gap_s: 6.0, fast_lane_stale_s: 8.0,
         // First sights (docs/FIRST_SIGHT.md): seeing someone one cannot place (whose name one
         // does not know, and who is near enough to make out) for the first time asks one's mind
         // for a thought, at most once within `first_sight_gap_s`. Off: it is only noticed.
@@ -225,6 +234,9 @@ fn senses_law() {
 //   names        a line to someone that holds their name tells it to those who receive the
 //                words and see whom it was for (default: unless the words are for one ear).
 //   salience     #{ addressed, overheard }.
+//   loudness     how loud a line is (a voice 1, the default): one at least `wake_loudness` wakes
+//                a sleeper within `wake_reach` m who receives the words; a quieter one waits
+//                until it wakes and is told then as heard while asleep.
 // A way's refusals are its `<way>_check(a)`: "" accepts the line, anything else refuses it in
 // those words. The reducer returns exactly them, and the game client, which compiles this
 // script, runs the same check before it sends, so a player sees the same words either way.
@@ -237,7 +249,7 @@ fn senses_law() {
 // engine's own refusals are not here: a way it does not know, and two lines within 2 s.
 fn say_speech() {
     #{ label: "Say", order: 0, about: "Speak aloud. Everyone within earshot hears you, also when you speak to one person.",
-       words: #{ hearing: 1.0 }, to: "optional", gap_s: 2.0, max_chars: 400 }
+       words: #{ hearing: 1.0 }, to: "optional", gap_s: 2.0, max_chars: 400, loudness: 1.0 }
 }
 // How far a whisper goes, and how near one sees that someone whispered.
 fn whisper_reach() { 1.5 }
@@ -252,7 +264,7 @@ fn whisper_speech() {
        about: `Whisper to someone beside you (within ${short(whisper_reach())} m). Only they hear the words; people within ${short(whisper_noticed_within())} m who see you may notice that you whispered to them, but not what.`,
        to: "required", reach: whisper_reach(), words: #{ within_m: whisper_reach(), only_to: true }, kind: "whisper",
        noticed: #{ within_m: whisper_noticed_within(), seen: true, kind: "whispered", text: "{a} whispers something to {b}.", salience: 0.3 },
-       said: "You whispered", said_to: "You whispered to {b}", heard_to_you: "{a} whispers to you", gap_s: 2.0, max_chars: 400 }
+       said: "You whispered", said_to: "You whispered to {b}", heard_to_you: "{a} whispers to you", gap_s: 2.0, max_chars: 400, loudness: 0.2 }
 }
 // A call carries this many times a voice, to people and animals alike, and comes at most once
 // every few seconds.
@@ -267,7 +279,7 @@ fn call_speech() {
        about: `Call out over a distance: everyone within ${short(hearing_of_people() * call_carry())} m hears you, and animals too (a shout can startle deer or draw wolves). Short lines (80 characters), at most one every ${short(call_gap_s())} s.`,
        to: "optional", words: #{ hearing: call_carry() }, animals: "a person shouting",
        said: "You called out", said_to: "You called out to {b}", heard: "{a} calls out{how} from about {d} m", heard_to: "{a} calls out to {b} from about {d} m", heard_to_you: "{a} calls out to you from about {d} m",
-       gap_s: call_gap_s(), max_chars: 80 }
+       gap_s: call_gap_s(), max_chars: 80, loudness: call_carry() }
 }
 
 // ---- moving (a law per creature, on the hot path) -----------------------------------
@@ -2384,31 +2396,31 @@ fn make_spec() {
 fn drop_spec() { #{ item: true, args: ["qty"], about: "Set items down where you stand and leave them, e.g. to free your pack. What is dropped is kept for no one.", takes: "the items from your pack", gives: "room in your pack; the items are left behind" } }
 
 fn attack_spec() {
-    #{ notable: true, target: true, reach: 1.4,
+    #{ loudness: 2.0, notable: true, target: true, reach: 1.4,
        about: "Strike a creature beside you. Every blow does its full damage and whoever reaches 0 health dies; there is no holding back. To frighten someone without harm, threaten. Killing game yields meat and hide.",
        takes: `a creature in reach, ${cost_words("attack")}`, args: ["run"],
        gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" }
 }
 fn strike_spec() {
-    #{ target: true, reach: 1.6,
+    #{ loudness: 2.0, target: true, reach: 1.6,
        about: "A quick blow at a creature in reach, after a short windup they can see. It does its full damage like any blow; 0 health is death.",
        takes: `a creature within reach, ${cost_words("strike")}; ready again ${combat_cooldown("strike")} ms after you start`,
        gives: "a quick blow (harder with a spear, strength and practice); out of reach by then, it misses; a raised guard in front of them takes most of it" }
 }
 fn bowshot_spec() {
-    #{ target: true, reach: 22.0,
+    #{ loudness: 2.0, target: true, reach: 22.0,
        about: "Loose an arrow toward a creature or a point (target {\"at\": [x, y]}): it flies straight and hits the first creature in its path, whoever that is.",
        takes: `a bow and 1 arrow, ${cost_words("bowshot")}, a creature or a point to aim at (up to 22 tiles)`,
        gives: "a hit at range (softened by armor); the arrow is spent" }
 }
 fn firebolt_spec() {
-    #{ target: true, reach: 16.0,
+    #{ loudness: 2.0, target: true, reach: 16.0,
        about: "Hurl a bolt of fire toward a creature or a point: it burns the first creature it meets, hard. Needs the fire_bolt technique.",
        takes: `knowing fire_bolt, ${cost_words("firebolt")}, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`,
        gives: "a bolt of fire that burns the first creature it meets" }
 }
-fn throw_spec() { #{ target: true, reach: 7.0, about: "Throw your spear at a creature up to 7 tiles away. The spear is gone afterwards.", takes: `your spear, ${cost_words("throw")}`, gives: "a hard hit at range" } }
-fn shoot_spec() { #{ target: true, reach: 9.0, about: "Shoot an arrow from your bow at a creature up to 9 tiles away.", takes: `a bow and 1 arrow, a creature within 9 tiles, ${cost_words("shoot")}`, gives: "a hit at range (softened by armor); the arrow is spent" } }
+fn throw_spec() { #{ loudness: 2.0, target: true, reach: 7.0, about: "Throw your spear at a creature up to 7 tiles away. The spear is gone afterwards.", takes: `your spear, ${cost_words("throw")}`, gives: "a hard hit at range" } }
+fn shoot_spec() { #{ loudness: 2.0, target: true, reach: 9.0, about: "Shoot an arrow from your bow at a creature up to 9 tiles away.", takes: `a bow and 1 arrow, a creature within 9 tiles, ${cost_words("shoot")}`, gives: "a hit at range (softened by armor); the arrow is spent" } }
 fn threaten_spec() {
     #{ notable: true, target: true, reach: 3.0,
        about: "Menace a creature within a few tiles for 2 s, weapon raised. No harm is done, but they and anyone watching see it: a way to make a warning or a demand felt without a blow.",
@@ -2927,6 +2939,8 @@ fn laws_about(l) {
         trade_window_s: `a trade offer can be accepted for ${short(l.trade_window_s)} s`,
         join_window_s: `a request to join a community stands ${short(l.join_window_s)} s`,
         address_m: `speech to no one in particular is for the only listener within ${short(l.address_m)} m`,
+        wake_loudness: "a sleeper wakes for a sound as loud as a shout, a baby crying or a fight (not for talk or a whisper)",
+        wake_reach: `when it is within ${short(l.wake_reach)} m`,
         keep_seen_m: `a creature in a player's sight stays seen until ${short(l.keep_seen_m)} m beyond it`,
         chase_lost_share: `a chase is lost beyond ${short(l.chase_lost_share)} times the chaser's sight`,
         spawn_hunger: `a body comes into the world with hunger ${short(l.spawn_hunger)}`,
@@ -2946,6 +2960,12 @@ fn laws_about(l) {
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
+        fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
+        seen_again_n: `seeing the same move started at one ${short(l.seen_again_n)} times in a fight is reason for a quick revision`,
+        fast_lane_rate: `at most ${short(l.fast_lane_rate)} quick revisions begin each second across the world`,
+        fast_lane_inflight: `and at most ${short(l.fast_lane_inflight)} are under way at once`,
+        fast_lane_gap_s: `one's quick revisions begin at least ${short(l.fast_lane_gap_s)} s apart`,
+        fast_lane_stale_s: `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,

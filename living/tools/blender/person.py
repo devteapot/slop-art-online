@@ -141,7 +141,7 @@ TYPED = False  # the head is a face type's cage, with the identity bones in it
 # living/tools/characters/share.py puts on files that people share. `far` is the far model's
 # skin (head, neck and hands), textured with the far picture.
 MAT = dict(
-    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", overlay_face="M00_000_00_FaceOverlay_00_FACE", line="M00_000_00_FaceEyeline_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
+    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", overlay_face="M00_000_00_FaceOverlay_00_FACE", line="M00_000_00_FaceEyeline_00_FACE", brow="M00_000_00_FaceBrow_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
     hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
 )
 FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
@@ -159,8 +159,13 @@ JOINTS = {
     "J_Fit_Belly": (0, 0.110, 1.070),  # a helper no clip keys: moved forward, it carries a belly on the clothes in front of it
     "J_Bip_C_Chest": (0, 0.012, 1.180),
     "J_Bip_C_UpperChest": (0, 0.004, 1.310),
-    "J_Bip_C_Neck": (0, -0.020, 1.475),
-    "J_Bip_C_Head": (0, -0.010, 1.560),
+    # The neck's and the head's joints are where the reference has them, measured from the chin
+    # (reference/neck.py; the chin is at 1.535 and a head is 0.2564 high): the neck's 0.168 of a
+    # head below it, the head's 0.135 above, each a little ahead of where they were. Until the
+    # joints step the neck's was 0.234 below (1.475, y -0.020) and the head's 0.098 above (1.560,
+    # y -0.010).
+    "J_Bip_C_Neck": (0, -0.012, 1.492),
+    "J_Bip_C_Head": (0, -0.003, 1.570),
     "J_Bip_L_Shoulder": (-0.025, -0.012, 1.435),
     "J_Bip_L_UpperArm": (SHOULDER_X, ARM_Y, ARM_Z),
     "J_Bip_L_LowerArm": (SHOULDER_X - 0.280, ARM_Y, ARM_Z),
@@ -993,12 +998,15 @@ def make_face(arm, spec, atlas_path):
             m.f.append(tuple(index[v] for v in f))
             m.fm.append("tint")
     # The iris shares the eye's material (the atlas); highlights are plain colour, as the lines are.
-    # The lash lines, brows, highlights and the mouth's inside are one material (plain colour).
+    # The lash lines, highlights and the mouth's inside are one material (plain colour).
     # The iris is a material of its own (VRoid's name for it, `EyeIris`), with its own small
     # picture: the client recolours a material by moving its picture's mean colour to the person's,
     # and the tag for the eyes' colour goes to materials named so.
-    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint").get(k, "line") for k in m.fm]
-    order = [k for k in ("face", "eye", "iris", "line", "skin", "tint") if k in set(fm)]
+    # The brows are a material of their own too (VRoid's `FaceBrow`): plain colour as the lines
+    # are, and the one the client gives the person's hair colour.
+    # The iris's lights ride in the lips' and blush's layer: a fixed colour the client leaves be.
+    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint", lights="tint", brow="brow").get(k, "line") for k in m.fm]
+    order = [k for k in ("face", "eye", "iris", "line", "brow", "skin", "tint") if k in set(fm)]
     A, C0, PXI = head_mesh.ATLAS, head_mesh.IRIS_COL0, head_mesh.IRIS_PX
     iris_verts = {v for f, k in zip(m.f, m.fm) if k == "iris" for v in f}
     m.uv = [((u * A - C0) / PXI, 1.0 - (1.0 - v) * A / PXI) if i in iris_verts else (u, v) for i, (u, v) in enumerate(m.uv)]
@@ -1006,6 +1014,10 @@ def make_face(arm, spec, atlas_path):
     world = base + np.array(m.v) * HEAD_SCALE
     eye_bone = {-1: "J_Adj_L_FaceEye", 1: "J_Adj_R_FaceEye"}
     weights = [{"J_Bip_C_Head": 1.0} if e is None else ({eye_bone[e[0]]: e[1], "J_Bip_C_Head": 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}) for e in m.eye]
+    v_kind = [None] * len(m.v)
+    for f, k in zip(m.f, m.fm):
+        for v in f:
+            v_kind[v] = k
     if TYPED:
         # Each vertex's share of the identity bones, by where it lies; an eye's own parts ride its orbit.
         shares = cage_head.identity_weights(HF, np.array(m.v))
@@ -1015,6 +1027,9 @@ def make_face(arm, spec, atlas_path):
             else:
                 orbit = f"J_Id_Orbit_{'L' if e[0] < 0 else 'R'}"
                 weights[i] = {eye_bone[e[0]]: e[1], orbit: 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}
+        for i, k in enumerate(v_kind):  # a brow rides its own bone whole
+            if k == "brow":
+                weights[i] = {f"J_Id_Brow_{'L' if m.v[i][0] < 0 else 'R'}": 1.0}
         for i in face.under_neck:  # the neck's ring turns with the neck
             weights[i] = {"J_Bip_C_Neck": 0.75, "J_Bip_C_Head": 0.25}
     for i, v in enumerate(tint_src):  # the layer moves exactly as the skin under it
@@ -1040,13 +1055,15 @@ def make_face(arm, spec, atlas_path):
             tex.image = img
             bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
             mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-    if tint_src:
-        # The layer's picture: the skin's layout at half its size, pigment with an alpha.
+    if layer is not None:
+        # The layer's picture: the atlas's layout at half its size, pigment with an alpha. Lips
+        # and blush where the skin is, the iris's lights where the iris is.
         A2 = head_mesh.ATLAS
         pic = np.zeros((A2, A2, 4))
         pic[..., :3] = face_paint.BLUSH_PIGMENT
         pic[head_mesh.EYE_ROWS :, :, :3] = layer["rgb"]
         pic[head_mesh.EYE_ROWS :, :, 3] = layer["alpha"]
+        pic[:PXI, C0 : C0 + PXI] = layer["lights"]
         # Averaged with the alpha as weight, so a half-covered texel keeps the pigment's colour.
         blocks = pic.reshape(A2 // 2, 2, A2 // 2, 2, 4)
         a_ = blocks[..., 3:4]
@@ -1831,16 +1848,44 @@ def jersey_colour(base):
     return colour
 
 
-def coat_colour(base, patches):
+# The tones inside a coat or a smock, as lightness against its own cloth (linear light): the hem,
+# the shoulders, the three patches (elbows, the skirt's front, the back) and the collar's lining.
+# A shared piece is grey shading that the client tints to the wearer's colour, so it can carry a
+# darker hem only as a tone, the same for every wearer. A person's own file is painted with the
+# same tones, so the two agree: mixed toward a fixed colour, as they were, a hem came out 0.58
+# to 1.37 times its cloth's lightness by the cloth (lighter on dark cloth), the shoulders 1.09
+# to 2.17, and a patch anything from 0.12 to 7.4.
+HEM_TONE, SHOULDER_TONE = 0.66, 1.15
+PATCH_TONES = (1.45, 0.78, 0.60)
+LINING_TONE = 0.45
+
+
+def lightness(c):
+    r, g, b = lin(c)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def relit(c, level):
+    """The colour c at a given lightness (linear light): its hue kept, its channels scaled."""
+    k = level / max(lightness(c), 1e-5)
+    return tuple(min(max(1.055 * (x * k) ** (1 / 2.4) - 0.055 if x * k > 0.0031308 else 12.92 * x * k, 0.0), 1.0) for x in lin(c))
+
+
+def coat_colour(base, patches, bands=False):
+    """A coat's or a smock's paint. `bands`: a smock's sleeve bands alone, which are a piece of
+    their own in their own cloth (the first patch's), not a tone of the smock's."""
+    level = lightness(base)
+
     def colour(tag, u, v, co, n):
-        c = base
-        # Wet and tarred toward the hem; salt-faded on the shoulders.
-        c = mix(c, PAL["kelp"], 0.40 * smooth((0.86 - co.z) / 0.2))
-        c = mix(c, PAL["old_lime"], 0.16 * smooth((co.z - 1.40) / 0.08))
-        if tag in (4, 5, 6):  # patches: other cloth, never matching
-            c = patches[tag - 4]
+        # Wet and tarred toward the hem; salt-faded on the shoulders: the hue leans as it did,
+        # the lightness is the cloth's own times a tone.
+        low, high = smooth((0.86 - co.z) / 0.2), smooth((co.z - 1.40) / 0.08)
+        c = mix(mix(base, PAL["kelp"], 0.40 * low), PAL["old_lime"], 0.16 * high)
+        c = relit(c, level * lerp(1.0, HEM_TONE, low) * lerp(1.0, SHOULDER_TONE, high))
+        if tag in (4, 5, 6):  # patches: other cloth, never matching, at a set tone of this one
+            c = patches[tag - 4] if bands else relit(patches[tag - 4], level * PATCH_TONES[tag - 4])
         elif tag == 7:  # collar lining
-            c = mix(PAL["kelp"], PAL["tar"], 0.3)
+            c = relit(mix(PAL["kelp"], PAL["tar"], 0.3), level * LINING_TONE)
         elif tag == 8:  # an apron
             c = mix(PAL["old_lime"], PAL["driftwood"], 0.15 + 0.25 * smooth((0.75 - co.z) / 0.3))
         elif tag == 9:  # its band
@@ -1981,7 +2026,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             # The bands round the sleeves, in another cloth: over the smock's own sleeve, a hair's
             # width out. Its own part, so a shared smock's bands are a piece with its own colour.
             p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag, neck_d=0.0148).mirrored()
-            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
+            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"], bands=True)))
             if apron:
                 p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag, neck_d=0.0158).mirrored()
                 obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
@@ -2159,7 +2204,8 @@ def spread_head_weights(obs):
             continue
         pts = np.array([(np.array(me.vertices[i].co) - np.array(HEAD)) / HEAD_SCALE for i in idx])
         groups = {}
-        for i, w, parts in zip(idx, share, cage_head.identity_weights(HF, pts)):
+        # The far head has its brows painted on its skin, which follows the brows' bones there.
+        for i, w, parts in zip(idx, share, cage_head.identity_weights(HF, pts, brows=ob.name.split(".")[0] == "FarHead")):
             g.remove([i])
             for n, x in parts.items():
                 vg = groups.get(n) or ob.vertex_groups.get(n) or ob.vertex_groups.new(name=n)
@@ -2355,6 +2401,7 @@ def add_vrm(path, title, springs=None):
 
 
 CLIENT_MORPHS = ("Fcl_EYE_Close", "Fcl_MTH_A")  # what the game drives (living/game/src/lookdev.rs): the blink and the open mouth
+TYPE_BROW = (0.94, 0.94, 0.94)  # a type's brows in its own file, before the client colours them
 TYPE_PARTS = ("Face", "Hands", "Neck", "FarHead")  # a face type's file: its head and skin, near and far
 
 
@@ -2379,6 +2426,7 @@ def main():
                     "`head`: only what a face type's file holds (the whole head, the neck and hands, and the far head with --lod both): no hair, no clothes; "
                     "`face`: the whole head and neck alone, to photograph a type")
     ap.add_argument("--morphs", default="all", choices=("all", "client"), help=f"`client`: keep only the expressions the game drives ({', '.join(CLIENT_MORPHS)}); every expression costs each vertex of the face again")
+    ap.add_argument("--own-iris", action="store_true", help="with --parts head: the iris painted in this figure's own eye colour, as a whole person's is, in place of the one every type shares (to compare the two: eye_colours.py)")
     ap.add_argument("--overlay", default="", help="with --parts overlay: beard_<style>, stubble, lines or freckles")
     ap.add_argument("--keep", default="", help="with --parts keep: the parts to keep, by name, comma-separated (Jersey, Coat, Buttons, Smock, Trousers, Boots, Cap, CapPeak, Kerchief, KerchiefKnot)")
     ap.add_argument("--no-lines", action="store_true", help="leave out the shell lines at the jaw, ears and mouth (cage_head.CageFace._shell_lines), to compare")
@@ -2408,6 +2456,14 @@ def main():
     if a.parts in ("head", "face"):
         # A type's own face has nothing a person adds: age lines are an overlay style, like stubble.
         spec["look"].update(lines=0.0, stubble=0.0, freckles=0.0)
+    if a.parts == "head" and not a.own_iris:
+        # A type's file: its iris is the one every type shares.
+        spec["look"]["iris_shared"] = person_params.SHARED_IRIS
+    if a.parts == "head":
+        # A type's brows are coloured by the client, with the person's hair colour through the
+        # mesh tag: their own tone is neutral, and lighter than any hair, so the client only
+        # ever darkens it.
+        spec["look"]["brow"] = TYPE_BROW
     if a.parts == "hair":
         # A shared style is coloured by the client, through the mesh tag: its own shades are
         # neutral, a little darker at the root than the tip, with no grey of its own.
@@ -2435,6 +2491,13 @@ def main():
             continue
         g["FAR"] = far
         parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
+        shaded = False
+        if a.parts == "keep" and not a.no_shade:
+            # An outfit piece is shaded as it is worn, with the rest of the outfit and the body
+            # round it (a jersey's collar under a smock's, a smock under its apron), and then
+            # the rest is taken away. Shaded alone, the tones inside it were not its wearer's.
+            bake_shade(parts)
+            shaded = True
         if a.parts != "all":
             wanted = dict(head=TYPE_PARTS, hair=("Hair", "HairTie"), face=("Face", "Neck"), keep=tuple(x for x in a.keep.split(",") if x), overlay=("Overlay",))[a.parts]
             keep = [ob for ob in parts if ob.name.split(".")[0] in wanted]
@@ -2452,7 +2515,7 @@ def main():
             spread_head_weights(parts)
             if spec.get("baked") and spec.get("identity"):
                 bake_identity(parts, spec["identity"])
-        if not a.no_shade:
+        if not a.no_shade and not shaded:
             bake_shade(parts)
         if not far and a.parts == "all" and spec.get("person"):
             painted_pieces(parts, spec["person"])

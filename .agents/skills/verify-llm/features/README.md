@@ -15,5 +15,6 @@ The sources are `living/mind/src/llm.rs` and the model configuration `living/con
 | Rate limits, overflow and fallback; background calls do not overflow, except listed ones on a capacity 429 | `overflow`, `capacity-overflow`, `capacity-retry`, `retry-fallback`, `error-overflow`; Cargo `background_calls_do_not_overflow`, `a_model_out_of_capacity_sends_listed_memory_work_to_the_overflow` | [overflow.md](overflow.md) |
 | Real HTTP timeout | `timeout` | [timeout.md](timeout.md) |
 | Routing and key configuration | `routing-group`, `routing-assign`, `routing-rotate`, `routing-child`, `routing-default`, `missing-default-key` | [routing.md](routing.md) |
+| The fast lane's route (purpose `fast` on the urgent lane to `fast.route`, a timeout dropped and journaled) and its world caps (`fast_lane_rate`, `fast_lane_inflight`) in a 20-fighter fake battle | `fast-route`, `fast-cap` | [fast.md](fast.md) |
 
 Local evidence includes the action, fake requests, mind attempts and authority effect. The opt-in live tier remains unrun unless the user authorizes that paid run.

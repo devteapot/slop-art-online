@@ -668,6 +668,9 @@ class CageHead(head_form.Head):
         self.brow_tilt = math.tan(math.radians(b["tilt_deg"])) * 0.020
         self.brow_len = b.get("length", 1.0)
         self.brow_ridge = 0.0
+        # How far above the head's own brow line the brow is drawn (the type's `brow.lift`).
+        # `brow_up` stays the form's brow line: hair and the forehead's lines are set by it.
+        self.brow_lift = b.get("lift", 0.0) * H
         self.nasion_z, self.nose_tip_z, self.nose_base_z = hz(no["bridge_z"]), hz(no["tip_z"]), hz(no["base_z"])
         self.nose_wid = (no["width"] / 2 * H) / 0.0112
         self.nose_len = self.nose_out = self.nose_curve = 1.0
@@ -739,7 +742,8 @@ def rig_pivots(hf):
     w = lambda key, z: Plan(t).raw(key, z) / 2 * H
     for sx, side in ((-1, "L"), (1, "R")):
         out[f"J_Id_Orbit_{side}"] = front(sx * hf.eye_x, hf.eye_z)
-        out[f"J_Id_Brow_{side}"] = front(sx * hf.eye_x, hz(brow_z))
+        # The brow's bone is at the drawn brow, which rides it whole (head_mesh.brow_shape).
+        out[f"J_Id_Brow_{side}"] = front(sx * hf.eye_x, hz(brow_z + b.get("lift", 0.0)))
         out[f"J_Id_Corner_{side}"] = np.array([sx * w("w15", e["z"]), (-0.15 + YB) * H, hf.eye_z])
         out[f"J_Id_Zygoma_{side}"] = np.array([sx * w("w30", 0.28) * 0.96, (-0.26 + YB) * H, hz(0.28)])
         out[f"J_Id_Cheek_{side}"] = front(sx * w("w15", 0.18) * 0.72, hz(0.18))
@@ -756,12 +760,13 @@ for _side in "LR":
                        f"J_Id_Gonion_{_side}": "J_Id_Jaw", f"J_Id_MouthCorner_{_side}": "J_Id_Mouth", f"J_Id_Ear_{_side}": "J_Bip_C_Head"})
 
 
-def identity_weights(hf, pts, pivots=None):
+def identity_weights(hf, pts, pivots=None, brows=False):
     """Each point's share of the identity bones: a list of {bone: weight} summing to 1, at most
     four bones a point.
 
     Features come first, each riding its own bone in full: an eye's opening and the skin round
-    it its orbit, the brow its brow bone, the nose, the mouth and its corners, the chin. Each
+    it its orbit, the nose, the mouth and its corners, the chin (and, with `brows`, the skin
+    round a painted brow its brow bone). Each
     field is 1 over the feature and falls to 0 a little way off, and a bone takes its share of
     what the bones before it left. Then the points that shape the outline (cheek corner,
     cheekbone, cheek, the jaw's angle, forehead, between the brows), and last the three broad
@@ -796,7 +801,10 @@ def identity_weights(hf, pts, pivots=None):
         ez = hf.eye_z + (hf.eye_up - hf.eye_lo) / 2
         d = np.hypot((x - ex) / (hf.eye_w * 1.22), (z - ez) / (eh * 1.55)) * (np.abs(y - c[1]) < 0.20 * H) + 9.0 * (np.abs(y - c[1]) >= 0.20 * H)
         fields.append((f"J_Id_Orbit_{sd}", fall(d, 1.0, 1.9) * (np.sign(c[0]) * x > -0.003)))
-    for sd in "LR":
+    # The brows are drawn shapes that ride their bones whole (person.py gives a brow's own
+    # vertices to its bone); the skin under them does not follow. `brows` is for a surface
+    # that has its brows painted on it, the far head's: there the skin round the brow follows.
+    for sd in "LR" if brows else "":
         c = piv[f"J_Id_Brow_{sd}"]
         d = np.hypot((x - c[0]) / (hf.eye_w * 1.45), (z - c[2]) / (0.030 * H)) + 9.0 * (np.abs(y - c[1]) >= 0.16 * H)
         fields.append((f"J_Id_Brow_{sd}", fall(d, 1.0, 1.8) * (np.sign(c[0]) * x > -0.003)))
@@ -1160,6 +1168,9 @@ class CageFace(head_mesh.Face):
         faces = [(0, 1 + i, 1 + (i + 1) % seg) for i in range(seg)] + [(1 + i, 1 + seg + i, 1 + seg + (i + 1) % seg, 1 + (i + 1) % seg) for i in range(seg)]
         ball = self.balls[side]
         m.add(head_mesh.turn(ip, ball, yaw, pitch), white, uv, faces, "iris", facing=head_mesh.FORWARD, eye=(side, 1.0))
+        # The iris's lights: the same disc 0.3 mm before it, behind the highlights, in the lips'
+        # and blush's layer (face_paint.iris_lights), which the client does not recolour.
+        m.add(head_mesh.turn(ip + np.array([0.0, 0.0003, 0.0]), ball, yaw, pitch), white, uv, faces, "lights", facing=head_mesh.FORWARD, eye=(side, 1.0))
         hs = look.get("light_side", 1.0)
         for hx, hz_, ring in head_mesh.glints(hs):
             n_ = len(ring)

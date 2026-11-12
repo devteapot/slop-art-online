@@ -10,7 +10,7 @@ mod prompts;
 
 use anyhow::{anyhow, Context, Result};
 use living_bindings::*;
-use spacetimedb_sdk::{DbContext, Table};
+use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -151,6 +151,11 @@ async fn main() -> Result<()> {
             c.subscription_builder()
                 .on_error(|_, e| log::warn!("no `cue` subscription ({e:?}): this world keeps no attention cues"))
                 .subscribe(["SELECT * FROM cue".to_string()]);
+            // The fast lane's requests (docs/FAST_LANE.md; private, one row per character while
+            // a trigger waits or is served). A world whose module has no such table still starts.
+            c.subscription_builder()
+                .on_error(|_, e| log::warn!("no `fast_ask` subscription ({e:?}): this world has no fast lane"))
+                .subscribe(["SELECT * FROM fast_ask".to_string()]);
             if mind::greet_audience() {
                 c.subscription_builder()
                     .on_error(|_, e| log::warn!("no `audience` subscription ({e:?}): this world does not keep who heard a line; LIVING_GREET falls back to `off` here"))
@@ -229,6 +234,21 @@ async fn main() -> Result<()> {
             // A whisper to me carries words too; noticing one (`whispered`) does not.
             if e.kind == "speech" || e.kind == "whisper" || e.kind == "silence" {
                 let _ = tx.send(mind::Event::Speech(e.clone()));
+            }
+        });
+    }
+    {
+        // A fast-lane request issued (mind/fast.rs): on insert or when a waiting row is issued.
+        let tx_insert = tx.clone();
+        conn.db.fast_ask().on_insert(move |_, a| {
+            if a.issued_ms != 0 {
+                let _ = tx_insert.send(mind::Event::Fast(a.clone()));
+            }
+        });
+        let tx_update = tx.clone();
+        conn.db.fast_ask().on_update(move |_, old, a| {
+            if a.issued_ms != 0 && a.issued_ms != old.issued_ms {
+                let _ = tx_update.send(mind::Event::Fast(a.clone()));
             }
         });
     }

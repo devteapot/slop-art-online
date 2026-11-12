@@ -2399,9 +2399,15 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         None if yielded => format!("{label} struck you though you had yielded ({amount:.0} damage)"),
         None => format!("{label} attacked you ({amount:.0} damage)"),
     };
-    percept(ctx, &vc, now, "attacked", subject, victim, at, felt, 1.0);
+    percept(ctx, &vc, now, "attacked", subject, victim, at, felt.clone(), 1.0);
+    if !dead {
+        crate::fast::struck(ctx, &vc, &felt, now);
+    }
     // What a witness is told: a missile as a shot by the shooter it sees, or by the missile alone.
     let shot = |seen: &str, unseen: &str| missile.map(|m| (seen.replace("{m}", m), unseen.replace("{M}", &common::capitalized(m)).replace("{m}", m)));
+    // A blow is loud where it lands (its skill's `loudness`): it wakes a sleeper near enough.
+    let loud = sc.skills().get(skill).map_or(0.0, |k| k.loudness);
+    perceive::noise(ctx, at_v, loud, common::widest_hearing(ctx), &[attacker, victim], |_, dir| format!("the noise of a fight, {dir}."), now);
     let pleading = match missile {
         Some(_) if seen_shooter => format!("{label} is shooting at you"),
         Some(_) => "Someone you cannot see is shooting at you".to_string(),
@@ -2581,6 +2587,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
         return;
     }
     let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((c.home_x, c.home_y));
+    crate::fast::cancel(ctx, id);
     // What the rules make of it, while the dead's records and things are still there.
     crate::records::on_death(ctx, id, now);
     // A person who plays the character (now, or while the minds hold it) is told how it died,
@@ -2680,6 +2687,9 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     ctx.db.wake().id().delete(id);
     ctx.db.deliberation().actor().delete(id);
     ctx.db.slumber().actor().delete(id);
+    for r in ctx.db.heard_asleep().actor().filter(id).map(|r| r.id).collect::<Vec<_>>() {
+        ctx.db.heard_asleep().id().delete(r);
+    }
     forget_dead(ctx, id);
     retire(ctx, id);
     crate::combat::died(ctx, id, killer, at, now, unseen.is_some());

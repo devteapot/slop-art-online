@@ -168,6 +168,45 @@ The time to close to 3.2 m did not change: a wolf there in 0.2–1.3 s, a walker
 
 **Ecology result.** Both arms follow the same course: deer boom to about 90–99 by day 2.5, starve back to 14–18 by day 4, and recover. That boom and starvation is the seed's own (compressed lives, finite grass), on main and before it alike. The wolves' run, the halved bite and the new deer and wolf health moved neither population outside the pre-merge spread; one main world ended with 12 wolves against the pre-merge 10. Neither population collapsed or exploded because of this change, and no value was changed.
 
+## Wolves on people and deer, before and after `fix-pursuit-speed` (ecology check, 2026-11-12)
+
+The bite came about 10× sooner after `fix-pursuit-speed` (4b3dc2b3; the table above). This checks what that does to a world over two full nights. **Builds:** main's first parent before the merge (`f5ebdcba`) against main with it (`4b3dc2b3`). Their rules side differs by the one condition in `motion.rs` `toward`, so "before" is this tree with that line put back, as for the chase worlds. **Worlds:** fresh, each from its seed, starting at 07:00 (every world does), run 48 game hours (two full nights, 20:00–06:00), on the Spark's trial server. **Minds:** none (no mind service, no model): every character lives by its instinct graph, which flees no better than a fake mind would, and worse than a real one. The comparison between builds is fair; the absolute rates are not what minds would live. **Measured** with `living/tools/wolf_ecology.py` every 2 s:
+
+- an attack episode: one wolf on one person, a new episode after 20 s without a blow begun;
+- the victim's state when the episode began, or at its last sample before a death: a child (stage 0–1), badly hurt (under half its health), asleep away from a fire (sleeping, no campfire, house, hall, inn, shelter or hearth within 4 m), alone at night (no other person within 10 m).
+
+**The hamlet and Cullet as shipped have no wolves** (`hamlet.json`, `hamlet-6.json` and `cullet.json`: deer 0, wolf 0), so wolves cannot touch their people under either build. The shipped world with wolves is the island (24 deer, two packs: 5 by the deer meadows and a bold pack of 4 in the low hills, 370–800 m from the arrival point, 40 m off the road). So the check ran the island as shipped, and the hamlet and Cullet each with 16 deer and wolves added for this check: the hamlet with a bold pack of 4 in the island's own pack form; Cullet with 4 ordinary wolves (the pack form found no spot on Cullet's treeless island). The two overlays are in the runs' evidence, not in `living/seeds`.
+
+| World (runs per build) | Resident-hours | Attack episodes per 1,000 resident-h (night) | People killed by wolves, per 1,000 resident-h | Killed: child / badly hurt / asleep, no fire / alone at night | Deer killed per 100 wolf-h | Wolves: start → end; starved |
+|---|---|---|---|---|---|---|
+| Island, before (2) | 26,483 | 0.15 (2 of 4 at night) | 0 (0 people) | – | 1.05 (9) | 9 → 9; 0 |
+| Island, after (2) | 26,462 | 0.04 (1, by day) | 0 (0 people) | – | 0.93 (8) | 9 → 9; 0 |
+| Hamlet + bold pack, before (4) | 1,749 | 62 (0 at night) | 7.4 (13 of 48 residents; per run 2, 3, 4, 4) | 2 / 13 / 0 / 0 | 0.54 (6) | 4 → 6–10; 0 |
+| Hamlet + bold pack, after (4) | 1,535 | 50 (4 at night) | 11.7 (18 of 48; per run 5, 3, 5, 5) | 3 / 18 / 1 / 1 | 1.05 (12) | 4 → 4–14; 0 |
+| Cullet + 4 wolves, before (2) | 6,138 | 0 | 0 | – | 0.90 (4) | 4 → 6; 0 |
+| Cullet + 4 wolves, after (2) | 6,137 | 0 | 0 | – | 1.00 (4) | 4 → 4–5; 0 |
+
+- **The island.** One to two attack episodes per 48 hours among 277 people, none deadly, before and after. Its bold pack lives far from the arrival point and off the road. Deer 24 → 20–22, wolves 9 throughout in both.
+- **The hamlet with a bold pack.** The one world where wolves live beside people. The pack reaches the village at once: under either build 2–5 of the 12 residents die by wolves within the first 12–18 game hours, all of them badly hurt when they died (worn down over several episodes), and none die after that (the deer, booming from 16 to 160–256 under the hamlet's fast life pace, feed the pack). After the change there are fewer episodes (76 against 109) but each is twice as deadly (0.24 deaths an episode against 0.12): a wolf now keeps its bite on a person walking away. Deaths rise by about 1.6× (13 → 18 of 48 residents over four runs each). The wolves died only of old age, none starved.
+- **Cullet with wolves.** Its four ordinary (not bold) wolves never went for any of its 64 residents under either build. Deer killed per wolf-hour about the same.
+- **Deer.** Deer killed per wolf-hour does not move on the island or in Cullet (1.05 → 0.93, 0.90 → 1.00); in the hamlet it doubles on small counts (6 → 12 over four runs), with the deer booming either way.
+
+**Verdict.** In the shipped worlds people killed by wolves do not rise: none die on the island under either build, and the hamlet and Cullet have no wolves. Where a bold pack lives beside a village (the hamlet with one added), deaths rise by about 1.6×, on a baseline that is already harsh under instincts: a bold pack kills a quarter to two-fifths of a 12-person hamlet in its first half day, before and after. Real minds, which flee, call for help and avoid the wolves' ground, should do better than instincts in both builds.
+
+**Fights after the change** (`scenes.py fights`, fresh default-seed worlds, 5 of each, then 8 more person-against-wolf; median and range of fights that started):
+
+| | The table above ("Run 1.65, shipped") | Before (`f5ebdcba`) | After (`4b3dc2b3`) |
+|---|---|---|---|
+| Person v person, dodging | 27.0 s (22.8–36.3) | 44.0 s (27.5–90.9), one timed out | 34.2 s (25.2–48.1) |
+| Person v person, trading blows | 23.3 s (17.7–23.7) | 23.1 s (15.8–25.7) | 22.0 s (16.2–26.7) |
+| Person v bold wolf | 15.0 s (14.4–18.3) | 23.6 s (19.3–26.3), 11 fights | 27.5 s (18.1–90.6), 9 fights, 2 timed out |
+
+- **Trading blows.** Unchanged by the fix.
+- **Dodging.** Within the spread on both builds.
+- **The wolf fights.** Run about 24 s on both builds, longer than the table's 15 s: the table no longer holds for them, and not because of this change. It was measured on an older main.
+- **The two "after" timeouts.** Each came after a dodge that left the person where something on the default map blocked sight: both sides then stood "no #N in sight" for the rest of the 90 s. Placed at those same spots on the "before" build, a person and a wolf do the same, so they are this scene's geometry.
+- **Fights that never started.** Two before and four after (0 blows in the window).
+
 ## Whether a body runs: `body.running`
 
 A client should draw the gait the rules move, not infer it from speed. A Settings walk of 3.0 or 3.4 m/s (`walk_base`) would otherwise read as a run.

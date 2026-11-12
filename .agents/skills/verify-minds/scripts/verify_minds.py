@@ -1035,6 +1035,143 @@ def dodge_wall(run):
     raise RuntimeError('no wall to dodge into on this map')
 
 
+def fast_config(run, **fast):
+    """A rethink config whose `fast` section routes to the fake (`local`)."""
+    cfg = json.loads((ROOT / 'living/configs/rethink.json').read_text())
+    cfg['fast'] = {'route': 'local', 'timeout_ms': 6000, 'experiences': 12, **fast}
+    path = run.directory / 'rethink-fast.json'
+    path.write_text(json.dumps(cfg, indent=2))
+    return str(path)
+
+
+FAST_PATCH = {'patch': {'label': 'combat', 'graph': {'first': [{'do': 'dodge'}, {'wait': 0.7}]}}, 'thought': 'verify fast: I will get out of its way.'}
+COUNT_WORDS = re.compile(r'again|\btimes\b|\(×|\d+(st|nd|rd|th) time')
+
+
+@case('fast-lane')
+def fast_lane_case(run):
+    """The fast lane (docs/FAST_LANE.md) with the fake model: the other strikes at the eye with a
+    spear (heavy blow, over and over), the world's `fast_lane_on` law on.
+
+    - (e) asleep: the eye sleeps; the other's one blow issues nothing (it wakes the eye, as before).
+    - (a) a blow taken issues one fast request; its prompt holds why now (the eye's own line for
+      the blow), what has just happened, the top level and the routines, and no count or "again";
+      the reply's `combat` branch is installed through `mind_patch` (source `fast`, a `fast`
+      thought), and the eye's next deliberation is not counted as thinking (`deliberated_ms`).
+    - (g) the slow deliberation the same blow started (its compile held 5 s) installs after the
+      patch and keeps the patched `combat` branch.
+    - (b) blows inside `fast_lane_gap_s` (6 s) merge: one fast request in the first 5.5 s.
+    - (c) the next request's reply is held 2.5 s; an install in between (admin `set_behavior`)
+      changes the plan, and the reply is refused by the plan check ("refused: the plan changed
+      since it was asked"), changing nothing.
+    - (f) with `fast_lane_on` off, blows ask nothing."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    e = wall_spots(run)['open']
+    for who in (eye, other):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 1.2, e[1])
+    run.admin('grant_items', other, 'spear', 1)
+    run.admin('set_world_law', 'fast_lane_on', 'true')
+    script = {'replies': {'think': {'thought': 'Someone is hitting me.', 'intend': ['stand my ground'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'fast', 'reply': FAST_PATCH, 'times': 1},
+                        {'purpose': 'fast', 'reply': FAST_PATCH, 'delay_s': 2.5, 'times': 1},
+                        {'purpose': 'deliberate', 'delay_s': 5, 'times': -1}]}
+    # A staged mix, as the shipped models are (compile by stage of attention): with no player in
+    # sight the eye is off stage for model routing, which must not keep the fast lane off.
+    models = model(run, script)
+    models['mixes'] = {'staged': {'deliberate': {'on_stage': 'local', 'off_stage': 'local'}, '*': 'local'}}
+    models['assign'] = {people[0]['name']: 'staged'}
+    run.start(models, [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run)})
+    requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
+    body = lambda x: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', []) if m.get('role') == 'user')
+    clock = lambda: run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+    fast_thoughts = lambda: [t for t in run.private(f'SELECT * FROM thought WHERE actor = {eye}', 'thoughts') if t['kind'] == 'fast']
+    # (e) asleep: one blow on a sleeper issues nothing.
+    run.admin('set_behavior', eye, json.dumps({'do': 'sleep'}))
+    run.wait(lambda: [a for a in run.private(f'SELECT * FROM activity WHERE id = {eye}', 'eye-activity') if a['skill'] == 'sleep'] or None, 'the eye asleep', 20)
+    run.admin('set_behavior', other, json.dumps({'seq': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 120}]}))
+    run.wait(lambda: [x for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'eye-told') if x['kind'] == 'attacked'] or None, 'the sleeper struck', 30)
+    time.sleep(2.0)
+    assert not requests() and not run.private(f'SELECT * FROM fast_ask WHERE actor = {eye}', 'fast-ask-asleep'), 'a sleeper was fast-laned'
+    # (a) a blow taken, and (b) the gap.
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    time.sleep(8.0)
+    t0 = clock()
+    run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 0.3}]}))
+    first = run.wait(lambda: requests() or None, 'a fast request after a blow', 30)[0]
+    patched = run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-patched') if b['source'] == 'fast' and '"wait":0.7' in b['graph'].replace(' ', '')] or None, 'the fast patch installed', 20)[0]
+    text = body(first)
+    why = text.split('# Who you are')[0]
+    blows = [x['text'] for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'eye-blows') if x['kind'] == 'attacked' and x['at_ms'] >= t0]
+    assert '# What has just happened' in text and '# Your top level' in text and '# Your routines' in text, text[:600]
+    assert blows and any(b in why for b in blows), {'why': why, 'blows': blows}
+    assert not COUNT_WORDS.search(why) and not COUNT_WORDS.search(text.split('# What has just happened')[1].split('# Your top level')[0]), 'a count or "again" in the fast prompt'
+    assert any('combat branch rewritten' in t['summary'] for t in fast_thoughts()), fast_thoughts()
+    time.sleep(5.5)
+    in_gap = [x for x in requests() if x['at_ms'] < first['at_ms'] + 5500]
+    assert len(in_gap) == 1, f'{len(in_gap)} fast requests inside the 6 s gap'
+    # (g) the slow deliberation the blow started lands after the patch and keeps its branch.
+    slow = run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-slow') if b['source'] == 'mind' and b['installed_ms'] > patched['installed_ms']] or None, 'the slow install after the patch', 30)[0]
+    assert '"wait":0.7' in slow['graph'].replace(' ', ''), 'the slow install dropped the fast-patched combat branch'
+    # (c) the plan check: the next reply is held; an install meanwhile changes the plan.
+    second = run.wait(lambda: requests()[1:] or None, 'a second fast request', 30)[0]
+    run.admin('set_behavior', eye, json.dumps({'wait': 30}))
+    refused = run.wait(lambda: [t for t in fast_thoughts() if t['summary'].startswith('refused: the plan changed')] or None, 'the stale reply refused', 20)
+    brain = run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-after-refusal')[0]
+    assert brain['source'] != 'fast' or brain['installed_ms'] < second['at_ms'], brain
+    # (f) the switch off.
+    run.admin('set_world_law', 'fast_lane_on', 'false')
+    time.sleep(3.0)
+    n = len(requests())
+    time.sleep(10.0)
+    assert len(requests()) == n, 'fast requests with the fast lane off'
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    (run.directory / 'fast-prompt.txt').write_text(text)
+    return {'status': 'pass', 'fast_requests': len(requests()), 'refused': [t['summary'] for t in refused][:2], 'why': why.strip()[:200]}
+
+
+@case('fast-takeover')
+def fast_takeover_case(run):
+    """(d) The controller rule (docs/FAST_LANE.md): a player's character, taken over by the minds,
+    is struck and its fast request's reply held 12 s; its person comes back meanwhile (handback):
+    the request is dropped (`fast_ask` gone) and the late reply changes nothing. Away again, the
+    minds take it over again; the reply prepared before is refused (no open request), and the
+    played body got no fast patch."""
+    people = prepare(run)
+    other = people[0]['id']
+    # Taken over 5 s after its person is gone (the `takeover_s` law), so the second takeover
+    # comes before the held reply.
+    run.admin('set_world_law', 'takeover_s', '5')
+    run.harness('player', 'join', 'FastAway')
+    me = run.sql("SELECT id FROM character WHERE name = 'FastAway'", 'player')[0]['id']
+    run.admin('set_world_law', 'fast_lane_on', 'true')
+    script = {'replies': {'think': {'thought': 'Alone now, I wait.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'fast', 'reply': FAST_PATCH, 'delay_s': 12, 'times': -1}]}
+    run.start(model(run, script), [me], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run, timeout_ms=30000)})
+    run.wait(lambda: [p for p in run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-taken') if p['ai']] or None, 'takeover', 60)
+    at = run.sql(f'SELECT x, y FROM body WHERE id = {me}', 'me-at')[0]
+    run.admin('place_at', other, at['x'] + 1.2, at['y'])
+    run.admin('grant_items', other, 'spear', 1)
+    run.admin('set_behavior', other, json.dumps({'seq': [{'do': {'skill': 'attack', 'target': {'id': me}}}, {'wait': 120}]}))
+    requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
+    run.wait(lambda: requests() or None, 'a fast request for the taken-over character', 30)
+    run.harness('player', 'move', '1', '0')
+    back = run.sql(f'SELECT * FROM character WHERE id = {me}', 'character-back')[0]
+    assert not back['ai'], back
+    assert not run.private(f'SELECT * FROM fast_ask WHERE actor = {me}', 'fast-ask-back'), 'the request outlived the handback'
+    # Away again (its connection closed): the minds take over again before the reply comes.
+    run.wait(lambda: [p for p in run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-again') if p['ai']] or None, 'takeover again', 60)
+    time.sleep(14.0)
+    brains = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-end')
+    fast = [t for t in run.private(f'SELECT * FROM thought WHERE actor = {me}', 'thoughts') if t['kind'] == 'fast']
+    assert brains and brains[0]['source'] != 'fast' and '"wait":0.7' not in brains[0]['graph'].replace(' ', ''), brains
+    assert not [t for t in fast if 'rewritten' in t['summary']], fast
+    return {'status': 'pass', 'fast_requests': len(requests()), 'fast_thoughts': [t['summary'] for t in fast]}
+
+
 @case('dodge-told')
 def dodge_told_case(run):
     """A dodge's outcome reaches the mind truthfully, and a cooldown's refusals once (fix-dodge-told;
@@ -2040,8 +2177,9 @@ def reasons_case(run):
 def sleeper_case(run):
     """A sleeping body's mind thinks only on what wakes it (perceive.rs `Wake`, the `slumber`
     table): an offer made to a sleeper starts no deliberation while it sleeps and waits in its
-    `slumber` row; an attack wakes it, and its mind deliberates on why it woke ("You woke up: …
-    is attacking you!") with the offer that waited."""
+    `slumber` row; a quiet line to it takes no talk turn and waits in `heard_asleep`; an attack
+    wakes it, and its mind deliberates on why it woke ("You woke up: … is attacking you!") with
+    the offer and the line that waited, and is told the line as heard while asleep."""
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     run.admin('set_behavior', other, json.dumps({'wait': 120}))
@@ -2062,9 +2200,17 @@ def sleeper_case(run):
     run.wait(lambda: slumber('slumber-start'), 'asleep', 30)
     base = max((t['id'] for t in run.thoughts(actor, 'thoughts-asleep')), default=0)
     sent_before = len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'deliberate'])
+    talks_before = len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'talk'])
     run.admin('mind_act', other, [json.dumps({'do': 'offer', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'want': 'wood', 'want_qty': 1})], 'verify-minds')
     run.wait(lambda: any('offers you' in r['reason'] for r in slumber('slumber-offer')), 'the offer waits in slumber', 30)
+    # A quiet line to the sleeper (another's `say`): no talk turn while it sleeps; kept for its waking.
+    thought = {'kind': 'deliberate', 'summary': 'verify minds sleeper', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': 'fake', 'reference': ''}
+    run.admin('mind_say', other, 'verify quiet line to a sleeper', actor, '', 0, thought)
+    run.wait(lambda: run.private(f'SELECT * FROM heard_asleep WHERE actor = {actor}', 'heard-asleep'), 'the line waits for its waking', 15)
     time.sleep(15)
+    talks_asleep = len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'talk']) - talks_before
+    assert talks_asleep == 0, f'a sleeper took {talks_asleep} talk turns'
+    assert not [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told-asleep') if 'verify quiet line' in e['text']], 'the line was told while asleep'
     later = [t for t in run.thoughts(actor, 'thoughts-after-offer') if t['id'] > base and t['kind'] == 'deliberate']
     asked = [d for d in pending('pending-after-offer') if 'offers you' in d['reason']]
     sent_asleep = len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'deliberate']) - sent_before
@@ -2076,11 +2222,14 @@ def sleeper_case(run):
     run.admin('set_behavior', other, json.dumps({'wait': 120}))
     assert reason.startswith('You woke up: ') and 'attacking you' in reason.split('\n')[0], reason
     assert 'offers you' in reason, f'the offer that waited was not asked with the waking: {reason!r}'
+    assert 'While you slept, you heard: ' in reason and 'verify quiet line to a sleeper' in reason, f'the line heard asleep was not asked with the waking: {reason!r}'
     # (the test graph may put it to sleep again until the mind's reply replaces it)
     run.wait(lambda: not slumber('slumber-after'), 'awake under the mind\'s plan', 30)
     told = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told') if e['kind'] == 'body' and e['text'].startswith('You woke up: ')]
     assert told, 'the sleeper was not told it woke'
-    return {'status': 'pass', 'model_calls_asleep': sent_asleep, 'woken_reason': reason, 'told': told[0]['text']}
+    heard = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'heard-on-waking') if e['kind'] == 'heard_asleep' and 'verify quiet line' in e['text']]
+    assert len(heard) == 1, f'the line heard asleep was not told once on waking: {heard}'
+    return {'status': 'pass', 'model_calls_asleep': sent_asleep, 'talk_turns_asleep': talks_asleep, 'woken_reason': reason, 'told': told[0]['text'], 'heard_asleep': heard[0]['text']}
 
 
 def system_text(body):

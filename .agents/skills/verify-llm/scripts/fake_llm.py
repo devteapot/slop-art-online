@@ -11,10 +11,12 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-PURPOSES = ('think', 'deliberate', 'consolidate', 'talk', 'internalize', 'reorganize', 'judge', 'choose', 'rethink')
+PURPOSES = ('think', 'deliberate', 'consolidate', 'talk', 'internalize', 'reorganize', 'judge', 'choose', 'rethink', 'fast')
 SPEECH = 'verify fake: I will wait here.'
 CHOICES = [0]
 REPLIES = {
+    # The fast lane (docs/FAST_LANE.md): by default it keeps the plan as it is.
+    'fast': {'keep': True, 'thought': 'verify fake: I keep to my plan.'},
     'think': {'thought': 'I can wait here.', 'intend': ['wait briefly'],
               'say': {'text': SPEECH, 'to': None}, 'judgments': [], 'places': []},
     'deliberate': {'thought': 'I can wait here.', 'plan': 'verify fake wait',
@@ -79,6 +81,8 @@ def purpose_of(body):
     effort = body.get('reasoning_effort')
     system = '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'system')
     # Calls the mind sends under another purpose's effort map, told apart by their prompt.
+    if 'Something has just happened to you (see Why now)' in system:
+        return 'fast'
     if 'should stop and think again' in system:
         return 'rethink'
     if 'pick one of the numbered' in system:

@@ -77,9 +77,15 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Long hair falls close to the back:** combed over the garment's own measured collar and back, gathered behind the shoulders, the front hair ending at the jaw. Styles that hang past the collar have a `.collar` file for a coat.
   - **Short hair is one sheet** from the whorl to the hairline, where it was rings of tiles.
   - **The highlight is one hard ring and the shadow one edge:** both are the client's, and every sheet's normals now come from one smooth shape so they are not broken into patches. The client needs nothing new.
-- **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris stays a type's own: shared, the client's recolouring gave some types another eye colour.
+- **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris was left a type's own then, and is one picture for every type since [one iris for every type](#one-iris-for-every-type).
+- **Pass 3, one iris for every type** ([one iris for every type](#one-iris-for-every-type)). Every type's file names one iris picture, and a person's line carries the colour that brings its body to the person's eye colour. Composed eyes had come out about three times too light, with grey pupils on the lighter colours and stray hues from the type's own iris; the iris's body is now within 3 CIE76 of the eye colour on every type. A whole file's warm glow in a dark or a blue eye is what a composed eye still lacks.
 - **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the brows' drawing, the face's painted softness, clothes and silhouette, hands.
+- **Pass 3, the neck's and the head's joints** ([the neck's and the head's joints](#the-necks-and-the-heads-joints)). Both are at the reference's places: the neck's 1.7 cm higher, the head's 1 cm higher. Every generated file was built again on the one skeleton; no clip key changes.
+- **look-1, the look book** ([the look book](#the-look-book)). A person line and its words for every look band a person can reach, under opaque keys: Cullet's 64 residents, a pool of 128 for newcomers and players, and 96 lines for background people. The client's book holds lines only; whose a line is, is in the world's data.
+- **Pass 3, the brows' place** ([the brows' place](#the-brows-place)), for the owner to judge. Measured against the reference, every type's brow sat on the head's own brow line, 0.3 of the eye's height above a large eye where the reference's sit 0.6 to 0.85 above. Each type's brow is lifted to 0.72; arch, tilt, length and thickness are unchanged. A brow now rides its own bone whole and the skin under it does not follow.
+- **Pass 3, the iris's lights** ([the iris's lights](#the-iriss-lights)). The glow, the streaks and the arc of sky in an eye are a layer of their own in fixed colours, on a disc before the iris in the lips' and blush's material, so the client's recolouring leaves them be. A composed eye is now within about 3 CIE76 of a whole file's in every eye colour; it was 10 to 14.
+- **Pass 3, the brows** ([the brows](#the-brows)). A brow is one tapered stroke, as the reference draws its own, in a material of its own under the reference's name for it, so the client's hair colour reaches it. Composed people had their type's brow colour whatever their hair.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's lifting strands and fringe (and fringes over the lifted brows), the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -129,6 +135,10 @@ python3 living/tools/characters/town.py .local/town --town living/seeds/cullet.j
 python3 living/tools/characters/share.py list living/game/assets/lookdev/anim/own-man.glb
 python3 living/tools/characters/share.py pages --name set living/game/assets/lookdev/anim/own-{man,woman}.glb
 
+# How the types' shared iris comes out in each eye colour under the client's recolouring, and whether
+# every type's iris still has the source colour the lines' eye colours are worked out from.
+python3 living/tools/characters/eye_colours.py living/game/assets/lookdev/types --check
+
 # Whether two people's baked clips are the same motion.
 python3 living/tools/characters/clips_compare.py living/game/assets/lookdev/anim/own-{man,woman}.glb
 
@@ -142,6 +152,8 @@ blender -b -P living/tools/blender/clip_check.py -- --in living/game/assets/look
 python3 living/tools/characters/media.py .local/cap .local/page .local/town .local/sheets
 python3 living/tools/characters/page.py .local/page
 ```
+
+**Photograph a person through a recipe.** `gen_person.sh` writes two copies: `lookdev/own-<name>.glb`, the builder's own, and `lookdev/anim/own-<name>.glb` with the clips, which is what a recipe draws. Both are finished the same way since the brows' place step (merged primitives, the face's designed normals and shadow map, the outline's normals, the person's identity on the bones); before that the builder's copy was left raw, and shown by itself it shaded with a straight split down the face and had the type's face. A file with clips shown as a plain file (no `recipe:`) is still drawn without its hair and face shading: that is the view's rule for plain animated files. `town.py` and the board go through recipes.
 
 A pass is also published through the asset board, the record of which version the owner accepted (`docs/ASSET_BOARD.md` and `living/tools/board/board.py`). Its records are in `living/assets/board/`.
 
@@ -175,6 +187,12 @@ A pass is also published through the asset board, the record of which version th
 - The types' pictures on shared pages are `character:face-types` `20261112-3f0805f7-…` (`types-pages`: four residents composed from the type files and coloured by the client, the full head close and at the game camera and the far head at the game camera, before and after).
 
 - The neck is `character:face-types` `20261112-4c89b344-…` (`neck-types`: four bare type heads before and after from the front, the side and at the game camera, with their measures; `neck-people`: four whole people before and after; `neck-motion`: the same four on moving frames; each with the reference's row), the six preset families' `20261112-4c89b344-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-4c89b344-…` (the 64 built again whole, with `faces-before-after` and `neck-named`, the four faces named on the sheet before).
+- The tones inside a piece are `character:face-types` `20261112-772c115c-…` (`piece-tones`: eight residents, each as its own file and composed from the shared pieces, before and after, with the measures; `shadow-square`: faces with the light square to them and a few degrees either side, for the shadow map's wait of 0: no straight split down the middle), the six preset families' `20261112-772c115c-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-772c115c-…` (the 64 built again whole, with `lineup-before-after`).
+- One iris for every type is `character:face-types` `20261112-83b3b0e7-…` (`shared-iris`: three types' eyes in the seven eye colours through the client, with a type's own iris and the eye colour in the line, with the shared iris and the line's new colour, and as a whole file paints them; the same by the client's rule in `eye_colours.py`; `shared-iris-people`: four residents composed before and now above their own files). The six preset families and `cast-64` are whole files, whose paint this step does not change (one preset built again: the same iris and atlas, texel for texel), so they have no new version.
+- The brows are `character:face-types` `20261112-46a90cae-…` (`brows`: four types coloured by the client with four hair colours, before and after, from the front and at 35 degrees; `brows-people`: four residents composed before and now above their own files), the six preset families' `20261112-46a90cae-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-46a90cae-…` (the 64 built again whole, with `faces-before-after`).
+- The iris's lights are `character:face-types` `20261112-d6ba3fba-…` (`iris-lights`: three types' eyes in the seven eye colours through the client, composed before and now and as a whole file's now and before; `iris-lights-people`: four residents composed before and now above their own files as the game draws them), the six preset families' `20261112-d6ba3fba-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-d6ba3fba-…` (the 64 built again whole, with `faces-before-after`: they should look the same).
+- The brows' place, for the owner to judge, is `character:face-types` `20261112-8d5432b1-…` (`brow-place`: four types in four hair colours through the client, before and after, from the front and at 35 degrees), the six preset families' `20261112-8d5432b1-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-8d5432b1-…` (the 64 built again whole, through recipes, with `faces-before-after` and `game-before-after`).
+- The neck's and the head's joints are `character:face-types` `20261112-46074f0d-…` (`head-joints`, `head-joints-2`: four residents composed and posed in turns, nods and a tilt from three sides, before and after), the six preset families' `20261112-46074f0d-…` (rebaked with clips: every key the same; `marker_check` passed) and `cast-64` `20261112-46074f0d-…` (the 64 built again whole, with `lineup-before-after`).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -332,7 +350,7 @@ The figures are the woman preset's with every face value at 0, computed from `he
 | The head's form | `head_form.py` | A loft: at each height a superellipse set by four curves (the front view's half width, the profile's front and back, how boxy the front is). The outline of jaw, cheekbones and chin and the profile are therefore set directly. Nose, brow ridge, eye hollows, cheeks, lips and chin are bumps on the front. |
 | The head's mesh | `head_mesh.py` | A cube-sphere projected onto the form, denser from the brows to the lip. The skin round each eye is cut away and stitched to a clean ring on the lids, with a rim turned inward as far as the eye. The skin is slit along the mouth; the lower edge drops with the jaw and shows teeth, the dark and the tongue. Ears are lofted rings. |
 | The eyes | `head_mesh.py` | Each eye lies on a ball of 8 cm radius set behind its opening. The white is a patch of the ball. The iris is its own disc just off the white, weighted to the eye's bone (`J_Adj_L_FaceEye`, `J_Adj_R_FaceEye`, at the ball's centre), so turning the bone slides it. Two highlights sit over it and follow the bone half way. `person.py --look` turns them in the file. |
-| Brows and lashes | `head_mesh.py` | Strands, made as the hair's locks are in small: each a tapering, bending card standing off the skin, with its own tone. A brow is 22 to 34 hairs over a soft shape, growing up at the inner end and sweeping out along the brow. A woman's upper lid carries 9 lashes and 4 under the outer corner. The lash line and its wing stay a drawn shape. They move with the expressions. |
+| Brows and lashes | `head_mesh.py` | A brow is one tapered stroke standing off the skin ([the brows](#the-brows); until then 22 to 34 strands over a soft shape). Lashes are strands, made as the hair's locks are in small: each a tapering, bending card with its own tone. A woman's upper lid carries 9 lashes and 4 under the outer corner. The lash line and its wing stay a drawn shape. They move with the expressions. |
 | Expressions | `head_mesh.py` | The whole face is built again for each expression's state (lids, jaw, mouth corners, brows); the difference is the morph target. |
 | The face's texture | `face_paint.py` | One 1024² atlas a person: the whole head's skin, the two eyes, a swatch for the ears. Each texel knows where on the head it lies, so paint follows the form. Painted: tone, blush, shade round eyes, nose and lip, lips, nostrils, the lids' edge, stubble, beards as fine strokes, age lines, freckles; each eye as white, lid shadow, iris with dark rim, gradient, lit crescent and rays, pupil, two highlights. |
 | Beards | `head_form.py`, both above | A beard is the skin itself standing off the face (2 to 7 mm, a full one hanging below the chin) with its hairs painted, so its edge is a painted edge, not a mesh edge. |
@@ -1050,7 +1068,7 @@ Pass 3, after outfits (2026-11-12). A composed person lost what a type does not 
 
 **Girth does not move the arms.** The client hangs the arms from the upper chest, widened by `build` × `shoulders`. A person's own file put its girth on below the shoulders only. So a person's line divides `shoulders` by the girth it multiplied `build` by. Neck and hands went from 2.5 to 10.3 mm off their own file's to 0.3 to 2.0 mm.
 
-**Colours in a person's line:** `hair` is the natural colour gone as grey as the person's is (a per-person file greys lock by lock; a shared style takes one tint); `beard` is the beard's own; `eyes` is the iris's; `outfit` has a colour for each piece, the apron's included.
+**Colours in a person's line:** `hair` is the natural colour gone as grey as the person's is (a per-person file greys lock by lock; a shared style takes one tint); `beard` is the beard's own; `eyes` was the iris's own colour and is, since [one iris for every type](#one-iris-for-every-type), the colour the client moves the shared iris to, with the eye colour itself in `eyes_natural`; `outfit` has a colour for each piece, the apron's included.
 
 **Four Cullet residents, composed against their own files** (`compose.py --person`, `person_check.py`): Ode Pontil (`elder-m-b`; a full beard and lines), Fenn Brandt (`adult-m-b`; stubble and lines; `sides` under a cap), Tamsin Hollin (`adult-f-a`; lines and freckles; a braid; smock and apron) and Joss Tarn (`adult-m-b`, `build` 1.18, `belly` 0.22; a coat).
 
@@ -1221,7 +1239,7 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 
 | Class | Material | Picture | What is equal in every file | Tint |
 |---|---|---|---|---|
-| Outfit pieces (28 files) | `M00_001_01_Cloth_01_CLOTH` | none | Vertex colours are grey shading; the mesh's mean lightness, by area and in linear light, is 0.30, for `Cloth` and `FarCloth` | `colors.outfit[<piece>]`: every piece a person wears now has one |
+| Outfit pieces (28 files) | `M00_001_01_Cloth_01_CLOTH` | none | Vertex colours are grey shading; the mesh's mean lightness, by area and in linear light, is 0.48 (0.30 until [the tones inside a piece](#the-tones-inside-a-piece)), for `Cloth` and `FarCloth` | `colors.outfit[<piece>]`: every piece a person wears now has one |
 | Hair (50 files) | `M00_000_Hair_00_HAIR` | the one shared picture of strands | The mean vertex colour of a mesh's outer surfaces (its lighter half by area) is 0.78, for `Hair` and `FarHair` | `colors.hair` |
 | Far beards | `M00_000_00_FarOverlay_00_HAIR` | none | One grey, 0.71, as before | `colors.beard` |
 | Overlays (72 files) | per file | each its own | The picture's mean grey over what it covers is 0.90 | hair or skin, as before |
@@ -1245,6 +1263,42 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **How far the lines moved,** over Cullet's 64 (293 pieces), as CIE76 ΔE between the old line colour and the new: 2.7 at the median, 12.2 at the 90th percentile, 20.2 at most. By piece, at the median: jerseys 11.9 (they lie in a coat's or a smock's painted shade), coats 6.1, trousers 4.1, caps 2.8, boots 0.8, smocks 0.7, aprons 0.0.
 - **What that is.** It is the error the old lines put on a piece's mean colour. With the new lines a composed piece's mean is its own file's by construction. What is left between a composed person and their own file is how the shade is spread inside a piece; the laptop's rendered check measures that, and this machine has not run it.
 - **A line with painted colours needs the person built.** `person_params.py` alone still prints the cloth each piece is cut from. The lines of Cullet's 64 are in the pass page's `cullet-people.json`.
+
+### The tones inside a piece
+
+Pass 3, 2026-11-12, from the laptop's colour check after the painted line colours: what was left between a composed person and their own file was no longer a piece's mean but the spread inside it. A deep red smock with a darker, browner hem composed as one tone. The decision was to carry hems and the like as tones in the piece's own grey shading, as patches and linings already are, so one shared material still serves every wearer.
+
+**What made the spread:**
+
+- **A hem was a mix toward a fixed colour,** not a tone. A coat's or a smock's cloth was mixed 40% toward kelp at the hem and 16% toward old lime at the shoulders, and its patches and lining were cloths of their own. How dark that came out depended on the cloth: over Cullet's wardrobe a hem was 0.58 to 1.37 times its cloth's lightness (lighter than the cloth on a dark coat), the shoulders 1.09 to 2.17, a patch anything from 0.12 to 7.4. A shared piece is built once, on one cloth, and carried that cloth's ratios to every wearer.
+- **A piece was shaded alone.** A shared piece's painted shade was worked out with only that piece present, so a jersey's collar had no smock over it and a smock no apron.
+- **A bright cloth was lightened, not multiplied.** The client moves a grey piece's value to the line's by multiplying when the line is darker than the piece's mean, and by lightening toward white when it is lighter, which flattens the piece's darker tones. With the mean at 0.30, 13% of the pieces worn in Cullet were lighter than it: every apron, 14 smocks, 6 coats and 3 jerseys.
+
+**What changed:**
+
+- **Hems, shoulders, patches and linings are set tones of the cloth** (`person.py`: `HEM_TONE` 0.66, `SHOULDER_TONE` 1.15, `PATCH_TONES` 1.45, 0.78 and 0.60, `LINING_TONE` 0.45; lightness in linear light). A person's own file keeps the hue it had there (a hem still leans toward kelp, a patch is still another cloth) at that lightness; a shared piece carries the lightness. A smock's sleeve bands are a piece of their own and keep their own cloth.
+- **A shared piece is shaded as it is worn,** with the rest of its figure's outfit round it, and the rest is then taken away.
+- **The class's mean is 0.48** (`shade_mean.py` `CLOTH`), above every cloth worn in Cullet (the lightest is 0.46), so the client only ever multiplies. `shade_mean.py --check` passes on all 159 files.
+
+**Measured** with `living/tools/characters/piece_tones.py`: each vertex of a person's own piece against the same vertex of the shared piece tinted by the client's rule (`recolor` in `toon.wesl`, read from the source, not run in the client), CIE76 weighted by area, medians over the 38 pieces eight residents wear:
+
+| | Before | After |
+|---|---|---|
+| All pieces: mean, 95th percentile | 2.7, 5.0 | 2.0, 3.7 |
+| All pieces: lightness alone | 2.4 | 0.5 |
+| Smocks | 4.8, lightness 2.8 | 3.9, lightness 0.3 |
+| Coats | 10.0, lightness 5.1 | 6.1, lightness 0.5 |
+| Jerseys | 3.7, lightness 3.5 | 2.2, lightness 1.8 |
+| Aprons | 2.2 | 0.8 |
+| Trousers | 2.8 | 3.0 |
+| Pieces tinted lighter than their mean | 5 of 38 | 0 |
+
+- **What is left is hue.** A grey material takes one hue from the line, so a hem's lean toward kelp and a patch's own cloth cannot show on a composed person: that is the 3.9 on a smock and the 6.1 on a coat. Vessa's and Sabine's red smocks are 4.7 and 4.4 where they were 5.0, their lightness 0.3 where it was 2.6 and 2.9.
+- **Trousers did not move:** what differs there is the shade of what each person wears over them, which one shared piece cannot carry.
+- **Tilly's jersey** measured 2.1 before and after; by this measure her ribs were not paler composed. A jersey lighter than the old mean would have been, and none can be now.
+- **Whole files changed too.** Their hems, shoulders, patches and linings are the set tones now, so a dark coat's hem is darker than its cloth where it was lighter and greener. The lines' piece colours are measured from them as before, so they changed with it.
+
+**What the client needs:** nothing. A piece's mean is read from the mesh, so 0.48 is found as 0.30 was. The 28 outfit pieces must be taken again, with the residents' lines, whose piece colours are measured from the new paint.
 
 **Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
 
@@ -1384,7 +1438,7 @@ Pass 3, 2026-11-12, from the laptop's cost table: with people composed from shar
 |---|---|---|
 | The far head's (`FarSkin`, `M00_000_00_Body_01_SKIN`) | 256² in each type's file | a tile of `lookdev/pages/types-far.png`, 1280 × 1280 |
 | Lips and blush (`M00_000_00_FaceTint_00_FACE`) | 512² with alpha in each type's file | a tile of `lookdev/pages/types-tint.png`, 1600 × 720 |
-| The iris (`M00_000_00_EyeIris_00_EYE`) | 192² in each type's file | the same: it does not belong on a page as it is, see below |
+| The iris (`M00_000_00_EyeIris_00_EYE`) | 192² in each type's file | one picture every type's file names, `lookdev/pages/types-iris.png`, 192²: [one iris for every type](#one-iris-for-every-type) |
 | The full head's atlas and its shadow map | 1024² in each type's file, `<type>.face.png` beside it | the same |
 
 - **A type's tile is fixed** by its place in `types.json` (a 5 × 5 grid for the 21), recorded in `lookdev/pages/types.json`. One type built again goes back into its own tile and changes no other texel.
@@ -1393,7 +1447,7 @@ Pass 3, 2026-11-12, from the laptop's cost table: with people composed from shar
 - **Nothing shows.** Four residents composed from the type files and coloured by the client, photographed before and after: where the pose is the same the pictures differ by 0.0 to 0.4 of 255 a channel, the far head at the game camera included.
 - **What it saves.** For every type on screen, two materials fewer: far heads and lip layers are one material each for all types. In memory (RGBA, no mips): 26.3 MiB for the 21 types' far pictures and lip layers before (21.3 for the 17 that Cullet wears), 10.6 MiB for the two pages. On disk the 21 type files are 23 MB where they were 24, and the pages 0.6 MB.
 
-**Why the iris stays a type's own.** The types' irises are painted in different colours, so that a type shown by itself has eyes: brown, blue and grey, with mean values from 0.06 to 0.12 and saturations from 0.15 to 0.80. The client's move from a mean to a person's colour multiplies below the mean and lightens above it, and two such moves in a row are not one. Moved to one mean and shared, the same eye colour came out as another on some types: photographed, a grey-blue eye turned teal; simulated with the client's own formula over the 21 types and Cullet's seven eye colours, up to 40 of 255 a texel. One iris picture for every type would share with no such step. That changes how every composed person's eyes are coloured, so it is a look to judge on the board first, and it was not done here.
+**Why the iris stayed a type's own at this step** (it is one picture since [one iris for every type](#one-iris-for-every-type)). The types' irises were painted in different colours, so that a type shown by itself has eyes: brown, blue and grey, with mean values from 0.06 to 0.12 and saturations from 0.15 to 0.80. The client's move from a mean to a person's colour multiplies below the mean and lightens above it, and two such moves in a row are not one. Moved to one mean and shared, the same eye colour came out as another on some types: photographed, a grey-blue eye turned teal; simulated with the client's own formula over the 21 types and Cullet's seven eye colours, up to 40 of 255 a texel. One iris picture for every type shares with no such step; it came next.
 
 **The full head's atlas** can go on pages by the existing `share.py pages --which near`, shadow map and `face_map` and all, as a town's faces do. It was not asked for and was not done: a full head is drawn for the few people near the camera.
 
@@ -1403,6 +1457,244 @@ Pass 3, 2026-11-12, from the laptop's cost table: with people composed from shar
 - **To share the materials.** The game's own path (`lookdev.rs convert`) makes one material for each distinct content, so far heads and lip layers become one each with no change. A composer that keys a type's materials by its file must key these two by content instead, as it does a style file's: `M00_000_00_Body_01_SKIN` and `M00_000_00_FaceTint_00_FACE`.
 - **Nothing for the colour.** Every far tile has the one mean, so whichever type's mesh teaches the material its mean, it is right for all.
 - **UVs stay inside a tile,** half a texel in from its edge. Nothing wraps.
+
+### One iris for every type
+
+Pass 3, 2026-11-12. Every face type's file now names one iris picture, `lookdev/pages/types-iris.png` (192², `face_paint.shared_iris`), and a person's line carries the colour that makes it theirs.
+
+**How the client colours an iris** (read from `living/game/src/toon.wesl` `recolor` and `characters.rs` `recolor`, `mean_color`): it learns the material's source colour once, as the mean of the texels the iris's vertices lie on, and moves that to the line's `colors.eyes`. Hues turn to the line's, keeping 0.4 of their distance from the source's hue. Saturation and value are multiplied down to the line's, or pushed toward 1 where the line's is above the source's.
+
+**What was wrong with a type's own iris and the eye colour in the line.** Simulated with that rule over the 21 types and the seven eye colours, and seen the same in photographs of three types through the client (the board's `shared-iris`):
+
+1. **Every eye came out too light.** An iris's vertices crowd its dark rim and pupil, so the source colour is about a third as light as the colour the iris is painted with. Moving that source to the eye colour made the iris's body about three times lighter than the eye colour.
+2. **Light eyes had grey pupils.** A blue, grey or amber eye is lighter than a type's source colour, so the client lightened toward white instead of scaling, which lifts the darks: the pupil came out at up to 0.30 in linear light, where a whole file's is under 0.01.
+3. **Stray hues.** A type's own iris had a warm glow on a blue or grey body. Turned to another eye colour, the glow's distance in hue came along: magenta and green glows in brown and amber eyes.
+
+**What it is now:**
+
+- **One picture, painted in a light strong amber** (`person_params.SHARED_IRIS`, sRGB 0.66, 0.551, 0.165): as light as the lightest eye colour and as saturated as the most saturated, so the client only turns its hue and darkens it. Its glow and its body are one hue, so nothing strays. One seed for its streaks.
+- **The line's `colors.eyes` is not the eye colour itself** but the colour to move the source to so that the iris's body comes out the eye colour (`person_params.eye_line_colour`): the eye colour taken down by the step from the picture's painted colour to its source colour (`SHARED_IRIS_SOURCE`), in hue, saturation and value as the client's rule undoes it. At this step the source was linear 0.1368, 0.0907, 0.0277 and blue `#4c789e` was carried as `#384e61`; since [the iris's lights](#the-iriss-lights) left the picture it is 0.0988, 0.0698, 0.0152 and blue is `#2c4053`. The eye colour itself is beside it, in `colors.eyes_natural`.
+- **A whole person's file is unchanged:** its iris is painted in its own eye colour and takes no tag.
+- **`eye_colours.py TYPES_DIR --check`** holds every type's iris to the shared source colour, and prints the measures below. `--nominal` gives the line the eye colour itself, as before. `person.py --parts head --own-iris` builds a type's head with an iris of its own, to compare.
+
+**Measured,** 21 types × 7 eye colours, CIE76, with the client's rule applied by `eye_colours.py` (median, worst):
+
+| | A type's own iris, the eye colour in the line | The shared iris, `eye_line_colour` in the line |
+|---|---|---|
+| The iris's body against the eye colour | 13.2, 39.7 | 1.2, 2.9 |
+| The picture against a whole file's iris, in 8 × 8 blocks | 29.0, 54.3 | 10.0, 13.8 |
+| The disc's mean against a whole file's | 19.5, 40.0 | 10.3, 19.0 |
+| The pupil's lightest value, linear | up to 0.30 | up to 0.004 |
+| Source colours among the 21 types | 10 | 1 |
+
+By eye colour, the body is nearer in all seven (0.4 to 2.9 against medians of 9.9 to 23.5). The picture as a whole is nearer in six; in dark brown it is 13.8 against a median of 10.5 (worst 19.4), and the disc's mean is further in brown (12.3 against 10.6) and dark brown (19.0 against 9.1). That is the glow, below: the old irises were too light all over, which put their mean nearer a whole file's bright glow by accident.
+
+**What still separates a composed eye from a whole file's:** the glow. A whole file paints a warm glow in every eye, mostly a fixed orange, so in a dark brown eye it is some fifteen times lighter than the body and in a blue eye it is another hue. The client's recolouring scales every texel by one ratio and turns every hue to the eye's, so a composed eye's glow is a lighter tone of the eye's own colour, at most 2.5 times its body. No line colour changes that: for a brown or dark brown eye, a line 1.5 to 2 times lighter buys 2 to 3 CIE76 of likeness for 6 to 8 of error in the body. Keeping the glow needs it as a layer of its own in a fixed colour over the iris. That came next: [the iris's lights](#the-iriss-lights).
+
+**What the client needs:**
+
+- **To ship `lookdev/pages/types-iris.png`** with the type files, beside the two pages. A type's file names it by path.
+- **To take the person lines again:** `colors.eyes` changed for everyone and `colors.eyes_natural` is new. Nothing reads `eyes_natural` yet; it is there for a reader that wants the eye colour.
+- **A composer that keys a type's materials by its file** can key `M00_000_00_EyeIris_00_EYE` by content, as the far head's and the lip layer's: it is one material for all types now, with one source colour.
+- **No code change.** The rule that learns the source colour and the shader's recolouring are used as they are. If either changes (how the source is taken, or the 0.4), `SHARED_IRIS_SOURCE` and `HUE_SPREAD` in `person_params.py` must follow, and `eye_colours.py --check` says so for the first.
+- **An old line with the eye colour itself** on the new type files gives eyes about three times too light, as before; a new line on old type files gives eyes too dark. They go together.
+
+### The iris's lights
+
+Pass 3, 2026-11-12. What a composed eye still lacked after [one iris for every type](#one-iris-for-every-type) was the glow: a whole file painted it into the iris, mostly in a fixed orange, and the client's recolouring turned it into a lighter tone of the eye's own colour. The lights are now a layer of their own that the client does not recolour, in whole files and types alike.
+
+**What moved out of the iris's picture** (`face_paint.py` `iris_lights`): the glow that rises from the bottom toward the pupil and its hot core, the two pale streaks beside it, and the cool arc of sky under the lid. Each has one colour for every eye (`IRIS_GLOW`, `IRIS_HOT`, `IRIS_STREAK`, `IRIS_SKY`) and a cover. They were painted with a share of the eye's own colour (a quarter of the glow, a third of the arc); that share is gone, and the cover is set so that over an iris of the eye's colour the result is what the paint was.
+
+**What stays in the iris's picture** (`paint_iris`): the body, the darker upper half, the lid's shade, the rim, the pupil and the rays. Every tone is the eye's colour or a darker one, which one ratio carries to any eye colour.
+
+**Where the lights are:**
+
+- **A disc on each eye's bone,** the iris's own disc again 0.3 mm in front of it and 0.3 mm behind the highlights (`cage_head.py`, `head_mesh.py`). It turns with the eye.
+- **In the lips' and blush's material,** `M00_000_00_FaceTint_00_FACE`: unshaded, not recoloured, blended by its picture's alpha. No new material and no new draw: the two discs are 144 more triangles in that primitive.
+- **In that material's picture where the atlas has the iris** (a whole file's `.tint.png`: the atlas's layout at half size, so the lights are 96 × 96 texels).
+- **On the types' tint page once,** in the corner of its last tile, which no type has (`share.py` `TYPE_LIGHTS`; the page is 5 × 5 tiles for 21 types). Every type's lights are the same picture; `share.py types` stops if one differs. `lookdev/pages/types.json` records nothing new: the UVs in each type's file point there.
+- **The alpha is the cover raised to 1.6** (`LIGHTS_GAMMA`). The client blends in linear light, where a light colour over a dark one shows more than the same cover does in a picture's own values. With 1.6 a whole eye is within 2.8 CIE76 of the same eye as it was painted in one picture, for every eye colour (1.9 at the mean, in 8 × 8 blocks).
+- **The far head** has no layers: its eyes are painted with the lights mixed in, as before.
+
+**Measured** with `eye_colours.py`, which now lays the lights over both irises as the client does. 21 types, CIE76, the composed eye against a whole file's (median over the types; they all share one iris, so the worst is the same):
+
+| Eye colour | The picture, in 8 × 8 blocks: before, now | The disc's mean: before, now |
+|---|---|---|
+| brown | 10.0, 2.5 | 12.3, 1.5 |
+| dark brown | 13.8, 3.0 | 19.0, 1.8 |
+| blue | 13.6, 3.1 | 12.8, 2.1 |
+| grey | 11.7, 3.3 | 10.3, 2.5 |
+| all seven | 10.0, 3.0 (worst 13.8, 3.3) | 10.3, 1.8 (worst 19.0, 2.5) |
+
+What is left, about 3, is the iris's own darks: the upper half and the rim are mixed toward a fixed near-black in a whole file, which a ratio does not reproduce exactly.
+
+**The line's eye colour changed again,** because the shared picture's source colour did when the lights left it (`SHARED_IRIS_SOURCE`, linear 0.0988, 0.0698, 0.0152): blue `#4c789e` is carried as `#2c4053`.
+
+**What the client needs:**
+
+- **Nothing in code,** if it draws `…FaceTint_00_FACE` as it does today: skinned, unshaded, untinted, alpha-blended after the opaque parts, with the depth test on. The discs are skinned to the eye bones (`J_Adj_L_FaceEye`, `J_Adj_R_FaceEye`) where the rest of that primitive follows the face's bones; nothing else is new. Photographed through the client on three types (the board's `iris-lights`).
+- **Types, the tint page and the lines go together,** from one bundle. Old lines on these types give eyes too light; these lines on old types give eyes too dark and without a glow.
+- **A whole person's file changed too:** its iris picture lost the lights and its `.tint.png` gained them.
+
+### The brows
+
+Pass 3, 2026-11-12. The reference draws a brow as one tapered stroke in the hair's colour; ours were 22 to 34 strands over a soft shape, in the lash lines' material.
+
+**What a brow is now** (`head_mesh.py` `_brow`, `brow_shape`, `brow_width`):
+
+- **One stroke a side:** a strip of 20 quads standing 1.1 mm off the skin. It begins rounded at the inner end at half its thickness, is full from a fifth of the way out to two fifths, and narrows from there to a point at the tail. No strands.
+- **Its thickness** is the type's brow thickness times 1.15 (`BROW_STROKE`): 2.9 mm on a woman's head, 5 mm on a man's, 5.8 mm on an old man's. The reference's is about 2.9 mm on its one head. The types' numbers were set for a soft shape under hairs that reached past it.
+- **Its place, length, arch and tilt** are unchanged, from the type and the person's identity values (`brow_height`, `brow_tilt`, `brow_thickness`, `brow_length` on `J_Id_Brow_L` and `_R`). The brow expressions move it as before.
+- **One colour,** a tenth darker along the lower edge.
+- **The far head** paints the same stroke on its skin, a little heavier, as before.
+
+**Its material is the reference's own, `M00_000_00_FaceBrow_00_FACE`.** The client already gives materials of that name the person's hair colour (`characters.rs` `slot`), and draws it as it does the lash lines (unshaded). Until now the brows were part of `…FaceEyeline_00_FACE`, which takes no colour, so every person composed on a type had that type's brows: dark brows under white or red hair.
+
+- **In a type's file** the brows are a neutral light grey (0.94, `person.py` `TYPE_BROW`), lighter than any hair, so the client only ever darkens them. A grey material takes the hair colour's hue and saturation and its value by ratio.
+- **In a whole person's file** they are painted in the person's own brow colour, as before, and take no tag.
+- **A composed person's brows are their hair's colour** (`colors.hair`). A whole file's are the natural hair colour taken 0.6 of the way as grey as the hair, and a quarter toward dark on light hair. So composed brows are a little lighter than a whole file's on blond and sandy hair, and as grey as the hair on a greying head. The client has one colour for hair and brows.
+- `compose.py` tints them by the client's rule (`tint_brows`).
+
+**What the client needs:**
+
+- **Nothing in code.** The name is one it knows.
+- **A type's face is seven primitives where it was six:** the brows are a draw of their own on a full head (80 triangles; the lash lines' primitive lost the strands' triangles, 184 on `adult-f-a`). The far head is unchanged in count.
+- **A composer that keys a type's materials by its file** can key `M00_000_00_FaceBrow_00_FACE` by content: it is plain colour with no picture, the same for every type.
+- **Take the 21 type files again.** Lines are unchanged.
+
+**What still separated ours from the reference's brows at this step:** theirs sit higher above the eye, and have a soft edge from a picture's alpha where ours is cut geometry. The height was measured and moved next ([the brows' place](#the-brows-place)).
+
+### The brows' place
+
+Pass 3, 2026-11-12. For the owner to judge: it changes every face's expression.
+
+**Measured** with `living/tools/characters/reference/brow.py`, the same way on the reference and on ours: the eye's opening is the open loop in the face's skin; the brow is its material where it shows (on the reference's card, the texels whose alpha is over a half). The gap is the brow's lower edge above the opening's top, over the middle third of the opening.
+
+| | Gap, in H | Gap, in heights of the opening | The opening's height, H |
+|---|---|---|---|
+| The reference (Shino, Vivi) | 0.098, 0.091 | 0.85, 0.60 | 0.115, 0.150 |
+| Ours before: `adult-f-a`, `youth-f-a`, `child-u-a` | 0.041, 0.041, 0.040 | 0.31, 0.31, 0.30 | 0.133, 0.133, 0.136 |
+| Ours before: `adult-m-b`, `elder-m-b` | 0.041, 0.045 | 0.54, 0.72 | 0.075, 0.063 |
+| Ours after: `adult-f-a`, `child-u-a` | 0.097, 0.099 | 0.73, 0.73 | |
+| Ours after: `adult-m-b`, `elder-m-b` | 0.055, 0.046 | 0.74, 0.73 | |
+
+Every type's brow sat about 0.041 H above the eye, whatever the eye's size: on the head's own brow line, where the form has its ridge. The reference draws its brows well above its ridge, on the forehead, at 0.6 to 0.85 of the eye's height above it.
+
+**What changed:**
+
+- **Each type has a brow lift** (`types.json` `brow.lift`, in H; `face_types.brow_lift`): what brings its brow's lower edge to 0.72 openings above the eye (`BROW_GAP`, between the reference's two faces), and never below the head's brow line. It is 0.055 to 0.058 H (14 to 15 mm) on the large-eyed types (`adult-f-a`, `youth-f-a`, `child-u-a`), 0.033 to 0.037 and 0.020 to 0.022 on their `b` and `c` lines, 0.043 to 0.005 on the boys' and men's, 0.033 and 0.011 on `elder-f-a` and `-b`, and nothing on `elder-m-b`, `elder-m-c` and `elder-f-c`, whose narrow eyes already had their brows that far above in the eye's own measure.
+- **The arch, the tilt, the length and the thickness are unchanged.** The whole stroke moves up.
+- **The head's form is unchanged:** `above_eye` is still the form's brow line. Hair's fringe and the forehead's lines are still set by it.
+- **A brow rides its own bone whole, and the skin under it does not follow.** `J_Id_Brow_L` and `_R` sit at the drawn brow (`cage_head.rig_pivots`), a brow's vertices are theirs alone (`person.py`), and the skin has no share of them (`cage_head.identity_weights`). Before, the skin round the brow line followed the brow's bone, so `brow_thickness` and `brow_length` scaled a patch of forehead with the brow, and a brow lifted off its bone would have slid when either changed. The reference's brows are cards that move alone too. On the far head, whose brows are painted on its skin, that skin still follows.
+- **`brow_height` now moves the drawn brow only,** in a head built from landmarks as on the bones (`face_types.apply`). `rig_check.py` for the four brow values: the skin moves 0.00 mm either way. `face_types.py check`: every type valid, 60,648 of 60,648 value ends valid.
+- **Hair is not changed.** A fringe still ends at the head's brow line by its `fringe` value, so on the lifted types a long fringe now covers the brows. Whether fringes should follow the brows up is for the hair pass.
+
+**What the client needs:** nothing in code. Take the bundle: the types (their brows, the brow bones' places and the skin's weights), and every hair, outfit and overlay file (what hangs on a head no longer follows the brow bones). Lines are unchanged.
+
+
+### The neck's and the head's joints
+
+Pass 3, 2026-11-12. The neck step left the two joints where they were and noted that the neck's was lower than the reference's. They are now at the reference's places.
+
+**Measured** (`reference/neck.py`): each joint's height from the chin in H, and how far behind the face's front it lies in widths of the head.
+
+| | `J_Bip_C_Head` above the chin | behind the front | `J_Bip_C_Neck` below the chin | behind the front |
+|---|---|---|---|---|
+| The reference (Shino, Vivi) | 0.143, 0.128 H | 0.53, 0.54 | 0.173, 0.162 H | 0.57, 0.59 |
+| Ours before | 0.098 H | 0.53 to 0.59 | 0.234 H | 0.58 to 0.64 |
+| Ours after | 0.137 H | 0.50 to 0.56 | 0.168 H | 0.54 to 0.60 |
+
+- **The neck's joint was 1.7 cm too low and the head's 1 cm too low.** A head nodded about a point 2.5 cm above the chin and a neck bent from 6 cm below it, inside the collar.
+- **`person.py` `JOINTS`:** `J_Bip_C_Neck` from (0, -0.020, 1.475) to (0, -0.012, 1.492), and `J_Bip_C_Head` from (0, -0.010, 1.560) to (0, -0.003, 1.570), in the generator's frame (metres, +Y forward, +Z up). No mesh and no weight changed: the same skin turns about other points.
+- **One skeleton, so the depth is the types' middle:** a type's front lies where its own face puts it.
+
+**What had to be built again:** every file with the body's skeleton in it, which is every generated file: the 21 types, the 159 style files, and whole people. A set mixed from before and after would put a head, its hair or a collar up to 1.7 cm apart.
+
+- **`skeleton_check.py LOOKDEV`** compares every `J_Bip_*` bone's rest place across the types, the style files, whole people and the shared clip file, and fails on a tenth of a millimetre. The bundle runs it.
+- **`pose.py`** turns the neck and the head in a file (a turn, a nod, a tilt; the neck takes 0.4 of each), to photograph a pose the view has no control for.
+
+**The clips.** A baked clip keys 52 bones' rotations and the hips' translation. It keys no bone's place but the hips', so no key holds the neck's or the head's joint.
+
+- **Rebaked on the new skeleton, every key is the same.** The `man` preset's 29 clips before and after (`clips_compare.py`): 52 rotation tracks with the largest difference 0.00°, and the hips' translation 0.0 cm, in every clip. `marker_check` passes on the seven presets and the control.
+- **By eye** (the board's `head-joints`): the difference is small. A nod or a turn carries the chin and the back of the head a little less far, and the collar's gap changes less.
+
+**What the laptop redoes for the shared clip file,** `lookdev/anim/own-clips.glb`:
+
+1. Bake it again from this generator with its own clip library, as it was made: `ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man` (with `KIMODO_DIR` at the library).
+2. Run `python3 living/tools/characters/skeleton_check.py living/game/assets/lookdev`. It reads `anim/own-clips.glb` with the rest and must print 0.
+
+- **Why, when no key changes:** the shared clip file is a character file, the `man` preset with the clips, and it has the body's skeleton at rest in it. An old one would be the one file with the two joints at their old places. The client binds clips to bones by name, so it would still play; the check exists so that a set never holds two skeletons.
+- **`share.py` needs no change.**
+- **It is not in the bundle:** this machine holds 30 of the library's 86 clips, so its bake is not the laptop's file.
+
+**What the client needs:** nothing in code. Take the bundle whole: types, every style file, and the lines (unchanged). A type from after the move with hair or a collar from before, or the other way, sits up to 1.7 cm apart at the neck.
+
+### The look book
+
+look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part of it). The live game drew no generated people. The look book is what lets it: a person line and its words for every look band a person can reach, under opaque keys.
+
+**One command, two files** (`living/tools/characters/look_lines.py book --town living/seeds/cullet.json`, after `town.py` has built the town; 2 s):
+
+| File | What it holds | Who reads it |
+|---|---|---|
+| `living/game/assets/characters/looks.json` (git-ignored) | `generation`, the one it was written in; `generations`, every one it holds, oldest first; `lines`: `{"lk_…": {person: the line as the composer reads it, words: LookWords}}`; `decor`: line keys for the island's background people; `files`: every shared file the lines name, with how many lines use it and an outfit piece's slot and layer | the client |
+| `living/seeds/worlds/cullet/looks.json` (tracked) | `looks`: `{generation, people: {lp: {band: lk}}, words: {lk: LookWords}, pool: [lp]}`; `residents`: `{the seed's name: lp}` | the authority's seed tools; never shipped to a client |
+
+- **The book does not say whose a line is.** No people, no pool, no names: a client cannot tell a resident's line from a newcomer's, or link one person's lines across ages. That is in the world's data only.
+- **The book is append-only.** Writing it keeps the lines of the book already at that path, so a released world's keys stay drawable, and adds its generation to `generations` (`--fresh` starts again). The world's data is the newest generation alone.
+- **Now:** generation `c4-aa393793`, 887 lines: Cullet's 64 residents in 151 (1 infant, 11 child, 17 youth, 58 adult, 64 elder), 128 pool people in five bands each (640), 96 decor lines. The book is 1.8 MB, the world's data 0.2 MB.
+
+**Keys.**
+
+- **A line's key** is `lk_` and the first 16 hex digits of the SHA-256 of the line's canonical JSON, in UTF-8.
+- **Canonical JSON:** only the fields the client draws, those the line has: `type`, `height`, `proportions`, `identity`, `colors`, `styles`, `belly`, `grey`. Keys sorted at every depth, separators `,` and `:` with no spaces, each number in its shortest form that reads back the same (Python's `json.dumps(…, sort_keys=True, separators=(",", ":"))`; `serde_json` writes the same for a number read as `f64`). A name, a seed or an id is not among them and is not in the book's entry.
+- **A person's key** is `lp_` and the first 16 hex digits of the SHA-256 of their bands and line keys, `0:lk_…|1:lk_…` in band order. It is in the world's data only.
+- **No key comes from a name or from the cast's order.**
+- **A test vector:** the line `{"type": "adult-f-a", "height": 1.6, "name": "…", "seed": 7}` has the canonical JSON `{"height":1.6,"type":"adult-f-a"}` and the key in `look-cases.json`. That file (`look_lines.py cases`, beside the world's data) has two whole lines with their canonical JSON and keys as well.
+
+**Bands** ([look](LOOK.md) §4; `look_band` is the rules' own, and `band_of` here is the same rule for writing the book): 0 infant (the authority's stage 0), 1 child (stage 1 and under 12), 2 youth (12 to under 18, at either stage), 3 adult (stage 2 and 18 or over), 4 elder (stage 3). In Cullet infancy ends at 2.1 years, childhood at 15 (`life_years`) and old age starts at 59.5.
+
+- **A resident has a line for the band they are in and for every later one.** The band they are in is their line as the town's build made it, with outfit colours measured from the built file. A later band is the same person drawn at that band's age (8, 15, 30, 68): the same seed, sex, family and skin tone, so the same identity values, eye and hair colour. The type follows sex and band; grey, lines and build come as the generator ages people.
+- **Band cases from the cast** are in `look-cases.json`: from Dory Tarn (1, stage 0, infant; all five bands in the data) through Col Roon (15: stage 2 and still a youth) to Halvard Dunmore (70, elder; one band).
+- **An infant** is a child type at an infant's size: the generator's own height for a one-year-old held to 0.70 to 0.85 m, with the head 1.56 to 1.6 times larger for its body that the generator gives that height, hair cropped (`crop`), in a plain smock with no apron or headwear. There is no baby type yet.
+
+**The pool: 128 people,** 64 women and 64 men from seeds of their own (20000 on), each with all five bands, so a newcomer keeps their look as they grow.
+
+- **Why 128.** It keeps the authority's static `look_line` table under 1,000 rows with Cullet's (791 now) and the book under 2 MB. Every pool person has their own identity values, so no two have the same face; with 21 types, 59 hair files and nine cloth colours their words repeat far sooner than their faces do. Two newcomers picking the same person is the price of a pool: with 10 newcomers the chance that some two share one is about 30%, with 20 about 78%. A larger pool lowers that at the cost of rows and bytes; it is one number (`--pool`).
+- **The decor: 96 lines,** one each from 96 other people (seeds 40000 on), across child, youth, adult and elder as a town's ages run. None is a line a character can wear: the tool checks.
+
+**Words** (`words_of`: one function names everyone, from the person's parameters).
+
+| Field | Values |
+|---|---|
+| `form` | `baby`; `girl`, `boy`; `young woman`, `young man`; `woman`, `man`; `old woman`, `old man`: by band and sex |
+| `girth` | 0 slight, 1 medium, 2 heavy-set: the build's weight below -0.35, between, above 0.45 or a belly over 0.12 |
+| `height` | 0 short, 1 middling, 2 tall for the band: more than 0.6 of the generator's spread below or above what it expects at that age and sex |
+| `hair` | `dark-haired`, `brown-haired`, `red-haired`, `fair-haired`, `grey-haired` (more than half grey), `white-haired` (more than 0.85), `bald`, or nothing under a kerchief |
+| `top` | `a <colour> coat`, `smock` or `jersey`, the largest garment, and `with an apron` |
+| `bottom` | `dark trousers` |
+| `head` | `a cap`, `a kerchief`, or nothing |
+| `beard` | `a <tone> beard`, `moustache` or `goatee`, `stubble`, or nothing |
+
+- **Nine colour words for ten cloths:** yellow (oilskin), black (tarred), green (olive and green), tan (canvas), blue, red, cream, navy, purple (heather).
+
+**An unbuilt line's outfit colours.** A line's outfit colours are the colours as painted ("the line's colour is the painted colour" under [one shading mean a class](#one-shading-mean-a-class)), which a built file is measured for. A later band and a pool person have no built file. Their pieces' colours are their cloths' taken to what they would be painted: the value ratio, saturation ratio and turn of hue that the built residents' pieces of that kind have at the median (`paint_rule`). Against the built colours of Cullet's 293 pieces that is 0.5 CIE76 at the median, 3.2 at the 95th percentile and 3.7 at most.
+
+**Slot and layer.** Each outfit style file says where its piece is worn and how far out, in its scene's extras: `"outfit": {"piece": "smock_58-f", "slot": "upper", "layer": 1}` (`person_params.PIECE_WEAR`; `gen_styles.sh` writes it; `look_lines.py wear --check` fails if a file lacks it, and the bundle runs that). The book's `files` carries the same.
+
+| Piece | Slot | Layer |
+|---|---|---|
+| `jersey`, `jersey_coat`, `jersey_smock` | `upper` | 0 |
+| `coat`, `smock_*` | `upper` | 1 |
+| `smock_bands` | `upper` | 2, with `"trim": true`: the smock's bands of other cloth, not a garment |
+| `apron_*` | `upper` | 3 |
+| `trousers` | `lower` | 0 |
+| `boots` | `feet` | 0 |
+| `cap`, `kerchief` | `head` | 0 |
+
+`feet` and `head` are two slots beyond the `upper` and `lower` asked for, so boots are not taken for the outermost lower piece.
+
+**In the bundle:** the book at `living/game/assets/characters/looks.json`, and the world's data and its cases at `living/seeds/worlds/cullet/`, with `cullet-people.json` as before.
 
 ### The neck
 
@@ -1876,6 +2168,15 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 
 ## What still separates ours from the reference
+
+**After the shared iris and the brows**, judged on the board's `shared-iris`, `brows` and `cast-64` sheets with the reference beside ours, ordered by how much it shows:
+
+1. **Hair.** Short styles' hairlines cut straight across the forehead in a box. The reference's hair has single strands lifting off at the ends and a fringe in a few thick locks; ours is smoother and plainer. A seam runs down the back of parted styles.
+2. **The eye's glow on composed people** was a lighter tone of the eye's own colour. Mended after this ([the iris's lights](#the-iriss-lights)).
+3. **The brows' place:** the reference's sat higher above the eye. Moved after this ([the brows' place](#the-brows-place)); on the lifted types a long fringe now covers the brows.
+4. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top.
+5. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+6. **Clothes and silhouette, hands** (unchanged).
 
 **After long hair, short hair and the hair's shading**, judged on the board's `hair-short`, `hair-long` and `hair-people` sheets with the reference beside ours, ordered by how much it shows:
 
