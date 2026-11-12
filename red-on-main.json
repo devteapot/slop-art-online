@@ -1,14 +1,1 @@
-{
-  "committed": {
-    "case": "committed",
-    "first_main": "4b3dc2b3",
-    "first_seen": "2026-11-12T08:51:48+01:00",
-    "last_evidence": "/home/gooning/.t3/worktrees/slop-art-online-t3/t3-4dc99ac7-601782eca8f046f3/.local/living/verify/core-stage-084914",
-    "last_main": "4b3dc2b3",
-    "last_seen": "2026-11-12T08:51:48+01:00",
-    "owner": "Spark",
-    "reason": "flaky on a reused world (4 of 5 reruns of core-stage-084914 fail): 'uncommitted ... dodge is broken off' (runs 1, 2, 4: the dodge made way) and 'death inside a committed windup' (run 3: no attack use in 3 tries); suspected: the scene reuses the same three people across checks with no settle (cooldowns, a pending act or the prior check's graph and placement), and the routine's first evaluation after the overlay install races the dash",
-    "skill": "verify-core",
-    "times": 0
-  }
-}
+{}
