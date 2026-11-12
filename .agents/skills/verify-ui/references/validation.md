@@ -1,5 +1,18 @@
 # verify-ui: last real run
 
+**2026-11-12, branch `fix-field-scene` (field failing on main 94c9e60f: walks at speed 0, a different 1–2 checks each re-run).** The cause was the scene, not fov-facing or look-2. Every walk, release, look and stand snapshot had `face_off` 0 (facing = travel). The walk itself was steered:
+- the scene placed a resident 5 m due north and walked the player due north at it;
+- the player started wherever the last run left it, often with a building north (slid along it at −4.1°, or boxed in at speed 0);
+- the check compared the facing with due north.
+
+Reproduced on `verify-ui-ff-1112-0055`: 28/28, then 26/28, then 27/28. Fixed in the check:
+- the player is placed at (300, 330) first;
+- the walk goes north-west between the placed residents;
+- the facing is judged against the authority's travel (released: facing = travel; with `FACE_WHILE_MOVING`: 75° off it toward the look);
+- a look south comes first, so the first (north) look is never inside `look_slack_deg` of a re-run's facing (re-runs failed "look 0°" with the authority at −96.8°, as the slack rule says).
+
+On main `bf33831d` (arrival-open `fed99262` included), a fresh `verify-ui-ff3-1112-0109`, `check.py field` three times in a row: **29/29, 29/29, 29/29**.
+
 **2026-11-12, branch `arrival-open` (newcomers arrive on open ground, `host::arrival`).** `verify-ui-arrival-000628` (`$V launch --run ui-arrival-000628 --seed island`, doctor ok; land row `arrive` (406.5, 257.5), layout `e798f6a9f302d538`, matching in the client). Release client from the branch, Clear. Every scenario but support: **183 passed, 8 failed** at load average 30–38. The failures: `pick`'s stacked check, because `place_at` no longer stacks the two residents on open ground (main's fix-dealings has since rewritten that check to compare with the bodies under the cursor; `pick` alone with a premise check gave **7/7**); `field` 1; and look-walk 6 (crossings, easing, drawn speed). Re-running `pick field look-walk` gave **100 passed, 4 failed**, with different field and look-walk checks failing. The field scene stood at (313.9, 324.2), 95 m from the arrival, where the test character had wandered, so these follow the load and that drift, as recorded before; they don't follow the arrival. A fresh join photographed at the new arrival point: `ui/arrival/01_arrival.png`, the player on the open square and no stall cut away. Cullet (`verify-ui-arrcullet-002646`): the arrival stays at (540.5, 766.5), open, `ui/arrival/01_arrival.png`.
 
 **2026-11-11, branch `fix-pick-check` (the `pick` scenario's spot check after fix-place-free).** fov-client's full run on main `9ddd2b6d` failed "two bodies stacked on one spot" twice (under [2,2,2] against "front by depth" [3,3,3], then [None,None,None]). Not pick.rs: since fix-place-free `place_at` puts the second body on a neighbouring free tile (`scene.json` `placed_at`: (308.5, 319.5) and (308.5, 318.5)), so the two no longer coincide, and the check took the nearer of every body seen, under the cursor or not (in the re-run #3 was out of view). The dump now gives each seen body `holds` (the cursor inside its outline, by pick.rs's own `Seen::contains`), and the check compares the pick with the nearest of those. On `verify-ui-w1` (ui-1 step 5's client, the same change): `pick` **8 passed, 0 failed**, three runs (both bodies held the cursor, #2 nearer and chosen every frame). Exact ties between coinciding outlines stay pick.rs's unit test (`two_bodies_on_one_spot_give_one_answer_in_any_order`).
