@@ -1007,8 +1007,13 @@ def doing_case(run):
     run.admin('set_behavior', eye, json.dumps({'wait': 300}))
     run.admin('place_at', eye, *e)
     run.admin('place_at', other, e[0] + 3.0, e[1])
-    run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] + 4.0, e[1]]}}}, {'wait': 300}]}))
-    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['outcome']], 'the eye turned to the other', 20)
+    # Turned away first, then to the other: a graph's turn to where it already faces is refused
+    # ("you already face it") and leaves no `skill_use` row, and the eye may face east already;
+    # after the turn west, the turn east is a real one with its row (`body.heading` is the
+    # segment's start, not the facing now).
+    run.admin('set_behavior', eye, json.dumps({'seq': [{'first': [{'do': {'skill': 'face', 'target': {'at': [e[0] - 4.0, e[1]]}}}, {'wait': 0.1}]}, {'wait': 1.5},
+                                                       {'first': [{'do': {'skill': 'face', 'target': {'at': [e[0] + 4.0, e[1]]}}}, {'wait': 0.1}]}, {'wait': 300}]}))
+    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['aim_x'] > e[0] and u['outcome']], 'the eye turned to the other', 20)
     run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'block', 'qty': 5000}}]}))
     run.wait(lambda: [f for f in run.private(f'SELECT * FROM fighter WHERE id = {other}', 'fighter-other') if f['act'] != 0], 'the guard is up', 20)
     script = {'replies': {'think': {'thought': 'They hold up a guard.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
