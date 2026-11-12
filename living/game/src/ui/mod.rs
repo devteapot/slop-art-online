@@ -401,7 +401,7 @@ impl DumpExtra<'_, '_> {
         // Facing sight: whether it is on, the field's five values, whether this client can switch
         // it, and the heard marks (`facing.rs`, `heardmark.rs`).
         let fov = self.fov.as_ref().map(|f| {
-            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last,
+            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last, "walk": f.walk,
                 "sight": self.edge.as_ref().and_then(|e| e.senses.map(|s| s.sight)), "source": self.edge.as_ref().and_then(|e| e.source.map(|s| format!("{s:?}"))),
                 "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
         });

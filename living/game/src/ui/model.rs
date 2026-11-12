@@ -101,6 +101,9 @@ pub struct Me {
     pub meters: Vec<MeterView>,
     /// How the body is, as the world's `status_of` says (the pills).
     pub statuses: Vec<StatusView>,
+    /// Every meter now, named by the field it shows (a skill card's `pool`): what a bar slot's
+    /// cost is checked against.
+    pub pools: Vec<MeterView>,
     /// 1 just after being hurt, fading to 0 (a flash on the health bar).
     pub hurt: f32,
 }

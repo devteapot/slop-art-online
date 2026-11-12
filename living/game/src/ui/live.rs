@@ -129,13 +129,13 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         let since_hurt = (now_ms - v.hurt_ms as f64) as f32 / 1000.0;
         // The bars and pills from the world's `meters()` and `status_of` over my vitals row read
         // generically (no column named here): a new vital is one column and one meters row.
-        let (meters, statuses) = match (rules.scripts.as_ref(), mine.get(&id)) {
+        let (meters, statuses, pools) = match (rules.scripts.as_ref(), mine.get(&id)) {
             (Some(sc), Some(c)) => my_body(sc, v, &c.kind, crate::verbs::stage_name(c.stage), sc.is_night(clock.hour()), now_ms),
-            _ => (Vec::new(), Vec::new()),
+            _ => (Vec::new(), Vec::new(), Vec::new()),
         };
         let name = mine.get(&id).map_or(net.name.clone(), |c| c.name.clone());
         let _ = hunger;
-        Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, meters, statuses, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
+        Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, meters, statuses, pools, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
     });
     let hostile = |id: u32| me.is_some_and(|m| crate::combat::hostile_to_me(conn, id, m, now_ms));
     // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
@@ -280,8 +280,16 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
                         if techniques.any(|t| !knows(t)) {
                             return SkillState::Unavailable("Unknown".into());
                         }
-                        if energy < card.cost {
-                            return SkillState::Unavailable("Too tired".into());
+                        // Its pool (stamina-1: `skill_card.pool`, a field a meter shows) short of its
+                        // cost: greyed in the pool's word ("Not enough mana"). A hint only: a press
+                        // still goes, and the authority decides.
+                        if let Some(p) = m.pools.iter().find(|p| !card.pool.is_empty() && p.name == card.pool) {
+                            if p.value < card.cost {
+                                // The rules' own words for a short pool (`short_of`: "out of
+                                // breath", "not enough mana"), else the pool's label.
+                                let why = rules.scripts.as_ref().and_then(|sc| sc.text_of("short_of", &card.pool)).unwrap_or_else(|| format!("not enough {}", p.label.to_lowercase()));
+                                return SkillState::Unavailable(crate::ui::label(&why));
+                            }
                         }
                         SkillState::Ready
                     })();
@@ -321,27 +329,35 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
 /// moved along `<field>_rate` per minute since `<field>_from_ms` or the row's `at_ms`, held
 /// within its max) and the pills (`status_of` over the same facts the authority and the minds
 /// build). The row is read by field name, generically.
-fn my_body(sc: &living_rules::script::Scripts, row: &impl spacetimedb_sdk::__codegen::__sats::ser::Serialize, kind: &str, stage: &str, night: bool, now_ms: f64) -> (Vec<MeterView>, Vec<StatusView>) {
-    let Ok(json) = spacetimedb_sdk::__codegen::__sats::ser::serde::serialize_to(row, serde_json::value::Serializer) else { return (Vec::new(), Vec::new()) };
+fn my_body(sc: &living_rules::script::Scripts, row: &impl spacetimedb_sdk::__codegen::__sats::ser::Serialize, kind: &str, stage: &str, night: bool, now_ms: f64) -> (Vec<MeterView>, Vec<StatusView>, Vec<MeterView>) {
+    let Ok(json) = spacetimedb_sdk::__codegen::__sats::ser::serde::serialize_to(row, serde_json::value::Serializer) else { return (Vec::new(), Vec::new(), Vec::new()) };
     let fields = living_rules::script::body::fields_of_json(&json);
     let get = |k: &str| fields.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
-    let mut ms: Vec<&living_rules::script::body::Meter> = sc.meters().iter().filter(|m| m.shown).collect();
+    let mut ms: Vec<&living_rules::script::body::Meter> = sc.meters().iter().collect();
     ms.sort_by_key(|m| m.order);
-    let meters = ms
-        .iter()
-        .filter_map(|m| {
-            let raw = get(&m.value)?;
-            let max = m.max_of(&fields)?;
-            let rate = get(&format!("{}_rate", m.value)).unwrap_or(0.0);
-            let from = get(&format!("{}_from_ms", m.value)).or_else(|| get("at_ms")).unwrap_or(now_ms);
-            let v = (raw + rate * ((now_ms - from).max(0.0) / 60_000.0)).clamp(0.0, max.max(0.0));
-            Some(MeterView { name: m.name.clone(), label: m.label.clone(), value: v as f32, max: max as f32 })
-        })
-        .collect();
+    // Each meter now: a pool (a field with `<field>_from_ms`, stamina-1) moves along its rate per
+    // second from the later of the row's `at_ms` and that time; any other field per minute since
+    // `at_ms` (as `BodyFacts::of` reads them, so the bars and the pills agree).
+    let now = |m: &living_rules::script::body::Meter| {
+        let raw = get(&m.value)?;
+        let max = m.max_of(&fields)?;
+        let rate = get(&format!("{}_rate", m.value)).unwrap_or(0.0);
+        let at = get("at_ms").unwrap_or(now_ms);
+        let v = match get(&format!("{}_from_ms", m.value)) {
+            Some(from) => raw + rate * ((now_ms - at.max(from)).max(0.0) / 1000.0),
+            None => raw + rate * ((now_ms - at).max(0.0) / 60_000.0),
+        };
+        Some(MeterView { name: m.name.clone(), label: m.label.clone(), value: v.clamp(0.0, max.max(0.0)) as f32, max: max as f32 })
+    };
+    let all: Vec<(&living_rules::script::body::Meter, MeterView)> = ms.iter().filter_map(|m| now(m).map(|v| (*m, v))).collect();
+    // The bars: shown meters, and one `while_short` only while it is not full (mana).
+    let meters = all.iter().filter(|(m, v)| m.shown && (!m.while_short || v.value < v.max - 0.01)).map(|(_, v)| v.clone()).collect();
+    // Every meter by the field it shows (a skill's pool names one), for greying the bar.
+    let pools = all.iter().map(|(m, v)| MeterView { name: m.value.clone(), ..v.clone() }).collect();
     let facts = living_rules::script::BodyFacts::of(kind, stage, night, &fields, sc.meters(), now_ms.max(0.0) as u64);
     // A `plain` status is the body's words when all is well (a mind's "rested"): no pill.
     let statuses = sc.status_of(&facts).map(|v| v.iter().map(|s| StatusView { name: s.name.clone(), tone: Tone::parse(&s.tone), text: s.text.clone() }).filter(|s| s.tone != Tone::Plain).collect()).unwrap_or_default();
-    (meters, statuses)
+    (meters, statuses, pools)
 }
 
 /// What the bar says when an item a skill needs is not carried.

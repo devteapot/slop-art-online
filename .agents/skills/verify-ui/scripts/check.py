@@ -466,7 +466,7 @@ def bar(run, c):
     slot; a held guard shows held; the tooltip names the slot and why it is greyed."""
     s = "bar"
     plan = ("ready;wait:2;cursor:0.5,0.3;wait:0.3;shot:01_sheathed;dump:01;cursor:@bar:Primary;wait:0.5;shot:02_tip;dump:02;"
-            "cursor:0.5,0.3;key:KeyX:tap;wait:0.6;shot:03_drawn;dump:03;tap;wait:0.4;shot:04_refused;dump:04;wait:0.6;"
+            "cursor:0.5,0.3;key:KeyX:tap;wait:0.6;shot:03_drawn;dump:03;cursor:0.5,0.06;wait:0.3;tap;wait:0.4;shot:04_refused;dump:04;wait:0.6;cursor:0.5,0.3;"
             "key:KeyQ:down;wait:0.5;shot:05_block;dump:05;key:KeyQ:up;wait:0.3;key:KeyX:tap;wait:0.5;dump:06;quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
@@ -491,7 +491,10 @@ def bar(run, c):
     # `status_of` (a plain status is the body's words when all is well: no pill).
     me = (d["01"] or {}).get("me") or {}
     ms = me.get("meters") or []
-    c.check(s, "the bars are the world's shown meters (health, energy), each within its max", [m["name"] for m in ms] == ["health", "energy"] and all(0 <= m["value"] <= m["max"] + 1e-3 and m["label"] for m in ms), str(ms))
+    # The shipped script (stamina-1): health and stamina shown; focus ("Mana") only while short;
+    # energy and hunger feed the statuses off the screen.
+    names = [m["name"] for m in ms]
+    c.check(s, "the bars are the world's shown meters (health, stamina; mana only while short), each within its max", names[:2] == ["health", "stamina"] and not ({"energy", "hunger"} & set(names)) and all(0 <= m["value"] <= m["max"] + 1e-3 and m["label"] for m in ms) and all(m["value"] < m["max"] for m in ms if m["name"] == "focus"), str(ms))
     c.check(s, "the pills are the rules' statuses, none plain", all(x["tone"] != "Plain" for x in me.get("statuses") or []), str(me.get("statuses")))
 
 
@@ -1207,7 +1210,51 @@ def grid(run, c):
     c.check(s, "the authority made it: ash in the pack", first != "ash" or got >= 1, f"ash {got}")
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "support": support}
+def walk_law(run, c):
+    """Settings › Play › Walk speed (stamina-1 made walk_base live): the row reads the world's
+    `walk_base` law from the installed script and, through a play scene's admin link, writes it
+    (`set_world_law`), as the authority records (`law_change`)."""
+    s = "walk-law"
+    plan = ("ready;wait:3;click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;dump:01;shot:01_walk;"
+            "click:@settings:walk:3.0;wait:4;dump:02;shot:02_walk_3;click:@settings:walk:2.6;wait:4;dump:03;quit")
+    out, code, text = drive(run, s, plan, extra=["--admin-link"])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    fs = lambda k: (((dump(out, k) or {}).get("extra") or {}).get("facing_sight") or {})
+    c.check(s, "the row reads walk_base from the installed script (2.6 m/s)", abs((fs("01").get("walk") or 0) - 2.6) < 0.05 and "settings:walk:3.0" in ((dump(out, "01") or {}).get("tags") or {}), str(fs("01")))
+    c.check(s, "with the admin link it can change it", fs("01").get("can_switch") is True, str(fs("01")))
+    changes = [r for r in sql(run, "SELECT name, old, new FROM law_change WHERE name = 'walk_base'")]
+    c.check(s, "3.0 is written as the world's law and read back", abs((fs("02").get("walk") or 0) - 3.0) < 0.05 and any(r.get("new") == "3.0" for r in changes), f"{fs('02').get('walk')}; {changes}")
+    c.check(s, "and 2.6 again", abs((fs("03").get("walk") or 0) - 2.6) < 0.05 and any(r.get("new") == "2.6" for r in changes), f"{fs('03').get('walk')}; {changes}")
+
+
+def pools(run, c):
+    """stamina-1's pools on the bar: the focus bar ("Mana", `while_short`) shows only while short;
+    a slot whose pool is short of its cost greys in the rules' own words (`short_of`: "not enough
+    mana"). The scene lowers `focus_max` to 40 (admin `set_world_law`) so one fire bolt leaves too
+    little for a heal (35) or another bolt (30), and restores it after."""
+    s = "pools"
+    # A fire bolt (R, 30 mana; drawn first: a hostile move) at a point on the ground: 10 of 40 left.
+    plan = ("ready;wait:2;sync:low;wait:3;dump:00;key:KeyX:tap;wait:0.5;cursor:0.5,0.3;wait:0.3;key:KeyR:down;wait:0.4;key:KeyR:up;wait:2;shot:01_short;dump:01;wait:3;dump:01b;"
+            "key:KeyX:tap;sync:back;wait:14;dump:02;quit")
+    low = 'low=set_world_law|"focus_max"|"40"'
+    back = 'back=set_world_law|"focus_max"|"100"'
+    out, code, text = drive(run, s, plan, syncs=[low, back])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["00", "01", "01b", "02"]}
+    ms = lambda k: {m["name"]: m for m in (((d[k] or {}).get("me") or {}).get("meters") or [])}
+    slot = lambda k, n: (((d[k] or {}).get("extra") or {}).get("slots") or {}).get(f"bar:{n}") or {}
+    c.check(s, "full, the mana bar is not shown (while_short)", "focus" not in ms("00"), str(list(ms("00"))))
+    f = ms("01").get("focus")
+    c.check(s, "after a fire bolt it shows, short", f is not None and f["value"] < f["max"], str(f))
+    # The bolt's own slot cools down first (a cooldown shows before a pool), then greys too.
+    heal, bolt = slot("01", "Skill2"), slot("01b", "Skill3")
+    fb = ms("01b").get("focus") or {}
+    c.check(s, "a slot whose pool is short of its cost greys in the rules' words (heal; the bolt once cooled down: not enough mana)", "mana" in (heal.get("off") or "").lower() and "mana" in (bolt.get("off") or "").lower() and fb.get("value", 99) < 30, str((heal.get("off"), bolt.get("off"), fb.get("value"))))
+    c.check(s, "a slot of another pool is not greyed by it (strike: stamina)", "mana" not in (slot("01", "Primary").get("off") or "").lower(), str(slot("01", "Primary").get("off")))
+    c.check(s, "refilled to its max again, the mana bar goes", "focus" not in ms("02"), str(list(ms("02"))))
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support}
 
 
 def main():
