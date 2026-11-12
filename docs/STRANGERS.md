@@ -242,3 +242,17 @@ Skin and eye colours, pieces and exact numbers are left out.
 - In Cullet only the newcomer is unnamed, so about 10 tokens a scene.
 - On a world with several settlements, about 100–250 tokens a scene with 10–20 unnamed people in sight.
 - Authority cost: one extra point lookup per perceived person when a projection is rebuilt, and no new subscription.
+
+## Stage 2b (prepared 2026-11-12; not run)
+
+One replicate of each of four arms, about $10. It runs only after fix-far-silence, far-handle and attention-cues are on main.
+- **The arms:** C (`strangers-2b-c`), L and LS (`strangers-2b`, control and filter), and LS + cues (variant `strangers-filter-cues`: `stranger_by_name` and `cues_on` on).
+- **The newcomer's walk.** It is player behaviour, not a fixture: after the stand at the arrival point, the newcomer walks the Strand (`walk_route`, a `goto` to each point as a player clicks along a street). It goes down from the Counting House yard to the quay and west along it, past the Fish Steps, where Ingrid Morrow mends, about 6 m off. Then it stands at the densest group as before.
+- **Silent approaches** count only a `goto` or `follow` aimed at the newcomer, a wave or nod at them, or a path that bent toward them and stayed within 4 m for 6 s (`arrive_spread.py` `bent_toward`). Turning to face them is not one. A resident whose own routine only passes within 4 m is counted as `passed_by`.
+  - Recomputed on stage 2's runs: approaches C 6→2, L 13→1, LS 6→2; passed by 4, 12, 3.
+- **The cues arm** is a stub until attention-cues lands: today `set_world_law cues_on` is refused ("`cues_on` is not a law of this world") and the instance does not start.
+- **Fake 5-minute pass** (`st2bf`, main `49dfc2cd` plus this branch):
+  - C, L and LS ran to duration; the walk took about 35 s.
+  - Ingrid got a first-sight line for the newcomer in all three ("For the first time you see a stranger, 8 tiles east, goto → (490,779)."), closest 0.6–3.5 m.
+  - The cues arm was refused as above.
+
