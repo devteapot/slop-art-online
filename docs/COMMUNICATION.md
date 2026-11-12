@@ -898,7 +898,7 @@ Approved 2026-11-12 by the general coordinator as a perception fact. It is #4 in
 **Both controllers, from one place.**
 - **A mind:** its deliberation scene (`perceive::scene_json`) has the key "who would hear you now" (`living_rules::script::speech::EARSHOT`), read in its think and deliberate prompts.
   - A talk turn's prompt does not have it. That prompt has no scene of its own: it answers a line just heard, and its `how` already says when the line was a call from afar.
-- **A player:** the private table `character_earshot` holds one row per character a person plays: `ways` (each way's `way` and `hearers`, the ids nearest first) and `text`, the same words in the player's labels.
+- **A player:** the private table `character_earshot` holds one row per character a person plays: `ways` (each way's `way` and `hearers`, the ids nearest first) and `text`, a short form of the words in the player's labels (since `earshot-short`, below).
   - The row is read through the view `my_earshot`, a point lookup by the caller's living character, like `my_senses`.
   - The player's frame writes it (`frame::show_earshot`) at most every 250 ms (`EARSHOT_MS`), and only when the people or the words changed.
   - It goes when the law is off or the character dies (`forget_dead`).
@@ -908,6 +908,25 @@ Approved 2026-11-12 by the general coordinator as a perception fact. It is #4 in
 - **Today.** The client draws its own earshot ring and Tab marks from `seen_characters` and the `senses` law with partial facts (`talk.rs` `earshot`, the say way only).
 - **The minimal change.** Subscribe `SELECT * FROM my_earshot`. While a row exists, take the Tab marks (whom a said line reaches) from `ways` where `way` = `say` instead of computing them. A call's and a whisper's lists are there too, for marks per way. The text can be shown as it is.
 - **With no row** (the law off), keep the client's own ring.
+
+**A short form for players (branch `earshot-short`).** In a crowd, the full sentence ran to several lines under the talk box (the laptop, 2026-11-12), and the owner wants less on screen. `text` is now `earshot::short_words`:
+
+> Within earshot: Ife Okoro, a stranger and 4 others; a call would also reach 3 more
+
+- **The parts:** the nearest two a said line reaches are named, and the rest counted. A wider way adds only a count, and only when it adds someone ("a call would also reach 3 more"; with no one in say range, "a call would reach 3"). A narrower way, a whisper, is left out of the words.
+- **Edge cases:** "Within earshot: no one you see" when a said line reaches no one the player sees. A repeated label reads "another stranger".
+- **Every id stays in `ways`,** each way's full list, for the client's marks.
+
+**Minds keep the full form: one text per controller, by need.** A mind's scene keeps `earshot::words`, every person by label and the id it can act on, up to 8 a way. A short form would hide what a mind needs: whether the stranger it means to speak to is within reach ("a stranger and 4 others" does not say which stranger).
+- **The cost**, measured on the fake smoke `es1s` (8 scene prompts with the fact): the sentence's median was 206 characters (max 281), 5% of the scene's 3,787 and 1.5% of the whole user prompt's 13,843, about 55 tokens.
+- **Same fact, two texts.** The two texts state the same fact from the same lists. A player sees the people themselves on screen, so the short form loses nothing a player cannot see.
+
+**A player cannot yet choose the way (a client gap, not a rule gap).** The game's talk box says every line (`human_say`). Whisper is a greyed placeholder and there is no call, so the client receives the `whisper` and `call` lists and has no use for them yet. Minds can call or whisper, so today a player only ever says. The authority already treats both alike:
+- `human_speak(text, to, way)` takes any way of the world's rules ("" is `say`);
+- it runs the same `speech::speak` as a mind's `mind_say`, with the same reach, refusals in the world's words, cut to the way's `max_chars`, and gaps;
+- it is verified for players by verify-player's `speak.py`.
+
+What is missing is the client's choice of way, read from `speech_card`.
 
 ### Data paths and SpacetimeDB
 
