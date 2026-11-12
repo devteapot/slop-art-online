@@ -20,9 +20,9 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 ```
 
 - The island seed's newcomer arrives on Brackenford's square among residents. No mind service runs and no model is called: residents never answer, and the free tier is all there is.
-- In a fresh worktree, link `living/game/assets/{lookdev,textures,view}` from the main checkout (`for d in lookdev textures view; do ln -s /Users/carlid/dev/slop-art-online/living/game/assets/$d living/game/assets/$d; done`). They are generated and git-ignored; without them the client draws no character models or textures, and `ready` can wait for a fitted character until `drive.py` times out.
+- In a fresh worktree, link `living/game/assets/{lookdev,textures,view}` from the main checkout (`for d in lookdev textures view; do ln -s /Users/carlid/dev/slop-art-online/living/game/assets/$d living/game/assets/$d; done`). They are generated and git-ignored; without them the client draws no character models or textures, and `ready` waits for a fitted character until it gives up at 240 s.
 - On the laptop, heavy builds go through `build-slot` (at most three at once).
-- The client is ready when its log says `live script: ready after …`; `drive.py` waits for it.
+- `drive.py` waits for the client's log to say `playing character #N` (the player's id), then, for `--place` and `--place-free`, for `scene.go` and `waiting for` (the plan at `sync:scene`), and for each `sync:NAME` the same way. The plan's own `ready` step waits in the client: until the island is drawn, the character has a body, the buildings round it are in, one person is fitted (when any is shown) and the loading cover has lifted, at least 2 s, or 240 s at most (`live.rs`).
 
 ## Drive
 
@@ -46,16 +46,16 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | --- | --- |
 | `click:@TAG` / `click:X,Y` | The cursor goes to a tagged node (or fractions of the picture), the left button goes down, then up: a click through `ui/hit.rs`, as the drawn cursor makes one |
 | `slide:A>B[:SECS]` | Holds the click at A, slides to B, lets go: a title-bar drag, an item carried onto someone (a three-finger drag is the same press and move) |
-| `key:NAME:tap\|down\|up` | Any key by its `KeyCode` name (`KeyI`, `Escape`, `Enter`, `Tab`, `Digit1`, `AltLeft`) |
+| `key:NAME:tap\|down\|up` | A key by its `KeyCode` name: any in the bindings' table (`keys.rs` `KEYS`, `key_named`: letters, digits, `Space`, `Enter`, `Tab`, `Escape`, `Backspace`, shift, control, alt, `SuperLeft`, `CapsLock`, the arrows, punctuation, `F1`–`F8`), else `live.rs` `key_code`'s own short list; any other name is not a key |
 | `type:TEXT`, `enter`, `tab`, `chat:open\|close` | Words in the box, said to whom it addresses; Tab; the box opened or closed (closing keeps its window) |
 | `dump:NAME` | Writes `NAME.json`: open windows (top last) with anchors and rectangles, the Menu list, the list of acts, the box and whom it addresses (with `typing.earshot` and the last Tab, `typing.tab`), the notes shown, `me_at` (my drawn position and the authority's row) (and `naming`: every person- or place-naming text on screen, with `known_names`, `given_places` and `perceived`, the ids I perceive; `rects`: where the notes and the F prompt are drawn, UI px), settings with the weapon (`extra.drawn`), the bar's slots (`extra.slots`) and the tooltip (`extra.tooltip`), the Log's last 12 events (`extra.events`), every tagged node shown with its centre, and the cursor pick: `under` (who is under the cursor, `living/game/src/pick.rs`), `hovered` (id, label: the nameplates shown as hovered), `targeted` (the target plate) and `seen` (each body's feet and head on screen, its depth and its distance from the cursor's ground point) |
 | `point:ID[:H]` | Keeps the game's cursor on character ID as drawn, H m above their feet (default 0.3; 1.3 is the chest), frame after frame, until `cursor:` or another `point:` |
-| `cursor:X,Y` / `cursor:@TAG` | The game's cursor there (a slot, to hover it); `cursor:` takes it away |
+| `cursor:X,Y` / `cursor:@TAG` | The game's cursor there: fractions of the picture, or a tagged node (a slot, to hover it); `cursor:` takes it away |
 | `pointat:X,Y[:H]`, `nudge:DX,DY`, `wheel:DIR` | The cursor kept on a world point (sim m); moved by logical px (an open wheel takes it as motion); an open wheel pointed at a direction |
 | `weapon:toggle\|draw\|sheathe`, `tap` | As X; a left tap on the world (a strike, or talk to a peaceful person) |
-| `menu:f@id:N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list on someone; wait for a scene; a photograph; two-finger scroll; a double tap |
-| `walk:DEG:S`, `hold:DEG`, `stop`, `look:DEG`, `lookwalk:SPEC` | Walk a compass direction for S seconds, or hold it until `stop`; look a compass direction (the cursor scheme's look, until `look:`); set the look-walk preset (`twist::LookWalk::parse`: `chest`, `head,body_s=0.3`) |
-| `cursor:X,Y`, `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | The cursor at fractions of the picture; a two-finger pan, a left drag or a pinch through the pointer's paths; no framing contexts (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
+| `menu:f[@AIM]\|c\|close\|N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list (on AIM, e.g. `f@id:57`), my own list (`c`), closing it, or picking row N; wait for a scene; a photograph; two-finger scroll; a double tap |
+| `walk:DEG:S[:run]`, `hold:DEG[:run]`, `stop`, `look:DEG`, `lookwalk:SPEC` | Walk (or run) a compass direction for S seconds, or hold it until `stop`; look a compass direction (the cursor scheme's look, until `look:`); set the look-walk preset (`twist::LookWalk::parse`: `chest`, `head,body_s=0.3`) |
+| `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | A two-finger pan, a left drag or a pinch through the pointer's paths; no framing contexts (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
 
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
 - buttons and Menu: `pack`, `menu`, `menu:Character|Skills|Log|Settings|Leave`;
@@ -70,7 +70,9 @@ Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:
 Facing sight (`check.py field`, [features/field.md](features/field.md)): drive.py's `--admin-link` gives the client the world admin's token in a mode-600 file it deletes after the drive, as `play.py` does for a scene with `"law_toggle": true`; a `--sync NAME='sql|QUERY;…'` call snapshots the authority (owner SQL, `{me}`, `{ident}`) into `scene.json`'s `snaps`.
 
 
-Scenes: `--sync NAME='player|REDUCER|ARG|…'` acts as verify.py's player identity (`$V player join`), a second player beside mine (look-walk's others case). `--place ID:DX:DY` puts a resident beside the player and holds them still when the plan reaches `sync:scene`; `--sync NAME='reducer|arg;…'` makes other admin calls at `sync:NAME`. Both are scene setup through admin reducers, never player acts; name them in a report.
+Scenes: `--sync NAME='player|REDUCER|ARG|…'` acts as verify.py's player identity (`$V player join`), a second player beside mine (look-walk's others case). `--place ID:DX:DY` puts a resident beside the player and holds them still when the plan reaches `sync:scene`; `--place-free ID:DX:DY` puts one near that offset on a free walkable tile 1.5–3 m from the player with nothing opaque between (`scene.json` `free_spots`), and `--sync NAME=refree` puts them back there; `--sync NAME='reducer|arg;…'` makes other admin calls at `sync:NAME` (`{me}` the player's id, `(expr)` a Python expression of `mx`, `my` and `me`; in `sql|` snapshots also `{ident}` and `{epoch_at:HOUR}`, the world epoch that makes the hour HOUR now). All are scene setup through admin reducers, never player acts; name them in a report.
+
+drive.py's other options (its docstring): `--expect REGEX` (repeatable) must match client.log, else exit 1; `--size WxH` (default `1600x900`); `--token FILE` plays another character (default the run's `ui/player.token`); `--player NAME` (default "Verifier"); `--client PATH` (default `$CARGO_TARGET_DIR/release/living-game`, else `.local/target/release/living-game`); `--admin-link` (above); `--timeout S` (default 600; check.py passes 420). `LIVING_STDB_URL` points it at a worker's own server (default `http://127.0.0.1:3300`).
 
 ## Evidence
 

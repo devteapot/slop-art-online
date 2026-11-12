@@ -468,7 +468,8 @@ def film(run, c):
     if os.environ.get("LIVING_GAME_FILM"):
         c.check(s, "LIVING_GAME_FILM is unset (it overrides the settings file)", False, os.environ["LIVING_GAME_FILM"])
         return
-    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "film")
+    # drive() keeps a themed run's evidence apart (`film-<theme>`): its settings file is there.
+    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", f"film-{THEME}" if THEME else "film")
     st = os.path.join(out0, "settings.json")
     if os.path.exists(st):
         os.remove(st)
@@ -1730,14 +1731,18 @@ def far(run, c):
     d = {k: dump(out, k) or {} for k in ["01", "02", "03", "04", "05"]}
     hov = lambda k: next((h.get("label") for h in d[k].get("hovered") or [] if h.get("id") == b), None)
     near1, far2, near5 = hov("01"), hov("02"), hov("05")
-    c.check(s, "close up (2 m): the plate says a stranger in their colours", bool(near1) and near1.startswith("a stranger") and "too far" not in near1, f"{near1!r}")
-    c.check(s, "beyond the range (6 m): the plate says someone in their colours, or there is none", far2 is None or re.fullmatch(r"someone in [a-z]+( [a-z]+)?( and [a-z]+( [a-z]+)?)?", far2) is not None, f"{far2!r}; hovered {d['02'].get('hovered')}")
+    # Someone drawn from a look book line is named by its words (`phrase`), made out and from
+    # afar; a VRoid base (a world without looks, the island) by the projection's label and colours.
+    bl = next((x.get("look") for k in d for x in (d[k] or {}).get("looks") or [] if x.get("id") == b), None)
+    ph = line_phrases(bl)
+    c.check(s, "close up (2 m): the plate says a stranger in their colours, or the line's words", bool(near1) and (near1.startswith("a stranger") or (ph and near1 == ph[0])) and "too far" not in near1, f"{near1!r}; phrase {ph}")
+    c.check(s, "beyond the range (6 m): the plate says someone in their colours (or the line's far words), or there is none", far2 is None or re.fullmatch(r"someone in [a-z]+( [a-z]+)?( and [a-z]+( [a-z]+)?)?", far2) is not None or bool(ph and far2 == ph[1]), f"{far2!r}; hovered {d['02'].get('hovered')}; phrase {ph}")
     t3 = d["03"].get("typing") or {}
     c.check(s, "the talk target carries the authority's words", t3.get("to") == b and FAR in (t3.get("label") or "") and " in " not in (t3.get("label") or "").replace(FAR, ""), json.dumps(t3))
     L = log(out)
     said = [x for x in sql(run, f"SELECT id, kind, object, text FROM experience WHERE kind = 'said' AND object = {b}") if line in x.get("text", "")]
     c.check(s, "what I send carries my words and their id, no colour words", re.search(rf'say: "{re.escape(line)}" to #{b}\b', L) is not None and said and not any("someone in" in x.get("text", "") for x in said) and not re.search(r'(say|act)[^\n]*someone in ', L), f"{len(said)} said rows")
-    c.check(s, "close again: a stranger in their colours", bool(near5) and near5.startswith("a stranger"), f"{near5!r}")
+    c.check(s, "close again: a stranger in their colours, or the line's words", bool(near5) and (near5.startswith("a stranger") or (ph and near5 == ph[0])), f"{near5!r}")
     notes_clear(c, s, out)
 
 
@@ -1921,7 +1926,12 @@ def death(run, c):
     c.check(s, "client ran and joined (struck)", code == 0, text[-300:])
     dt = (dump(out, "02") or {})
     words = [t for k, t in dt.get("naming") or [] if k == "death"]
-    c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and words[0].startswith("Killed by a stranger") and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}")
+    # As perceived: "a stranger in …" on a world without looks, the striker's line's words where they
+    # have a look (`phrase`; a player gets a pool look on a world with looks).
+    sl = (look_rows(run) or {}).get(striker)
+    ph = line_phrases(sl)
+    seen_as = ["Killed by a stranger"] + ([f"Killed by {ph[0]}", f"Killed by {ph[1]}"] if ph else [])
+    c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and any(words[0].startswith(x) for x in seen_as) and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}; as perceived {seen_as}")
 
 
 @scenario("houses")
@@ -2060,6 +2070,40 @@ def style_places(line):
     return out
 
 
+def look_phrase(words, seen, band):
+    """`living_rules::look::phrase` (living/rules/src/look.rs), the words a person drawn from a look
+    book line is labelled by: `seen` "full" (made out) or "far"; `band` 1 child .. 4 elder."""
+    if seen == "full":
+        noun = (words.get("form") or "").strip() or "person"
+    else:
+        noun = "child" if band <= 1 else ("old figure" if band == 4 else "figure")
+    head = {0: "short ", 2: "tall "}.get(words.get("height", 1), "") + noun
+    out = f"{'an' if head[0] in 'aeiou' else 'a'} {head}"
+    clothes = [x for x in ((words.get("top") or "").strip(), (words.get("bottom") or "").strip()) if x]
+    if clothes:
+        out += " in " + " and ".join(clothes)
+    if seen == "full" and (words.get("hair") or "").strip():
+        out += ", " + words["hair"].strip()
+    out += {0: ", slight", 2: ", heavy-set"}.get(words.get("girth", 1), "")
+    if (words.get("head") or "").strip():
+        out += ", in " + words["head"].strip()
+    if seen == "full" and (words.get("beard") or "").strip():
+        out += ", with " + words["beard"].strip()
+    return out
+
+
+def line_phrases(key):
+    """What the client calls someone drawn from `key`'s line, made out and from afar; None for no
+    key or a key the book lacks (a VRoid base: colour words)."""
+    if not key or not os.path.exists(LOOK_BOOK):
+        return None
+    line = json.load(open(LOOK_BOOK))["lines"].get(key)
+    if not line:
+        return None
+    band = BANDS.get(line["person"]["type"].split("-")[0], 3)
+    return look_phrase(line.get("words") or {}, "full", band), look_phrase(line.get("words") or {}, "far", band)
+
+
 def look_rows(run):
     """The authority's truth (owner SQL on the private `look` table): each person's line key."""
     return {r["id"]: r["line"] for r in sql(run, "SELECT id, line FROM look")}
@@ -2100,8 +2144,8 @@ def looks(run, c):
     a, b = residents(run, 2)
     ev = os.path.join(ROOT, ".local/living/verify", run, "ui")
     test_book = book_copy(ev, book, "looks-without-b", drop=[rows.get(b, "")])
-    plan = "ready;sync:scene;cursor:0.5,0.5;wait:5;dump:00;shot:00_drawn;quit"
-    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], env={"LIVING_GAME_LOOK_BOOK": test_book})
+    plan = "ready;sync:scene;cursor:0.5,0.5;wait:5;dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{A};wait:0.5;dump:01;quit".replace("{A}", str(a))
+    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], syncs=["hold=refree"], env={"LIVING_GAME_LOOK_BOOK": test_book})
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     d0 = dump(out, "00") or {}
@@ -2131,9 +2175,13 @@ def looks(run, c):
     c.check(s, "every worn outfit style carries its slot and layer, as the book's files list them", worn and set(places) == worn and not differ, f"{len(places)} of {len(worn)} with extras; differing {differ[:3]}")
     mine = by.get(me_id, {})
     c.check(s, "my own look comes from my own row", mine.get("composed") is True and mine.get("look") == rows.get(me_id), f"me {me_id}: {json.dumps(mine)}; row {rows.get(me_id)}")
-    # Labels by the line's words (`phrase`): A's plate or label names it as a mind is told.
-    names = [t for k, t in d0.get("naming") or [] if k in ("plate", "hover")]
-    c.check(s, "labels by the line's words, no name", not any(n and n in " ".join(names) for n in seed_names(run)) if names else True, f"{names[:4]}")
+    # Labels by the line's words (`phrase`): A, pointed at, is named as a mind is told; no plate
+    # on screen carries a seed name.
+    d1 = dump(out, "01") or {}
+    hov = next((h.get("label") for h in d1.get("hovered") or [] if h.get("id") == a), None)
+    want = (line_phrases(rows.get(a)) or (None,))[0]
+    plates = [t for k, t in (d0.get("naming") or []) + (d1.get("naming") or []) if k == "plate"]
+    c.check(s, "labels by the line's words (phrase), no name", hov is not None and hov == want and plates and not any(n and n in " ".join(plates) for n in seed_names(run)), f"hovered {hov!r}, phrase {want!r}; {len(plates)} plates {plates[:3]}")
     # 2. A book of another generation.
     other = book_copy(ev, book, "looks-other-generation", generation="c4-not-this-book")
     out2, code2, text2 = drive(run, "looks-generation", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_BOOK": other})
