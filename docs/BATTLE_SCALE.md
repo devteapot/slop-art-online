@@ -1,6 +1,6 @@
 # Battle scale: why a battle of minded fighters collapses (diagnosis and fix design, 2026-11-12)
 
-Status: **fixes 1–3 built on branch `battle-scale` (2026-11-12); fix 4 (folding) held**, to be built only if 1–3 do not reach the bar. The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
+Status: **fixes 1–3 built on branch `battle-scale` and accepted as a step (2026-11-12): the collapse is gone, but 60 Hz is not reached at 200 fighters (see [Acceptance runs](#acceptance-runs-fixes-13-quiet-box-2026-11-12)). Fix 4 (folding) is approved, on `battle-fold`.** The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
 
 ## Workload
 
@@ -157,6 +157,57 @@ That gives roughly 300–450 ms/s of tick work against 1,000 available: 60 Hz wi
    - **Bystanders coalesced.** A bystander is woken at most once per window (`common::wake_bystander`). A wake held back is delivered when the window ends, each tick before the wakes (`due_bystander_wakes`).
    - **Remains.** A remains noticed is a bystander's sight of a death.
 4. **Deleting a busy world.** The verify harness's cleanup and `trials.py` pause a world and read the pause back before deleting it (fix-sleep-talk, fix-trials-pause). `living/tools/world_delete.py` does the same for the tools that delete scratch databases outside both: `verify_mechanics.py` and `verify_steering.py` (verify-core's Cargo checks), `gate.py`, `latency.py` and `play.py`.
+
+## Acceptance runs (fixes 1–3, quiet box, 2026-11-12)
+
+Two 30-minute runs of `battle_diag.py --no-mind` on `battle-scale` `a7485376`, in a quiet window given for them: every other agent paused, and the seven other worlds on the trial service were paused, so none was ticking. Host load over the window (one sample every 10 s, 381 samples): 1.8 to 5.0, median 3.1. `committed` was run first in the same window and passed 16 of 16 (`core-qcm-141636`).
+
+**Workload:** as in [Workload](#workload): the island's 310 residents and animals, all AI. Fighters are packed within 7 m of the battle site, walkers forage, and there is no mind service. A dead fighter is refilled at the site (the load generator's respawn, which the game does not have).
+
+- **`minds-q100-141730`:** 100 fighters and 116 walkers.
+- **`minds-q200-144827`:** 200 fighters and 16 walkers.
+
+**Sampling:** a 30 s profiled `bench.py` window every minute; tick counts are of the sampled ticks. Each run directory holds `windows.md` (the table per window), `load.log` and the `bench-NN.json` files.
+
+| | 100 fighters | 200 fighters |
+|---|---|---|
+| Creatures in a graph's scene, mean (range over windows) / max | 43 (23–58) / 96 | 87 (50–120) / 187 |
+| Fight starts a second, onlookers each | 20.5, about 59 | 38.8, about 102 |
+| Skill uses a second (strikes, blocks, dodges, heals) | 23.8 | 44.1 |
+| Deaths (refills) a second | 0.9 | 1.8 |
+| Alive, start → end | 520 → 453 | 508 → 441 |
+| Structures (mostly remains), start → end | 597 → 2,207 | 650 → 3,830 |
+
+**Against the contract** (sustained 60 Hz; the nominal step is 16.667 ms, so a tick over 16.7 ms misses its step). Before is the diagnosis on the same tool and workload. `minds-bdat-124436` (100) ran on a nearly quiet host, load 3.5–9, and was stopped after 7 minutes at collapse. `minds-bd200-123543` (200) ran at load 10–28, and its first minute, before remains piled up, was already 7.8 ticks a second.
+
+| | Ticks/s | Ticks over 16.7 ms | Tick p99 per window: median (worst) |
+|---|---|---|---|
+| 100, before | 19.5, collapsing to 1.6 | 63.7% | 89 ms (233) |
+| **100, after (30 min)** | **55.0**: 56.9 in the first 5 min, 50.4 in the last 5 | **4.4%** (2,179 of 50,016) | **23 ms** (48) |
+| 200, before | 10.0 | 84.4% | 273 ms (467) |
+| **200, after (30 min)** | **26.8**: 37.7 in the first 5 min, 16.1 in the last 5 | **60.6%** (14,777 of 24,401) | **83 ms** (243) |
+
+**Reading:**
+
+- **The runaway is gone.** Nothing in view is forgotten and noticed again: `familiar` evictions are 0–4 a second at 100 and at most 150 at 200 (against 15k–30k before), and every `saw` percept is a first sight with its new `familiar` row. Woken evaluations stay flat, at 370–440 a second at 100 and 490–680 at 200. 100 fighters hold near 60 Hz for 30 minutes.
+- **First sights still grow, with the refills.** At 100, first sights go from 75 to 1,321 a second over the run; at 200, from 402 to 3,329. `familiar` rows go from 20k to 159k at 100, and from 56k to 416k at 200: about 50 MB at about 120 bytes a row. Each refill is a new character that has seen none of the remains at the site: 2,207 at 100 and 3,830 at 200 by the end. This is the load generator's respawn more than a battle's.
+- **Neither run meets the contract.** 100 is close: 4.4% of ticks are over budget, and the rate declines slowly. 200 is far from it.
+
+**Where the time goes at 200** (span ms per second of wall time, mean of the first and last five windows; spans nest, so they do not add up):
+
+| Span | First 5 min | Last 5 min |
+|---|---|---|
+| `tick` (all) | 603 | 799 |
+| `tick.wakes` (woken evaluations) | 108 | 335 |
+| `tick.combat` (the fighters' 15 Hz evaluations) | 224 | 253 |
+| `tick.activity` (blows, and writing what onlookers saw) | 233 | 184 |
+| `brain.graph` | 189 | 221 |
+| `brain.noticed` | 33 | 217 |
+| `brain.scene` | 55 | 120 |
+
+- **What the fight costs from the start.** Writing what onlookers see (4,700–6,100 fight percepts a second, every one written in full) and the fighters' own evaluations at 15 Hz cost about 230 ms/s each. That is what fix 4 (folding) and the 15 Hz analysis address.
+- **What grows.** Noticing (33 → 217 ms/s) and scene building (55 → 120) grow as remains pile up at the site: 3,830 structures by the end, each refill a new character that has seen none of them. Remains are static, so these costs are what caching them by their `familiar` row addresses. Part of the growth comes from the refills themselves, so the next acceptance runs keep deaths permanent.
+- **At 100 the same costs, smaller.** `tick.combat` goes from 165 to 306 ms/s, `brain.scene` from 37 to 113 and `brain.noticed` from 11 to 57, with 2,207 structures by the end.
 
 ## Verification it would need
 
