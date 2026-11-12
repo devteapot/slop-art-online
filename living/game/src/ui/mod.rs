@@ -340,6 +340,15 @@ fn dump(
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone()), "tab": talk.as_ref().and_then(|t| t.tabbed.as_ref().map(|(p, e, c)| serde_json::json!({"prev": p, "earshot": e, "chose": c})))})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+        // Where my body is drawn (game x, z) and the authority's row for it as this client holds
+        // it (x, y, speed): committed-moves holds movement through a windup or a dash.
+        "me_at": me_at(&extra),
+        // Every text that names a person or a place on screen (perceived-names-1), by where it
+        // shows, and what the authority has given me to name (`known_names`, `given_places`).
+        "naming": naming(&model, &verbs, talk.as_deref(), &ws, &extra),
+        "known_names": crate::looks::known_names(&extra.net),
+        "given_places": crate::looks::given_places(&extra.net),
+        "perceived": crate::looks::perceived_ids(&extra.net),
         // Where the notes and the F prompt are drawn (UI px: x, y, w, h), those showing.
         "rects": {
             "notes": notes.iter().filter(|(n, c, _)| n.display != Display::None && c.size().x > 0.0).map(|(_, c, t)| { let tl = (t.affine().translation - c.size() / 2.0) / k; [tl.x, tl.y, c.size().x / k, c.size().y / k] }).collect::<Vec<_>>(),
@@ -373,6 +382,56 @@ fn dump(
     }
 }
 
+fn me_at(x: &DumpExtra) -> serde_json::Value {
+    let Some((conn, me)) = x.net.conn.as_ref().zip(x.net.my_id) else { return serde_json::Value::Null };
+    let drawn = x.scene.shown.get(&me).map(|(p, _)| [p.x, p.y]);
+    let body = crate::net::find_body(conn, me).map(|b| serde_json::json!({"x": b.x, "y": b.y, "speed": b.speed, "t_ms": b.t_ms}));
+    serde_json::json!({"drawn": drawn, "body": body})
+}
+
+/// Every person- or place-naming text the client shows, as (where, text): plates and hover
+/// (every actor's name), the target plate, bubbles, person windows' titles, the Log's lines
+/// (speaker and addressee), its events and people, notes, the act list's, wheel's and grid's
+/// titles, the act name under the F prompt, the talk target, offer cards, the death screen and
+/// the compass's place.
+fn naming(model: &model::HudModel, verbs: &crate::verbs::Verbs, talk: Option<&crate::talk::Talk>, ws: &win::Windows, x: &DumpExtra) -> serde_json::Value {
+    let mut out: Vec<(&str, String)> = Vec::new();
+    out.extend(model.actors.iter().map(|a| ("plate", a.name.clone())));
+    out.extend(model.target.as_ref().map(|t| ("target", t.name.clone())));
+    out.extend(model.bubbles.iter().map(|b| ("bubble", b.name.clone())));
+    for o in &ws.open {
+        if let win::Win::Person(id) = o.win {
+            out.push(("window", x.looks.cap(id)));
+        }
+    }
+    let who = |id: u32| x.looks.of(id).unwrap_or("someone").to_string();
+    for l in x.talks.lines.values().rev().take(40) {
+        if !l.mine {
+            out.push(("log", who(l.speaker)));
+        }
+        if l.to != 0 {
+            out.push(("log", who(l.to)));
+        }
+    }
+    out.extend(x.talks.events.iter().rev().take(40).map(|(_, t)| ("event", t.clone())));
+    out.extend(x.talks.met.keys().map(|id| ("people", who(*id))));
+    out.extend(verbs.toasts.iter().map(|t| ("note", t.text.clone())));
+    out.extend(verbs.menu.as_ref().map(|m| ("acts", m.title.clone())));
+    out.extend(verbs.wheel.as_ref().map(|w| ("wheel", w.title.clone())));
+    out.extend(verbs.grid.as_ref().map(|g| ("grid", g.title.clone())));
+    if verbs.aim.is_some() && !verbs.aim_name.is_empty() {
+        out.push(("aim", verbs.aim_name.clone()));
+    }
+    out.extend(talk.filter(|t| !t.label.is_empty()).map(|t| ("talk", t.label.clone())));
+    out.extend(x.talks.cards.iter().map(|(_, _, t)| ("card", t.clone())));
+    if let Some(d) = &model.death {
+        out.push(("death", d.cause.clone()));
+        out.extend(d.witnesses.iter().flatten().map(|w| ("death", w.clone())));
+    }
+    out.extend(model.map.place.as_ref().map(|p| ("place", p.clone())));
+    serde_json::Value::Array(out.into_iter().filter(|(_, t)| !t.trim().is_empty()).map(|(k, t)| serde_json::json!([k, t])).collect())
+}
+
 /// Further state the dump reports, from the widgets of later steps.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct DumpExtra<'w, 's> {
@@ -382,6 +441,9 @@ pub struct DumpExtra<'w, 's> {
     weapon: Res<'w, crate::weapon::Weapon>,
     slots: Res<'w, prim::Slots>,
     talks: Res<'w, people::Talks>,
+    net: NonSend<'w, crate::net::Net>,
+    scene: NonSend<'w, crate::world::Scene>,
+    looks: Res<'w, crate::looks::Looks>,
     tip: Query<'w, 's, &'static Node, With<prim::Tooltip>>,
     tip_title: Query<'w, 's, &'static Text, (With<prim::TooltipTitle>, Without<prim::TooltipText>)>,
     tip_text: Query<'w, 's, &'static Text, (With<prim::TooltipText>, Without<prim::TooltipTitle>)>,

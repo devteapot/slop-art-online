@@ -787,6 +787,7 @@ The general coordinator's decisions: tell the speaker the truth, and never hold 
 
 - A first version on this branch added "Call out or go closer." or "Go closer." to the seen case. The general coordinator had it dropped.
 - Absent, dead and out of sight read alike, so ids cannot be probed.
+- Someone too far away to make out (far-label) is not named by the label followed by "is": "They are too far away: they could not have heard you." and "They are out of earshot: …" (since fix-far-silence; before, "Someone too far away to make out is too far away …").
 - **A player** who speaks to someone out of earshot, or to an empty room, gets the same row in `my_experience`. They also get an `act_outcome` row keyed by it (`my_act_outcomes`): kind `act`, code `reach`, `ok` false, `skill` the way, `what` "say to Bram" (or "say" for the room), `why` the same words, `other` the addressee (0 for the room). A client can draw its note from the code, not the English.
 - **The game client** already reads a `silence` row by its kind. With subject 0 it marks the player's own room line at that moment as unheard and shows the words as a toast (`heard.rs` `unheard`, `ui/people.rs`, `talk.rs`). Its own room note after a wait ("No one in earshot heard you. …") is unchanged.
 - **A newcomer talking to an empty yard** is the strangers trial's situation, so the room case had to be in before stage 2.

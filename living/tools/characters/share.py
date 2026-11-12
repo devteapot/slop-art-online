@@ -132,12 +132,14 @@ def strands(files, shared=None):
 
 
 def atlas_users(j, which=None):
-    """The materials whose picture is an atlas of this person (embedded, and not the hair's),
-    by picture; `which` keeps only the full model's (`near`) or the far model's (`far`)."""
+    """The materials whose picture is an atlas of this person (embedded, and not the hair's, the
+    iris's, which keeps a small picture of its own for the client's tag, nor the lips' and
+    blush's fixed-colour layer, `.tint`, which keeps its own), by picture; `which`
+    keeps only the full model's (`near`) or the far model's (`far`)."""
     by_image = {}
     for mi, m in enumerate(j.get("materials", [])):
         ii = material_image(j, mi)
-        if ii is None or "_HAIR" in m.get("name", "") or "bufferView" not in j["images"][ii]:
+        if ii is None or "_HAIR" in m.get("name", "") or "bufferView" not in j["images"][ii] or j["images"][ii].get("name", "").endswith((".iris", ".tint")):
             continue
         if which is not None and j["images"][ii].get("name", "").endswith(".far") != (which == "far"):
             continue

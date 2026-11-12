@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Drive real internal minds against the shared local fake model server."""
 import argparse
+import functools
 import hashlib
 import importlib.util
+import inspect
 import json
 import math
 import os
@@ -19,10 +21,22 @@ ROOT = Path(__file__).resolve().parents[4]
 spec = importlib.util.spec_from_file_location('verify_llm', ROOT / '.agents/skills/verify-llm/scripts/verify_llm.py')
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
-CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
-         'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run', 'timings', 'queued', 'doing',
-         'intents')
+# The cases, by name, in the order they are defined below: each registers itself with @case.
+CASES = {}
+
+
+def case(*names, **fixed):
+    """Register the decorated function as the case(s) NAMES. It is called with the case's run and
+    FIXED, and with case=NAME when it takes a `case` argument (one body serving several cases)."""
+    def register(function):
+        takes_name = 'case' in inspect.signature(function).parameters
+        for name in names:
+            assert name not in CASES, f'case {name} registered twice'
+            CASES[name] = functools.partial(function, **fixed, **({'case': name} if takes_name else {}))
+        return function
+    return register
+
+
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -219,6 +233,7 @@ def scene_sent(sent):
     return json.loads(m.group(1)) if m else None
 
 
+@case('drop')
 def drop_case(run):
     """A mind is told of a drop and of a low thing in words that say what they are and that
     one sees past them but cannot walk through them (`terrain_near`), and sees the creature on
@@ -263,6 +278,7 @@ def drop_case(run):
     return {'status': 'pass', 'told': told}
 
 
+@case('run')
 def breath_case(run):
     """A mind can run (docs/STAMINA.md): its prompt documents `"run": true` on a goto and the
     graph's `stamina` condition, its scene carries its breath, and an act it decides with
@@ -302,6 +318,7 @@ def breath_case(run):
             'scene_stamina': scene['you']['stamina'], 'experiences': len(act)}
 
 
+@case('intents')
 def intents_case(run):
     """A mind's plan can say a movement intent (docs/COMBAT_MIND.md §3.3): its prompt's skill
     reference documents keep_distance, close_in, circle and back_off with their distances and the
@@ -375,49 +392,8 @@ def timings_told(run, actor, sent, fire_bolt):
     assert not any(OWN_TIMING.search(system_text(e['body'])) for e in sent), 'timings in the shared system prompt'
 
 
-def run_case(run, case):
-    if case in ('animals', 'night', 'jev'):
-        return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
-    if case in ('rethink', 'rethink-llm'):
-        return rethink_case(run, 'jev' if case == 'rethink' else 'llm')
-    if case == 'takeover':
-        return takeover_case(run)
-    if case == 'dealings':
-        return dealings_case(run)
-    if case == 'answers':
-        return answers_case(run)
-    if case == 'sight':
-        return sight_case(run)
-    if case == 'fov':
-        return fov_case(run)
-    if case == 'doing':
-        return doing_case(run)
-    if case == 'drop':
-        return drop_case(run)
-    if case == 'death-names':
-        return death_names_case(run)
-    if case == 'health-seen':
-        return health_seen_case(run)
-    if case == 'resident':
-        return resident_case(run)
-    if case == 'parked':
-        return parked_case(run)
-    if case == 'alongside':
-        return alongside_case(run)
-    if case == 'greet':
-        return greet_case(run)
-    if case == 'queued':
-        return queued_case(run)
-    if case == 'speech':
-        return speech_case(run)
-    if case == 'frame':
-        return frame_case(run)
-    if case == 'reasons':
-        return reasons_case(run)
-    if case == 'run':
-        return breath_case(run)
-    if case == 'intents':
-        return intents_case(run)
+@case('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod', 'timings')
+def basic_case(run, case):
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -717,6 +693,7 @@ def run_case(run, case):
     return {'status': 'pass'}
 
 
+@case('takeover')
 def takeover_case(run):
     """A player's character passes to the minds when its person has been gone for the
     `takeover_s` law, is thought for like any AI character, and comes back to its person at
@@ -781,6 +758,7 @@ def takeover_case(run):
             'held_graph': 'kept and reinstalled', 'in_flight': 'refused'}
 
 
+@case('dealings')
 def dealings_case(run):
     """A mind sees and acts on a record (docs/WORLD_RULES.md): another character demands a stone
     of it; the rules tell it and ask its mind; its deliberation shows the demand among its
@@ -832,6 +810,7 @@ def dealings_case(run):
             'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before, 'asked_by_the_rules': asked}
 
 
+@case('answers')
 def answers_case(run):
     """A mind answers by id (docs/WORLD_RULES.md, "Answering"): another character proposes terms
     to it and offers it a trade. Its deliberation shows the trade's id in "asked of you" and the
@@ -878,6 +857,7 @@ def answers_case(run):
             'proposer_told': told[0]['text'], 'outcomes': outcomes[-4:], 'deliberations_with_ids': len(with_ids)}
 
 
+@case('sight')
 def sight_case(run):
     """A mind's scene and what it witnesses follow the sight rule: a creature behind rock or a
     wall is not in the scene the model is sent, and its death is not witnessed; one in the open
@@ -919,6 +899,7 @@ def sight_case(run):
             'hidden': names.get(other), 'open': names.get(third)}
 
 
+@case('fov')
 def fov_case(run):
     """Sight that depends on facing (docs/PERCEPTION.md, "Heard, not seen"), on by the admin's
     `set_world_law fov_on`: a resident faces away from another standing 4.5 m behind it. The
@@ -990,6 +971,7 @@ def fov_case(run):
     finally:
         run.admin('set_world_law', 'fov_on', 'false')
     return {'status': 'pass', 'heard': heard, 'facing': scene.get('you', {}).get('facing'), 'noticed': [x['text'] for x in told], 'habit_turned': turned[:1], 'facing_after': round(facing, 2)}
+@case('doing')
 def doing_case(run):
     """What someone is visibly doing reaches a mind (docs/PERCEPTION.md, "What someone is visibly
     doing"): a resident faces another 3 m east of it who holds up a guard (`block`, held). The
@@ -1003,8 +985,13 @@ def doing_case(run):
     run.admin('set_behavior', eye, json.dumps({'wait': 300}))
     run.admin('place_at', eye, *e)
     run.admin('place_at', other, e[0] + 3.0, e[1])
-    run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] + 4.0, e[1]]}}}, {'wait': 300}]}))
-    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['outcome']], 'the eye turned to the other', 20)
+    # Turned away first, then to the other: a graph's turn to where it already faces is refused
+    # ("you already face it") and leaves no `skill_use` row, and the eye may face east already;
+    # after the turn west, the turn east is a real one with its row (`body.heading` is the
+    # segment's start, not the facing now).
+    run.admin('set_behavior', eye, json.dumps({'seq': [{'first': [{'do': {'skill': 'face', 'target': {'at': [e[0] - 4.0, e[1]]}}}, {'wait': 0.1}]}, {'wait': 1.5},
+                                                       {'first': [{'do': {'skill': 'face', 'target': {'at': [e[0] + 4.0, e[1]]}}}, {'wait': 0.1}]}, {'wait': 300}]}))
+    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['aim_x'] > e[0] and u['outcome']], 'the eye turned to the other', 20)
     run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'block', 'qty': 5000}}]}))
     run.wait(lambda: [f for f in run.private(f'SELECT * FROM fighter WHERE id = {other}', 'fighter-other') if f['act'] != 0], 'the guard is up', 20)
     script = {'replies': {'think': {'thought': 'They hold up a guard.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
@@ -1030,6 +1017,7 @@ def doing_case(run):
     return {'status': 'pass', 'visibly': entry.get('visibly'), 'entry': entry, 'purposes': sorted(text)}
 
 
+@case('death-names')
 def death_names_case(run):
     """A community member killed in view of a mind's character, who shares the community and
     feels something for them: the experience the authority gives that mind names the dead, and
@@ -1116,6 +1104,93 @@ def death_names_case(run):
     return {'status': 'pass', **texts}
 
 
+FAR = 'someone too far away to make out'
+FAR_HANDLE_BASE = 1_000_000_000
+
+
+@case('far-figure')
+def far_figure_case(run):
+    """A mind cannot name someone it cannot make out (far-handle, docs/STRANGERS.md §1). The mind's
+    character M and its neighbour F share a community, and F is in M's relations (the prompt lists
+    "F (#id)"). An overlay of `perceived_of` makes everyone past 4 m `far` (as Cullet's law past
+    24 m). F stands 5 m from M and says a line. M's prompt shows a figure too far away to make out
+    under a handle of its own (not F's id), F's line tagged with that handle, and nowhere ties the
+    figure to F's name or id. M acts on the handle (a wave reaches F). F comes within 2 m: M is
+    told whom the figure was (the handle joined to F's id), and the scene names F."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    m, f = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    fname = names[f]
+    for who in (m, f):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    act = lambda who, node: run.admin('mind_act', who, [json.dumps(node)], 'verify-minds')
+    run.admin('place_near', f, m)
+    act(m, {'do': 'found', 'text': f'Verify Strand {m}'})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {m}', 'm-membership'), 'community founded', 20)
+    act(f, {'do': 'join', 'target': {'id': m}})
+    run.wait(lambda: run.sql(f'SELECT * FROM join_request WHERE asker = {f}', 'join-request'), 'join request', 20)
+    act(m, {'do': 'welcome', 'target': {'id': f}})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {f}', 'f-membership'), 'neighbour welcomed', 20)
+    run.admin('set_background', m, json.dumps({'sheet': {'narrative': 'I keep the strand with my neighbour.', 'values': ['care'], 'goals': ['keep the strand'],
+        'mood': 'settled', 'relations': [{'id': f, 'trust': 50, 'affinity': 50, 'label': 'neighbour', 'note': 'lives two doors down'}]}}))
+    # Everyone past 4 m is too far away to make out.
+    shipped = (ROOT / 'living/scripts/skills.rhai').read_text()
+    overlay = shipped.replace('fn perceived_of(p)', 'fn base_perceived_of(p)', 1) + \
+        '\nfn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }\n'
+    (run.directory / 'far-overlay.rhai').write_text(overlay)
+    subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db, str(run.directory / 'far-overlay.rhai')], check=True, cwd=ROOT, capture_output=True, timeout=120)
+    try:
+        body = run.sql(f'SELECT * FROM body WHERE id = {m}', 'm-body')[0]
+        run.admin('place_at', f, body['x'] + 5.0, body['y'])
+        time.sleep(2.0)
+        script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        run.start(model(run, script), [m])
+        # F says a line to the room, as the world's minds say one (`mind_say`, admin).
+        run.admin('mind_say', f, 'Fine weather on the strand today.', 0, 'say', 0, {'kind': 'talk', 'summary': 'verify far-figure line', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''})
+        time.sleep(2.0)
+        requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+        sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+        asked = lambda marker: [sent_text(e) for e in requests() if f'verify {marker}' in sent_text(e)]
+        run.admin('set_behavior', m, json.dumps({'think': 'I finished my plan. verify far'}))
+        prompt = run.wait(lambda: asked('far'), 'prompt with the far figure', 60)[0]
+        (run.directory / 'prompt-far.txt').write_text(prompt)
+        handles = sorted({int(h) for h in re.findall(r'"id": ?(\d{10,})', prompt) if int(h) >= FAR_HANDLE_BASE})
+        figure = [l for l in prompt.split('\n') if FAR in l]
+        tied = [l for l in prompt.split('\n') if any(str(h) in l for h in handles) and (fname in l or f'#{f})' in l or f'=#{f}' in l or f'"id": {f}' in l or f'"id":{f}' in l)]
+        checks = {
+            'scene_has_a_far_figure_by_handle': bool(handles) and any(FAR in l for l in figure),
+            'scene_has_no_entry_with_f_id': not re.search(r'"id": ?%d\b' % f, prompt),
+            'relations_list_names_f': f'{fname} (#{f})' in prompt,
+            'f_line_tagged_by_handle': any('Fine weather' in l and any(f'=#{h}' in l for h in handles) and f'#{f}' not in l and fname not in l for l in prompt.split('\n')),
+            'nothing_ties_the_figure_to_f': not tied,
+        }
+        # The mind acts on the handle: a wave reaches F.
+        if handles:
+            t0 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+            act(m, {'do': 'wave', 'target': {'id': handles[0]}})
+            waves = run.wait(lambda: [u for u in run.private(f'SELECT * FROM skill_use WHERE actor = {m}', 'waves') if u['skill'] == 'wave' and u['at_ms'] >= t0], 'the wave at the handle', 20)
+            checks['an_act_on_the_handle_reaches_f'] = waves[0]['target'] == f
+        # Brought within 2 m: M is told whom the figure was; the scene names F.
+        run.admin('place_at', f, body['x'] + 2.0, body['y'])
+        time.sleep(21.0)
+        run.admin('set_behavior', m, json.dumps({'think': 'I finished my plan. verify near'}))
+        near = run.wait(lambda: asked('near'), 'prompt with F made out', 60)[0]
+        (run.directory / 'prompt-near.txt').write_text(near)
+        made = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {m}', 'experiences-m') if e['kind'] == 'made_out']
+        checks['made_out_joins_handle_to_f'] = any(e['subject'] == f and e['object'] in handles for e in made)
+        checks['near_scene_names_f'] = bool(re.search(r'"id": ?%d\b' % f, near)) and f'"{fname}"' in near
+    finally:
+        subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db], cwd=ROOT, capture_output=True, timeout=120)
+    result = {'f': f, 'name': fname, 'handles': handles, 'figure_lines': figure[:4], 'tied': tied, 'made_out': [e['text'] for e in made], 'checks': checks}
+    (run.directory / 'far-figure.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+@case('health-seen')
 def health_seen_case(run):
     """A mind in a fight is told its opponent's health as the band everyone sees, never as a
     number, except while its own appraisal of them holds (`act::fight_report`,
@@ -1179,6 +1254,7 @@ def health_seen_case(run):
     return {'status': 'pass', **out}
 
 
+@case('animals')
 def animals_case(run):
     """Cheaper animal minds (LIVING_ANIMAL_MINDS=salient,choose,pack; mind/animal.rs): one deer
     picks one of a few options in one call and the graph built from it is installed; the deer it
@@ -1233,6 +1309,7 @@ def animals_case(run):
     return {'status': 'pass', 'lead': lead, 'pick': d0['options'][d0['pick']], 'weight': d0.get('weight'), 'members': rest, 'model_calls_for_three_deer': 1}
 
 
+@case('night')
 def night_case(run):
     """Reorganization at night (mind/sleep.rs): with LIVING_NIGHT covering the whole day and no
     gap, a mind that integrated once goes to sleep in the night's batch round; under the timer
@@ -1251,6 +1328,7 @@ def night_case(run):
     return {'status': 'pass', 'night': int(line[1])}
 
 
+@case('jev')
 def jev_case(run):
     """A cached judgment drives a graph (mind/judge.rs; `judged` condition): a defender whose
     graph flees while `fight_risk` is above 0.6 is struck; the fake Jev answers 0.9; the mind
@@ -1280,6 +1358,9 @@ def jev_case(run):
     judged = [e for e in run.exchanges() if e['purpose'] == 'judge']
     assert judged and judged[0]['judged'][0]['q'] == 'fight_risk'
     return {'status': 'pass', 'judgments': len(judged), 'value': cached[0]['value']}
+# Stacked decorators register bottom first: rethink, then rethink-llm.
+@case('rethink-llm', arm='llm')
+@case('rethink', arm='jev')
 def rethink_case(run, arm):
     """The rethink gate (mind/rethink.rs; `LIVING_RETHINK=jev|llm`) in front of non-urgent
     deliberations. The fake judge holds by default and answers per marker in the request: a
@@ -1383,6 +1464,7 @@ def rethink_case(run, arm):
     return {'status': 'pass', 'arm': arm, 'verdicts': verdicts, 'stats': stats[-1], **out}
 
 
+@case('resident')
 def resident_case(run):
     """On the island every resident has a mind from the start (an AI character the world
     admin controls): this service thinks for it, it answers a player through `mind_say`,
@@ -1448,7 +1530,7 @@ def resident_case(run):
     # complete set (`replace: true`). Send that update as the service would: the places the
     # resident was given at world creation must survive a set that does not name them.
     run.admin('mind_update', rid, {'persona': {'none': []}, 'relations': [], 'beliefs': {'none': []}, 'judgments': [],
-                                   'places': [{'name': 'verify after', 'x': 41.0, 'y': 61.0}], 'thought': {'none': []}, 'replace': True})
+                                   'places': [{'name': 'verify after', 'x': 41.0, 'y': 61.0}], 'thought': {'none': []}, 'replace': True, 'cues': {'none': []}})
     places = {p['name'] for p in run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-after')}
     assert 'verify after' in places and places_before <= places, (places_before, places)
     final = run.sql(f'SELECT * FROM character WHERE id = {rid}', 'resident-final')[0]
@@ -1458,6 +1540,7 @@ def resident_case(run):
             'places_kept': sorted(places_before), 'places_after': sorted(places)}
 
 
+@case('parked')
 def parked_case(run):
     """A line heard while the listener's deliberation runs waits for it to end and then gets its
     reply turn (talk.rs `deliberation_ended`), unless that deliberation spoke to the speaker."""
@@ -1505,6 +1588,7 @@ def parked_case(run):
     return {'status': 'pass', 'talk_turns': len(talks())}
 
 
+@case('alongside')
 def alongside_case(run):
     """LIVING_PARK=concurrent (talk.rs `turn_alongside`, `deliberation_decided`, `unanswered_say`):
     (1) a line heard just after a deliberation's prompt was built gets its turn while the think
@@ -1587,6 +1671,7 @@ def alongside_case(run):
     return {'status': 'pass', 'talk_turns': len(talks())}
 
 
+@case('greet')
 def greet_case(run):
     """LIVING_GREET (talk.rs `Facts::drawn`, `faced`): with the world keeping who heard each line
     (`speech_audience`), a stranger's line to no one, said with two residents within 6 m, draws
@@ -1684,6 +1769,7 @@ def greet_case(run):
     return {'status': 'pass', **results}
 
 
+@case('reasons')
 def reasons_case(run):
     """A deliberation consumes the reasons its prompt contained (living_rules::reasons,
     `clear_deliberation`). The mind's plan finishes every few seconds and each model call takes
@@ -1753,6 +1839,7 @@ def system_text(body):
     return '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'system')
 
 
+@case('frame')
 def frame_case(run):
     """LIVING_FRAME=player: a person's think, compile, talk and consolidation requests open with
     the player frame, as sent (fake log) and as journaled; a starting identity is not framed; a
@@ -1807,6 +1894,7 @@ def frame_case(run):
             'journaled_framed': sum(f for _, f in journaled), 'journaled': len(journaled), 'bad_value_exit': bad.returncode}
 
 
+@case('speech')
 def speech_case(run):
     """Speech through a mind (docs/COMMUNICATION.md): a talk reply's `way` reaches `mind_say`
     (a way the world does not have is said aloud), a name that is news reaches the mind as an
@@ -1898,6 +1986,7 @@ def speech_case(run):
             'heard_rows': len(heard), 'consolidation_tagged': tagged, 'whispered_back': whispered, 'called_back': called}
 
 
+@case('queued')
 def queued_case(run):
     """A plan's queued line overtaken by a reply (`speech_truth`, brain.rs `line_overtaken`;
     docs/COMMUNICATION.md §15). The plan holds a line for the newcomer until the newcomer stands
@@ -2002,11 +2091,17 @@ def queued_case(run):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--run', required=True, help='new suite name starting with minds- (gate- for the merge scene gate)')
-    parser.add_argument('--case', action='append', choices=CASES, help='repeat to select; default all')
+    parser.add_argument('--run', help='new suite name starting with minds- (gate- for the merge scene gate)')
+    parser.add_argument('--case', action='append', choices=list(CASES), help='repeat to select; default all')
+    parser.add_argument('--list', action='store_true', help='print the registered cases, one per line, and exit')
     parser.add_argument('--no-unit-tests', action='store_true',
                         help="skip living-mind's cargo tests (the merge's scene gate runs them as its own case, mind-unit)")
     args = parser.parse_args()
+    if args.list:
+        print('\n'.join(CASES))
+        return 0
+    if not args.run:
+        parser.error('--run is required')
     if not re.fullmatch(r'(minds|gate)-[a-zA-Z0-9-]+', args.run):
         parser.error('--run must start with minds- (or gate- for the merge scene gate)')
     with urllib.request.urlopen(os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/') + '/v1/ping', timeout=5) as response:
@@ -2031,7 +2126,7 @@ def main():
         run = Run(args.run + '-' + case)
         print(f'RUN {case} {run.directory}', flush=True)
         try:
-            result = run_case(run, case)
+            result = CASES[case](run)
         except Exception as error:
             (run.directory / 'failure.txt').write_text(traceback.format_exc())
             result = {'status': 'fail', 'error': f'{type(error).__name__}: {error}'}

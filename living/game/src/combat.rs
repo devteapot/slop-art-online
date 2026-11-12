@@ -425,7 +425,8 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
                 }
             }
             seen::WITNESS => {
-                if !c.witnesses.contains(&r.actor) {
+                // Id 0 is no one (an actor the authority keeps from me): never a "someone".
+                if r.actor != 0 && !c.witnesses.contains(&r.actor) {
                     c.witnesses.push(r.actor);
                 }
             }
@@ -498,7 +499,7 @@ pub fn input(
     ui: Res<crate::hud::UiWants>,
     cards: Res<Cards>,
     mut scripted: ResMut<Scripted>,
-    (pointer, mut talk): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>),
+    (pointer, mut talk, rules): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>, NonSend<crate::verbs::Rules>),
     mut c: ResMut<Combat>,
     (binds, roles, mut weapon, taps): (Res<crate::keys::Binds>, Res<Roles>, ResMut<crate::weapon::Weapon>, Res<crate::keys::DoubleTap>),
 ) {
@@ -598,6 +599,9 @@ pub fn input(
             releases.push(card.skill.clone());
         }
     }
+    // A committed move of mine running its course: a press over it is still sent (the authority
+    // decides and says why), but nothing of it is predicted (no clip, no guard raised).
+    let mine = rules.scripts.as_ref().zip(crate::net::find_fighter(conn, me_id)).and_then(|(sc, f)| my_committed(sc, &cards, &f, now));
     for (skill, aim, tgt) in presses {
         let Some(card) = cards.by_name(&skill) else { continue };
         let given = aim.is_some() && card.aim == "dash";
@@ -621,6 +625,10 @@ pub fn input(
         let r = conn.reducers.use_skill_then(skill.clone(), target_id, point.x, point.y, net.on_reply("skill", "use_skill", args));
         net.report("skill", r);
         c.pressed.insert(skill.clone(), now);
+        if held(mine.as_ref(), card.aim == "dash") {
+            info!("combat: {skill} pressed during my {}: sent, not predicted", mine.as_ref().map_or("", |m| m.0.as_str()));
+            continue;
+        }
         if look(card).clips.len() > 1 {
             c.strikes = c.strikes.wrapping_add(1);
         }
@@ -640,6 +648,36 @@ pub fn input(
                 c.predicted = None;
             }
         }
+    }
+}
+
+/// A committed move of mine under way (committed-moves: the rules' `committed`, docs/COMBAT.md):
+/// its skill and whether it is a dash, while it winds up (before its release) or dashes (before
+/// its end), from my fighter row. It runs its whole course: movement keys wait (the authority
+/// holds them, `combat::resume_move`), and a press starts nothing over it but a dash over a windup.
+pub fn my_committed(sc: &living_rules::script::Scripts, cards: &Cards, f: &Fighter, now: f64) -> Option<(String, bool)> {
+    let card = cards.by_code(f.act).filter(|_| f.act != 0)?;
+    committed_now(sc, &card.skill, f.act_ms, f.release_ms, f.until_ms, now).map(|dash| (card.skill.clone(), dash))
+}
+
+/// Whether `skill`, started at `act_ms`, runs its course now, by the world's script: its
+/// `<skill>_combat()` spec's `committed` (a world's laws may turn it off for one skill, and then
+/// the client predicts a cancel again), a windup before its release or a dash before its end.
+/// `Some(dash)` when it does.
+pub fn committed_now(sc: &living_rules::script::Scripts, skill: &str, act_ms: u64, release_ms: u64, until_ms: u64, now: f64) -> Option<bool> {
+    let shape = sc.shapes().get(skill)?;
+    let dash = shape.aim == living_rules::combat::Aim::Dash;
+    let under_way = if dash { now < until_ms as f64 } else { (act_ms as f64) <= now && now < release_ms as f64 };
+    (shape.committed && under_way).then_some(dash)
+}
+
+/// Whether a press would start over `cur` (a committed move under way: its skill, whether a
+/// dash): the authority's `held_by`, so the client predicts nothing it will refuse. Only a dash
+/// cuts in on a committed windup.
+pub fn held(cur: Option<&(String, bool)>, press_dash: bool) -> bool {
+    match cur {
+        None => false,
+        Some((_, cur_dash)) => !(press_dash && !cur_dash),
     }
 }
 
@@ -860,4 +898,36 @@ pub fn cooldown(conn: &DbConnection, me: u32, skill: &str, now_ms: f64) -> Optio
     let t = r.ready.iter().find(|t| t.skill == skill)?;
     let left = (t.at_ms as f64 - now_ms) / 1000.0;
     (left > 0.0).then(|| (left as f32, (t.at_ms - t.from_ms) as f32 / 1000.0))
+}
+
+#[cfg(test)]
+mod committed_tests {
+    use super::{committed_now, held};
+
+    #[test]
+    fn committed_comes_from_the_world_script_per_skill() {
+        let shipped = include_str!("../../scripts/skills.rhai");
+        let sc = living_rules::script::Scripts::new(shipped).expect("shipped script");
+        // A strike winding up (started at 1000, released at 1650) runs its course; a dodge too.
+        assert_eq!(committed_now(&sc, "strike", 1000, 1650, 1900, 1200.0), Some(false));
+        assert_eq!(committed_now(&sc, "strike", 1000, 1650, 1900, 1700.0), None);
+        assert_eq!(committed_now(&sc, "dodge", 1000, 1000, 1300, 1200.0), Some(true));
+        // A world that turns it off for the strike: no longer held, the dodge still is.
+        let line = shipped.lines().find(|l| l.starts_with("fn strike_combat()")).expect("strike_combat");
+        let off = shipped.replace(line, &line.replace("committed: true", "committed: false"));
+        let sc = living_rules::script::Scripts::new(&off).expect("script without a committed strike");
+        assert_eq!(committed_now(&sc, "strike", 1000, 1650, 1900, 1200.0), None);
+        assert_eq!(committed_now(&sc, "dodge", 1000, 1000, 1300, 1200.0), Some(true));
+    }
+
+    #[test]
+    fn a_press_over_a_committed_move_is_held_but_a_dash_over_a_windup() {
+        let windup = ("strike".to_string(), false);
+        let dodge = ("dodge".to_string(), true);
+        assert!(!held(None, false) && !held(None, true));
+        // Over a committed windup: anything but a dash waits; a dash cuts in.
+        assert!(held(Some(&windup), false) && !held(Some(&windup), true));
+        // Over a dash: nothing starts, a guard or another dash alike.
+        assert!(held(Some(&dodge), false) && held(Some(&dodge), true));
+    }
 }

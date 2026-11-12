@@ -1,6 +1,6 @@
 # Breath, tiredness and focus (stamina-1)
 
-Built 2026-11-11 on the Spark (branch `stamina-1`) from the approved [proposal](STAMINA_PROPOSAL.md) and the general coordinator's decisions. This note says what the rules and the authority do now, where the numbers live, the data path, and where the build departs from the proposal. Evidence is in the branch's verification records (`.agents/skills/verify-*/references/validation.md`).
+Built 2026-11-11 on the Spark (branch `stamina-1`) from the approved [proposal](STAMINA_PROPOSAL.md) and the general coordinator's decisions. This note says what the rules and the authority do now, where the numbers live, the data path, and where the build departs from the proposal. Evidence is in the branch's verification records (`.agents/skills/verify-*/references/validation/history.md`).
 
 ## What changed
 

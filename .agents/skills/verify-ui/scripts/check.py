@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes film pick turns look-walk bar offers wheel wheel-workplace grid support (default: all but support, wheel-workplace and grid, which need a Cullet world)
+  check.py --run RUN [SCENARIO ...]      default: every scenario but those that need a Cullet world
+  check.py --list                        the scenarios, in the order they are defined (* needs Cullet)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -21,11 +22,41 @@ V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 W, H = 1600, 900
 
 
+# The scenarios, by name, in the order they are defined below: each registers itself with
+# @scenario. CULLET: those the default run leaves out, because they need a Cullet world.
+SCENARIOS = {}
+CULLET = set()
+
+
+def scenario(name, cullet=False):
+    def register(function):
+        assert name not in SCENARIOS, f"scenario {name} registered twice"
+        SCENARIOS[name] = function
+        if cullet:
+            CULLET.add(name)
+        return function
+    return register
+
+
 def sql(run, q):
     r = subprocess.run([sys.executable, V, "sql", "--run", run, q], capture_output=True, text=True)
     t = r.stdout
     i = t.find("[")
     return json.loads(t[i:]) if i >= 0 else []
+
+
+def sql_as_player(run, q):
+    """SQL as verify.py's player identity (`$V player join`), through its views."""
+    r = subprocess.run([sys.executable, V, "sql", "--run", run, q, "--as-player"], capture_output=True, text=True)
+    t = r.stdout
+    i = t.find("[")
+    return json.loads(t[i:]) if i >= 0 else []
+
+
+def call_admin(run, reducer, args):
+    """An admin reducer call (scene setup or restore), its output for evidence."""
+    r = subprocess.run([sys.executable, V, "call", "--run", run, reducer, json.dumps(args), "--as-admin"], capture_output=True, text=True)
+    return r.stdout + r.stderr
 
 
 def residents(run, n=2):
@@ -117,6 +148,7 @@ def apart(d):
     return True
 
 
+@scenario("windows")
 def windows(run, c):
     s = "windows"
     plan = ("ready;wait:2;shot:01_explore;dump:01;click:@menu;wait:0.4;shot:02_menu;dump:02;click:@menu:Settings;wait:0.5;shot:03_settings;dump:03;"
@@ -142,6 +174,7 @@ def windows(run, c):
     c.check(s, "Esc again opens Menu (and frees the cursor)", d["12"] and d["12"]["menu"] and "Esc with nothing open: Menu, cursor freed" in log(out))
 
 
+@scenario("talk")
 def talk(run, c):
     s = "talk"
     a, b = residents(run)
@@ -250,6 +283,7 @@ def talk(run, c):
     c.check(s, "every act toward them (More…) leaves out face: a player faces where it looks (play-test 5)", len(more) > 3 and not any(r == "face" or r.startswith("face ") for r in more), str(more))
 
 
+@scenario("items")
 def items(run, c):
     s = "items"
     a, b = residents(run)
@@ -303,6 +337,7 @@ THEMES = ["glass", "clear", "night", "linen", "walnut"]  # F4's order (`ui::wood
 
 
 
+@scenario("themes")
 def themes(run, c):
     s = "themes"
     n = len(THEMES)
@@ -333,6 +368,7 @@ def themes(run, c):
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
 
 
+@scenario("film")
 def film(run, c):
     """The film (`post::Film`, Settings › Play › Film): a fresh settings file starts in Soft and
     saves no choice; Settings sets Full and None and the file keeps the last; the next start reads
@@ -368,6 +404,7 @@ def act(actor, a):
     return "mind_act|%d|%s|\"verify-ui\"" % (actor, json.dumps([inner]))
 
 
+@scenario("offers")
 def offers(run, c):
     """A resident's swap and terms, offered to the player (admin `mind_act`, as a mind decides):
     each a card in the maker's window; its buttons are the rules' skills on `offer` (Accept,
@@ -454,6 +491,7 @@ SUPPORTS = [
 AWAY = (540.5, 766.5)
 
 
+@scenario("support", cullet=True)
 def support(run, c):
     """What I stand on or step onto never fades (the owner's Cullet walk: the flight dithered away
     while climbing it). Needs a Cullet world (`--seed cullet`) and the cutaway's debug log."""
@@ -495,6 +533,7 @@ def support(run, c):
     c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
 
 
+@scenario("pick")
 def pick(run, c):
     """Two people overlapping on screen: the cursor on the one in front (its chest, with the one
     behind standing where the cursor's ground point falls) names, hovers and addresses that one.
@@ -537,6 +576,7 @@ def pick(run, c):
     c.check(s, "two bodies asked onto one spot, overlapping on screen: the same one every frame, the nearest the camera under the cursor", len(set(unders)) == 1 and unders[0] in (a, b) and all(front(x) == unders[0] for x in st), f"under {unders}, front of those under the cursor {[front(x) for x in st]}")
 
 
+@scenario("bar")
 def bar(run, c):
     """The cluster on the rules' bar (`bar_places`): sheathed, the hostile slots are greyed with
     their reason and X draws; a press the rules refuse is noted in their words and flashes its
@@ -589,6 +629,7 @@ def ground(d):
     return ((d or {}).get("extra") or {}).get("cursor_ground")
 
 
+@scenario("turns")
 def turns(run, c):
     """The cursor while the view turns or zooms (Cullet walk 1, the owner: a pan turned the view
     and carried the cursor off with it). A two-finger pan, a pinch either way and a left drag,
@@ -774,6 +815,7 @@ def compare_fov(snap, dumps, me):
     return out
 
 
+@scenario("field")
 def field(run, c):
     """Facing sight (`fov_on`): off, the client draws no field (its dumps have no facing); on (F5
     through the admin link), the field and its readout appear, and at four looks the authority's
@@ -1244,6 +1286,7 @@ def look_walk_others(run, c):
         json.dump({"other": other, "twist_median": tw, "legs_off_median": legs, "frames": len(walking), "authority": row}, open(os.path.join(out, "others.json"), "w"), indent=1)
 
 
+@scenario("look-walk")
 def look_walk(run, c):
     """`look-walk` (play-test 5, item 2): every preset, or `LOOK_WALK_PRESETS=chest,head`;
     `LOOK_WALK_REUSE=1` checks the last drives' feet logs again, `LOOK_WALK_RECORD=1` also records
@@ -1272,6 +1315,7 @@ def look_walk(run, c):
     c.check(s, "the settings file keeps it", saved == "head", str(saved))
 
 
+@scenario("wheel")
 def wheel(run, c):
     """The wheel (docs/INTERFACE.md §8): hold F on a resident, the held cursor picks a section,
     letting go chooses; Esc and the hub send nothing; a flick opens it with its direction; a
@@ -1318,6 +1362,7 @@ def wheel(run, c):
         c.check(s, f"after closing ({k}) the cursor is where it was (1 px)", bool(ok), str((x0, x1)))
 
 
+@scenario("wheel-workplace", cullet=True)
 def wheel_workplace(run, c):
     """A fuel fire's wheel on Cullet (a furnace, oven, hearth or smokehouse with no one by it):
     Make pinned north and Feed east; with the fire out, Make
@@ -1355,6 +1400,7 @@ def wheel_workplace(run, c):
     c.check(s, "and the authority's words are noted", len((d["04"] or {}).get("notes") or []) > 0, str((d["04"] or {}).get("notes")))
 
 
+@scenario("grid", cullet=True)
 def grid(run, c):
     """A recipe grid (recipes-1, docs/INTERFACE.md example 4), on Cullet: at a cold hearth the
     wheel's Make opens the grid, every cell greyed with the rules' reason; fed (Feed › wood) it
@@ -1399,6 +1445,7 @@ def grid(run, c):
     c.check(s, "the authority made it: ash in the pack", first != "ash" or got >= 1, f"ash {got}")
 
 
+@scenario("walk-law")
 def walk_law(run, c):
     """Settings › Play › Walk speed (stamina-1 made walk_base live): the row reads the world's
     `walk_base` law from the installed script and, through a play scene's admin link, writes it
@@ -1429,6 +1476,7 @@ def walk_law(run, c):
     c.check(s, "2.6 chosen again: three chips", len(chips("06")) == 3 and sel("06") == ["2.6 m/s"], str(chips("06")))
 
 
+@scenario("pools")
 def pools(run, c):
     """stamina-1's pools on the bar: the focus bar ("Mana", `while_short`) shows only while short;
     a slot whose pool is short of its cost greys in the rules' own words (`short_of`: "not enough
@@ -1456,6 +1504,7 @@ def pools(run, c):
     c.check(s, "refilled to its max again, the mana bar goes", "focus" not in ms("02"), str(list(ms("02"))))
 
 
+@scenario("own")
 def own(run, c):
     """mind-act-outcome-far (force_outcomes): my own strikes, shots and casts get an `own`
     act_outcome row and experience line. The client takes notes and Log events only from `act`
@@ -1487,6 +1536,7 @@ def own(run, c):
 UNHEARD_SPOT = (300.0, 330.0)
 
 
+@scenario("unheard")
 def unheard(run, c):
     """speech-truth (`speech_truth`, on by default): a line nobody could hear gets the authority's
     truthful `silence` row and a `reach` act outcome. The client shows those words once, as a
@@ -1559,6 +1609,7 @@ FAR = "someone too far away to make out"
 FAR_LAW = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
 
 
+@scenario("far")
 def far(run, c):
     """far-label in the client: someone too far away to make out keeps the authority's words in
     the talk target (and the Log), while their plate and hover read "someone in blue" from the
@@ -1600,19 +1651,293 @@ def far(run, c):
     notes_clear(c, s, out)
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far}
+@scenario("committed")
+def committed(run, c):
+    """committed-moves in the client: a windup or a dash, once started, runs its whole course.
+    A fire bolt (R) cast at the ground and W pressed during its windup: the authority keeps the
+    windup (the bolt goes) and holds the walk, which follows once it ends; the client draws no
+    movement meanwhile (the dump's `me_at`: drawn, and the authority's row). Then a dodge (`dodge:D`)
+    and the guard (Q) pressed mid-dodge: the rules' refusal ("in the middle of a dodge") once,
+    quietly, as a note; the dodge completes; the guard is sent but not predicted (client.log)."""
+    s = "committed"
+    cards = {r["skill"]: r for r in sql(run, "SELECT skill, windup_ms, recover_ms FROM skill_card")}
+    wb = (cards.get("firebolt") or {}).get("windup_ms", 600) / 1000.0
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}"]
+    plan = ("ready;sync:noon;sync:spot;wait:2;key:KeyX:tap;wait:0.6;cursor:0.5,0.3;wait:0.3;dump:a0;"
+            f"key:KeyR:down;wait:0.08;key:KeyW:down;wait:0.05;dump:a1;wait:{max(wb / 2 - 0.13, 0.05):.2f};dump:a2;wait:{wb / 2 + 0.2:.2f};key:KeyR:up;dump:a3;"
+            "wait:1.2;dump:a4;key:KeyW:up;wait:1.8;dump:b0;dodge:D;wait:0.06;key:KeyQ:down;wait:0.12;dump:b1;key:KeyQ:up;wait:1.0;shot:02_dodged;dump:b2;quit")
+    out, code, text = drive(run, s, plan, syncs=syncs)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("a0", "a1", "a2", "a3", "a4", "b0", "b1", "b2")}
+    at = lambda k, w: ((d[k].get("me_at") or {}).get(w))
+    pos = lambda k, w: (lambda v: (v["x"], v["y"]) if isinstance(v, dict) else (tuple(v) if v else None))(at(k, w))
+    dist = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 if a and b else None
+    still = [dist(pos("a0", w), pos(k, w)) for k in ("a1", "a2") for w in ("body", "drawn")]
+    c.check(s, "W pressed in the windup: neither the authority's body nor the drawn one moves", all(x is not None and x < 0.1 for x in still), f"windup {wb:.2f} s; moved {still}")
+    after = dist(pos("a0", "body"), pos("a4", "body"))
+    c.check(s, "the walk follows once the windup ends (held, then resumed)", after is not None and after > 0.5, f"{after}")
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    bolts = [r for r in (sql(run, f"SELECT id, kind, skill, why FROM act_outcome WHERE observer = {me}") if me else []) if r.get("skill") == "firebolt"]
+    c.check(s, "the authority kept the windup: the bolt went (its outcome told)", bool(bolts), str(bolts)[:200])
+    notes = [n for k in ("a1", "a2", "a3", "a4") for n in d[k].get("notes") or []]
+    c.check(s, "no note of a cancel while walking was held", not any("moved" in n.lower() or "broke off" in n.lower() for n in notes), str(notes))
+    mid = [n for k in ("b1", "b2") for n in d[k].get("notes") or [] if "middle of a dodge" in n]
+    c.check(s, "the guard mid-dodge: the rules' words, once, as a note", len(set(mid)) == 1 and all(n.count("middle of a dodge") == 1 for n in mid), str([d[k].get("notes") for k in ("b1", "b2")]))
+    dodged = dist(pos("b0", "body"), pos("b2", "body"))
+    c.check(s, "the dodge completes", dodged is not None and dodged > 1.5, f"{dodged}")
+    c.check(s, "the guard was sent but not predicted", "pressed during my dodge: sent, not predicted" in log(out), "client.log")
+
+
+def seed_names(run):
+    """The proper names the seed this world was made from gives people and places (residents,
+    their first names, buildings, plan lots and spots), from `living/seeds/<seed>.json`."""
+    st = json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json")))
+    path = os.path.join(ROOT, "living/seeds", f"{st.get('seed', 'island')}.json")
+    if not os.path.exists(path):
+        return []
+    seed = json.load(open(path))
+    names = set()
+    for t in seed.get("towns") or []:
+        names.add(t.get("name") or "")
+        for r in t.get("residents") or []:
+            n = (r.get("name") or "").strip()
+            names.add(n)
+            first = n.split(" ")[0]
+            if len(first) >= 3 and first[:1].isupper():
+                names.add(first)
+        for b in t.get("buildings") or []:
+            names.add(b.get("name") or "")
+    for plan in ((seed.get("map") or {}).get("params") or {}).get("plans") or []:
+        for lot in plan.get("lots") or []:
+            names.add(lot.get("name") or "")
+            for sp in lot.get("spots") or []:
+                names.add(sp.get("name") or "")
+    # Proper names only (a capital letter): spots such as "bench by the door" or "gate" describe
+    # a thing anyone sees, and would match a thing's kind.
+    out = set()
+    for n in names:
+        n = n.strip()
+        n = n[4:] if n.lower().startswith("the ") else n
+        if len(n) >= 3 and any(ch.isupper() for ch in n):
+            out.add(n)
+    return sorted(out)
+
+
+def leaked(texts, names, given):
+    """Seed names found in the shown texts, but those the authority gave me (a known name, a
+    place of mine). A name with a capital matches as written; a lower-case one as a phrase."""
+    allowed = set()
+    for g in given:
+        allowed.add(g)
+        allowed.update(w for w in g.split(" ") if len(w) >= 3)
+    hits = []
+    for where, t in texts:
+        for n in names:
+            if n in allowed:
+                continue
+            found = (n in t) if any(ch.isupper() for ch in n) else re.search(rf"\b{re.escape(n)}\b", t, re.I) is not None
+            if found:
+                hits.append((where, n, t[:80]))
+    return hits
+
+
+def naming_of(out):
+    """Every dump's `naming` texts, and what the authority gave me to name."""
+    texts, given = [], set()
+    for f in sorted(glob.glob(os.path.join(out, "*.json"))):
+        try:
+            d = json.load(open(f)) or {}
+        except (ValueError, OSError):
+            continue
+        if not isinstance(d, dict):
+            continue
+        texts.extend((f"{os.path.basename(f)}:{k}", t) for k, t in d.get("naming") or [])
+        given.update(d.get("known_names") or [])
+        given.update(d.get("given_places") or [])
+    return texts, given
+
+
+@scenario("names", cullet=True)
+def names(run, c):
+    """perceived-names-1's guard: a fresh player on a world from a named seed (Cullet) points at
+    residents, opens their wheel, the talk box, the Log and its People, and a person's window. No
+    text that names a person or a place on screen (the dump's `naming`) holds a seed resident's
+    name, a first name, a building's or a plan lot's or spot's name the player was not given (the
+    dump's `known_names`, `given_places`)."""
+    s = "names"
+    seeded = seed_names(run)
+    c.check(s, "the seed names people and places", len(seeded) > 0, f"{len(seeded)} names")
+    st = json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json")))
+    people = {r["id"] for r in sql(run, "SELECT id, kind, alive FROM character WHERE kind = 'person'") if r.get("alive")}
+    bodies = [r for r in sql(run, "SELECT id, x, y FROM body") if r["id"] in people]
+    arrive = (sql(run, "SELECT arrive_x, arrive_y FROM land") or [{}])[0]
+    ax, ay = arrive.get("arrive_x", 0.0), arrive.get("arrive_y", 0.0)
+    near = sorted(bodies, key=lambda r: (r["x"] - ax) ** 2 + (r["y"] - ay) ** 2)[:4]
+    steps = "".join(f"point:{r['id']};wait:0.7;dump:p{i};key:KeyF:down;wait:0.7;dump:w{i};key:KeyF:up;wait:0.2;key:Escape:tap;wait:0.3;"
+                    f"point:{r['id']};wait:0.4;key:Enter:tap;wait:0.6;dump:t{i};key:Escape:tap;wait:0.3;" for i, r in enumerate(near))
+    plan = ("ready;wait:5;dump:00;" + steps + "key:KeyL:tap;wait:0.6;dump:log;click:@log:tab:1;wait:0.6;dump:people;click:@log:person:0;wait:0.8;dump:window;"
+            "click:@log:tab:2;wait:0.5;dump:events;quit")
+    token = os.path.join(ROOT, ".local/living/verify", run, "ui", f"names-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, extra=["--token", token, "--player", "Newcomer"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    texts, given = naming_of(out)
+    kinds = {w.split(":")[1] for w, _ in texts}
+    c.check(s, "names were on screen: plates, the talk box, the Log", {"plate", "talk"} <= kinds, f"{sorted(kinds)}; {len(texts)} texts; residents pointed at {[r['id'] for r in near]}")
+    hits = leaked(texts, seeded, given)
+    c.check(s, "no person or place is named by a seed name the player was not given", not hits, f"{hits[:6]}; given {sorted(given)[:8]}")
+
+
+@scenario("death")
+def death(run, c):
+    """The death screen names no one it should not (perceived-names-1). An admin's `kill` whose
+    cause names a resident (code `other`) says "You died", not the cause; killed by a stranger
+    (verify.py's player identity, striking with the scene's sharper, free strike) says "Killed by"
+    the stranger as perceived ("a stranger in …"), never their name. Each drive is a fresh player."""
+    s = "death"
+    rid = residents(run, 1)[0]
+    real = (sql(run, f"SELECT id, name FROM character WHERE id = {rid}") or [{}])[0].get("name", "")
+    d = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    os.makedirs(d, exist_ok=True)
+    tok = lambda k: os.path.join(d, f"death-{k}-{int(time.time())}.token")
+    # 1. An admin's cause that names someone.
+    plan = "ready;wait:3;dump:00;sync:kill;wait:3;shot:01_died;dump:01;quit"
+    out, code, text = drive(run, "death-other", plan, syncs=[f'kill=kill|{{me}}|"killed by {real}"'], extra=["--token", tok("other"), "--player", "Fallen"])
+    c.check(s, "client ran and joined (killed by the admin)", code == 0, text[-300:])
+    dt = (dump(out, "01") or {})
+    words = [t for k, t in dt.get("naming") or [] if k == "death"]
+    c.check(s, "a cause that names someone: the screen says only You died", words[:1] == ["You died"] and not any(real and real in t for _, t in dt.get("naming") or []), f"{words}; resident {real!r}")
+    # 2. Killed by a stranger.
+    subprocess.run([sys.executable, V, "player", "--run", run, "join", "Striker"], capture_output=True, text=True)
+    me2 = (sql_as_player(run, "SELECT * FROM my_characters") or [{}])
+    striker = next((r["id"] for r in me2 if r.get("alive")), None)
+    sname = next((r.get("name") for r in me2 if r.get("id") == striker), "Striker")
+    c.check(s, "the stranger who strikes is a living player character", striker is not None, str(me2)[:200])
+    # A sync runs once per name (drive.py waits for NAME.go): one name per strike.
+    hits = "".join(f"sync:hit{i};wait:0.9;" for i in range(8))
+    plan = "ready;wait:3;sync:sharp;sync:near;wait:1.5;dump:00;" + hits + "wait:2;shot:02_killed;dump:02;sync:blunt;quit"
+    syncs = ['sharp=set_world_law|"dmg_strike"|"40";set_world_law|"cost_strike"|"0"', f"near=place_at|{striker}|(mx+0.9)|(my)",
+             *[f'hit{i}=player|use_skill|strike|{{me}}|(mx)|(my)' for i in range(8)], 'blunt=set_world_law|"dmg_strike"|"5";set_world_law|"cost_strike"|"20"']
+    try:
+        out, code, text = drive(run, "death-struck", plan, syncs=syncs, extra=["--token", tok("struck"), "--player", "Struck"])
+    finally:
+        call_admin(run, "set_world_law", ["dmg_strike", "5"])
+        call_admin(run, "set_world_law", ["cost_strike", "20"])
+    c.check(s, "client ran and joined (struck)", code == 0, text[-300:])
+    dt = (dump(out, "02") or {})
+    words = [t for k, t in dt.get("naming") or [] if k == "death"]
+    c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and words[0].startswith("Killed by a stranger") and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}")
+
+
+@scenario("houses")
+def houses(run, c):
+    """owner-known in the client: a structure is named by its kind, "{name}'s {kind}" only once
+    my character knows the owner by name (`my_known_names`), "your {kind}" when mine. The scene
+    holds a resident beside the arrival and puts a house by them (admin `place_structure`: owned
+    by them); a fresh player points at it ("house"); the resident says their name to the player
+    (admin `mind_say`, the speech minds use: an introduction), and it reads "{name}'s house"; a
+    house put by the player reads "your house"."""
+    s = "houses"
+    b = residents(run, 1)[0]
+    bname = (sql(run, f"SELECT id, name FROM character WHERE id = {b}") or [{}])[0].get("name", "")
+    # On open grass, cleared (anyone within 25 m put 40 m east): the cursor's aim takes a body
+    # before a thing, so neither the owner nor I stand by a house when it is pointed at.
+    ax, ay = UNHEARD_SPOT
+    people = {r["id"]: r.get("name") for r in sql(run, "SELECT id, name, kind FROM character WHERE kind = 'person'")}
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] != b and people[x["id"]] != "Verifier" and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 25):
+        call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
+    call_admin(run, "set_behavior", [b, json.dumps({"wait": 600})])
+    call_admin(run, "place_at", [b, ax + 4.0, ay + 4.0])
+    time.sleep(1.0)
+    before = {r["id"] for r in sql(run, "SELECT id FROM structure")}
+    call_admin(run, "place_structure", [b, "house"])
+    theirs = [r for r in sql(run, f"SELECT id, kind, owner, x, y FROM structure WHERE owner = {b}") if r["id"] not in before]
+    c.check(s, "a house of the resident's on the cleared spot", len(theirs) == 1, str(theirs))
+    if not theirs:
+        return
+    # Off the house, within the 9 m speech carries to where I will stand (their name must reach me).
+    call_admin(run, "place_at", [b, ax + 5.0, ay - 3.0])
+    h = theirs[0]
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}", f'intro=mind_say|{b}|"I\'m {bname}."|{{me}}|""|0|{thought}',
+             'mine=place_structure|{me}|"house"', f"off=place_at|{{me}}|{ax - 3.0}|{ay}"]
+    plan = (f"ready;sync:noon;wait:1;sync:spot;wait:2;pointat:{h['x']},{h['y']};wait:1.2;shot:01_house;dump:01;"
+            f"sync:intro;wait:3;pointat:{h['x']},{h['y']};wait:1.2;shot:02_theirs;dump:02;"
+            f"sync:mine;wait:1;sync:off;wait:2;pointat:{ax + 0.8},{ay};wait:1.2;shot:03_mine;dump:03;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"houses-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, syncs=syncs, extra=["--token", tok, "--player", "Lodger"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    aim = lambda k: [t for w, t in (dump(out, k) or {}).get("naming") or [] if w == "aim"]
+    every = [t for k in ("01", "02", "03") for _, t in (dump(out, k) or {}).get("naming") or []]
+    c.check(s, "a stranger's house: the kind alone, no owner", aim("01") == ["house"] and not any(bname in t for _, t in (dump(out, "01") or {}).get("naming") or []), f"{aim('01')}; owner {bname!r}")
+    known = (dump(out, "02") or {}).get("known_names") or []
+    c.check(s, "told their name, I know them (my_known_names)", bname in known, f"{bname!r} in {known[:8]}")
+    c.check(s, "then it is their house, by name", aim("02") == [f"{bname}'s house"], str(aim("02")))
+    c.check(s, "a house of mine: your house", aim("03") == ["your house"], str(aim("03")))
+
+
+@scenario("shot")
+def shot(run, c):
+    """fix-missile-told in the client: an arrow on me is told as a shot, by the shooter as my
+    character perceives them when it sees them, else by the arrow alone; the weapon's note is
+    that line ("A stranger shot you with an arrow: hit for 7. Your weapon is drawn."), never an
+    "attacked" of ours beside it; an unseen shooter (the feed's id 0) is named, targeted and
+    plated by nothing. verify.py's player identity ("Striker", given a bow and arrows, held still)
+    shoots a fresh player at noon on open grass from 6 m (in sight), then, the weapon sheathed
+    again, from 16 m (beyond the 11 m one sees by day, within the bow's 22)."""
+    s = "shot"
+    subprocess.run([sys.executable, V, "player", "--run", run, "join", "Striker"], capture_output=True, text=True)
+    mine = sql_as_player(run, "SELECT * FROM my_characters")
+    striker = next((r["id"] for r in mine if r.get("alive")), None)
+    sname = next((r.get("name") for r in mine if r.get("id") == striker), "Striker")
+    c.check(s, "the shooter is a living player character", striker is not None, str(mine)[:200])
+    if striker is None:
+        return
+    for item, n in (("bow", 1), ("arrow", 6)):
+        call_admin(run, "grant_items", [striker, item, n])
+    call_admin(run, "set_behavior", [striker, json.dumps({"wait": 600})])
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}",
+             f"near=place_at|{striker}|(mx+6.0)|(my)", f"far=place_at|{striker}|(mx+16.0)|(my)", "shoot1=player|use_skill|bowshot|{me}|(mx)|(my)", "shoot2=player|use_skill|bowshot|{me}|(mx)|(my)",
+             "hurt1=sql|SELECT id, hurt_by, hurt_ms FROM vitals WHERE id = {me}", "hurt2=sql|SELECT id, hurt_by, hurt_ms FROM vitals WHERE id = {me}"]
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:near;wait:2;dump:00;sync:shoot1;wait:2.2;sync:hurt1;shot:01_seen;dump:01;"
+            "weapon:sheathe;wait:0.6;sync:far;wait:2.5;dump:02;sync:shoot2;wait:2.5;sync:hurt2;shot:02_unseen;dump:03;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"shot-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, syncs=syncs, extra=["--token", tok, "--player", "Target"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("00", "01", "02", "03")}
+    seen = lambda k: set(d[k].get("perceived") or [])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    lines = sorted(sql(run, f"SELECT id, kind, subject, text, at_ms FROM experience WHERE observer = {me} AND kind = 'attacked'") if me else [], key=lambda r: r["at_ms"])
+    c.check(s, "the authority told both arrows as shots: by the shooter in sight, by the arrow alone unseen", len(lines) >= 2 and "shot you with" in lines[0]["text"] and lines[0]["subject"] == striker and "could not see" in lines[-1]["text"] and lines[-1]["subject"] == 0, str([(l["subject"], l["text"]) for l in lines])[:400])
+    n1 = d["01"].get("notes") or []
+    c.check(s, "in sight: the shooter is seen, and the note is the authority's shot, the weapon drawn", striker in seen("00") and any("shot you with" in n and "Your weapon is drawn" in n for n in n1) and not any("attacked you" in n for n in n1) and (d["01"].get("extra") or {}).get("drawn") is True, f"{n1}; seen {sorted(seen('00'))}")
+    n3 = d["03"].get("notes") or []
+    c.check(s, "out of sight: the shooter is not seen, and the note says the arrow came from somewhere unseen", striker not in seen("02") and any("could not see" in n for n in n3) and (d["03"].get("extra") or {}).get("drawn") is True, f"{n3}; seen {sorted(seen('02'))}")
+    # fix-unseen-killer-id: `my_vitals.hurt_by` names the shooter only when my character sees them.
+    hurt = lambda k: ((((sc.get("snaps") or {}).get(k) or [{}])[0].get("rows") or [{}])[0])
+    h1, h2 = hurt("hurt1"), hurt("hurt2")
+    c.check(s, "hurt_by: the shooter in sight, 0 once unseen (a newer hurt)", h1.get("hurt_by") == striker and h2.get("hurt_by") == 0 and h2.get("hurt_ms", 0) > h1.get("hurt_ms", 0), f"{h1}; {h2}")
+    c.check(s, "nothing targets or hovers the hidden shooter, and the target plate is not theirs", d["03"].get("targeted") != striker and not any(h.get("id") == striker for h in d["03"].get("hovered") or []), f"targeted {d['03'].get('targeted')}; hovered {d['03'].get('hovered')}")
+    c.check(s, "the shooter's name is nowhere", not any(sname in t for k in d for _, t in d[k].get("naming") or []), sname)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", required=True)
+    ap.add_argument("--run")
+    ap.add_argument("--list", action="store_true", help="print the registered scenarios, one per line (* needs a Cullet world), and exit")
     ap.add_argument("scenarios", nargs="*")
     a = ap.parse_args()
+    if a.list:
+        print("\n".join(n + (" *" if n in CULLET else "") for n in SCENARIOS))
+        return
+    if not a.run:
+        ap.error("--run is required")
     if not f"verify-{a.run}".startswith("verify-ui-"):
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
-    # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
-    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace", "grid")]:
+    # The Cullet scenarios need a Cullet world (`--seed cullet`), the others the island's residents.
+    for name in a.scenarios or [k for k in SCENARIOS if k not in CULLET]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)
