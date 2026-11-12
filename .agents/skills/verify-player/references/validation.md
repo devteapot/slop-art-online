@@ -2,7 +2,7 @@
 
 ## 2026-11-12 committed-moves (Spark)
 
-Branch `committed-moves` from origin/main `2ff786aa`, an island run on the trial service. `player-commit-061743`: `combat.py` (all scenes) 39 of 39, then the new `committed` scene 2/2: a guard pressed mid-dodge refused "in the middle of a dodge" and the dodge whole (`made way`); a dodge pressed in a strike's windup still cuts in (the strike `broken off`, unreleased). The same scene on main `2ff786aa` (`player-cmain-062029`, a temporary worktree): 1 of 2, the guard broke the dodge off 0.07 m in: the one player-path change, recorded in docs/COMBAT.md "Committed moves".
+Branch `committed-moves` from origin/main `2ff786aa`, an island run on the trial service. `player-commit-061743`: `combat.py` (all scenes) 39 of 39, then the new `committed` scene 2/2: a guard pressed mid-dodge refused "in the middle of a dodge" and the dodge whole (`made way`); a dodge pressed in a strike's windup still cuts in (the strike `broken off`, unreleased). The same scene on main `2ff786aa` (`player-cmain-062029`, a temporary worktree): 1 of 2, the guard broke the dodge off 0.07 m in: the one player-path change, recorded in docs/COMBAT.md "Committed moves". After merging main `a07f5919` (with fix-missile-told's `shot`): `player-commitm-065415` all scenes 43 of 43.
 
 ## 2026-11-12 fix-missile-told (Spark)
 
