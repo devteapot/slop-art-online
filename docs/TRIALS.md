@@ -1153,6 +1153,31 @@ python3 living/tools/ooc.py .local/living/trials/<b>
 
 **Defect found (3.1, `force_outcomes`).** A melee kill is told to the killer with the victim's real name: "You finished: attack → person. killed Agnes Fenner (9)", where the killer knew her only as a stranger. The line's words are `act::damage`'s result, which names the victim by `common::display`; a missile's kill avoids it (`act::Far::Killed`, "struck a stranger and killed them"), a blow that resolves at its release does not. Before `force_outcomes` this reached minds only for `attack` (a notable skill); now it reaches every striker, players included. The fix is to tell a kill in the maker's terms (`label_for`) in `act.rs` `report`; not made here.
 
+### R2 heavy-blow re-run (`r2c`, 2 fights, $0.11)
+
+The two r2b heavy fights with no fight in them (r2: 0 exposures, the subject 11–12 m off; r4: 1, the foe 60 m away) run again with the fixed fixture, so the heavy arena has five fights with a fight in them: r2b r1, r3, r5 and r2c r1, r2.
+
+**Build and switches.** Trial module and `living-mind` built from origin/main `49dfc2cd`, branch `r2-heavy-rerun` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force, beyond r2b's: arena-heavy-fix (`561ba7a7`: the approach trigger, the heal in the pause), fix-missile-told (`7729fc9b`: no effect here, the heavy fixture is melee) and doing-percept (combat mind 3.2, `2ff786aa`, always on: each creature in a mind's scene shows what it is visibly doing and how far in, and graphs may read `doing`). `force_outcomes` on, `LIVING_SKILL_TIMINGS` on (main's defaults); `fov_on` off (the shipped default); the `default` variant (glm-flash, overflow deepseek-flash). Not in: fix-unseen-killer-id. The r2b and r2c fights are therefore not one build: r2c's minds also had 3.2's scene. Ran 2026-11-12, 06:29–06:41, 2 replicates of `arena-heavy`. The key loaded from a copied `.env`, deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 50 files. Evidence: `.local/living/trials/r2c/` (`arena_report.json`, `report.md`) in the `r2-heavy-rerun` checkout on the Spark.
+
+**`arena_report.py` fix.** A heavy blow refused at its release because the subject had moved away ("failed: they moved away") was counted as unanswered; by the measure's own definition (it did not land: out of reach) it is answered, and it now reads as `evaded`. r2b had no such outcome (its numbers are unchanged); five of r2c r2's exposures did.
+
+**Main measure, the five heavy fights with a fight in them:**
+
+| Fight | Exposures | Answered | K | End |
+|---|---|---|---|---|
+| r2b r1 | 4 | 0 | never | the subject killed the foe |
+| r2b r3 | 5 | 0 | never | the subject killed the foe |
+| r2b r5 | 2 | 0 | never | the subject killed the foe |
+| r2c r1 | 5 | 0 | never | the subject killed the foe after 5 heavies, through 4 heals |
+| r2c r2 | 20 | **7** (0 of the first 7, 6 of blows 8–14) | **8** | both lived the 10 minutes (the subject's lowest health 19.7; the foe healed 7 times) |
+| **All** | **36** | **7 of 36**: 0 of 15 in the first three, 7 of 21 after | once, at 8 | |
+
+- **One fight changed, after seven exposures, and the change came from the mind's plan.** In r2c r2 the subject traded blows in the pause for seven heavies, as every other subject did (its seeded reflex). At 186 s, 13 s after the seventh, the mind installed "Dodge his blow, answer with my spear, keep shouting for the household" (`threatened` weighted 3.0 in its desires); from then the body dodged about every 2 s for 40 s, and blows 8, 9 and 10 were dodged or missed it. At 229 s and 247 s the plan became "Break away from his swings, run for the hall … bind my wounds": blows 13 and 14 were refused as it moved off. It said what it saw: "he's found me again and he's already swinging — 3 metres off … I can only dodge this one blow and put distance between us before he winds up again" (exposure 12). At night it slept and the foe, following, found it ("He found me asleep and is swinging again"): blows 15–19 landed; then 18 bow shots, 14 of them hits, as it broke away.
+- **The fit is coarse.** Only 3 of its 77 dodges fell inside one of the foe's 20 windups: the answer is a dodge rhythm and running off, not a dodge timed to the 750 ms the blow shows, and it cost breath ("I have almost no breath left"). No graph in either fight read the new `doing` condition (0 of the subjects' graphs), and no reply cited a timing in ms; "recover" appears only from its own outcome lines ("still recovering from your last move").
+- **The fixture fix:** the foe approached in both fights (no fight lost to distance). It outlasted the subject in r2c r2, not in r2c r1, where the subject countered with three blows a pause, about 30 damage against a 22-point heal.
+- **Spoken ids:** 0 of 19 spoken lines.
+- **Cost and latency:** $0.108 ($0.041 and $0.067; 28 and 46 calls); think and compile p50 6.0 and 5.8 s.
+
 ### What the told outcome lines cost in a battle
 
 [`outcome_cost.py`](../living/tools/outcome_cost.py) on a scratch `verify-core` world (`core-r2cost-025725`, default seed, 186–188 people alive): 20 minded spear fighters (`spawn_crowd(20, true)`: held like a mind's, so their outcomes are told), packed 1.5 m apart, striking the nearest person, timed by `bench.py` (profiled tick spans, no subscribers) over a 22 s window per arm, each arm a fresh battle; the fighters' new experience rows were read during the window, so the lines of those who died count.
