@@ -73,7 +73,11 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **The eyes are drawn as the reference draws its own:** a broad dark lash band over the whole lid with an ink line along the lid's edge, flicks along its top and a fan of them at the outer corner; an iris with a thin dark rim, a darker upper half, a glow rising from the bottom and one large highlight; a lower line on the outer part only. The depths of step 3 and the `EyeIris` primitive are as they were.
   - **Lips and blush are a layer of their own over the skin,** in a fixed colour the client neither shades nor recolours. Painted into the skin, the skin's recolouring washed them out at every tone; as a layer they hold across Cullet's skin tones.
   - **One shading mean a class** ([one shading mean a class](#one-shading-mean-a-class)): outfit pieces, hair and far beards can each share one material; every piece a person wears has a colour in their line.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's shading (one colour with a soft band, where the reference paints a hard highlight and a dark edge) and long hair standing off the back, the brows' drawing, the face's painted softness, clothes and silhouette, hands.
+- **Pass 3, long hair, short hair and the hair's shading** ([long hair, short hair and the hair's shading](#long-hair-short-hair-and-the-hairs-shading)).
+  - **Long hair falls close to the back:** combed over the garment's own measured collar and back, gathered behind the shoulders, the front hair ending at the jaw. Styles that hang past the collar have a `.collar` file for a coat.
+  - **Short hair is one sheet** from the whorl to the hairline, where it was rings of tiles.
+  - **The highlight is one hard ring and the shadow one edge:** both are the client's, and every sheet's normals now come from one smooth shape so they are not broken into patches. The client needs nothing new.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the brows' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -927,6 +931,7 @@ python3 living/tools/characters/person_check.py OUT.glb NAME.params.json [--own 
 - **A type's file holds the skin that shows:** the head, the neck and the hands. There is no torso, arm or leg skin in any file: the clothes are the body, as they were, so no hidden skin is drawn.
 - **A piece holds only what shows of it in the outfit it belongs to.** A jersey is three files: whole (worn alone), as worn under a coat (its front, collar and cuffs) and as worn under a smock (its collar and cuffs). Trousers and boots are whole in every outfit.
 - **Hair under a cap** is the style's `.cap` file, cut where the cap covers it. Under a kerchief it is the style `kerchief`.
+- **Long hair over a coat** is the style's `.collar` file (`long`, `tail` and `braid`, each cut), combed over the coat's collar ([long hair](#long-hair-short-hair-and-the-hairs-shading)).
 - **A tie** (a braid's, a tail's) is a second mesh in its hair style's file, in cloth, and attaches with it.
 
 **The files.** Every piece is built once (`person.py --variant piece:<name> --parts keep`), on the standard head and at the standard build (weight and muscle 0). It holds the `Cloth` mesh and its far mesh `FarCloth`, skinned to the `J_Bip_*` bones every generated file shares, with outline normals and widths, and no clips.
@@ -1127,7 +1132,7 @@ Pass 3, after the hair's finish (2026-11-12). The reference draws hair as broad 
 | Styles | Sheets |
 |---|---|
 | `bob`, `bob_parted`, `long`, `shag` | One curtain round the sides and back from the ear's front; a sheet a side from the parting over the top; one from the crown down the back; the fringe; a small sheet at each temple. A `bob`'s ends turn under; `long` ends in a few long points; `shag` in more, deeper ones |
-| `crop`, `short`, `tousled`, `swept`, `sides`, `balding` | Rings of short sheets round the head, one over the next as tiles lie, each cut into points; the rings wander up and down so they do not read as rows. `tousled` splays its points and turns them out |
+| `crop`, `short`, `tousled`, `swept`, `sides`, `balding` | (Since replaced by one sheet: [short hair is one sheet](#long-hair-short-hair-and-the-hairs-shading).) Rings of short sheets round the head, one over the next as tiles lie, each cut into points; the rings wander up and down so they do not read as rows. `tousled` splays its points and turns them out |
 | `tail`, `bun`, `braid`, `braids`, `kerchief` | The scalp's hair as two sheets drawn to the tie (from the hairline all round, and from the top); the tail a sheet rolled into a tube that ends in three points; the fringe |
 | Single locks | The locks at the ears' front, sideburns, a bun's coils and a braid's leaves stay locks |
 
@@ -1225,6 +1230,65 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **A smock's sleeve bands are a piece of their own,** `smock_bands-m` and `-f` (320 triangles, 0.04 MB), with their own colour in the line, as the apron is. The bands were faces of the smock in another cloth, and would have taken the smock's hue. A piece needs nothing new from the client; a second tag inside one file would have needed a second mesh and a new key. A person in a smock wears the bands, so wears one more piece.
 
 **Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
+
+### Long hair, short hair and the hair's shading
+
+Pass 3, after the nose wedge (2026-11-12). Three things the board showed: long styles flared out behind the shoulders as one flat plane, like a cape; short and tousled styles read as clumps or tiles close up and from behind; and where the reference has a hard highlight band and a dark edge, ours was one colour with a soft band. The file names, `hair_fit`, the far mesh, the spring chains and the outline data are as they were.
+
+**Long hair falls close to the back.**
+
+- **Why it was a cape.** Hair was combed over a rough body: a capsule for the shoulders, 3.5 cm larger than the figure all round. Long hair hung straight down from the head's widest point and stopped on that capsule, so it lay on a plane the head's width, 3 to 5 cm behind the back.
+- **It now lies on the garment itself.** The collar and the back are measured on the pieces at the standard build: the collar as a cone about the neck's axis by height, the back as an ellipse by height (`person.py make_hair`: `cone`, `back`). A smock's collar ends at 1.530 m, 9.6 cm from the axis; a coat's at 1.570 m, 12.4 cm.
+- **It is gathered behind the shoulders.** Below the collar's top each column is drawn toward the middle of the back and in to its surface as it hangs (`Hair.sheet(gather=…)`, `_walk`). A hanging sheet's own volume and its standing off the sheet under it now end at the nape.
+- **The hair in front of the ears ends at the jaw** (`front_end`). Hanging on to the chest it could not go behind the shoulder with the rest: it lay in front of it as a thin tail, and that tail's end was the hook that kicked forward at the collar.
+- **The two sides meet down the middle of the back** (`over(back_th=88)`), as parted hair does. They were fanned apart and a third sheet from the crown covered the gap; drawn in with the rest that sheet hung the hair's whole length as a narrow panel. It is gone, from `long`, `bob`, `bob_parted` and `shag`.
+- **Over a coat: `.collar` files.** A shared style is combed over a smock. A coat's collar stands 4 cm higher and 3 cm wider, so hair that lies close on a smock cuts through it. The styles that hang past the collar (`long`, `tail`, `braid`; `person_params.COLLARED`) are also written as combed over a coat, each cut: `long.collar`, `long.2.collar` and so on, nine files. A person in a coat with one of those styles is given the `.collar` file in their line (`worn()`), as a person in a cap is given the `.cap` file. Over a jersey alone the plain file is used and stands about a centimetre off the back.
+
+**Short hair is one sheet.**
+
+- **`crop`, `short`, `tousled`:** one sheet from a small ring round the whorl out over the whole scalp to the hairline all round, its hem cut into points (`Hair.cap`), closed over the whorl by a low cone. `short` and `tousled` have a second, shorter one over the top for the cut's volume. Rings of short sheets laid like tiles read as tiles, each ring with its own edge and outline; one sheet has one hem.
+- **`sides`, `balding`:** one sheet from a line round the head down to the hairline (`Hair.skirt`), left out where the crown is bald or a cap covers it.
+- **`swept`:** the cap, and one sheet from the front hairline combed back over it. Its two rows of loose sheets stood up at the crown as flaps.
+- **Sideburns** are a small sheet a side where they were six short locks, which read as a clump in front of the ear.
+- **Greying blends.** A lock went grey whole, one lock in so many. On a sheet's points that made grey tiles beside coloured ones. A sheet's points now all take the head's share of grey, each a little more or less.
+
+**The shading.**
+
+- **What the reference's highlight is in our renderer.** The asset board shows the reference through the client, and the client draws one highlight on anything tagged as hair: a ring round the head where the surface's normal leans up by a set angle, broken into comb teeth along the strands, and a hard edge where the surface turns from the sun (`hair_light` and the bands in `living/game/src/toon.wesl`). The reference's hard band and dark edge on the board are those two, on its smooth normals. Ours has had the same shader since `hair-rim-1`.
+- **Why ours did not show them.** A sheet's normal was half its own facing, so the ring and the shadow's edge broke at every sheet's edge into patches. Over that lay a soft lighter band in the vertex colours, added when the client's rim washed hair out. And the board's type sheets were photographed with every hair normal turned to the camera (`compose.py --hair-toward`, a stand-in from before `hair-rim-1`), which removes both the ring and the edge from the picture. That option is no longer used for the board.
+- **Now: one smooth shape.** Every sheet's normals are those of one smooth shape round the head, with a fifth of the sheet's own facing over the head and half where the hair hangs (`hair.py`: `RING_TILT`, `RING_FROM`; `face_normals.py` then draws them 0.35 toward the head's capsule, as before). The client's ring is one hard toothed band about 5 cm below the top of the head, and its shadow one edge across the whole head of hair. The soft band is gone.
+- **The dark edge in the file:** a sheet's ends are drawn 22% darker over its last fifth (`HEM_DARK`), so the hem reads as a line; inner surfaces are 0.55 of the outer, as before.
+- **One shading mean, as before.** The strand picture is unchanged (its whole mean 0.55), and every hair mesh's outer surfaces have mean 0.78 (`shade_mean.py --check`: 159 files, 0 off).
+
+**What the client needs:** nothing new.
+
+- The ring's strength, width and height are its own settings (`hair_ring` 0.7, `hair_ring_width` 0.05, `hair_ring_shift` 0.35 in `style.rs`), and the files are made for those values.
+- A `.collar` file is loaded by the name in the person's line, like a `.cap` file. A composer that builds the hair's path from `styles.hair` needs no change; one that lists the hair files it knows needs the nine names.
+- If the ring is wanted nearer the reference's, that is client work and two numbers: the teeth are 2.4 mm wide on our hair (`uv.x * 90` on a picture that repeats every 22 cm round the head) where the reference's strands make them about three times as wide, and the ring is drawn full strength all the way round where the reference's breaks at its strands.
+
+**What it costs.**
+
+| | Before | After |
+|---|---|---|
+| Hair files on disk | 50, 13.4 MB | 59, 16.9 MB (nine are `.collar` files, 3.3 MB) |
+| `crop` | 3,272 triangles near and 1,168 far, 0.23 MB | 4,404 near and 1,298 far, 0.29 MB |
+| `short` | 3,760 near and 1,254 far, 0.26 MB | 5,648 near and 1,520 far, 0.36 MB |
+| `tousled` | 3,796 near and 1,298 far, 0.26 MB | 4,796 near and 1,402 far, 0.31 MB |
+| `long` | 9,572 near and 2,464 far, 0.57 MB | 8,472 near and 2,080 far, 0.50 MB |
+| `bob` | 5,304 near and 1,436 far, 0.33 MB | 5,148 near and 1,404 far, 0.32 MB |
+| Hair files Cullet's 64 wear | 30, 8.6 MB | 33, 10.2 MB (four people wear a `.collar` file) |
+| All shared files the 64 wear | 97, 35.3 MB | 100, 36.9 MB |
+| Everything on disk | 171 files, 50.9 MB | 180 files, 54.4 MB |
+
+A short style costs more than its rings did: a sheet over the whole scalp has faces under its upper layer that the rings did not have.
+
+**What is left** (judged on the board's `hair-short`, `hair-long` and `hair-people` sheets, under the client's own hair light):
+
+- **The ring is a whole circle on a short round head** seen from behind or above, where the reference's long hair shows it as an arc. It is the client's ring on a dome; see the client's two numbers above.
+- **`tousled` is calmer than it was.** One sheet with its points turned out is tidier than rings of splayed tiles; the reference's loose hair has single strands lifting off, which ours has none of.
+- **A seam runs down the middle of the back** on parted styles, where the two sides meet. Close up one side can sit a millimetre or two over the other.
+- **`long` over a coat is fuller at the collar** than over a smock: it has to clear a collar 12 cm from the neck's axis.
+- **`long` on a bare type head** lies on a smock that is not there; on a person it lies on theirs.
 
 ### Type files
 
@@ -1572,6 +1636,14 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
+**After long hair, short hair and the hair's shading**, judged on the board's `hair-short`, `hair-long` and `hair-people` sheets with the reference beside ours, ordered by how much it shows:
+
+1. **The brows** are strands where the reference draws one tapered stroke.
+2. **Hair, what is left.** The shapes and the shading are now the reference's kind: broad sheets, one hard ring, one shadow edge, long hair on the back. The reference's hair still has single strands lifting off at the ends and a fringe in a few thick locks; ours is smoother and plainer, most on `tousled`. The ring is a whole circle on a short round head. A seam runs down the back of parted styles.
+3. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top, its glow hotter.
+4. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+5. **Clothes and silhouette, hands** (unchanged). Long hair now shows how plain the smock's back and collar are.
+
 **After step 6**, judged on the board's `eyes-close`, `faces-close` and `lips-blush-sweep` sheets with the reference beside ours, ordered by how much it shows:
 
 1. **Hair.** Long hair stands off the back as one flat plane where the reference's falls close to it; the shading is one colour with a soft band where the reference paints a hard highlight and a dark edge; short styles read as clumps from behind. Next.
@@ -1682,7 +1754,7 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 7. **Hair finish.** Done ([hair finish and cuts](#hair-finish-and-cuts)): the fringe, the ends, the temple; three cuts of every style; far beards.
 8. **Hair as sheets.** Done ([hair as sheets](#hair-as-sheets)).
 9. **The eyes' drawing, lips and blush.** Done ([the eyes, lips and blush](#the-eyes-lips-and-blush)).
-10. **Long hair close to the back,** then **hair's shading** (the reference's hard highlight and dark edge) with the short styles' clumps. Next.
+10. **Long hair close to the back, short hair as one sheet, hair's shading.** Done ([long hair, short hair and the hair's shading](#long-hair-short-hair-and-the-hairs-shading)).
 11. **Later:** the brows as one stroke; the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
 
 Each pass page sets two references beside ours: the VRoid control, and a still from Blue Protocol's published character material (one of the owner's named art references), for comparison only. The stills are kept outside the repository, in `~/archive/asset-board/references/blue-protocol/`, with their sources.
