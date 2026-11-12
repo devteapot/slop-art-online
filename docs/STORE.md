@@ -397,6 +397,7 @@ The steps are the same on every machine. The gate is per machine and per upload.
    ```bash
    python3 -m venv ~/.slop-store-venv && ~/.slop-store-venv/bin/pip install huggingface_hub
    ```
+   `just living-store` runs the venv's Python when it exists, and `python3` otherwise. Without the library, a Hugging Face publish or fetch is refused as soon as the gate passes, before anything is packed, and the message names the venv. On 2026-11-12 the Spark had no venv: the `gq1` upload got through its checks and failed at the import, with nothing sent. The venv was recreated with `huggingface_hub` 2.4.0.
 3. **Token.** `~/.config/slop-store/hf_token`, mode 600. It is already installed; check it with `stat -f %Lp ~/.config/slop-store/hf_token` (macOS) or `stat -c %a …` (Linux). The tool reads no other token.
 4. **Dry run first, and read it.**
    ```bash
