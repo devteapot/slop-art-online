@@ -33,12 +33,15 @@
 //! are not in a material: each mesh carries its own in its tag, and the shader moves the
 //! material's source colour to it (`toon.wesl` `recolor`, mode 3). What a material brings is its
 //! content (the glTF material, its picture, its kind of shading, a face's shadow map) and that
-//! source colour: the mean of the texels or vertex colours its file's meshes use (near meshes
-//! first), worked out once and quantised to 1/1024 (`characters::recolor_source`). A toon is
-//! keyed by both, so two files share one exactly when every tag draws the same on either, and
-//! `recolor` keeps the source it was given. Files whose pieces are built around one shading mean
-//! then share one material. `LIVING_GAME_PERF=filestyles` (measurement only) keys one a file and
-//! material name, as before, to compare.
+//! source colour (`characters::source_mean`): its picture's whole mean, else the mean of its
+//! file's vertex colours (near meshes first), set on the toon when it is made and kept by
+//! `recolor`. A file's material shares a toon already made with the same content whose source
+//! colour is within [`SAME_SOURCE`] of its own, so every tag draws the same on either to below a
+//! step of the screen's 8 bits; else it makes its own. The generator builds each class of style
+//! files around one shading mean (docs/CHARACTERS.md, "One shading mean a class"): every outfit
+//! piece's `Cloth` is then one toon, and every hair cut's hair one (their one picture's mean).
+//! `LIVING_GAME_PERF=filestyles` (measurement only) keys one a file and material name, as before,
+//! to compare.
 //!
 //! **Colours** go through the mesh tag as recipes recolour today (`recolor`, mode 3): hair by its
 //! `_HAIR` material, skin by `_SKIN`, an outfit piece by its own name in the line's
@@ -75,6 +78,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub const TYPES: &str = "lookdev/types";
 /// Where style files are (`hair/<style>.glb`, `outfit/<piece>.glb`).
 pub const STYLES: &str = "lookdev/styles";
+/// How close two style files' source colours must be (linear, each channel) to share a toon:
+/// under one 8-bit step, so sharing moves no colour the screen shows.
+pub const SAME_SOURCE: f32 = 0.004;
+
 /// Outfit pieces worn on the head: attached with the type's `hair_fit`, as hair is.
 const HEAD_PIECES: [&str; 2] = ["cap", "kerchief"];
 
@@ -280,7 +287,8 @@ struct PlanMesh {
 #[derive(Resource, Default)]
 pub struct Plans {
     plans: HashMap<(String, String, bool), Option<Arc<Plan>>>,
-    toons: HashMap<String, Handle<Toon>>,
+    /// By content: each source colour made, and its toon.
+    toons: HashMap<String, Vec<(Vec3, Handle<Toon>)>>,
     file_toons: HashMap<String, Handle<Toon>>,
     /// A type's rest (bind) world matrix by joint name.
     rests: HashMap<String, Arc<HashMap<String, Mat4>>>,
@@ -352,21 +360,23 @@ impl Composer<'_> {
         // material. Without it (a picture not yet readable) the material is the file's own and
         // `recolor` finds it from the first mesh, as for any character.
         let meshes: Vec<&Mesh> = sources.iter().filter_map(|m| self.meshes.get(m)).collect();
-        let source = super::source_mean(&base, &meshes, &self.thumbs, &self.images).map(super::recolor_source);
-        let key = match source {
-            Some((_, from)) if !crate::perf::has("filestyles") => format!("{kind:?} {face_map:?} {from:?} {base:?}"),
-            _ => own.clone(),
-        };
-        let h = match self.plans.toons.get(&key) {
-            Some(h) => h.clone(),
+        let source = super::source_mean(&base, &meshes, &self.thumbs, &self.images);
+        let content = format!("{kind:?} {face_map:?} {base:?}");
+        let shared = source.filter(|_| !crate::perf::has("filestyles")).and_then(|src| {
+            self.plans.toons.get(&content)?.iter().find(|(m, _)| (*m - src).abs().max_element() < SAME_SOURCE).map(|(_, h)| h.clone())
+        });
+        let h = match shared {
+            Some(h) => h,
             None => {
                 let mut toon = self.style.kind(base, kind, face);
-                if let Some((recolor, from)) = source {
+                if let Some((recolor, from)) = source.map(super::recolor_source) {
                     toon.extension.params.recolor = recolor;
                     toon.extension.params.recolor_from = from;
                 }
                 let h = self.toons.add(toon);
-                self.plans.toons.insert(key, h.clone());
+                if let Some(src) = source {
+                    self.plans.toons.entry(content).or_default().push((src, h.clone()));
+                }
                 h
             }
         };

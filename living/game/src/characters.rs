@@ -972,11 +972,13 @@ fn mean_color(toon: &Toon, mesh: &Mesh, thumbs: &Thumbs) -> Option<Vec3> {
     (wsum > 0.0).then(|| sum / wsum * base)
 }
 
-/// A recolour's source colour over several meshes of one material (linear): the mean of its
-/// picture's texels the meshes use (from its summary, or from its pixels while they are still on
-/// the CPU), else of their vertex colours by area, times its base colour. What `recolor` finds
-/// from one mesh, for a material shared between files (`compose.rs`). None while its picture is
-/// neither summarised nor readable.
+/// A shared style material's recolour source colour (linear), for `compose.rs`: its whole
+/// picture's mean (from its summary, or from its pixels while they are still on the CPU), else
+/// its meshes' vertex colours by area, times its base colour. A picture is shared by files
+/// whose meshes use different parts of it (every hair cut has the one strand picture, whose
+/// texels a short cut uses differ from a long one's), so its whole mean is the one value they
+/// agree on (docs/CHARACTERS.md, "One shading mean a class"). None while the picture is neither
+/// summarised nor readable.
 pub(crate) fn source_mean(base: &StandardMaterial, meshes: &[&Mesh], thumbs: &Thumbs, images: &Assets<Image>) -> Option<Vec3> {
     let b = base.base_color.to_linear();
     let b = Vec3::new(b.red, b.green, b.blue);
@@ -998,26 +1000,15 @@ pub(crate) fn source_mean(base: &StandardMaterial, meshes: &[&Mesh], thumbs: &Th
             &own
         }
     };
-    let (mut sum, mut wsum) = (Vec3::ZERO, 0.0);
-    for m in meshes {
-        let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) = m.attribute(Mesh::ATTRIBUTE_UV_0) else { continue };
-        let step = (uvs.len() / 4000).max(1);
-        for uv in uvs.iter().step_by(step) {
-            let c = thumb.at(uv[0], uv[1]);
-            sum += c.truncate();
-            wsum += c.w;
-        }
-    }
+    let (sum, wsum) = thumb.cells.iter().fold((Vec3::ZERO, 0.0), |(s, w), c| (s + c.truncate(), w + c.w));
     Some(if wsum > 0.0 { sum / wsum * b } else { b })
 }
 
-/// The recolour's material values for a source colour, quantised to 1/1024 so that two
-/// materials are given the same values exactly when their sources agree to below what the
-/// screen shows (`compose.rs` keys materials by them): mode 3 and `recolor_from`.
+/// The recolour's material values for a source colour: mode 3 and `recolor_from`, as `recolor`
+/// sets them from a mesh.
 pub(crate) fn recolor_source(mean: Vec3) -> (Vec4, Vec4) {
-    let q = |x: f32| (x * 1024.0).round() / 1024.0;
     let m = hsv(mean);
-    (Vec4::new(0.0, 0.0, 0.0, 3.0), Vec4::new(q(m.x), HUE_SPREAD, q(m.y), q(m.z)))
+    (Vec4::new(0.0, 0.0, 0.0, 3.0), Vec4::new(m.x, HUE_SPREAD, m.y, m.z))
 }
 
 /// Cells a side of a texture's summary.
