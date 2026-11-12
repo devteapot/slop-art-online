@@ -208,6 +208,33 @@ An estimate only. No paid battle runs until the 100-fighter collapse is understo
 - **The global cap binds before that** (below): **2 calls a second, $0.0026 a second, $0.16 a minute**. A 3-minute battle costs about **$0.47**.
 - **The total spend** rises by the cap's share: at 2 calls a second the queue's Urgent share is spent on fast calls, and the cap keeps the queue from flooding.
 
+**Measured (2026-11-12, fake model, free): the battle with the fast lane on and off.**
+- **Setup.** `battle_diag.py --battle 20 --walkers 0 --minutes 10`, without and with `--fast-lane`, on main `619e0f9a` (battle-scale, without battle-fold), the two arms side by side on the trial service.
+  - The island's 310 residents and 20 minded spear fighters packed at the battle site, refilled when killed (2 and 4 refills).
+  - The mind service on the fake model. Fast calls were answered "keep" after 1.0 s (r2e's model p50), so both arms fought the same battle.
+  - A 30 s profiled `bench.py` window a minute. The host was loaded by other work (load 35–61 on 20 cores, logged per window).
+  - Evidence: `.local/living/verify/minds-bfl-{off,on}-212141/` (`diag.jsonl`, `fast-NN.json`, the journal) in the `battle-fast-lane` checkout on the Spark.
+- **Calls.** 238 in 10 minutes; peak 45 a minute (0.75 a second) while the fight was hot, then 2–9 a minute as it thinned (both arms thinned alike, as BATTLE_SCALE.md's fake-model battle did).
+  - 216 calls came from blows taken, 22 from a move seen started for the third time.
+  - At most 3 issued in one second; in flight at most 4, so the in-flight cap was reached at times. At most 9 `fast_ask` rows.
+  - Wait from trigger to issue: 0.4 s p50, 4.2 s p90. Mostly the 6 s gap, at times the in-flight cap.
+  - The rate cap (2 a second) was not reached over a whole second's average: 0.75 a second at the peak minute.
+- **Cost a minute** (none spent: the fake model). These fighters' fast prompts were about 6,400 characters (about 1,600 tokens): newly spawned people with little to remember.
+  - At r2e's measured $0.0019 a call (12.2 k-token prompts, an arena subject's): **$0.09 a minute** at the peak, $0.045 over the 10 minutes.
+  - At this battle's prompt size: about $0.0006 a call, so **$0.03 a minute** at the peak.
+- **The tick: no cost found at 20 fighters.**
+
+  | | off | on |
+  |---|---:|---:|
+  | Ticks a second (median of 10 windows; min) | 58.7 (57.3) | 58.8 (56.2) |
+  | Tick p50 / p99 (median of windows, ms) | 2.75 / 12.6 | 2.24 / 10.2 |
+  | Ticks over 16.7 ms | 70 of 17,912 | 46 of 17,945 |
+  | `tick` work (ms a second, mean) | 164.9 | 148.6 |
+  | `tick.combat` (ms a second) | 37.9 | 28.8 |
+
+  The on arm was not slower; the differences run the other way and are within what the host's load moves. The lane's work (a trigger per blow, a turn per call, a row per fighter, a reply reducer per call) does not show at this size.
+- **What this does not answer.** 100 or 200 fighters (the collapse's scale, and battle-fold not yet in), and a real model's patches installed under load: here every reply kept the plan. So it does not settle default-on by itself.
+
 ### The bound that keeps a battle from flooding the queue
 
 - **Per character:** one in flight, the 6 s gap, merged triggers, stale drops (above).
