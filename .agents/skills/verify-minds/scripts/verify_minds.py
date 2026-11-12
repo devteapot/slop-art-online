@@ -1282,7 +1282,17 @@ def first_sight_case(run):
     for who in (m, u):
         run.admin('set_behavior', who, json.dumps({'wait': 300}))
     body = run.sql(f'SELECT * FROM body WHERE id = {m}', 'm-body')[0]
-    run.admin('place_at', u, body['x'] + 60.0, body['y'] + 60.0)
+
+    def place_off(who, offsets):
+        # The first offset with a free walkable tile (water, rock or a crowd may fill one).
+        for dx, dy in offsets:
+            try:
+                run.admin('place_at', who, body['x'] + dx, body['y'] + dy)
+                return (dx, dy)
+            except RuntimeError:
+                continue
+        raise RuntimeError(f'no free tile for {who} at any of {offsets}')
+    place_off(u, [(60.0, 60.0), (-60.0, 60.0), (60.0, -60.0), (-60.0, -60.0), (70.0, 0.0), (-70.0, 0.0), (0.0, 70.0), (0.0, -70.0)])
     run.admin('set_world_law', 'first_sight_thinks', 'true')
     # (no gap: M's opening thought may itself be a first sight of someone else in view)
     run.admin('set_world_law', 'first_sight_gap_s', '0')
@@ -1297,7 +1307,7 @@ def first_sight_case(run):
         time.sleep(30.0)
         seen_before = len(requests())
         t0 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
-        run.admin('place_at', u, body['x'] + 2.0, body['y'])
+        place_off(u, [(2.0, 0.0), (-2.0, 0.0), (0.0, 2.0), (0.0, -2.0), (1.5, 1.5), (-1.5, -1.5)])
         line = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {m}', 'experiences-m')
                                  if e['at_ms'] >= t0 and e['text'].startswith('For the first time you see') and u in (e['subject'], e['object'])], 'the first-sight line', 20)[0]['text']
         asked = run.wait(lambda: [sent_text(e) for e in requests()[seen_before:] if line in sent_text(e)], 'a think request carrying the line', 60)[0]
