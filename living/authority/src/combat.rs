@@ -577,6 +577,7 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
     for (skill, shape) in shapes.iter() {
         let c = living_rules::script::SkillCtx { actor: living_rules::script::ActorFacts { kind: "person".into(), stamina: 100.0, focus: 100.0, ..Default::default() }, skill: skill.to_string(), qty: shape.hold_ms, ..Default::default() };
         let missile = if shape.missile { sc.missile(skill, &c).ok() } else { None };
+        let timing = sc.timing(skill).unwrap_or_default();
         let reach = match (missile, shape.aim) {
             (Some(m), _) => m.range,
             (None, Aim::Dash) => sc.num_of(&format!("{skill}_dist"), "person", 0.0) as f32,
@@ -586,9 +587,9 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
             skill: skill.to_string(),
             slot: shapes.bar().iter().position(|b| b == skill).map_or(NOT_ON_BAR, |i| i as u8),
             cost: sc.num_of("combat_cost", skill, 0.0) as f32,
-            windup_ms: if matches!(shape.aim, Aim::Dash | Aim::Facing) { 0 } else { sc.duration_ms(skill, &c).unwrap_or(0) as u32 },
-            recover_ms: sc.num_of("combat_recover", skill, 0.0) as u32,
-            cooldown_ms: sc.num_of("combat_cooldown", skill, 0.0) as u32,
+            windup_ms: timing.windup_ms,
+            recover_ms: timing.recover_ms,
+            cooldown_ms: timing.cooldown_ms,
             reach,
             code: shape.code,
             aim: shape.aim.as_str().into(),

@@ -34,6 +34,11 @@ Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trial
 - Full suite `minds-arrive-172139` (load about 15, beside the paid greeting batch): roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink-llm, dealings and parked pass. Consolidation is its known XFAIL. `animals` failed at its known gap ("nothing new: no call", the 2026-11-11 lives-2 entry). `rethink` timed out waiting 40 s for its first gate, and passed alone (`minds-arrive-rt-175042`).
 - Trials free tier: `af1`, the `arrive` trial × five variants (`arrive-control`, `-notice`, `-known`, `-wonder`, `-all`), one replicate each, 14 minutes, `--fake --fake-script living/trials/fake/latency.json`. All five ran to their duration with every `record` file written. `arrive_report.py af1` reads them (docs/TRIALS.md, "Arrivals"). The first attempt hit the trial service's file-descriptor limit (about 120 kept databases); the coordinator cleaned up and raised the limit.
 
+
+## 2026-11-12 the timing of one's own known fighting moves (mind-skill-timings, Spark)
+
+Branch `mind-skill-timings` at c6af2ff6, the trial service (port 3320), fake model. Scoped maintain-verification-skill pass on `features/deliberation.md`: its citations brought to the current lines (`perceive.rs:270`, `mind.rs:1286`, `:1812`, authority `mind.rs:360`, `:409`, `brain.rs:517`), the `timings` case and `LIVING_SKILL_TIMINGS` mapped. Live: `minds-time3-234118` `roundtrip`, `acts`, `timings` pass, `minds-time3-off-234118-roundtrip` passes with the switch off; `reasons` passed in `minds-time3-233156`, and its later attempts stopped in the suite's own `cargo test -p living-mind` on two timing tests of `llm.rs` (`a_failed_poll_keeps_the_batch…`, `unreachable_provider_holds_calls`; the file is main's) at a load average of 76 on 20 cores.
+
 ## 2026-11-12 fix-dealings: `dealings` passes again on main (dev-box)
 
 Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 4–72 from other work.

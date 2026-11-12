@@ -348,6 +348,44 @@ pub struct MissileSpec {
     pub radius: f32,
 }
 
+/// A combat skill's timing as a person has it: what `skill_card` shows a player and what the
+/// minds' skill reference states (`Scripts::timing`, one source for both). Milliseconds.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Timing {
+    pub aim: Aim,
+    /// Before it takes effect (0 for a dash or a guard, which act at once).
+    pub windup_ms: u32,
+    /// After it, before the next move.
+    pub recover_ms: u32,
+    /// From its start until it can be used again.
+    pub cooldown_ms: u32,
+    /// The longest a guard is held.
+    pub hold_ms: u32,
+    /// A missile's speed (m/s), 0 for none.
+    pub speed: f32,
+}
+
+impl Timing {
+    /// The timing in words, for a mind's skill reference (docs/COMBAT_MIND.md §3.7).
+    pub fn words(&self) -> String {
+        let s = |ms: u32| if ms % 1000 == 0 && ms >= 1000 { format!("{} s", ms / 1000) } else { format!("{ms} ms") };
+        let then = if self.recover_ms > 0 { format!(", then {} to recover", s(self.recover_ms)) } else { String::new() };
+        let mut w = match self.aim {
+            Aim::Dash => format!("a dash at once{then}"),
+            Aim::Facing => format!("raised at once and held up to {}", s(self.hold_ms)),
+            _ if self.windup_ms > 0 => format!("winds up {} before it takes effect (others see it coming){then}", s(self.windup_ms)),
+            _ => format!("takes effect at once{then}"),
+        };
+        if self.speed > 0.0 {
+            w.push_str(&format!("; it flies {} m/s", (self.speed * 10.0).round() / 10.0));
+        }
+        if self.cooldown_ms > 0 {
+            w.push_str(&format!("; ready again {} after it starts", s(self.cooldown_ms)));
+        }
+        w
+    }
+}
+
 /// The radius of a body for missiles and blows (tiles).
 pub fn body_radius(kind: &str) -> f32 {
     match kind {
