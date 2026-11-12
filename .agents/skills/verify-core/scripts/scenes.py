@@ -591,6 +591,12 @@ def infant(s):
     for actor in (b, witness):
         s.call("place_near", actor, a)
     s.call("place_near", baby["id"], a)
+    # The warm anchor stands well beyond the cry's hearing (12 m), placed there: where
+    # spawn_crowd puts it is anywhere from 25 m (seen 26.98 and 28.68 against the 30 m check).
+    pa = s.rows(f"SELECT x, y FROM body WHERE id = {a}")[0]
+    for dx, dy in ((40, 0), (-40, 0), (0, 40), (0, -40), (32, 32), (-32, -32), (32, -32), (-32, 32)):
+        if s.call("place_at", warm_anchor, pa["x"] + dx, pa["y"] + dy, check=False).returncode == 0:
+            break
     s.call("place_structure", warm_anchor, "shelter")
     s.rows("SELECT * FROM relation", "relations")
     positions = {r["id"]: r for r in s.rows("SELECT * FROM body", "positions-before")}
@@ -775,9 +781,12 @@ def infant_cries(s, baby, a, b, carers, witness, warm_anchor):
         return math.hypot(positions[actor]["x"] - positions[baby["id"]]["x"], positions[actor]["y"] - positions[baby["id"]]["y"])
     s.expect("parents leave hearing and carers have unequal nearby distances", all(distance(p) > 12 for p in (a, b, witness))
              and distance(carers[0]) < distance(carers[1]) <= 12, {str(p): distance(p) for p in (a, b, witness, *carers)})
-    fallback = s.wait(lambda: [d for d in requests() if "crying" in d["reason"] and baby["name"] in d["reason"]], seconds=55)
+    # The cry names the baby only to one who knows its name (fix-kill-name: every told line
+    # names others as the teller perceives them); a fallback carer may know it only as "a baby".
+    cried = lambda r: "crying" in r and (baby["name"] in r or "a baby" in r.lower())
+    fallback = s.wait(lambda: [d for d in requests() if cried(d["reason"])], seconds=55)
     time.sleep(3)
-    fallback = [d for d in requests("fallback-requests") if "crying" in d["reason"] and baby["name"] in d["reason"]]
+    fallback = [d for d in requests("fallback-requests") if cried(d["reason"])]
     if not s.baseline:
         s.expect("exactly the nearest caring adult receives fallback", {d["actor"] for d in fallback} == {carers[0]}, fallback)
     s.rows("SELECT * FROM experience", "fallback-experiences")
@@ -2950,7 +2959,9 @@ def alarms(s):
         s.call("install_script", on)
         s.wait(lambda: len(s.told(a, word, "body")) >= 2, seconds=30)
         s.expect("ended and begun again, it is told again", len(s.told(a, word, "body")) == 2, s.told(a, word, "body"))
-        bad = compose(shipped, {"meters": 'fn meters() { base_meters() + [#{ name: "stamina", value: "stamina", max: 100.0 }] }'})
+        # (a meter of its own name over a field the row lacks: `stamina` is a shipped meter
+        # and a row field since stamina-1, so it no longer tests this)
+        bad = compose(shipped, {"meters": 'fn meters() { base_meters() + [#{ name: "thirst", value: "thirst", max: 100.0 }] }'})
         r = s.call("install_script", bad, check=False)
         out = (r.stdout or "") + (r.stderr or "")
         s.expect("a meter naming a field the vitals row lacks is refused at install", r.returncode != 0 and "not a my_vitals field" in out, out[-300:])
