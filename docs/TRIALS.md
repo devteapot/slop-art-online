@@ -331,19 +331,19 @@ Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.
 | measure | C | L | LS | LS + cues | target (L, LS) |
 |---|---|---|---|---|---|
 | in range (≤12 m during a stand) | 13 | 11 | 16 | 10 | about 10–16 |
-| asks | 2 (Roos Achterberg, 57 s; Cora Stannard) | 1 (Nan Fenwick) | 1 (Jory Greave) | **0** | 1–3, Aldous among them |
+| asks | 2 (Roos Achterberg, 57 s, out of earshot; Cora Stannard) | 1 (Nan Fenwick) | 1 (Jory Greave) | **0** | 1–3, Aldous among them |
 | approaches silently (deliberate only, since 2b) | 1 | 2 | 0 | 0 | 0–2 |
 | notices inwardly | 1 | **0** | **0** | **0** | 3–8 |
 | unaware | 9 (69%) | 8 (73%) | **15 (94%)** | **10 (100%)** | ≤6, ≤40% |
 | passed by on their own way (not counted as approaches) | 4 | 1 | 8 | 6 | — |
 | tells others (all residents) | 1 (Oswin Greave) | 1 (Nan Fenwick) | 3 (Tobiah Dunmore, Magda Tarn, Eilidh Roon) | **0** | 1–4, Ingrid in 2 of 4 runs |
-| first heard line after the join | 57 s (Roos) | 692 s (Nan) | 550 s (Jory) | none | within 5 minutes |
+| first heard line after the join | 892 s (Cora), corrected; first read 57 s (Roos) | 692 s (Nan) | 550 s (Jory) | none | within 5 minutes |
 | `converge_60s` / `together_4m` | 2 / 1 | 1 / 0 | 1 / 1 | 1 / 0 | ≤3 / ≤2 |
 | re-asks | 0 | 2 (Nan asked three more times) | 0 | 0 | — |
 | guards: false replies a min, repeated lines, `led_res` − placebo | 0.10, 0.07, −0.03 | 0.46, 0.00, +0.22 | 0.80, 0.00, −0.26 | 1.06, 0.03, +0.28 | within C's spread |
 | deliberations per resident-hour | 18.2 | 18.5 | 19.3 | 23.1 | (ar2: 24) |
 
-**Correction (2026-11-12, branch `earshot-stage`).** `arrive_spread.py` counted a line to the newcomer as out of earshot only when the speaker's `silence` row had the newcomer as its subject. When the newcomer is too far away to make out (past 24 m in Cullet), that row names them by the speaker's far handle instead (far-handle), so those lines counted as heard. Re-read with the fix: in C, Roos Achterberg's line at 57 s was out of earshot. C's lines to the newcomer out of earshot are 2, not 1, and its first heard line came at 892 s, not 57 s. L, LS and LS + cues are unchanged. The table above keeps the first figures.
+**Correction (2026-11-12, branch `earshot-stage`).** `arrive_spread.py` counted a line to the newcomer as out of earshot only when the speaker's `silence` row had the newcomer as its subject. When the newcomer is too far away to make out (past 24 m in Cullet), that row names them by the speaker's far handle instead (far-handle), so those lines counted as heard. Re-read with the fix: in C, Roos Achterberg's line at 57 s was out of earshot. C's lines to the newcomer out of earshot are 2, not 1, and its first heard line came at 892 s (Cora Stannard), not 57 s. L, LS and LS + cues are unchanged. The table above shows both figures. The same re-reading leaves stage 2 (`st2`) and fs1c unchanged.
 
 - **Not in shape.** No arm reaches the inward band or the unaware band, Aldous asked in no arm, and the cue arm has no asker.
 - **Aldous.** He was in range only in LS, classed unaware. He thought 4–6 times after the join in each arm, and stranger or arrival words came up only about other things ("me with a blank arrivals line waiting on names", LS + cues).
