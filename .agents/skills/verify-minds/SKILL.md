@@ -1,6 +1,6 @@
 ---
 name: verify-minds
-description: "Verify the living core's internal mind service with the real living-mind binary and a local fake model on scratch databases. Use when changing the mind protocol (requests, thoughts, installed graphs, mind_* reducers) or what a mind is sent and does: deliberation and deliberate acts, conversations and ways of speaking, consolidation, reconnect and takeover, level of detail and the rethink gate, the prompt frame, the mind service's LIVING_* switches, player memory, or trials."
+description: "Verify the living core's internal mind service with the real living-mind binary and a local fake model on scratch databases. Use when changing the mind protocol (requests, thoughts, installed graphs, mind_* reducers) or what a mind is sent and does: deliberation and deliberate acts, conversations and ways of speaking, consolidation, reconnect and takeover, level of detail and the rethink gate, attention cues, the prompt frame, the mind service's LIVING_* switches, player memory, or trials."
 ---
 
 # Verify internal minds
@@ -38,6 +38,12 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 ```
 
 `--case` can repeat. `verify_minds.py --list` prints every case, in the order they are defined (each registers itself with `@case` where it is defined); [features/README.md](features/README.md) maps each case to its feature file. `drop` and `resident` run on an island world, built in `.local/living/target-resident-island`, or in `CARGO_TARGET_DIR` when it is set. Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
+
+Attention cues (docs/ATTENTION.md) have their own driver with Neo4j, `scripts/cues_mind.py` ([features/cues.md](features/cues.md)), with the same environment as `privacy.py`:
+
+```bash
+.agents/skills/verify-minds/scripts/cues_mind.py --run minds-cues-${R#minds-}
+```
 
 Seeded island residents (docs/SEEDED_LIVES.md) have their own driver, `scripts/lives_mind.py` ([features/lives-mind.md](features/lives-mind.md)): on an island run the mind service thinks for the named residents from the start (`LIVING_ONLY`) and a player speaks to each, with a scratch Neo4j and the fake model (free) or `--real PROFILE` (paid, only when authorized), and checks that each knows its own past and people and no one else's secrets.
 

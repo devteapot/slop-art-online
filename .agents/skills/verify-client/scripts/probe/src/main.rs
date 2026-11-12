@@ -37,7 +37,7 @@ macro_rules! primary_tables {
             inventory, resource_node, structure, brain, mind_state, persona, relation,
             belief, judgment, place, thought, chronicle, stats, bond_offer, expecting,
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
-            routine, routine_stat, script, community, membership, join_request, genome,
+            routine, routine_stat, cue, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather,
             seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
             my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_act_outcomes, my_known_names);
@@ -138,6 +138,7 @@ fn snapshot(c: &DbConnection) -> Value {
         experience,
         routine,
         routine_stat,
+        cue,
         my_deliberations,
         script,
         community,
@@ -256,6 +257,11 @@ fn snapshot(c: &DbConnection) -> Value {
             .iter()
             .map(|r| json!({"id":r.id,"ok":r.ok,"failed":r.failed}))
             .collect();
+    let cues: Vec<_> =
+        c.db.cue()
+            .iter()
+            .map(|r| json!({"id":r.id,"actor":r.actor,"for_key":r.for_key,"refused":r.refused,"fires":r.fires}))
+            .collect();
     let brains: Vec<_> =
         c.db.brain()
             .iter()
@@ -278,7 +284,7 @@ fn snapshot(c: &DbConnection) -> Value {
             .collect();
     json!({"counts":counts,"ticks":c.db.stats().iter().next().map(|r|r.ticks),
         "characters":characters,"experiences":experiences,"thoughts":thoughts,
-        "deliberations":deliberations,"combat":combat,"skill_uses":skill_uses,"routines":routines,"routine_stats":routine_stats,
+        "deliberations":deliberations,"combat":combat,"skill_uses":skill_uses,"routines":routines,"routine_stats":routine_stats,"cues":cues,
         "brains":brains,"bodies":bodies,"chronicle":chronicle,"cursors":cursors,"perception":perception})
 }
 

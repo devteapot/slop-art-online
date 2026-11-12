@@ -48,6 +48,8 @@ python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
 python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 # A graph's "stranger" under the stranger_by_name law, off and on (features/graphs.md, about 30 s).
 python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&1
+# Attention cues under the cues_on law: once per thing, the cooldown and the gap, never a far figure, nothing off (features/cues.md, about 1.5 min).
+python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1

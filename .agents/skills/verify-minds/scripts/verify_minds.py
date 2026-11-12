@@ -1530,7 +1530,7 @@ def resident_case(run):
     # complete set (`replace: true`). Send that update as the service would: the places the
     # resident was given at world creation must survive a set that does not name them.
     run.admin('mind_update', rid, {'persona': {'none': []}, 'relations': [], 'beliefs': {'none': []}, 'judgments': [],
-                                   'places': [{'name': 'verify after', 'x': 41.0, 'y': 61.0}], 'thought': {'none': []}, 'replace': True})
+                                   'places': [{'name': 'verify after', 'x': 41.0, 'y': 61.0}], 'thought': {'none': []}, 'replace': True, 'cues': {'none': []}})
     places = {p['name'] for p in run.sql(f'SELECT * FROM place WHERE actor = {rid}', 'places-after')}
     assert 'verify after' in places and places_before <= places, (places_before, places)
     final = run.sql(f'SELECT * FROM character WHERE id = {rid}', 'resident-final')[0]
