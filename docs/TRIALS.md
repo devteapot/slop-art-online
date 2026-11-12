@@ -810,7 +810,7 @@ Control's 163 and 167 split the same way (deliberation 108 and 109, talk 36 and 
 
 **Evidence:** `.local/living/trials/es1` and `.local/living/journal/verify-trial-es1-*` in `~/slop-trials2b`.
 
-## Ways stage (run as `ew1`) — target, written before any paid call
+## Ways stage (run as `ew1` and `ew2`) — target, written before any paid call
 
 Approved by the general coordinator at about $2.5: one Cullet arm, once `mind-say-way` (a decision's line names its way, docs/COMMUNICATION.md §18) and the laptop's talk box on `human_speak` are both on main. The talk box does not enter the trial (the newcomer is scripted), so this measures the minds' side alone. Nothing below has been run.
 
