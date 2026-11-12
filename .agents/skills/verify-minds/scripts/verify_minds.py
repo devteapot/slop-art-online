@@ -1099,11 +1099,13 @@ def fast_lane_case(run):
     first = run.wait(lambda: requests() or None, 'a fast request after a blow', 30)[0]
     patched = run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-patched') if b['source'] == 'fast' and '"wait":0.7' in b['graph'].replace(' ', '')] or None, 'the fast patch installed', 20)[0]
     text = body(first)
-    why = text.split('# Who you are')[0]
+    why = text.split('# Why now')[1].split('# What has just happened')[0]
     blows = [x['text'] for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'eye-blows') if x['kind'] == 'attacked' and x['at_ms'] >= t0]
     assert '# What has just happened' in text and '# Your top level' in text and '# Your routines' in text, text[:600]
+    # Stable parts first (the providers' prefix caches): who, the top level, the routines, then why now.
+    assert text.startswith('# Who you are') and text.index('# Your routines') < text.index('# Why now') < text.index('# What has just happened'), text[:600]
     assert blows and any(b in why for b in blows), {'why': why, 'blows': blows}
-    assert not COUNT_WORDS.search(why) and not COUNT_WORDS.search(text.split('# What has just happened')[1].split('# Your top level')[0]), 'a count or "again" in the fast prompt'
+    assert not COUNT_WORDS.search(why) and not COUNT_WORDS.search(text.split('# What has just happened')[1]), 'a count or "again" in the fast prompt'
     assert any('combat branch rewritten' in t['summary'] for t in fast_thoughts()), fast_thoughts()
     time.sleep(5.5)
     in_gap = [x for x in requests() if x['at_ms'] < first['at_ms'] + 5500]

@@ -79,6 +79,8 @@ One chat call (`living/mind/src/mind/fast.rs`, `prompts::fast_system` and `fast_
 | Your top level (plan and outline) and Your routines (names, one line each, `routine_stat`) | the installed graph, `routine`, `routine_stat` |
 | The world's rules (physics), the graph grammar and the four replies; no acts or dealings | `world_rules()`, `grammar()`, a stable prefix (prompt-cached) |
 
+**Order, for the providers' prefix caches** (branch `prompt-cache-order`, 2026-11-12). The system prompt is the fixed part, about 11,000 tokens: the frame, `world_rules()` and `grammar()`, byte-identical across characters and calls. The user prompt then runs from the most to the least stable part between one character's calls in a fight: who you are, the top level, the routines, then why now and what has just happened. Before that change why now came first, so nothing after the system prompt could be reused between calls. The content is the same in either order. Measured cached shares are in [Prompt caching](#prompt-caching) below.
+
 **Not built:** situational recall in the prompt (§3.6's "what comes to mind about whom you face"). The size and cost of the built prompt are measured in r2e.
 
 ### The reply
@@ -154,6 +156,32 @@ About 1.0 s of pipeline plus the call: **≈ 3 s p50, ≈ 5 s p90 in a good hour
 | The next exchange | heavy: 9.8 s p50 between blows in r2d; arrows: 1.33 s | **Heavy: yes, usually** (3 s against 9.8 s; the p10 gap is 9.3 s). Arrows: no. A patch lands after the next two or three, so it answers about the third arrow after the trigger. |
 
 **What it buys.** The re-plan cannot answer the exchange it was triggered by, nor a windup. It answers the next exchange of a paced fight (heavy blows, an approach, a guard), and the third or fourth of a fast one (arrows). Against today's 8.6–13 s, that is the difference between answering at about exposure k+1 to k+3 and at about k+5 to k+10, or after the fight. Whether the answer fits is what the arm measures (§6).
+
+## Prompt caching
+
+Every profile calls Mistral's API (`https://api.mistral.ai/v1`), for DeepSeek and GLM alike.
+- **How Mistral caches.** Its prompt caching is automatic and works on the shared prefix. `prompt_cache_key` raises the chance of a hit; `llm.rs` sends `sao:<len>:<profile>:<purpose>`, the same key for every character. Cached tokens come back as `usage.prompt_tokens_details.cached_tokens`, in blocks of 64 tokens ([Mistral prompt caching](https://docs.mistral.ai/studio-api/conversations/advanced/prompt-caching), read 2026-11-12). The docs give no lifetime.
+- **What the journals show.** Cached counts come in multiples of 128 tokens on DeepSeek and 1,152 on GLM, as MODEL_COST found.
+
+Measured from the journals (`cached_tokens` ÷ `prompt_tokens`, error-free calls; bi1, ar2, st2b and r2d):
+
+| Purpose | DeepSeek V4.1 Flash: cached share | calls whose system prompt was cached | GLM 5.3 Flash: cached share |
+|---|---:|---:|---:|
+| think | 37–40% | 80–86% | 18–21% |
+| deliberate (compile) | 55–63% | 80–91% | 49–51% |
+| talk | 39–47% | 88–90% | – |
+| consolidate | 38–49% | 77–86% | 17–32% |
+| fast | not measured: no real call yet (r2e reports it) | – | – |
+
+- **The system prompts are byte-stable.** There was one hash per purpose per run in every batch read: 2,232 think calls in bi1's hamlet r1, one system text. Shared text comes first, then the character's, then the call's (`prompts.rs` `Segments`).
+- **DeepSeek caches the system prompt and almost never more.** Calls caching past it: 0–1% for think and compile, 18–25% for talk. Misses (nothing cached) are 8–20% in the towns and 33–42% in r2d's lone fighter, where calls are sparse.
+- **Past the system prompt, the content changes, not the order.** Between one character's consecutive calls, the user text agrees for its first 340–740 tokens (of 3,200–5,600). Then it changes where the content changed:
+  - `# People you know` (trust and affinity numbers) and the persona (rewritten by consolidation);
+  - `# Your habits` (a routine's record);
+  - in talk, `# How you talk`.
+  - The calls are 100–300 s apart (44 s in talk). Nothing there can be reused without changing what a mind is told.
+- **GLM reaches one or two blocks short of the system prompt.** For example, 1,152 of about 2,700 tokens for think, and 8,064 of about 10,400 for compile. With blocks of 1,152 tokens, no reordering changes this.
+- **The fast lane** was the one prompt that put the call's own text first. It now follows the order above: its system prompt is cacheable from the first call, and the person, the top level and the routines can be reused between a character's calls 6–10 s apart.
 
 ## 4. Cost
 
