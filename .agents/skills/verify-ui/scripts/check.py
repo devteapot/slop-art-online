@@ -2022,10 +2022,14 @@ def looks(run, c):
         return
     book = json.load(open(LOOK_BOOK))
     a, b, d = residents(run, 3)
-    grow_s = 14
+    # The shim's clock starts with its first look (at connect); the burst of dumps runs from about
+    # 15.5 s to 25 s after it, so the redraw falls inside it.
+    grow_s = 19
     env = {"LIVING_GAME_LOOK_SHIM": f"on;none={b};missing={d};grow={a}@{grow_s}"}
     burst = "".join(f"dump:s{i:02d};wait:0.15;" + (f"shot:s{i:02d};" if i % 6 == 0 else "") for i in range(48))
-    plan = f"ready;sync:hold;wait:4;dump:00;shot:00_drawn;wait:6;sync:hold;wait:0.5;{burst}wait:2;dump:02;shot:02_grown;quit"
+    # `sync:scene` places the three (drive.py's --place-free); a sync name runs once, so the
+    # second hold has its own; the cursor on screen keeps the pick's `seen` list.
+    plan = f"ready;sync:scene;cursor:0.5,0.5;wait:4;dump:00;shot:00_drawn;wait:5;sync:hold;wait:0.5;{burst}wait:2;dump:02;shot:02_grown;quit"
     out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0", f"{d}:0.5:2.2"], syncs=["hold=refree"], env=env)
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
@@ -2045,7 +2049,9 @@ def looks(run, c):
             L.count("looks: people without a look key in a world with looks") == 1 and L.count("looks: lk_ffffffffffffffff is not in the look book") == 1,
             f"{L.count('people without a look key')} and {L.count('lk_ffffffffffffffff is not in')}")
     chips = lambda key: [outer_piece(book["lines"][key]["person"], True, style_places(book["lines"][key]["person"])), outer_piece(book["lines"][key]["person"], False, style_places(book["lines"][key]["person"]))]
-    wrong = [(x["id"], x.get("chips"), chips(x["look"])) for x in composed if (x.get("chips") or [None, None]) != chips(x["look"])]
+    me_id = (json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}).get("me")
+    # My own chips are not kept (the labels are for others).
+    wrong = [(x["id"], x.get("chips"), chips(x["look"])) for x in composed if x["id"] != me_id and (x.get("chips") or [None, None]) != chips(x["look"])]
     c.check(s, "chips by piece: a composed person's chips are its line's outermost upper and lower pieces' colours", composed and not wrong, f"{wrong[:3]}")
     # The style files' extras against the book's files (a cross-check: the extras are the source).
     files = book.get("files") or {}

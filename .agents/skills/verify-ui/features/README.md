@@ -8,6 +8,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | Facing sight (`fov_on`): off draws no field; F5 or Settings › Play switches it through the admin link (`law_change` rows); the readout of the five values; the authority's perceived set against the client's field at four looks (`human_face`); a walking look held at 30° and the releases; heard marks per `heard_sounds` row | [field.md](field.md) | `check.py field` |
 | Items on people: the pack, an item's acts, carrying an item onto someone's window or onto them, hold F › Give › | [items.md](items.md) | `check.py items` |
 | Looking aside while walking: head, then chest, then the body on an eased curve; legs on the travel's takes; a sidestep only after a sudden turn; the three presets (Settings › Play › Looking aside) | [look-walk.md](look-walk.md) | `check.py look-walk` |
+| People drawn from their look (look-1): the projected key's line from the look book, composed; the VRoid fallback and its warnings; a new key redrawn in place; chips by piece from the style files' slot and layer; the prewarm; background people from decor | [looks.md](looks.md) | `check.py looks` (island or Cullet; with `LIVING_GAME_LOOK_SHIM` until the authority projects looks) |
 | Names on screen: one way to name a person (`Looks`), places and houses by kind, the death screen by the cause's kind; the guard: no seed name the player was not given | [names.md](names.md) | `check.py names` (Cullet); `check.py death`; `check.py houses`; `check.py shot` |
 | Offers to me: a card per swap or proposal in the maker's window, Accept (the rules' skill on `offer`), refusals, Dismiss, a re-offer, terms | [offers.md](offers.md) | `check.py offers` |
 | Pools and the walk law: the bars from `meters()` (mana only while short), slots greyed by their pool's cost in the rules' words, Settings › Walk speed reading and writing `walk_base` | [pools.md](pools.md) | `check.py pools`; `check.py walk-law` |
@@ -34,8 +35,9 @@ This directory is the maintained source for verifying interface D in the game cl
 | `envs.rs` (the cutaway fade) | [support.md](support.md) |
 | `heard.rs`, `mouth.rs`, `pick.rs`, `talk.rs` | [talking.md](talking.md) |
 | `keys.rs` (Settings › Controls) | [windows.md](windows.md), [bar.md](bar.md) |
-| `live.rs`: the live script every drive runs through (SKILL.md), and how a walking body's legs and upper body turn | the harness for every feature; [look-walk.md](look-walk.md) |
-| `looks.rs` | [names.md](names.md) |
+| `live.rs`: the live script every drive runs through (SKILL.md), and how a walking body's legs and upper body turn | the harness for every feature; [look-walk.md](look-walk.md); `recipe_for`, `swap_look`: [looks.md](looks.md) |
+| `characters/book.rs`, `characters/seen.rs`, `loading.rs` (the prewarm), `island.rs` (`person_recipe`) | [looks.md](looks.md) |
+| `looks.rs` | [names.md](names.md), [looks.md](looks.md) (`clothes`, `place`) |
 | `post.rs` (`post::Film`) | [film.md](film.md) |
 | `twist.rs` | [look-walk.md](look-walk.md) |
 | `ui/*` (interface D) | every feature |
