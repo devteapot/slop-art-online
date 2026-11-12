@@ -87,7 +87,8 @@ CASES = {
     "acts":         {"skill": "verify-minds", "group": "minds"},
     "dealings":     {"skill": "verify-minds", "group": "minds",
                      "flaky": "times out under load (the demand act or the rules' ask late): verify-minds validation, recipes-1, l2c, fix-death-labels"},
-    "conversation": {"skill": "verify-minds", "group": "minds"},
+    "conversation": {"skill": "verify-minds", "group": "minds",
+                     "flaky": "the talk-turn count assertion once under load, passed on its retry (scene gate, 2026-11-12)"},
     "combat":       {"skill": "verify-player", "group": "player",
                      "flaky": "staged fights in town geometry (a bolt into a passer-by, an arrow into a wall): verify-player validation, l2; "
                               "the kill scene 34/35 then 2/2 (stamina-1)"},

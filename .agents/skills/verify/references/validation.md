@@ -68,3 +68,12 @@ After the run, the SpacetimeDB container was stopped by hand to restore its earl
 - The public observer path.
 - `minds.md`: requires an authorized authentic run.
 - Discovery of this skill by agents other than Claude Code. This stopped being a requirement on 2026-11-11, when the project moved to Claude only. Claude Code lists `verify` from `.claude/skills/`, as seen in a session's skill list on that date.
+
+## 2026-11-12 scene gate (merge-scene-gate, DGX Spark)
+
+`living/tools/scene_gate.py` on the trial server `slop-trials-stdb` (2.14.1, :3320), private `CARGO_TARGET_DIR`, fake model only, load average 75–105 on 20 cores. Every `verify-gate-*` database was gone after each run (`stdb list`).
+
+- Docs-only change: skipped in 0.1 s ("none behavioural").
+- Main + the gate (`--base HEAD --force`, `gate-1112000149`): every case passed in the first pass (284 s) except minds `dealings` ("no #1 in sight", the corner asymmetry fixed by `fix-dealings`). It failed alone too, then twice on main's checkout: reported as red on main too, not blocking; whole gate 753 s, including a cold build of main's checkout.
+- After `fix-dealings` (8c5b8530) merged: `recheck` ran `dealings` on main's build and it passed (`gate-1112003244-recheck-dealings`), so it left the list. `takeover` failed there, as listed.
+- A branch shifting `place_at` 1 m east, through `living-merge --scenes --no-push` (`gate-1112010123`): exit 10, nothing pushed. `sight` failed twice ("a graph behind rock or a wall does not see it") and passed on main. `conversation` failed once (the talk-turn count) and passed alone. `combat` passed: its fights are staged relative to the player and the nearest free tile, so a uniform shift does not break them. Check 993 s, scenes 265 s, merge 1263 s.
