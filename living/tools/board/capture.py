@@ -15,6 +15,9 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "characters"))
+import hold_eyes  # noqa: E402
+
 # A shot is (name, view spec). View specs are the asset view's: `front`, `game`,
 # `YAW:PITCH[:ZOOM[:AIM]]`, `<clip>@<seconds>/<view>`.
 PRESETS = {
@@ -239,7 +242,9 @@ def capture(game, repo, members, preset_name, out, scratch, clips=True, only_sho
             continue
         tmp = os.path.join(scratch, f"g{gi}")
         shutil.rmtree(tmp, ignore_errors=True)
-        found, reps = _view(game, [m["token"] for m in who], [s[1] for s in shots], tmp, group["size"], preset, hours[group["hour"]])
+        # Stills are taken with the eyes held open: a blink caught in one reads as a fault of the model.
+        with hold_eyes.held([m["token"] for m in who], os.path.join(repo, "living", "game", "assets")):
+            found, reps = _view(game, [m["token"] for m in who], [s[1] for s in shots], tmp, group["size"], preset, hours[group["hour"]])
         for m in who:
             if reps.get(m["token"]) and not isinstance(reports[m["name"]], dict):
                 reports[m["name"]] = reps[m["token"]]
