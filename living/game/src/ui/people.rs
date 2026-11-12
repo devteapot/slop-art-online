@@ -195,6 +195,11 @@ pub struct MsgHeard(Win, usize);
 pub struct InputRow(Win);
 #[derive(Component)]
 pub struct ToChip(Win);
+/// The box's way of speaking: its chip (a click moves to the next way) and its label.
+#[derive(Component)]
+pub struct WayChip(Win);
+#[derive(Component)]
+pub struct WayText(Win);
 #[derive(Component)]
 pub struct InputText(Win);
 #[derive(Component)]
@@ -258,12 +263,10 @@ fn input_row(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, w: Win, hin
                 c.spawn(wood::icon(icons, Glyph::Ui(Mark::Caret), 9.0, Color::WHITE));
             });
             r.spawn((InputText(w), Text::new(""), f.body(14.0, 650), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { flex_grow: 1.0, flex_shrink: 1.0, min_width: Val::Px(90.0), ..default() }, Pickable::IGNORE));
-            // The box's other ways of speaking (`talk::MODES`): whisper keeps its place, greyed,
-            // until the rules have it (docs/COMMUNICATION.md, the Spark coordinator's).
-            for m in crate::talk::MODES.iter().filter(|m| !m.available) {
-                r.spawn((Node { padding: UiRect::axes(Val::Px(6.0), Val::Px(1.0)), border: wood::b(1.5), border_radius: wood::r(6.0), flex_shrink: 0.0, ..default() }, BorderColor::all(wood::alpha(wood::muted(), 0.6)), Pickable::IGNORE))
-                    .with_child((Text::new(m.key), f.body(11.0, 800), TextColor(wood::alpha(wood::muted(), 0.8)), Pickable::IGNORE));
-            }
+            // The way of speaking (the world's, `speech_card`): the one the box has; a click, or
+            // the Way key, moves to the next; greyed while its gap runs (`gap_ms`).
+            r.spawn((WayChip(w), Hot, Tag(format!("talk:way:{}", w.name())), Node { padding: UiRect::axes(Val::Px(6.0), Val::Px(1.0)), border: wood::b(1.5), border_radius: wood::r(6.0), flex_shrink: 0.0, ..default() }, BorderColor::all(wood::alpha(wood::muted(), 0.6))))
+                .with_child((WayText(w), Text::new(""), f.body(11.0, 800), TextColor(wood::alpha(wood::muted(), 0.9)), Pickable::IGNORE));
             if wood::t().chips {
                 wood::chip(r, f, "Enter", ());
             }
@@ -392,6 +395,8 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mu
         let parts: Vec<&str> = t.split(':').collect();
         match parts.as_slice() {
             ["log", "tab", i] => page.0 = i.parse().unwrap_or(0),
+            // The box's way chip: the next of the world's ways of speaking.
+            ["talk", "way", _] => talk.next_way = true,
             ["log", "person", i] => {
                 if let Some(id) = i.parse::<usize>().ok().and_then(|i| people_list(&offers, net.my_id, &looks).get(i).copied()) {
                     ws.open(Win::Person(id));
@@ -486,7 +491,7 @@ pub fn update(
         Query<(&MsgHeard, &mut Text, &mut Node)>,
         Query<(&ToChip, &mut Text)>,
         Query<(&InputText, &mut Text, &mut TextColor)>,
-        ParamSet<(Query<(&WinTitle, &mut Text)>, Query<(&PersonRowText, &mut Text)>, Query<(&PersonRowNote, &mut Text)>, Query<(&EventRow, &mut Text, &mut Node)>, Query<(&GiveText, &mut Text)>)>,
+        ParamSet<(Query<(&WinTitle, &mut Text)>, Query<(&PersonRowText, &mut Text)>, Query<(&PersonRowNote, &mut Text)>, Query<(&EventRow, &mut Text, &mut Node)>, Query<(&GiveText, &mut Text)>, Query<(&WayText, &mut Text, &mut TextColor)>)>,
     )>,
     (mut msgs, mut tabs, mut rows, mut gives, mut empties): (
         Query<(&Msg, &mut Node, &mut BackgroundColor, &mut BorderColor), (Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<PersonRow>, Without<GiveRow>, Without<Empty>)>,
@@ -626,6 +631,19 @@ pub fn update(
         Win::Person(id) => format!("to {}", lower(id)),
         _ => "to the room".into(),
     };
+    // The way chip: the box's way, by the world's label; greyed while its gap runs.
+    {
+        let card = talk.card.as_ref();
+        let resting = card.is_some_and(|c| c.gap_ms > 0 && talk.used_at.get(&c.name).is_some_and(|t| (time.elapsed_secs_f64() - t) * 1000.0 < c.gap_ms as f64));
+        let label = card.map_or(String::new(), |c| c.label.to_lowercase());
+        let colour = if resting { wood::alpha(wood::muted(), 0.45) } else { wood::alpha(wood::muted(), 0.9) };
+        for (_, mut t, mut col) in &mut texts.p7().p5() {
+            set_text(&mut t, &label);
+            if col.0 != colour {
+                col.0 = colour;
+            }
+        }
+    }
     for (c, mut t) in &mut texts.p5() {
         // Short, so the box keeps its room: "to a stranger in gr…".
         let s = wood::fit(&if typing_in == Some(c.0) { talk.to.map_or_else(|| "to the room".into(), |id| format!("to {}", lower(id))) } else { to_label(c.0) }, 22);

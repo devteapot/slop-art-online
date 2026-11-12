@@ -12,7 +12,7 @@ Since `look-1-auth` (2026-11-12, docs/LOOK.md). Each person has one private `loo
 
 ## Driving it
 
-On a launched and doctored `client-*` run whose seed has looks (`$V launch --run "$R" --seed plan-test`, the fixture generation `fixture-1`; Cullet's own data since look-1, `--seed cullet`):
+On a launched and doctored `client-*` run whose seed has looks (`$V launch --run "$R" --seed plan-test`, the fixture generation `fixture-1`; Cullet's own data since look-1, `--seed cullet`; the island's pool since look-1-island, `--seed island`):
 
 ```bash
 .agents/skills/verify-client/scripts/look_rows.py --run "$R"
