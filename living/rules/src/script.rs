@@ -263,6 +263,12 @@ pub enum Precision {
 /// ("someone too far away to make out #77").
 pub const FAR_PERSON: &str = "someone too far away to make out";
 
+/// Where the handles of figures too far away to make out begin (far-handle): a mind's scene and
+/// experiences name such a figure by a handle of its own sighting, never by the person's id, so
+/// nothing else in a prompt (relations, community, memory) can tie the figure to a name. No
+/// character, structure or resource id reaches it.
+pub const FAR_HANDLE_BASE: u32 = 1_000_000_000;
+
 /// The `perceived_of` law's answer: which fields of the target the observer gets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Regard {

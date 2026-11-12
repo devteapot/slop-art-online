@@ -89,6 +89,8 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     let text: String = text.chars().take(w.max_chars).collect();
     let Some(me) = ctx.db.character().id().find(speaker) else { return Err("no speaker".into()) };
     let Some(b) = ctx.db.body().id().find(speaker) else { return Err("no body".into()) };
+    // A line to a figure the speaker's mind names by its sighting's handle (far-handle).
+    let to = crate::far::resolve(ctx, speaker, to);
     let st = ctx.db.mind_state().id().find(speaker);
     if st.as_ref().is_some_and(|st| now.saturating_sub(st.spoke_ms) < SPEAK_GAP_MS) {
         return Err("speaking too fast".into());
@@ -229,7 +231,16 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
             .map(|(c, d, _)| (*d, c.id))
             .collect();
         seen.sort_by(|a, b| a.0.total_cmp(&b.0));
-        ctx.db.line_heard().insert(LineHeard { line, speaker, way: w.name.clone(), hearers: seen.into_iter().map(|(_, id)| id).collect(), at_ms: now });
+        // A mind's speaker knows a hearer it cannot make out by its sighting's handle (far-handle).
+        let mind = crate::combat::human(ctx, speaker).is_none();
+        let hearers: Vec<u32> = seen
+            .into_iter()
+            .map(|(_, id)| match ctx.db.character().id().find(id).filter(|_| mind) {
+                Some(t) => crate::far::id_for(ctx, &me, &t, now),
+                None => id,
+            })
+            .collect();
+        ctx.db.line_heard().insert(LineHeard { line, speaker, way: w.name.clone(), hearers, at_ms: now });
     }
     Ok(())
 }
@@ -293,6 +304,7 @@ pub fn unsaid(ctx: &ReducerContext, speaker: u32, to: u32, way: &str, text: &str
     let sc = common::scripts(ctx);
     let w = sc.way(way_name(way)).ok_or_else(|| format!("no way of speaking called `{way}`"))?;
     let (Some(me), Some(b)) = (ctx.db.character().id().find(speaker), ctx.db.body().id().find(speaker)) else { return Ok(()) };
+    let to = crate::far::resolve(ctx, speaker, to);
     let at = pos(&b, now);
     let why = unheard_text(ctx, &sc, w, &me, to, at, common::facing_at(&b, now), true, now);
     let text: String = text.trim().chars().take(w.max_chars).collect();

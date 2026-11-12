@@ -17,6 +17,10 @@ Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trial
 
 ## 2026-11-12 doing-percept: what someone is visibly doing (Spark)
 
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle`, `core-farhandle`. Results: `stranger_filter` 9/9 (the far check now expects a handle ≥ 1000000000 and no entry with F's id), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7; speech `channels` 29/29 (`core-farhandle-ch`).
+
 Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-doing-052655`.
 
 - `doing_seen` (new): 10 PASS, 1 XFAIL. Field on (near ring 0.5 m): W's routine dodged A's attack 367 ms into its 650 ms windup (second half), not before; B's attack from behind was not dodged. All round: dodged 383 ms in, A's blow `missed`, W's scene `{"is": "attack", "phase": "about to release", "at": "you"}`. Far overlay (past 3 m): F's guard 5 m off triggered the routine, listed as "someone too far away to make out" with `{"is": "block", "phase": "holding"}`; G's guard 14 m off did not. XFAIL (a product finding): with the field on the dodge was broken off 66 ms in (the dash turned W's back on A) and the blow landed. A first attempt failed the scene check only: a landed blow's "is attacking you!" request overwrote the `think`'s scene; the check moved to the all-round probe.
