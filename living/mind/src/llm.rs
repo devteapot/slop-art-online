@@ -351,7 +351,7 @@ impl Lane {
     pub fn for_purpose(purpose: &str) -> Self {
         match purpose {
             "talk" => Self::Interactive,
-            "combat" | "alarm" | "attack" => Self::Urgent,
+            "combat" | "alarm" | "attack" | "fast" => Self::Urgent,
             "consolidate" | "reorganize" | "identity" | "internalize" => Self::Background,
             _ => Self::Routine,
         }

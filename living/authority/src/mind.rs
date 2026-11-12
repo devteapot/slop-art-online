@@ -377,6 +377,111 @@ fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: 
     }
 }
 
+/// When the fast lane last changed the character's plan (`mind_state.marks`; kept by `set_graph`).
+pub const FAST_MARK: u16 = 0xD500;
+
+/// A slow deliberation that read its request before the fast lane's last patch keeps the
+/// patched `combat` branch: the authority splices it in by label (docs/FAST_LANE.md). A later
+/// decision, which saw the patch in its prompt, replaces it as any other part of the plan.
+fn keep_fast_branch(ctx: &ReducerContext, actor: u32, graph: String, seen_ms: u64) -> String {
+    let patched_ms = ctx.db.mind_state().id().find(actor).and_then(|st| st.marks.iter().find(|m| m.node == FAST_MARK).map(|m| m.at_ms));
+    if !patched_ms.is_some_and(|at| at > seen_ms) {
+        return graph;
+    }
+    let current = ctx.db.brain().id().find(actor).and_then(|b| serde_json::from_str::<serde_json::Value>(&b.graph).ok());
+    let (Some(node), Ok(incoming)) = (current.as_ref().and_then(|g| living_rules::graph::branch_of(g, "combat")), serde_json::from_str::<serde_json::Value>(&graph)) else { return graph };
+    living_rules::graph::patch_branch(incoming, "combat", node).to_string()
+}
+
+/// The fast lane's answer (docs/FAST_LANE.md) to the request issued at `asked_ms`: the
+/// character's `combat` branch rewritten (`target` "combat"), or one of its own routines
+/// (`routine:<name>`; never a new one). Authorised as `mind_install` is: only the character's
+/// controller may call it, so a character a person plays, or anyone else's, is refused. The plan
+/// check: it lands only if the graph installed when the request was issued is still installed;
+/// otherwise nothing changes and the refusal is kept as a `fast` thought ("refused: …"). Either
+/// way the request's turn ends (`fast::answered`). It does not count as having thought
+/// (`think_min_s`), and a committed move under way runs its course.
+#[spacetimedb::reducer]
+pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: String, asked_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    let c = authorize(ctx, actor)?;
+    if !c.alive {
+        return Err("character is dead".into());
+    }
+    let now = common::now_ms(ctx);
+    let Some(ask) = ctx.db.fast_ask().actor().find(actor).filter(|r| r.issued_ms == asked_ms && asked_ms != 0) else {
+        return Err("no fast re-plan was asked of this character".into());
+    };
+    let refuse = |why: String| {
+        add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), summary: format!("refused: {why}"), ..thought.clone() }, now);
+        crate::fast::answered(ctx, actor, asked_ms, now);
+        Ok(())
+    };
+    let Some(b) = ctx.db.brain().id().find(actor) else { return refuse("there is no plan to change".into()) };
+    if b.installed_ms != ask.base_ms {
+        return refuse("the plan changed since it was asked".into());
+    }
+    if target == "combat" {
+        let (Ok(current), Ok(branch)) = (serde_json::from_str::<serde_json::Value>(&b.graph), serde_json::from_str::<serde_json::Value>(&graph)) else {
+            return refuse("not a graph".into());
+        };
+        let patched = living_rules::graph::patch_branch(current, "combat", branch);
+        if let Err(e) = set_graph(ctx, actor, &patched.to_string(), &b.plan, "fast", now) {
+            return refuse(format!("rejected graph: {e}"));
+        }
+    } else if let Some(name) = target.strip_prefix("routine:") {
+        let name = living_rules::normalize::routine_name(name);
+        let Some(mut r) = ctx.db.routine().actor().filter(actor).find(|x| living_rules::normalize::routine_name(&x.name) == name) else {
+            return refuse(format!("it has no routine called {name}"));
+        };
+        let g = match living_rules::graph::parse(&graph) {
+            Ok(g) => g,
+            Err(e) => return refuse(format!("rejected routine {name}: {e}")),
+        };
+        if let Some(sp) = common::species(&c.kind) {
+            if let Some(bad) = living_rules::graph::skills_used(&g.root).into_iter().find(|s| if s == "say" { !sp.speaks } else { !sp.allows(s) }) {
+                return refuse(format!("a {} cannot {bad}", c.kind));
+            }
+        }
+        ctx.db.routine_stat().id().delete(r.id);
+        r.graph = g.to_json();
+        r.revision += 1;
+        r.source = "fast".into();
+        r.updated_ms = now;
+        ctx.db.routine().id().update(r);
+        // Recompile the plan with its routines, as the fast lane (not counted as thinking).
+        if let Err(e) = set_graph(ctx, actor, &b.graph, &b.plan, "fast", now) {
+            return Err(e);
+        }
+    } else {
+        return refuse(format!("it may change its combat branch or a routine of its own, not {target}"));
+    }
+    if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
+        st.marks.retain(|m| m.node != FAST_MARK);
+        st.marks.push(crate::tables::Mark { node: FAST_MARK, at_ms: now });
+        ctx.db.mind_state().id().update(st);
+    }
+    add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), ..thought }, now);
+    crate::fast::answered(ctx, actor, asked_ms, now);
+    Ok(())
+}
+
+/// The fast lane served the request issued at `asked_ms` without a change (the reply kept the
+/// plan, failed, timed out, or the character was off stage): its turn ends. A thought with a
+/// kind is kept. Only for an open request: a body its person controls never has one.
+#[spacetimedb::reducer]
+pub fn mind_fast_done(ctx: &ReducerContext, actor: u32, asked_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    if !ctx.db.fast_ask().actor().find(actor).is_some_and(|r| r.issued_ms == asked_ms && asked_ms != 0) {
+        return Err("no fast re-plan was asked of this character".into());
+    }
+    let now = common::now_ms(ctx);
+    if !thought.kind.is_empty() {
+        add_thought(ctx, actor, thought, now);
+    }
+    crate::fast::answered(ctx, actor, asked_ms, now);
+    Ok(())
+}
+
 /// Deliver a deliberation result: a new behavior graph, optional speech and a thought log entry.
 #[spacetimedb::reducer]
 pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
@@ -387,6 +492,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
     }
     let now = common::now_ms(ctx);
     clear_deliberation(ctx, actor, seen_ms, true);
+    let graph = keep_fast_branch(ctx, actor, graph, seen_ms);
     if let Err(e) = set_graph(ctx, actor, &graph, &plan, "mind", now) {
         add_thought(ctx, actor, ThoughtIn { kind: "error".into(), summary: format!("rejected graph: {e}"), ..thought }, now);
         return Err(e);

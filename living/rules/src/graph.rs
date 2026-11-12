@@ -1055,6 +1055,92 @@ pub fn outline(root: &Node) -> String {
     out
 }
 
+// ---- labelled branches ----------------------------------------------------------------
+
+/// Replace the branch labelled `label` in a graph (as JSON) with `node`, keeping the rest: a
+/// mind's patch ("adapt how you fight mid-fight"), the fast lane's `combat` branch
+/// (docs/FAST_LANE.md). A graph wrapped in the `reflexes` branch is patched inside it. Not found,
+/// the new branch goes first, ahead of the existing behaviour.
+pub fn patch_branch(graph: serde_json::Value, label: &str, node: serde_json::Value) -> serde_json::Value {
+    use serde_json::{json, Value};
+    let inner = match &graph["first"] {
+        Value::Object(o) if o.get("label").and_then(|l| l.as_str()) == Some("reflexes") => o["children"].as_array().and_then(|c| c.last()).cloned().unwrap_or(json!({"wait": 3})),
+        _ => graph,
+    };
+    let labeled = label_node(node, label);
+    fn replace(v: &mut Value, label: &str, with: &Value) -> bool {
+        match v {
+            Value::Object(o) => {
+                for key in ["first", "seq"] {
+                    if let Some(Value::Object(c)) = o.get(key) {
+                        if c.get("label").and_then(|l| l.as_str()) == Some(label) {
+                            *v = with.clone();
+                            return true;
+                        }
+                    }
+                }
+                o.values_mut().any(|x| replace(x, label, with))
+            }
+            Value::Array(a) => a.iter_mut().any(|x| replace(x, label, with)),
+            _ => false,
+        }
+    }
+    let mut inner = inner;
+    if replace(&mut inner, label, &labeled) {
+        return inner;
+    }
+    // Not found: the new branch takes priority over the existing behavior.
+    match inner.get("first") {
+        Some(Value::Array(children)) => {
+            let mut c = vec![labeled];
+            c.extend(children.iter().cloned());
+            json!({"first": c})
+        }
+        Some(Value::Object(o)) => {
+            let mut c = vec![labeled];
+            c.extend(o.get("children").and_then(|x| x.as_array()).cloned().unwrap_or_default());
+            json!({"first": {"label": o.get("label").cloned().unwrap_or(json!("plan")), "children": c}})
+        }
+        _ => json!({"first": [labeled, inner]}),
+    }
+}
+
+/// Ensure a patched branch carries its label (wrapping non-composite nodes).
+pub fn label_node(node: serde_json::Value, label: &str) -> serde_json::Value {
+    use serde_json::{json, Value};
+    for key in ["first", "seq"] {
+        match node.get(key) {
+            Some(Value::Array(children)) => return json!({key: {"label": label, "children": children}}),
+            Some(Value::Object(o)) => {
+                let mut o = o.clone();
+                o.insert("label".into(), json!(label));
+                return json!({key: o});
+            }
+            _ => {}
+        }
+    }
+    json!({"first": {"label": label, "children": [node]}})
+}
+
+/// The branch labelled `label` in a graph (as JSON), as the node that carries the label.
+pub fn branch_of(graph: &serde_json::Value, label: &str) -> Option<serde_json::Value> {
+    use serde_json::Value;
+    match graph {
+        Value::Object(o) => {
+            for key in ["first", "seq"] {
+                if let Some(Value::Object(c)) = o.get(key) {
+                    if c.get("label").and_then(|l| l.as_str()) == Some(label) {
+                        return Some(graph.clone());
+                    }
+                }
+            }
+            o.values().find_map(|x| branch_of(x, label))
+        }
+        Value::Array(a) => a.iter().find_map(|x| branch_of(x, label)),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

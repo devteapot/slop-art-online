@@ -1,6 +1,6 @@
 # The fast lane: a re-plan between blows
 
-Design only (2026-11-12, branch `design-fast-lane`, from origin/main `d80a1373`). Nothing here is built. It details [combat mind](COMBAT_MIND.md) §3.4 within the owner's layered idea:
+Designed on `design-fast-lane` and **built on `fast-lane`** (2026-11-12), with the general coordinator's change: **nothing the trigger counts is told to anyone** (owner: minds find patterns themselves; r2b–r2d show they name a pattern by its 3rd or 4th exposure without help). **Off by default:** the world law `fast_lane_on` is false; a trial turns it on per arm. While the 100-fighter battle collapse is diagnosed (2026-11-12: 18.5 → 2.9 ticks a second in 30 minutes, every witnessed blow waking every minded onlooker), nothing may add calls to battles: the lane stays off outside 1v1 arenas, and nothing is tuned for battles. It details [combat mind](COMBAT_MIND.md) §3.4 within the owner's layered idea:
 
 > "the big model basically prepares a bunch of schemes, and then the decision model decides more or less real-time when it's the good time to apply them. But then there is still live real-time execution of things, so that we are not bounded by the decision model."
 
@@ -20,27 +20,30 @@ A revision that lands in about 3 s would come between heavy blows and after two 
 
 ## 1. The trigger
 
-The fast lane starts from what the character has perceived, as `experience` rows the mind service already receives. It never reads the opponent's skill, vitals or plan.
+The authority raises the trigger from what the character perceived (`living/authority/src/fast.rs`). It never reads the opponent's plan or vitals for it.
 
-- **A blow taken.** An `attacked` experience: a blow, a shot, a bolt that landed in full or in part.
-- **A pattern repeating.** The same visible move, aimed at the character, by the same creature, perceived for the N-th time in one fight. N is the world law `seen_again_n`, shipped as 3, the same "three" the fight report already uses for blows that land or come to nothing (`act.rs` `fight_report`). It is a law of perception, the same for every creature and every fight, and never tuned per fight or opponent.
-  - "The same visible move" is what `doing` reads: the move's `is` as `perception::doing_of` shows it (its skill or act card), the mover, `at_me`, under the one sight rule (`perception::in_sight`: field and facing when `fov_on`, the light, the far label).
-  - "One fight" is a run of blows and moves with gaps under 30 s: the window `damage` already uses to decide that a blow is a first blow (`hurt_ms` older than 30 s).
+- **A blow taken.** In `act::damage`, a blow, shot or bolt that landed in full or in part on a character the minds hold. The request's reason is the character's own line for it: "A stranger shot you with an arrow: hit for 7", "Kelkelly attacked you (10 damage)".
+- **A move repeating.** In `combat::accepted`, a move started with a victim, seen by the victim (`perception::sees_creature`: the one sight rule, facing when `fov_on`, the light), is counted per (victim, mover, skill) within one fight: moves less than 30 s apart, the window `damage` uses for a first blow. At every N-th, a trigger whose reason is the event as perceived: "Grim winds up an attack at you". No number, no "again".
+  - N is the world law `seen_again_n`, shipped as 3, the same for every creature and fight. It is used for the trigger only.
+  - The count is kept in the authority's memory and is never written or told: no experience, no prompt, no player row carries it (verify-core `seen_again`, verify-minds `fast-lane`, verify-player `fast_lane`).
+- **Only a character whose mind runs:** alive, `ai` (an AI character, or a person's character while the minds hold it), a person past infancy, awake (`perceive::asleep`), not instinct-only.
 
-### The repeat becomes a percept first (authority)
+### Turns: the `fast_ask` row and the laws
 
-This is §3.2's folded percept, which was designed and not yet built. When a perceived creature starts a move aimed at a character whose mind runs, the authority counts it in that character's `mind_state` marks, keyed by (mover, look), as `fight_report` keeps its marks. At N, and again at 2N and 3N, it writes one experience, in words for the character and its memory:
+A private table, one row per character, holds its newest trigger: reason, when, the oldest one not yet served, when it was issued, and the graph it was issued against (`brain.installed_ms`). Rows are issued to the mind service under world laws, all in `skills.rhai` `laws()`:
 
-> "Grim winds up an attack at you again (3 times now)."
+| Law | Shipped | What it bounds |
+|---|---:|---|
+| `fast_lane_on` | false | the lane at all |
+| `seen_again_n` | 3 | the repeat trigger |
+| `fast_lane_rate` | 2 a second | issues across the world (a bucket holding one second's worth) |
+| `fast_lane_inflight` | 4 | issued and unanswered at once, across the world |
+| `fast_lane_gap_s` | 6 s | between one character's issues |
+| `fast_lane_stale_s` | 8 s | a trigger waiting longer is let go; an issued one unanswered in twice that is let go |
 
-Below N, nothing is written beyond today's percepts. A move the character did not see is not counted; the sight rule decides, not the trigger. This line is the same whether or not the fast lane is on: a person playing the character gets it in `my_experience` too, as perception.
-
-### Debounce, per character
-
-- **One in flight.** At most one fast-lane request per character at a time.
-- **A gap.** At least `gap_s` between two fast calls' starts, in `living/configs/rethink.json` `fast.gap_s`, 6 s. A mind-service setting, like the gate's `max_hold_s`.
-- **Triggers merge.** Triggers inside the gap, or while a request is in flight, are merged; the next call sends the latest exchanges. Nothing queues per blow.
-- **Stale requests are dropped.** A trigger older than `fast.stale_s` (8 s) when its turn comes is dropped: the fight has moved on.
+- **One in flight per character**, and triggers merge: a trigger while one is issued or waiting replaces the reason and waits for the next turn. Nothing queues per blow.
+- **Turns** go to the most recently triggered first. A row answered with nothing newer stays idle until its gap has passed, so the gap holds.
+- **Pumped** on each trigger and answer, on the tick while a row waits, and in housekeeping.
 
 ### With the think throttle
 
@@ -49,7 +52,7 @@ Below N, nothing is written beyond today's percepts. A move the character did no
 - **Who writes what.**
   - The fast lane writes only the `combat` branch (below); the slow deliberation stays the author of the whole plan.
   - A slow install whose request began before the last fast patch keeps the current `combat` branch: the authority splices it in by label. A later slow decision, which saw the patch in its prompt, replaces it like any other part of the plan.
-- **Held after a patch.** For `fast.settle_s` (10 s) after a fast patch, the rethink gate counts "the plan was just revised" as a reason to hold the non-urgent triggers it already holds (a plan finished, a branch failing). Urgent reasons still pass, as they always do.
+- **Not built: held after a patch.** The design had the rethink gate hold non-urgent triggers for 10 s after a fast patch. Not built: the gate is off by default, and nothing measured asks for it yet.
 
 ### With committed moves
 
@@ -58,32 +61,32 @@ Below N, nothing is written beyond today's percepts. A move the character did no
 
 ### With sleep
 
-- **A sleeping body is never fast-laned.** A sleeper perceives only what wakes it.
-- **The waking blow counts.** A blow that wakes it starts the waking deliberation, as today, and counts as a trigger once the body is awake.
+- **A sleeping body is never fast-laned.** A sleeper (in a sleep act, or between two sleeps of one rest: `perceive::asleep`) is not counted or triggered.
+- **The waking blow does not count.** It starts the waking deliberation, as today; later blows, on the woken body, do.
 - **Off stage, no fast lane.** Off-stage characters (`lod`: `Attention::OffStage`) don't get it either. Their fights are coarse and their minds slow by design.
 
 ## 2. What it sends and gets back
 
 ### The request
 
-One chat call, built in code like the rethink gate's state (`rethink::state`). It carries only the character's own perception, plans and memory:
+One chat call (`living/mind/src/mind/fast.rs`, `prompts::fast_system` and `fast_user`). It carries only the character's own perception and plans:
 
-| Part | From | Size |
-|---|---|---|
-| Who you are: name, goals, mood | the persona, as in think | ~200 tokens |
-| Your top level and your `combat` branch, as an outline; your routines' names and one line each, with `routine_stat` ("done 3×, failed 2×") | the installed graph, `routine`, `routine_stat` | ≤ 1,200 chars |
-| What has happened in this fight, oldest first: blows taken and dealt, own outcomes ("You failed to dodge: it was over before the blow came"), refusals, the repeat percepts, what the other is visibly doing now (`visibly`) | experiences since the fight began, folded as the gate folds them (`rethink::folded`), newest 12 | ~600 tokens |
-| What comes to mind about whom you face | situational recall with a small budget (§3.6): stances, beliefs, memories cued by the creature, its kind and the fight's words | ≤ 400 tokens |
-| Your own moves' timings | `prompts::own_timings` (3.7), the moves the character knows | ~150 tokens |
-| The graph grammar, the conditions and leaves only, and the reply format | the same `prompts.rs` text the compile step gets, without the acts and dealings sections | ~3,500 tokens, a stable prefix (prompt-cached) |
+| Part | From |
+|---|---|
+| Why now: the trigger's reason, the event as perceived | `fast_ask.reason` |
+| Who you are, with its own moves' timings | `persona_text` and `own_timings` (3.7), as think has them |
+| What has just happened, oldest first: the newest 12 experiences (blows taken and dealt, own outcomes, refusals) | `exp_line`, as deliberation renders them |
+| Your top level (plan and outline) and Your routines (names, one line each, `routine_stat`) | the installed graph, `routine`, `routine_stat` |
+| The world's rules (physics), the graph grammar and the four replies; no acts or dealings | `world_rules()`, `grammar()`, a stable prefix (prompt-cached) |
 
-About 6,000 tokens in all, two-thirds of them a cached prefix: smaller than a think call (4,638 tokens at p50 in r2b–r2d, plus its own long cached prefix) and a third of a compile (13,226).
+**Not built:** situational recall in the prompt (§3.6's "what comes to mind about whom you face"). The size and cost of the built prompt are measured in r2e.
 
 ### The reply
 
 The reply is one of these:
 
 - `{"patch": {"label": "combat", "graph": …}, "thought": "…"}`: the `combat` branch rewritten in the grammar;
+- `{"routine": {"name": "<one of your routines>", "graph": …}, "thought": "…"}`: one of its own routines rewritten (never a new one; r2–r2d's plans live in the routine "current plan");
 - `{"switch": "<one of your routines>", "thought": "…"}`: the branch becomes `{"routine": name}`;
 - `{"keep": true, "thought": "…"}`: no change.
 
@@ -92,20 +95,24 @@ The `thought` is one sentence, kept as a thought row of kind `fast`, so the next
 ### What it may not do
 
 - **No speech, acts, stances or places.** Those stay with the slow mind.
-- **Nothing outside the `combat` branch.**
+- **Nothing outside the `combat` branch and its own existing routines.** The authority does the splice (`living_rules::graph::patch_branch`, shared with the compile's patch), so a reply cannot touch anything else.
 - **Nothing a compile could not write.** The patch is validated by the same `set_graph` normalisation, and a refusal is a thought of kind `error`, as a rejected compile is.
 - **No scripted counters, no "dodge on windup" answer, no tactic text.** The prompt states what the character perceived and what it knows how to do; the rules text keeps physics only (§6 of COMBAT_MIND).
 - **No inventing.** A routine it switches to must be one the character wrote; the reply cannot create routines (the slow mind does that). The audit of §4.1 (every prompt sent, searched for the fixture's pattern words outside the character's own experiences) applies to the fast lane's prompts too.
 
 ### The data path
 
-- **A new reducer, `mind_patch(actor, label, graph, base_ms, thought)`.**
-  - Like `mind_install`, it is authorised by the caller being the character's controller.
-  - It applies only if the installed graph is still the one the request read (`brain.installed_ms == base_ms`); otherwise it returns an error and writes nothing. SpacetimeDB reducers are transactions: an error rolls back every write ([reducers](https://spacetimedb.com/docs/functions/reducers/)).
-  - Adding a reducer is a safe module update. Changing `mind_install`'s signature would not be: clients calling the old version would get runtime errors ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/), docs 2.0.0, read 2026-11-12).
-  - Bindings are regenerated with `just living-generate`.
-- **Writes.** One `brain` row update and one `thought` row per accepted patch. No new table, column or subscription.
-- **Reads.** The request reads rows the mind service already holds (its characters' experiences, routines, graph).
+- **Two new reducers:**
+  - `mind_patch(actor, target, graph, asked_ms, thought)`: `target` is `combat` or `routine:<name>`.
+  - `mind_fast_done(actor, asked_ms, thought)`: no change (kept, no usable answer, off stage, timed out).
+- **Who may call them.** Both are authorised as `mind_install` is (the caller is the character's controller), and both need an open request issued at `asked_ms`; a body its person controls never has one, so a player is refused even for its own character (verify-client).
+- **The plan check.** `mind_patch` lands only if the graph installed when the request was issued is still installed (`fast_ask.base_ms == brain.installed_ms`). Otherwise it changes nothing and keeps the refusal as a `fast` thought ("refused: the plan changed since it was asked"), so refusals can be counted; the request's turn ends either way.
+  - SpacetimeDB reducers are transactions: an error rolls back every write ([reducers](https://spacetimedb.com/docs/functions/reducers/)), which is why the plan check returns success with the refusal recorded.
+  - Adding reducers is a safe module update; changing `mind_install`'s signature would not be: clients calling the old version would get runtime errors ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/), docs 2.0.0, read 2026-11-12).
+- **Install source `fast`.** A patch installs with source `fast`, so it does not count as having thought (`deliberated_ms`, `think_min_s`). A committed move under way runs its course (the activity is kept as an orphan the new graph may adopt).
+- **Schema.** One new private table, `fast_ask` (adding a table is a safe change). Bindings regenerated with additions only (`fast_ask`, the two reducers; and `slumber`, which main's bindings lacked).
+- **Writes.** Per issue, one `fast_ask` row update; per answer, one `brain` row update (and one `routine` row for a routine) and one `thought` row.
+- **Subscription.** The mind service subscribes `fast_ask` on its own; a world without it still starts.
 
 ## 3. Model and latency
 
@@ -167,6 +174,8 @@ Triggers are the blows taken plus one per N repeats, merged by the 6 s gap.
 
 ### Per battle of 20 fighters
 
+An estimate only. No paid battle runs until the 100-fighter collapse is understood (see the top).
+
 - **The rate.** §5.2's battle had 9.2 blows a second among 20, so each fighter is struck about every 2 s. The 6 s gap binds: 20 fighters × 1 call per 6 s is 3.3 calls a second.
 - **The global cap binds before that** (below): **2 calls a second, $0.0026 a second, $0.16 a minute**. A 3-minute battle costs about **$0.47**.
 - **The total spend** rises by the cap's share: at 2 calls a second the queue's Urgent share is spent on fast calls, and the cap keeps the queue from flooding.
@@ -174,9 +183,15 @@ Triggers are the blows taken plus one per N repeats, merged by the 6 s gap.
 ### The bound that keeps a battle from flooding the queue
 
 - **Per character:** one in flight, the 6 s gap, merged triggers, stale drops (above).
-- **Global:** `fast.max_in_flight` 4 and `fast.per_s` 2, a token bucket across the service.
+- **Global, world laws:** `fast_lane_inflight` 4 and `fast_lane_rate` 2 a second, applied by the authority when it issues rows.
   - Past either, a trigger waits its turn or goes stale; it never displaces a deliberation.
-  - Turns go first to the character struck most recently, then by attention (on stage first), the ordering the queue's admission already uses (`NON_INTERACTIVE_ADMISSIONS`: six of ten admissions are Urgent).
+  - Turns go first to the character triggered most recently.
+- **Measured** (verify-llm `fast-cap`, fake model, 20 fighters in ten pairs attacking each other, all served, each fast reply held 2.5 s, 30 s):
+  - at most 4 issued at once and 4 in flight at the provider;
+  - at most 3 started in any one second (the bucket's 2 plus one refill);
+  - 28 calls, and 19 of the 20 fighters got a call (9 got two);
+  - the wait from trigger to issue was 0.09 s at p50, 4.7 s at p90 and 5.7 s at most (under the 8 s stale limit).
+  - **No tick numbers.** Any reading in a battle would be confounded by the battle collapse under diagnosis, and nothing is tuned for battles.
 - **What the cap means at scale:**
   - At 200 fighters the cap means each gets a fast call about every 100 s: the lane degrades to nothing for most fighters, and the slow mind and the routines carry the fight, as today.
   - The fast lane is a help to those in view, not a promise to every combatant. Measured at the 216-character gate before it counts as accepted.
@@ -188,14 +203,14 @@ Triggers are the blows taken plus one per N repeats, merged by the 6 s gap.
   - a player's character while the AI holds it (the player offline, `presence.ai`).
 - **Never while a person controls the body.** The authority already enforces it: `mind_patch`, like `mind_install`, is authorised only when the caller is the character's controller. When the player comes back (`presence.rs` `hand_back`), the player becomes the controller again, so a reply arriving after that is refused, writing nothing.
 - **The player's return cancels a pending re-plan.** The mind service drops the character's in-flight fast request when it sees `character.ai` go false or the controller change; it doesn't wait for the reply.
-- **A stale reply can't land after the AI takes over again.** When the player leaves once more, `take_over` installs the AI's graph (`set_graph` from `ai_graph`), which changes `brain.installed_ms`. A reply prepared before the player's return carries the old `base_ms` and is refused by `mind_patch`, even though the mind service is the controller again.
-- **The player is never served.** A human-controlled body gets no fast lane: its "fast lane" is the person. The repeat percept of §1 reaches the player all the same, as perception.
+- **A stale reply can't land after the AI takes over again.** The player's return deleted the request (`fast::cancel` in `hand_back`), so a reply prepared before it is refused by `mind_patch` ("no fast re-plan was asked of this character"), even though the mind service is the controller again (verify-minds `fast-takeover`).
+- **The player is never served.** A human-controlled body gets no fast lane: its "fast lane" is the person.
 
 ## 6. How to test it
 
 ### The arm
 
-- **R2 with a variant `fast`** (`LIVING_FAST=1` with `LIVING_RETHINK` set to `llm`, the gate's machinery) against `default`: the same fixtures (`arena-heavy`, `arena-kiter`), 5 replicates each.
+- **R2 with the world law `fast_lane_on` set true for the arm** against r2d (the same fixtures, `arena-heavy` and `arena-kiter`, 5 replicates each).
 - **Free first:** `--fake`, for the plumbing and the floor. From a blow to a patch installed, with an instant model, should be about 1 s.
 - **Then paid:** about $0.40 for the pair of arms at r2d's scale, plus the fast calls ($0.05–0.2).
 
@@ -208,28 +223,25 @@ Triggers are the blows taken plus one per N repeats, merged by the 6 s gap.
 - **Did a mind's timing move?** `arena_report.py`'s doing→dodge table, by install time and source: do fast patches move from "winding up" toward "about to release" after "it was over before the blow came"?
 - **Latency.** Blow to patch installed, p50 and p90, and the share dropped as stale. **Cost per fight.**
 
-### Free verification cases it would need, before any paid run
+### Verification (built, free)
 
-**verify-minds `fast-lane`, with the fake model:**
-- (a) a blow taken starts one fast request whose prompt holds the fight's experiences, the `combat` outline and the routine names, and no tactic text; the reply's patch is installed through `mind_patch`;
-- (b) blows inside `gap_s` merge into one call;
-- (c) a reply with a stale `base_ms` (a slow install in between) is refused and changes nothing;
-- (d) the player coming back (handback) while a request is in flight drops it, and the authority refuses a late reply; after the AI takes over again, a reply prepared before is refused;
-- (e) a sleeping body is not fast-laned;
-- (f) with the switch off, no `fast` call is made;
-- (g) a slow install that began before a fast patch keeps the patched `combat` branch.
-
-**verify-llm `fast-route`:** the purpose `fast` routes to `fast.route`'s profile on the `Urgent` lane, is journaled with `latency_ms` and `queue_wait_ms`, and a reply past `timeout_ms` is dropped as a timeout.
-
-**verify-llm `fast-cap`:** at most `max_in_flight` fast calls run at once and at most `per_s` start a second; excess triggers wait or go stale, and deliberations are never displaced.
-
-**verify-core `seen_again`:** the repeat percept under the `seen_again_n` law:
-- written at N and 2N for a creature's same visible move at a character that sees it;
-- not for one it does not see (behind it with `fov_on`, beyond sight);
-- not for different moves;
-- an installed law changes N.
-
-**verify-player:** the repeat percept reaches a player's `my_experience`; a played body gets no fast call.
+- **verify-minds `fast-lane`** (fake model), each sub-case a check:
+  - (a) a blow taken issues one fast request whose prompt holds why now (the victim's own line), what has just happened, the top level and the routines, and no count or "again"; the reply's `combat` branch is installed through `mind_patch`;
+  - (b) blows inside the 6 s gap merge into one call;
+  - (c) a reply held while an install changes the plan is refused by the plan check;
+  - (e) a sleeper's blow issues nothing;
+  - (f) with the law off, blows ask nothing;
+  - (g) the slow install the same blow started keeps the patched branch.
+- **verify-minds `fast-takeover`:** (d) the player's return drops the request; the minds take over again and the late reply is refused.
+- **verify-llm `fast-route`:** the purpose `fast` goes to `fast.route`'s profile on the urgent lane, journaled with `latency_ms` and `queue_wait_ms`; a reply past `timeout_ms` is dropped and journaled as a timeout.
+- **verify-llm `fast-cap`:** the laws' caps, as measured above.
+- **verify-core `seen_again`:** the repeat trigger, with `fast_lane_inflight` 0 so rows wait and can be read:
+  - the windup reason first comes at the 3rd windup (law 3) and at the 2nd (law 2);
+  - no reason or experience counts or says "again";
+  - shot from behind with `fov_on`, only the struck line.
+- **verify-client:** `mind_patch` and `mind_fast_done` are refused to anonymous callers, to players for another character ("not your character") and for their own ("no fast re-plan was asked"); `fast_ask` is private.
+- **verify-player `fast_lane`:** a played body struck by four heavy blows gets no `fast_ask` row, and its rows carry no count or "again".
+- **Unit tests:** `mind::fast::tests` (what a reply may change; no count or tactic text in the prompt); the rules' install check covers the six laws.
 
 ## What this design does not do
 

@@ -91,6 +91,12 @@ fn laws() {
         // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
         // brought to think by its cues at most once within `cue_gap_s`.
         cues_on: false, cue_cooldown_s: 600.0, cue_gap_s: 60.0,
+        // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
+        // on a blow taken or when the same creature is seen to start the same move at it
+        // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
+        // world at most `fast_lane_rate` are issued a second and `fast_lane_inflight` at once;
+        // a character's start `fast_lane_gap_s` apart; a trigger waiting `fast_lane_stale_s` is dropped.
+        fast_lane_on: false, seen_again_n: 3.0, fast_lane_rate: 2.0, fast_lane_inflight: 4.0, fast_lane_gap_s: 6.0, fast_lane_stale_s: 8.0,
         fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
         fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
         // What is heard but not seen (only while the field is on) is told by its distance:
@@ -2931,6 +2937,12 @@ fn laws_about(l) {
         cues_on: if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         cue_cooldown_s: `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
         cue_gap_s: `what one watches for brings one to think at most once in ${short(l.cue_gap_s)} s`,
+        fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
+        seen_again_n: `seeing the same move started at one ${short(l.seen_again_n)} times in a fight is reason for a quick revision`,
+        fast_lane_rate: `at most ${short(l.fast_lane_rate)} quick revisions begin each second across the world`,
+        fast_lane_inflight: `and at most ${short(l.fast_lane_inflight)} are under way at once`,
+        fast_lane_gap_s: `one's quick revisions begin at least ${short(l.fast_lane_gap_s)} s apart`,
+        fast_lane_stale_s: `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
