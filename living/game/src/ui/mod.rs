@@ -339,6 +339,8 @@ fn dump(
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone())})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+        // The pack's load and limit as its header shows them (while the pack is open).
+        "pack": model.verbs.inventory.as_ref().map(|i| serde_json::json!({"carried": i.carried, "limit": i.limit, "items": i.rows.iter().map(|r| (r.0.clone(), r.1)).collect::<Vec<_>>()})),
         // My bars (`meters()`) and pills (`status_of`) as drawn.
         "me": model.me.as_ref().map(|m| serde_json::json!({"meters": m.meters.iter().map(|x| serde_json::json!({"name": x.name, "label": x.label, "value": x.value, "max": x.max})).collect::<Vec<_>>(), "statuses": m.statuses.iter().map(|x| serde_json::json!({"name": x.name, "tone": format!("{:?}", x.tone), "text": x.text})).collect::<Vec<_>>()})),
         // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.

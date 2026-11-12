@@ -197,9 +197,11 @@ def items(run, c):
     t0 = int(time.time() * 1000) - 1000
     plan = ("ready;sync:scene;sync:kit;wait:1.5;menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.6;dump:01;key:KeyI:tap;wait:0.6;shot:01_pack_person;dump:02;"
             "click:@pack:berries;wait:0.5;shot:02_item_acts;dump:03;key:Escape:tap;wait:0.3;slide:@pack:berries>@win:Person{A}:head:0.8;wait:2;shot:03_dropped;dump:04;"
-            "menu:f@id:{A};wait:0.5;shot:04_hold_f;dump:05;click:@acts:0:give;wait:0.5;shot:05_give_sub;dump:06;click:@acts:1:berries;wait:2;shot:06_given;quit").replace("{A}", str(a))
+            "menu:f@id:{A};wait:0.5;shot:04_hold_f;dump:05;click:@acts:0:give;wait:0.5;shot:05_give_sub;dump:06;click:@acts:1:berries;wait:2;shot:06_given;dump:07;sync:load;wait:2;shot:07_load;dump:08;quit").replace("{A}", str(a))
     # The newcomer's berries may be gone from earlier runs: the scene grants four (admin).
-    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"], syncs=['kit=grant_items|{me}|"berries"|4'])
+    # Then a basket (room 20) and ten arrows (0.1 each) for the pack's load and limit (goods-3).
+    load = 'load=grant_items|{me}|"basket"|1;grant_items|{me}|"arrow"|10'
+    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"], syncs=['kit=grant_items|{me}|"berries"|4', load])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06"]}
     c.check(s, "hold-F list › Their window opens their window", d["01"] and (f"Person{a}", "Left") in wins(d["01"]), str(wins(d["01"])))
@@ -224,9 +226,18 @@ def items(run, c):
     done = [r["text"] for r in gave if "gave 1 berries" in r["text"]]
     c.check(s, "the rules carried out both gives (the player's act outcomes)", len(done) == 2, f"{len(done)} done; outcomes {[r['text'] for r in gave]}")
     c.check(s, "and both reached them (their gift experiences)", len(gifts) == 2, f"{len(gifts)} gifts")
+    p7, p8 = (dump(out, "07") or {}).get("pack") or {}, (dump(out, "08") or {}).get("pack") or {}
+    dl = (p8.get("limit") or 0) - (p7.get("limit") or 0)
+    dc = (p8.get("carried") or 0) - (p7.get("carried") or 0)
+    had = dict(map(tuple, p7.get("items") or [])).get("basket", 0)
+    # The first basket adds its room (20); another adds nothing (the largest room, not a sum).
+    want = 0.0 if had else 20.0
+    c.check(s, f"the pack's limit adds the largest room carried (a basket: {want:.0f} more, {had} carried before)", p7 and p8 and abs(dl - want) < 1e-3, f"limit {p7.get('limit')} -> {p8.get('limit')}")
+    c.check(s, "its load counts each item by its carry (ten arrows at 0.1, a basket)", p7 and p8 and 1.0 - 1e-3 <= dc < 10.0, f"carried {p7.get('carried')} -> {p8.get('carried')}")
 
 
 THEMES = ["glass", "clear", "night", "linen", "walnut"]  # F4's order (`ui::wood::Name::ALL`)
+
 
 
 def themes(run, c):
