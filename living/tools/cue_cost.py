@@ -13,9 +13,11 @@ A B C D, then D C B A, so drift shows as a difference between the two passes.
 - `cullet`: seed `cullet`, all its minds on the fake model (think 5 s, compile and consolidation
   4 s, talk 2 s) with Neo4j; each mind's think reply writes the same 8 cues (NOTICE).
 - `crowd216`: seed `island`; 216 minded people (`spawn_crowd`): `--battle` of them packed within
-  7 m of the battle site (where `spawn_battle` stages one) fighting the nearest person (strike;
-  dodge or block when threatened; heal below half, knowing wound_tending), the rest walking as
-  foragers; each with the same 8 cues written as its mind would (`mind_update`). No mind service:
+  7 m of the battle site (where `spawn_battle` stages one), the rest walking as foragers. `--mode
+  mill` (default): the packed group stands and now and then waves at the nearest person (no
+  deaths). `--mode battle`: it fights the nearest person (strike; dodge or block when threatened;
+  heal below half, knowing wound_tending); on 2026-11-12 that workload ran away by itself
+  (experiences 2.3k/s to 40k/s in 30 min, cues on or off) and cannot compare arms; each with the same 8 cues written as its mind would (`mind_update`). No mind service:
   their requests to think stay pending, refreshed with their scene, as under a slow mind. A
   fighter who dies is replaced by a new one at the site (a load-generator respawn, counted per
   window), so the battle keeps its population.
@@ -170,10 +172,14 @@ def crowd216(run, a):
     site = next(b for b in run.private("SELECT id, x, y FROM body", "bodies-probe") if b["id"] == probe[0]["id"])
     run.admin("kill", probe[0]["id"], "cost probe")
     site = (site["x"], site["y"])
-    graph = lambda id: {"first": [
+    battle_graph = lambda id: {"first": [
         {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
         {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if id % 2 == 0 else "block"}}}},
         {"do": {"skill": "strike", "target": {"nearest": "person"}}}]}
+    # `--mode mill`: the same packed crowd without blows: each stands among the others and now and
+    # then waves at the nearest (a gesture, seen by all), so the density holds with no deaths.
+    mill_graph = lambda id: {"first": [{"if": {"cond": {"chance": 0.03}}, "then": {"do": {"skill": "wave", "target": {"nearest": "person"}}}}, {"wait": 2}]}
+    graph = battle_graph if a.mode == "battle" else mill_graph
     cues = [cue_in(n) for n in notice()]
 
     def spawn(n):
@@ -186,8 +192,9 @@ def crowd216(run, a):
 
     def fighter(id):
         run.admin("place_at", id, site[0] + random.uniform(-7, 7), site[1] + random.uniform(-7, 7))
-        run.admin("grant_items", id, "spear", 1)
-        run.admin("grant_know_how", id, "wound_tending")
+        if a.mode == "battle":
+            run.admin("grant_items", id, "spear", 1)
+            run.admin("grant_know_how", id, "wound_tending")
         run.admin("set_behavior", id, json.dumps(graph(id)))
         update(id)
 
@@ -221,7 +228,7 @@ def crowd216(run, a):
         rows = run.sql("SELECT id, alive, kind FROM character", "census")
         return {"alive": sum(1 for r in rows if r["alive"]), "respawns": state["respawns"]}
 
-    head = {"workload": "crowd216", "ambient_at_publish": ambient, "battle": a.battle, "walkers": a.walkers, "site": site,
+    head = {"workload": "crowd216", "mode": a.mode, "ambient_at_publish": ambient, "battle": a.battle, "walkers": a.walkers, "site": site,
             "cue_rows": len(run.private("SELECT id FROM cue", "cue-count")), "refused": refused}
     print(json.dumps(head), flush=True)
     try:
@@ -242,6 +249,7 @@ def main():
     ap.add_argument("--warmup", type=int, default=60)
     ap.add_argument("--battle", type=int, default=100)
     ap.add_argument("--walkers", type=int, default=116)
+    ap.add_argument("--mode", choices=["battle", "mill"], default="mill", help="crowd216: the packed group fights (battle) or stands and waves (mill)")
     a = ap.parse_args()
     run = vm.Run(a.run)
     result = {}
