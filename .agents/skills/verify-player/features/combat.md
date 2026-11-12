@@ -22,7 +22,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - Breath (since `stamina-1`, docs/STAMINA.md; scene `breath`), read through the player's own `my_vitals`:
   - **A run.** `human_move` with run goes the `run_share` law times the walk and drains 4 breath a second. The row's rate comes from its anchor, and a held run writes no further row. Letting go writes the refill from a second later at 25 a second. Standing, breath comes back with no row written.
   - **Costs.** A dodge takes 20 and a jump 10.
-  - **Refusal.** Dodging on without a pause is refused "out of breath", in the use's outcome and as a `my_combat` REFUSED row.
+  - **Refusal.** A dodge with less breath than it costs is refused "out of breath", in the use's outcome and as a `my_combat` REFUSED row (checked with the world's `cost_dodge` at 90 for the check: a dodge from full, then one 0.95 s later).
 - The seed's bold pack attacks a healthy adult player.
 - In the game client (since 2026-11-11), a left tap on a person who is not hostile to the player sends no `use_skill`; it opens the text box to them (and a `face` act). A held press, and a tap on an animal or a hostile person, strike as before. The reducers are unchanged, so `combat.py` still drives `use_skill` directly.
 - The character dies through the vitals and death rules ("killed by …"), the dead player is told of the death and who saw it, and `join` makes a new character with only the newcomer's kit.
