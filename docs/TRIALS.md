@@ -1767,6 +1767,60 @@ Switches in the fake proofs, to record again with the paid batch: greeting `near
 
 **SpacetimeDB.** Nothing here adds or changes a table, reducer, view or subscription. The census is the same SQL read of four small tables every 30 s as in the hamlet, for a developer's audit truth. The [HTTP database API](https://spacetimedb.com/docs/http/database/) (checked 2026-11-11) calls that endpoint intended for management and debugging, not a game data path. At 24–45 characters the reads stay small.
 
+
+### The plan, with the identity fix and the sleep fixes in the build (2026-11-12)
+
+Branch `self-body`. This supersedes the cost above. Nothing paid has run.
+
+**What the build now carries.** The batch measures choice: a run-born adult's prompts no longer describe a body the person does not have.
+
+- **The identity fix** (`self-body`).
+  - Every prompt's `# Who you are` ends with one perceived line, e.g. "Your body: 15 years old, an adult for a few hours." It goes into think, deliberate, consolidate, talk, reorganize, fast, and a player's lived consolidation, so players' characters under AI get it too. It comes from the character row and the life table under the world's `life_years` law, as the scene's `you.age` does. It sits beside the persona and never edits it.
+  - A stage change stays a lived experience (the authority's "You have grown up" percept, unchanged).
+  - A run-born mind that first starts when grown gets a first identity from facts, with no model call: "I am Faye, child of Brisk Marrow and Edda Marrow. Nell, Kit and Tobin Marrow are my parents' children too." It has its inborn temperament, no values, goals, pastimes or mood, and `CHILD_OF` edges and `parent` relations to both parents. In bi1, 14 run-born began with "(no persona yet)" and no parents.
+  - Proof: verify-minds `body` (features/self-body.md), with Neo4j.
+- **The sleep fixes**, on main since `0203fe60` (`fix-sleep-thinking`) and `6fedfa5f` (`fix-sleep-talk`). A sleeper's mind is asked to think only when something wakes it. A line that does not wake it waits for the sleeper to wake, with no talk turn.
+
+**Cadence on the current build** (`b4f`, 2026-11-12 15:44–16:33). Fake model with model-like latencies (`fake/latency.json`), 48 minutes (one game day, night included), one run of `hamlet-6` and one of `hamlet`, against bi1's real control. The table lists calls per resident-hour (census thinkers), and in brackets the share whose caller was asleep at the nearest census.
+
+| | `hamlet-6`, this build, fake | `hamlet`, this build, fake | bi1 control (`hamlet`, real, 6 h) |
+| --- | ---: | ---: | ---: |
+| Deliberations | 27.5 (0.06) | 20.7 (0.11) | 24.6 (0.30) |
+| Think steps | 27.5 (0.07) | 21.1 (0.14) | 24.6 (0.32) |
+| Consolidations | 27.2 (0.12) | 25.3 (0.19) | 23.1 (0.31) |
+| Talk turns | 20.8 (0.01) | 14.2 (0.02) | 7.7 (0.23) |
+| All calls | 103 | 81.3 | 81.1 |
+| Prompt characters per resident-hour | 2.81 M | 2.15 M | 2.52 M |
+
+Reading it:
+
+- **Sleepers think far less.** Deliberations from sleepers fell from 30% in bi1 to 6–11%, and talk turns by sleepers to 1–2%. That is the sleep fixes. The merges' own fake measures were 26.7 → 23.5 deliberations per resident-hour, and sleepers' talk calls 8 of 163 → 0 of 167.
+- **Fake talk runs long.** The latency script's talk replies do not end the exchange, so talk turns are high in both fake runs. Talk is the smallest prompt (5.6k characters against 59k for a deliberation), about 4% of prompt volume.
+- **More people, more calls each.** `hamlet-6` makes 1.27 times the calls per resident-hour of `hamlet` on the same build, and 1.30 times the prompt volume: more people in each scene, more conversations.
+
+**The body line's cost, measured.** All 1,960 `hamlet-6` prompts carried it, at 47 characters on average (about 12–14 tokens). That is 0.17% of prompt volume: about 1.4 M input tokens over a 2-replicate batch, **about $0.21** at glm-flash's uncached input price ($0.42 if all on deepseek-flash). The line changes once per year of age (6.9 real minutes), in 159 of 1,960 prompts. Each time, the rest of the character segment after it cannot come from the provider's prompt cache. The shared prefix before it (system prompt and rules) still can. That cache effect was not measured; it needs a paid run.
+
+**Cost per resident-hour, re-estimated.** From bi1's $0.13, on two routes:
+
+1. **Build, then seed.** The sleep fixes cut deliberations and think steps by 12% and talk by 5%. Weighted by bi1's prompt volume per purpose (deliberate 1.32 M, think 0.53 M, consolidate 0.57 M, talk 0.06 M, reorganize 0.04 M characters per resident-hour), that is ×0.91. Then `hamlet-6`'s density on this build is ×1.30: **$0.154**.
+2. **Direct.** `hamlet-6`'s fake prompt volume against bi1's real one, 2.81 M / 2.52 M = ×1.11: **$0.145**. Fake consolidations write no memories, so fake prompts stay shorter than real ones over hours, and this route is low.
+
+Take **$0.15 per resident-hour**, against bi1's $0.13 on the hamlet. Neither route is measured with real models.
+
+**Arms.** Control `hamlet-6` and `hamlet-6-longing`, 10 hours each, `minds.max` 48 (expected peak 34, high case 45), commands as above. Resident-hours per run from the projection above: control about 300, longing about 225, so 525 a replicate pair; the range is 450–742.
+
+| Replicates | Runs | Resident-hours | Estimate at $0.15 | Range ($0.145–0.154, 450–742 a pair) |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 4 | 1,050 | **≈ $158** | $131–229 |
+| 3 | 6 | 1,575 | **≈ $236** | $196–343 |
+
+Recommendation unchanged: 2 replicates first, about $158 (up to about $230), and a third pair only if the two disagree on whether the run-born have children.
+
+**Still to settle with the batch.**
+
+- Provider capacity: about 120–140 minds on the service at once. Expect more overflow to deepseek-flash, whose input costs twice glm-flash's.
+- The switches to record: those above, plus the identity fix (body line on, `Origin::Grown`) and both sleep fixes.
+
 ### Not covered
 
 - Fake minds do not choose to conceive, so nothing here says whether the larger seed changes whom minds choose. `b2g`'s attempts are scripted.
@@ -1880,7 +1934,9 @@ Branch `births-identity`. Free: reading of code and of bi1's journals, nothing b
 
 Whether this holds back pairing is **not shown**. Dell and Ada did not try. Uma, who rewrote herself as grown, was the only run-born to try, but Teal and Hollis also rewrote and did not.
 
-**The fix's shape (not built).** It must come only from what the mind already has: the body it perceives, and what it lived, consolidated as usual. There is no rewritten persona, no instruction to change voice, and no want.
+**Built since (2026-11-12, `self-body`):** shapes 1 and 3 below, and shape 2 as an unchanged percept, without the `Self` node's `stage`. The body line is in every prompt, and a grown mind's first identity comes from facts. See [the plan with the identity fix](#the-plan-with-the-identity-fix-and-the-sleep-fixes-in-the-build-2026-11-12) and verify-minds `body`.
+
+**The fix's shape (as designed).** It must come only from what the mind already has: the body it perceives, and what it lived, consolidated as usual. There is no rewritten persona, no instruction to change voice, and no want.
 
 1. **The body's age and stage as a perceived fact, in every prompt's `# Who you are`.** The line would read, for example, "Your body: 15 years old, an adult since about a day." It comes from the same character row and life table that the scene's `you.age` already uses: `stage` and age from `born_ms`/`birth_age_days` at the world's pace and `life_years` law (the mind already reads `stage` in `body_now`, mind.rs:584), and how long ago the stage began from the same life table.
    - It sits beside the persona, not inside it. The authored or lived narrative stays as written.
