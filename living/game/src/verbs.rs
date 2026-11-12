@@ -620,6 +620,9 @@ pub struct Verbs {
     /// The open wheel (`ui/wheel.rs`, docs/INTERFACE.md §8), and a script's direction for it.
     pub wheel: Option<crate::ui::wheel::WheelOpen>,
     pub wheel_point: Option<living_rules::ui::Dir>,
+    /// The open recipe grid (`ui/grid.rs`), and a cell picked in it.
+    pub grid: Option<crate::ui::grid::GridOpen>,
+    pub grid_pick: Option<usize>,
     /// Where the cursor was when F went down (a flick opens the wheel with its direction).
     f_at: Option<Vec2>,
     composing: bool,
@@ -849,6 +852,67 @@ fn place_of(conn: &DbConnection, aim: &Aim) -> (living_rules::ui::On, String) {
         Aim::Thing { kind, .. } => (On::Thing, kind.clone()),
         Aim::Me => (On::Me, String::new()),
     }
+}
+
+/// A way of making's recipe grid toward a target (`ui/grid.rs`), where its `_ui()` says
+/// `choose: "grid"` from `products`: a cell per product, live or greyed by the rules' check with
+/// that cell's item (`making_item`), its rows from `recipe_parts`. None keeps the list.
+fn grid_toward(conn: &DbConnection, sc: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim, skill: &str, title: String) -> Option<crate::ui::grid::GridOpen> {
+    use living_rules::ui::{Choose, ItemSource};
+    let u = sc.ui(skill).filter(|u| u.choose == Choose::Grid && u.source == Some(ItemSource::Products))?;
+    let spec = skills.iter().find(|s| s.name == skill)?;
+    let products = sc.products_of(skill);
+    if products.is_empty() {
+        return None;
+    }
+    let t = toward(conn, sc, me, my_at, aim);
+    let words = |p: &living_rules::script::RecipePart| {
+        let what = if p.any_of.len() > 1 { format!("{} {} ({})", p.qty, p.look.label, p.any_of.iter().map(|i| i.replace('_', " ")).collect::<Vec<_>>().join(", ")) } else { format!("{} {}", p.qty, p.look.label) };
+        what
+    };
+    let cells = products
+        .iter()
+        .filter_map(|product| {
+            let parts = sc.recipe_parts(skill, product)?;
+            let (why, _) = refusal_with(sc, me, t.target.as_ref(), spec, &parts.item);
+            let mut rows: Vec<(String, String)> = Vec::new();
+            if !parts.takes.is_empty() {
+                rows.push(("Takes".into(), parts.takes.iter().map(words).collect::<Vec<_>>().join(", ")));
+            }
+            if !parts.tools.is_empty() {
+                rows.push(("Holds".into(), parts.tools.iter().map(words).collect::<Vec<_>>().join(", ")));
+            }
+            let place = match parts.at.as_str() {
+                "" => "anywhere".to_string(),
+                "fire" => "at a fire".to_string(),
+                k => format!("at a {}", k.replace('_', " ")),
+            };
+            let heat = match (parts.lit, parts.fuel > 0.0) {
+                (_, true) => format!(", burning, {} fuel from it", parts.fuel),
+                (true, false) => ", burning".to_string(),
+                _ => String::new(),
+            };
+            rows.push(("Where".into(), format!("{place}{heat}")));
+            if !parts.knows.is_empty() {
+                rows.push(("Knowing".into(), parts.knows.replace('_', " ")));
+            }
+            if parts.ms > 0 {
+                rows.push(("Time".into(), format!("{:.0} s", parts.ms as f64 / 1000.0)));
+            }
+            let detail = u.detail.as_deref().and_then(|d| sc.text_of(d, product)).unwrap_or_default();
+            Some(crate::ui::grid::GridCell { product: product.to_string(), item: parts.item.clone(), label: parts.look.label.clone(), icon: parts.look.icon.clone(), makes: parts.makes, allowed: why.is_empty(), reason: why, detail, rows })
+        })
+        .take(crate::ui::grid::CELLS)
+        .collect::<Vec<_>>();
+    let title = format!("{} — {}", u.label, title);
+    Some(crate::ui::grid::GridOpen { aim: aim.clone(), skill: skill.to_string(), title, cells, sel: 0 })
+}
+
+/// A skill's check with this item toward the target: the rules' refusal words (empty: allowed).
+fn refusal_with(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill, item: &str) -> (String, String) {
+    let t = target.cloned().unwrap_or_else(|| TargetFacts { class: "none".into(), ..Default::default() });
+    let ctx = SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, night: me.night, hour: me.hour, season: me.season.clone(), roll: 0.5, skill: spec.name.clone(), raining: me.raining, ..Default::default() };
+    (sc.check(&spec.name, &ctx).err().unwrap_or_default(), item.to_string())
 }
 
 /// The rules' own words for refusing a skill toward this target now (its `_check`), for the
@@ -1107,7 +1171,7 @@ pub fn input(
 ) {
     let now = time.elapsed_secs_f64();
     let now_ms = scene.now_ms;
-    wants.menu = v.menu.is_some() || v.wheel.is_some();
+    wants.menu = v.menu.is_some() || v.wheel.is_some() || v.grid.is_some();
     let (Some(conn), Some(me), Some(me3), Some(sc)) = (net.conn.as_ref(), net.my_id, target.0, rules.scripts.as_ref()) else {
         v.menu = None;
         v.wheel = None;
@@ -1233,11 +1297,19 @@ pub fn input(
                                 send(&net, conn, sc, &w.aim, &c, None, now_ms, &mut v, &mut controls);
                             }
                         }
+                        // A greyed way of making with a grid: the grid, its cells greyed with why.
+                        [] if grid_toward(conn, sc, &rules.skills, &facts(&w.aim), my_at, &w.aim, &k, w.title.clone()).is_some() => {
+                            v.grid = grid_toward(conn, sc, &rules.skills, &facts(&w.aim), my_at, &w.aim, &k, w.title.clone());
+                        }
                         // Greyed: sent all the same; the authority decides and says why.
                         [] => {
                             let item = w.grey_items.get(&Pin::Skill(k.clone())).cloned();
                             let c = Choice { item, ..Choice::new(&k, pretty(&k)) };
                             send(&net, conn, sc, &w.aim, &c, None, now_ms, &mut v, &mut controls);
+                        }
+                        // A way of making with a recipe grid: the grid (greyed cells say why).
+                        _ if grid_toward(conn, sc, &rules.skills, &facts(&w.aim), my_at, &w.aim, &k, w.title.clone()).is_some() => {
+                            v.grid = grid_toward(conn, sc, &rules.skills, &facts(&w.aim), my_at, &w.aim, &k, w.title.clone());
                         }
                         // A further choice: its sub-list, beside the hub.
                         _ => {
@@ -1324,6 +1396,22 @@ pub fn input(
         }
     } else if v.menu.as_ref().is_some_and(|m| m.aim != Aim::Me) && pressed(INTERACT) {
         v.menu = None;
+    }
+    // A recipe grid's cell (a click, or its number): the way's act with that cell's item, a
+    // greyed one too (the authority decides; its note says why).
+    if v.grid.is_some() {
+        const NUM: [KeyCode; 9] = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9];
+        if let Some(i) = NUM.iter().position(|c| pressed(*c)) {
+            v.grid_pick = Some(i);
+        }
+    }
+    if let (Some(i), Some(g)) = (v.grid_pick.take(), v.grid.clone()) {
+        if let Some(c) = g.cells.get(i) {
+            v.grid = None;
+            info!("ui: grid {} chose {}{}", g.skill, c.product, if c.allowed { String::new() } else { format!(" (grey: {}; sent, the authority decides)", c.reason) });
+            let ch = Choice { item: Some(c.item.clone()), ..Choice::new(&g.skill, format!("{} {}", pretty(&g.skill), c.label)) };
+            send(&net, conn, sc, &g.aim, &ch, None, now_ms, &mut v, &mut controls);
+        }
     }
     // The wheel holds the cursor while it is open (`pointer.rs`).
     pointer.hold = v.wheel.is_some();
@@ -1456,11 +1544,18 @@ pub fn input(
     // A pick in the open list.
     if let (Some(i), Some(m)) = (pick, v.menu.clone()) {
         match m.rows().get(i) {
-            Some(Row::Group { name, .. }) => {
-                if let Some(mm) = v.menu.as_mut() {
-                    mm.group = Some(name.clone());
+            Some(Row::Group { name, .. }) => match grid_toward(conn, sc, &rules.skills, &facts(&m.aim), my_at, &m.aim, name, m.title.clone()) {
+                // A way of making with a recipe grid opens it in place of its sub-list.
+                Some(g) => {
+                    v.grid = Some(g);
+                    v.menu = None;
                 }
-            }
+                None => {
+                    if let Some(mm) = v.menu.as_mut() {
+                        mm.group = Some(name.clone());
+                    }
+                }
+            },
             Some(Row::Talk) => {
                 if let (Aim::Creature { id }, Some(t)) = (&m.aim, talk.as_mut()) {
                     t.open_to = Some(*id);
