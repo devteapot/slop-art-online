@@ -201,7 +201,9 @@ pub struct InputText(Win);
 pub struct Empty(Win);
 /// A help line shown until it has been used (`Hints`).
 #[derive(Component)]
-pub struct Hint;
+/// The box's hint line, with its own words (the earshot sentence takes their place while the
+/// authority gives one).
+pub struct Hint(pub String);
 
 /// One-time help: the box's line goes once a line has been said.
 #[derive(Resource, Default)]
@@ -267,7 +269,7 @@ fn input_row(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, w: Win, hin
             }
         });
     // How the box works: shown until the first line is said (always in a dense theme).
-    p.spawn((Hint, Text::new(hint), f.body(12.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+    p.spawn((Hint(hint.to_string()), Text::new(hint), f.body(12.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
 }
 
 fn thread(p: &mut ChildSpawnerCommands, f: &Fonts, w: Win, n: usize, empty: &str) {
@@ -705,10 +707,14 @@ pub fn update(
 }
 
 /// One-time help lines, and the person window's second line only when it says something.
-pub fn hints(hints: Res<Hints>, mut lines: Query<&mut Node, (With<Hint>, Without<WhoText>)>, mut who: Query<(&Text, &mut Node), (With<WhoText>, Without<Hint>)>) {
-    let on = wood::t().help || !hints.said;
-    for mut n in &mut lines {
+pub fn hints(hints: Res<Hints>, talk: Option<Res<crate::talk::Talk>>, input: Res<crate::controls::Input>, mut lines: Query<(&Hint, &mut Node, &mut Text), Without<WhoText>>, mut who: Query<(&Text, &mut Node), (With<WhoText>, Without<Hint>)>) {
+    // The authority's earshot sentence (the `earshot` law), as it is, while the box is open; else
+    // the box's own words until the first line is said (always in a dense theme).
+    let told = talk.as_ref().and_then(|t| t.told.as_ref()).filter(|_| input.chat_open).map(|t| t.text.clone()).filter(|t| !t.is_empty());
+    let on = told.is_some() || wood::t().help || !hints.said;
+    for (h, mut n, mut t) in &mut lines {
         show(&mut n, on);
+        set_text(&mut t, told.as_deref().unwrap_or(&h.0));
     }
     for (t, mut n) in &mut who {
         show(&mut n, !t.0.is_empty());

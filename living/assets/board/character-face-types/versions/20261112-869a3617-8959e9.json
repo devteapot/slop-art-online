@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-869a3617-8959e9",
+ "published": "2026-11-12T16:47:49+01:00",
+ "imported": "2026-11-12T16:47:49+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "The hair pass: no fringe covers a brow (a full fringe ends above the highest brow any type has); short styles' fronts rounded where they were a box; the fringe in three or four thick locks; single strands lifting off; no seam down the back of parted styles; a tail or a braid held off the back on the idle clip.",
+ "source": {
+  "commit": "869a3617ed40f4ef158f4c990da8c675aee6b4f2",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "11e9ec5f97816f332bd5bcfc7c371e74a97ebee1655462b61285138f0722b3b1",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "hair-pass-short, hair-pass-long: each style composed on a bare type by compose.py (hair and brows in one hair colour) through the game client, from five sides, before and after; hair-pass-motion: five residents' own files through recipes on four frames of the idle clip from the side, then from behind and three-quarter behind, before and after. Eyes are held open by the photo tool. The vroid and blue-protocol members are the references, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-869a3617-8959e9",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "e3386df163e290090bbbde4d665b50e7204307860e4bdd4273efbfc6f44e0172",
+   "shots": [
+    "hair-pass-long",
+    "hair-pass-motion",
+    "hair-pass-short"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "3f5f9b93b79ee77b8a9981f92db27d3c8dc91d95f1b62df77ce8f3c4da4d47bf",
+   "shots": [
+    "hair-pass-long",
+    "hair-pass-motion",
+    "hair-pass-short"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "bb7cd191ecf96d882726df878d0b6facf1bab1de1826e273ea0012a964cb0c9d",
+   "shots": [
+    "hair-pass-long",
+    "hair-pass-motion",
+    "hair-pass-short"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

@@ -5,6 +5,7 @@
 // have: kinds (skin, faces, hair), recolouring, and painted detail on scenery.
 
 import bevy_pbr::render::{
+    pbr_bindings,
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, visibility_range_dither},
     mesh_functions,
@@ -186,7 +187,7 @@ fn recolor(c: vec3<f32>, tag: u32, grey_v: f32) -> vec3<f32> {
 // where the strands (running down the surface, from the crown) are square to the half vector
 // (Kajiya-Kay, with the tangent made from the normal and up, shifted to place the band), broken
 // into comb teeth along the strands; and a rim in the hair's own lightened colour.
-fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: f32, fr: f32, in: VertexOutput) -> vec3<f32> {
+fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: f32, fr: f32, strand: f32, forward: vec3<f32>, in: VertexOutput) -> vec3<f32> {
     let up = vec3<f32>(0.0, 1.0, 0.0);
     let along = up - N * dot(N, up);
     let T = normalize(along * select(1.0, 0.0, length(along) < 1e-3) + N * toon.hair.z + vec3<f32>(0.0, 1e-4, 0.0));
@@ -194,14 +195,21 @@ fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: 
     let H = normalize(V * 0.75 + L * 0.25);
     let d = abs(dot(T, H));
     let w = toon.hair.y;
-    var ring = 1.0 - smoothstep(w * 0.55, w, d);
+    // The band's edge: hard (softness 0) or fading from the band's middle (1). On hair shaded as
+    // one smooth shape a hard band reads as a seam across the fringe.
+    var ring = 1.0 - smoothstep(w * 0.55 * (1.0 - toon.hair_sheen.x), w, d);
     // Comb teeth: the band's edge breaks along the strands (across the hair's UVs).
 @if(VERTEX_UVS_A) {
     let teeth = noise3(vec3<f32>(in.uv.x * 90.0, in.uv.y * 9.0, 0.0));
-    ring = ring * smoothstep(0.25, 0.5, teeth + (1.0 - d / w) * 0.35);
+    ring = ring * mix(1.0, smoothstep(0.25, 0.5, teeth + (1.0 - d / w) * 0.35), toon.hair_sheen.y);
 }
-    // Only on the upper, outward side of the hair, and fainter in shadow.
-    ring = ring * smoothstep(0.2, 0.45, N.y) * mix(0.25, 1.0, lit);
+    // The strand picture breaks it: light strands carry the sheen, dark ones lose it.
+    ring = ring * mix(1.0, clamp((strand - 0.85) * 2.5, 0.0, 1.5), toon.hair_sheen.z);
+    // Only on the upper, outward side of the hair (from `hair_sheen.w` up: high enough keeps it to
+    // the crown and off a fringe, which faces forward), and fainter in shadow.
+    ring = ring * smoothstep(toon.hair_place.x, toon.hair_place.x + 0.25, N.y) * mix(0.25, 1.0, lit);
+    // Off surfaces that face the character's forward (a fringe), kept on the crown, sides and back.
+    ring = ring * (1.0 - smoothstep(toon.hair_place.y, toon.hair_place.y + 0.3, dot(N, forward)));
     // Lighter in the hair's own hue; the lift keeps that hue, so dark hair shows a coloured ring
     // rather than a grey one.
     let lifted = albedo * 1.3 + 0.08 * albedo / max(max(albedo.r, max(albedo.g, albedo.b)), 1e-3);
@@ -213,6 +221,32 @@ fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: 
     // Pale hair needs less added light to show a ring (and would clip).
     let room = clamp(1.1 - dot(albedo, vec3<f32>(0.3, 0.59, 0.11)) * 1.2, 0.25, 1.0);
     return light * ring * toon.hair.x * room + (albedo + vec3<f32>(0.04)) * rim;
+}
+
+// The character's forward, level: the mesh's world frame turned by the character's root (its
+// body's facing; a head turned aside is not followed). Our character files face -Z in their own
+// frame (VRM's convention), their roots turned to face +Z.
+fn facing(in: VertexOutput) -> vec3<f32> {
+    let m = mesh_functions::get_world_from_local(in.instance_index);
+    let f = -m[2].xyz;
+    let flat = vec3<f32>(f.x, 0.0, f.z);
+    return select(normalize(flat), vec3<f32>(0.0, 0.0, 1.0), length(flat) < 1e-4);
+}
+
+// The strand picture's own light at this point against its mean across the strands (a few taps
+// along u, where the strands vary): about 1 on average, above on light strands. 1 without UVs.
+fn strand_light(in: VertexOutput) -> f32 {
+    var s = 1.0;
+@if(VERTEX_UVS_A && !BINDLESS) {
+    let lum = vec3<f32>(0.3, 0.59, 0.11);
+    let here = dot(textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv, 0.0).rgb, lum);
+    var mean = 0.0;
+    for (var i = -3; i <= 3; i++) {
+        mean += dot(textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv + vec2<f32>(f32(i) * 0.012, 0.0), 0.0).rgb, lum);
+    }
+    s = here / max(mean / 7.0, 1e-3);
+}
+    return s;
 }
 
 @fragment
@@ -303,7 +337,7 @@ fn fragment(
         let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0));
         color = color + rim_light(fr, lit, rim_strength) * sun;
         if (is_kind(4.0)) {
-            color = color + hair_light(albedo.rgb, N, V, L, lit, fr, in) * sun;
+            color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in), facing(in), in) * sun;
         }
         color = color + point_lights(albedo.rgb, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
         color = color + emission(pbr_input.material.emissive.rgb, sc);

@@ -217,12 +217,16 @@ pub struct Action {
     pub side: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub distance: Option<f32>,
+    /// `keep_distance`, `close_in`, `circle`: how far to keep from others of one's own kind
+    /// one sees while holding it (`steer::Spacing::apart`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apart: Option<f32>,
 }
 
 impl Action {
     /// The distances a movement intent names.
     pub fn spacing(&self) -> crate::steer::Spacing {
-        crate::steer::Spacing { min: self.min, max: self.max, radius: self.radius, side: self.side, distance: self.distance }
+        crate::steer::Spacing { min: self.min, max: self.max, radius: self.radius, side: self.side, distance: self.distance, apart: self.apart }
     }
 }
 

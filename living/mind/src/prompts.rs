@@ -339,6 +339,52 @@ Old people tire sooner and heal slower. Two adults who both choose to start a fa
     )
 }
 
+/// The one line of "# Who you are" that says what the body is now: its age and life stage, and
+/// for how long it has been in that stage, as the character row and the world's life table give
+/// them (the same age and stage the scene's `you.age` carries, perceive.rs). It is a perceived
+/// fact beside the persona, never part of it: a run-born adult whose identity still speaks as a
+/// small child reads, every prompt, that the body is grown (docs/TRIALS.md, "Does a run-born
+/// adult's identity still describe a child?"). `base` is the species' table; the world's
+/// `life_years` law (Cullet's 90-year lives) is applied over it as the authority applies it.
+pub fn body_line(kind: &str, stage: u8, age_days: f32, base: living_rules::life::Life, pace: living_rules::life::Pace) -> String {
+    let life = compiled().map(|s| s.life(kind, base)).unwrap_or(base);
+    body_line_of(kind, stage, age_days, life, pace)
+}
+
+fn body_line_of(kind: &str, stage: u8, age_days: f32, life: living_rules::life::Life, pace: living_rules::life::Pace) -> String {
+    let person = kind == "person";
+    let what = match (person, stage) {
+        (true, 0) => "a baby",
+        (true, 1) => "a child",
+        (true, 3) => "old",
+        (true, _) => "an adult",
+        (false, 0) => "newborn",
+        (false, 1) => "young",
+        (false, 3) => "old",
+        (false, _) => "grown",
+    };
+    // Where this stage began, as a fraction of the lifespan.
+    let from = match stage {
+        0 => 0.0,
+        1 => life.infant,
+        3 => life.elder,
+        _ => life.child,
+    };
+    let year = (pace.year_days * pace.pace.max(0.0001)).max(0.0001);
+    let since = (age_days - from * life.span(pace.year_days, pace.pace)).max(0.0);
+    let years = (age_days / year + 1e-4).floor();
+    let old = if years < 1.0 { "less than a year old".to_string() } else if years == 1.0 { "1 year old".to_string() } else { format!("{years:.0} years old") };
+    // The time in a stage: in days while under a year of them, else in years.
+    let how_long = if since < year {
+        living_rules::describe_days(since)
+    } else if since < 2.0 * year {
+        "a year".to_string()
+    } else {
+        format!("{:.0} years", (since / year + 1e-4).floor())
+    };
+    format!("Your body: {old}, {what} for {how_long}.")
+}
+
 /// The world's rules as every mind is told them: the world's line, then the rule script's
 /// world text with the world's seasons and life table. Built once per rules revision, so the
 /// static prefix of every prompt that holds it changes only when the rules do.
@@ -540,7 +586,31 @@ pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2],
 /// the choices of a life: in replays of real moments, 2 in 12 minds acted on a longing for a
 /// child with the grammar in view, 11 in 12 without it).
 pub fn think_system() -> String {
-    think_system_in(frame(), crate::mind::projects::enabled())
+    framed_system(think_system_in(frame(), crate::mind::projects::enabled()), think_framing())
+}
+
+/// Whether the world's `think_framing` law holds (docs/FRAMING.md): the think prompt's neutral
+/// framing (N2 in the replay). Off in the bundled rules.
+pub fn think_framing() -> bool {
+    compiled().is_some_and(|s| s.laws().think_framing)
+}
+
+/// Today's framing sentence in the think system prompt, and the neutral one (N2) that replaces it
+/// under `think_framing`, word for word as replayed (docs/FRAMING.md).
+const TODAY_FRAMING: &str = "Start from why you are thinking now: that is what this moment of thought is about. Think about it as that person: what you make of it, and what you mean to do.";
+const NEUTRAL_FRAMING: &str = "What just happened is shown beside what you perceive. Think as that person about whatever matters to you now, which may or may not be what just happened, and decide what you mean to do.";
+/// The think prompt's reason section, and its name under `think_framing` (in the same place).
+const WHY_SECTION: &str = "\n# Why you are thinking now\n";
+const JUST_SECTION: &str = "\n# What just happened\n";
+
+/// The think system prompt with the neutral framing when `neutral`; today's, untouched, otherwise.
+fn framed_system(text: String, neutral: bool) -> String {
+    if neutral { text.replacen(TODAY_FRAMING, NEUTRAL_FRAMING, 1) } else { text }
+}
+
+/// The think user prompt with the reason's section renamed when `neutral`; untouched otherwise.
+fn framed_user(text: String, neutral: bool) -> String {
+    if neutral { text.replacen(WHY_SECTION, JUST_SECTION, 1) } else { text }
 }
 
 /// The think system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
@@ -665,7 +735,7 @@ pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, 
     }
     out.push(Stability::Dynamic, format!("\n# What you perceive right now\n{scene}\n"));
     out.push(Stability::Dynamic, format!("\n# What you were doing\n{plan}\n"));
-    out.render()
+    framed_user(out.render(), think_framing())
 }
 
 /// Compiling: the body's expression of a decision already made (acts now, an intent over time).
@@ -1074,16 +1144,10 @@ Answer with ONE JSON object: {{\"feeling\": \"what you sense and feel, in plain 
     ))
 }
 
-/// What an animal choosing is told: what it would be told to feel an impulse, its pack when
-/// it decides for them, and the options.
-pub fn animal_choose_user(think_user: String, pack: &[String], options: &[String]) -> String {
+/// What an animal choosing is told: what it would be told to feel an impulse, and the
+/// options. It decides for itself alone (docs/PACK_MIND.md: the `pack` switch is retired).
+pub fn animal_choose_user(think_user: String, options: &[String]) -> String {
     let mut out = think_user;
-    if !pack.is_empty() {
-        out.push_str("\n# Your pack (what you pick, they do too, each in its own way)\n");
-        for p in pack {
-            out.push_str(&format!("- {p}\n"));
-        }
-    }
     out.push_str("\n# What you can do now\n");
     for (i, o) in options.iter().enumerate() {
         out.push_str(&format!("{i}. {o}\n"));
@@ -1500,6 +1564,21 @@ mod tests {
         assert_prefix("reorganize", "person");
     }
     #[test]
+    fn body_line_says_age_stage_and_how_long() {
+        // Cullet's lives on the hamlet's pace: 90 years, a year of 4 days at pace 0.0357 (0.143
+        // world days), adult from 15 years, old from 59.5.
+        let life = living_rules::life::Life { years: 90.0, infant: 2.0 / 90.0, child: 15.0 / 90.0, elder: 59.5 / 90.0, ..Default::default() };
+        let pace = living_rules::life::Pace { year_days: 4.0, pace: 0.0357 };
+        let year = 4.0 * 0.0357;
+        assert_eq!(body_line_of("person", 2, 15.05 * year, life, pace), "Your body: 15 years old, an adult for a few hours.");
+        assert_eq!(body_line_of("person", 1, 14.9 * year, life, pace), "Your body: 14 years old, a child for 12 years.");
+        assert_eq!(body_line_of("person", 2, 41.0 * year, life, pace), "Your body: 41 years old, an adult for 26 years.");
+        assert_eq!(body_line_of("person", 3, 60.0 * year, life, pace), "Your body: 60 years old, old for a few hours.");
+        assert_eq!(body_line_of("person", 0, 0.01, life, pace), "Your body: less than a year old, a baby for a few hours.");
+        assert_eq!(body_line_of("wolf", 2, 15.5 * year, life, pace), "Your body: 15 years old, grown for a few hours.");
+    }
+
+    #[test]
     fn identity_shares_prefix() {
         assert_prefix("identity", "person");
         assert_prefix("birth_identity", "person");
@@ -1534,6 +1613,32 @@ mod tests {
         assert_eq!(Frame::parse(Some("character")), Ok(Frame::Character));
         assert_eq!(Frame::parse(Some("player")), Ok(Frame::Player));
         assert!(Frame::parse(Some("Player")).is_err() && Frame::parse(Some("npc")).is_err());
+    }
+
+    /// The `think_framing` law (docs/FRAMING.md): off, the think prompts are today's, byte for
+    /// byte; on, the neutral sentence replaces today's once, and the reason's section is renamed
+    /// once, in the same place.
+    #[test]
+    fn think_framing_is_n2_on_and_today_off() {
+        for frame in [Frame::Character, Frame::Player] {
+            for projects in [false, true] {
+                let today = think_system_in(frame, projects);
+                assert_eq!(today.matches(TODAY_FRAMING).count(), 1, "{frame:?} {projects}");
+                assert_eq!(framed_system(today.clone(), false), today);
+                let on = framed_system(today.clone(), true);
+                assert_eq!(on.matches(NEUTRAL_FRAMING).count(), 1);
+                assert!(!on.contains(TODAY_FRAMING));
+                assert_eq!(on.replacen(NEUTRAL_FRAMING, TODAY_FRAMING, 1), today);
+            }
+        }
+        let c = context("Ivo");
+        let user = think_user(&c, "{\"creatures\": []}", "wait", "For the first time you see a stranger, 9 tiles west, wait.", "habit", "");
+        assert_eq!(user.matches(WHY_SECTION).count(), 1);
+        assert_eq!(framed_user(user.clone(), false), user);
+        let on = framed_user(user.clone(), true);
+        assert!(!on.contains("# Why you are thinking now") && on.matches(JUST_SECTION).count() == 1);
+        assert_eq!(on.find(JUST_SECTION), user.find(WHY_SECTION), "renamed where it stands");
+        assert_eq!(on.replacen(JUST_SECTION, WHY_SECTION, 1), user);
     }
 
     /// Without `LIVING_FRAME` the service runs the character frame, and the character frame is

@@ -277,6 +277,124 @@ pub fn sweep(map: &Map, p: (f32, f32), seg: &Segment, clearance: f32) -> (f32, b
     (dur, false)
 }
 
+// ---- flight --------------------------------------------------------------------------------
+//
+// A body running from something looks for open ground, as a person does. Straight away when that
+// way is open as far as it still has to go; else it weighs the ground it can reach within sight
+// (a small Dijkstra "flee map", as roguelikes' safety maps do) and makes for the spot that puts
+// the most distance between it and the threat soonest, without running past the threat. It is
+// the same for every flight (`flee`, `back_off`, a band backing off, an animal's flight) and
+// reads only the ground within the body's sight.
+
+/// The least room (m) a way out must gain: with no reachable spot within sight that much farther
+/// from the threat, a flight is cornered.
+pub const ROOM_M: f32 = 1.0;
+/// The farthest (m) a flight weighs the ground round it, however far it sees.
+pub const FLEE_REACH_M: f32 = 16.0;
+
+/// How far a body can go straight along `h` from `p`, up to `max` metres (0.25 m steps, kept
+/// `clearance` from obstacles as steering keeps it).
+pub fn free_run(map: &Map, p: (f32, f32), h: f32, max: f32, clearance: f32) -> f32 {
+    let (c, s) = (h.cos(), h.sin());
+    let n = (max / 0.25).ceil().max(1.0) as u32;
+    let mut ok = 0.0f32;
+    for k in 1..=n {
+        let d = (k as f32 * 0.25).min(max);
+        if !passable(map, (p.0 + c * d, p.1 + s * d), h, clearance) {
+            return ok;
+        }
+        ok = d;
+    }
+    max
+}
+
+/// The way a flight takes from `p`, running from `threat`, with `look` metres still to go and
+/// `reach` the ground it sees (its sight). `heading` is the way it goes now.
+///
+/// Straight away when that is open for `look`. Otherwise every tile reachable within `reach`
+/// (path length up to 1.5 × `reach`, steps between walkable tiles, a diagonal only past two open
+/// sides as the route search takes it) is scored: its distance from the threat (counted only up to
+/// `look` farther than now), less a quarter of the way there, less twice how much nearer the way
+/// passes to the threat than the body is now; a little for keeping the way it goes. The body heads
+/// for the farthest point of the way to the best tile that it can see in a straight line. `None`:
+/// no reachable tile is [`ROOM_M`] farther from the threat (cornered).
+pub fn flee_way(map: &Map, p: (f32, f32), threat: (f32, f32), heading: f32, look: f32, reach: f32, clearance: f32) -> Option<f32> {
+    let d0 = (p.0 - threat.0).hypot(p.1 - threat.1);
+    let away = if d0 < 1e-3 { heading } else { (p.1 - threat.1).atan2(p.0 - threat.0) };
+    let look = look.max(ROOM_M * 2.0);
+    if free_run(map, p, away, look, clearance) >= look {
+        return Some(away);
+    }
+    let r = reach.clamp(2.0, FLEE_REACH_M).ceil() as i32;
+    let side = 2 * r + 1;
+    let (ox, oy) = (p.0.floor() as i32 - r, p.1.floor() as i32 - r);
+    let idx = |x: i32, y: i32| -> Option<usize> {
+        let (i, j) = (x - ox, y - oy);
+        (i >= 0 && j >= 0 && i < side && j < side).then(|| (j * side + i) as usize)
+    };
+    let open = |x: i32, y: i32| map.free(x as f32 + 0.5, y as f32 + 0.5);
+    let n = (side * side) as usize;
+    // Cost so far in centimetres (integers, so the order is exact), parent, nearest approach.
+    let mut g = vec![u32::MAX; n];
+    let mut parent = vec![usize::MAX; n];
+    let mut near = vec![f32::INFINITY; n];
+    let (sx, sy) = (p.0.floor() as i32, p.1.floor() as i32);
+    let start = idx(sx, sy)?;
+    g[start] = 0;
+    near[start] = d0;
+    let limit = (reach.min(FLEE_REACH_M) * 150.0) as u32;
+    let mut heap = std::collections::BinaryHeap::new();
+    heap.push(std::cmp::Reverse((0u32, start)));
+    let centre = |k: usize| ((ox + (k as i32 % side)) as f32 + 0.5, (oy + (k as i32 / side)) as f32 + 0.5);
+    let mut best: Option<(f32, usize)> = None;
+    while let Some(std::cmp::Reverse((cost, k))) = heap.pop() {
+        if cost > g[k] {
+            continue;
+        }
+        let (cx, cy) = centre(k);
+        if k != start {
+            let dt = (cx - threat.0).hypot(cy - threat.1);
+            let gain = dt.min(d0 + look);
+            let toward = (cy - p.1).atan2(cx - p.0);
+            let score = gain - 0.25 * cost as f32 / 100.0 + 2.0 * (near[k] - d0).min(0.0) + 0.3 * wrap(toward - heading).cos();
+            if dt >= d0 + ROOM_M && best.map_or(true, |(b, _)| score > b) {
+                best = Some((score, k));
+            }
+        }
+        let (x, y) = (cx.floor() as i32, cy.floor() as i32);
+        for (dx, dy, step) in [(1, 0, 100u32), (-1, 0, 100), (0, 1, 100), (0, -1, 100), (1, 1, 141), (1, -1, 141), (-1, 1, 141), (-1, -1, 141)] {
+            let (nx, ny) = (x + dx, y + dy);
+            let Some(j) = idx(nx, ny) else { continue };
+            if !open(nx, ny) || (dx != 0 && dy != 0 && !(open(x + dx, y) && open(x, y + dy))) {
+                continue;
+            }
+            let c = cost + step;
+            if c > limit || c >= g[j] {
+                continue;
+            }
+            g[j] = c;
+            parent[j] = k;
+            let (jx, jy) = centre(j);
+            near[j] = near[k].min((jx - threat.0).hypot(jy - threat.1));
+            heap.push(std::cmp::Reverse((c, j)));
+        }
+    }
+    let (_, goal) = best?;
+    // The farthest point along the way that the body sees straight from where it stands.
+    let mut k = goal;
+    let mut aim = centre(goal);
+    while k != start {
+        let c = centre(k);
+        if map.line_clear(p, c) {
+            aim = c;
+            break;
+        }
+        k = parent[k];
+        aim = c;
+    }
+    Some((aim.1 - p.1).atan2(aim.0 - p.0))
+}
+
 // ---- movement intents ---------------------------------------------------------------------
 //
 // Ways for any controller to move relative to a creature it perceives: hold a range band from
@@ -306,6 +424,76 @@ pub struct Spacing {
     pub side: Option<f32>,
     /// `close_in`, `follow`: how near to come; `back_off`: how far to get.
     pub distance: Option<f32>,
+    /// `keep_distance`, `close_in`, `circle`: keep this far from others of one's own kind
+    /// that one sees, while holding the intent (docs/PACK_MIND.md, A5). How far, never where.
+    pub apart: Option<f32>,
+}
+
+/// The widest `apart` an intent may ask (m): beyond about one's sight it would not be seen.
+pub const APART_MAX_M: f32 = 12.0;
+/// The narrowest (m): steering already keeps bodies about this far apart.
+pub const APART_MIN_M: f32 = 1.0;
+/// The intents that take `apart`.
+pub const APART_INTENTS: [&str; 3] = ["keep_distance", "close_in", "circle"];
+
+/// The push away from seen others of one's kind (`mates`, positions) within `apart` m of `me`:
+/// the sum of the unit ways from each to `me`, each weighted by how far inside `apart` it is
+/// (1 touching, 0 at the edge). Zero when none is that near.
+pub fn apart_push(me: (f32, f32), mates: &[(f32, f32)], apart: f32) -> (f32, f32) {
+    let (mut x, mut y) = (0.0f32, 0.0f32);
+    if apart <= 0.0 {
+        return (x, y);
+    }
+    for q in mates {
+        let (dx, dy) = (me.0 - q.0, me.1 - q.1);
+        let d = dx.hypot(dy);
+        if d >= apart {
+            continue;
+        }
+        let w = 1.0 - d / apart;
+        if d < 1e-3 {
+            // On top of each other: a fixed way out, the same for both, so they part.
+            x += w;
+            continue;
+        }
+        x += dx / d * w;
+        y += dy / d * w;
+    }
+    (x, y)
+}
+
+/// How strongly the push bends the way an intent takes (against the way's unit length).
+pub const APART_WEIGHT: f32 = 1.5;
+
+/// The way a body holding an intent round `at` takes with `apart` from its mates (`push`, from
+/// [`apart_push`]): `way` (None: it stands, in its band) bent by the push; standing in its band,
+/// along the band, to the side the push points (round `at`, never in or out of the band).
+/// `None` when there is no push and it stands.
+pub fn apart_way(me: (f32, f32), at: (f32, f32), way: Option<f32>, push: (f32, f32)) -> Option<f32> {
+    let strength = push.0.hypot(push.1);
+    if strength < 1e-3 {
+        return way;
+    }
+    match way {
+        Some(w) => Some((w.sin() + APART_WEIGHT * push.1).atan2(w.cos() + APART_WEIGHT * push.0)),
+        None => {
+            // Along the circle about `at` through `me`: the tangent the push leans to.
+            let (dx, dy) = (me.0 - at.0, me.1 - at.1);
+            let d = dx.hypot(dy);
+            if d < 1e-3 {
+                return Some(push.1.atan2(push.0));
+            }
+            let (tx, ty) = (-dy / d, dx / d);
+            let along = push.0 * tx + push.1 * ty;
+            // A push straight in or out (a mate directly behind or ahead): no side is nearer;
+            // stay standing rather than leave the band.
+            if along.abs() < 0.05 * strength {
+                return None;
+            }
+            let s = along.signum();
+            Some((s * ty).atan2(s * tx))
+        }
+    }
 }
 
 /// A side word: `left` (+1) or `right` (-1), as one faces what one circles.
@@ -326,6 +514,14 @@ impl Spacing {
                 if !v.is_finite() || !(0.0..=INTENT_MAX_M).contains(&v) {
                     return Err(format!("{skill}: `{k}` is metres from 0 to {INTENT_MAX_M}"));
                 }
+            }
+        }
+        if let Some(a) = self.apart {
+            if !APART_INTENTS.contains(&skill) {
+                return Err(format!("{skill}: `apart` is for {} (keeping apart from your own kind while you hold it)", APART_INTENTS.join(", ")));
+            }
+            if !a.is_finite() || !(APART_MIN_M..=APART_MAX_M).contains(&a) {
+                return Err(format!("{skill}: `apart` is metres from {APART_MIN_M} to {APART_MAX_M}"));
             }
         }
         match skill {
@@ -660,6 +856,158 @@ mod tests {
         assert!(Spacing::default().check("circle").is_ok(), "a circle at the distance one is");
         assert!(Spacing { distance: Some(0.0), ..Default::default() }.check("back_off").is_err());
         assert!(Spacing { distance: Some(60.0), ..Default::default() }.check("follow").is_err());
+        assert!(Spacing { apart: Some(4.0), ..Default::default() }.check("keep_distance").is_ok());
+        assert!(Spacing { apart: Some(4.0), ..Default::default() }.check("back_off").unwrap_err().contains("`apart` is for"));
+        assert!(Spacing { apart: Some(0.5), ..Default::default() }.check("circle").unwrap_err().contains("from 1 to 12"));
+        assert!(Spacing { apart: Some(f32::NAN), ..Default::default() }.check("close_in").is_err());
         assert_eq!((side_of("Left"), side_of("clockwise"), side_of("up")), (Some(1.0), Some(-1.0), None));
+    }
+
+    fn walled(w: u32, h: u32, walls: &[((u32, u32), (u32, u32))]) -> Map {
+        let mut m = open(w, h);
+        for &((x0, y0), (x1, y1)) in walls {
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    m.set(x as i32, y as i32, Terrain::Wall);
+                }
+            }
+        }
+        m
+    }
+
+    /// Runs a flight from `threat` with the body's own steering (`flee_way` then `plan`, a
+    /// look every quarter second) until it is 9 m farther than it began; returns the distances.
+    fn flight(m: &Map, from: (f32, f32), threat: (f32, f32)) -> Result<(f32, f32), String> {
+        let c = Tuning::default().clearance;
+        let t = Tuning::default();
+        let (mut p, mut heading, mut speed) = (from, 0.0f32, 0.0f32);
+        let start = (p.0 - threat.0).hypot(p.1 - threat.1);
+        let mut last = start;
+        for _ in 0..120 {
+            let left = start + 9.0 - (p.0 - threat.0).hypot(p.1 - threat.1);
+            if left <= 0.0 {
+                break;
+            }
+            let dir = flee_way(m, p, threat, heading, left, 11.0, c).ok_or(format!("cornered at {p:?}"))?;
+            let seg = plan(m, p, heading, speed, Want { dir, speed: 3.0, agile: false, max_dt: 0.25 }, &t);
+            if seg.blocked && seg.speed == 0.0 {
+                return Err(format!("stuck at {p:?}"));
+            }
+            let (x, y, h) = seg.at(p, seg.dur.min(0.25));
+            (p, heading, speed) = ((x, y), h, seg.speed);
+            let d = (p.0 - threat.0).hypot(p.1 - threat.1);
+            if d < last - 0.8 {
+                return Err(format!("closed on the threat: {last} -> {d} at {p:?}"));
+            }
+            last = last.max(d);
+        }
+        Ok((start, last))
+    }
+
+    /// In the open a flight runs straight away; against a wall it turns along it; out of an
+    /// inside corner and past a dead-end pocket it takes the open side; boxed in it is cornered.
+    #[test]
+    fn a_flight_looks_for_open_ground() {
+        let c = Tuning::default().clearance;
+        let m = open(64, 64);
+        let h = flee_way(&m, (32.0, 32.0), (32.0 - 5.0 * 0.3f32.cos(), 32.0 - 5.0 * 0.3f32.sin()), 0.3, 9.0, 11.0, c).unwrap();
+        assert!((h - 0.3).abs() < 1e-4, "{h}");
+        // A wall 3 m east across the whole way, the threat west: along the wall, and clear.
+        let m = walled(64, 64, &[((35, 0), (35, 63))]);
+        let h = flee_way(&m, (32.0, 32.0), (27.0, 32.0), 0.0, 9.0, 11.0, c).unwrap();
+        assert!(h.abs() > 0.5, "turns along the wall: {h}");
+        let (a, b) = flight(&m, (32.0, 32.0), (27.0, 32.0)).unwrap();
+        assert!(b >= a + 8.0, "{a} -> {b}");
+        // An inside corner (walls east and south, y grows south) with the threat west: out by the
+        // open north side.
+        let m = walled(64, 64, &[((36, 10), (36, 40)), ((10, 36), (36, 36))]);
+        let (a, b) = flight(&m, (32.5, 33.0), (26.0, 33.0)).unwrap();
+        assert!(b >= a + 8.0, "{a} -> {b}");
+        // A dead-end pocket straight away (a channel 6 m deep, closed at its end), open ground
+        // north and south of its mouth: the flight goes round it, not into it.
+        let m = walled(64, 64, &[((31, 29), (38, 29)), ((31, 35), (38, 35)), ((38, 29), (38, 35))]);
+        let (a, b) = flight(&m, (30.5, 32.5), (25.5, 32.5)).unwrap();
+        assert!(b >= a + 8.0, "{a} -> {b}");
+        // Keeps the way it goes when two are as good (a straight wall: north or south).
+        let m = walled(64, 64, &[((35, 0), (35, 63))]);
+        let north = flee_way(&m, (32.5, 32.5), (27.5, 32.5), -PI / 2.0, 9.0, 11.0, c).unwrap();
+        let south = flee_way(&m, (32.5, 32.5), (27.5, 32.5), PI / 2.0, 9.0, 11.0, c).unwrap();
+        assert!(north < 0.0 && south > 0.0, "{north} {south}");
+        // Boxed in: nowhere farther from the threat.
+        let m = walled(64, 64, &[((31, 31), (33, 31)), ((31, 33), (33, 33)), ((31, 31), (31, 33)), ((33, 31), (33, 33))]);
+        assert_eq!(flee_way(&m, (32.5, 32.5), (30.0, 32.5), 0.0, 9.0, 11.0, c), None);
+    }
+}
+
+#[cfg(test)]
+mod apart_tests {
+    use super::*;
+
+    #[test]
+    fn the_push_is_away_from_mates_inside_apart_only() {
+        let p = apart_push((0.0, 0.0), &[(2.0, 0.0), (10.0, 0.0)], 4.0);
+        assert!(p.0 < -0.4 && p.1.abs() < 1e-6, "{p:?}");
+        assert_eq!(apart_push((0.0, 0.0), &[(5.0, 0.0)], 4.0), (0.0, 0.0));
+        assert_eq!(apart_push((0.0, 0.0), &[(1.0, 0.0)], 0.0), (0.0, 0.0));
+    }
+
+    #[test]
+    fn standing_in_the_band_a_mate_moves_one_round_the_target_not_in_or_out() {
+        // Target at the origin; me 4 m east; a mate 1.5 m north of me (also about 4 m out).
+        let me = (4.0, 0.0);
+        let push = apart_push(me, &[(3.7, -1.5)], 4.0);
+        let w = apart_way(me, (0.0, 0.0), None, push).expect("moves");
+        // Round the circle: tangent at (4, 0) is ±y; away from the mate at -y is +y (south).
+        assert!((w - std::f32::consts::FRAC_PI_2).abs() < 0.05, "{w}");
+        // A mate straight behind (farther out on the same ray): no side, stays.
+        let push = apart_push(me, &[(6.0, 0.0)], 4.0);
+        assert_eq!(apart_way(me, (0.0, 0.0), None, push), None);
+    }
+
+    #[test]
+    fn moving_the_way_is_bent_away_from_the_mate() {
+        let me = (0.0, 0.0);
+        let push = apart_push(me, &[(0.0, 1.0)], 4.0);
+        // Going east with a mate just south (+y): bent north (negative angle).
+        let w = apart_way(me, (10.0, 0.0), Some(0.0), push).unwrap();
+        assert!(w < -0.3, "{w}");
+        // No mate near: the way is unchanged.
+        assert_eq!(apart_way(me, (10.0, 0.0), Some(0.0), (0.0, 0.0)), Some(0.0));
+    }
+
+    /// Four bodies start bunched on one side of a target at the origin and each, every step,
+    /// holds 3-5 m from it and keeps `apart` m from the others: Muro et al.'s two rules with
+    /// this module's geometry, stepping 0.2 m. Returns the coverage they end at (degrees).
+    fn spread_round(apart: f32) -> f32 {
+        let mut p: Vec<(f32, f32)> = vec![(-4.0, 0.0), (-4.0, 0.6), (-4.2, -0.5), (-3.8, 0.3)];
+        for _ in 0..600 {
+            let snapshot = p.clone();
+            for i in 0..p.len() {
+                let mates: Vec<(f32, f32)> = snapshot.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, q)| *q).collect();
+                let way = band_way(p[i], (0.0, 0.0), 3.0, 5.0, 0).map(|(w, _)| w);
+                let push = apart_push(p[i], &mates, apart);
+                if let Some(w) = apart_way(p[i], (0.0, 0.0), way, push) {
+                    p[i] = (p[i].0 + 0.2 * w.cos(), p[i].1 + 0.2 * w.sin());
+                }
+            }
+        }
+        let mut b: Vec<f32> = p.iter().map(|q| q.1.atan2(q.0).rem_euclid(2.0 * PI)).collect();
+        b.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        let gaps: Vec<f32> = (0..b.len()).map(|i| if i + 1 < b.len() { b[i + 1] - b[i] } else { b[0] + 2.0 * PI - b[i] }).collect();
+        for q in &p {
+            let d = q.0.hypot(q.1);
+            assert!((2.5..=5.5).contains(&d), "{d}");
+        }
+        (2.0 * PI - gaps.iter().cloned().fold(0.0, f32::max)).to_degrees()
+    }
+
+    #[test]
+    fn mates_who_each_follow_the_rule_spread_round_a_standing_target() {
+        // 4 m apart on a circle of about 4 m is about 60° between neighbours: four span about
+        // 180° (from bunched within 1 m: under 20°). Wider apart, wider round.
+        let c4 = spread_round(4.0);
+        assert!(c4 >= 170.0, "{c4}");
+        let c6 = spread_round(6.0);
+        assert!(c6 >= 240.0 && c6 > c4, "{c6} {c4}");
     }
 }

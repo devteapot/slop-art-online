@@ -58,12 +58,19 @@ python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&
 python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
 # First sights that ask for a thought under first_sight_thinks: refused then owed, the gap, never far or named, sleepers, with a cue (features/first-sight.md, about 4 min).
 python3 "$C/scenes.py" first_sight --run "$R" > "$E/first_sight.txt" 2>&1
+# Battle scale: familiarity never forgets what is in view, novelty once a second, bystanders'
+# wakes coalesced by witness_wake_ms (features/battle.md, about 7 min together).
+python3 "$C/scenes.py" familiar_dense --run "$R" > "$E/familiar_dense.txt" 2>&1
+python3 "$C/scenes.py" notice_rate --run "$R" > "$E/notice_rate.txt" 2>&1
+python3 "$C/scenes.py" witness_wake --run "$R" > "$E/witness_wake.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
 # on an island run it also drives the told lines of `outcomes`).
 python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
+# A flight out of inside corners by open ground, never cornered (features/steering.md#flight, about 1.5 min).
+python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
 # Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run

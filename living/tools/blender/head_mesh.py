@@ -674,7 +674,7 @@ class Face:
         top, bot = brow_shape(self.hf, side, state, ts=BROW_TS)
         c = look["brow"]
         # A little darker along the lower edge: the stroke has a top and a bottom.
-        self._strip(m, top, bot, c, mix3(c, (0, 0, 0), 0.10), "brow", 0.0011)
+        self._strip(m, top, bot, c, mix3(c, (0, 0, 0), 0.10), "brow", BROW_OFF)
 
     def _strand(self, m, side, root, angle, length, width, bend, cols, mat, off, rise=None):
         """One hair on the face: a tapering card from `root` (front view: |x|, z) along `angle`
@@ -802,6 +802,12 @@ def brow_width(t):
     cap = np.clip(t / 0.035, 0.0, 1.0) ** 0.5
     taper = 1.0 - np.clip((t - 0.40) / 0.60, 0.0, 1.0) ** 1.6
     return swell * cap * taper
+
+
+# How far a brow stands off the skin, metres. It was 1.1 mm; where a man's brow crosses the
+# crease over a small eye the skin between the strip's own points left half of that, and with a
+# person's values at their ends next to nothing (brow_check.py).
+BROW_OFF = 0.0016
 
 
 def brow_shape(hf, side, state=None, n=14, ts=None):

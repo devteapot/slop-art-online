@@ -77,15 +77,18 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Long hair falls close to the back:** combed over the garment's own measured collar and back, gathered behind the shoulders, the front hair ending at the jaw. Styles that hang past the collar have a `.collar` file for a coat.
   - **Short hair is one sheet** from the whorl to the hairline, where it was rings of tiles.
   - **The highlight is one hard ring and the shadow one edge:** both are the client's, and every sheet's normals now come from one smooth shape so they are not broken into patches. The client needs nothing new.
+  - **The client's ring on smooth hair (hair-ring-1, 2026-11-12, a proposal).** On one smooth shape the ring became one pale band straight across every fringe. The ring now has style values for where and how it lies: `hair_ring_up` (how far up a surface must face), `hair_ring_front` (it fades on surfaces facing the character's forward: the fringe), `hair_ring_soft`, `hair_ring_teeth` and `hair_ring_strands` (break-up by the strand picture). The defaults keep today's look. Proposed: up 0.3, front 0.25, soft 0.15, strands 0.6 (`LIVING_GAME_HAIR_RING=0.7,0.05,0.15,1,0.6,0.35,0.3,0.25` in look-dev): a hard band over the crown, broken where locks part, never across the fringe.
+  - **Hair shine, a setting since hair-ring-2 (approved 2026-11-12).** Settings › Play › Hair shine: Crown (the proposal above, the default), Soft (a softer, wider band broken by the strands) and Today (the ring before hair-ring-1). The three are `style.rs` `HAIR_SHINES`; the settings file keeps a choice once made, so a player who never chose gets Crown. `LIVING_GAME_HAIR_SHINE` starts in one and `LIVING_GAME_HAIR_RING` sets single values over any (captures).
 - **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris was left a type's own then, and is one picture for every type since [one iris for every type](#one-iris-for-every-type).
 - **Pass 3, one iris for every type** ([one iris for every type](#one-iris-for-every-type)). Every type's file names one iris picture, and a person's line carries the colour that brings its body to the person's eye colour. Composed eyes had come out about three times too light, with grey pupils on the lighter colours and stray hues from the type's own iris; the iris's body is now within 3 CIE76 of the eye colour on every type. A whole file's warm glow in a dark or a blue eye is what a composed eye still lacks.
 - **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
 - **Pass 3, the neck's and the head's joints** ([the neck's and the head's joints](#the-necks-and-the-heads-joints)). Both are at the reference's places: the neck's 1.7 cm higher, the head's 1 cm higher. Every generated file was built again on the one skeleton; no clip key changes.
+- **Pass 3, the hair pass** ([the hair pass](#the-hair-pass)). No fringe covers a brow; short styles' fronts are rounded where they were a box; the fringe is a few thick locks; single strands lift off; the seam down the back of parted styles is gone; a tail or braid is held off the back.
 - **look-1, the look book** ([the look book](#the-look-book)). A person line and its words for every look band a person can reach, under opaque keys: Cullet's 64 residents, a pool of 128 for newcomers and players, and 96 lines for background people. The client's book holds lines only; whose a line is, is in the world's data.
 - **Pass 3, the brows' place** ([the brows' place](#the-brows-place)), for the owner to judge. Measured against the reference, every type's brow sat on the head's own brow line, 0.3 of the eye's height above a large eye where the reference's sit 0.6 to 0.85 above. Each type's brow is lifted to 0.72; arch, tilt, length and thickness are unchanged. A brow now rides its own bone whole and the skin under it does not follow.
 - **Pass 3, the iris's lights** ([the iris's lights](#the-iriss-lights)). The glow, the streaks and the arc of sky in an eye are a layer of their own in fixed colours, on a disc before the iris in the lips' and blush's material, so the client's recolouring leaves them be. A composed eye is now within about 3 CIE76 of a whole file's in every eye colour; it was 10 to 14.
 - **Pass 3, the brows** ([the brows](#the-brows)). A brow is one tapered stroke, as the reference draws its own, in a material of its own under the reference's name for it, so the client's hair colour reaches it. Composed people had their type's brow colour whatever their hair.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's lifting strands and fringe (and fringes over the lifted brows), the face's painted softness, clothes and silhouette, hands.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the fringe's locks, the brows' and the glow's edges, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -138,6 +141,10 @@ python3 living/tools/characters/share.py pages --name set living/game/assets/loo
 # How the types' shared iris comes out in each eye colour under the client's recolouring, and whether
 # every type's iris still has the source colour the lines' eye colours are worked out from.
 python3 living/tools/characters/eye_colours.py living/game/assets/lookdev/types --check
+
+# Whether every type's brows are there and stay before the skin when a person's values move the face:
+# at rest, at every value's ends, and on every line of a look book.
+python3 living/tools/characters/brow_check.py living/game/assets/lookdev/types --book living/game/assets/characters/looks.json
 
 # Whether two people's baked clips are the same motion.
 python3 living/tools/characters/clips_compare.py living/game/assets/lookdev/anim/own-{man,woman}.glb
@@ -193,6 +200,7 @@ A pass is also published through the asset board, the record of which version th
 - The iris's lights are `character:face-types` `20261112-d6ba3fba-…` (`iris-lights`: three types' eyes in the seven eye colours through the client, composed before and now and as a whole file's now and before; `iris-lights-people`: four residents composed before and now above their own files as the game draws them), the six preset families' `20261112-d6ba3fba-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-d6ba3fba-…` (the 64 built again whole, with `faces-before-after`: they should look the same).
 - The brows' place, for the owner to judge, is `character:face-types` `20261112-8d5432b1-…` (`brow-place`: four types in four hair colours through the client, before and after, from the front and at 35 degrees), the six preset families' `20261112-8d5432b1-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-8d5432b1-…` (the 64 built again whole, through recipes, with `faces-before-after` and `game-before-after`).
 - The neck's and the head's joints are `character:face-types` `20261112-46074f0d-…` (`head-joints`, `head-joints-2`: four residents composed and posed in turns, nods and a tilt from three sides, before and after), the six preset families' `20261112-46074f0d-…` (rebaked with clips: every key the same; `marker_check` passed) and `cast-64` `20261112-46074f0d-…` (the 64 built again whole, with `lineup-before-after`).
+- The hair pass is `character:face-types` `20261112-869a3617-…` (`hair-pass-short`, `hair-pass-long`: every style from five sides before and after; `hair-pass-motion`: five residents with a tail, a braid or long hair on idle frames before and after), the six preset families' `20261112-869a3617-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-869a3617-…` (the 64 built again whole, with `faces-before-after` and `game-before-after`).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -1585,11 +1593,44 @@ Every type's brow sat about 0.041 H above the eye, whatever the eye's size: on t
 - **Each type has a brow lift** (`types.json` `brow.lift`, in H; `face_types.brow_lift`): what brings its brow's lower edge to 0.72 openings above the eye (`BROW_GAP`, between the reference's two faces), and never below the head's brow line. It is 0.055 to 0.058 H (14 to 15 mm) on the large-eyed types (`adult-f-a`, `youth-f-a`, `child-u-a`), 0.033 to 0.037 and 0.020 to 0.022 on their `b` and `c` lines, 0.043 to 0.005 on the boys' and men's, 0.033 and 0.011 on `elder-f-a` and `-b`, and nothing on `elder-m-b`, `elder-m-c` and `elder-f-c`, whose narrow eyes already had their brows that far above in the eye's own measure.
 - **The arch, the tilt, the length and the thickness are unchanged.** The whole stroke moves up.
 - **The head's form is unchanged:** `above_eye` is still the form's brow line. Hair's fringe and the forehead's lines are still set by it.
-- **A brow rides its own bone whole, and the skin under it does not follow.** `J_Id_Brow_L` and `_R` sit at the drawn brow (`cage_head.rig_pivots`), a brow's vertices are theirs alone (`person.py`), and the skin has no share of them (`cage_head.identity_weights`). Before, the skin round the brow line followed the brow's bone, so `brow_thickness` and `brow_length` scaled a patch of forehead with the brow, and a brow lifted off its bone would have slid when either changed. The reference's brows are cards that move alone too. On the far head, whose brows are painted on its skin, that skin still follows.
+- **A brow rides its own bone whole, and the skin under it does not follow** (undone the same day: on people this put brows behind the skin, see [the brows on a person's face](#the-brows-on-a-persons-face))**.** `J_Id_Brow_L` and `_R` sit at the drawn brow (`cage_head.rig_pivots`), a brow's vertices are theirs alone (`person.py`), and the skin has no share of them (`cage_head.identity_weights`). Before, the skin round the brow line followed the brow's bone, so `brow_thickness` and `brow_length` scaled a patch of forehead with the brow, and a brow lifted off its bone would have slid when either changed. The reference's brows are cards that move alone too. On the far head, whose brows are painted on its skin, that skin still follows.
 - **`brow_height` now moves the drawn brow only,** in a head built from landmarks as on the bones (`face_types.apply`). `rig_check.py` for the four brow values: the skin moves 0.00 mm either way. `face_types.py check`: every type valid, 60,648 of 60,648 value ends valid.
 - **Hair is not changed.** A fringe still ends at the head's brow line by its `fringe` value, so on the lifted types a long fringe now covers the brows. Whether fringes should follow the brows up is for the hair pass.
 
 **What the client needs:** nothing in code. Take the bundle: the types (their brows, the brow bones' places and the skin's weights), and every hair, outfit and overlay file (what hangs on a head no longer follows the brow bones). Lines are unchanged.
+
+
+### The brows on a person's face
+
+A fix (2026-11-12, branch `char-4`), after the laptop's live check found `child-u-a` people with no brows.
+
+**What was wrong.** It was not `child-u-a`'s file and not one type: on **198 of the look book's 887 lines, on every type, some of a brow was behind the skin**, and on 54 more than half of it (21 and 6 of `child-u-a`'s 96 lines; 32 and 12 of `child-u-c`'s 107).
+
+- Every type's file had its brow primitive (`…FaceBrow_00_FACE`, 80 triangles), weighted to `J_Id_Brow_L` and `_R`, 1.0 to 1.2 mm before the skin at rest. A bare type showed its brows.
+- [The brows' place](#the-brows-place) had set that a brow rides its own bone whole and the skin under it does not follow. A person's values then moved the two apart: `forehead`, `brow_ridge` and `cranium_depth` push the forehead's skin forward by up to 4 mm and `brow_height` slides the brow up a forehead that curves, against 1.1 mm of clearance. With those at their ends a brow was up to 6.6 mm inside the head.
+- The step's own check looked at types at rest and at people in photographs, and the cast's brows that showed thin were read as thin brows.
+
+**What changed** (`cage_head.identity_weights`, `person.make_face`, `head_mesh.BROW_OFF`):
+
+- **The skin round a brow follows the brow's bone again,** on the face's own skin as on the far head's: one field round the brow's bone, 1.5 eye half-widths by 0.045 H, falling to nothing at 1.8 times that. What hangs on the head (hair, headwear) still does not, so no shared style file changes.
+- **A brow's vertices take the weights of the skin under them:** for each, the skin's triangle on the line of sight, its three corners' weights by how near each is, the four largest kept. Whatever a person's values do to the forehead they do to the brow. The skin's mesh is coarse there (edges of 7 to 19 mm), so giving the skin to the brow's bone alone would not have been enough.
+- **A brow stands 1.6 mm off the skin** (it was 1.1): where a man's brow crosses the crease over a small eye, the skin between the strip's own points left 0.5 mm at rest.
+- **The brow's own values still move it, a little less:** `brow_height` at its ends moves the brow 3.0 to 3.8 mm up and 1.8 to 2.3 mm down (4.1 and 2.4 before, when it rode its bone whole), `brow_thickness` makes it 0.76 to 1.32 as thick (0.7 to 1.4), `brow_length` 0.90 to 1.12 as long. The skin round it moves with it: `rig_check.py` on `child-u-a` gives 0.06 mm at most (root mean square, along the surface) for height, tilt and thickness, and 0.15 mm for `brow_length` at its end, 3.5 mm at the one worst point beside the temple.
+
+**The check** (`living/tools/characters/brow_check.py TYPES_DIR [--book looks.json]`): for every type, that the brow primitive is there and weighted, and how far each of its vertices and its triangles' middles stands before the skin's front on the line of sight, with the file posed the client's way: at rest, with each of the 38 values alone at each end, with `forehead`, `brow_ridge`, `cranium_depth`, `brow_height` and `socket_depth` together at their ends (8 poses), and on every line of a look book. It fails under 0.3 mm. `gen_types.sh` runs it after a full build, and the bundle runs it with the book.
+
+| | before | after |
+|---|---|---|
+| At rest, least on any type | 0.51 mm | 1.05 mm |
+| At rest, median | 1.15 to 1.24 mm | 1.71 to 1.81 mm |
+| Lines of the book with some of a brow behind the skin | 198 of 887 | 0 |
+| Least in any pose (values' ends, the eight together, the book's lines) | -6.6 mm | 0.64 mm (`elder-m-b`) |
+
+**Files:** the 21 types (weights and the brow's distance), and the 72 overlay files, which carry the face's weights. Hair, outfit pieces and the pages' layout are unchanged. **Lines and look keys are unchanged** (generation `c4-aa393793`).
+
+**What the client needs:** nothing in code. Take the bundle's types and overlay files together: an overlay from the earlier bundle on a new type would not follow the skin round the brows.
+
+**What it does not cover.** The check looks from the front, at the brows. Lashes and lash lines ride the orbit's bone with the skin round the eye and were not measured the same way. The brows' expressions (`Fcl_BRW_…`, not driven by the client) still move a brow over skin that does not follow.
 
 
 ### The neck's and the head's joints
@@ -1628,6 +1669,43 @@ Pass 3, 2026-11-12. The neck step left the two joints where they were and noted 
 - **It is not in the bundle:** this machine holds 30 of the library's 86 clips, so its bake is not the laptop's file.
 
 **What the client needs:** nothing in code. Take the bundle whole: types, every style file, and the lines (unchanged). A type from after the move with hair or a collar from before, or the other way, sits up to 1.7 cm apart at the neck.
+
+### The hair pass
+
+Pass 3, 2026-11-12. Six things, in the order they were asked for.
+
+**1. No fringe covers a brow** (`hair.py` `fringe_line`). A fringe ended at the head's own brow line, and since [the brows' place](#the-brows-place) the brows are drawn above that: on a third of the cast's faces the fringe covered them.
+
+- **A full fringe now ends 4 mm above the top of the highest brow any face type has.** A shared style is one mesh for every type, and the types' brows sit at different heights (the highest brow's top is 1.2 cm above the lowest's), so the line is the highest's. On a type with lower brows a full fringe ends up to 1.2 cm above them.
+- **A person's own hair takes the same line,** so their own file and the composed person agree.
+- **`hair.fringe` above 1 no longer goes over the eyes:** it is held at 1.
+
+**2. Short styles' fronts are not a box** (`cap`). The front of a short cut was the fringe's level line across the forehead, with the hairline's square corner at the temple on either side. It read as a helmet's edge.
+
+- **The hem follows the hairline with its corner rounded** (the hairline averaged over 18° either way).
+- **Over the forehead the hem is lowest in the middle and rises in a curve to the temples,** uneven by up to 6 mm from side to side.
+
+**3. The fringe is a few thick locks** (`bangs`). It was six points 9 mm deep along a level line.
+
+- **Three or four locks, 14 to 22 mm deep** by the fringe's length, uneven in width.
+- **Longest in the middle and up to 12 mm shorter toward the temples.**
+
+**4. Single strands lift off the hair** (`strands`). Thin locks 10 to 16 mm wide, a little off the sheets.
+
+- **Short hair:** one or two on `short`, three on `tousled`, rising from the top and standing up at the tip.
+- **Hanging hair:** one on `bob`, two on `bob_parted`, three on `shag`, four on `long`, hanging beside the sheets' ends and flicking out. On `long` they ride the back's spring chains and keep to the back.
+
+**5. No seam down the back of parted styles** (`over`). The top of `bob`, `bob_parted`, `shag` and `long` was two sheets, one from each side of the parting, whose back edges met down the middle of the back. Two edges side by side read as a seam from behind. It is now one sheet: down one side of the parting to the crown, round behind it and back up the other.
+
+**6. A tail or a braid down the back is held off the back** (`Hair.rope_chains`; `person.py` `back_spheres`, `secondary`). On the idle clip a braid's lower part passed into the back and showed through the cloth further down.
+
+- **The back's spheres are sized for them too:** each sphere is the largest that leaves every hair joint clear at rest, and a rope's joints (its axis) are kept its own radius away, 12 mm (`ROPE_HIT`).
+- **A spring group of their own, `HairRope`,** with `hitRadius` 0.012 and the neck's, the chest's and the back's spheres, and not the head's, which the rope is tied on. Sheets on the back stay in `HairBack` (2 mm) and the rest in `Hair`.
+- **Two braids that hang in front of the shoulders** are not ropes down the back and stay as they were.
+
+**What the client needs:** nothing in code: the spring block's groups already carry their own `hitRadius` and collider groups. Take the 59 hair files. Types, outfits, overlays and lines are unchanged.
+
+**What still separates ours from the reference's hair:** the fringe's locks are even triangles where the reference's are curved and of several lengths; a full fringe ends well above the brows on the types whose brows are low; long hair's ends still dip into the back in places on the idle clip.
 
 ### The look book
 
@@ -2218,6 +2296,14 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 
 ## What still separates ours from the reference
+
+**After the hair pass**, judged on the board's `hair-pass-short`, `hair-pass-long`, `hair-pass-motion` and `cast-64` sheets with the reference beside ours, ordered by how much it shows:
+
+1. **Hair, what is left.** The fringe's locks are even triangles where the reference's are curved and of several lengths. A full fringe ends well above the brows on the types whose brows are low. Long hair's ends still dip into the back in places on the idle clip.
+2. **The brows' edge and the glow's edge:** the reference's brow has a soft edge and notches at its inner end, and its glow is a hard-edged flame; ours are cut geometry and soft.
+3. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top.
+4. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+5. **Clothes and silhouette, hands** (unchanged).
 
 **After the shared iris and the brows**, judged on the board's `shared-iris`, `brows` and `cast-64` sheets with the reference beside ours, ordered by how much it shows:
 

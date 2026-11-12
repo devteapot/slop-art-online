@@ -325,7 +325,7 @@ impl Minds {
         let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6, "consolidate").await;
         let persona = match self.conn.db.persona().id().find(&actor) {
             Some(_) => self.persona_text(actor),
-            None => "(played by a person: who they are shows only in what they do)".into(),
+            None => format!("(played by a person: who they are shows only in what they do)\n{}", self.body_line(actor)).trim_end().to_string(),
         };
         let ctx = prompts::Ctx {
             name: &c.name,
