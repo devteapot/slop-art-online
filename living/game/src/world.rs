@@ -180,6 +180,12 @@ impl Scene {
 #[derive(Component)]
 pub struct Thing(pub Vec2);
 
+/// A structure standing inside a planned lot's building, on its blocked floor (the lot's id,
+/// [`crate::island::indoors_of`]): drawn only while the cutaway has that building open
+/// (`live::indoors`), so a hearth inside a house does not show through its front wall.
+#[derive(Component)]
+pub struct Indoors(pub u32);
+
 /// A tree that fades when it stands between the camera and the player.
 #[derive(Component)]
 pub struct Tree;
@@ -660,7 +666,7 @@ pub fn things(
     mut palette: ResMut<Palette>,
     style: Res<Style>,
     island: Option<Res<crate::island::Island>>,
-    (assets, rules): (Res<AssetServer>, Option<NonSend<crate::verbs::Rules>>),
+    (assets, rules, live): (Res<AssetServer>, Option<NonSend<crate::verbs::Rules>>, Option<Res<crate::live::Live>>),
     mut shown_lit: Local<HashMap<(u8, u64), bool>>,
 ) {
     let Some(conn) = &net.conn else { return };
@@ -708,6 +714,11 @@ pub fn things(
             })
             .clone();
         let at = island.as_ref().map_or_else(|| scene.at3(x, y), |i| Vec3::new(x, i.height(x, y), y));
+        let hosted = live.as_ref().and_then(|l| l.hosted_map());
+        let indoors = island.as_ref().zip(hosted.as_deref()).filter(|_| key.0 == 1).and_then(|(i, map)| crate::island::indoors_of(&i.land, map, Vec2::new(x, y)));
+        if let Some(lot) = indoors {
+            debug!("things: {kind} #{} stands inside lot {lot}: drawn while the cutaway opens it", key.1);
+        }
         // A planned settlement's kit may model the structure (`island::structure_model`): drawn
         // at its real size, fitted and converted like a lot's model. A lit fire's own glowing
         // materials are damped by daylight as a lot's lit panes are (`lookdev::NightGlow`); one
@@ -718,6 +729,9 @@ pub fn things(
             let model = crate::lookdev::Model { vrm: false, file: file.clone(), height: 0.0, ground_y: at.y, glow: None };
             let root = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
             let e = commands.spawn((Thing(Vec2::new(x, y)), model, bevy::world_serialization::WorldAssetRoot(root), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::Hidden)).id();
+            if let Some(lot) = indoors {
+                commands.entity(e).insert(Indoors(lot));
+            }
             if lit {
                 commands.entity(e).insert(crate::lookdev::NightGlow);
             } else {
@@ -738,6 +752,9 @@ pub fn things(
         let e = commands
             .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), crate::style::stencil()))
             .id();
+        if let Some(lot) = indoors {
+            commands.entity(e).insert((Indoors(lot), Visibility::Hidden));
+        }
         // Outlines on structures only; small resources stay unlined so the scene stays calm.
         if key.0 == 1 {
             commands.entity(e).insert(outline(Outlined::Thing, &style));

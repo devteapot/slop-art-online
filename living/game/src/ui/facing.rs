@@ -34,6 +34,43 @@ pub struct WalkChoices;
 #[derive(Component)]
 pub struct Line(u8);
 
+/// The note after a change, at the top centre (under the target plate).
+#[derive(Component)]
+pub struct Pill;
+#[derive(Component)]
+pub struct PillText;
+
+/// The pill's tree, once (and again after a theme's rebuild sweeps the HUD's roots).
+pub fn pill_spawn(mut commands: Commands, have: Query<(), With<Pill>>, fonts: Res<Fonts>) {
+    if !have.is_empty() {
+        return;
+    }
+    let f = &*fonts;
+    commands
+        .spawn((super::HudRoot, Node { position_type: PositionType::Absolute, top: Val::Px(92.0), left: Val::Px(0.0), right: Val::Px(0.0), justify_content: JustifyContent::Center, ..default() }, Pickable::IGNORE, GlobalZIndex(40)))
+        .with_children(|r| {
+            r.spawn((Pill, Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(5.0)), border: wood::b(1.5), border_radius: wood::r(12.0), display: Display::None, ..default() }, BackgroundColor(wood::alpha(wood::surface(), 0.9)), BorderColor::all(wood::edge()), Pickable::IGNORE))
+                .with_child((PillText, Text::new(""), f.body(13.0, 700), TextColor(wood::text()), Pickable::IGNORE));
+        });
+}
+
+/// Shows the note for `facing::NOTE_S`, fading over its last half second.
+pub fn pill(st: Option<Res<FovState>>, time: Res<Time>, mut pills: Query<(&mut Node, &mut BackgroundColor), With<Pill>>, mut texts: Query<(&mut Text, &mut TextColor), With<PillText>>) {
+    let now = time.elapsed_secs_f64();
+    let shown = st.as_ref().and_then(|s| s.note.clone()).filter(|(_, at)| now - at < crate::facing::NOTE_S);
+    let a = shown.as_ref().map_or(0.0, |(_, at)| ((crate::facing::NOTE_S - (now - at)) / 0.5).clamp(0.0, 1.0) as f32);
+    for (mut n, mut bg) in &mut pills {
+        show(&mut n, shown.is_some());
+        super::set_bg(&mut bg, wood::alpha(wood::surface(), 0.9 * a));
+    }
+    for (mut t, mut c) in &mut texts {
+        if let Some((s, _)) = &shown {
+            set_text(&mut t, s);
+        }
+        super::set_color(&mut c, wood::alpha(wood::text(), a));
+    }
+}
+
 pub fn spawn(mut commands: Commands, places: Query<Entity, Added<FacingSight>>, fonts: Res<Fonts>) {
     let f = &*fonts;
     for e in &places {

@@ -457,7 +457,7 @@ impl Island {
             // Low buildings too (market stalls, wells): a newcomer arrives among the stalls, and
             // their awnings hid them (play-test 1). Taller ones are occluders already.
             if it.height < 3.0 {
-                commands.entity(root).insert((crate::envs::Occluder { height: it.height.max(1.0) }, crate::fade::Fade::shown()));
+                commands.entity(root).insert((crate::envs::Occluder { height: it.height.max(1.0), open: false }, crate::fade::Fade::shown()));
             }
         }
         es
@@ -554,6 +554,26 @@ impl Island {
 /// none: the fixture stands where the plan has it).
 fn prop_file(files: &[String], exact: Option<String>, kit_brings: bool, index: usize) -> Option<String> {
     exact.or_else(|| (!kit_brings && !files.is_empty()).then(|| files[(hash(index as u32, 17) * files.len() as f32) as usize % files.len()].clone()))
+}
+
+/// The planned lot whose building a point stands inside: on a tile of the hosted map (`map`:
+/// the authority's tiles, `host::hosted_map`, where a building's footprint is blocked) that no
+/// one can stand on, within the footprint of a lot that has a building (a height). A household's own hearth and store
+/// stand there since `hearth-1` (docs/AUTHORED_PLANS.md, "A household's own things stand inside
+/// its lot"); `world::things` hides such a structure while its house is drawn closed.
+pub fn indoors_of(land: &Land, map: &living_rules::map::Map, at: Vec2) -> Option<u32> {
+    if map.at(at.x, at.y).walkable() {
+        return None;
+    }
+    land.lots
+        .iter()
+        .enumerate()
+        .find(|(_, l)| {
+            let (c, f) = (Vec2::new(l.centre.0, l.centre.1), Vec2::new(l.front.0, l.front.1).normalize_or(Vec2::Y));
+            let d = at - c;
+            l.height_m > 0.0 && land.settlements.get(l.settlement as usize).is_some_and(|s| s.planned) && d.dot(f).abs() <= l.depth_m * 0.5 && d.dot(f.perp()).abs() <= l.width_m * 0.5
+        })
+        .map(|(i, _)| i as u32)
 }
 
 /// A look-dev land from its worker thread ([`Island::generate`]): the land, its seconds, the
@@ -1092,7 +1112,7 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
         let fitted = crate::lookdev::Fitted { y_off: 0.0, size, center: Vec3::ZERO };
         let mut e = commands.spawn((EnvPart, GreyBox(colour), fitted, Transform::from_translation(c).with_rotation(Quat::from_rotation_y(it.yaw)).with_scale(size)));
         if it.height >= 3.0 {
-            e.insert((Occluder { height: it.height }, crate::fade::Fade::shown()));
+            e.insert((Occluder { height: it.height, open: false }, crate::fade::Fade::shown()));
         }
         if it.solid {
             e.insert(crate::envs::Solid);
@@ -1111,7 +1131,7 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(it.file.clone()));
     let mut e = commands.spawn((EnvPart, model, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     if it.height >= 3.0 {
-        e.insert((Occluder { height: it.height }, crate::fade::Fade::shown()));
+        e.insert((Occluder { height: it.height, open: false }, crate::fade::Fade::shown()));
     }
     if it.height <= SMALL {
         e.insert(crate::lookdev::NoShadow);
@@ -1637,5 +1657,40 @@ mod tests {
         assert!(picked.len() >= 4 && picked.iter().all(|f| files.contains(f)), "{picked:?}");
         assert_eq!(resource_file(&files, 5), resource_file(&files, 5));
         assert_eq!(resource_file(&[], 5), None);
+    }
+
+    /// A structure on a planned lot building's own blocked floor (since `hearth-1`, a household's
+    /// hearth and store, about 0.5 m behind the front wall) is indoors of that lot; the street in
+    /// front of it, and open lots, are not.
+    #[test]
+    fn a_point_on_a_buildings_own_blocked_floor_is_indoors_of_its_lot() {
+        let (land, params) = cullet();
+        let (map, _) = living_rules::host::hosted_map(&land, &params);
+        let mut houses = 0;
+        for (i, l) in land.lots.iter().enumerate() {
+            if !land.settlements[l.settlement as usize].planned {
+                continue;
+            }
+            let (c, f) = (Vec2::new(l.centre.0, l.centre.1), Vec2::new(l.front.0, l.front.1).normalize_or(Vec2::Y));
+            // Behind the front wall's face, on the lot's own floor.
+            let inside = c + f * (l.depth_m * 0.5 - 0.5);
+            let street = c + f * (l.depth_m * 0.5 + 1.5);
+            if l.height_m > 0.0 {
+                if !map.at(inside.x, inside.y).walkable() {
+                    assert_eq!(indoors_of(&land, &map, inside), Some(i as u32), "lot {i}: behind its front wall");
+                    houses += 1;
+                }
+                assert_ne!(indoors_of(&land, &map, street), Some(i as u32), "lot {i}: its street is not inside it");
+            } else {
+                assert_eq!(indoors_of(&land, &map, c), None, "open lot {i}");
+            }
+        }
+        assert!(houses >= 40, "{houses} buildings");
+        // A land without plans has no lot buildings to be inside.
+        let gen = living_rules::land::generate(7, 512, &LandParams::default());
+        let (gmap, _) = living_rules::host::hosted_map(&gen, &LandParams::default());
+        for l in &gen.lots {
+            assert_eq!(indoors_of(&gen, &gmap, Vec2::new(l.centre.0, l.centre.1)), None);
+        }
     }
 }

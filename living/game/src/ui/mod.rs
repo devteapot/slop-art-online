@@ -100,9 +100,9 @@ impl Plugin for UiPlugin {
             // Connected play: the game UI's input, its windows and the live source.
             app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
-                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
-                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows, facing::pill).chain().in_set(UiWork).before(UiSystems::Prepare))
                 // Light text gets the theme's drop the frame it is spawned (Glass).
                 .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(kit::paint).after(UiWork).before(UiSystems::Prepare));
             if perf_on() {
@@ -402,7 +402,7 @@ impl DumpExtra<'_, '_> {
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
-            "facing_sight": fov, "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
+            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
     }
 }
 

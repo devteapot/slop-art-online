@@ -61,6 +61,11 @@ pub struct Edges {
     /// 4 hatch, 5 memory); y: how light the scene is (0 night, 1 day); z: 1 when the memory
     /// texture is current.
     pub sight_extra: Vec4,
+    /// The scene's shadow tone for the shade look: x the target hue (the sky fill's, else the
+    /// style's `shadow_hue`), y `hue_shift`, z `shadow_saturation`, w `shadow_depth`.
+    pub sight_shade: Vec4,
+    /// rgb: the style's `shadow_tint`.
+    pub sight_tint: Vec4,
 }
 
 /// The sight field's texture and the memory of it (`sightfield.rs`), on the camera beside its
