@@ -54,6 +54,8 @@ python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&1
 # Attention cues under the cues_on law: once per thing, the cooldown and the gap, never a far figure, nothing off (features/cues.md, about 1.5 min).
 python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
+# First sights that ask for a thought under first_sight_thinks: refused then owed, the gap, never far or named, sleepers, with a cue (features/first-sight.md, about 4 min).
+python3 "$C/scenes.py" first_sight --run "$R" > "$E/first_sight.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1

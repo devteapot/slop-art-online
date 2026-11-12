@@ -2,7 +2,7 @@
 
 **The owner's answer (2026-11-12, relayed by the general coordinator): yes.** Build `first_sight_thinks` as designed below, off by default with `first_sight_gap_s` 300 s, then run one paid Cullet stage (C, C + first sight, and LS + cues + first sight if the budget allows; about $13 approved).
 
-Status: **approved design; the build is on branch `first-sight`.** Until it reaches main, nothing here is built. No paid call has been made for it. Code is read from main `ef9c3ae5`. The cost figures come from recorded trial runs, counted read-only (§4).
+Status: **built on branch `first-sight`, off by default** (see [As built](#as-built-first-sight-2026-11-12)). No paid call has been made for it yet. Code is read from main `ef9c3ae5`. The cost figures come from recorded trial runs, counted read-only (§4).
 
 **The gap.** In strangers stage 2 and 2b (docs/TRIALS.md), a resident's first sight of someone it cannot place arrives in its experiences as a first-sight line, but it never asks for a thought.
 - Ingrid Morrow saw the newcomer from 1.8–2.7 m on the Strand in all four st2b arms, each time with "For the first time you see a stranger, 7 tiles east, goto → (490,779)."
@@ -248,6 +248,25 @@ verify-client needs nothing: no table, view or reducer changes.
   - lines to the newcomer out of earshot;
   - deliberations and $ per resident-hour against L.
 - **Expected,** from §3 and §4: inward rises, unaware falls, and the crowding marks are the risk.
+
+## As built (first-sight, 2026-11-12)
+
+Built as designed, on main `d80a1373` with fix-sleep-thinking merged. cue-cache's regard cache is not on main, so "can't place" is the test `noticed` already makes for each first-sight part (`named`, from `label_for`).
+
+**Where it lives:**
+- the laws `first_sight_thinks` (false) and `first_sight_gap_s` (300, clamped 0–3,600) in `skills.rhai` `laws()` and `laws_about`, and `script.rs` `Laws`;
+- `brain.rs` `Ev::first_sight_asks`, called at the end of each look in `noticed` while the law holds;
+- the thread-local `FIRST_SIGHT`: per character, when a first sight last brought it to think, and what is owed.
+
+**Two choices made in the build:**
+1. **What settles an owed request.** It is any thought made after the first sight (`mind_state.deliberated_ms` past the time it became owed), while the person is still in sight. That stands in for "a thought whose scene held them". A thought made while they stay in sight has them in its scene, unless it was asked for before they came and taken after.
+2. **The sleeper rule.** With the law on, a sleeper (`perceive::asleep`, fix-sleep-thinking's `slumber` or a sleep act) does not see someone it cannot place for the first time: no line, no `familiar` row, nothing in `slumber`. The person is looked at again every 5 s, as a far figure is. A sleeper's owed requests are dropped. A request already pending merges as before.
+
+**Verified** (scratch databases on the trial service, the fake model, no paid call):
+- verify-core `scenes.py first_sight`: 22 of 22 (`core-fs1-111127`), as features/first-sight.md lists.
+- verify-minds `first-sight`: the think request carried the line word for word (`minds-fs3-112258`). The first attempt showed the gap holding a second first sight 29 s after the opening one.
+- verify-player `first_sight.py`: 7 of 7 (`player-fs1-112453`).
+- verify-client: the public surface is unchanged (see its record).
 
 ## SpacetimeDB documentation
 

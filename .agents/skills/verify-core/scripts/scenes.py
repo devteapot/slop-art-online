@@ -4671,6 +4671,170 @@ def dodge_told(s):
 SCENES["dodge_told"] = dodge_told
 
 
+FIRST = "For the first time you see "
+FS_TALK = {"kind": "talk", "summary": "verify-core first_sight: K says its name", "detail": "", "latency_ms": 0, "tokens": 0, "model": "fake", "reference": ""}
+THOUGHT = {"kind": "deliberate", "summary": "verify-core first_sight: a thought taken", "detail": "", "latency_ms": 0, "tokens": 0, "model": "fake", "reference": ""}
+
+
+def first_sight(s):
+    """A first sight of someone one cannot place asks for one thought (docs/FIRST_SIGHT.md; the
+    `first_sight_thinks` law, `brain.rs` `first_sight_asks`). No mind runs here: a thought is
+    stood in for by `mind_skip` (the request is cleared and the mind counts as having just
+    thought). With the law off, U1 seen for the first time is told and asks nothing. On:
+    - U2, first seen within `think_min_s` of a thought, is refused, owed, and asked again at a
+      later look while in sight: one request, its reason the first-sight line word for word;
+    - U3, first seen once `think_min_s` has passed but within `first_sight_gap_s` of that
+      request, asks nothing, then or later (dropped, not owed);
+    - under a `perceived_of` overlay (who someone is only within 4 m), V (unknown) at 6 m gets
+      no first sight and asks nothing; K (who told O its name from afar) brought within 4 m is a
+      first sight that asks nothing; V within 4 m asks, its reason naming only V's part;
+    - V leaving and coming back asks nothing (once per first sight);
+    - a sleeping O does not see W (no line, no `familiar` row, nothing in `slumber`); awake,
+      W's first sight is told and asks;
+    - with `cues_on` and a cue on someone unknown, X's first sight and the cue's fire are one
+      pending request holding both lines.
+    The laws, the script and O's cues are restored at the end."""
+    line = clear_line(s)
+    o, k, u1, u2, u3, v, w, x = s.people(8)
+    others = (k, u1, u2, u3, v, w, x)
+    away = lambda who, j=0: s.call("place_at", who, line[0][0] + 80 + 2 * j, line[0][1] + 60)
+    for j, who in enumerate(others):
+        away(who, j)
+        s.graph(who, {"wait": 300})
+    s.call("place_at", o, *line[0])
+    s.graph(o, {"wait": 300})
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    name = lambda who: s.rows(f"SELECT name FROM character WHERE id = {who}")[0]["name"]
+    firsts = lambda since: [r for r in s.rows(f"SELECT id, at_ms, subject, object, text FROM experience WHERE observer = {o}") if r["at_ms"] >= since and r["text"].startswith(FIRST)]
+    about = lambda who, since: [r for r in firsts(since) if who in (r["subject"], r["object"])]
+    pending = lambda label=None: "\n".join(r["reason"] for r in s.rows(f"SELECT reason FROM deliberation WHERE actor = {o}", label))
+    asks = lambda label=None: [l for l in pending(label).split("\n") if l.startswith(FIRST)]
+    familiar = lambda who: any((r["thing"] & 0xFFFFFFFF) == who and r["thing"] >> 40 == 2 for r in s.rows(f"SELECT thing FROM familiar WHERE actor = {o}"))
+    near = lambda who, i, dy=1.0: s.call("place_at", who, line[i][0], line[i][1] + dy)
+
+    def think_now():
+        s.call("mind_skip", o, now() + 60_000, THOUGHT)
+        s.wait(lambda: not s.rows(f"SELECT actor FROM deliberation WHERE actor = {o}"), 10)
+        return now()
+
+    s.expect("none of the scene's people is familiar to O yet", not any(familiar(p) for p in others), [p for p in others if familiar(p)])
+    try:
+        # Off.
+        set_law(s, "first_sight_thinks", False)
+        think_now()
+        t0 = now()
+        near(u1, 2)
+        s.wait(lambda: about(u1, t0), 10)
+        time.sleep(3)
+        s.expect("law off: U1's first sight is told", len(about(u1, t0)) == 1, firsts(t0))
+        s.expect("law off: it asks for no thought", not asks("off"), pending())
+        away(u1, 1)
+        # On: refused within think_min_s, owed, asked again while in sight.
+        set_law(s, "first_sight_thinks", True)
+        set_law(s, "first_sight_gap_s", 40)
+        s.wait(lambda: any(r["name"] == "first_sight_thinks" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
+        t1 = think_now()
+        near(u2, 2)
+        seen = s.wait(lambda: about(u2, t1), 10)
+        time.sleep(3)
+        s.expect("on: within think_min_s (20 s) of a thought the request is refused", not asks("refused"), pending())
+        got = s.wait(lambda: asks(), 30)
+        s.expect("owed and asked again at a later look, after think_min_s", now() - t1 >= 19_000, {"t1": t1, "now": now()})
+        s.expect("one request for U2's first sight", len(got) == 1, got)
+        s.expect("its reason is the first-sight line word for word", got[0] == seen[0]["text"], {"reason": got[0], "line": seen[0]["text"]})
+        asked1 = now()
+        # The gap: U3 once think_min_s has passed but within 40 s of U2's request.
+        think_now()
+        time.sleep(21)
+        t3 = now()
+        near(u3, 3, -1.0)
+        s.wait(lambda: about(u3, t3), 10)
+        time.sleep(3)
+        s.expect("within first_sight_gap_s: U3's first sight is told and asks nothing", not asks("gap"), pending())
+        s.wait(lambda: now() - asked1 > 45_000, 40, every=1)
+        s.expect("dropped, not owed: nothing once the gap has passed either", not asks("gap-after"), pending())
+        for who in (u2, u3):
+            away(who, 2)
+        # Far and named.
+        set_law(s, "first_sight_gap_s", 0)
+        far_law = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
+        s.call("install_script", compose(shipped, {"perceived_of": far_law}))
+        set_law(s, "first_sight_thinks", True)
+        set_law(s, "first_sight_gap_s", 0)
+        t4 = think_now()
+        time.sleep(21)
+        near(v, 6)
+        near(k, 7, -1.0)
+        s.call("mind_say", k, f"I am {name(k)}.", 0, "", 0, FS_TALK)
+        s.wait(lambda: s.rows(f"SELECT * FROM acquaintance WHERE observer = {o} AND known = {k}"), 10)
+        time.sleep(6)
+        s.expect("far: V and K 6-7 m off, too far to make out, get no first sight", not about(v, t4) and not about(k, t4), firsts(t4))
+        s.expect("far: they ask nothing", not asks("far"), pending())
+        s.expect("far: no familiar rows for them", not familiar(v) and not familiar(k))
+        near(k, 2, -1.0)
+        s.wait(lambda: about(k, t4), 15)
+        time.sleep(2)
+        s.expect("K, whose name O knows, made out: a first sight naming K", name(k) in about(k, t4)[0]["text"], about(k, t4))
+        s.expect("a first sight of someone O can place asks nothing", not asks("named"), pending())
+        near(v, 3)
+        seen = s.wait(lambda: about(v, t4), 15)
+        got = s.wait(lambda: asks(), 10)
+        s.expect("V made out: asks, with V's line", len(got) == 1 and got[0] == seen[0]["text"] and "a stranger" in got[0] and name(k) not in got[0], {"asks": got, "line": seen})
+        # Once per first sight.
+        think_now()
+        away(v, 3)
+        time.sleep(3)
+        t5 = now()
+        near(v, 3)
+        time.sleep(25)
+        s.expect("V back: no new first sight and no request", not about(v, t5) and not asks("again"), {"firsts": firsts(t5), "pending": pending()})
+        away(v, 3)
+        away(k, 4)
+        s.call("install_script", shipped)
+        set_law(s, "first_sight_thinks", True)
+        set_law(s, "first_sight_gap_s", 0)
+        # A sleeper does not see someone it cannot place for the first time.
+        think_now()
+        s.graph(o, {"seq": [{"do": "sleep"}]})
+        s.wait(lambda: s.rows(f"SELECT * FROM slumber WHERE actor = {o}"), 20)
+        time.sleep(21)
+        t6 = now()
+        near(w, 2)
+        time.sleep(6)
+        slept = "\n".join(r["reason"] for r in s.rows(f"SELECT reason FROM slumber WHERE actor = {o}", "slumber-asleep"))
+        s.expect("asleep: W gets no first-sight line", not about(w, t6), firsts(t6))
+        s.expect("asleep: no familiar row for W", not familiar(w))
+        s.expect("asleep: nothing waits in slumber and nothing is asked", FIRST not in slept and not asks("asleep"), {"slumber": slept, "pending": pending()})
+        s.graph(o, {"wait": 300})
+        s.wait(lambda: not s.rows(f"SELECT * FROM slumber WHERE actor = {o}"), 20)
+        seen = s.wait(lambda: about(w, t6), 15)
+        got = s.wait(lambda: asks(), 30)
+        s.expect("awake: W's first sight is told and asks", len(got) == 1 and got[0] == seen[0]["text"], {"asks": got, "line": seen, "pending": pending()})
+        away(w, 5)
+        # One thought with a matching cue.
+        set_law(s, "cues_on", True)
+        set_cues(s, o, [cue("stance:verify_watch", who="unknown")])
+        think_now()
+        time.sleep(21)
+        t7 = now()
+        near(x, 2)
+        s.wait(lambda: about(x, t7), 10)
+        both = s.wait(lambda: (lambda p: p if WHY in p and FIRST in p else None)(pending("cue-and-first-sight")), 15)
+        s.expect("with a matching cue: the cue's line and the first sight are one request", len(s.rows(f"SELECT actor FROM deliberation WHERE actor = {o}")) == 1 and len(asks()) == 1, both)
+    finally:
+        s.call("install_script", shipped, check=False)
+        set_law(s, "first_sight_thinks", False, check=False)
+        set_law(s, "first_sight_gap_s", 300, check=False)
+        set_law(s, "cues_on", False, check=False)
+        set_cues(s, o, [])
+        s.graph(o, {"wait": 300})
+        off_the_line(s, line, [o, *others], dy=58)
+
+
+SCENES["first_sight"] = first_sight
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
 

@@ -78,6 +78,8 @@ Every field present must hold for the same perceived thing.
 | `cue_cooldown_s` | `600` (0–86,400) | A cue fires at most once per thing it matched within this many seconds. |
 | `cue_gap_s` | `60` (0–3,600) | A character's cues bring it to think at most once in this many seconds. Things that begin to match together go in one line. |
 
+The first-sight laws (`first_sight_thinks`, `first_sight_gap_s`) are a separate attention law: a first sight of someone one cannot place asks one thought ([First sight](FIRST_SIGHT.md)). A cue and a first sight of the same person in one look are one request.
+
 All three are script laws (`skills.rhai`, `script.rs` `Laws`), switched at runtime by `set_world_law`, and described by `laws_about`.
 
 ## What the prompt says
