@@ -86,8 +86,21 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     }
     let sc = common::scripts(ctx);
     let w = sc.way(way_name(way)).ok_or_else(|| format!("no way of speaking called `{way}`"))?;
-    let text: String = text.chars().take(w.max_chars).collect();
     let Some(me) = ctx.db.character().id().find(speaker) else { return Err("no speaker".into()) };
+    // The `#<id>` handles a mind is shown people by are not words anyone hears: each is said as
+    // the speaker refers to that one (a name it knows, "that stranger"; a far figure's handle as
+    // the one it saw). An id that names no one is left as written.
+    let text = living_rules::normalize::spoken_without_ids(text, |id| {
+        let real = crate::far::resolve(ctx, speaker, id);
+        if real == 0 || ctx.db.character().id().find(real).is_none() {
+            None
+        } else if real == speaker {
+            Some(me.name.clone())
+        } else {
+            Some(common::label_for(ctx, &me, real))
+        }
+    });
+    let text: String = text.chars().take(w.max_chars).collect();
     let Some(b) = ctx.db.body().id().find(speaker) else { return Err("no body".into()) };
     // A line to a figure the speaker's mind names by its sighting's handle (far-handle).
     let to = crate::far::resolve(ctx, speaker, to);

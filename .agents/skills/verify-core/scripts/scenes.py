@@ -3002,6 +3002,19 @@ def say(s):
     s.expect("a sequence of two lines speaks the second", heard(two, t0, 10), lines(t0, "two-lines")[:3], fatal=False)
     time.sleep(2.5)
 
+    # Ids are not words: a line naming people by the `#<id>` a mind is shown them by is heard as
+    # the speaker refers to them (`normalize::spoken_without_ids`, applied by `speech::speak`).
+    # r2e's minds said three such lines (docs/TRIALS.md).
+    idline = f"Watch out, #{b} is here, and the archer #{far} too."
+    t0 = now()
+    install("mind_install", {"seq": [{"say": {"text": idline, "to": {"id": b}}}, hold]})
+    got = heard("Watch out,", t0)
+    said_text = got[0]["text"] if got else ""
+    s.expect("a line naming people by id is spoken without the ids", bool(got) and f"#{b}" not in said_text and f"#{far}" not in said_text and "and the archer too." in said_text, got[:1], fatal=False)
+    told_b = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {b}", "id-line-heard") if r["at_ms"] >= t0 and "Watch out," in r["text"]]
+    s.expect("the listener hears it without the ids", len(told_b) >= 1 and all(f"#{b}" not in r["text"] and f"#{far}" not in r["text"] for r in told_b), told_b[:2], fatal=False)
+    time.sleep(2.5)
+
     # Out of sight: not spoken, and the speaker is told why.
     lost = "Can you hear me over there?"
     t0 = now()
