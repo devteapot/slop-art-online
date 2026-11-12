@@ -40,7 +40,7 @@ macro_rules! primary_tables {
             routine, routine_stat, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather,
             seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_act_outcomes);
+            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_act_outcomes, my_known_names);
     };
 }
 
@@ -174,7 +174,8 @@ fn snapshot(c: &DbConnection) -> Value {
         heard_sounds,
         my_heard,
         my_senses,
-        my_act_outcomes
+        my_act_outcomes,
+        my_known_names
     );
     // What the perception views returned to this identity (docs/PERCEPTION.md).
     let ids = |v: Vec<u32>| { let mut v = v; v.sort_unstable(); v };
@@ -202,6 +203,8 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_senses": c.db.my_senses().iter().map(|r| json!({"id":r.id,"sight":r.sight,"hearing":r.hearing,"field":r.field,"near_m":r.near_m,"at_ms":r.at_ms})).collect::<Vec<_>>(),
         // How my acts and death came out, in codes (one row per line that tells one).
         "my_act_outcomes": c.db.my_act_outcomes().iter().map(|r| json!({"id":r.id,"observer":r.observer,"kind":r.kind,"ok":r.ok,"skill":r.skill,"code":r.code})).collect::<Vec<_>>(),
+        // Whom my character knows by name (owner-known): ids and names.
+        "my_known_names": c.db.my_known_names().iter().map(|r| json!({"id":r.id,"name":r.name})).collect::<Vec<_>>(),
         // What I hear and do not see (only while the world's `fov_on` law is on): no id.
         "heard_sounds": c.db.heard_sounds().iter().map(|r| json!({"key":r.key.to_string(),"kind":r.kind,"bearing":r.bearing,"band":r.band})).collect::<Vec<_>>(),
         // Who heard my own lines: speaker and line of each row (docs/COMMUNICATION.md §6).
