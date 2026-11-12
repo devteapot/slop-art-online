@@ -17,10 +17,13 @@ arrival with the game camera:
    50 ms, and `hitch:` lines (`LIVING_GAME_PERF=hitch=50`) where that frame or one of the two
    before spawned a character or converted meshes: the first-sight hitch.
 
-Memory: the process's peak resident size, sampled every second, and the last `assets:` line
-(meshes, morph targets, images). The load average at each run's start and end is recorded:
+Memory, sampled every 2 s: the resident size, the physical footprint and the graphics
+(IOAccelerator) memory from macOS's `footprint`, each at its peak and steady (the median over the
+still window); and the last `assets:` line (main-world meshes, morph targets, CPU-held pictures,
+glTF files) and `batches:`'s textures on the GPU. The load average at each run's start and end is recorded:
 measure on a quiet machine, and say so. `--far` draws everyone on the full model
-(`LIVING_GAME_FAR=1000`). Writes DIR/live_crowd.json and a table on stdout.
+(`LIVING_GAME_FAR=1000`). Every run is uncapped (`LIVING_GAME_FPS_CAP=0`; `--fps-cap` to change it).
+Writes DIR/live_crowd.json and a table on stdout.
 """
 import argparse
 import json
@@ -48,16 +51,32 @@ def pct(xs, p):
     return xs[min(len(xs) - 1, int(round(p / 100 * (len(xs) - 1))))]
 
 
+def mac_memory(pid):
+    """A process's physical footprint and its IOAccelerator (graphics) memory in MiB, from
+    macOS's `footprint` (as crowd.py)."""
+    try:
+        text = subprocess.run(["footprint", "-p", str(pid)], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return 0, 0
+    mib = lambda v, u: float(v) * dict(B=1 / (1 << 20), KB=1 / 1024, MB=1, GB=1024).get(u, 0)
+    total = re.search(r"Footprint:\s*([\d.]+)\s*(B|KB|MB|GB)", text)
+    gpu = sum(mib(v, u) for v, u, cat in re.findall(r"^\s*([\d.]+)\s*(B|KB|MB|GB)\s+[\d.]+\s*(?:B|KB|MB|GB)\s+[\d.]+\s*(?:B|KB|MB|GB)\s+\d+\s+(.*)$", text, re.M) if "IOAccelerator" in cat)
+    return int(mib(*total.groups())) if total else 0, int(gpu)
+
+
 def peak_rss(pid_file, stop, out):
-    """Sample the client's resident size (MiB) every second while it runs."""
+    """Sample the client's resident size, physical footprint and graphics memory (MiB) every 2 s
+    while it runs: (time, rss, footprint, gpu)."""
     while not stop.is_set():
         try:
             pid = int(open(pid_file).read().split()[0])
             rss = int(subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True).stdout.strip() or 0) / 1024
+            fp, gpu = mac_memory(pid)
             out[0] = max(out[0], rss)
+            out.append((time.time(), rss, fp, gpu))
         except (OSError, ValueError):
             pass
-        stop.wait(1.0)
+        stop.wait(2.0)
 
 
 def one(a, arm, binary, env, k, out, run=None):
@@ -67,7 +86,8 @@ def one(a, arm, binary, env, k, out, run=None):
     os.makedirs(d, exist_ok=True)
     frames = os.path.join(d, "frames.csv")
     perf = ",".join(x for x in ["frames", "diag", "hitch=50", a.perf, env.pop("PERF", "")] if x)
-    e = dict(os.environ, LIVING_GAME_FRAMES=frames, LIVING_GAME_PERF=perf, **env)
+    # Uncapped (the headless loop's default is 60 Hz): the frame interval is the frame's cost.
+    e = dict(os.environ, LIVING_GAME_FRAMES=frames, LIVING_GAME_PERF=perf, LIVING_GAME_FPS_CAP=a.fps_cap, **env)
     if a.far:
         e["LIVING_GAME_FAR"] = "1000"
     plan = f"ready;wait:3;dump:t0;wait:{a.still};dump:t1;walk:90:8;walk:180:8;walk:270:8;dump:t2;quit"
@@ -91,6 +111,11 @@ def one(a, arm, binary, env, k, out, run=None):
     stop.set()
     load1 = load()
     mark = {s: os.path.getmtime(os.path.join(d, f"{s}.json")) for s in ("t0", "t1", "t2") if os.path.exists(os.path.join(d, f"{s}.json"))}
+    samples = rss[1:]
+    steady = [x for x in samples if "t0" in mark and "t1" in mark and mark["t0"] <= x[0] <= mark["t1"]]
+    med = lambda xs: round(statistics.median(xs)) if xs else None
+    memory = dict(peak_rss_mib=round(rss[0]), peak_footprint_mib=max([x[2] for x in samples] or [0]), peak_gpu_mib=max([x[3] for x in samples] or [0]),
+                  steady_rss_mib=med([x[1] for x in steady]), steady_footprint_mib=med([x[2] for x in steady]), steady_gpu_mib=med([x[3] for x in steady]))
     rows = []
     if os.path.exists(frames):
         for ln in open(frames):
@@ -114,10 +139,12 @@ def one(a, arm, binary, env, k, out, run=None):
              walk_frames=len(walk), walk_max_ms=max(walk) if walk else None, walk_over_50=sum(1 for x in walk if x > 50),
              hitches=len(hitches), first_sight_hitches=len(first_sight), first_sight_max_ms=max([float(m.group(1)) for l in first_sight for m in [re.search(r"hitch: ([\d.]+) ms", l)] if m] or [0]) or None,
              people_meshes=int(people.group(1)) if people else None, people_materials=int(people.group(2)) if people else None, people_ktris=int(people.group(3)) if people else None, people_pairs=int(people.group(4)) if people else None,
-             opaque_sets=int(opaque.group(1)) if opaque else None, peak_rss_mib=round(rss[0]), assets=assets[-1].split("assets:")[-1].strip()[:200] if assets else None,
+             opaque_sets=int(opaque.group(1)) if opaque else None, **memory, assets=assets[-1].split("assets:")[-1].strip()[:200] if assets else None,
+             gpu_textures=(re.search(r"textures \d+ on the GPU [\d.]+ MiB", batches[-1]) or [None])[0] if batches else None,
+             prewarm=next((l.split("loading: ")[-1] for l in log.splitlines() if "prewarm characters" in l), None),
              composed=len(re.findall(r"compose: .* wears", log)), looks_warnings=sorted(set(re.findall(r"looks: [^\n]*", log)))[:6], evidence=d)
     out.append(r)
-    print(json.dumps({x: r[x] for x in ("arm", "k", "rc", "p50_ms", "p99_ms", "walk_max_ms", "first_sight_hitches", "people_materials", "people_pairs", "opaque_sets", "peak_rss_mib", "load_start")}), flush=True)
+    print(json.dumps({x: r[x] for x in ("arm", "k", "rc", "p50_ms", "p99_ms", "walk_max_ms", "first_sight_hitches", "people_materials", "people_pairs", "opaque_sets", "peak_rss_mib", "steady_rss_mib", "steady_footprint_mib", "steady_gpu_mib", "load_start")}), flush=True)
     if p.returncode != 0:
         print(rest[-600:], flush=True)
 
@@ -131,6 +158,7 @@ def main():
     ap.add_argument("--still", type=float, default=30.0)
     ap.add_argument("--far", action="store_true", help="everyone on the full model (LIVING_GAME_FAR=1000)")
     ap.add_argument("--perf", default="", help="more LIVING_GAME_PERF flags for every arm")
+    ap.add_argument("--fps-cap", default="0", help="LIVING_GAME_FPS_CAP for every run (default 0: uncapped)")
     a = ap.parse_args()
     arms = []
     for spec in a.arm:
@@ -148,10 +176,10 @@ def main():
     for name, _, _, _ in arms:
         rs = [r for r in out if r["arm"] == name and r["rc"] == 0 and r["p50_ms"]]
         med = lambda key: statistics.median([r[key] for r in rs if r[key] is not None]) if any(r[key] is not None for r in rs) else None
-        summary[name] = {key: med(key) for key in ("p50_ms", "p99_ms", "walk_max_ms", "first_sight_hitches", "first_sight_max_ms", "people_meshes", "people_materials", "people_pairs", "opaque_sets", "peak_rss_mib", "composed")}
+        summary[name] = {key: med(key) for key in ("p50_ms", "p99_ms", "walk_max_ms", "first_sight_hitches", "first_sight_max_ms", "people_meshes", "people_materials", "people_pairs", "opaque_sets", "peak_rss_mib", "peak_footprint_mib", "peak_gpu_mib", "steady_rss_mib", "steady_footprint_mib", "steady_gpu_mib", "composed")}
         summary[name]["runs"] = len(rs)
         summary[name]["load"] = [min([r["load_start"] for r in rs] or [0]), max([r["load_end"] for r in rs] or [0])]
-    json.dump({"run": a.run, "far": a.far, "still_s": a.still, "arms": [(n, b, e, r or a.run) for n, b, e, r in arms], "runs": out, "summary": summary}, open(os.path.join(a.out, "live_crowd.json"), "w"), indent=1)
+    json.dump({"run": a.run, "far": a.far, "still_s": a.still, "fps_cap": a.fps_cap, "arms": [(n, b, e, r or a.run) for n, b, e, r in arms], "runs": out, "summary": summary}, open(os.path.join(a.out, "live_crowd.json"), "w"), indent=1)
     for name, s in summary.items():
         print(name, json.dumps(s))
 
