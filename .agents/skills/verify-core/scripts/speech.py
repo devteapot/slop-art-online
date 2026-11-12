@@ -544,7 +544,8 @@ def channels(s):
     time.sleep(GAP)
     # Overheard names: b says c's name to c; whoever hears it in full and sees c learns it.
     r, got, t = line_by(b, f"{names[c]}, come over here.", c, "say", "names")
-    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == c and x["since_ms"] >= t)
+    # (the cast only: a resident who wanders into earshot learns the name too, rightly)
+    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == c and x["since_ms"] >= t and x["observer"] in at)
     want = sorted(w for w in (a, p.id, e) if math.dist(at[b], at[w]) <= 9.0 and (math.dist(at[w], at[c]) <= (6.0 if night else 11.0)))
     s.expect("names: those who heard c named and saw c learn c's name; c and d do not", learned == want, (learned, want), fatal=False)
     told = [x["text"] for x in got[a] if x["kind"] == "introduced"]
@@ -557,7 +558,7 @@ def channels(s):
     t = now(s)
     p.call("human_say", ["I'm Mara.", 0])
     time.sleep(1.0)
-    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == p.id and x["since_ms"] >= t)
+    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == p.id and x["since_ms"] >= t and x["observer"] in at)
     s.expect("names: saying a given name (Mara of Mara Quill) introduces to those in earshot", learned == sorted(w for w in (a, b, c, e, d) if math.dist(at[p.id], at[w]) <= 9.0), learned, fatal=False)
     time.sleep(GAP)
     # Someone too far away to make out (fix-far-silence): with an overlay of `perceived_of` that
