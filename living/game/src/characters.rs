@@ -100,6 +100,10 @@ pub struct Colors {
     /// A composed person's beard and stubble (an overlay's `…Overlay_00_HAIR`); the hair's
     /// without one.
     pub beard: Option<String>,
+    /// A greying person's hair before and after (the line's `grey` mixes them lock by lock by
+    /// the hair file's `_GREY`, `compose.rs`); `hair` is the one tint where they are not used.
+    pub hair_natural: Option<String>,
+    pub hair_silver: Option<String>,
     /// Outfit pieces' colours by slot (a missing one keeps the piece's own).
     pub outfit: BTreeMap<String, String>,
 }
@@ -123,8 +127,8 @@ pub struct Recipe {
     #[serde(default)]
     pub identity: BTreeMap<String, f32>,
     /// The person as shared files compose it (`compose.rs`): a type, style files, colours and
-    /// the line's own numbers. With `LIVING_GAME_COMPOSE=1` it replaces `base` and the numbers
-    /// above; off, it is ignored.
+    /// the line's own numbers. It replaces `base` and the numbers above unless
+    /// `LIVING_GAME_COMPOSE=0`, which ignores it.
     #[serde(default)]
     pub person: Option<compose::Person>,
 }
@@ -288,6 +292,8 @@ impl Recipe {
             shoes: outfit(&mut r),
             accent: outfit(&mut r),
             beard: None,
+            hair_natural: None,
+            hair_silver: None,
             outfit: BTreeMap::new(),
         };
         let base = r.pick(&b.bases).cloned().unwrap_or_else(|| "lookdev/vroid-Vivi.glb".into());
@@ -616,6 +622,7 @@ impl Plugin for CharactersPlugin {
             .add_observer(on_ready)
             .add_observer(compose::on_ready)
             .init_resource::<compose::Plans>()
+            .init_resource::<compose::HairTints>()
             .init_resource::<Thumbs>()
             .add_systems(PreUpdate, (place_scenes, force_rebuild, thumb_pictures))
             .insert_resource(SpringSettings::from_env())
@@ -945,7 +952,33 @@ fn hsv(c: Vec3) -> Vec3 {
 }
 
 /// How much of a texture's own hue variation a recoloured material keeps.
+///
+/// The generator mirrors this rule: `living/tools/blender/person_params.py` `HUE_SPREAD` (this value) and
+/// `SHARED_IRIS_SOURCE` (the shared iris picture's mean as [`mean_color`] takes it, over the
+/// texels its mesh uses) set each person's `colors.eyes` so that the moved iris lands on their eye
+/// colour. Change either here, or how a material's source colour is taken, and those must follow;
+/// `living/tools/characters/eye_colours.py --check` catches a changed source.
 const HUE_SPREAD: f32 = 0.4;
+
+/// A greying person's hair tag (`toon.wesl` `recolor`): their natural colour's and their
+/// silver's places on the palette, how grey they are (0 to 1 in 8 bits), bit 24 set, bit 26 the
+/// palette's (bit 25 clear: never wind sway). None without the colours, their `grey`, room on
+/// the palette, or a mesh and material that grey (a hair file's `_GREY`, the shared hair toon).
+fn grey_tag(c: &Character, mesh: &Mesh, toon: &Toon, tints: &mut compose::HairTints, images: &mut Assets<Image>) -> Option<u32> {
+    let p = c.recipe.person.as_ref().filter(|p| p.grey > 0.0)?;
+    toon.extension.tints.as_ref()?;
+    mesh.attribute(Mesh::ATTRIBUTE_UV_1)?;
+    let byte = |hex: &Option<String>| -> Option<[u8; 3]> {
+        let c = Srgba::hex(hex.as_ref()?).ok()?;
+        let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+        Some([b(c.red), b(c.green), b(c.blue)])
+    };
+    let (natural, silver) = (byte(&p.colors.hair_natural)?, byte(&p.colors.hair_silver)?);
+    let n = tints.place(0, natural, images)? as u32;
+    let s = tints.place(1, silver, images)? as u32;
+    let g = (p.grey.clamp(0.0, 1.0) * 255.0).round() as u32;
+    Some(n | s << 8 | g << 16 | 1 << 24 | 1 << 26)
+}
 
 /// A recipe colour packed for a mesh's tag: sRGB bytes, bit 24 marks it set (`toon.wesl`
 /// `recolor`).
@@ -1120,6 +1153,8 @@ pub fn recolor(
     mut toons: ResMut<Assets<Toon>>,
     thumbs: Res<Thumbs>,
     meshes: Res<Assets<Mesh>>,
+    mut tints: ResMut<compose::HairTints>,
+    mut images: ResMut<Assets<Image>>,
     mut ready: Local<std::collections::HashSet<AssetId<Toon>>>,
 ) {
     for (e, mat, mesh, name, piece) in &q {
@@ -1152,9 +1187,19 @@ pub fn recolor(
             // materials, `compose.rs`) keeps it: it may be shared by meshes of several files.
             if toon.extension.params.recolor.w > 2.5 {
                 ready.insert(mat.0.id());
-                commands.entity(e).insert((bevy::mesh::MeshTag::new(tag_color(srgb)), Recolored));
-                continue;
             }
+        }
+        // A greying person's hair, lock by lock from the palette; else the one tint.
+        if piece.is_none() && name.is_some_and(|n| n.0.contains("_HAIR") && !n.0.contains("Overlay")) {
+            if let (Some(c), Some(m), Some(t)) = (owner, meshes.get(&mesh.0), toons.get(&mat.0)) {
+                if let Some(tag) = grey_tag(c, m, t, &mut tints, &mut images) {
+                    commands.entity(e).insert((bevy::mesh::MeshTag::new(tag), Recolored));
+                    continue;
+                }
+            }
+        }
+        if !ready.contains(&mat.0.id()) {
+            let Some(toon) = toons.get(&mat.0) else { continue };
             let Some(mean) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &thumbs)) else { continue };
             let m = hsv(mean);
             if let Some(mut t) = toons.get_mut(&mat.0) {
@@ -1164,6 +1209,12 @@ pub fn recolor(
             ready.insert(mat.0.id());
         }
         commands.entity(e).insert((bevy::mesh::MeshTag::new(tag_color(srgb)), Recolored));
+    }
+    // A grown palette: its toons are touched so their bind groups take the new texels.
+    if std::mem::take(&mut tints.grown) {
+        for id in tints.users.clone() {
+            let _ = toons.get_mut(id);
+        }
     }
 }
 

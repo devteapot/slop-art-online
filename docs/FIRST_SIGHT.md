@@ -274,6 +274,31 @@ So a first sight and a cue on someone unknown in the same look read one answer.
 - verify-player `first_sight.py`: 7 of 7 (`player-fs1-112453`).
 - verify-client: the public surface is unchanged (see its record).
 
+## Crowds (first-sight-crowd, 2026-11-12)
+
+fs1 (docs/TRIALS.md, "First sight fs1") stopped on its crowding rule: C + first sight's `converge_60s` was 6. The general coordinator kept `first_sight_thinks` off and asked two questions of the 314–322 s cluster.
+
+**1. Does a thinking resident see that others are already approaching or talking to the newcomer?**
+- **Approaching: no.** That is a perception gap. A walk or follow toward someone read "→ person" in every scene; the activity label names only the target's kind. It is closed for every controller: whom someone is going to is named as the observer perceives them (docs/PERCEPTION.md, "Activity derived from the body"). No law.
+- **Speaking to them: yes, once heard.** A heard line names whom it was to, with main's room detail.
+- **Who is near them: only by distance and direction from oneself.** No fact relates one person to another. This is not changed here.
+
+**2. Does a thought started at first sight go stale? Yes.**
+- **The gap from thought to act:**
+  - a reply's `say` is spoken at install, after the compile: 2.4–5.3 s after the reply;
+  - the reply comes 3.5–15 s after the prompt.
+- **Three of the cluster's six lines to the newcomer** were said after another resident addressed it within the speaker's hearing, and after the speaker's decision had been made without that line:
+  - Ingrid, 0.2 s after Lorcan;
+  - Davin, 6 s after both of them;
+  - Oswin, 1.4 s after Hobb.
+- **The fix.** The line's own check at the moment it comes due, as a perceived fact and not a rule to back off. Under the law `heard_first_rethinks` (off by default), such a line waits and the speaker's mind thinks again with the heard line in front of it (docs/COMMUNICATION.md). It may still speak.
+
+| Law | Default | Meaning |
+|---|---|---|
+| `heard_first_rethinks` | `false` | A mind's line to someone waits, its speaker told and asked to think again, when it heard another address them after its decision read its scene. Off: said as decided. |
+
+Whether the two spread a cluster like fs1's is the question for the C + first sight re-run, with `first_sight_thinks` and `heard_first_rethinks` both on. It uses the same targets and crowding stop rule, committed first.
+
 ## SpacetimeDB documentation
 
 This design adds no table, column, view, reducer, subscription or index. It reads only what `noticed` and `request` already read:

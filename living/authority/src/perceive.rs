@@ -502,6 +502,13 @@ pub fn ask_to_think(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bo
     request(ctx, id, reason, now, false, None)
 }
 
+/// Ask the mind again about a decision of its own that could not be carried out as decided (a
+/// line held because another spoke first, `speech::held_for_another`): not refused within
+/// `think_min_s`, since the decision it would protect is the one being undone. A sleeper's waits.
+pub fn ask_again(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bool {
+    request(ctx, id, reason, now, true, None)
+}
+
 fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool, wake: Option<Wake>) -> bool {
     let Some(c) = ctx.db.character().id().find(id) else { return false };
     if !c.alive {
@@ -699,6 +706,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": common::scripts(ctx).is_night(hour), "season": common::season(ctx, now), "sight": r});
 
     let mut creatures = Vec::new();
+    // Each person listed, by the id the scene shows them under (a far figure's handle).
+    let mut shown_as: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
     let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, r, now);
@@ -718,6 +727,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             c.id
         };
         o.insert("id".into(), json!(shown));
+        if ch.kind == "person" {
+            shown_as.insert(c.id, shown);
+        }
         if !seen.name.is_empty() {
             o.insert("name".into(), json!(seen.name));
         } else if ch.kind == "person" {
@@ -912,6 +924,15 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
 
     let mut scene = json!({"you": you, "time": time, "creatures": creatures, "resources": resources, "structures": structures, "terrain_near": terrain});
+    // Whom a line said now would reach, at each way, among the people listed above (earshot;
+    // the rule speech gives the words by), each as the scene shows them.
+    if me.kind == "person" && common::laws(ctx).earshot {
+        let ways = crate::earshot::reach(ctx, id, at, |x| shown_as.contains_key(&x), now);
+        let words = crate::earshot::words(&ways, |x| format!("{} (#{})", common::label_for(ctx, &me, x), shown_as.get(&x).copied().unwrap_or(x)));
+        if !words.is_empty() {
+            scene[living_rules::script::speech::EARSHOT] = json!(words);
+        }
+    }
     if !smelled.is_empty() {
         scene[living_rules::species::SMELLED] = Value::Array(smelled);
     }
