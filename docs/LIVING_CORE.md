@@ -40,7 +40,7 @@ flowchart LR
     N --> L
   end
   C -->|mind_update| Authority
-  L -->|mind_install| Authority
+  L -->|mind_install_way| Authority
   Authority -->|tables, as the owner| V[Bevy observer: living-viewer]
 ```
 

@@ -1257,13 +1257,14 @@ impl Minds {
         rx.await?.map_err(|e| anyhow!("mind_consolidated: {e}"))
     }
 
+    /// Install a decision, its line said in `way` (`mind_install_way`; "" is `say`).
     #[allow(clippy::too_many_arguments)]
-    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, seen: u64, t: ThoughtIn) -> Result<()> {
+    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, way: String, seen: u64, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_install_then(actor, graph, plan, say, to, seen, t, move |_, r| {
+        self.conn.reducers.mind_install_way_then(actor, graph, plan, say, to, way, seen, t, move |_, r| {
             let _ = tx.send(flatten(r));
         })?;
-        rx.await?.map_err(|e| anyhow!("mind_install: {e}"))
+        rx.await?.map_err(|e| anyhow!("mind_install_way: {e}"))
     }
 
     /// Hand deliberate acts to the authority (carried out once each, in order).
@@ -2049,8 +2050,11 @@ impl Minds {
                     };
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
+                    // The line's way, as a talk reply names it (mind-say-way); one the world
+                    // lacks is said aloud.
+                    let way = talk::way_of(&v).unwrap_or_default();
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, say, to, String::new(), d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, say, to, way, d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
@@ -2093,9 +2097,10 @@ impl Minds {
                         model: reply.model.clone(),
                         reference: thought_ref.clone(),
                     };
-                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
+                    let way = talk::way_of(&v).unwrap_or_default();
+                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else if way.is_empty() || way == "say" { format!(" — says “{say}”") } else { format!(" — says ({way}) “{say}”") });
                     self.deliberation_says(actor, &say, to);
-                    self.install(actor, g.to_json(), plan.clone(), say, to, d.updated_ms, t).await?;
+                    self.install(actor, g.to_json(), plan.clone(), say, to, way, d.updated_ms, t).await?;
                     self.served_project(actor, served.as_deref(), &plan, &thought_ref).await;
                     return self.act(actor, acts, "deliberate").await;
                 }
@@ -2228,7 +2233,7 @@ impl Minds {
                         reference: thought_ref.clone(),
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
-                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, d.updated_ms, t).await;
+                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, String::new(), d.updated_ms, t).await;
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");

@@ -174,6 +174,18 @@ fn ways_text() -> String {
     format!("\"way\": how you say it, {} (default \"say\"; {}), ", names.join(" or "), about.join(" "))
 }
 
+/// A decision's line may name its way (mind-say-way): the field in the think reply's `say`,
+/// naming the world's ways (the world text's SPEAKING section says what each is and how far it
+/// carries), when it has more than `say`. Nothing about when to use one.
+fn say_way_field() -> String {
+    let names = ways();
+    if names.len() < 2 {
+        return String::new();
+    }
+    let quoted: Vec<String> = names.iter().map(|w| format!("\"{w}\"")).collect();
+    format!(", \"way\": {} (optional; default \"say\")", quoted.join(" or "))
+}
+
 /// The ways of speaking the world's rules have (`<way>_speech()`), in their order.
 pub fn ways() -> Vec<String> {
     compiled().map(|s| s.ways().iter().map(|w| w.name.clone()).collect()).unwrap_or_else(|| vec!["say".into()])
@@ -630,11 +642,12 @@ Refer to people by the ids you see in your acts and your memory; the ids are han
 Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
 \"intend\": [\"each thing you mean to do, in plain words, in order (e.g. ask Borno (#5) to start a family with me; give Galy (#8) 2 berries; \
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
-\"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
+\"say\": {{\"text\": \"...\", \"to\": id or null{}}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}{}}}",
         opening(frame, THINK_OPENING),
         world_rules(),
+        say_way_field(),
         if projects { THINK_PROJECTS } else { "" },
         notice_field()
     ))
