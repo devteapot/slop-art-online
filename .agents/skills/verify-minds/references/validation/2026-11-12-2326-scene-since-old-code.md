@@ -1,6 +1,6 @@
 # Minds validation record
 
-## 2026-11-13 scene-since: the case against the old code (Spark)
+## 2026-11-12 (UTC) scene-since: the case against the old code (Spark)
 
 Follows `2026-11-12-*-scene-since.md`. Branch `scene-since`, after main was merged in (`48fbc811`). Server: the trial container `slop-trials-stdb` (127.0.0.1:3320), on scratch `verify-minds-*` databases, with the fake model.
 
