@@ -1160,6 +1160,9 @@ class CageFace(head_mesh.Face):
         faces = [(0, 1 + i, 1 + (i + 1) % seg) for i in range(seg)] + [(1 + i, 1 + seg + i, 1 + seg + (i + 1) % seg, 1 + (i + 1) % seg) for i in range(seg)]
         ball = self.balls[side]
         m.add(head_mesh.turn(ip, ball, yaw, pitch), white, uv, faces, "iris", facing=head_mesh.FORWARD, eye=(side, 1.0))
+        # The iris's lights: the same disc 0.3 mm before it, behind the highlights, in the lips'
+        # and blush's layer (face_paint.iris_lights), which the client does not recolour.
+        m.add(head_mesh.turn(ip + np.array([0.0, 0.0003, 0.0]), ball, yaw, pitch), white, uv, faces, "lights", facing=head_mesh.FORWARD, eye=(side, 1.0))
         hs = look.get("light_side", 1.0)
         for hx, hz_, ring in head_mesh.glints(hs):
             n_ = len(ring)
