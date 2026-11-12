@@ -112,6 +112,29 @@ Decoding a commitlog later needs the module that wrote it. It is in `program-byt
 - **After the shape as given** (no-model removed, unknown held): the data directory is about 32 GB, plus 4–6 GB of archived commitlogs. That **frees about 225 GB** (host about 290 GB free).
 - **With the no-model commitlogs kept too:** another 7–11 GB is kept.
 
+## The reviewed removal list (2026-11-12, owner-approved shape)
+
+The list is [`docs/trial-disk/removal-list-20261112.tsv`](trial-disk/removal-list-20261112.tsv), one row per replica directory: replica, class, action, size, commitlog size, lock time, and what it was. It was made by `trials.py reclaim --json` and `trial_disk.py list` after gl2 ended, with only the four bi1 hamlets and the merge gate's world hosted.
+
+| Class | Dirs | Size | Commitlogs | Action |
+|---|---:|---:|---:|---|
+| live (hosted, or written in the 15 minutes before the list) | 11 | 4.0 GB | 3.7 GB | keep |
+| paid | 224 | 32.5 GB | 27.1 GB | archive the commitlog (with its module), then remove |
+| no-model | 273 | 51.2 GB | 41.6 GB | archive the commitlog (with its module), then remove |
+| fake | 77 | 9.6 GB | 7.7 GB | remove |
+| verify scratch (`verify-gate-*` of finished merges included) | 1,157 | 157.9 GB | 120.7 GB | remove |
+| unknown | 181 | 15.7 GB | 10.9 GB | hold, untouched |
+
+**Totals:**
+- **Remove:** 1,731 directories, 251.2 GB.
+- **Archive first:** 497 commitlogs, 68.7 GB before compression. Expect about 4–21 GB, since zstd -6 gave 0.063 on a gl1 commitlog, and the plan's sample range was 0.06–0.3.
+
+**Where it differs from the plan's read-only tally:**
+- **The matching is now conservative.** A directory whose lock time is within 40 s of any real trial run's publish is archived, even when a verify publish is as near. This moves directories from verify into paid and no-model.
+- **More runs are counted.** gl2, pkp1 and ew1 have run since, and every checkout on the machine was scanned.
+- **unknown is 181 directories (15.7 GB), not 92 (9.9 GB):** verify runs are now matched only by their own publish lines, not by folder times. All 181 are held.
+- **The two ticking verify worlds of the plan have since ended.** The live rows are the four bi1 hamlets, the merge gate's world, and six directories written in the last 15 minutes. All are kept.
+
 ## How it would be done (once the owner approves; not before)
 
 1. **In a quiet window.** Announce it, because the two ticking verify worlds belong to other sessions. Stop the trial server (`trials.py down`; SIGINT, then stop).

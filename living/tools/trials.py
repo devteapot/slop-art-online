@@ -3143,8 +3143,11 @@ def reclaim(a):
         if info is None:
             t = datetime.datetime.fromisoformat(lock.replace("Z", "+00:00")).timestamp()
             k = bisect.bisect_left(ptimes, t)
-            near = [pubs[j] for j in (k - 1, k) if 0 <= j < len(pubs) and abs(pubs[j][0] - t) <= 40]
-            info = near[0][1] if near else None
+            near = sorted((abs(pubs[j][0] - t), j) for j in range(max(0, k - 6), min(len(pubs), k + 6)) if abs(pubs[j][0] - t) <= 40)
+            # Conservative: a real trial run's publish within the window wins (its commitlog is
+            # archived); otherwise the nearest publish.
+            real = [j for _, j in near if not pubs[j][1].get("verify") and not pubs[j][1]["fake"]]
+            info = pubs[real[0]][1] if real else (pubs[near[0][1]][1] if near else None)
         if info and info.get("verify"):
             cls, what = "verify", info["batch"]
         elif info:
