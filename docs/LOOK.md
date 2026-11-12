@@ -406,7 +406,7 @@ Built on the laptop on look-1-auth (`e15557cd`) and main. The book is char-4's (
 - **The prewarm** (`loading.rs`): under the loading cover, the fewest lines that wear every type and style file of the looks perceived when the cover is up (connected: `seen_characters`, waiting up to 5 s for the rows; offline and look-dev: the decor). A first version covered the whole book: 64 people whose 101 files stayed resident for the session (`characters::kept`), +345 MiB resident and +470 MiB footprint, steady, on Cullet; the perceived looks need 17 people and cost what no prewarm does.
 - **The asset view** shows a line: `LIVING_GAME_VIEW=look:<lk_…>`.
 
-### Memory (Cullet, the play camera; `live_crowd.py`, uncapped, two runs an arm; worlds fresh from each module)
+### Memory (bundle `f81d8a47`; Cullet, the play camera; `live_crowd.py`, uncapped, two runs an arm; worlds fresh from each module)
 
 | | main (VRoid) | look-1, prewarm of the looks in sight | look-1, whole-book prewarm (the first version) | look-1, no prewarm |
 |---|---|---|---|---|
