@@ -1,6 +1,6 @@
 ---
 name: verify-client
-description: Verify the living core client protocol through real Rust SDK WebSocket connections. Use when changing subscriptions, public or private tables, identity-scoped views, reducer permissions, or reconnect behavior, or when a program receives unexpected authority data.
+description: "Verify what a connecting client receives and may call, through real Rust SDK WebSocket connections under each identity. Use when changing tables (public or private), views (identity-scoped and perception views), subscriptions, reducers and their permissions, reconnect, the game client's connection to the authority, or when a program receives authority data it should not."
 ---
 
 # Verify the client protocol
@@ -78,7 +78,7 @@ The suite above drives the observer's query set (`living/viewer/src/net.rs`) as 
 
 ## Checks and evidence
 
-[features/README.md](features/README.md) indexes every check. [references/validation.md](references/validation.md) records the real runs.
+[features/README.md](features/README.md) indexes every check. [references/validation/](references/validation/README.md) holds one record per real run; the newest files are the last validated runs.
 
 The driver compares its copied base queries against `living/viewer/src/net.rs` and checks the private-table and reducer inventories against the authority source. A changed inventory stops the run so the map cannot silently omit a new permission path.
 

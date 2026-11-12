@@ -127,7 +127,7 @@ Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb`
 
 ## 2026-11-11 rules-offers: trade offers a player receives (Spark)
 
-Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. `offers.py` (new, [offers.md](../features/offers.md)) on `player-offers-1111-183948`: 17 of 17. Shown: a resident's offer in `my_offers`, a second player's outgoing one, isolation between them, refused and then completed `accept`, `trade_offer` private. After the window the second offer was gone (`expiry-after-window.json`). Not covered: a client drawing the offer (the laptop's ui-1), and a mind deciding to offer (the resident's offer came through admin `mind_act`).
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. `offers.py` (new, [offers.md](../../features/offers.md)) on `player-offers-1111-183948`: 17 of 17. Shown: a resident's offer in `my_offers`, a second player's outgoing one, isolation between them, refused and then completed `accept`, `trade_offer` private. After the window the second offer was gone (`expiry-after-window.json`). Not covered: a client drawing the offer (the laptop's ui-1), and a mind deciding to offer (the resident's offer came through admin `mind_act`).
 
 ## 2026-11-11 eye-2: across a drop, unchanged (dev-box)
 
@@ -224,7 +224,7 @@ On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81
 
 Own scratch container `slop-townlife-stdb` (image `v2.14.1`, own volume, `/wasm` from the worktree's `.local/target`) through a `docker` name shim (`~/townlife-shim`); worktree `~/dev/slop-townlife` on branch `townlife-1` (from `b12fa45`, uncommitted at the time). Run `player-town-1`, `--seed island`; scenes set by admin `place_at`.
 
-- **`scripts/gesture.py`, 9 of 9** ([features/gestures.md](../features/gestures.md)): `human_act` wave accepted and kept in `skill_use` (source `act`, outcome `greeted Feka`); its `doing` row with the wave's `act_card` code and target; the resident answered with a nod from its own graph (`answered Visitor`) and the player perceived "Feka answers your greeting (nod)."; one answer only; a nod 8 s later greeted anew and was answered; `face` turned the player's body to within 0.00 rad; waving at oneself refused by the rules ("not to yourself", told as an act experience); `use_skill("wave")` refused ("wave is not on the skill bar").
+- **`scripts/gesture.py`, 9 of 9** ([features/gestures.md](../../features/gestures.md)): `human_act` wave accepted and kept in `skill_use` (source `act`, outcome `greeted Feka`); its `doing` row with the wave's `act_card` code and target; the resident answered with a nod from its own graph (`answered Visitor`) and the player perceived "Feka answers your greeting (nod)."; one answer only; a nod 8 s later greeted anew and was answered; `face` turned the player's body to within 0.00 rad; waving at oneself refused by the rules ("not to yourself", told as an act experience); `use_skill("wave")` refused ("wave is not on the skill bar").
 - **`scripts/combat.py`, 23 of 23** on the same world, as a regression check of the act path this change touched (`act::begin`, `perform`, `finish`, `cancel`).
 
 ## 2026-11-09 combat skills on the island (dev-box)
@@ -296,7 +296,7 @@ Shared container (v2.14.1), Mac checkout at `b7cf7fb` plus the change removing t
 
 ## 2026-11-10 verbs from the game client (Mac)
 
-Shared container (v2.14.1), Mac checkout at `6de2bad` plus the uncommitted verbs change in `living/game` (docs/GAME_BRIEF.md "Verbs"). Island world `verify-client-verbs-1110-003532`; the real game client headless from a private release build, driven by `drive_verbs.py` ([verbs](../features/verbs.md)). Runs `game2` and `game3` (after the list fixes), each a new character (#295, #296):
+Shared container (v2.14.1), Mac checkout at `6de2bad` plus the uncommitted verbs change in `living/game` (docs/GAME_BRIEF.md "Verbs"). Island world `verify-client-verbs-1110-003532`; the real game client headless from a private release build, driven by `drive_verbs.py` ([verbs](../../features/verbs.md)). Runs `game2` and `game3` (after the list fixes), each a new character (#295, #296):
 
 | Act (game client path) | Authority's `act` row |
 | --- | --- |
