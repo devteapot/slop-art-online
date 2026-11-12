@@ -155,6 +155,14 @@ fn status(
 /// resident for the session (`characters::kept`), and the whole book's (64 people, 101 files)
 /// held 140 MiB more GPU textures and peaked 700 MiB higher (look-1, Cullet).
 /// `LIVING_GAME_PERF=nolooks` leaves them out, to measure the first-sight hitch.
+///
+/// The VRoid bases with every outfit piece (`Recipe::every_piece`) only when someone will fall
+/// back to one (prewarm-worn-1): a world without looks (Brackenford, a world made before them),
+/// offline and in look-dev, no book or composing off, or a person perceived with no look or a key
+/// the book lacks. With every person in sight composed, none: their two files alone held about
+/// 100 MiB of CPU meshes on a composed Cullet (`LIVING_GAME_PERF=meshfiles`). A VRoid person who
+/// comes later loads the base then, a first-sight hitch. The player's own look is among the
+/// perceived (`seen_characters` holds mine).
 fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<crate::island::Island>>, mut loading: ResMut<Loading>, net: Option<NonSend<crate::net::Net>>, time: Res<Time>, mut since: Local<Option<f32>>) {
     if loading.prewarm.is_some() || loading.done || !crate::characters::available() {
         return;
@@ -162,11 +170,12 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
     let Some(island) = island else { return };
     let book = crate::characters::book::book().filter(|_| crate::characters::compose::enabled() && !crate::perf::has("nolooks"));
     let conn = net.as_ref().and_then(|n| n.conn.as_ref());
-    let keys: Vec<String> = match conn {
+    let (keys, fallback): (Vec<String>, Fallback) = match conn {
         Some(conn) => {
             use living_bindings::*;
             use spacetimedb_sdk::Table;
-            let mut keys: Vec<String> = conn.db.seen_characters().iter().map(|c| c.look).filter(|k| !k.is_empty()).collect();
+            let people: Vec<String> = conn.db.seen_characters().iter().filter(|c| c.kind == "person").map(|c| c.look).collect();
+            let mut keys: Vec<String> = people.iter().filter(|k| !k.is_empty()).cloned().collect();
             keys.sort();
             keys.dedup();
             // The rows come with the subscription; a world without looks has none to wait for.
@@ -175,11 +184,15 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
             if book.is_some() && looks_world && keys.is_empty() && time.elapsed_secs() - started < LOOKS_WAIT_S {
                 return;
             }
-            keys
+            let fallback = Fallback::of(book.is_some(), looks_world, &people, |k| book.is_some_and(|b| b.recipe(k).is_ok()));
+            (keys, fallback)
         }
-        None => book.map(|b| b.decor.clone()).unwrap_or_default(),
+        None => (book.map(|b| b.decor.clone()).unwrap_or_default(), Fallback::Offline),
     };
-    let mut recipes = crate::characters::Recipe::every_piece();
+    // `LIVING_GAME_PERF=prewarmall`: the bases always, as before (to measure).
+    let fallback = if fallback == Fallback::None && crate::perf::has("prewarmall") { Fallback::Asked } else { fallback };
+    let mut recipes = if fallback == Fallback::None { Vec::new() } else { crate::characters::Recipe::every_piece() };
+    let n_bases = recipes.len();
     let looks: Vec<crate::characters::Recipe> = match book {
         Some(b) if !keys.is_empty() => b.covering(&keys).iter().filter_map(|k| b.recipe(k).ok()).collect(),
         _ => Vec::new(),
@@ -196,8 +209,52 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
             crate::characters::spawn(&mut commands, &assets, r, Vec3::new(p.x, island.height(p.x, p.y), p.y), a)
         })
         .collect::<Vec<_>>();
-    info!("loading: {} prewarm characters wear every outfit piece ({n_looks} composed, every type and style file of the {} looks perceived)", spawned.len(), keys.len());
+    info!("loading: {} prewarm characters ({n_looks} composed, every type and style file of the {} looks perceived; {n_bases} on VRoid bases wearing every outfit piece: {})", spawned.len(), keys.len(), fallback.why());
     loading.prewarm = Some(spawned);
+}
+
+/// Why the prewarm wears the VRoid bases, or doesn't.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Fallback {
+    /// Every person perceived is drawn from the book: no base.
+    None,
+    /// People perceived with no look or a key the book lacks.
+    People(usize),
+    /// A world without looks: everyone is drawn on a base.
+    OldWorld,
+    NoBook,
+    Offline,
+    /// `LIVING_GAME_PERF=prewarmall`.
+    Asked,
+}
+
+impl Fallback {
+    /// For a connected client: whether there is a book (and composing is on), whether the world
+    /// has looks, the looks of the people perceived (empty for none) and whether the book draws a
+    /// key.
+    fn of(book: bool, looks_world: bool, people: &[String], draws: impl Fn(&str) -> bool) -> Self {
+        if !book {
+            return Fallback::NoBook;
+        }
+        if !looks_world {
+            return Fallback::OldWorld;
+        }
+        match people.iter().filter(|k| k.is_empty() || !draws(k)).count() {
+            0 => Fallback::None,
+            n => Fallback::People(n),
+        }
+    }
+
+    fn why(self) -> String {
+        match self {
+            Fallback::None => "none, every person in sight is composed".into(),
+            Fallback::People(n) => format!("{n} people in sight without a look the book has"),
+            Fallback::OldWorld => "a world without looks".into(),
+            Fallback::NoBook => "no look book, or composing off".into(),
+            Fallback::Offline => "offline or look-dev".into(),
+            Fallback::Asked => "asked for (prewarmall)".into(),
+        }
+    }
 }
 
 /// How long the prewarm waits for perceived people's looks before it goes without them (s).
@@ -263,5 +320,27 @@ fn lift(
     }
     if a <= 0.0 {
         loading.done = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Fallback;
+
+    /// The VRoid bases are prewarmed only for people who will be drawn on one.
+    #[test]
+    fn the_bases_are_prewarmed_only_for_people_drawn_on_them() {
+        let book = |k: &str| k.starts_with("lk_");
+        let all = ["lk_a".to_string(), "lk_b".to_string()];
+        assert_eq!(Fallback::of(true, true, &all, book), Fallback::None);
+        // No look, or a key the book lacks: drawn on a base.
+        assert_eq!(Fallback::of(true, true, &["lk_a".into(), String::new()], book), Fallback::People(1));
+        assert_eq!(Fallback::of(true, true, &["lk_a".into(), "other".into(), String::new()], book), Fallback::People(2));
+        // A world without looks (its rows may not be in yet), or no book: always.
+        assert_eq!(Fallback::of(true, false, &all, book), Fallback::OldWorld);
+        assert_eq!(Fallback::of(true, false, &[], book), Fallback::OldWorld);
+        assert_eq!(Fallback::of(false, true, &all, book), Fallback::NoBook);
+        // Nobody in sight on a looks world: nothing to fall back for.
+        assert_eq!(Fallback::of(true, true, &[], book), Fallback::None);
     }
 }
