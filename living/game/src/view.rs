@@ -29,7 +29,7 @@
 //!
 //! - `recipe:<name>` or `recipe:<folk>:<seed>` in `LIVING_GAME_VIEW` shows a character recipe
 //!   (`assets/characters/recipes.json`; folks `adult`, `giant`, `small`) at its own height; a
-//!   recipe with a person line is composed from shared files with `LIVING_GAME_COMPOSE=1`
+//!   recipe with a person line is composed from shared files unless `LIVING_GAME_COMPOSE=0`
 //!   (`characters/compose.rs`), as in the game.
 //! - `LIVING_GAME_VIEW_PLATE=1`: after each photograph, a second of the same view and pose with
 //!   the model hidden (`NN-<shot>.plate.png`): the background alone, to tell the model's pixels

@@ -18,6 +18,12 @@ Since `doing-percept` (2026-11-12; docs/PERCEPTION.md, "What someone is visibly 
 - `doing`: a resident faces another 3 m east who holds up a guard (`block`, held, a `fighter` row with `act`). The pending request's scene lists the other with `visibly` `{is: block, phase: holding}`, with `at: you` only when the other's guard happens to face the eye (a guard has no target; its drawn aim decides); the think prompt the fake model is sent carries it; the deliberate prompt's grammar carries `{"doing": {"who": "person", "is": "hostile", "phase": "winding up"` (a kind word since fix-dodge-told, not a skill the reader may never face) and `about to release`. Evidence: `scene.json`, `sent-prompts.txt`, `result.json`.
 - What the routine does with it on the tick, the field, the far label and beyond sight are verify-core's ([doing](../../verify-core/features/doing.md)).
 
+## Who would hear you now
+
+Since `earshot` (2026-11-12; docs/COMMUNICATION.md §17), behind the world's `earshot` law (off as shipped). A person's deliberation scene says whom a line said now would reach, at each way, among the people it lists: `"who would hear you now": "Within earshot if you say it: Walker2 (#269); a whisper would reach no one; a call would also reach: a stranger (#270)."` (`perceive::scene_json`, `earshot::reach` and `words`; the key is `living_rules::script::speech::EARSHOT`). Each person is named as the mind knows them, with the id the scene shows them under (a far figure's handle). Someone the scene does not list is never named, though a line may reach them.
+
+- `earshot`: on a quiet open line (`open_line`, a copy of verify-core's `quiet_line`), H (thought for) stands with A 3 m east, B 10 m east and C 15 m west; A and C tell H their names first. With the law off, H's think prompt has no such key (`prompt-earshot-off.txt`). The admin turns it on (`set_world_law earshot true`), and H's next think prompt (`prompt-earshot.txt`) lists A by name at say, B as a stranger added by a call (by day; sight 11 m), and never C (15 m, beyond sight). H then says a line to the room and calls one (admin `mind_say`). Among A, B and C, those who receive each are exactly the list at that way, and C receives the call unlisted. By night (sight 6 m) B is out of sight too, and the case expects "a call would reach no one more". Evidence: `earshot.json`.
+
 ## Driving it
 
 ```bash
@@ -25,6 +31,7 @@ Since `doing-percept` (2026-11-12; docs/PERCEPTION.md, "What someone is visibly 
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case sight
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case death-names
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case health-seen
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case earshot
 ```
 
 ## Gotchas
@@ -56,3 +63,11 @@ Since `first-sight` (2026-11-12; docs/FIRST_SIGHT.md). Under the world's `first_
 ## A dodge told truthfully (fix-dodge-told)
 
 - `dodge-told`: the mind service runs throughout. The eye stands two tiles short of a wall, the other (a spear) beside it; the eye's graph dodges toward the wall on `doing` attack "winding up": the dash is over before the blow lands, and the eye is told "You failed to dodge: it was over before the blow came" (its `skill_use` says so). After the mind has answered the attack, a graph restarting a dodge every tick for 4 s is refused while not ready: at most one "not ready yet" line per cooldown. The prompt of a thought asked afterwards (`Run.request`, marker `dodge-told`) carries the first line, and no more "not ready yet" lines than dodges made plus one. Evidence: `eye-told.json`, `eye-told-streak.json`, `uses-early.json`, `sent-prompts.txt`, `result.json`.
+
+## Whose a house is (house-owner-label)
+
+Since 2026-11-12 (docs/PERCEPTION.md "Whose a thing is"). `house-owner`: three spawned people. M founds a community and welcomes F (`mind_act`); X stays a stranger to M. An overlay of the shipped script makes anyone past 4 m too far away to make out (as Cullet's `perceived_of` past 24 m) and gives the `storage` kind `shows_owner`. With M 40 m off, F puts up a house and X a house and a storage (`place_structure`); F and X go 30 m off and M is brought beside the houses; the real mind with the fake model is asked once (`Run.request`, marker `house`).
+
+- Asserted from the think prompt (`prompt-house.txt`): F's house carries `home_of` and `by` with F's name; X's house carries neither; X's storage carries `by` with X's name; no structure entry carries "someone too far away to make out".
+- Asserted from every request the model was sent (the mind integrates its experience rows, so the experience table is empty by then): "You notice a house built by F … {F=#id}" and "You notice a storage built by X … {X=#id}", tagged by id; X's house noticed with no tag; no notice line tagged by a far handle. Before the fix the lines named the owner by the far label, and after the label fix alone, the far handle still tagged a line that named the owner (`percept_owned`).
+- Evidence: `house-owner.json` (entries, noticed lines, checks), `prompt-house.txt`, `fake-requests.jsonl`, `house-overlay.rhai`. The shipped script is installed again at the end.

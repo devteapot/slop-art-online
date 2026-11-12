@@ -1486,6 +1486,10 @@ class Instance:
             for k in ("MISTRAL_API_KEY", "CARLID_NPC_API_KEY", "TYPESAFE_API_KEY"):
                 env[k] = ""
         env.update({k: str(x) for k, x in v.get("env", {}).items()})
+        if self.opts.fake and env.get("LIVING_RETHINK") == "jev":
+            # The gate's Jev judge goes to the fake server's `/v1/systemone` too (fake_llm.py), never to TypeSafe.
+            env["LIVING_RETHINK_URL"] = f"http://127.0.0.1:{self.shared['fake_port']}/v1/systemone"
+            env["TYPESAFE_API_KEY"] = "fake-only"
         self.concurrency = int(env["LIVING_CONCURRENCY"])
         (self.dir / "mind-env.json").write_text(json.dumps({k: env[k] for k in sorted(env) if k.startswith("LIVING_") and k not in ("LIVING_TOKEN", "LIVING_NEO4J_PASSWORD")}, indent=1))
         log = open(self.dir / "mind.log", "a")

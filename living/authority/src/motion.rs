@@ -802,6 +802,9 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                         let edge = st.keep + geo::band_margin(st.keep, st.far);
                         let cruise = b.speed.max(0.1);
                         let max_dt = look.min(((edge - dist(p, h.at)) / cruise).max(0.05));
+                        // Backing off takes open ground as a flight does.
+                        let sight = common::sight_for(ctx, b.id, &common::world(ctx), now);
+                        let way = geo::flee_way(&map, p, h.at, b.heading, (edge - dist(p, h.at)).min(sight), sight, tune.clearance).unwrap_or(way);
                         let (dir, _) = separate(ctx, b.id, p, way, st.target, &moves, now);
                         b.path.clear();
                         want = Some(Want { dir, speed: cruise, agile, max_dt });
@@ -869,7 +872,12 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                 return (ev, dirty);
             }
             let away = if d < 0.01 { b.heading } else { angle(threat, p) };
-            let (dir, _) = separate(ctx, b.id, p, away, st.target, &moves, now);
+            // Open ground: straight away while that way is open, else toward the reachable
+            // ground within sight that gains the most distance (`steer::flee_way`); with none,
+            // straight away, and the plan below finds it cornered.
+            let sight = common::sight_for(ctx, b.id, &common::world(ctx), now);
+            let way = geo::flee_way(&map, p, threat, b.heading, (st.keep - d).min(sight), sight, tune.clearance).unwrap_or(away);
+            let (dir, _) = separate(ctx, b.id, p, way, st.target, &moves, now);
             want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt });
         }
         _ => {
