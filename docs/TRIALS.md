@@ -438,6 +438,96 @@ Tick time per arm: `spacetime_reducer_plus_query_duration_sec`, reducer `tick` (
 - `~/slop-trials2b/.local/living/trials/st2b`, `st2bs`, and the journals under `.local/living/journal/verify-trial-st2b-*`;
 - the archive at `~/archive/trials/st2b-20261112.tar.gz` (51 MB, 1,356 files), which includes the metrics samples, the analyses (`st2b-spread.md`, `st2b-cues.md`, `st2b-cue-fires.md`, `st2b-ticks.md`) and the spend log.
 
+### Analysis of st2b (2026-11-12, branch `st2b-analysis`; free, no model calls)
+
+#### (a) Why false replies rise by arm (0.10 → 0.46 → 0.80 → 1.06 a minute)
+
+**The definition.** It is `greet_report.py`'s: a conversation turn by resident C that answered resident a's line meant for someone else. "Meant for someone else" means one of two things:
+- a line addressed to another person by id;
+- a line to the room said while a had talked with someone else in the last 60 s (`EXCHANGE_S`).
+
+It never judges what a reply says. Invented facts, wrong names and claims about the newcomer are not what it counts. The trial's subject, Aldous Quill, is excluded as "the player" (greet_report reads the subject that way), so his turns are not counted.
+
+Driver: `~/slop-strangers-logs/tools/false_replies.py`, joining talk turns to their journal requests. Evidence: `st2b-false.json`.
+
+**What they are.** All 48 are of the second kind: a room line answered inside someone else's exchange. None answers a line addressed by id to another. None involves the newcomer, none answers a line that did not reach the answerer, and none is an invented fact the rule could see. By what the line itself said:
+
+| kind | C | L | LS | LS + cues | all |
+|---|---:|---:|---:|---:|---:|
+| the line named the answerer (the rule miscounts it) | 2 | 5 | 6 | 7 | 20 |
+| a remark to the room, no name (a group conversation) | 0 | 2 | 5 | 12 | 19 |
+| the line named the person in the speaker's exchange (another's line, answered) | 0 | 2 | 5 | 2 | 9 |
+
+- [C] the line named the answerer (the rule miscounts it): Edda Hollin (talking with Pim Hollin just before) said “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!”; Ife Okoro answered “I remember! I'll grab the blue before Zeke even sees it.”
+- [C] the line named the answerer (the rule miscounts it): Edda Hollin (talking with Pim Hollin just before) said “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!”; Lumi Pontil answered “Ife's with me, Edda — we're hunting cobalt together after lessons. You can have whatever's left!”
+- [L] a remark to the room, no name (a group conversation): Edda Hollin (talking with Zeke Okoro just before) said “Crew! Benches now — lessons first, then the yard, and I'm leading. Pim, you sit where I can see you.”; Posy Fenwick answered “I'm on the bench, Edda — right by Tilly, and I'll have my letters done before the yard, promise!”
+- [L] a remark to the room, no name (a group conversation): Juno Brandt (talking with Wick Marl just before) said “Coming, Edda — save me a spot next to Pim!”; Lumi Pontil answered “Juno! Do you know about the cobalt dare? Edda says first shard from the deep heaps keeps it — and I mean to beat her to it.”
+- [L] the line named the person in the speaker's exchange (another's line, answered): Zeke Okoro (talking with Lumi Pontil just before) said “Coming, Lumi — no stopping, I swear! Saving my seat, Master Orme!”; Edda Hollin answered “Save me the seat next to it, Zeke — and don't let Lumi talk you into anything before the race starts.”
+- [L] the line named the person in the speaker's exchange (another's line, answered): Davin Vane (talking with Lorcan Vane just before) said “Lorcan — I'll be at the Marver tonight. Say your word there and I'll hear it.”; Ingrid Morrow answered “The Marver, is it? Mind the loose step by the door — I've mended my share of knees from it. Fine night for a talk, Davin.”
+
+| arm | false replies | answerer a child | speaker a child | both children | answerer's talk prompt tokens, mean (all turns / false turns) |
+|---|---:|---:|---:|---:|---|
+| C | 2 | 2 | 2 | 2 | 2374 / 1933 |
+| L | 9 | 7 | 7 | 7 | 2351 / 2413 |
+| LS | 16 | 9 | 10 | 9 | 2374 / 2470 |
+| LS + cues | 21 | 8 | 12 | 8 | 2364 / 2344 |
+
+
+**What drives the rise: the volume of room lines answered, not one prompt block.**
+
+| arm | lines said | room lines | of them within an exchange | turns answering a room line | false | false per turn |
+|---|---:|---:|---:|---:|---:|---:|
+| C | 556 | 20 | 10 | 7 | 2 | 0.9% |
+| L | 545 | 28 | 17 | 16 | 9 | 4.2% |
+| LS | 615 | 44 | 23 | 26 | 16 | 6.1% |
+| LS + cues | 761 | 38 | 26 | 30 | 21 | 6.6% |
+
+- **Prompt size is flat:**
+  - the answerer's talk prompt averages 2,351–2,374 tokens in every arm, and false turns' prompts are no larger (1,933–2,470);
+  - all prompts together (system and user) are about 8,400 characters in every arm.
+- **No block drives it:**
+  - **`# What you watch for`** (cues): in no talk prompt; it is in think and consolidate prompts only.
+  - **The `stranger_by_name` wording:** in no talk prompt (0 of 1,030); it is in the graph grammar of think and deliberate prompts.
+  - **The longing text** ("long for a child", "start a family"): in 15–35 talk prompts per arm, and in 0, 0, 0 and 4 false ones.
+- **The children.** Most false replies are the children's group talk: Edda, Lumi, Ife, Zeke, Posy and Pim around lessons and the cullet-heap dare. The answerer was a child in 2 of 2, 7 of 9, 9 of 16 and 8 of 21.
+- **Why LS and LS + cues have more.** They had more room lines and more answered room lines. With one replicate per arm, that is the children's gatherings falling as they did in those runs, not something the arms change.
+
+**Examples:**
+- **C:** Edda Hollin (talking with Pim just before): “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!” Ife answered “I remember! I'll grab the blue before Zeke even sees it.” Counted false; the line named Ife.
+- **L:** Edda Hollin: “Crew! Benches now — lessons first, then the yard, and I'm leading. Pim, you sit where I can see you.” Posy answered “I'm on the bench, Edda — right by Tilly…”. A remark to the group, answered by the group.
+- **L:** Zeke Okoro (talking with Lumi): “Coming, Lumi — no stopping, I swear! Saving my seat, Master Orme!” Edda answered “Save me the seat next to it, Zeke…”. Another's line, answered.
+- **L:** Davin Vane: “Lorcan — I'll be at the Marver tonight. Say your word there and I'll hear it.” Ingrid Morrow answered “The Marver, is it? Mind the loose step by the door…”. A line named for Lorcan, answered by a bystander: the clearest real false reply.
+
+**What I would change (not done):**
+1. **The measure first.** Count as false only a turn answering a line that names or addresses someone other than the answerer. Under that rule, st2b has **0, 2, 5 and 2** false replies (C, L, LS, LS + cues): no rise.
+   - Count a room remark answered inside a group as group talk, a measure of its own.
+   - Never count a line that names the answerer.
+   - Count the trial's subject like anyone else.
+2. **The prompt only if the corrected count stays high in stage 3.** The talk prompt could mark a room line said inside an exchange ("said to the room, while talking with Lorcan"), so that a bystander knows whose talk it is joining. No prompt block shows up in st2b's false replies, so there is nothing to remove.
+
+#### (b) "In range" now counts the newcomer's walk
+
+`arrive_report.windows_of` adds the newcomer's walks (`human_route` … `human_route_end`) to the windows in which "in range" (≤12 m) is taken; `arrive_spread.py --stands-only` gives the old measure. st2b re-scored (new beside old):
+
+| measure | C stands / + walk | L stands / + walk | LS stands / + walk | LS + cues stands / + walk | target (L, LS) |
+|---|---|---|---|---|---|
+| in range | 13 / 21 | 11 / 18 | 16 / 24 | 10 / 20 | about 10–16 |
+| asks | 2 / 2 | 1 / 1 | 1 / 1 | 0 / 0 | 1–3, Aldous among them |
+| approaches silently | 1 / 1 | 2 / 2 | 0 / 0 | 0 / 0 | 0–2 |
+| notices inwardly | 1 / 1 | 0 / 1 | 0 / 0 | 0 / 0 | 3–8 |
+| unaware | 9 (69%) / 17 (81%) | 8 (73%) / 14 (78%) | 15 (94%) / 23 (96%) | 10 (100%) / 20 (100%) | ≤6, ≤40% |
+| passed by on their own way | 4 / 5 | 1 / 2 | 8 / 9 | 6 / 9 | — |
+
+- C: now in range 8 more: Aldous Quill (unaware), Chidi Okoro (unaware), Davin Vane (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Magda Tarn (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- L: now in range 7 more: Aldous Quill (unaware), Amara Okoro (unaware), Ingrid Morrow (unaware), Lorcan Vane (inward), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- LS: now in range 8 more: Amara Okoro (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Lorcan Vane (unaware), Magda Tarn (unaware), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- LS + cues: now in range 10 more: Amara Okoro (unaware), Davin Vane (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Lorcan Vane (unaware), Magda Tarn (unaware), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware), Tobiah Dunmore (unaware). Ingrid: unaware.
+
+
+- **Ingrid** is now classed in every arm: unaware. She saw the newcomer from 1.8–2.7 m and had a first-sight line, but no thought of hers named them.
+- **Most residents the walk adds are unaware.** They are the quay's people (Magda, Joss and Petra Tarn, Ren Sato, Neve Calloway, Lorcan and Davin Vane, Amara and Chidi Okoro). Lorcan Vane in L becomes inward.
+- **The bands.** Unaware rises to 78–100% of those in range, and in range exceeds the 10–16 band in every arm. The band was written for stands only, so the target's in-range figure should be read as stands-only, or restated for walks.
+
 ## Strangers stage 2 (2026-11-12, st2)
 
 docs/STRANGERS.md section 6, stage 2: the pilot. All 63 minds think (Dory, the infant, lives by her graph). The arms are C, L and LS, 1 replicate each, run in one batch.
