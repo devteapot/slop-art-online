@@ -53,6 +53,9 @@ pub enum Event {
     Percept(Experience),
     /// A fast-lane request issued for one of this service's characters (mind/fast.rs).
     Fast(FastAsk),
+    /// A line of one of this service's characters whose `#<id>` handles the world said as words
+    /// (`spoken_as`, speech.rs): journaled in `outcomes/spoken_as.jsonl`.
+    SpokenAs(Experience),
 }
 
 pub use lived::enabled as player_memory;
@@ -1254,13 +1257,14 @@ impl Minds {
         rx.await?.map_err(|e| anyhow!("mind_consolidated: {e}"))
     }
 
+    /// Install a decision, its line said in `way` (`mind_install_way`; "" is `say`).
     #[allow(clippy::too_many_arguments)]
-    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, seen: u64, t: ThoughtIn) -> Result<()> {
+    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, way: String, seen: u64, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_install_then(actor, graph, plan, say, to, seen, t, move |_, r| {
+        self.conn.reducers.mind_install_way_then(actor, graph, plan, say, to, way, seen, t, move |_, r| {
             let _ = tx.send(flatten(r));
         })?;
-        rx.await?.map_err(|e| anyhow!("mind_install: {e}"))
+        rx.await?.map_err(|e| anyhow!("mind_install_way: {e}"))
     }
 
     /// Hand deliberate acts to the authority (carried out once each, in order).
@@ -1349,6 +1353,15 @@ impl Minds {
                     Some(Event::Lived(e)) => self.lived_add(e),
                     Some(Event::Percept(e)) => self.rethink_percept(&e),
                     Some(Event::Fast(a)) => self.clone().fast_issued(a),
+                    Some(Event::SpokenAs(e)) => {
+                        // What the model wrote and what was said, beside the actor's calls: if
+                        // these are many, the prompt's sentence on ids is not doing its work.
+                        let me = self.clone();
+                        tokio::spawn(async move {
+                            let name = me.conn.db.character().id().find(&e.observer).map(|c| c.name).unwrap_or_default();
+                            me.llm.outcome("spoken_as", &json!({"at_ms": e.at_ms, "actor": e.observer, "name": name, "to": e.object, "line": e.text})).await;
+                        });
+                    }
                     None => return Err(anyhow!("event channel closed")),
                 },
                 _ = tick.tick() => {
@@ -2037,8 +2050,11 @@ impl Minds {
                     };
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
+                    // The line's way, as a talk reply names it (mind-say-way); one the world
+                    // lacks is said aloud.
+                    let way = talk::way_of(&v).unwrap_or_default();
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, say, to, String::new(), d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, say, to, way, d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
@@ -2081,9 +2097,10 @@ impl Minds {
                         model: reply.model.clone(),
                         reference: thought_ref.clone(),
                     };
-                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
+                    let way = talk::way_of(&v).unwrap_or_default();
+                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else if way.is_empty() || way == "say" { format!(" — says “{say}”") } else { format!(" — says ({way}) “{say}”") });
                     self.deliberation_says(actor, &say, to);
-                    self.install(actor, g.to_json(), plan.clone(), say, to, d.updated_ms, t).await?;
+                    self.install(actor, g.to_json(), plan.clone(), say, to, way, d.updated_ms, t).await?;
                     self.served_project(actor, served.as_deref(), &plan, &thought_ref).await;
                     return self.act(actor, acts, "deliberate").await;
                 }
@@ -2216,7 +2233,7 @@ impl Minds {
                         reference: thought_ref.clone(),
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
-                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, d.updated_ms, t).await;
+                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, String::new(), d.updated_ms, t).await;
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");

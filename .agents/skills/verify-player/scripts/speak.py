@@ -14,6 +14,8 @@ rules list (`speech_card`), is refused in the world's words, and reads who heard
   reducer's error must be exactly what that check says on the same facts, run outside the
   authority the way a client runs it before sending (`living-rules` example `way_check`, the
   installed script, `speech::check_way`). A refused line writes nothing.
+- a line naming someone by `#<id>` is said as the speaker refers to them (ids are not words), and a
+  `spoken_as` row keeps what the player wrote beside it.
 
     speak.py --run RUN
 
@@ -211,6 +213,19 @@ def main():
     heard = [h for h in sql("SELECT * FROM my_heard", me_token) if h["at_ms"] >= t3]
     expect("a line to the room that the resident beside me hears gives no `silence` row",
            code == 200 and not sil and heard and resident in heard[0]["hearers"], {"silence": sil, "heard": heard})
+    # Ids are not words, whoever speaks (`speech::speak`): a line naming someone by `#<id>` is
+    # said as the speaker refers to them, and its `said` row shows the words as spoken.
+    time.sleep(2.6)
+    t4 = sql("SELECT last_ms FROM clock", admin)[0]["last_ms"]
+    code, body = call("human_say", [f"verify speak: is #{resident} about?", resident], me_token)
+    time.sleep(1.5)
+    said = said_since(t4)
+    words = said[0]["text"] if said else ""
+    expect("a player's line naming someone by #id is said without the id",
+           code == 200 and said and f"#{resident}" not in words and "verify speak: is " in words and " about?" in words, {"code": code, "body": body[:200], "said": words})
+    kept = [r for r in sql("SELECT * FROM my_experience", me_token) if r["kind"] == "spoken_as" and r["at_ms"] >= t4]
+    expect("the player's spoken_as row keeps what it wrote beside what was said",
+           len(kept) == 1 and f"verify speak: is #{resident} about?" in kept[0]["text"] and words.split("“")[-1].rstrip("”") in kept[0]["text"], [r["text"] for r in kept])
     out = Path(V.run_dir(a.run)) / "speak.json"
     out.write_text(json.dumps({"db": db, "me": me, "resident": resident, "cards": cards, "checks": checks}, indent=2) + "\n")
     print(out)

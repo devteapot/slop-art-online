@@ -40,7 +40,7 @@ flowchart LR
     N --> L
   end
   C -->|mind_update| Authority
-  L -->|mind_install| Authority
+  L -->|mind_install_way| Authority
   Authority -->|tables, as the owner| V[Bevy observer: living-viewer]
 ```
 
@@ -65,7 +65,8 @@ flowchart LR
 | `deliberation` (private, per-controller view) | pending LLM deliberation with a scene snapshot | per trigger |
 | `persona`, `relation`, `belief`, `judgment`, `place`, `thought` | mind projections for behavior and the observer | per consolidation/deliberation |
 | `chronicle` | bounded story feed of notable events | per notable event |
-| `perceived`, `projected` (private) | per human player: who its character sees, and what it perceives of each (the `perceived_of` projection) | on entering or leaving sight; on a projection change |
+| `perceived`, `projected` (private) | per human player: who its character sees, and what it perceives of each (the `perceived_of` projection; since look-1 with the `lk_` key of a seen person's look) | on entering or leaving sight; on a projection change |
+| `look`, `look_line` (private) | a person's look (their person entry, the line they wear for their band, its words, when the band next changes) and the world's lines by person and band ([LOOK.md](LOOK.md)) | `look`: at creation, a band change (about 4 a life), a script install, `relook`; `look_line`: at genesis and `relook` |
 | `reveal`, `acquaintance` (private) | what a skill use revealed to an observer, until when; whose name a character was told | per appraisal; per introduction |
 | `connection`, `presence` (private) | open client connections; per played character, whether its person is there and whether the minds control it | per connection; per takeover or handback |
 

@@ -232,6 +232,10 @@ async fn main() -> Result<()> {
             if rethink {
                 let _ = tx.send(mind::Event::Percept(e.clone()));
             }
+            // A line of mine whose #ids were said as words (`spoken_as`): journaled as evidence.
+            if e.kind == "spoken_as" {
+                let _ = tx.send(mind::Event::SpokenAs(e.clone()));
+            }
             // A whisper to me carries words too; noticing one (`whispered`) does not.
             if e.kind == "speech" || e.kind == "whisper" || e.kind == "silence" {
                 let _ = tx.send(mind::Event::Speech(e.clone()));

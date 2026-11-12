@@ -89,6 +89,12 @@ pub const STYLES: &str = "lookdev/styles";
 /// only for a face's skin, so hair's pass as they are.
 pub const ATTRIBUTE_GREY: bevy::mesh::MeshVertexAttribute = bevy::mesh::MeshVertexAttribute::new("Grey", 0x5c3e_9a01, bevy::render::render_resource::VertexFormat::Float32);
 
+/// Where a hair vertex may carry the ring (`_RING` in the hair files, 0 to 1: 1 over the crown
+/// band, 0 on fringes, lock tips, inner surfaces and under caps; char-4). Composing puts it in the
+/// second UVs' y as 1 + `_RING`, so 0 there means the file has none and the shader places the ring
+/// itself (`toon.wesl` `hair_light`).
+pub const ATTRIBUTE_RING: bevy::mesh::MeshVertexAttribute = bevy::mesh::MeshVertexAttribute::new("Ring", 0x5c3e_9a02, bevy::render::render_resource::VertexFormat::Float32);
+
 /// The greying palette the one shared hair material holds (`ToonExt::tints`): row 0 the natural
 /// colours and row 1 the silvers that the people drawn with it carry, as sRGB bytes, each once.
 /// A greying person's hair meshes carry their two places in it and how grey they are in their
@@ -137,6 +143,18 @@ impl HairTints {
 /// How close two style files' source colours must be (linear, each channel) to share a toon:
 /// under one 8-bit step, so sharing moves no colour the screen shows.
 pub const SAME_SOURCE: f32 = 0.004;
+
+impl Person {
+    /// Every file the person is composed from, under the asset folder: the type's, then hair,
+    /// outfit pieces and overlays, as [`prepare`] wears them.
+    pub fn files(&self) -> Vec<String> {
+        let mut out = vec![format!("{TYPES}/{}.glb", self.kind)];
+        out.extend(self.styles.hair.iter().map(|h| format!("{STYLES}/hair/{h}.glb")));
+        out.extend(self.styles.outfit.iter().map(|o| format!("{STYLES}/outfit/{o}.glb")));
+        out.extend(self.styles.overlays.iter().map(|o| format!("{STYLES}/overlay/{}/{o}.glb", self.kind)));
+        out
+    }
+}
 
 /// Outfit pieces worn on the head: attached with the type's `hair_fit`, as hair is.
 const HEAD_PIECES: [&str; 2] = ["cap", "kerchief"];
@@ -558,9 +576,14 @@ impl Composer<'_> {
                 if self.plans.outlined.insert(p.mesh.id()) {
                     if let Some(mut m) = self.meshes.get_mut(&p.mesh) {
                         crate::style::outline_normals(&mut m);
-                        // A hair mesh's greying into its second UVs ([`ATTRIBUTE_GREY`]).
+                        // A hair mesh's greying and ring mask into its second UVs
+                        // ([`ATTRIBUTE_GREY`], [`ATTRIBUTE_RING`] as 1 + its value; 0 without).
+                        let ring = match m.remove_attribute(ATTRIBUTE_RING) {
+                            Some(bevy::mesh::VertexAttributeValues::Float32(r)) => Some(r),
+                            _ => None,
+                        };
                         if let Some(bevy::mesh::VertexAttributeValues::Float32(g)) = m.remove_attribute(ATTRIBUTE_GREY) {
-                            let uv: Vec<[f32; 2]> = g.iter().map(|v| [*v, 0.0]).collect();
+                            let uv: Vec<[f32; 2]> = g.iter().enumerate().map(|(i, v)| [*v, ring.as_ref().and_then(|r| r.get(i)).map_or(0.0, |r| 1.0 + r.clamp(0.0, 1.0))]).collect();
                             m.insert_attribute(Mesh::ATTRIBUTE_UV_1, uv);
                         }
                     }

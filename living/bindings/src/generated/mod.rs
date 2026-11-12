@@ -137,6 +137,11 @@ pub mod line_heard_table;
 pub mod line_heard_type;
 pub mod line_seen_table;
 pub mod line_seen_type;
+pub mod look_line_table;
+pub mod look_line_type;
+pub mod look_table;
+pub mod look_type;
+pub mod look_words_type;
 pub mod lot_table;
 pub mod lot_type;
 pub mod mark_type;
@@ -148,6 +153,7 @@ pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_fast_done_reducer;
 pub mod mind_install_reducer;
+pub mod mind_install_way_reducer;
 pub mod mind_judged_reducer;
 pub mod mind_patch_reducer;
 pub mod mind_routines_reducer;
@@ -225,6 +231,7 @@ pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
 pub mod release_skill_reducer;
+pub mod relook_reducer;
 pub mod resource_node_table;
 pub mod resource_node_type;
 pub mod resume_genesis_reducer;
@@ -436,6 +443,11 @@ pub use line_heard_table::*;
 pub use line_heard_type::LineHeard;
 pub use line_seen_table::*;
 pub use line_seen_type::LineSeen;
+pub use look_line_table::*;
+pub use look_line_type::LookLine;
+pub use look_table::*;
+pub use look_type::Look;
+pub use look_words_type::LookWords;
 pub use lot_table::*;
 pub use lot_type::Lot;
 pub use mark_type::Mark;
@@ -447,6 +459,7 @@ pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_fast_done_reducer::mind_fast_done;
 pub use mind_install_reducer::mind_install;
+pub use mind_install_way_reducer::mind_install_way;
 pub use mind_judged_reducer::mind_judged;
 pub use mind_patch_reducer::mind_patch;
 pub use mind_routines_reducer::mind_routines;
@@ -524,6 +537,7 @@ pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
 pub use release_skill_reducer::release_skill;
+pub use relook_reducer::relook;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
 pub use resume_genesis_reducer::resume_genesis;
@@ -687,6 +701,16 @@ pub enum Reducer {
         seen_ms: u64,
         thought: ThoughtIn,
     },
+    MindInstallWay {
+        actor: u32,
+        graph: String,
+        plan: String,
+        say: String,
+        say_to: u32,
+        way: String,
+        seen_ms: u64,
+        thought: ThoughtIn,
+    },
     MindJudged {
         actor: u32,
         items: Vec<JudgedIn>,
@@ -744,6 +768,9 @@ pub enum Reducer {
     PurgeDead,
     ReleaseSkill {
         skill: String,
+    },
+    Relook {
+        generation: String,
     },
     ResumeGenesis,
     SeedCommunities,
@@ -822,6 +849,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindFastDone { .. } => "mind_fast_done",
             Reducer::MindInstall { .. } => "mind_install",
+            Reducer::MindInstallWay { .. } => "mind_install_way",
             Reducer::MindJudged { .. } => "mind_judged",
             Reducer::MindPatch { .. } => "mind_patch",
             Reducer::MindRoutines { .. } => "mind_routines",
@@ -835,6 +863,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::PurgeDead => "purge_dead",
             Reducer::ReleaseSkill { .. } => "release_skill",
+            Reducer::Relook { .. } => "relook",
             Reducer::ResumeGenesis => "resume_genesis",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
@@ -971,6 +1000,25 @@ impl __sdk::Reducer for Reducer {
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindInstallWay {
+                actor,
+                graph,
+                plan,
+                say,
+                say_to,
+                way,
+                seen_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_install_way_reducer::MindInstallWayArgs {
+                actor: actor.clone(),
+                graph: graph.clone(),
+                plan: plan.clone(),
+                say: say.clone(),
+                say_to: say_to.clone(),
+                way: way.clone(),
+                seen_ms: seen_ms.clone(),
+                thought: thought.clone(),
+            }),
             Reducer::MindJudged { actor, items } => {
                 __sats::bsatn::to_vec(&mind_judged_reducer::MindJudgedArgs {
                     actor: actor.clone(),
@@ -1067,6 +1115,9 @@ impl __sdk::Reducer for Reducer {
                     skill: skill.clone(),
                 })
             }
+            Reducer::Relook { generation } => __sats::bsatn::to_vec(&relook_reducer::RelookArgs {
+                generation: generation.clone(),
+            }),
             Reducer::ResumeGenesis => {
                 __sats::bsatn::to_vec(&resume_genesis_reducer::ResumeGenesisArgs {})
             }
@@ -1201,6 +1252,8 @@ pub struct DbUpdate {
     law_change: __sdk::TableUpdate<LawChange>,
     line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
+    look: __sdk::TableUpdate<Look>,
+    look_line: __sdk::TableUpdate<LookLine>,
     lot: __sdk::TableUpdate<Lot>,
     membership: __sdk::TableUpdate<Membership>,
     mind_cursor: __sdk::TableUpdate<MindCursor>,
@@ -1436,6 +1489,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "line_seen" => db_update
                     .line_seen
                     .append(line_seen_table::parse_table_update(table_update)?),
+                "look" => db_update
+                    .look
+                    .append(look_table::parse_table_update(table_update)?),
+                "look_line" => db_update
+                    .look_line
+                    .append(look_line_table::parse_table_update(table_update)?),
                 "lot" => db_update
                     .lot
                     .append(lot_table::parse_table_update(table_update)?),
@@ -1828,6 +1887,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.line_seen = cache
             .apply_diff_to_table::<LineSeen>("line_seen", &self.line_seen)
             .with_updates_by_pk(|row| &row.id);
+        diff.look = cache
+            .apply_diff_to_table::<Look>("look", &self.look)
+            .with_updates_by_pk(|row| &row.id);
+        diff.look_line = cache
+            .apply_diff_to_table::<LookLine>("look_line", &self.look_line)
+            .with_updates_by_pk(|row| &row.id);
         diff.lot = cache
             .apply_diff_to_table::<Lot>("lot", &self.lot)
             .with_updates_by_pk(|row| &row.id);
@@ -2199,6 +2264,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "look" => db_update
+                    .look
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "look_line" => db_update
+                    .look_line
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "lot" => db_update
                     .lot
@@ -2582,6 +2653,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "line_seen" => db_update
                     .line_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "look" => db_update
+                    .look
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "look_line" => db_update
+                    .look_line
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "lot" => db_update
                     .lot
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2862,6 +2939,8 @@ pub struct AppliedDiff<'r> {
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
     line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
+    look: __sdk::TableAppliedDiff<'r, Look>,
+    look_line: __sdk::TableAppliedDiff<'r, LookLine>,
     lot: __sdk::TableAppliedDiff<'r, Lot>,
     membership: __sdk::TableAppliedDiff<'r, Membership>,
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
@@ -3034,6 +3113,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
         callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
+        callbacks.invoke_table_row_callbacks::<Look>("look", &self.look, event);
+        callbacks.invoke_table_row_callbacks::<LookLine>("look_line", &self.look_line, event);
         callbacks.invoke_table_row_callbacks::<Lot>("lot", &self.lot, event);
         callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
@@ -3885,6 +3966,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         law_change_table::register_table(client_cache);
         line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
+        look_table::register_table(client_cache);
+        look_line_table::register_table(client_cache);
         lot_table::register_table(client_cache);
         membership_table::register_table(client_cache);
         mind_cursor_table::register_table(client_cache);
@@ -4010,6 +4093,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "law_change",
         "line_heard",
         "line_seen",
+        "look",
+        "look_line",
         "lot",
         "membership",
         "mind_cursor",

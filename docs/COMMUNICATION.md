@@ -504,6 +504,19 @@ Built 2026-11-11 on `speech-1` from `a107fdf`. Source: `living/authority/src/spe
 - "you can't see whom to `<way>` to";
 - the check's own words.
 
+**Ids are not words** (fix-spoken-ids, 2026-11-12). A mind is shown people by their ids (`{someone=#3}`), and in r2e three lines its deliberations said carried them ("That one, #9, set on me twice…"; [TRIALS.md](TRIALS.md), r2e "Ids"). The primitive says each `#<id>` as the speaker refers to that one, before the way's checks and its length limit (`normalize::spoken_without_ids`, with `common::label_for` and a far figure's handle resolved):
+- `Maud (#3)`: the aside goes;
+- `the archer #9`: the noun already refers, and the id goes;
+- anything else is said pointing: `#9 strikes me` → "that stranger strikes me" ("That stranger" to begin a sentence), or by a name the speaker knows.
+
+An id that names no one ("my #1 customer") is left as written. It applies to every speaker: the chronicle, the speaker's `said` row and every hearer get the same words.
+
+This is a safety net. The prompt is where the fix belongs: every speaking mind's system prompt (think, deliberate, fast, talk) carries one sentence, the same for all (`prompts::IDS_NOT_SPOKEN`), that the handles are for acts and memory and never spoken, and that people are named by name or description when speaking.
+
+**The original is kept as evidence.** When the rewrite changes a line, the speaker gets a `spoken_as` experience (salience 0.2) with what it wrote beside what was said; hearers get only the words said. A mind journals each one in `<journal>/outcomes/spoken_as.jsonl`, and trials.py counts them per instance and per batch (`summary.json` `spoken_as`, report.md "Ids said as words"). A high count means the prompt's sentence is not working.
+
+Tests: `living-rules` `spoken_lines_carry_no_ids` (r2e's three lines); `living-mind` `every_speaking_mind_is_told_ids_are_never_spoken`; verify-core `say`; verify-player `speak.py`; verify-minds `spoken-ids`.
+
 Listeners are gathered once within the way's widest carry (`WaySpec::widest`). Today two gathers of the same radius ran, one for animals and one for people.
 
 **Entry points.**
@@ -511,7 +524,7 @@ Listeners are gathered once within the way's widest carry (`WaySpec::widest`). T
 - `human_say(text, to)`: unchanged signature; the `say` way.
 - `human_speak(text: String, to: u32, way: String)`: new; `""` is `say`.
 - `mind_say(actor, say, say_to, way: String, seen_ms, thought)`: `way` is the new fourth argument.
-- `mind_install`'s say: `say`.
+- `mind_install`'s say: `say` (since `mind-say-way` a decision's line names its way through `mind_install_way`, §18).
 - The graph's `say` node takes an optional `"way"` (`SayNode.way`; the normalizer accepts it in every written form). It waits out the way's limits (`speech::too_soon_to_speak`), and an unknown way fails as a refused leaf the speaker is told about.
 - The mind's talk reply may name `"way"` (beside or inside `say`). A way the world lacks is said aloud. The talk prompt does not list ways yet: with `say` the only way, it is unchanged (item 6 adds them).
 
@@ -954,3 +967,24 @@ The ways change comes first: a deliberation's line naming a way, which addresses
 | **What it fixes** | The late line and some "not listed" ones: the speaker goes to the listener. | The late line: the mind sees it is late and chooses again. | Nothing. |
 
 The owner decides (a), which is act semantics, and whether (b) is turned on by default.
+
+## 18. A decision's line names its way (branch `mind-say-way`)
+
+Approved 2026-11-12 by the general coordinator. The earshot stage (`es1`, docs/TRIALS.md) found 22–33 unheard lines a run whose scene had said "a call would also reach" the addressee: a think or deliberate reply could not choose a way, so its line was always said. A talk reply and a graph's `say` node could already name a way, and so could a player through `human_speak`. Now a decision's line can too, under the same rules.
+
+**The reply.** The think reply's `say` takes an optional `"way"`: `{"text": "...", "to": id or null, "way": "say" or "whisper" or "call"}`.
+- The format names the field and the world's ways (`prompts::say_way_field`, only when the world has more than `say`). It says nothing about when to use one; the world text's SPEAKING section says what each way is and how far it carries.
+- The mind service reads the way as a talk reply's is read (`talk::way_of`). A way the world lacks is said aloud (`say`), as in talk turns.
+- It sends the way with the decision: through the new reducer `mind_install_way` when the reply installs a plan, through `mind_say`'s existing `way` argument when it carries on.
+
+**The reducer.** `mind_install_way(actor, graph, plan, say, say_to, way, seen_ms, thought)` is `mind_install` with the line's way. Adding a reducer is a safe module update; changing `mind_install`'s signature would not be (docs/FAST_LANE.md).
+- The line goes to `speech::speak` with that way: the same reach, gaps (2 s across ways, a call's 6 s) and refusals as every way, for every controller.
+- A refused line is not said and is told to the speaker in the rules' words, in an `unsaid` row (the kind a held line uses): "You did not say “Verify whisper to no one.”: a whisper needs someone to whisper to." The decision's graph, plan and thought stand: rolling the install back would undo the decision for its line's sake.
+- `mind_say` for a deliberation (a thought not of kind `talk`) now tells a refused line the same way, instead of failing the call. A talk turn's refused line is the reducer's error, as before.
+- It is authorised as every mind reducer is: only the character's controller may call it (verify-client's permission matrix).
+
+**No column is appended to any table.** The bindings gain the reducer. The regeneration also brought `heard_asleep`, a private table main had added without regenerating its bindings.
+
+**`mind_install` is to be retired.** The mind service no longer calls it. It is kept, its signature and behaviour unchanged (its line is always said, and a refused line dropped without a word), for a module update that leaves an older mind service connected, and for the admin harness: verify-core `scenes.py`, the say-by-id and `heard_first` scenes. Once those move to `mind_install_way` and no older service runs, it can go.
+
+**Both controllers now have the same choices.** Minds choose the way in a talk reply, a decision's line and a graph's `say` node. Players have `human_speak`, which the game's talk box is moving to (the laptop). Both go through `speech::speak`.
