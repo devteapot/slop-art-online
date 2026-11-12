@@ -3391,14 +3391,15 @@ def outcomes(s):
     """Whoever strikes or shoots is told how it came out (the `force_outcomes` law,
     docs/COMBAT_MIND.md §3.1). Before 2026-11-11 a mind-held archer was never told how its
     arrow went (0 of 10 tries in the wolves trials), while `attack` reported "hit for 7".
-    Three minded people (`spawn_crowd`, no mind service): an archer shoots a still target 6 m
+    Three minded people (`spawn_crowd`, no mind service): an archer shoots a still target 4.5 m
     off (told "struck …: hit for N" when the arrow lands), a striker beside the target strikes
     it (told "hit for N"), the archer looses at an empty point past its sight (told it came to
     nothing), and with the law off a hit is not told."""
     a, b, c = s.people(3)
     here = body_at(s, a)
-    s.call("place_at", b, here[0] + 6.0, here[1])
-    s.call("place_at", c, here[0] + 6.0, here[1] + 1.2)
+    # 4.5 m: within sight by night too (6 m), so the archer sees its target at any hour.
+    s.call("place_at", b, here[0] + 4.5, here[1])
+    s.call("place_at", c, here[0] + 4.5, here[1] + 1.2)
     s.call("grant_items", a, "bow", 1)
     s.call("grant_items", a, "arrow", 20)
     time.sleep(1.0)
@@ -3455,13 +3456,14 @@ def missiles_told(s):
     arrow: hit for 7"), else by the missile alone ("An arrow struck you from somewhere you could
     not see: hit for 7"); to a witness the same way ("A stranger shot a stranger with an
     arrow"). The missile is named by its skill's `called` (`<skill>_missile`). Four strangers:
-    an archer, a target 6 m off with a witness beside it, and a far target 19 m off (past day
+    an archer, a target 4.5 m off (within night sight) with a witness beside it, and a far target 19 m off (past day
     sight, within the bow's 22 m) shot at by a point aim. No line any of them is told about the
     arrows says "attacked", and the unseen shot names no one."""
     a, b, w, f = s.people(4)
     here = body_at(s, a)
-    s.call("place_at", b, here[0] + 6.0, here[1])
-    s.call("place_at", w, here[0] + 6.0, here[1] + 1.5)
+    # 4.5 m: within sight by night too (6 m); the far target stays past day sight (11 m).
+    s.call("place_at", b, here[0] + 4.5, here[1])
+    s.call("place_at", w, here[0] + 4.5, here[1] + 1.5)
     s.call("place_at", f, here[0] + 19.0, here[1] - 3.0)
     s.call("grant_items", a, "bow", 1)
     s.call("grant_items", a, "arrow", 20)

@@ -14,6 +14,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - A fire bolt burns the creature it meets.
 - A guard facing the blow blocks it (`BLOCKED`, reduced); facing away, the blow lands in full; letting go ends it.
 - A dodge dashes about 2.6 m and the blow winding up misses or is dodged.
+- **A dodge over before the blow came** (fix-dodge-told), scene `early_dodge` (after `heal`, so the hit and the spent breath touch no other scene): the player two tiles short of a wall, a resident with a spear beside it; the resident's heavy blow winds up and the player dodges toward the wall at once (`use_skill`), which has room for half the dash. The dash is over, still in reach, before the blow lands: `my_experience` holds "You failed to dodge: it was over before the blow came", as a mind is told it, with its `my_act_outcomes` row (kind own, skill dodge, not ok, code failed), and `my_skill_uses`' dodge says "made way: it was over before the blow came". Admin reducers: `place_at`, `set_behavior`, `grant_items`.
 - A jump (the bar's seventh place, Space in the game) hops about 1.6 m like a dash but does not evade (`jump_combat()`'s `evades: false`): a blow winding up as you jump toward its striker lands or misses by reach, never `DODGED` (scene `jump`).
 - Heal mends yourself.
 - Breath (since `stamina-1`, docs/STAMINA.md; scene `breath`), read through the player's own `my_vitals`:

@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-12 fix-dodge-told (Spark)
+
+Branch `fix-dodge-told` (merged with origin/main `c67bb6e1`), the trial service `slop-trials-stdb`. Island seed, `player-dodge3-074940`: `combat.py` all scenes 45/45. New scene `early_dodge`: the player's dodge toward a wall at the windup was over before the blow ("hit for 9" before the merge). The player was told "You failed to dodge: it was over before the blow came", as a mind is, with its `my_act_outcomes` row (own, dodge, not ok, code failed), and `my_skill_uses` "made way: it was over before the blow came". Run before `breath`, the scene left the player hurt and short of breath, and `breath`'s recovery check failed once (`player-dodge-071153`), so it runs after `heal`. Admin reducers: `place_at`, `set_behavior`, `grant_items`, `kill`, `join`.
+
 ## 2026-11-12 fix-unseen-killer-id (Spark)
 
 Branch `fix-unseen-killer-id` from `7729fc9b`, the trial service `slop-trials-stdb`, island seed, `player-unseen2-061653`: `combat.py` all scenes 44/44; scene `shot` gains three: `my_vitals.hurt_by` 2 after the seen archer's hit and 0 after the same archer's hit from 19 m; shot dead from 19 m, the death row's `other` 0, the feed's death `target` 0, "You were killed by an arrow from someone unseen.", the chronicle's `killing` a = 2; after a rejoin shot dead from 6 m, `other` 2 and `target` 2. (Before the move to main, `player-unseen-061037` on `caa295d1`: the same.) Admin reducers: `place_at`, `grant_items`, `set_behavior`, `kill`, `join`.

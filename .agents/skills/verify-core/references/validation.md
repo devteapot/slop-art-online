@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-12 fix-dodge-told: a dodge over before the blow told so, a cooldown's refusals once (Spark)
+
+Branch `fix-dodge-told` (merged with origin/main `c67bb6e1`), the trial service `slop-trials-stdb`. `scenes.py dodge_told` on `core-dodge2-074053`: 5/5. The dodge made at the windup, aimed at a wall two tiles off, was over before the heavy blow (hit) and the dodger was told "You failed to dodge: it was over before the blow came" once, its use "made way: it was over before the blow came". In the streak, 1 "not ready yet" line told for 5 dodges while the routine's stat counted every refusal; before the merge (`core-dodge-065910`), 4 lines for 4 dodges and 25 refusals counted. `scenes.py outcomes` on `core-dodge3-074340`: 16/16 after staging its near target and witness at 4.5 m. At 6 m they were missed by night (6 m sight) or at a forest edge: "stuck: bowshot: no #269 in sight", and once the far shot of `missiles_told` timed out (`core-dodge2-074053`). That fragility predates this branch.
+
 ## 2026-11-12 move-intents: movement intents (Spark)
 
 Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-intents-053759` (evidence `.local/living/verify/core-intents-053759/`).

@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-12 fix-dodge-told (Spark)
+
+Branch `fix-dodge-told` (merged with origin/main `c67bb6e1`), the trial service `slop-trials-stdb`. `dodge-told` on `minds-dodge3-074610`: pass. The eye was told "You failed to dodge: it was over before the blow came"; 4 "not ready yet" lines for 5 dodges; the asked thought's prompt carried the line, and 5 "not ready yet" lines (no more than dodges + 1). `doing`: pass on `minds-doing4-074902` (the grammar's example now `"is": "hostile"`). In `minds-dodge3-074610` it failed once in its setup ("the eye turned to the other" not within 20 s, before any `doing`). Mind unit tests 106 pass, `the_doing_example_uses_a_kind_word` among them.
+
 ## 2026-11-12 move-intents (Spark)
 
 Branch `move-intents`, the trial service, the fake model, `--no-unit-tests` (the check ran the mind's build). `minds-intents-061748`: `intents` (new) passes. The prompt documents the five intents with their arguments, m/s and "lost sight of them". The plan `keep_distance` 3–6 m is kept as the `current plan` routine `{"do":{"skill":"keep_distance","target":{"id":7},"qty":120,"min":3.0,"max":6.0}}`, and `steer` is goal 5 (keep 3, far 6, flag 128). The character backs off at its walk (3.37 m/s) when the other walks at it. Earlier attempts placed the two in town at night, where a wall hid one ("no #7 in sight"); the case now uses an open row. Not run: the other cases (the scene gate runs roundtrip, acts, dealings, conversation).

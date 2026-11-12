@@ -42,6 +42,9 @@ python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 # What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
 # and far label (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
+# A dodge over before the blow came is told so; a cooldown's refusals are told once per cooldown,
+# every one still counted in the routine's stat (features/combat.md, about 20 s).
+python3 "$C/scenes.py" dodge_told --run "$R" > "$E/dodge_told.txt" 2>&1
 # First sights in a crowd: everyone in sight is told, several in one line (features/sight.md, about 30 s).
 python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 # A graph's "stranger" under the stranger_by_name law, off and on (features/graphs.md, about 30 s).
