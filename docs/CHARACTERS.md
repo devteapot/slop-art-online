@@ -175,6 +175,7 @@ A pass is also published through the asset board, the record of which version th
 - The types' pictures on shared pages are `character:face-types` `20261112-3f0805f7-…` (`types-pages`: four residents composed from the type files and coloured by the client, the full head close and at the game camera and the far head at the game camera, before and after).
 
 - The neck is `character:face-types` `20261112-4c89b344-…` (`neck-types`: four bare type heads before and after from the front, the side and at the game camera, with their measures; `neck-people`: four whole people before and after; `neck-motion`: the same four on moving frames; each with the reference's row), the six preset families' `20261112-4c89b344-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-4c89b344-…` (the 64 built again whole, with `faces-before-after` and `neck-named`, the four faces named on the sheet before).
+- The tones inside a piece are `character:face-types` `20261112-772c115c-…` (`piece-tones`: eight residents, each as its own file and composed from the shared pieces, before and after, with the measures; `shadow-square`: faces with the light square to them and a few degrees either side, for the shadow map's wait of 0: no straight split down the middle), the six preset families' `20261112-772c115c-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-772c115c-…` (the 64 built again whole, with `lineup-before-after`).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -1221,7 +1222,7 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 
 | Class | Material | Picture | What is equal in every file | Tint |
 |---|---|---|---|---|
-| Outfit pieces (28 files) | `M00_001_01_Cloth_01_CLOTH` | none | Vertex colours are grey shading; the mesh's mean lightness, by area and in linear light, is 0.30, for `Cloth` and `FarCloth` | `colors.outfit[<piece>]`: every piece a person wears now has one |
+| Outfit pieces (28 files) | `M00_001_01_Cloth_01_CLOTH` | none | Vertex colours are grey shading; the mesh's mean lightness, by area and in linear light, is 0.48 (0.30 until [the tones inside a piece](#the-tones-inside-a-piece)), for `Cloth` and `FarCloth` | `colors.outfit[<piece>]`: every piece a person wears now has one |
 | Hair (50 files) | `M00_000_Hair_00_HAIR` | the one shared picture of strands | The mean vertex colour of a mesh's outer surfaces (its lighter half by area) is 0.78, for `Hair` and `FarHair` | `colors.hair` |
 | Far beards | `M00_000_00_FarOverlay_00_HAIR` | none | One grey, 0.71, as before | `colors.beard` |
 | Overlays (72 files) | per file | each its own | The picture's mean grey over what it covers is 0.90 | hair or skin, as before |
@@ -1245,6 +1246,42 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **How far the lines moved,** over Cullet's 64 (293 pieces), as CIE76 ΔE between the old line colour and the new: 2.7 at the median, 12.2 at the 90th percentile, 20.2 at most. By piece, at the median: jerseys 11.9 (they lie in a coat's or a smock's painted shade), coats 6.1, trousers 4.1, caps 2.8, boots 0.8, smocks 0.7, aprons 0.0.
 - **What that is.** It is the error the old lines put on a piece's mean colour. With the new lines a composed piece's mean is its own file's by construction. What is left between a composed person and their own file is how the shade is spread inside a piece; the laptop's rendered check measures that, and this machine has not run it.
 - **A line with painted colours needs the person built.** `person_params.py` alone still prints the cloth each piece is cut from. The lines of Cullet's 64 are in the pass page's `cullet-people.json`.
+
+### The tones inside a piece
+
+Pass 3, 2026-11-12, from the laptop's colour check after the painted line colours: what was left between a composed person and their own file was no longer a piece's mean but the spread inside it. A deep red smock with a darker, browner hem composed as one tone. The decision was to carry hems and the like as tones in the piece's own grey shading, as patches and linings already are, so one shared material still serves every wearer.
+
+**What made the spread:**
+
+- **A hem was a mix toward a fixed colour,** not a tone. A coat's or a smock's cloth was mixed 40% toward kelp at the hem and 16% toward old lime at the shoulders, and its patches and lining were cloths of their own. How dark that came out depended on the cloth: over Cullet's wardrobe a hem was 0.58 to 1.37 times its cloth's lightness (lighter than the cloth on a dark coat), the shoulders 1.09 to 2.17, a patch anything from 0.12 to 7.4. A shared piece is built once, on one cloth, and carried that cloth's ratios to every wearer.
+- **A piece was shaded alone.** A shared piece's painted shade was worked out with only that piece present, so a jersey's collar had no smock over it and a smock no apron.
+- **A bright cloth was lightened, not multiplied.** The client moves a grey piece's value to the line's by multiplying when the line is darker than the piece's mean, and by lightening toward white when it is lighter, which flattens the piece's darker tones. With the mean at 0.30, 13% of the pieces worn in Cullet were lighter than it: every apron, 14 smocks, 6 coats and 3 jerseys.
+
+**What changed:**
+
+- **Hems, shoulders, patches and linings are set tones of the cloth** (`person.py`: `HEM_TONE` 0.66, `SHOULDER_TONE` 1.15, `PATCH_TONES` 1.45, 0.78 and 0.60, `LINING_TONE` 0.45; lightness in linear light). A person's own file keeps the hue it had there (a hem still leans toward kelp, a patch is still another cloth) at that lightness; a shared piece carries the lightness. A smock's sleeve bands are a piece of their own and keep their own cloth.
+- **A shared piece is shaded as it is worn,** with the rest of its figure's outfit round it, and the rest is then taken away.
+- **The class's mean is 0.48** (`shade_mean.py` `CLOTH`), above every cloth worn in Cullet (the lightest is 0.46), so the client only ever multiplies. `shade_mean.py --check` passes on all 159 files.
+
+**Measured** with `living/tools/characters/piece_tones.py`: each vertex of a person's own piece against the same vertex of the shared piece tinted by the client's rule (`recolor` in `toon.wesl`, read from the source, not run in the client), CIE76 weighted by area, medians over the 38 pieces eight residents wear:
+
+| | Before | After |
+|---|---|---|
+| All pieces: mean, 95th percentile | 2.7, 5.0 | 2.0, 3.7 |
+| All pieces: lightness alone | 2.4 | 0.5 |
+| Smocks | 4.8, lightness 2.8 | 3.9, lightness 0.3 |
+| Coats | 10.0, lightness 5.1 | 6.1, lightness 0.5 |
+| Jerseys | 3.7, lightness 3.5 | 2.2, lightness 1.8 |
+| Aprons | 2.2 | 0.8 |
+| Trousers | 2.8 | 3.0 |
+| Pieces tinted lighter than their mean | 5 of 38 | 0 |
+
+- **What is left is hue.** A grey material takes one hue from the line, so a hem's lean toward kelp and a patch's own cloth cannot show on a composed person: that is the 3.9 on a smock and the 6.1 on a coat. Vessa's and Sabine's red smocks are 4.7 and 4.4 where they were 5.0, their lightness 0.3 where it was 2.6 and 2.9.
+- **Trousers did not move:** what differs there is the shade of what each person wears over them, which one shared piece cannot carry.
+- **Tilly's jersey** measured 2.1 before and after; by this measure her ribs were not paler composed. A jersey lighter than the old mean would have been, and none can be now.
+- **Whole files changed too.** Their hems, shoulders, patches and linings are the set tones now, so a dark coat's hem is darker than its cloth where it was lighter and greener. The lines' piece colours are measured from them as before, so they changed with it.
+
+**What the client needs:** nothing. A piece's mean is read from the mesh, so 0.48 is found as 0.30 was. The 28 outfit pieces must be taken again, with the residents' lines, whose piece colours are measured from the new paint.
 
 **Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
 

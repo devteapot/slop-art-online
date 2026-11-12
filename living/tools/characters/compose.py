@@ -175,13 +175,26 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False, node=No
     skin = dict(joints=order, inverseBindMatrices=append_accessor(j, binary, array("f", ibm.transpose(0, 2, 1).astype(np.float32).ravel().tolist()), 5126, "MAT4", False))
     j["skins"].append(skin)
     # The mesh: every accessor copied across; the material and its picture with it.
-    def copy(acc, scale=None, each=None):
+    def copy(acc, scale=None, each=None, grey=False, weight=None):
         values, (ct, typ, norm) = read_accessor(h, hbin, acc)
         if scale is not None:
             v = np.array(values, dtype=np.float64).reshape(-1, 4)
             unit = {5126: 1.0, 5123: 65535.0, 5121: 255.0}[ct]
-            mean = np.maximum(v[:, :3].mean(axis=0) / unit, 1e-4)
-            v[:, :3] = np.clip(v[:, :3] * (np.array(scale) / mean) * (1.0 if each is None else each), 0.0, unit)
+            # The mean by area, as the client takes a mesh's (characters.rs `vertex_sum`).
+            mean = np.maximum((v[:, :3].mean(axis=0) if weight is None else (v[:, :3] * weight[:, None]).sum(axis=0) / weight.sum()) / unit, 1e-4)
+            if grey:
+                # A grey piece as the client tints it (toon.wesl `recolor`, a grey material): the
+                # colour's hue and saturation everywhere, and the value multiplied down to the
+                # colour's when that is below the piece's mean, or lightened toward white when
+                # it is above (which flattens the piece's darker tones).
+                t = np.array(scale, float)
+                tv, lo = float(t.max()), float(t.min())
+                mv = float(mean.max())
+                g = v[:, :3].mean(axis=1) / unit
+                val = g * tv / mv if tv <= mv else 1.0 - (1.0 - g) * max((1.0 - tv) / max(1.0 - mv, 1e-4), 1e-4)
+                v[:, :3] = np.clip(np.clip(val, 0.0, 1.0)[:, None] * (t / max(tv, 1e-6))[None, :], 0.0, 1.0) * unit
+            else:
+                v[:, :3] = np.clip(v[:, :3] * (np.array(scale) / mean) * (1.0 if each is None else each), 0.0, unit)
             values = array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()])
         return append_accessor(j, binary, values, ct, typ, norm, None)
 
@@ -210,7 +223,16 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False, node=No
             mixed = np.array(natural)[None, :] * (1 - t) + np.array(silver)[None, :] * t
             mixed = np.where(mixed > 0.04045, ((mixed + 0.055) / 1.055) ** 2.4, mixed / 12.92)
             each = mixed / np.maximum(np.array(colour)[None, :], 1e-4)
-        q = dict(attributes={k: copy(a, scale=tone if k == "COLOR_0" and colour is not None else None, each=each) for k, a in p["attributes"].items()}, mode=p.get("mode", 4))
+        cloth = "material" in p and h["materials"][p["material"]].get("name", "").endswith("_CLOTH") and "baseColorTexture" not in (h["materials"][p["material"]].get("pbrMetallicRoughness") or {})
+        weight = None
+        if cloth and colour is not None and "indices" in p:
+            pos = np.array(read_accessor(h, hbin, p["attributes"]["POSITION"])[0], float).reshape(-1, 3)
+            idx = np.array(read_accessor(h, hbin, p["indices"])[0], np.int64).reshape(-1, 3)
+            area = np.linalg.norm(np.cross(pos[idx[:, 1]] - pos[idx[:, 0]], pos[idx[:, 2]] - pos[idx[:, 0]]), axis=1)
+            weight = np.zeros(len(pos))
+            for k_ in range(3):
+                np.add.at(weight, idx[:, k_], area / 3)
+        q = dict(attributes={k: copy(a, scale=tone if k == "COLOR_0" and colour is not None else None, each=each, grey=cloth, weight=weight) for k, a in p["attributes"].items()}, mode=p.get("mode", 4))
         if "indices" in p:
             q["indices"] = copy(p["indices"])
         mi = p.get("material")
