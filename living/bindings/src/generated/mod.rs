@@ -94,6 +94,8 @@ pub mod guest_table;
 pub mod guest_type;
 pub mod hear_salt_table;
 pub mod hear_salt_type;
+pub mod heard_asleep_table;
+pub mod heard_asleep_type;
 pub mod heard_sound_type;
 pub mod heard_sounds_table;
 pub mod heard_table;
@@ -391,6 +393,8 @@ pub use guest_table::*;
 pub use guest_type::Guest;
 pub use hear_salt_table::*;
 pub use hear_salt_type::HearSalt;
+pub use heard_asleep_table::*;
+pub use heard_asleep_type::HeardAsleep;
 pub use heard_sound_type::HeardSound;
 pub use heard_sounds_table::*;
 pub use heard_table::*;
@@ -1184,6 +1188,7 @@ pub struct DbUpdate {
     guest: __sdk::TableUpdate<Guest>,
     hear_salt: __sdk::TableUpdate<HearSalt>,
     heard: __sdk::TableUpdate<Heard>,
+    heard_asleep: __sdk::TableUpdate<HeardAsleep>,
     heard_sounds: __sdk::TableUpdate<HeardSound>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
@@ -1392,6 +1397,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "heard" => db_update
                     .heard
                     .append(heard_table::parse_table_update(table_update)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
+                    .append(heard_asleep_table::parse_table_update(table_update)?),
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(heard_sounds_table::parse_table_update(table_update)?),
@@ -1784,6 +1792,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.heard = cache
             .apply_diff_to_table::<Heard>("heard", &self.heard)
             .with_updates_by_pk(|row| &row.key);
+        diff.heard_asleep = cache
+            .apply_diff_to_table::<HeardAsleep>("heard_asleep", &self.heard_asleep)
+            .with_updates_by_pk(|row| &row.id);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
             .with_updates_by_pk(|row| &row.infant);
@@ -2149,6 +2160,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "heard" => db_update
                     .heard
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "heard_sounds" => db_update
                     .heard_sounds
@@ -2529,6 +2543,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "heard" => db_update
                     .heard
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2832,6 +2849,7 @@ pub struct AppliedDiff<'r> {
     guest: __sdk::TableAppliedDiff<'r, Guest>,
     hear_salt: __sdk::TableAppliedDiff<'r, HearSalt>,
     heard: __sdk::TableAppliedDiff<'r, Heard>,
+    heard_asleep: __sdk::TableAppliedDiff<'r, HeardAsleep>,
     heard_sounds: __sdk::TableAppliedDiff<'r, HeardSound>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
@@ -2991,6 +3009,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Guest>("guest", &self.guest, event);
         callbacks.invoke_table_row_callbacks::<HearSalt>("hear_salt", &self.hear_salt, event);
         callbacks.invoke_table_row_callbacks::<Heard>("heard", &self.heard, event);
+        callbacks.invoke_table_row_callbacks::<HeardAsleep>(
+            "heard_asleep",
+            &self.heard_asleep,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<HeardSound>(
             "heard_sounds",
             &self.heard_sounds,
@@ -3849,6 +3872,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         guest_table::register_table(client_cache);
         hear_salt_table::register_table(client_cache);
         heard_table::register_table(client_cache);
+        heard_asleep_table::register_table(client_cache);
         heard_sounds_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
@@ -3973,6 +3997,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "guest",
         "hear_salt",
         "heard",
+        "heard_asleep",
         "heard_sounds",
         "infant_cry",
         "inventory",

@@ -62,6 +62,19 @@ Since `first-sight` (2026-11-12; docs/FIRST_SIGHT.md). Under the world's `first_
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case first-sight
 ```
 
+## The think prompt's framing (`think_framing`)
+
+Since `think-framing` (2026-11-12; docs/FRAMING.md). The world's `think_framing` law chooses the think prompt's framing: off, today's; on, the neutral one (N2).
+
+- `think-framing`: M's mind runs on the fake model.
+  - **Off:** with `set_world_law think_framing false`, M is asked to think (`Run.request`). The think request carries today's sentence ("Start from why you are thinking now: …") once, and the section "# Why you are thinking now".
+  - **On:** after `set_world_law think_framing true`, the next think request's system prompt equals the off one with that sentence replaced by the neutral one. Its user prompt has the same sections in the same order, the reason's renamed "# What just happened".
+  - **Evidence:** `prompt-off.json`, `prompt-on.json`, `think-framing.json`. The law is restored.
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case think-framing
+```
+
 ## A dodge told truthfully (fix-dodge-told)
 
 - `dodge-told`: the mind service runs throughout. The eye stands two tiles short of a wall, the other (a spear) beside it; the eye's graph dodges toward the wall on `doing` attack "winding up": the dash is over before the blow lands, and the eye is told "You failed to dodge: it was over before the blow came" (its `skill_use` says so). After the mind has answered the attack, a graph restarting a dodge every tick for 4 s is refused while not ready: at most one "not ready yet" line per cooldown. The prompt of a thought asked afterwards (`Run.request`, marker `dodge-told`) carries the first line, and no more "not ready yet" lines than dodges made plus one. Evidence: `eye-told.json`, `eye-told-streak.json`, `uses-early.json`, `sent-prompts.txt`, `result.json`.

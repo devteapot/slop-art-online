@@ -131,6 +131,10 @@ fn laws() {
         // address them since one decided, is not said yet: one is told and thinks again with
         // that line in front of one (docs/FIRST_SIGHT.md, "Crowds"). Off: it is said.
         heard_first_rethinks: false,
+        // The think prompt's framing (docs/FRAMING.md): off, a mind starts from why it is
+        // thinking now; on, what just happened is shown beside what it perceives, and it thinks
+        // about whatever matters to it now (the neutral framing, replayed as N2).
+        think_framing: false,
         // Earshot (docs/COMMUNICATION.md §17): a person's scene says whom a line said now would
         // reach, at each way, among the people they perceive. Off: it is not told.
         earshot: false,
@@ -2496,19 +2500,19 @@ fn intent_sight() {
 }
 fn keep_distance_spec() {
     let l = laws();
-    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty"],
-       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
+    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty", "apart"],
+       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
        takes: intent_sight(), gives: "you between min and max metres from it, facing it" }
 }
 fn close_in_spec() {
-    #{ target: true, target_class: "creature", args: ["distance", "run"],
-       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
+    #{ target: true, target_class: "creature", args: ["distance", "run", "apart"],
+       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
        takes: intent_sight(), gives: "you within that distance of it" }
 }
 fn circle_spec() {
     let l = laws();
-    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty"],
-       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
+    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty", "apart"],
+       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
        takes: intent_sight(), gives: "you going round it at that distance" }
 }
 fn back_off_spec() {
@@ -2982,6 +2986,7 @@ fn laws_about(l) {
         first_sight_thinks: if l.first_sight_thinks { "seeing someone you cannot place for the first time brings you to think" } else { "one thinks when something happens to one; a first sight is noticed, not thought over" },
         earshot: if l.earshot { "one knows whom one's words would reach if one spoke now, among the people one sees" } else { "one judges for oneself whom one's words would reach" },
         first_sight_gap_s: `a first sight brings one to think at most once in ${short(l.first_sight_gap_s)} s`,
+        think_framing: if l.think_framing { "a mind is shown what just happened and thinks about whatever matters to it now" } else { "a mind starts from why one is thinking now" },
         heard_first_rethinks: if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
         witness_fold_ms: if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
