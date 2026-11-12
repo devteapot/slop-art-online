@@ -282,14 +282,34 @@ const STAND_TURN_OFF: f32 = 6.0 * PI / 180.0;
 /// segment turned by its facing offset at `now_ms` (authority ms), as `steer::facing` evaluates
 /// it with `dt = (min(now, next_ms) − t_ms) / 1000`. None when the row holds no offset (the body
 /// faces its travel).
-fn authority_facing(m: &living_bindings::Moving, now_ms: f64) -> Option<f32> {
+///
+/// look-4: the offset is not wrapped (at a segment's start it may be ±180°, past it after a
+/// counter-turn), so the sum is; and while the travel turns, the offset's own rate can be up to
+/// twice the turn rate, but the facing in the world (what is drawn) stays continuous and within
+/// it: nothing here eases or scales the offset by itself.
+pub(crate) fn authority_facing(m: &living_bindings::Moving, now_ms: f64) -> Option<f32> {
     if m.face_off == 0.0 && (m.face_turn == 0.0 || m.face_turn_s <= 0.0) {
         return None;
     }
     let dt = ((now_ms.min(m.next_ms as f64) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
-    let travel = m.heading + if m.turn_s > 0.0 { m.turn * dt.min(m.turn_s) } else { 0.0 };
     let off = living_rules::steer::face_off(m.face_off, m.face_turn, m.face_turn_s, dt);
-    (off.abs() > 1e-3).then(|| living_rules::steer::facing(travel, m.face_off, m.face_turn, m.face_turn_s, dt))
+    (living_rules::steer::wrap(off).abs() > 1e-3).then(|| living_rules::steer::wrap(living_rules::steer::facing(authority_travel(m, now_ms), m.face_off, m.face_turn, m.face_turn_s, dt)))
+}
+
+/// The row's travel heading at `now_ms` (the travel segment's turn followed), wrapped.
+pub(crate) fn authority_travel(m: &living_bindings::Moving, now_ms: f64) -> f32 {
+    let dt = ((now_ms.min(m.next_ms as f64) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
+    living_rules::steer::wrap(m.heading + if m.turn_s > 0.0 { m.turn * dt.min(m.turn_s) } else { 0.0 })
+}
+
+/// Where the row's facing settles from its travel (look-4): the offset at the facing segment's
+/// end, against the travel at the end of its own turn (`face_turn_s` is the travel's `turn_s`
+/// while it turns), wrapped. After a sudden change of the travel the offset can pass 75° (up to
+/// 180°) for about 0.3 s while the facing comes round; deciding "walking backwards" from it then
+/// would start a brief backwards gait, so the legs decide from where it settles.
+fn settled_offset(m: &living_bindings::Moving) -> f32 {
+    let turned = if m.face_turn_s > 0.0 { m.face_turn * m.face_turn_s } else { 0.0 };
+    living_rules::steer::wrap(m.face_off + turned)
 }
 
 #[derive(Resource, Default)]
@@ -903,6 +923,8 @@ fn bodies(
         // look leads it, drawn ahead of the row (`docs/PERCEPTION.md`, "Drawing it").
         let faced = row.as_ref().and_then(|m| authority_facing(m, if mine { scene.mine_ms } else { scene.now_ms }));
         let look_at = aimed.or(look).or(faced);
+        // Backwards from where the authority's facing settles, when that is what the legs follow.
+        let settled = if aimed.is_none() && look.is_none() && faced.is_some() { row.as_ref().map(settled_offset) } else { None };
         let walking = s.person && s.speed > MOVING;
         let takes = |t: f32, legs: f32| gaits.as_ref().is_some_and(|g| g.blend_toward(s.speed / pace.max(0.5), stride, family, living_rules::steer::wrap(t - legs), |_| 1.0).is_some());
         // The travel from the legs for the directional takes, when they play.
@@ -953,7 +975,7 @@ fn bodies(
             // play; where the file has none there, the forward gaits along the travel (reversed
             // backwards), the legs taken round at the old rate.
             (true, Some(l), Some(t)) => {
-                let (goal, b) = lw.legs_goal(t, l, s.back, |legs| takes(t, legs));
+                let (goal, b) = lw.legs_goal(t, l, settled, s.back, |legs| takes(t, legs));
                 back = b;
                 // Always eased (a snap at the old rate turned the legs 25–39° a frame setting off
                 // from a standing turn); without a take there, the forward gaits play meanwhile.
@@ -1760,6 +1782,34 @@ fn script(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row(heading: f32, turn: f32, turn_s: f32, face_off: f32, face_turn: f32, face_turn_s: f32) -> living_bindings::Moving {
+        living_bindings::Moving { id: 1, x: 0.0, y: 0.0, t_ms: 0, vx: 1.0, vy: 0.0, heading, turn, turn_s, next_ms: u64::MAX, speed: 1.0, face_off, face_turn, face_turn_s, running: false }
+    }
+
+    #[test]
+    fn a_reversal_is_drawn_continuous_and_decided_where_it_settles() {
+        use std::f32::consts::PI;
+        // look-4: the travel reverses (a half-turn over 0.3 s); the facing was 10° off the old
+        // travel, so its offset starts near 170° and its relative turn is near twice the travel's.
+        let (turn_s, turn) = (0.3, PI / 0.3);
+        let m = row(0.0, turn, turn_s, PI - 0.17, -(PI - 0.17 - 0.2) / turn_s, turn_s);
+        // The world facing is continuous, wrapped, and turns no faster than the relative turn and
+        // the travel's together allow (nothing here amplifies the relative value).
+        let mut prev = authority_facing(&m, 0.0).unwrap();
+        for k in 1..=30 {
+            let f = authority_facing(&m, k as f64 * 10.0).unwrap_or(authority_travel(&m, k as f64 * 10.0));
+            assert!(f.abs() <= PI + 1e-4, "wrapped: {f}");
+            let step = living_rules::steer::wrap(f - prev).abs();
+            assert!(step <= 0.2, "a 10 ms step of {step} rad");
+            prev = f;
+        }
+        // Where it settles (0.2 rad off the travel at the end of its turn), not the 170° now,
+        // decides walking backwards.
+        assert!((settled_offset(&m) - 0.2).abs() < 1e-4, "{}", settled_offset(&m));
+        // An offset past ±180° at a segment's start is wrapped.
+        assert!(settled_offset(&row(0.0, 0.0, 0.0, 3.5, 0.0, 0.0)).abs() < PI);
+    }
 
     /// A structure inside a house is hidden while the house is drawn closed, or not drawn, and
     /// shown while the cutaway has it open; a kit model waits for its fit.
