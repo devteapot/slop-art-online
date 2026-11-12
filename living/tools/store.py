@@ -1015,7 +1015,7 @@ def jev_strip(obj, acc, in_jev=False, cost_parent=False):
     """obj without Jev's price, its per-call costs and its share of totals.
     - In a Jev object (its model, profile, arm, gate or provider names Jev; or it sits under a key that
       names Jev), every cost, price or spend field is dropped, at any depth.
-    - Under a cost key ("spend_usd": {"jev": 0.08, …, "total": …}) a part named for Jev is dropped
+    - Under a cost key ("spend_usd": {"jev": …, …, "total": …}) a part named for Jev is dropped
       and a sibling "total" is recomputed without it."""
     if isinstance(obj, list):
         return [jev_strip(v, acc, in_jev, cost_parent) for v in obj]
