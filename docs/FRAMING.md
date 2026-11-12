@@ -169,6 +169,43 @@ The replays' worst N1 flaw, also seen once each in T and N2, was a mind fleeing 
   2. **The new plan takes effect 10–21 s after the reply.** Until then the body keeps its old plan: standing (`keep`) or chasing the foe (`attack`).
 - **So it is the mind's choice of target, and decision latency, not the flee act.** r2d ran before flee-open, so flee-open itself is not exercised in these traces.
 
+## The general coordinator's reading (2026-11-12)
+
+- **The ordinary-think replay counts as "came out well."** Letting a feeling pass with no harm is the intended effect of the neutral framing.
+- **births-2 keeps today's framing** (`think_framing` off) until N2 is measured on longing in particular. A longing for a child is one of the felt needs N2 addresses less often, and births-2 is about that feeling.
+- **fs1n** (first sight with N2, live at Cullet) runs after the battle quiet window, with the targets and the stop rule as committed (docs/TRIALS.md, "First sight fs1n").
+
+## Did the fleeing mind know where its attacker was? (reading check, 2026-11-12, free)
+
+The question: in the scene a fleeing mind was given, are the attacker's bearing and distance there, and the directions of the places it can name? If yes, it had what it needed and chose badly; if no, that is a perception gap. Each think request below is read as the model received it, from the journal.
+
+**The five traced r2d flights.** Each row gives the scene's `#9` entry, the place the mind named, and where that place sits in the prompt:
+
+| Run, reply | `#9` in the scene | The mind's flight | The named place in the prompt |
+|---|---|---|---|
+| heavy r5, t 70 | `{"dir": "southwest", "dist": 0.8, "visibly": {"is": "attack", "phase": "releasing", "at": "you"}}` | "run northeast toward the road … away from #9" | `terrain_near`: `"road": "northeast 3"`, with a bearing |
+| heavy r5, t 223 | `{"dir": "northwest", "dist": 1.2, …}` | "run southeast along the road to the inn" | Places you remember: `"the inn south of the hall" at [405, 285]`; `you.at` [386.0, 271.7]; coordinates only |
+| heavy r4, t 96 | `{"dir": "east", "dist": 1.2, …}` | "run east toward the town wall at (356,262)" | Places you remember: `"town wall" at [356, 262]`; `you.at` [351.9, 269.9]; coordinates only (it lies north-northeast, not east) |
+| heavy r5, t 258 | `{"dir": "southeast", "dist": 1.2, …}` | "run west toward the house at (365.5,260.5)" | in sight: `{"kind": "house", "dir": "west", "dist": 9.4, "at": [365.5, 260.5]}` |
+| kiter r3, t 93 | `{"dir": "east", "dist": 6.2, "visibly": {"is": "bowshot", "phase": "recovering", "at": "you"}}` | "run west away from the shooter toward the wall cover" | `terrain_near`: `"wall": "west 1"` |
+
+- **The attacker's bearing and distance were in every scene,** with what it was doing at the mind ("at": "you").
+- **Four of the five flights were right for the scene the mind was given:** away from `#9` as the scene placed it.
+- **Their bodies went toward `#9` later because the world moved on.** The scene is built when the request is made. In a melee the foe circles within seconds: the scene's "southwest 0.8 m" was north at 9.6 m by the reply. Then the plan took 10–21 s more to install.
+- **The fifth (heavy r4) misnamed a remembered place's bearing:** "east" for a wall that, from the coordinates, lies north-northeast.
+
+**The replays' "fled toward the attacker"** (the 15 attacked prompts, judged against their own scenes, every arm).
+- **How often:** a reply that names a flight direction names one within 45° of the scene's direction to `#9` in 3 of 9 (recorded), 4 of 10 (today's, again), 5 of 11 (N1) and 5 of 10 (N2).
+- **Examples:**
+  - scene `#9` `{"dir": "southeast", "dist": 1.2}`, today's reply: "run southeast toward the inn at (405,285)";
+  - scene `#9` `{"dir": "northeast", "dist": 1.1}`, today's reply: "run northeast toward the crowd and the road".
+- **These minds had both bearings in words:** the attacker's from the scene, the goal's in their own reply. They ran for the goal (the inn, the crowd, witnesses) through the attacker.
+
+**Reading.**
+- **The mind had what it needed and chose badly**, in the replays and in four of the five real flights. The scene states the attacker's bearing and distance.
+- **One perception gap, smaller and not the cause here:** places the mind remembers come as coordinates only (`"the inn south of the hall" at [405, 285]`), beside its own `you.at`. A mind must work out their bearing and distance itself, and in heavy r4 it got the bearing wrong. Places and things in sight already carry `dir` and `dist`. Giving remembered places the same (bearing and distance from where the mind stands) would close it.
+- **The delay is the larger cause in the real flights.** The scene is several seconds old when the model reads it, and the plan is installed 10–21 s after the reply. That is a case for r2e's fast-lane attack arm: a fight's reply acted on within a second or two.
+
 ## Cost and evidence
 
 - **Replays:** $0.29 (T $0.094, N1 $0.098, N2 $0.096; 249 calls, no errors), against the $5 cap.
