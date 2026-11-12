@@ -280,6 +280,16 @@ pub(crate) fn unnamed_label(kind: &str, stage: u8) -> String {
     format!("{article} {kind}")
 }
 
+/// The joins a batch of experiences asks for: each `made_out` experience (subject the person,
+/// object the handle of the figure they were) folds `person:<handle>` into `person:<id>`.
+pub(crate) fn made_out_merges(batch: &[Experience]) -> Vec<(String, String)> {
+    batch
+        .iter()
+        .filter(|e| e.kind == "made_out" && e.object >= living_rules::script::FAR_HANDLE_BASE && e.subject != 0 && e.subject < living_rules::script::FAR_HANDLE_BASE)
+        .map(|e| (format!("person:{}", e.object), format!("person:{}", e.subject)))
+        .collect()
+}
+
 fn belonging(community: &str, others: usize, known: &[String]) -> String {
     const NAMED: usize = 12;
     let mut line = format!("\nYou belong to {community}");
@@ -453,6 +463,9 @@ impl Minds {
     /// developer records keep names. What goes into a character's own memory is
     /// [`Minds::remembered_as`].
     pub(super) fn known_as(&self, me: u32, other: u32) -> String {
+        if other >= living_rules::script::FAR_HANDLE_BASE {
+            return living_rules::script::FAR_PERSON.into();
+        }
         let Some(o) = self.conn.db.character().id().find(&other) else { return "someone".into() };
         if self.knows_name(me, &o) {
             o.name
@@ -507,6 +520,8 @@ impl Minds {
             Some(o) if o.kind == "person" && self.only_far(me, other) => format!("{} #{other}", living_rules::script::FAR_PERSON),
             Some(o) if self.knows_name(me, &o) => o.name,
             Some(o) => format!("{} #{other}", unnamed_label(&o.kind, o.stage)),
+            // A figure seen too far away to make out, by its sighting's handle (far-handle).
+            None if other >= living_rules::script::FAR_HANDLE_BASE => format!("{} #{other}", living_rules::script::FAR_PERSON),
             None => format!("someone #{other}"),
         }
     }
@@ -802,6 +817,12 @@ impl Minds {
     fn exp_line(&self, e: &Experience, fmt: &dyn Fn(u64) -> String, with_id: bool) -> String {
         let mut who = Vec::new();
         for id in [e.subject, e.object] {
+            // A figure too far away to make out has a handle of its sighting, no character row
+            // (far-handle): tagged so the mind can name it in what it decides.
+            if id >= living_rules::script::FAR_HANDLE_BASE && !who.iter().any(|w: &String| w.ends_with(&format!("#{id}"))) {
+                who.push(format!("{}=#{id}", living_rules::script::FAR_PERSON));
+                continue;
+            }
             if id != 0 && id != e.observer {
                 if let Some(c) = self.conn.db.character().id().find(&id) {
                     if c.kind == "person" && !who.iter().any(|w: &String| w.ends_with(&format!("#{id}"))) {
@@ -2264,6 +2285,9 @@ impl Minds {
                 m.childhood = true;
             }
         }
+        // Someone made out who was a figure too far away to make out: the figure's node joins the
+        // person's (far-handle); later far sightings get new handles, so it is never undone.
+        patch.merges.extend(made_out_merges(&batch));
         self.name_people(actor, &mut patch);
         // Lived under the minds (a character's history shows both kinds: docs/PLAYER_MEMORY.md).
         patch.lived_under = Some("ai".into());
@@ -2561,6 +2585,16 @@ fn cue_in(for_key: String, c: &Value, source: String) -> CueIn {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A figure made out joins the person: `person:<handle>` folds into `person:<id>`; nothing
+    /// else asks for a join (far-handle).
+    #[test]
+    fn a_figure_made_out_joins_the_person() {
+        let h = living_rules::script::FAR_HANDLE_BASE + 3;
+        let e = |kind: &str, subject: u32, object: u32| Experience { id: 1, observer: 1, controller: spacetimedb_sdk::Identity::ZERO, at_ms: 0, kind: kind.into(), subject, object, x: 0.0, y: 0.0, text: String::new(), salience: 0.3 };
+        let batch = [e("made_out", 15, h), e("saw", 15, 0), e("made_out", 15, 0), e("speech", h, 1)];
+        assert_eq!(made_out_merges(&batch), vec![(format!("person:{h}"), "person:15".to_string())]);
+    }
 
     /// Someone one does not know by name is labelled as the authority's projection labels them
     /// (`perception::stranger`).

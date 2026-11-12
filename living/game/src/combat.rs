@@ -425,7 +425,8 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
                 }
             }
             seen::WITNESS => {
-                if !c.witnesses.contains(&r.actor) {
+                // Id 0 is no one (an actor the authority keeps from me): never a "someone".
+                if r.actor != 0 && !c.witnesses.contains(&r.actor) {
                     c.witnesses.push(r.actor);
                 }
             }

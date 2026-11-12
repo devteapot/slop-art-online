@@ -5,6 +5,16 @@
 After merging main `c67bb6e1` (move-intents, births-2-prep): `minds-cuesm-071859` `cues_mind.py` 6/6.
 
 Branch `attention-cues` (origin/main `49dfc2cd` merged), the trial service with `slop-trials-neo4j`, the release mind and the fake model. `cues_mind.py` (new; features/cues.md): `minds-cuesf-064543` 6/6 on the merged build (the cue projected through `mind_update` in the reply's words; a player W does not know at 3 m gives one `noticed` line; the next think request, 0.4 s after it, carries it as its reason; `# What you watch for` lists the cue as having made W think). Two earlier attempts found product bugs, fixed before the pass (`minds-cues-062519`): the compile step dropped the think decision's `notice` (`keep` now carries it), and a fire 2 s after the last thought was recorded although the authority refused the request within `think_min_s` (a fire now waits for the request to be taken: 22.8 s after the previous think here). Mind tests `cue_examples_name_no_one`, `notice_is_kept_on_what_it_serves`. The `resident` case's `mind_update` now passes `cues` (not re-run: the suite's other cases were not run on this branch).
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle` (from main `b657a344`), the trial service `slop-trials-stdb`, the fake model. New case `far-figure` (`minds-farhandle2-*`): 8/8. F, in M's relations as "Walker2 (#266)", stood 5 m off under an overlay making everyone past 4 m far:
+- the scene showed `{"id": 1000000059, "who": "someone too far away to make out"}`;
+- F's line read "Someone too far away to make out said: “Fine weather on the strand today.” {someone too far away to make out=#1000000059}";
+- no line tied the handle to Walker2 or #266;
+- a wave at the handle reached #266;
+- at 2 m the `made_out` row joined the handle to #266 and the scene named Walker2.
+
+The first attempt failed only because F's graph room line was never said; F now speaks by admin `mind_say`. The release mind's tests: 106 pass.
 
 ## 2026-11-12 move-intents (Spark)
 
