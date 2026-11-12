@@ -942,11 +942,20 @@ def scene_breath(st):
     call(st, "place_at", [cid, home[0], home[1]], "admin")
     time.sleep(0.5)
     p = body(st, cid)
-    full = breath_of(my_vitals(st), int(time.time() * 1000))
-    ready(st, "dodge")
-    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
-    wait_outcome(st, "dodge", 3)
-    vd = my_vitals(st)
+    # Read back within the refill's second, or again: a row already back at full (a request
+    # stalled past the refill) no longer says what the dodge took.
+    for _ in range(3):
+        full_breath(st)
+        p = body(st, cid)
+        full = breath_of(my_vitals(st), int(time.time() * 1000))
+        ready(st, "dodge")
+        call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+        wait_outcome(st, "dodge", 3)
+        vd = my_vitals(st)
+        if vd["stamina"] < vd["stamina_max"] - 0.01:
+            break
+        p = body(st, cid)
+        p = (p[0], p[1] - 3.0)
     check(st, "a dodge takes 20 breath", abs(full - at_rest(vd) - 20.0) < 0.6, {"before": full, "row": vd})
     time.sleep(1.5)
     p = body(st, cid)
@@ -965,7 +974,7 @@ def scene_breath(st):
     # loaded host, or after `committed` in the same world, its loop ran slower (requests stalled
     # 4-6 s at times) and nine never ran out, on main as on the branch (pursue-last-seen's gate).
     # The shipped cost is checked above ("a dodge takes 20 breath").
-    trail, gaps = [], []
+    trail, gaps, told = [], [], []
     try:
         call(st, "set_world_law", ["cost_dodge", "90"], "admin")
         for attempt in range(3):
@@ -990,13 +999,15 @@ def scene_breath(st):
                 break
             gaps.append(round(second_sent - first_sent, 2))
             trail.append(v and v["outcome"])
+            # Read at once: a REFUSED row stays 4 s, and a request can stall that long.
+            told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")] or told
             if trail[-1] and "out of breath" in trail[-1]:
                 break
             if gaps[-1] < 3.5:
                 break
     finally:
         call(st, "set_world_law", ["cost_dodge", "20"], "admin")
-    told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")]
+    told = told or [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")]
     check(st, "dodging on without a pause is refused out of breath, and told (my_combat REFUSED)", len(trail) >= 2 and trail[-2] == "made way" and trail[-1] and "out of breath" in trail[-1] and told, {"outcomes": trail, "seconds between": gaps, "told": told[-1:]})
 
 
