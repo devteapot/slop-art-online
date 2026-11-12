@@ -464,6 +464,21 @@ class Gate(unittest.TestCase):
             be.publish("assets", os.path.join(t, "many"), "motion/raw", "m")
             self.assertEqual(api.calls, ["create_repo", "create_commit", "create_commit", "create_commit"])
 
+    def test_missing_library_refuses_before_packing(self):
+        # gate open, no injected api, no huggingface_hub for this Python: refused by gate(), which
+        # publish calls before reading or packing anything, with the venv to use named
+        real = store.importlib.util.find_spec
+        store.importlib.util.find_spec = lambda name, *a: None if name == "huggingface_hub" else real(name, *a)
+        try:
+            be = store.HFBackend(self.cfg(True), yes_publish=True)
+            with self.assertRaises(store.Refused) as e:
+                be.gate()
+            self.assertIn(".slop-store-venv", str(e.exception))
+            with self.assertRaises(store.Refused):
+                be.api()
+        finally:
+            store.importlib.util.find_spec = real
+
     def test_cli_refuses_without_importing(self):
         poison = types.ModuleType("huggingface_hub")
 
