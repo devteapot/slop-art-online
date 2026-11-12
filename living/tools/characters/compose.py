@@ -350,7 +350,7 @@ def tint_skin(j, binary, hexc):
                 p["attributes"]["COLOR_0"] = append_accessor(j, binary, array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()]), ct, typ, norm, None)
 
 
-def tint_eyes(j, binary, hexc):
+def tint_eyes(j, binary, hexc, at=None):
     """Stand in for the client's tag colour on the iris: the iris material's own picture, redrawn
     in shades of this person's eye colour (each pixel's lightness against the picture's mean,
     times the colour), as the client moves a picture's mean colour to the recipe's."""
@@ -370,8 +370,14 @@ def tint_eyes(j, binary, hexc):
             if id(image) in done:
                 continue
             done.add(id(image))
-            bv = j["bufferViews"][image["bufferView"]]
-            pic = np.array(Image.open(io.BytesIO(bytes(binary[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]]))).convert("RGB"), float) / 255
+            if "bufferView" in image:
+                bv = j["bufferViews"][image["bufferView"]]
+                pic = np.array(Image.open(io.BytesIO(bytes(binary[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]]))).convert("RGB"), float) / 255
+            else:
+                # The types' shared iris page (share.py types): the whole page is redrawn and kept
+                # in this file, since a page cannot be one person's colour.
+                pic = np.array(Image.open(os.path.join(os.path.dirname(os.path.abspath(at)), image.pop("uri"))).convert("RGB"), float) / 255
+                image["mimeType"] = "image/png"
             lum = pic @ np.array([0.3, 0.59, 0.11])
             out = np.clip(target[None, None, :] * (lum / max(float(lum.mean()), 1e-3))[..., None], 0.0, 1.0)
             # Keep what is nearly white or black as it is (the light in the eye, the pupil).
@@ -425,6 +431,10 @@ def main():
     if a.identity:
         values.update(json.loads(a.identity) if a.identity.strip().startswith("{") else {k: float(v) for k, v in (x.split("=") for x in a.identity.split(",") if x)})
     j, binary = read_glb(a.inp)
+    for img in j.get("images", []):
+        if "uri" in img and not img["uri"].startswith("data:"):
+            there = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(a.inp)), img["uri"]))
+            img["uri"] = os.path.relpath(there, os.path.dirname(os.path.abspath(a.out))).replace(os.sep, "/")
     if a.person:
         line = json.load(open(a.person))["person"]
         cols = line.get("colors", {})
@@ -444,7 +454,7 @@ def main():
         if cols.get("skin"):
             tint_skin(j, binary, cols["skin"])
         if cols.get("eyes"):
-            tint_eyes(j, binary, cols["eyes"])
+            tint_eyes(j, binary, cols["eyes"], a.out)
     if a.hair:
         colour = linear(a.hair_colour) if a.hair_colour else None
         added = attach(j, binary, a.hair, a.out, colour)

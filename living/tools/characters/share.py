@@ -4,6 +4,7 @@ materials and not three a person (docs/CHARACTERS.md, "Crowd cost").
 
     python3 living/tools/characters/share.py strands GLB [GLB ...]
     python3 living/tools/characters/share.py pages --name cullet [--tile 1024] [--page 4096] [--dir DIR] [--which near|far] GLB [GLB ...]
+    python3 living/tools/characters/share.py types [--dir DIR] TYPE.glb [TYPE.glb ...]
     python3 living/tools/characters/share.py clips GLB [GLB ...]
     python3 living/tools/characters/share.py list GLB [GLB ...]
 
@@ -25,6 +26,25 @@ image's `uri` through the asset server), so those files' materials become one.
   on which tile. town.py does this for a town. A file with the full and the far model
   (`--lod both`) has two atlases: `--which near` pages the full model's, `--which far` the far
   model's picture (its image is named `<person>.far`).
+- `types`: the face types' own small pictures (lookdev/types/<type>.glb) are laid out on two
+  pages every type shares: `<dir>/types-far.png` (the far head's picture) and `types-tint.png`
+  (lips and blush, with its alpha; only the band of the picture its mesh uses). A type's place
+  on a page is fixed by its place in types.json, so one type built again goes back into its own
+  tile. `<dir>/types.json` records the tiles. The types' far heads and lip layers are then one
+  material each for every type, where each type brought its own.
+  - The far head's picture is recoloured by the client, which learns a material's mean colour
+    once, from the first mesh that wears it. So each tile's colours are moved as the client
+    moves them (one turn of hue, one ratio of saturation and of value, in linear light) until
+    its mean over the texels its mesh's vertices use is `FAR_MEAN`, and the page's empty tiles
+    are that colour. The types' own means are within 1% of it, so nothing shows.
+  - The iris stays each type's own picture. The types' irises are painted in different
+    colours (brown, blue, grey: mean value 0.06 to 0.12, saturation 0.15 to 0.80), and the
+    client's move from a mean to a person's colour is not one that can be made in two steps:
+    it multiplies below the mean and lightens above it. Moved to one mean and shared, the same
+    eye colour came out as another on some types (simulated with the client's formula: up to
+    40 of 255 a texel). One picture for every type's iris would share; that is a change to
+    how every composed person's eyes are coloured, to be judged on the board first.
+  - The full head's atlas and its shadow map stay the type's own.
 - `clips`: every generated person has the same skeleton, so the game takes their clips from one
   shared clip file (`lookdev/anim/own-clips.glb`, anim.rs `clip_file`). Each file's own clips
   (its `animations` and their data) and its `.clips.json` are removed.
@@ -145,9 +165,11 @@ def atlas_users(j, which=None):
     return by_image
 
 
-def move_uvs(j, binary, materials, col, row, n, tile):
+def move_uvs(j, binary, materials, col, row, n, tile, window=(0.0, 0.0, 1.0, 1.0)):
     """Move the UVs of every primitive that wears one of `materials` into tile (col, row) of an
-    n×n page, half a texel inside its edges."""
+    n×n page, half a texel inside its edges. `window`: the part of the picture the tile holds
+    (u0, v0, u1, v1), when it is not the whole of it."""
+    u0, v0, u1, v1 = window
     e = 0.5 / tile
     seen = set()
     for mesh in j["meshes"]:
@@ -166,6 +188,7 @@ def move_uvs(j, binary, materials, col, row, n, tile):
             for k in range(a["count"]):
                 o = base + k * stride
                 u, t = struct.unpack_from("<2f", binary, o)
+                u, t = (u - u0) / (u1 - u0), (t - v0) / (v1 - v0)
                 struct.pack_into("<2f", binary, o, (col + min(max(u, e), 1 - e)) / n, (row + min(max(t, e), 1 - e)) / n)
             a.pop("min", None)
             a.pop("max", None)
@@ -226,6 +249,134 @@ def pages(files, name, out_dir, tile=1024, page=4096, which=None):
     with open(os.path.join(out_dir, f"{name}.json"), "w") as f:
         json.dump(record, f, indent=1)
     return record
+
+
+# The mean colour (linear) of a type's far picture over the texels its mesh uses: what each tile
+# is moved to, so a material shared by every type has one mean. The types' own means are within
+# 1% of it. The irises are not paged: their means differ too much (see the module's note).
+FAR_MEAN = (0.777, 0.4985, 0.369)
+# kind: (the picture's side, the class's mean or None for a layer with an alpha, the window of the
+# picture a tile holds). The lip layer's mesh uses a band across the middle of its picture
+# (u 0.203 to 0.797, v 0.604 to 0.859 on every type): only that is kept, at the picture's own
+# scale, so the page is 1600 x 720 where whole tiles would make it 2560 x 2560.
+TYPE_PAGES = dict(far=(256, FAR_MEAN, (0.0, 0.0, 1.0, 1.0)), tint=(512, None, (0.1875, 0.59375, 0.8125, 0.875)))
+
+
+def _linear(a):
+    import numpy as np
+
+    return np.where(a > 0.04045, ((a + 0.055) / 1.055) ** 2.4, a / 12.92)
+
+
+def _stored(a):
+    import numpy as np
+
+    a = np.clip(a, 0.0, 1.0)
+    return np.where(a > 0.0031308, 1.055 * a ** (1 / 2.4) - 0.055, 12.92 * a)
+
+
+def _hsv(a):
+    """Linear RGB (..., 3) to hue, saturation, value, each 0..1."""
+    import numpy as np
+
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    v = a.max(axis=-1)
+    c = v - a.min(axis=-1)
+    safe = np.maximum(c, 1e-12)
+    h = np.where(v == r, ((g - b) / safe) % 6.0, np.where(v == g, (b - r) / safe + 2.0, (r - g) / safe + 4.0)) / 6.0
+    return np.stack([np.where(c > 1e-9, h % 1.0, 0.0), np.where(v > 1e-9, c / np.maximum(v, 1e-12), 0.0), v], axis=-1)
+
+
+def _rgb(h):
+    import numpy as np
+
+    k = (np.array([5.0, 3.0, 1.0]) + h[..., 0:1] * 6.0) % 6.0
+    return h[..., 2:3] * (1.0 - h[..., 1:2] * np.clip(np.minimum(k, 4.0 - k), 0.0, 1.0))
+
+
+def types(files, out_dir):
+    """Lay the face types' far pictures, irises and lip layers out on the three shared pages."""
+    import numpy as np
+
+    from merge_primitives import read_accessor
+
+    order = list(json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "types.json")))["types"])
+    n = 1
+    while n * n < len(order):
+        n += 1
+    os.makedirs(out_dir, exist_ok=True)
+    record_path = os.path.join(out_dir, "types.json")
+    record = json.load(open(record_path)) if os.path.exists(record_path) else {}
+    cell = {}
+    for kind, (side, mean, (u0, v0, u1, v1)) in TYPE_PAGES.items():
+        cell[kind] = (int(round(side * u0)), int(round(side * v0)), int(round(side * u1)), int(round(side * v1)))
+    size = {k: (c[2] - c[0], c[3] - c[1]) for k, c in cell.items()}
+    record = dict(grid=n, pages={k: dict(file=f"types-{k}.png", tile=list(size[k]), window=list(TYPE_PAGES[k][2]), mean=TYPE_PAGES[k][1]) for k in TYPE_PAGES},
+                  types=record.get("types", {}) if record.get("grid") == n else {})
+    sheets = {}
+    for kind, (side, mean, _) in TYPE_PAGES.items():
+        path = os.path.join(out_dir, f"types-{kind}.png")
+        whole = (n * size[kind][0], n * size[kind][1])
+        if os.path.exists(path) and Image.open(path).size == whole and record["types"]:
+            sheets[kind] = Image.open(path).convert("RGBA" if mean is None else "RGB")
+        elif mean is None:
+            sheets[kind] = Image.new("RGBA", whole, (0, 0, 0, 0))
+        else:
+            sheets[kind] = Image.new("RGB", whole, tuple(int(round(float(x) * 255)) for x in _stored(np.array(mean))))
+    done = 0
+    for f in files:
+        t = os.path.splitext(os.path.basename(f))[0]
+        if t not in order:
+            raise SystemExit(f"share: {f} is not a face type's file (types.json has no {t!r})")
+        col, row = order.index(t) % n, order.index(t) // n
+        j, binary = read_glb(f)
+        binary = bytearray(binary)
+        moved = []
+        for kind, (side, mean, window) in TYPE_PAGES.items():
+            mats = [mi for mi in range(len(j.get("materials", []))) if material_image(j, mi) is not None and j["images"][material_image(j, mi)].get("name", "").endswith("." + kind)
+                    and "bufferView" in j["images"][material_image(j, mi)]]
+            if not mats:
+                continue
+            ii = material_image(j, mats[0])
+            im = Image.open(io.BytesIO(image_bytes(j, binary, ii))).convert("RGBA" if mean is None else "RGB")
+            if im.size != (side, side):
+                im = im.resize((side, side), Image.LANCZOS)
+            uv = np.vstack([np.array(read_accessor(j, binary, p["attributes"]["TEXCOORD_0"])[0], float).reshape(-1, 2) for mesh in j["meshes"] for p in mesh["primitives"] if p.get("material") in mats])
+            if uv[:, 0].min() < window[0] - 1e-4 or uv[:, 0].max() > window[2] + 1e-4 or uv[:, 1].min() < window[1] - 1e-4 or uv[:, 1].max() > window[3] + 1e-4:
+                if window != (0.0, 0.0, 1.0, 1.0):
+                    raise SystemExit(f"share: {f}: its {kind} mesh uses the picture outside the window the page keeps ({uv.min(axis=0).round(3)} to {uv.max(axis=0).round(3)}, window {window})")
+            if mean is not None:
+                # The mean over the texels the mesh's vertices use, as the client takes it.
+                a = _linear(np.asarray(im, float) / 255.0)
+                x = np.clip((uv[:, 0] % 1.0 * side).astype(int), 0, side - 1)
+                y = np.clip((uv[:, 1] % 1.0 * side).astype(int), 0, side - 1)
+                # Moved as the client moves colours (toon.wesl `recolor`): every texel's hue by the
+                # same turn, its saturation and its value by the same ratios, until the tile's mean
+                # is the class's. Hues keep their distance from the mean's, so the client's own
+                # move from the class's mean to a person's colour lands where it did from the
+                # type's own mean.
+                goal = _hsv(np.array(mean, float)[None, None, :])[0, 0]
+                for _ in range(3):
+                    own = _hsv(a[y, x].mean(axis=0)[None, None, :])[0, 0]
+                    h = _hsv(a)
+                    h[..., 0] = (h[..., 0] + goal[0] - own[0]) % 1.0
+                    h[..., 1] = np.clip(h[..., 1] * goal[1] / max(own[1], 1e-4), 0.0, 1.0)
+                    h[..., 2] = np.clip(h[..., 2] * goal[2] / max(own[2], 1e-4), 0.0, 1.0)
+                    a = _rgb(h)
+                im = Image.fromarray((_stored(a) * 255 + 0.5).astype(np.uint8), "RGB")
+            sheets[kind].paste(im.crop(cell[kind]), (col * size[kind][0], row * size[kind][1]))
+            move_uvs(j, binary, set(mats), col, row, n, min(size[kind]), window)
+            point_at(j, ii, os.path.join(out_dir, f"types-{kind}.png"), f)
+            moved.append(kind)
+        if moved:
+            write_glb(f, j, compact(j, binary))
+            record["types"][t] = dict(col=col, row=row, pages=sorted(set(record["types"].get(t, {}).get("pages", [])) | set(moved)))
+            done += 1
+    for kind, sheet in sheets.items():
+        sheet.save(os.path.join(out_dir, f"types-{kind}.png"))
+    with open(record_path, "w") as f:
+        json.dump(record, f, indent=1)
+    return record, done
 
 
 def drop_clips(files):
@@ -298,6 +449,9 @@ def main():
     p.add_argument("--tile", type=int, default=1024, help="a person's tile, in texels (1024 the full atlas, 256 a far model's picture)")
     p.add_argument("--page", type=int, default=4096, help="a page's side, in texels")
     p.add_argument("--which", choices=("near", "far"), help="for files with both models: the full model's atlas or the far model's picture")
+    t = sub.add_parser("types", help="lay the face types' far pictures, irises and lip layers out on the pages every type shares")
+    t.add_argument("files", nargs="+")
+    t.add_argument("--dir", default=os.path.join(ASSETS, "lookdev", "pages"))
     c = sub.add_parser("clips", help="remove each file's own clips (the game takes them from the shared clip file)")
     c.add_argument("files", nargs="+")
     l = sub.add_parser("list", help="each file's meshes, materials and pictures")
@@ -308,6 +462,9 @@ def main():
     elif a.cmd == "pages":
         r = pages(a.files, a.name, os.path.abspath(a.dir), a.tile, a.page, a.which)
         print(f"share: {len(r['people'])} people on {len(r['pages'])} page(s) " + ", ".join(f"{p['file']} ({p['size']}², {p['people']} people)" for p in r["pages"]))
+    elif a.cmd == "types":
+        r, done = types(a.files, os.path.abspath(a.dir))
+        print(f"share: {done} of {len(a.files)} type files put on the shared pages ({r['grid']}x{r['grid']} tiles): " + ", ".join(f"{v['file']} ({r['grid'] * v['tile'][0]} x {r['grid'] * v['tile'][1]})" for v in r["pages"].values()))
     elif a.cmd == "clips":
         print(f"share: {drop_clips(a.files)} of {len(a.files)} files had their own clips removed")
     else:

@@ -77,6 +77,7 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Long hair falls close to the back:** combed over the garment's own measured collar and back, gathered behind the shoulders, the front hair ending at the jaw. Styles that hang past the collar have a `.collar` file for a coat.
   - **Short hair is one sheet** from the whorl to the hairline, where it was rings of tiles.
   - **The highlight is one hard ring and the shadow one edge:** both are the client's, and every sheet's normals now come from one smooth shape so they are not broken into patches. The client needs nothing new.
+- **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris stays a type's own: shared, the client's recolouring gave some types another eye colour.
 - **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the brows' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
@@ -1329,7 +1330,7 @@ A short style costs more than its rings did: a sheet over the whole scalp has fa
 | Skeleton | the 52 `J_Bip_*` bones and the root, as every generated person; the 25 `J_Id_*` bones and the two eye bones at rest: 80 joints |
 | `Face` | the whole head (the scalp too, since every hair style shares it): skin, eyes, lashes and lines, and the skin under the jaw; 5,840 triangles; two morph targets, `Fcl_EYE_Close` and `Fcl_MTH_A` |
 | `Skin` | the neck and hands, 4,536 triangles |
-| `FarSkin` | the far head, neck and hands on the same skeleton, 1,964 triangles, with its own small picture |
+| `FarSkin` | the far head, neck and hands on the same skeleton, 1,964 triangles; its small picture is a tile of a page every type shares ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)) |
 | Normals | the designed face normals (`face_normals.py`) and `_OUTLINE_NORMAL` |
 | Not in it | hair, clothes, clips, hair's spring bones |
 
@@ -1340,6 +1341,34 @@ A short style costs more than its rings did: a sheet over the whole scalp has fa
 - **`gen_person.sh` switches:** `CLIPS=none` bakes no clips into a file; `MORPHS=client`; `IDENTITY=bake` builds the identity into the vertices where the default moves the bones.
 
 **The standard figure for the shared clips.** `lookdev/anim/own-clips.glb` (`share.py clips`, from the client's `crowd-1`) is baked on the `man` preset, and the client measures a person's stride against that file's figure, so nothing else depends on which figure it is. With the cage head the `man` preset stands 1.803 m in the file; it stood 1.837 m when `crowd-1` chose it, because the head changed. The clip file is to be made again from the current preset when the type files go into use, and is not to move to a type's own figure.
+
+### The types' pictures on shared pages
+
+Pass 3, 2026-11-12, from the laptop's cost table: with people composed from shared files, most of what was left at the play camera was the types' own far-head pictures, each a material of its own. A type's file held four pictures: the full head's atlas, the iris, the lip-and-blush layer and the far head's picture. Two of them now lie on pages every type shares (`share.py types`, run at the end of `gen_types.sh`).
+
+| Picture | Before | Now |
+|---|---|---|
+| The far head's (`FarSkin`, `M00_000_00_Body_01_SKIN`) | 256² in each type's file | a tile of `lookdev/pages/types-far.png`, 1280 × 1280 |
+| Lips and blush (`M00_000_00_FaceTint_00_FACE`) | 512² with alpha in each type's file | a tile of `lookdev/pages/types-tint.png`, 1600 × 720 |
+| The iris (`M00_000_00_EyeIris_00_EYE`) | 192² in each type's file | the same: it does not belong on a page as it is, see below |
+| The full head's atlas and its shadow map | 1024² in each type's file, `<type>.face.png` beside it | the same |
+
+- **A type's tile is fixed** by its place in `types.json` (a 5 × 5 grid for the 21), recorded in `lookdev/pages/types.json`. One type built again goes back into its own tile and changes no other texel.
+- **The lip layer's tile is the band its mesh uses,** not the whole picture: u 0.19 to 0.81 and v 0.59 to 0.88 on every type, 320 × 144 texels at the picture's own scale. Whole tiles would make a 2560² page that is nearly all empty.
+- **One mean for every far head.** The client recolours skin by moving a material's mean colour to the person's, and a material learns its mean once, from the first mesh that wears it. So each far tile's colours are moved the way the client moves colours (one turn of hue, one ratio of saturation and of value, in linear light) until its mean over the texels its mesh uses is one value, `FAR_MEAN` (linear 0.777, 0.4985, 0.369). The types' own means were within 1% of it. The page's empty tiles are that colour.
+- **Nothing shows.** Four residents composed from the type files and coloured by the client, photographed before and after: where the pose is the same the pictures differ by 0.0 to 0.4 of 255 a channel, the far head at the game camera included.
+- **What it saves.** For every type on screen, two materials fewer: far heads and lip layers are one material each for all types. In memory (RGBA, no mips): 26.3 MiB for the 21 types' far pictures and lip layers before (21.3 for the 17 that Cullet wears), 10.6 MiB for the two pages. On disk the 21 type files are 23 MB where they were 24, and the pages 0.6 MB.
+
+**Why the iris stays a type's own.** The types' irises are painted in different colours, so that a type shown by itself has eyes: brown, blue and grey, with mean values from 0.06 to 0.12 and saturations from 0.15 to 0.80. The client's move from a mean to a person's colour multiplies below the mean and lightens above it, and two such moves in a row are not one. Moved to one mean and shared, the same eye colour came out as another on some types: photographed, a grey-blue eye turned teal; simulated with the client's own formula over the 21 types and Cullet's seven eye colours, up to 40 of 255 a texel. One iris picture for every type would share with no such step. That changes how every composed person's eyes are coloured, so it is a look to judge on the board first, and it was not done here.
+
+**The full head's atlas** can go on pages by the existing `share.py pages --which near`, shadow map and `face_map` and all, as a town's faces do. It was not asked for and was not done: a full head is drawn for the few people near the camera.
+
+**What the client needs:**
+
+- **To ship the two pages** with the type files: `lookdev/pages/types-far.png` and `types-tint.png`. A type's file names them by path (`../pages/…`), and the asset server loads each once, as it does `strands.png` and a town's pages.
+- **To share the materials.** The game's own path (`lookdev.rs convert`) makes one material for each distinct content, so far heads and lip layers become one each with no change. A composer that keys a type's materials by its file must key these two by content instead, as it does a style file's: `M00_000_00_Body_01_SKIN` and `M00_000_00_FaceTint_00_FACE`.
+- **Nothing for the colour.** Every far tile has the one mean, so whichever type's mesh teaches the material its mean, it is right for all.
+- **UVs stay inside a tile,** half a texel in from its edge. Nothing wraps.
 
 ### What the client needs for types
 
