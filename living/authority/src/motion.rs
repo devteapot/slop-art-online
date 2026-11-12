@@ -548,10 +548,11 @@ fn toward(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, map: &Map, p: (f32
     let d = dist(p, tp);
     let cruise = b.speed.max(0.1);
     let mut v = cruise * ((d - keep) / laws.slow_radius.max(0.1)).clamp(0.35, 1.0);
-    // A movement intent (`FLAG_SIGHT`) slowing near its distance does not drop below the speed
-    // at which the target draws away, so it closes on one that walks off instead of trailing it
-    // forever just beyond (up to its own speed: a slower body still cannot catch a faster one).
-    if st.flags & FLAG_SIGHT != 0 && d > 1e-3 {
+    // A pursuit slowing near its distance (an approach to strike, a close_in, a follow; any
+    // controller) does not drop below the speed at which the target draws away, so it closes on
+    // one that walks off instead of trailing it forever just beyond its reach (up to its own
+    // speed: a slower body still cannot catch a faster one).
+    if d > 1e-3 {
         let away = ((tp.0 - p.0) * tv.0 + (tp.1 - p.1) * tv.1) / d;
         v = v.max((away + 0.3).min(cruise));
     }
