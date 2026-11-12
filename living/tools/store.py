@@ -2148,7 +2148,9 @@ def pack_session(src, out_dir, scrubber, name=None, machine=None):
 
 
 def pack_motion(src, out_dir, scrubber, machine=None):
-    """Raw takes as files (fetchable one by one) plus a MANIFEST with sha256 per take."""
+    """Raw takes as files (fetchable one by one) plus a MANIFEST with sha256 per take.
+    Asset packs name no machine and no host, in fields or paths (`machine` is accepted for the
+    common signature and ignored)."""
     rows, totals, data = scrub_source(src, scrubber, keep_data=True)
     raw = os.path.join(out_dir, "motion", "raw")
     os.makedirs(raw, exist_ok=True)
@@ -2160,7 +2162,7 @@ def pack_motion(src, out_dir, scrubber, machine=None):
         with open(os.path.join(raw, base), "wb") as f:
             f.write(data[rel])
         files.append({"path": f"motion/raw/{base}", "sha256": _sha(data[rel]), "bytes": len(data[rel])})
-    man = {"format": FORMAT, "unit": "motion-library", "machine": machine, "files": files,
+    man = {"format": FORMAT, "unit": "motion-library", "files": files,
            "refused": [r["path"] for r in rows if r["status"] == "refused"],
            "redactions": {c: v["count"] for c, v in totals.as_dict().items()}, "packed": _dt.datetime.now().isoformat(timespec="seconds")}
     with open(os.path.join(out_dir, "motion", "MANIFEST.json"), "w") as f:
@@ -2835,8 +2837,10 @@ def cmd_publish(a, cfg, machine):
         if a.kind in ("batch", "session"):
             check_models(man, cfg)
         local = stage if a.kind != "motion" else os.path.join(stage, "motion")
+        # asset units name no machine, not even in the commit message
+        msg = "motion library" if a.kind == "motion" else f"{a.kind} {name} from {machine}"
         where = backend.publish("runs" if a.kind != "motion" else "assets", local,
-                                unit_path(a.kind, name, machine), f"{a.kind} {name} from {machine}")
+                                unit_path(a.kind, name, machine), msg)
         print(where)
     finally:
         shutil.rmtree(stage, ignore_errors=True)

@@ -33,6 +33,13 @@
 | Projects (`LIVING_PROJECTS=1`): self-chosen aims in the mind's graph, shown to every think step with `serves`, kept by consolidation and reorganization | `--fake` trial batch, variant `projects` (needs Neo4j; the suite's cases run without a store) | [projects.md](projects.md) |
 | Trials: one mind in a scripted or open-ended world (`living/tools/trials.py`) | `--fake` dry batch; real batches measured, uncapped | [trials.md](trials.md) |
 
+Most cases ask a mind to deliberate through the shared `Run.request(actor, marker)` in `verify_minds.py`: an admin `set_behavior` graph whose think node gives the reason "I finished my plan. verify <marker>". It is used by `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect`, `lod`, `timings`, `run`, `sight`, `fov`, `night`, `parked`, `alongside`, `greet`, `queued`, `frame` and `speech`. Most call it before the mind starts, so the request stays pending. `lod`, `parked`, `alongside`, `greet` and `queued` call it while the mind runs. Since fix-request (2026-11-12), while the mind runs, it does three things:
+- It first waits, for up to 40 s, until the actor has no request pending. A reply in flight replaces the test graph, and its new plan drops an "I finished my plan" reason that arrived during the call (`reasons::PLAN_STATE`). A request still pending after 40 s is one the mind holds (LoD, the rethink gate), and the ask merges into it.
+- It counts the ask by the marker in a newer `thought` row's `detail.reason`, or in a pending row the marker's line made (`arrived` against `requested_ms`). A fake reply answers within a second, between two polls.
+- When a reply replaces the test graph without the marker reaching a thought, it installs the graph again, up to three times. The think node asks only once the deliberation clock has settled 45 s, so each install waits up to 65 s.
+
+Cases with their own asks (`drop`, `death-names`, `reasons`, `rethink`, `takeover`, `dealings`, `answers`) do not use it.
+
 Each free case launches its own database through `verify.py` and passes doctor before driving the real mind binary. Admin calls arrange scenes only. Requests go through the production HTTP model boundary, and replies return through production mind reducers. Public snapshots use shared SQL; private deliberations use shared `sql --as-admin` with the token held in memory. Store-backed projections belong to `verify-knowledge`.
 
 All evidence stays under `.local/living/verify/`. The paid tier is documented and intentionally unexecuted. Runtime discovery uses the shared `.agents/skills/` source and the existing Claude and Cursor links.
