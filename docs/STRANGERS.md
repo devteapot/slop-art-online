@@ -8,6 +8,8 @@ Status: **design approved 2026-11-12 with the decisions at the end; nothing buil
 - most people notice and carry on;
 - some notice inwardly and do not show it.
 
+**Proposed after stage 2b (design only, the owner's decision):** a first sight of someone one cannot place asks for one thought, behind the law `first_sight_thinks`, off by default. See [First sight](FIRST_SIGHT.md), which also sets it against these rejected laws point by point.
+
 ## 1. Perception today
 
 | Fact | Deliberation scene | Graph conditions |
