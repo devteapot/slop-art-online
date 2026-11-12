@@ -1,6 +1,6 @@
 # Battle scale: why a battle of minded fighters collapses (diagnosis and fix design, 2026-11-12)
 
-Status: **fixes 1–3 built on `battle-scale` and accepted as a step (2026-11-12): the collapse is gone, but 60 Hz is not reached at 200 fighters (see [Acceptance runs](#acceptance-runs-fixes-13-quiet-box-2026-11-12)). Fix 4 (folding) and the remains' caching built on `battle-fold`; its acceptance runs, with deaths permanent, wait for a quiet window. The fighters' 15 Hz evaluations analysed, nothing built for them.** The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
+Status: **fixes 1–3 built on `battle-scale` and accepted as a step (2026-11-12): the collapse is gone, but 60 Hz is not reached at 200 fighters (see [Acceptance runs](#acceptance-runs-fixes-13-quiet-box-2026-11-12)). Fix 4 (folding) and the remains' caching built on `battle-fold`, measured in the second quiet window: with a sustained 200-fighter battle, 36.0 ticks/s against 30.0, 40.6% of ticks over 16.7 ms against 59.4%. The contract's 60 Hz is not reached. The fighters' 15 Hz evaluations analysed, nothing built for them.** The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
 
 ## Workload
 
@@ -328,6 +328,43 @@ Dev-box owns the sweep (300–440 ms/s at 216 players on Cullet). Nothing here c
   - A thread-local may hold this only as a cache of rows: it must give the same answers when it is empty. The SpacetimeDB reducers docs make module memory across calls undefined.
   - Not built here: it is the sweep's design, and the fold would use it too.
 - **Familiarity.** Nothing in fixes 1–4 is on the sweep's path. The seen set, `familiar` and noticing serve minds' graphs, not players' perceived sets.
+
+## Acceptance, second quiet window (2026-11-12, 18:34–19:56 UTC)
+
+Three worlds ran at once on the same box, each with the same `battle_diag.py`:
+- `battle-scale` `109690de` (fixes 1–3, the before arm);
+- `battle-fold` (fix 4);
+- `battle-cheap` (the cheaper paths on top; its rows are added with that branch).
+
+The island seed: its about 310 residents, all AI, and no mind service. Fighters are packed within 7 m of the site, walkers forage, and profiling is on. The four other worlds on the service were paused, none ticking. Host load over the window, one sample every 10 s (487 samples): 1.7 to 12.5, median 4.4. Evidence: `.local/living/verify/minds-a100*-193501`, `minds-a200*-200652` and `minds-r200*-203858`, with `acceptance-2/` (the load log and summaries).
+
+**As approved: deaths permanent, 30 minutes each** (`--no-refill`).
+- At 100 fighters (116 walkers) the battle is over in about 2 minutes: about 40 fighters are left at minute 1 and 15 at minute 2.
+- At 200 (16 walkers) it also lasts about 2 minutes: 160 at the first sample, 33 at minute 2. Then 2–6 fighters remain, among the dead.
+- Population starts at about 500 and ends at 286–386.
+- During the battle a fighter's scene held about 50 others at 100 (max 98), and 91–106 at 200 (max 158–170). Skill uses were 10–18 a second in the first minute.
+
+| | Arm | Whole run: ticks/s, over 16.7 ms, p99 median | The battle's first minutes |
+|---|---|---|---|
+| 100 | `battle-scale` | 60.8, 0.2% (110 of 53,961), 4.7 ms | 56.8 then 58.5 ticks/s; 91 then 17 ticks over |
+| 100 | `battle-fold` | 59.3, 0.2% (114 of 53,909), 4.3 ms | 52.8 then 58.8; 107 then 7 |
+| 200 | `battle-scale` | 59.8, 0.4%, 3.9 ms | first 2 min: 54.9 ticks/s, 5.0% over, p99 median 24 ms |
+| 200 | `battle-fold` | 59.9, 0.2%, 3.6 ms | 57.8, 3.0%, 17 ms |
+
+- **The battle is too short** to separate the arms with deaths permanent. Its first sample is often only one or two of the 30.
+- **The aftermath** is the rest of each run: about 60 Hz with all the remains lying at the site (129 at 100, 217–225 at 200). Remains at rest cost almost nothing.
+- **Remains** lasted their law in every arm: a person's 3,600,000 ms (an hour of real time), an animal's 1,800,000 ms. No 30-minute run sees one expire.
+
+**Added within the window: the sustained battle**, 200 fighters and 16 walkers with refills on, 15 minutes (`minds-r200*`). It is the workload the first window measured alone at 26.8 ticks/s. About 520 alive; about 93–96 others in a fighter's scene (max 187–192); 47–48 skill uses a second; about 1,700 refills.
+
+| Arm | Ticks/s | First 5 min → last 5 | Over 16.7 ms | p99 median (worst) | Experiences/s |
+|---|---|---|---|---|---|
+| `battle-scale` | 30.0 | 36.0 → 19.1 | 59.4% (9,621 of 16,206) | 49 ms (262) | 6,932 |
+| `battle-fold` | 36.0 | 41.4 → 25.4 | 40.6% (7,992 of 19,695) | 35 ms (181) | 2,401 |
+
+- **What the fold saves.** Writing what onlookers see (`tick.activity`) falls from 223 to 138 ms/s; the fold's own flush takes 58–63 back. Experience rows fall by two thirds.
+- **The drift** comes with the refills, about 1,700 in 15 minutes, and the about 1,750 remains at the site. The load generator is to be fixed before the next acceptance.
+- **An offset between builds.** Idle, the `battle-scale` world ticks 61.5 times a second and the other two 59.5, with no tick over budget. The tick interval (16,667 µs) and `bench.py` are the same in both, so it lies in how the ticks are scheduled, not in the work. To be looked at.
 
 ## Verification it would need
 
