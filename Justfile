@@ -30,11 +30,11 @@ living-build:
 # Private tables are included: the mind service and the lab observer read them as the database
 # owner (docs/PERCEPTION.md). The generated code is the same for `LIVING_PERCEPTION=open` and
 # `scoped`, which differ only in which tables are public.
+# living/tools/generate_bindings.sh generates into a temporary folder and swaps it in only when
+# the generator succeeded and its output has a mod.rs and parses; on failure the bindings stay as
+# they were. LIVING_GENERATE_CMD replaces the compose run (another server's CLI, or a stub).
 living-generate: living-build
-    rm -rf .local/living/generated && mkdir -p .local/living/generated
-    {{living_compose}} run --rm --no-deps -T -v "$PWD/living/target/wasm32-unknown-unknown/release:/wasm:ro" --entrypoint sh spacetimedb -c 'spacetime generate -l rust -b /wasm/living_authority.wasm -o /tmp/gen -y --include-private >/dev/null 2>&1 && tar -C /tmp/gen -cf - .' | tar -C .local/living/generated -xf -
-    rm -rf living/bindings/src/generated && mv .local/living/generated living/bindings/src/generated
-    rustfmt --edition 2021 living/bindings/src/generated/*.rs
+    LIVING_COMPOSE="{{living_compose}}" living/tools/generate_bindings.sh
 
 # Export the world admin's token for the mind service.
 living-token:
