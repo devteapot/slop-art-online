@@ -209,5 +209,14 @@
    "cues_on": true,
    "first_sight_thinks": true
   }
+ },
+ "strangers-first-sight-hf": {
+  "about": "C + first sight, with the crowd fixes (docs/FIRST_SIGHT.md, \"Crowds\"): `first_sight_thinks` and `heard_first_rethinks` on (set_world_law after the laws guard). Whom someone walks to is named in every arm since first-sight-crowd (no switch).",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "heard_first_rethinks": true
+  }
  }
 }

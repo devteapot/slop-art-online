@@ -283,11 +283,17 @@ Fifth change (2026-11-11, branch `fix-perceived-moving`). Human-controlled and A
 
   | Walker | R's scene `doing`, before | after |
   |---|---|---|
-  | player walking at R (`human_move`) | `wait` | `walk → person` |
+  | player walking at R (`human_move`) | `wait` | `walk → person` (since first-sight-crowd `walk → you`) |
   | player standing | `wait` | `wait` |
-  | AI walking at R (`goto`) | `goto → person` | `goto → person` |
-  | R's first sight of the player walking in | "…, 11 tiles west, wait." | "…, 8 tiles east, walk → person." |
+  | AI walking at R (`goto`) | `goto → person` | `goto → person` (since first-sight-crowd `goto → you`) |
+  | R's first sight of the player walking in | "…, 11 tiles west, wait." | "…, 8 tiles east, walk → person." (since first-sight-crowd "walk → you") |
 
+- **Whom they are going to** (first-sight-crowd, 2026-11-12; docs/FIRST_SIGHT.md "Crowds").
+  - **The gap it closes.** An activity aimed at a creature (`goto`, `follow`, a give, an attack) was perceived by the target's kind alone ("follow → person"), because its label is the doer's own and a name is known only to who knows it. So nobody perceived who was walking toward whom. In fs1, Oswin's scene showed Lorcan "goto → person" while Lorcan was walking to the newcomer.
+  - **The rule now.** The target is named as the observer perceives it: "you" when it is the observer, else its label ("follow → Neve Calloway", "goto → a stranger", "goto → someone too far away to make out", an animal's kind). A walker under motion intent heading at someone reads the same way ("walk → you").
+  - **What stays.** The doer's own feedback (its act outcome lines, `act.rs` `label`) keeps the act's label.
+  - **Players** see the same fact drawn on screen: the body moving toward that person. They get no `seen_doing` row for a walk, as before.
+  - **Cost:** one `character` lookup by primary key and the shared `regard` answer (cue-cache), only for an activity aimed at a creature.
 - **Cost.** It is computed when a scene or a first-sight line is built. It reads, per creature listed, its `activity` row as before, plus the `steer` and `body` rows by primary key, only when the activity is none or `wait`. It writes nothing and adds no table, column, view or subscription. The 60 Hz path, the frames and the views' read sets are untouched.
 - **SpacetimeDB documentation consulted (2026-11-11), against 2.14.1.** [Indexes](https://spacetimedb.com/docs/tables/indexes/): primary keys create an index for equality lookups, and `find` on one is the access pattern to use. [Performance](https://spacetimedb.com/docs/tables/performance/): prefer indexed lookups to scans, and split tables by access pattern so that updates touch fewer rows. [Views](https://spacetimedb.com/docs/functions/views/): a view re-runs when a row in its read set changes. The implications are three. Computing the label in the reducer that builds a scene, from rows read by key, costs three point lookups and changes no subscription. Putting it in a table or a column would add a write on the motion path, and a view re-run for every viewer whose read set holds it. Deriving it in a view would put `steer` and `body` in that view's read set. So the projection computes it.
 

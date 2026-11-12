@@ -45,6 +45,17 @@ Design: [docs/COMMUNICATION.md](../../../../docs/COMMUNICATION.md). Source: `liv
   - `call`: 2.5 times each listener's hearing (22.5 m on the island, 30 in Cullet); listeners read "… calls out from about {d} m" (the `{d}` placeholder, distance from the reader); animals hear "a person shouting"; 80 characters, 6 s apart.
 - **World text.** The `speech` topic (heading SPEAKING) lists each way as "<name> (<reach>) = <about>", the reach in metres from the spec and the world's hearing (`WaySpec::reach_words`: "carries 9 m", "to someone within 1.5 m"; since `speech-truth`).
 - **Queued lines** (graph `say` nodes, `brain.rs`; since `speech-truth`, with `speech_truth` on): a say to someone beyond what the way carries as it comes due (`speech::within_reach`; not for a way with a reach, which its check refuses) is not said; the speaker's `silence` row reads the words above and "You did not say your planned line: “…”." (`speech::unsaid`), and the node counts as done. A mind plan's say (`brain.source = "mind"`) the conversation has overtaken (`line_overtaken`: since the install or the node's last line, the addressee spoke to the speaker, or the speaker answered them by a line not this plan's) is dropped with no row. The second is driven in `verify-minds` `queued`.
+- **Another spoke to them first** (`heard_first_rethinks`, off by default; since first-sight-crowd, docs/COMMUNICATION.md):
+  - **What waits.** A mind's line to someone that comes due after the speaker heard another address that person, since its decision read its scene, is not said. Since the decision means the later of `seen_ms` and the start of the model calls (now less the thought's `latency_ms`). It covers `mind_install`'s `say`, `mind_say` carrying on, and a mind plan's say node since its install. A conversation turn's reply and a routine's say never wait.
+  - **What the speaker gets.** An `unsaid` experience: "You had not yet said “…” to <who> when you heard: <the line>". Its mind is asked to think again with that line as the reason (`perceive::ask_again`, not refused within `think_min_s`).
+  - **The scene.** `scenes.py heard_first` (any seed, about 1.5 minutes, no mind; O's decisions delivered as the mind service delivers them, the thought's latency standing for when the decision read its scene). It checks:
+    - law off: said;
+    - on, through `mind_say` and through `mind_install`: held, told, asked for;
+    - a decision whose prompt came after the other's line (latency 0): said;
+    - nobody else speaking: said;
+    - the other speaking to someone else: said;
+    - a plan's say node coming due after the other's line: held, told, asked for.
+  - **Rules test:** `script::tests::heard_first_rethinks_is_the_world_s_law`.
 
 ## Drive
 
