@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes pick turns look-walk bar offers wheel wheel-workplace grid support (default: all but support, wheel-workplace and grid, which need a Cullet world)
+  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes film pick turns look-walk bar offers wheel wheel-workplace grid support (default: all but support, wheel-workplace and grid, which need a Cullet world)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -308,6 +308,35 @@ def themes(run, c):
     st = os.path.join(out, "settings.json")
     saved = json.load(open(st)).get("theme") if os.path.exists(st) else None
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
+
+
+def film(run, c):
+    """The film (`post::Film`, Settings › Play › Film): a fresh settings file starts in Soft and
+    saves no choice; Settings sets Full and None and the file keeps the last; the next start reads
+    it back. Stills of the three modes from one place (`01_soft`, `03_screen`, `04_off`), the
+    unseen ground's edge in view, for the eye. `LIVING_GAME_FILM` must not be set."""
+    s = "film"
+    if os.environ.get("LIVING_GAME_FILM"):
+        c.check(s, "LIVING_GAME_FILM is unset (it overrides the settings file)", False, os.environ["LIVING_GAME_FILM"])
+        return
+    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "film")
+    st = os.path.join(out0, "settings.json")
+    if os.path.exists(st):
+        os.remove(st)
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
+    plan = ("ready;wait:3;dump:01;shot:01_soft;" + open_settings + "click:@settings:film:screen;wait:0.4;dump:02;shot:02_settings;key:Escape:tap;wait:0.8;dump:03;shot:03_screen;"
+            + open_settings + "click:@settings:film:off;wait:0.4;key:Escape:tap;wait:0.8;dump:04;shot:04_off;" + open_settings + "click:@settings:film:screen;wait:0.6;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    x = lambda k: ((dump(out, k) or {}).get("extra") or {})
+    c.check(s, "a fresh settings file starts in Soft and saves no choice", x("01").get("film") == "soft" and x("01").get("film_saved") is None, str((x("01").get("film"), x("01").get("film_saved"))))
+    c.check(s, "Settings › Play › Film › Full sets the screen film", x("02").get("film") == "screen" and x("03").get("film") == "screen", str((x("02").get("film"), x("03").get("film"))))
+    c.check(s, "None turns it off", x("04").get("film") == "off", str(x("04").get("film")))
+    c.check(s, "the log names each choice", log(out).count("settings: film: ") == 3)
+    saved = json.load(open(st)).get("film") if os.path.exists(st) else None
+    c.check(s, "the settings file keeps the last choice", saved == "screen", str(saved))
+    out2, code2, _ = drive(run, s, "ready;wait:2;dump:05;quit")
+    c.check(s, "the next start reads it back", (((dump(out2, "05") or {}).get("extra") or {}).get("film")) == "screen", str(((dump(out2, "05") or {}).get("extra") or {}).get("film")))
 
 
 def act(actor, a):
@@ -1476,7 +1505,7 @@ def unheard(run, c):
     c.check(s, "a heard line: no reach note", not any("could not have heard" in n or "near enough to hear" in n or "out of earshot" in n for n in n6), str(n6))
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard}
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard}
 
 
 def main():
