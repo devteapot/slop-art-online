@@ -172,6 +172,16 @@ pub struct LandInfo {
 
 /// A settlement of a land world (one row per `Land::settlements` entry, same index). Static
 /// after world creation.
+/// The land's full parameters (the seed's `map.params`, with every name its people use), kept
+/// by the authority for minds and records (owner-known, 2026-11-12). The public `land` row
+/// carries `living_rules::land::public_params` of them: the same land, no names. One row, id 0.
+#[spacetimedb::table(accessor = land_plan)]
+pub struct LandPlan {
+    #[primary_key]
+    pub id: u8,
+    pub params: String,
+}
+
 #[spacetimedb::table(accessor = settlement, public)]
 pub struct Settlement {
     #[primary_key]

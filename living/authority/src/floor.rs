@@ -393,7 +393,7 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
             let _t = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.populate");
             let h = w.hosted.take().expect("hosted");
             seed::world_row(ctx, &s, &h.map);
-            ctx.db.land().insert(h.info.clone());
+            crate::island::keep_land(ctx, h.info.clone());
             seed::populate(ctx, &s, &h.map, Some(&h), None, Vec::new(), now);
             *cell = None;
             log::info!("genesis: the world is made ({} steps, {} s)", g.step + 1, now.saturating_sub(g.started_ms) / 1000);
