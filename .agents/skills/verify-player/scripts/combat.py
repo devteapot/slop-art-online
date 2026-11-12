@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|breath|heal|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|breath|heal|early_dodge|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -558,6 +558,64 @@ def scene_dodge(st):
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
 
 
+def wall_by(st, near):
+    """Near `near`: a walkable tile, the next one along an axis walkable and the one after it
+    wall or rock, the tile beside the first (a quarter turn) walkable and free of bodies: the
+    tile, the axis toward the wall, the side."""
+    t = tiles(st, (near[0] - 40, near[0] + 40), (near[1] - 40, near[1] + 40))
+    walk = lambda x, y: t.get((x, y), 4) not in WALK_BLOCKED
+    taken = {(math.floor(r["x"]), math.floor(r["y"])) for r in sql(st, "SELECT x, y FROM body")}
+    spots = sorted(t, key=lambda k: math.dist((k[0] + .5, k[1] + .5), near))
+    for x, y in spots:
+        if not walk(x, y) or (x, y) in taken:
+            continue
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            sx, sy = -dy, dx
+            if walk(x + dx, y + dy) and t.get((x + 2 * dx, y + 2 * dy)) in OPAQUE and walk(x + sx, y + sy) and (x + sx, y + sy) not in taken:
+                return (x, y), (dx, dy), (sx, sy)
+    return None
+
+
+def scene_early_dodge(st):
+    """A dodge over before the blow came is told so to the player, as to a mind (fix-dodge-told):
+    the player two tiles short of a wall, a resident beside it with a spear. The resident's heavy
+    blow (`attack`) winds up; the player dodges toward the wall at once, which has room for half
+    the dash, so the dash is over, still within reach, before the blow releases and lands. The
+    player's `my_experience` holds "You failed to dodge: it was over before the blow came", its
+    `my_act_outcomes` row (kind own, skill dodge, not ok), and its `my_skill_uses` dodge says
+    "made way: it was over before the blow came"."""
+    cid = me(st)
+    spot = wall_by(st, body(st, cid))
+    if not spot:
+        check(st, "a wall two tiles off to dodge toward", False, "none near the player")
+        return
+    (x, y), (dx, dy), (sx, sy) = spot
+    at = (x + .5, y + .5)
+    call(st, "place_at", [cid, at[0], at[1]], "admin")
+    d = dummy(st, (at[0], at[1]), sx, sy)
+    call(st, "grant_items", [d, "spear", 1], "admin")
+    call(st, "place_at", [d, at[0] + sx, at[1] + sy], "admin")
+    time.sleep(0.6)
+    ready(st, "dodge")
+    t0 = int(time.time() * 1000)
+    call(st, "set_behavior", [d, json.dumps({"seq": [{"do": {"skill": "attack", "target": {"id": cid}}}, {"wait": 60}]})], "admin")
+    time.sleep(0.12)
+    call(st, "use_skill", ["dodge", 0, at[0] + 3 * dx, at[1] + 3 * dy])
+    lines = []
+    t = time.time() + 5
+    while time.time() < t and not lines:
+        lines = [e for e in sql(st, "SELECT id, kind, text, at_ms FROM my_experience", "player") if e["at_ms"] >= t0 and "it was over before the blow came" in e["text"]]
+        time.sleep(0.3)
+    call(st, "set_behavior", [d, '{"wait":60}'], "admin")
+    rows = [o for o in sql(st, "SELECT * FROM my_act_outcomes", "player") if lines and o["id"] == lines[-1]["id"]]
+    u = last_use(st, "dodge")
+    blow = [r for r in sql(st, f"SELECT outcome FROM skill_use WHERE actor = {d} AND skill = 'attack'") if r["outcome"]]
+    check(st, "a dodge over before the blow came: the player is told 'You failed to dodge: it was over before the blow came', with its row, as a mind is",
+          lines and lines[-1]["text"] == "You failed to dodge: it was over before the blow came" and rows and rows[-1]["kind"] == "own" and rows[-1]["skill"] == "dodge" and not rows[-1]["ok"]
+          and u and u["outcome"] == "made way: it was over before the blow came",
+          {"lines": [e["text"] for e in lines], "row": rows[-1] if rows else None, "dodge": u and u["outcome"], "blow": blow[-1:]})
+
+
 def scene_jump(st):
     """A jump (2026-11-11) carries the body like a dash but does not evade: jumping toward a
     resident whose strike is winding up, the blow is not dodged (it lands, or misses by reach)."""
@@ -732,7 +790,7 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "breath": scene_breath, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "wolves": scene_wolves, "death": scene_death}
 
 
 def main():
