@@ -110,7 +110,9 @@ struct Scene {
     /// Heard and not seen (only while sight depends on facing), nearest first.
     heard: Vec<NearCreature>,
     resources: Vec<(ResourceNode, f32)>,
-    structures: Vec<(Structure, f32)>,
+    /// Built when first asked for (`Ev::structures`): an evaluation that reads no structure (a
+    /// fighter's at combat cadence) does not gather every remains in sight. The same set either way.
+    structures: Option<Vec<(Structure, f32)>>,
 }
 
 struct Ev<'a> {
@@ -151,6 +153,7 @@ struct Ev<'a> {
 /// holding (sleeping until rested, not until barely awake). Movement and combat stay reactive.
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
+    let load = common::detail_span("brain.load");
     let Some(me) = ctx.db.character().id().find(id) else { return };
     if !me.alive {
         return;
@@ -178,7 +181,10 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
+    drop(load);
+    let alerts = common::detail_span("brain.alerts");
     ev.alerts();
+    drop(alerts);
     let root = ev.g.clone();
     let played = !ev.me.ai;
     let result = {
@@ -187,6 +193,8 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     };
     let _span = common::span("brain.after");
     ev.after(result, &root.root);
+    drop(_span);
+    let _span = common::detail_span("brain.slept");
     // Fell asleep, or woke (and thinks on what waited): perceive::slept.
     if let Some(me) = ctx.db.character().id().find(id) {
         perceive::slept(ctx, &me, now);
@@ -298,10 +306,21 @@ impl<'a> Ev<'a> {
             let (creatures, heard) = crate::perception::sensed(self.ctx, self.me.id, self.at, r, self.now);
             common::note_scene(creatures.len());
             let resources = common::resources_near(self.ctx, self.at, r);
-            let structures = common::structures_near(self.ctx, self.at, r);
-            self.scene = Some(Scene { creatures, heard, resources, structures });
+            self.scene = Some(Scene { creatures, heard, resources, structures: None });
         }
         self.scene.as_ref().unwrap()
+    }
+
+    /// The structures in sight, nearest first (the scene's, gathered when first asked for).
+    fn structures(&mut self) -> &[(Structure, f32)] {
+        self.scene();
+        if self.scene.as_ref().is_some_and(|s| s.structures.is_none()) {
+            let _span = common::detail_span("brain.scene.structures");
+            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
+            let v = common::structures_near(self.ctx, self.at, r);
+            self.scene.as_mut().unwrap().structures = Some(v);
+        }
+        self.scene.as_ref().and_then(|s| s.structures.as_deref()).unwrap_or(&[])
     }
 
     fn smelled(&mut self) -> &[NearCreature] {
@@ -519,7 +538,10 @@ impl<'a> Ev<'a> {
                 let then_id = id + 1;
                 let then_end = then_id + self.g.sizes.get(then_id as usize).copied().unwrap_or(1);
                 let latched = self.latched.map_or(false, |n| n >= then_id && n < then_end);
-                let holds = latched || self.cond(&i.cond);
+                let holds = latched || {
+                    let _span = common::detail_span("brain.cond");
+                    self.cond(&i.cond)
+                };
                 if holds {
                     self.run(&i.then, then_id)
                 } else if let Some(e) = &i.otherwise {
@@ -535,8 +557,12 @@ impl<'a> Ev<'a> {
                 if let Some(done) = self.finished(id) {
                     return done;
                 }
+                let sensed = a.target.as_ref().map(|t| {
+                    let _span = common::detail_span("brain.target");
+                    self.sensed(t)
+                });
                 let target = match &a.target {
-                    Some(t) => match self.sensed(t) {
+                    Some(t) => match sensed.flatten() {
                         Some(r) => r,
                         None => {
                             // A movement intent under way goes by where its target was last seen
@@ -740,14 +766,19 @@ impl<'a> Ev<'a> {
         let answers = std::mem::take(&mut self.answers);
         let run = self.run.take();
         let spacing = std::mem::take(&mut self.spacing);
+        let _span = common::detail_span("brain.begin");
         match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, spacing, self.now) {
             Ok(()) => {
+                common::diag(|| format!("begin:ok:{skill}"), 1);
                 self.running = Some(id);
                 self.status = self.ctx.db.activity().id().find(self.me.id).map(|a| a.label).unwrap_or(desc);
                 St::Run
             }
             Err(why) => {
+                // While profiling: what refused it, the reason's words without its numbers.
+                common::diag(|| format!("begin:refused:{skill}:{}", why.chars().filter(|c| !c.is_ascii_digit() && *c != '.').take(48).collect::<String>()), 1);
                 // Refused at the start: a failure like any other, not an unseen retry.
+                let _refused = common::detail_span("begin.refused");
                 if act::refused(self.ctx, self.me.id, id, rev, skill, &desc, &why, self.now) {
                     self.st.fails = self.st.fails.saturating_add(1);
                 }
@@ -775,11 +806,10 @@ impl<'a> Ev<'a> {
 
     /// A structure or resource in sight by its id.
     fn visible_thing(&mut self, id: u64) -> Option<Resolved> {
-        let sc = self.scene();
-        if let Some((s, _)) = sc.structures.iter().find(|(s, _)| s.id == id) {
+        if let Some((s, _)) = self.structures().iter().find(|(s, _)| s.id == id) {
             return Some(Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() });
         }
-        sc.resources.iter().find(|(n, _)| n.id == id).map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
+        self.scene().resources.iter().find(|(n, _)| n.id == id).map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
     }
 
     fn smelled_creature(&mut self, id: u32) -> Option<Resolved> {
@@ -957,8 +987,7 @@ impl<'a> Ev<'a> {
                 let holds = |id: u64| f.holds.as_deref().map_or(true, |item| common::inv_count(ctx, STRUCTURE_BIT | id, item) >= 1);
                 // A kind `like` the one asked for counts as it (a world's `store` is a storage).
                 let sc = common::scripts(ctx);
-                self.scene()
-                    .structures
+                self.structures()
                     .iter()
                     .find(|(s, _)| sc.is_kind(&s.kind, &f.kind) && (!f.mine || s.owner == me) && holds(s.id))
                     .map(|(s, _)| Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() })
@@ -1303,8 +1332,9 @@ impl<'a> Ev<'a> {
         let place_of = |name: &str| places.iter().find(|p| p.name.eq_ignore_ascii_case(name)).map(|p| (p.id, (p.x, p.y)));
         let creatures: Vec<NearCreature> = self.scene().creatures.clone();
         let things: Vec<(u64, String, (f32, f32), f32)> = {
-            let sc = self.scene();
-            sc.resources.iter().map(|(r, d)| (CUE_RESOURCE | r.id, r.kind.clone(), (r.x, r.y), *d)).chain(sc.structures.iter().map(|(s, d)| (CUE_STRUCTURE | s.id, s.kind.clone(), (s.x, s.y), *d))).collect()
+            let mut v: Vec<(u64, String, (f32, f32), f32)> = self.scene().resources.iter().map(|(r, d)| (CUE_RESOURCE | r.id, r.kind.clone(), (r.x, r.y), *d)).collect();
+            v.extend(self.structures().iter().map(|(s, d)| (CUE_STRUCTURE | s.id, s.kind.clone(), (s.x, s.y), *d)));
+            v
         };
         let scripts = common::scripts(ctx);
         // Who each person in sight is to me, worked out only once and only if a cue asks.
@@ -1449,7 +1479,7 @@ impl<'a> Ev<'a> {
             if now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) {
                 continue;
             }
-            common::diag(|| "familiar:evict".into(), 1);
+            common::diag(|| "familiar:evict", 1);
             self.ctx.db.familiar().id().delete(id);
             over -= 1;
         }
@@ -1468,7 +1498,7 @@ impl<'a> Ev<'a> {
 
     /// Look up (and refresh) bodily familiarity; returns the previous record, if any.
     fn familiarity(&mut self, thing: u64) -> Option<Familiar> {
-        common::diag(|| "familiar:lookup".into(), 1);
+        common::diag(|| "familiar:lookup", 1);
         let prev = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, thing)).next();
         match prev.clone() {
             Some(mut f) => {
@@ -1479,7 +1509,7 @@ impl<'a> Ev<'a> {
                 }
             }
             None => {
-                common::diag(|| "familiar:insert".into(), 1);
+                common::diag(|| "familiar:insert", 1);
                 self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
                 // Every 64 new rows of this character, its count is checked against the limit.
                 let me = self.me.id;
@@ -1540,7 +1570,7 @@ impl<'a> Ev<'a> {
 
     /// Recently checked (fast path that avoids familiarity lookups every second).
     fn recently_seen(&mut self, key: u32) -> bool {
-        common::diag(|| "seen:check".into(), 1);
+        common::diag(|| "seen:check", 1);
         let now = self.now;
         if let Some(at) = self.seen_at(key) {
             if now.saturating_sub(at) < SEEN_MS {
@@ -1552,7 +1582,7 @@ impl<'a> Ev<'a> {
             self.seen_set(key, now);
             return false;
         }
-        common::diag(|| "seen:miss".into(), 1);
+        common::diag(|| "seen:miss", 1);
         self.seen_set(key, now);
         false
     }
@@ -1645,7 +1675,7 @@ impl<'a> Ev<'a> {
             return;
         }
         let _span = common::span("brain.noticed");
-        common::diag(|| "noticed".into(), 1);
+        common::diag(|| "noticed", 1);
         // The seen set keeps what was looked at within its horizon (and far marks), no more.
         let (me, now) = (self.me.id, self.now);
         SEEN.with(|s| {
@@ -1785,13 +1815,20 @@ impl<'a> Ev<'a> {
         // Structures. One made of several tiles (a town gate is a block of gate tiles) is noticed
         // once: new tiles touching others of the same kind and owner are one thing, and nothing
         // is said when any part of it was already familiar.
-        let structures: Vec<(u64, String, u32, (f32, f32), f32)> = self.scene().structures.iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
+        // Remains and every other structure lie still: one looked at lately is in the seen set,
+        // so a look costs one check of its id, and their details are copied only when something
+        // in sight is new.
+        let ids: Vec<u64> = self.structures().iter().map(|(s, _)| s.id).collect();
         let mut new: Vec<usize> = Vec::new();
-        for (i, (id, _, _, _, _)) in structures.iter().enumerate() {
+        for (i, id) in ids.iter().enumerate() {
             if !self.recently_seen(0x4000_0000 | (*id as u32 & 0x3fff_ffff)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
                 new.push(i);
             }
         }
+        if new.is_empty() {
+            return;
+        }
+        let structures: Vec<(u64, String, u32, (f32, f32), f32)> = self.structures().iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
         let mut told = vec![false; structures.len()];
         for &i in &new {
             if told[i] {
@@ -1847,7 +1884,7 @@ impl<'a> Ev<'a> {
         kinds.sort_by(|a, b| b.1.cmp(&a.1));
         let res = kinds.iter().map(|(k, n)| format!("{n} {}", k.replace('_', " "))).collect::<Vec<_>>().join(", ");
         let ctx = self.ctx;
-        let near: Vec<(u32, String)> = self.scene().structures.iter().take(4).map(|(s, _)| (s.owner, s.kind.clone())).collect();
+        let near: Vec<(u32, String)> = self.structures().iter().take(4).map(|(s, _)| (s.owner, s.kind.clone())).collect();
         let structures: Vec<String> = near
             .into_iter()
             .map(|(owner, kind)| match common::owner_label(ctx, &self.me, owner, &kind) {
