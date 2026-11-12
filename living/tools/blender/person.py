@@ -1096,7 +1096,8 @@ def make_overlay(arm, spec, face, m, world, weights, atlas_path):
     # painted from its whole look, its freckles and its beard carried the lines as well, and a
     # person wearing both wore the lines twice.
     key = "beard" if OVERLAY.startswith("beard") else OVERLAY
-    with_, _ = face_paint.paint_skin(HF, dict(plain, **{key: look[key]}), rng())
+    strong = dict(lines=face_paint.LINE_OVERLAY, freckles=face_paint.FRECKLE_OVERLAY).get(OVERLAY, (1.0, 1.0, 1.0))
+    with_, _ = face_paint.paint_skin(HF, dict(plain, detail_size=strong[2], **{key: look[key]}), rng())
     without, _ = face_paint.paint_skin(HF, plain, rng())
     hairy = OVERLAY.startswith("beard") or OVERLAY == "stubble"
     diff = np.abs(with_ - without).max(axis=2)
@@ -1111,6 +1112,9 @@ def make_overlay(arm, spec, face, m, world, weights, atlas_path):
         pigment = np.array(face_paint.LINE_PIGMENT if OVERLAY == "lines" else face_paint.FRECKLE_PIGMENT)
         toward = without - np.clip(pigment * face_paint.PART_GAIN, 0.0, 1.0)
         alpha = np.clip(((without - with_) * toward).sum(axis=2) / np.maximum((toward * toward).sum(axis=2), 1e-6), 0.0, 1.0) * (diff > 0.004)
+        # Drawn for the screen (face_paint.FRECKLE_OVERLAY, LINE_OVERLAY): stronger than the
+        # paint's own strength, up to nearly the whole pigment at a core.
+        alpha = np.clip(alpha * strong[0], 0.0, strong[1])
         pic[..., :3] = pigment
     else:
         pic[head_mesh.EYE_ROWS :, :, :3] = grey[..., None]
