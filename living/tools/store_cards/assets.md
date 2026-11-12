@@ -16,7 +16,7 @@ tags:
 # Slop Art Online assets
 
 Generated assets from a **research build** of [Slop Art Online](https://github.com/devteapot/slop-art-online),
-which is not a finished game. They are kept here so that any machine can rebuild the game's look
+which is not a finished game. They are kept here so that the game's look can be rebuilt from them
 without copying folders between disks.
 
 **The motion takes are AI-generated:** they are raw output of a text-to-motion model.
@@ -28,7 +28,7 @@ without copying folders between disks.
 
 | Path | What | Made by |
 | --- | --- | --- |
-| `motion/raw/<clip>_s<seed>.npz` | Raw text-to-motion takes on the SOMA 77-joint skeleton: every take kept for the clip library | NVIDIA Kimodo-SOMA-RP-v1.2 on a DGX Spark, from the prompts, seeds and parameters in the code repository's `living/tools/blender/clips.json` |
+| `motion/raw/<clip>_s<seed>.npz` | Raw text-to-motion takes on the SOMA 77-joint skeleton: every take kept for the clip library | NVIDIA Kimodo-SOMA-RP-v1.2 on our own hardware, from the prompts, seeds and parameters in the code repository's `living/tools/blender/clips.json` |
 | `motion/MANIFEST.json` | sha256 and size of every take | `living/tools/store.py` |
 
 `python3 living/tools/store.py fetch motion-library` (in the code repository) writes `motion/raw/`
@@ -40,8 +40,8 @@ its characters, removes travel and cuts loops.
 
 ## Reproducing a take
 
-The prompt, seed and parameters of each library entry are in `clips.json`. `living/tools/kimodo/spark.sh`
-and `living/tools/kimodo/cliplab.py` run the model. The same prompt and seed on the same model and
+The prompt, seed and parameters of each library entry are in `clips.json`. The scripts in
+`living/tools/kimodo/` (`batch.py`, `cliplab.py`) run the model. The same prompt and seed on the same model and
 GPU stack give a close take, but not a bit-identical one.
 
 ## Licences
