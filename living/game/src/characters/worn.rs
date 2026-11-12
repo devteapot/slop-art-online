@@ -11,8 +11,8 @@
 //!   (`compose::prepare` for style files, `characters::spawn` for the type file).
 //! - [`Wears`]: the files a composed character wears; its hooks count the character in when it
 //!   is added and out when it is removed or the entity despawned.
-//! - [`free_unworn`]: once a second, frees the files no one has worn for [`GRACE_S`]: the
-//!   registry's handle goes, and so do compose's plans and toons for them
+//! - [`free_unworn`]: once a second, frees the files no one has worn for [`GRACE_S`], past the
+//!   [`KEEP_IDLE`] most recently worn of those no one wears: the registry's handle goes, and so do compose's plans and toons for them
 //!   (`compose::Plans::forget`); Bevy then drops the assets as their last handles go.
 //!
 //! Someone walking out of sight and back within the grace keeps their files; a file freed is read
@@ -27,9 +27,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-/// How long a file no one wears stays loaded (s): someone stepping out of sight and back keeps
-/// it. `LIVING_GAME_PERF=keepworn` keeps every file for the session, as before (to measure).
+/// How long a file no one wears stays loaded at least (s): someone stepping out of sight and back
+/// keeps it. `LIVING_GAME_PERF=keepworn` keeps every file for the session, as before (to measure).
 pub const GRACE_S: f32 = 20.0;
+/// How many files no one wears stay loaded past their grace, the most recently worn first: a
+/// walk back to people just left reads nothing again, and what is held is bounded by the files
+/// worn now plus these.
+pub const KEEP_IDLE: usize = 16;
 
 #[derive(Default)]
 struct Entry {
@@ -112,13 +116,19 @@ pub fn stats() -> Stats {
     }
 }
 
-/// The loaded files no one has worn for `grace` s by `now`, their handles taken (`free_unworn`).
-fn take_unworn(r: &mut Registry, now: Instant, grace: f32) -> HashSet<String> {
+/// The loaded files no one has worn for `grace` s by `now`, beyond the `keep` most recently worn
+/// of those no one wears, their handles taken (`free_unworn`).
+fn take_unworn(r: &mut Registry, now: Instant, grace: f32, keep: usize) -> HashSet<String> {
+    let mut idle: Vec<(Instant, String)> = r.files.iter().filter(|(_, e)| e.handle.is_some() && e.wearers == 0).filter_map(|(f, e)| Some((e.idle_since?, f.clone()))).collect();
+    // Newest first: the first `keep` stay whatever their age.
+    idle.sort_by(|a, b| b.0.cmp(&a.0));
     let mut gone = HashSet::new();
-    for (f, e) in r.files.iter_mut() {
-        if e.handle.is_some() && e.wearers == 0 && e.idle_since.is_some_and(|t| now.duration_since(t).as_secs_f32() >= grace) {
-            e.handle = None;
-            gone.insert(f.clone());
+    for (since, f) in idle.into_iter().skip(keep) {
+        if now.duration_since(since).as_secs_f32() >= grace {
+            if let Some(e) = r.files.get_mut(&f) {
+                e.handle = None;
+            }
+            gone.insert(f);
         }
     }
     r.files.retain(|_, e| e.handle.is_some() || e.wearers > 0);
@@ -133,7 +143,7 @@ pub fn free_unworn(time: Res<Time>, mut since: Local<f32>, mut plans: ResMut<sup
         return;
     }
     *since = 0.0;
-    let gone = take_unworn(&mut registry(), Instant::now(), GRACE_S);
+    let gone = take_unworn(&mut registry(), Instant::now(), GRACE_S, KEEP_IDLE);
     if gone.is_empty() {
         return;
     }
@@ -141,7 +151,7 @@ pub fn free_unworn(time: Res<Time>, mut since: Local<f32>, mut plans: ResMut<sup
     let s = stats();
     let mut names: Vec<&str> = gone.iter().map(|f| f.trim_start_matches("lookdev/")).collect();
     names.sort();
-    info!("worn: freed {} file(s) no one has worn for {GRACE_S:.0} s ({}); {} worn, {} idle, {} freed this session", gone.len(), names.join(", "), s.worn, s.idle, s.freed);
+    info!("worn: freed {} file(s) no one has worn for {GRACE_S:.0} s, past the {KEEP_IDLE} kept ({}); {} worn, {} idle, {} freed this session", gone.len(), names.join(", "), s.worn, s.idle, s.freed);
 }
 
 #[cfg(test)]
@@ -159,13 +169,25 @@ mod tests {
         worn(&mut r, "a", 1, None);
         worn(&mut r, "b", 0, Some(t0));
         worn(&mut r, "c", 0, Some(t0 + Duration::from_secs(15)));
-        let gone = take_unworn(&mut r, t0 + Duration::from_secs(21), GRACE_S);
+        let gone = take_unworn(&mut r, t0 + Duration::from_secs(21), GRACE_S, 0);
         assert_eq!(gone, HashSet::from(["b".to_string()]));
         assert!(r.files.contains_key("a") && r.files.contains_key("c") && !r.files.contains_key("b"));
         assert_eq!(r.freed, 1);
         // Worn again before its grace ran out: kept.
         r.files.get_mut("c").unwrap().wearers = 1;
         r.files.get_mut("c").unwrap().idle_since = None;
-        assert!(take_unworn(&mut r, t0 + Duration::from_secs(60), GRACE_S).is_empty());
+        assert!(take_unworn(&mut r, t0 + Duration::from_secs(60), GRACE_S, 0).is_empty());
+    }
+
+    #[test]
+    fn the_most_recently_worn_idle_files_stay() {
+        let mut r = Registry::default();
+        let t0 = Instant::now();
+        for (i, f) in ["old", "mid", "new"].iter().enumerate() {
+            r.files.insert(f.to_string(), Entry { handle: Some(Handle::default()), wearers: 0, idle_since: Some(t0 + Duration::from_secs(i as u64)) });
+        }
+        // Two kept: only the oldest goes, past its grace.
+        assert_eq!(take_unworn(&mut r, t0 + Duration::from_secs(30), GRACE_S, 2), HashSet::from(["old".to_string()]));
+        assert!(take_unworn(&mut r, t0 + Duration::from_secs(90), GRACE_S, 2).is_empty());
     }
 }
