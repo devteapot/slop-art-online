@@ -504,6 +504,19 @@ Built 2026-11-11 on `speech-1` from `a107fdf`. Source: `living/authority/src/spe
 - "you can't see whom to `<way>` to";
 - the check's own words.
 
+**Ids are not words** (fix-spoken-ids, 2026-11-12). A mind is shown people by their ids (`{someone=#3}`), and in r2e three lines its deliberations said carried them ("That one, #9, set on me twice…"; [TRIALS.md](TRIALS.md), r2e "Ids"). The primitive says each `#<id>` as the speaker refers to that one, before the way's checks and its length limit (`normalize::spoken_without_ids`, with `common::label_for` and a far figure's handle resolved):
+- `Maud (#3)`: the aside goes;
+- `the archer #9`: the noun already refers, and the id goes;
+- anything else is said pointing: `#9 strikes me` → "that stranger strikes me" ("That stranger" to begin a sentence), or by a name the speaker knows.
+
+An id that names no one ("my #1 customer") is left as written. It applies to every speaker: the chronicle, the speaker's `said` row and every hearer get the same words.
+
+This is a safety net. The prompt is where the fix belongs: every speaking mind's system prompt (think, deliberate, fast, talk) carries one sentence, the same for all (`prompts::IDS_NOT_SPOKEN`), that the handles are for acts and memory and never spoken, and that people are named by name or description when speaking.
+
+**The original is kept as evidence.** When the rewrite changes a line, the speaker gets a `spoken_as` experience (salience 0.2) with what it wrote beside what was said; hearers get only the words said. A mind journals each one in `<journal>/outcomes/spoken_as.jsonl`, and trials.py counts them per instance and per batch (`summary.json` `spoken_as`, report.md "Ids said as words"). A high count means the prompt's sentence is not working.
+
+Tests: `living-rules` `spoken_lines_carry_no_ids` (r2e's three lines); `living-mind` `every_speaking_mind_is_told_ids_are_never_spoken`; verify-core `say`; verify-player `speak.py`; verify-minds `spoken-ids`.
+
 Listeners are gathered once within the way's widest carry (`WaySpec::widest`). Today two gathers of the same radius ran, one for animals and one for people.
 
 **Entry points.**

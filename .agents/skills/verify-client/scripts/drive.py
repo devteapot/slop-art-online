@@ -56,7 +56,7 @@ BASE_QUERIES = [
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
 PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberation', 'rearing',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
-           'combat_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
+           'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
            'routine', 'routine_stat', 'background', 'brain', 'mind_state', 'mind_cursor',
            'persona', 'relation', 'belief', 'judgment', 'thought', 'chronicle', 'stats',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',

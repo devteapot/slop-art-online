@@ -1319,6 +1319,99 @@ def death_names_case(run):
     return {'status': 'pass', **texts}
 
 
+@case('watch-fight')
+def watch_fight_case(run):
+    """A mind watching others fight can still tell who is winning and who fell, from folded lines
+    (docs/BATTLE_SCALE.md, fix 4; `witness_fold_ms`). W, the only mind, stands between two fights
+    it is not party to: A, with a spear, strikes V until V falls; C strikes D, who blocks. The
+    think prompt W's model is sent then carries W's folded lines: each fight's blows counted with
+    their outcomes (A's landed on V, D blocked C), V's fall, and each stranger anchored by the id
+    W's scene knows them by. The blows its lines count are the blows W could see (`fight_seen`
+    rows naming W, read while the fights go on), no more than the strikes the rules resolved."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 5, True)
+    made = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    assert len(made) == 5, made
+    w, a, v, c, d = made
+    for who in made:
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    for who in (a, v, c, d):
+        run.admin('place_near', who, w)
+    time.sleep(1.0)
+    script = {'replies': {'think': {'thought': 'I watch the fighting.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    run.start(model(run, script), [w])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    asked = lambda marker: [sent_text(e) for e in requests() if f'verify {marker}' in sent_text(e)]
+    run.admin('set_behavior', w, json.dumps({'think': 'I finished my plan. verify before'}))
+    run.wait(lambda: asked('before'), 'first prompt', 60)
+    accepted(run, w)
+    deliberated = time.monotonic()
+    t0 = run.sql('SELECT last_ms FROM clock', 'clock-0')[0]['last_ms']
+    run.admin('grant_items', a, 'spear', 1)
+    run.admin('set_behavior', d, json.dumps({'first': [{'if': {'cond': {'threatened': True}, 'then': {'do': {'skill': 'block'}}}}, {'wait': 60}]}))
+    run.admin('set_behavior', c, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': d}}}, {'wait': 60}]}))
+    run.admin('set_behavior', a, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': v}}}, {'wait': 60}]}))
+    # The blows W could see (`fight_seen` rows naming W), read while the fights go on: a row goes
+    # once every onlooker has been told it.
+    # W's lines too: its mind consolidates as the fight goes on, and consolidation takes the
+    # integrated rows out of the inbox (`mind_consolidated`).
+    rows, w_lines, start = {}, {}, time.monotonic()
+
+    def gather():
+        for r in run.private('SELECT * FROM fight_seen', 'fight-seen'):
+            rows[r['id']] = r
+        for e in run.private(f'SELECT * FROM experience WHERE observer = {w}', f'experiences-{w}'):
+            if e['kind'] == 'fight' and e['at_ms'] >= t0:
+                w_lines[e['id']] = e
+    while time.monotonic() - start < 90:
+        gather()
+        if not run.sql(f'SELECT alive FROM character WHERE id = {v}', 'v-alive')[0]['alive']:
+            break
+        time.sleep(0.3)
+    for who in (a, c):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    # The law in force: the world's own value, else the installed script's.
+    own = [r['value'] for r in run.private('SELECT * FROM world_law', 'laws') if r['name'] == 'witness_fold_ms']
+    src = run.private("SELECT source FROM script WHERE name = 'skills'", 'script')[0]['source']
+    fold = float(own[0]) if own else float(re.search(r'\bwitness_fold_ms: ([0-9.]+)', src).group(1))
+    # Blows still in flight land first, then every onlooker's window holding them ends.
+    end = time.monotonic() + 3 + fold / 1000 + 1.5
+    while time.monotonic() < end:
+        gather()
+        time.sleep(0.3)
+    seen_by_w = [r for r in rows.values() if (r['attacker'], r['victim']) in ((a, v), (c, d)) and w in [x & 0x7FFFFFFF for x in r['onlookers']]]
+    exp = lambda who: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {who}', f'experiences-{who}') if e['at_ms'] >= t0]
+    lines = [e['text'] for e in sorted(w_lines.values(), key=lambda e: e['id'])]
+    # The strikes as the rules resolved them (`skill_use` outcomes); V's own lines go with V's death.
+    struck = [u for u in run.sql('SELECT * FROM skill_use', 'skill-uses') if (u['actor'], u['target']) in ((a, v), (c, d)) and u['outcome_ms'] >= t0
+              and re.match(r'(hit for|blocked|killed|dodged|missed)', u['outcome'] or '')]
+    counted = sum(int(n) for n in re.findall(r'(\d+) (?:blow|shot)s? \(', ' '.join(lines)))
+    time.sleep(max(0.0, 21 - (time.monotonic() - deliberated)))
+    run.admin('set_behavior', w, json.dumps({'think': 'I finished my plan. verify watched'}))
+    prompt = run.wait(lambda: asked('watched'), 'prompt after the fights', 60)[0]
+    (run.directory / 'prompt-watched.txt').write_text(prompt)
+    in_prompt = [l for l in prompt.split('\n') if re.search(r'\d+ blows? \(', l)]
+    a_on_v = re.compile(rf'#{a}\) (?:attacked|kept on at) [^:]*#{v}\): \d+ blows? \([^)]*landed')
+    texts = {'fold_ms': fold, 'w_fight_lines': lines[:8], 'w_line_count': len(lines), 'blows_counted': counted, 'struck': len(struck), 'seen_by_w': len(seen_by_w),
+             'prompt_lines': in_prompt[:8]}
+    checks = {
+        # Rows are read by polling (a lower bound); W among every row read saw the fights whole.
+        'folded_lines_count_every_blow_w_saw': 0 < len(seen_by_w) <= counted <= len(struck) and counted > len(lines) > 0
+                                                 and (counted == len(struck) if len(seen_by_w) == len([r for r in rows.values() if (r['attacker'], r['victim']) in ((a, v), (c, d))]) else True),
+        'who_is_winning_a_landed_on_v': any(a_on_v.search(l) for l in lines),
+        'd_blocked_c': any(re.search(rf'#{c}\) (?:attacked|kept on at) [^:]*#{d}\): \d+ blows? \([^)]*blocked', l) for l in lines),
+        'who_fell_v': sum(l.count(f'#{v}) fell.') for l in lines) == 1,
+        'prompt_carries_the_folded_lines': in_prompt and any(a_on_v.search(l) for l in in_prompt) and any(f'#{v}) fell.' in l for l in in_prompt),
+    }
+    texts['checks'] = checks
+    (run.directory / 'watch-fight.json').write_text(json.dumps(texts, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **texts}
+
+
 FAR = 'someone too far away to make out'
 FAR_HANDLE_BASE = 1_000_000_000
 
@@ -1844,6 +1937,48 @@ def think_framing_case(run):
     }
     result = {'m': m, 'off_heads': heads(off['user']), 'on_heads': heads(on['user']), 'checks': checks}
     (run.directory / 'think-framing.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+@case('spoken-ids')
+def spoken_ids_case(run):
+    """Ids are not words (fix-spoken-ids): every speaking mind's system prompt (think, deliberate)
+    carries the one sentence that the `#<id>` handles are for acts and memory and never spoken
+    (prompts.rs `IDS_NOT_SPOKEN`). A deliberation whose line names someone by `#id` anyway is
+    spoken without it (the speech primitive); the speaker gets a `spoken_as` experience with what
+    it wrote beside what was said; the mind journals it in `outcomes/spoken_as.jsonl`, which
+    trials.py counts per batch."""
+    people = prepare(run)
+    actor, other = people[0]['id'], people[1]['id']
+    run.admin('set_behavior', actor, json.dumps({'wait': 300}))
+    run.admin('place_near', other, actor)
+    written = f'Watch out, #{other} is here.'
+    sentence = ('Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: '
+                'when you speak, name people by their name or as you would describe them.')
+    # The decision speaks (think's `say`); the compile carries it out and never adds speech.
+    script = {'replies': {'think': {'thought': 'I warn the room.', 'intend': ['warn everyone'], 'say': {'text': written, 'to': None}},
+                          'deliberate': basic_reply()}}
+    run.request(actor, 'spoken ids')
+    run.start(model(run, script), [actor])
+    accepted(run, actor)
+    lines = lambda: [c for c in run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'spoken-ids-chronicle') if c['kind'] == 'speech' and 'Watch out,' in c['text']]
+    said = run.wait(lines, 'the deliberation\'s line is spoken', 60)[0]['text']
+    rows = lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'spoken-ids-experience') if e['kind'] == 'spoken_as']
+    spoken_as = run.wait(rows, 'a spoken_as experience', 30)[0]
+    outcome = run.journal / 'outcomes' / 'spoken_as.jsonl'
+    journaled = run.wait(lambda: [r for r in shared.rows(outcome) if r.get('actor') == actor] if outcome.exists() else [], 'the mind journals the line', 30)
+    requests = list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    system = lambda purpose: [str(m.get('content', '')) for e in requests if e['purpose'] == purpose for m in e['body'].get('messages', []) if m.get('role') == 'system']
+    checks = {
+        'think_prompt_has_the_sentence_once': bool(system('think')) and all(s.count(sentence) == 1 for s in system('think')),
+        'deliberate_prompt_has_the_sentence_once': bool(system('deliberate')) and all(s.count(sentence) == 1 for s in system('deliberate')),
+        'spoken_without_the_id': f'#{other}' not in said and 'is here.' in said,
+        'spoken_as_keeps_both': written in spoken_as['text'] and f'#{other}' in spoken_as['text'] and said.split('“')[-1].rstrip('”') in spoken_as['text'],
+        'journaled_with_both': written in journaled[0].get('line', '') and journaled[0].get('name'),
+    }
+    result = {'actor': actor, 'other': other, 'said': said, 'spoken_as': spoken_as['text'], 'journaled': journaled[0], 'checks': checks}
+    (run.directory / 'spoken-ids.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
 

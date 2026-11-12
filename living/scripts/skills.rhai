@@ -84,6 +84,10 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        // A body struck this many seconds ago cannot fall asleep; nor while the one who last
+        // struck it, in a fight still on, is within `wake_reach` (`sleep_check`, every
+        // controller alike).
+        alert_after_hit_s: 15.0, alert_while_attacker_near: true,
         // Who a behaviour graph's `relation: "stranger"` filter matches (docs/STRANGERS.md).
         // Off: anyone one has no relation row about (feelings the mind wrote), or a relation
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
@@ -100,10 +104,17 @@ fn laws() {
         // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
         // compares every shared answer with a fresh one and logs any difference.
         regard_cache: true, regard_cache_check: false,
+        // A diagnostic: while profiling, also time the parts of a graph's evaluation.
+        profile_detail: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // What an onlooker sees of fights it is not party to is told as one line per
+        // `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4): every blow it could see, by who struck
+        // whom, with counts and outcomes, and who fell. A blow at it or by it is told at once.
+        // 0: each fight's first blow told at once on its own line, as before.
+        witness_fold_ms: 2000.0,
         // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
         // on a blow taken or when the same creature is seen to start the same move at it
         // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
@@ -2346,6 +2357,14 @@ fn smoke_spec() {
 }
 fn clear_spec() { #{ about: "Turn the forest where you stand into open ground. For making room to build; gathering at a tree is the quicker way to get wood.", takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" } }
 fn graze_spec() { #{ moment: true, listed: false, about: "Eat grass where you stand (grazing animals).", takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" } }
+// A body does not fall asleep in a fight: struck moments ago (`alert_after_hit_s`), or with the
+// one who struck it close while the fight is on (`alert_while_attacker_near`; the fact
+// `hurt_by_near`). The words are the body fact alone.
+fn sleep_check(a) {
+    if within(a.actor.hurt_ago, law("alert_after_hit_s") * 1000.0) { return "you cannot sleep: you were struck moments ago"; }
+    if law("alert_while_attacker_near") && a.actor.hurt_by_near { return "you cannot sleep: someone who struck you is close"; }
+    ""
+}
 fn sleep_spec() { #{ latch: true, moment: true, about: "Sleep until rested. Night is the time for it; beside a shelter or house it is much faster and the night cold can't hurt you. A short break is rest.", takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" } }
 fn rest_spec() { #{ latch: true, moment: true, about: "Sit a few seconds and recover a little energy. Sleep restores far more.", takes: "8 seconds", gives: "a little energy" } }
 fn wait_spec() { #{ moving: true, moment: true, args: ["qty"], about: "Pause where you are (qty: seconds, at most 120).", takes: "time", gives: "nothing: time passes" } }
@@ -2707,14 +2726,14 @@ fn rates_awake() {
 // `meters()`: the bars a body has, each naming fields of its `my_vitals` row: `value`, and `max`
 // a field or a number; `shown: false` keeps a meter off the screen while it still bounds its
 // value and feeds the statuses. A world that adds a vital adds its column and a row here.
-// Breath is a bar under health, always; focus a bar under the world's word for it, while it is
-// not full; tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
+// Breath is a bar under health, always; focus a bar under the world's word for it, always too
+// (the owner, play-test 6: "why not always visible ?"); tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
 fn meters() {
     let w = pool_word("focus");
     [
         #{ name: "health", value: "hp", max: "max_hp", order: 0 },
         #{ name: "stamina", value: "stamina", max: "stamina_max", order: 1 },
-        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1), while_short: true },
+        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1) },
         #{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },
         #{ name: "hunger", value: "hunger", max: 100.0, order: 4, shown: false },
     ]
@@ -2996,8 +3015,10 @@ fn laws_about(l) {
         think_framing: if l.think_framing { "a mind is shown what just happened and thinks about whatever matters to it now" } else { "a mind starts from why one is thinking now" },
         heard_first_rethinks: if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
+        witness_fold_ms: if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
         witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
+        profile_detail: if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
         seen_again_n: `seeing the same move started at one ${short(l.seen_again_n)} times in a fight is reason for a quick revision`,
@@ -3006,6 +3027,8 @@ fn laws_about(l) {
         fast_lane_gap_s: `one's quick revisions begin at least ${short(l.fast_lane_gap_s)} s apart`,
         fast_lane_stale_s: `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
+        alert_after_hit_s: `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
+        alert_while_attacker_near: if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,

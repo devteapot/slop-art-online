@@ -28,6 +28,7 @@ mod town;
 mod common;
 mod far;
 mod earshot;
+mod fold;
 mod fast;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};

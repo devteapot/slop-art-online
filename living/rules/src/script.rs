@@ -62,6 +62,9 @@ pub struct ActorFacts {
     /// Who last hurt the actor, and how long ago (ms; none when never).
     pub hurt_by: u32,
     pub hurt_ago: Option<f32>,
+    /// The one who last hurt the actor is alive and within the `wake_reach` law of it, and the
+    /// fight is still on (struck within the authority's fight window, `act::FIGHT_MS`).
+    pub hurt_by_near: bool,
     /// How long ago the actor yielded (ms; none when it has not).
     pub yielded_ago: Option<f32>,
     /// Creatures the actor senses (in sight, or smelled for a species with a scent) by kind;
@@ -498,6 +501,12 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// A body struck this many seconds ago cannot fall asleep (the script's `sleep_check`, the
+    /// same for every controller).
+    pub alert_after_hit_s: f32,
+    /// A body cannot fall asleep while the one who last struck it, in a fight still on, is within
+    /// `wake_reach` (the fact `hurt_by_near`).
+    pub alert_while_attacker_near: bool,
     /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
@@ -533,6 +542,10 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// What an onlooker sees of fights it is not party to is told as one line per this many ms
+    /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
+    /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
+    pub witness_fold_ms: f32,
     /// What each observer makes of each target (name known, the `perceived_of` answer) is
     /// computed once per transaction and shared (`perception::with_answers`). Off: every
     /// asker computes it afresh (the same answers; for measuring the cache).
@@ -540,6 +553,10 @@ pub struct Laws {
     /// Diagnostic: every shared answer is also computed afresh and compared; differences are
     /// logged and counted (`perception::report_answers`). Costs both.
     pub regard_cache_check: bool,
+    /// A diagnostic: while profiling (`set_profile`), also time the parts of a behaviour graph's
+    /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
+    /// default: those spans are many and would weigh on what an ordinary profile measures.
+    pub profile_detail: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -621,6 +638,8 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            alert_after_hit_s: 15.0,
+            alert_while_attacker_near: true,
             stranger_by_name: false,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -632,8 +651,10 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
+            profile_detail: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -1902,7 +1923,7 @@ impl Scripts {
         let Some(i) = context::ACTOR.iter().position(|f| *f == field) else { return false };
         ["_check", "_duration", "_done"].iter().any(|p| {
             let f = format!("{skill}{p}");
-            self.has(&f) && self.plan(&f).actor & (1 << i) != 0
+            self.has(&f) && self.plan(&f).actor & (1u64 << i) != 0
         })
     }
 
@@ -2654,6 +2675,8 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
+            alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
@@ -2665,8 +2688,10 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
+            profile_detail: flag("profile_detail", l.profile_detail),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3554,6 +3579,7 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
+        assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
@@ -3563,6 +3589,7 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (30.0, 0.0, 0.1));
         assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
         assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
+        assert!(about["witness_fold_ms"].contains("2000 ms") && about["witness_fold_ms"].contains("who fell"), "{about:?}");
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
