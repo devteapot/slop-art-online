@@ -25,3 +25,9 @@ Paid tier: `residents_real.py --allow-live --run knowledge-residents-real-<name>
 - The island's residents are authored ([seeded lives](../../../../docs/SEEDED_LIVES.md)): an authored resident's mind starts as its sheet says. The fixture takes the chosen resident's sheet out of its background with `set_background` before the mind starts, since the identity is made at the service's start.
 - `player_session.py` reads the player's characters through `my_characters` (`character` is private in the scoped default).
 - A lesson whose prerequisite the newcomer lacks is refused by the rules; that is not a mind failure.
+
+## Someone born in the world whose mind starts when grown (since 2026-11-12, `self-body`)
+
+The other facts path: a character born in the run (parents on its `character` row, no background, not in the seed) whose mind first starts once it is past childhood, as in a capped trial (`Origin::Grown`, `facts.rs` `grown_identity`). Its first identity comes from facts with no model call: its parents, siblings, children and settlement in a plain narrative ("I am Vale, child of Brisk Marrow and Edda Marrow. My home is in Millbrook."), its inborn temperament, and no values, goals, pastimes, calling or mood. Its mind gets `CHILD_OF` edges from `self` to both parents and the `parent` relation (trust 70, affinity 80, as a newborn's mind starts with), written `lived_under = world`; the identity version is `written_by: facts` with `from_facts`. Before this such a mind had "(no persona yet)" and no parents.
+
+The proof is verify-minds' `body` case run with `LIVING_PRIVACY_NEO4J` and `LIVING_PRIVACY_NEO4J_ENV` set ([self-body.md](../../verify-minds/features/self-body.md)): it reads the `CHILD_OF` edges with Cypher (`grown-child-of.txt`) and the projected `parent` relation rows, then deletes the run's nodes.

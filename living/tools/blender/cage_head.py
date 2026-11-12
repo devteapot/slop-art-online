@@ -766,7 +766,7 @@ def identity_weights(hf, pts, pivots=None, brows=False):
 
     Features come first, each riding its own bone in full: an eye's opening and the skin round
     it its orbit, the nose, the mouth and its corners, the chin (and, with `brows`, the skin
-    round a painted brow its brow bone). Each
+    round a brow its brow bone). Each
     field is 1 over the feature and falls to 0 a little way off, and a bone takes its share of
     what the bones before it left. Then the points that shape the outline (cheek corner,
     cheekbone, cheek, the jaw's angle, forehead, between the brows), and last the three broad
@@ -801,12 +801,15 @@ def identity_weights(hf, pts, pivots=None, brows=False):
         ez = hf.eye_z + (hf.eye_up - hf.eye_lo) / 2
         d = np.hypot((x - ex) / (hf.eye_w * 1.22), (z - ez) / (eh * 1.55)) * (np.abs(y - c[1]) < 0.20 * H) + 9.0 * (np.abs(y - c[1]) >= 0.20 * H)
         fields.append((f"J_Id_Orbit_{sd}", fall(d, 1.0, 1.9) * (np.sign(c[0]) * x > -0.003)))
-    # The brows are drawn shapes that ride their bones whole (person.py gives a brow's own
-    # vertices to its bone); the skin under them does not follow. `brows` is for a surface
-    # that has its brows painted on it, the far head's: there the skin round the brow follows.
+    # `brows`: the skin round a brow follows the brow's bone, on the face's own skin (the drawn
+    # brow lies on it: person.py gives a brow's vertices the weights of the skin under them) and
+    # on the far head's, which has its brows painted. Until the brow fix (2026-11-12) the near
+    # skin did not: a brow rode its bone whole over skin that the forehead's, the cranium's and
+    # the glabella's bones moved, and on one line in five some of it went behind the skin. Not
+    # for what hangs on the head (hair, headwear): a shared style's weights are every type's.
     for sd in "LR" if brows else "":
         c = piv[f"J_Id_Brow_{sd}"]
-        d = np.hypot((x - c[0]) / (hf.eye_w * 1.45), (z - c[2]) / (0.030 * H)) + 9.0 * (np.abs(y - c[1]) >= 0.16 * H)
+        d = np.hypot((x - c[0]) / (hf.eye_w * 1.5), (z - c[2]) / (0.045 * H)) + 9.0 * (np.abs(y - c[1]) >= 0.16 * H)
         fields.append((f"J_Id_Brow_{sd}", fall(d, 1.0, 1.8) * (np.sign(c[0]) * x > -0.003)))
     fields.append(("J_Id_NoseTip", ball("J_Id_NoseTip", 0.022, 0.060)))
     bridge, tip = piv["J_Id_Face"], piv["J_Id_NoseTip"]

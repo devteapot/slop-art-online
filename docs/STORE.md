@@ -212,7 +212,7 @@ board/<family>/<version>/       asset board photographs and pages (from the lapt
   - the Jev replay's `judged.cost_usd`;
   - a Jev gate's `usd_per_trigger` and `cost_vs_off` in `curve.json`;
   - `by_model`/`by_purpose_model` Jev cost fields in a summary.
-- **Totals.** Under a cost key, a part named for Jev is dropped and a sibling `total` is recomputed without it (`gq1`'s `spend_usd`: 0.765 becomes 0.685).
+- **Totals.** Under a cost key, a part named for Jev is dropped and a sibling `total` is recomputed without it (`gq1`'s `spend_usd` total loses Jev's part).
 - **Text.** These become `[removed: Jev pricing]`:
   - in a table row naming Jev, the cells of cost columns;
   - in a line about Jev (it names Jev, or sits under a list item or lead-in paragraph that does), dollar amounts and the percentages of clauses about cost or savings;
@@ -397,6 +397,7 @@ The steps are the same on every machine. The gate is per machine and per upload.
    ```bash
    python3 -m venv ~/.slop-store-venv && ~/.slop-store-venv/bin/pip install huggingface_hub
    ```
+   `just living-store` runs the venv's Python when it exists, and `python3` otherwise. Without the library, a Hugging Face publish or fetch is refused as soon as the gate passes, before anything is packed, and the message names the venv. On 2026-11-12 the Spark had no venv: the `gq1` upload got through its checks and failed at the import, with nothing sent. The venv was recreated with `huggingface_hub` 2.4.0.
 3. **Token.** `~/.config/slop-store/hf_token`, mode 600. It is already installed; check it with `stat -f %Lp ~/.config/slop-store/hf_token` (macOS) or `stat -c %a …` (Linux). The tool reads no other token.
 4. **Dry run first, and read it.**
    ```bash
@@ -486,7 +487,7 @@ The owner allowed model exchanges in published runs (`model_exchanges: include`)
 - **Attribution.** None asked.
 - **Training and redistribution (s.2.3(b)).** Customer will not "use the Services or any Output … to perform model distillation, train a model to imitate the output of the Services, or develop (or to facilitate the development of) a similar or competing product or service". This binds us, the customer. Publishing is not training. "Facilitate" is the open word: a public dataset of Jev's answers could help someone else distil Jev.
 - **Unclear.**
-  - s.14.1 lists "Customer's Fees and all pricing information" among TypeSafe's Confidential Information. The repository and records carry Jev's input price (`input_usd_per_m: 0.042`) and per-call `cost_usd`. TypeSafe's own home page discusses its prices publicly; that the published price equals ours was not checked.
+  - s.14.1 lists "Customer's Fees and all pricing information" among TypeSafe's Confidential Information. The repository carried Jev's input price (`input_usd_per_m` in `rethink.json` and `judgments.json`) until `jev-price-local` (2026-11-12) moved it to an untracked local file; the records carry per-call `cost_usd`. TypeSafe's own home page discusses its prices publicly; that the published price equals ours was not checked.
   - It is assumed that the owner's key was bought through the console checkout, so this MCA governs, not a separate order.
 
 #### GPT-6 Luna (`gpt-6-luna`), through the owner's proxy
@@ -530,7 +531,7 @@ The owner allowed model exchanges in published runs (`model_exchanges: include`)
 
 #### Decisions (2026-11-12, general coordinator; branch `store-gate-2`)
 
-1. **Jev's pricing is scrubbed until the owner confirms.** Its price, every Jev per-call `cost_usd` and Jev's share of any total are removed from published records. Totals are recomputed without Jev, or dropped where Jev is mixed in and cannot be separated. Other models' costs are kept. This is decision `jev_pricing: exclude` and the scrubber rule above, applied to every unit. No published unit carried Jev calls: of the 62 published batches none has one; only `gq1` and the fake `glf2` do. The code repository is public and still carries Jev's price (`living/configs/rethink.json`, `judgments.json`: `input_usd_per_m`) and Jev-mixed costs (`docs/GATE_QUALITY.md`). This decision does not cover those.
+1. **Jev's pricing is scrubbed until the owner confirms.** Its price, every Jev per-call `cost_usd` and Jev's share of any total are removed from published records. Totals are recomputed without Jev, or dropped where Jev is mixed in and cannot be separated. Other models' costs are kept. This is decision `jev_pricing: exclude` and the scrubber rule above, applied to every unit. No published unit carried Jev calls: of the 62 published batches none has one; only `gq1` and the fake `glf2` do. The code repository is public and still carries Jev's price (`living/configs/rethink.json`, `judgments.json`: `input_usd_per_m`) and Jev-mixed costs (`docs/GATE_QUALITY.md`). Since `jev-price-local` (2026-11-12) these are out of committed files too: the price is in an untracked local file (`living/configs/prices.example.json` shows the shape; the mind reads `LIVING_PRICES`, `living/configs/prices.local.json` or `~/.config/slop-living/prices.local.json`), and the docs' Jev cost figures are removed. Git history keeps the old value.
 2. **Card note.** The runs card asks readers not to train models on the Jev answers or the Claude judge labels, as the assets card does for the Kimodo takes.
 3. **Gate.**
    - Now `verified` in `store_config.json`: `mistral-small-latest`, `ministral-*-latest` and `ministral-*-2512` (Ministral 3), `jev*` and `claude-opus-5-5`, each with the card note.

@@ -212,13 +212,22 @@ def earshot(run, c):
     talk box takes whom Tab goes to, and their order, from `my_earshot`'s `say` list, and shows its
     sentence (in my own labels) in the box's hint line; someone who steps out of a say's reach
     drops from it while a call still reaches them. With it off: no row, the client's own reckoning,
-    as before. Residents A and B held 2 m and 6 m off a fresh player; B then 12 m off. The box
-    cannot switch to whisper or call (they have no place in it yet): their lists are only read."""
+    as before. At noon on open grass, cleared (the authority lists only people one sees: 11 m by
+    day, 6 by night), residents A and B held 2 m and 6 m off a fresh player; B then 10 m off,
+    beyond a say's 9 m and within a call's reach and sight. The box cannot switch to whisper or call
+    (they have no place in it yet): their lists are only read."""
     s = "earshot"
     a, b = residents(run)
+    # Anyone within 25 m of the spot (offline player characters of earlier drives among them) is
+    # put 40 m east first: they would stand in every list.
+    people = {r["id"] for r in sql(run, "SELECT id, kind FROM character WHERE kind = 'person'")}
+    ax, ay = UNHEARD_SPOT
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] not in (a, b) and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 25):
+        call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
     tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"earshot-{int(time.time())}.token")
-    syncs = ['on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx-12.0)|(my)", 'off=set_world_law|"earshot"|"false"']
-    plan = ("ready;sync:on;sync:scene;wait:3;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}",
+             'on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx-10.0)|(my)", 'off=set_world_law|"earshot"|"false"']
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:on;sync:scene;wait:3;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
             "key:Escape:tap;wait:0.3;sync:away;wait:2;key:Enter:tap;wait:1.2;shot:02_away;dump:e2;tab;wait:0.4;dump:t4;tab;wait:0.4;dump:t5;key:Escape:tap;wait:0.3;"
             "sync:off;wait:2;key:Enter:tap;wait:1.2;shot:03_off;dump:e3;tab;wait:0.4;dump:t6;key:Escape:tap;wait:0.3;quit")
     try:
@@ -256,7 +265,7 @@ def earshot(run, c):
     st = steps(("t1", "t2", "t3"))
     c.check(s, "law on: each Tab goes by the authority's say list, in its order", all(x[0] and x[1] for x in st), str(st))
     say2, call2 = ways("e2").get("say"), ways("e2").get("call")
-    c.check(s, "B steps 12 m off: out of the say list, still in the call's; the box follows", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
+    c.check(s, "B steps 10 m off: out of the say list, still in the call's (in sight); the box follows", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
     st2 = steps(("t4", "t5"))
     c.check(s, "Tab then goes by the new say list and never to B", all(x[0] and x[1] for x in st2) and all(b not in (x[4] or []) and x[3] != b for x in st2), str(st2))
     c.check(s, "law off: no row, the client's own reckoning (A within it)", not ty("e3").get("told") and a in (ty("e3").get("earshot") or []), f"told {ty('e3').get('told')}; earshot {ty('e3').get('earshot')}")
@@ -487,6 +496,73 @@ def film(run, c):
     c.check(s, "the settings file keeps the last choice", saved == "screen", str(saved))
     out2, code2, _ = drive(run, s, "ready;wait:2;dump:05;quit")
     c.check(s, "the next start reads it back", (((dump(out2, "05") or {}).get("extra") or {}).get("film")) == "screen", str(((dump(out2, "05") or {}).get("extra") or {}).get("film")))
+
+
+@scenario("hair")
+def hair(run, c):
+    """The hair shine (`style::HAIR_SHINES`, Settings › Play › Hair shine): a fresh settings file
+    starts on Crown and saves no choice; Settings sets Soft and Today and the file keeps the last;
+    the next start reads it back. Then, with a resident's window open and the camera framing them
+    as they speak to me (admin `mind_say`, as in `talk`), the live script's `shine:` switches it in
+    one view close up, each shine between two shots of Crown: the hair changes, and away from every
+    head no more changes than between those two Crowns (the sun and people move meanwhile).
+    `LIVING_GAME_HAIR_SHINE` and `LIVING_GAME_HAIR_RING` must not be set."""
+    s = "hair"
+    for k in ("LIVING_GAME_HAIR_SHINE", "LIVING_GAME_HAIR_RING"):
+        if os.environ.get(k):
+            c.check(s, f"{k} is unset (it overrides the settings file)", False, os.environ[k])
+            return
+    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "hair")
+    st = os.path.join(out0, "settings.json")
+    if os.path.exists(st):
+        os.remove(st)
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
+    plan = ("ready;wait:2;dump:01;" + open_settings + "click:@settings:hair:soft;wait:0.4;dump:02;shot:02_settings;"
+            "click:@settings:hair:today;wait:0.4;dump:03;key:Escape:tap;wait:0.4;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    x = lambda o, k: ((dump(o, k) or {}).get("extra") or {})
+    c.check(s, "a fresh settings file starts on Crown and saves no choice", x(out, "01").get("hair_shine") == "crown" and x(out, "01").get("hair_shine_saved") is None, str((x(out, "01").get("hair_shine"), x(out, "01").get("hair_shine_saved"))))
+    c.check(s, "Settings › Play › Hair shine sets Soft, then Today", x(out, "02").get("hair_shine") == "soft" and x(out, "03").get("hair_shine") == "today", str((x(out, "02").get("hair_shine"), x(out, "03").get("hair_shine"))))
+    c.check(s, "the log names each choice", log(out).count("settings: hair shine: ") == 2)
+    saved = json.load(open(st)).get("hair_shine") if os.path.exists(st) else None
+    c.check(s, "the settings file keeps the last choice", saved == "today", str(saved))
+    # The same settings file: the next start reads Today back. Then A, placed beside me and held
+    # still, speaks to me with their window open, the camera comes in close (`view:`, 2.4 m),
+    # and the shines in turn.
+    a, _ = residents(run)
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    answer = f'answer=mind_say|{a}|"Good day to you."|{{me}}|""|0|{thought}'
+    seq = ["crown", "today", "crown", "soft", "crown"]
+    shots = "".join(f"shine:{v};wait:0.7;shot:{i + 1:02d}_{v};" for i, v in enumerate(seq))
+    plan = (f"ready;wait:2;dump:00;shine:crown;sync:scene;wait:1.5;menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:1;sync:answer;wait:0.5;view:8:2.4:30;wait:4;" + shots + "dump:06;quit")
+    out2, code2, _ = drive(run, s, plan, places=[f"{a}:-1.5:1.5"], syncs=[answer])
+    c.check(s, "the next start reads it back", x(out2, "00").get("hair_shine") == "today", str(x(out2, "00").get("hair_shine")))
+    c.check(s, "A's window is open in the photographs", any(w.startswith("Person") for w, _ in wins(dump(out2, "06"))), str(wins(dump(out2, "06"))))
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        c.check(s, "pixels: numpy and Pillow are available (uv run --with pillow --with numpy)", False)
+        return
+    names = [f"{i + 1:02d}_{v}" for i, v in enumerate(seq)]
+    shot = {n: np.asarray(Image.open(os.path.join(out2, f"{n}.png")).convert("RGB")).astype(int) for n in names}
+    h, w = shot[names[0]].shape[:2]
+    near = np.zeros((h, w), bool)
+    yy, xx = np.mgrid[0:h, 0:w]
+    for b in (dump(out2, "06") or {}).get("seen") or []:
+        (hx, hy), (fx, fy) = b["head"], b["feet"]
+        tall = max(abs(fy - hy), 8.0)
+        near |= ((xx - hx) / (0.32 * tall)) ** 2 + ((yy - hy - 0.06 * tall) / (0.22 * tall)) ** 2 <= 1.0
+    changed = lambda p, q: np.abs(shot[p] - shot[q]).max(2) > 10
+    for k in (1, 3):
+        before, this, after = names[k - 1], names[k], names[k + 1]
+        d, base = changed(before, this), changed(before, after)
+        c.check(s, f"{seq[k].title()} differs from Crown on the hair", (d & near).sum() > 40, f"{int((d & near).sum())} px near heads")
+        far, far0 = (d & ~near).mean() * 100, (base & ~near).mean() * 100
+        # People's idle motion, the speech bubble's timer and the sun's shadows move meanwhile:
+        # within a quarter of the Crowns' own change.
+        c.check(s, f"away from every head, {seq[k].title()} changes no more than the Crowns before and after it", far <= far0 * 1.25 + 0.05, f"{far:.3f}% against {far0:.3f}%")
 
 
 def act(actor, a):

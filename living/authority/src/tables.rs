@@ -430,6 +430,11 @@ pub struct Steer {
     /// of sight (0 while it is in sight); `gx`/`gy` where it was last seen.
     #[default(0u64)]
     pub unseen_ms: u64,
+    /// A movement intent's `apart` (m, 0 none): how far it keeps from others of its own kind it
+    /// sees while it holds the intent (docs/PACK_MIND.md, A5). Appended (an automatic migration
+    /// with this default).
+    #[default(0.0f32)]
+    pub apart: f32,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
@@ -1603,8 +1608,9 @@ impl CharacterSenses {
 /// Whom a line said now would reach, for a person's client (private; read through
 /// `my_earshot`): per way of speaking in the rules' order, the people the character perceives
 /// whom a line in it would reach (`earshot::reach`, the rule `speech::speak` gives the words
-/// by), nearest first, and the same in words in the character's own labels (`text`, the words a
-/// mind's scene carries). Someone out of sight is never listed, though a line may reach them.
+/// by), nearest first, and the same in short words in the character's own labels (`text`,
+/// `earshot::short_words`: the nearest two named, the rest and what a call adds counted; a
+/// mind's scene carries the full `earshot::words`). Someone out of sight is never listed, though a line may reach them.
 /// Written at the character's frames only when it changed (`frame::show_earshot`, at most every
 /// `frame::EARSHOT_MS`). One row per character a person plays now; it goes when the character
 /// dies.

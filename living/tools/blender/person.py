@@ -1020,16 +1020,44 @@ def make_face(arm, spec, atlas_path):
             v_kind[v] = k
     if TYPED:
         # Each vertex's share of the identity bones, by where it lies; an eye's own parts ride its orbit.
-        shares = cage_head.identity_weights(HF, np.array(m.v))
+        shares = cage_head.identity_weights(HF, np.array(m.v), brows=True)
         for i, e in enumerate(m.eye):
             if e is None:
                 weights[i] = shares[i]
             else:
                 orbit = f"J_Id_Orbit_{'L' if e[0] < 0 else 'R'}"
                 weights[i] = {eye_bone[e[0]]: e[1], orbit: 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}
-        for i, k in enumerate(v_kind):  # a brow rides its own bone whole
-            if k == "brow":
-                weights[i] = {f"J_Id_Brow_{'L' if m.v[i][0] < 0 else 'R'}": 1.0}
+        # A brow lies on the skin: each of its vertices takes the weights of the skin under it
+        # (the skin's triangle there, its corners' weights by how near each is), so whatever a
+        # person's values do to the forehead they do to the brow, and it stays its own distance
+        # off. The skin round a brow follows the brow's bone (identity_weights), which is how
+        # the brow's own values still move it.
+        skin = [f for f, k in zip(m.f, m.fm) if k == "face"]
+        tris = np.array([(f[0], f[j], f[j + 1]) for f in skin for j in range(1, len(f) - 1)])
+        V = np.array(m.v)
+        A, B, C = V[tris[:, 0]], V[tris[:, 1]], V[tris[:, 2]]
+        lo, hi = np.minimum(np.minimum(A, B), C), np.maximum(np.maximum(A, B), C)
+        den = (B[:, 2] - C[:, 2]) * (A[:, 0] - C[:, 0]) + (C[:, 0] - B[:, 0]) * (A[:, 2] - C[:, 2])
+        for i, k in enumerate(v_kind):
+            if k != "brow":
+                continue
+            q = V[i]
+            near = np.where((lo[:, 0] <= q[0]) & (hi[:, 0] >= q[0]) & (lo[:, 2] <= q[2]) & (hi[:, 2] >= q[2]) & (np.abs(den) > 1e-14) & (hi[:, 1] > 0))[0]
+            u = ((B[near, 2] - C[near, 2]) * (q[0] - C[near, 0]) + (C[near, 0] - B[near, 0]) * (q[2] - C[near, 2])) / den[near]
+            v = ((C[near, 2] - A[near, 2]) * (q[0] - C[near, 0]) + (A[near, 0] - C[near, 0]) * (q[2] - C[near, 2])) / den[near]
+            w = 1 - u - v
+            inside = (u >= -1e-6) & (v >= -1e-6) & (w >= -1e-6)
+            if not inside.any():
+                raise SystemExit(f"person: no skin under a brow's vertex at {tuple(round(float(x), 4) for x in q)}")
+            fwd = u * A[near, 1] + v * B[near, 1] + w * C[near, 1]
+            best = np.where(inside)[0][np.argmax(fwd[inside])]  # the skin's front, where the brow lies
+            mixed = {}
+            for corner, share in zip(tris[near[best]], (u[best], v[best], w[best])):
+                for name, x in shares[corner].items():
+                    mixed[name] = mixed.get(name, 0.0) + float(share) * x
+            top = sorted(mixed.items(), key=lambda kv: -kv[1])[:4]
+            total = sum(x for _, x in top)
+            weights[i] = {name: x / total for name, x in top}
         for i in face.under_neck:  # the neck's ring turns with the neck
             weights[i] = {"J_Bip_C_Neck": 0.75, "J_Bip_C_Head": 0.25}
     for i, v in enumerate(tint_src):  # the layer moves exactly as the skin under it
@@ -2213,7 +2241,8 @@ def spread_head_weights(obs):
             continue
         pts = np.array([(np.array(me.vertices[i].co) - np.array(HEAD)) / HEAD_SCALE for i in idx])
         groups = {}
-        # The far head has its brows painted on its skin, which follows the brows' bones there.
+        # The far head has its brows painted on its skin, which follows the brows' bones as the
+        # face's own skin does; what hangs on the head does not.
         for i, w, parts in zip(idx, share, cage_head.identity_weights(HF, pts, brows=ob.name.split(".")[0] == "FarHead")):
             g.remove([i])
             for n, x in parts.items():

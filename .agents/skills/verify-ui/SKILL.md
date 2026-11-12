@@ -54,6 +54,7 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `pointat:X,Y[:H]`, `nudge:DX,DY`, `wheel:DIR` | The cursor kept on a world point (sim m); moved by logical px (an open wheel takes it as motion); an open wheel pointed at a direction |
 | `weapon:toggle\|draw\|sheathe`, `tap` | As X; a left tap on the world (a strike, or talk to a peaceful person) |
 | `menu:f[@AIM]\|c\|close\|N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list (on AIM, e.g. `f@id:57`), my own list (`c`), closing it, or picking row N; wait for a scene; a photograph; two-finger scroll; a double tap |
+| `shine:NAME` | The hair shine (`crown`, `soft`, `today`) as Settings sets it, leaving open windows be (Settings would close them): to compare shines from one view |
 | `walk:DEG:S[:run]`, `hold:DEG[:run]`, `stop`, `look:DEG`, `lookwalk:SPEC` | Walk (or run) a compass direction for S seconds, or hold it until `stop`; look a compass direction (the cursor scheme's look, until `look:`); set the look-walk preset (`twist::LookWalk::parse`: `chest`, `head,body_s=0.3`) |
 | `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | A two-finger pan, a left drag or a pinch through the pointer's paths; no framing contexts (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
 
@@ -65,7 +66,7 @@ Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`;
 - the list of acts: `acts:0:<skill>:<I>` (`talk`, `window`, `introduce`, `give`, `more`, …), its sub-list `acts:1:<item>:<I>`;
 - the pack: `pack:<item>:<I>`; know-how: `skill:<I>`; the tip: `tip:ok`, `tip:all`;
-- Settings: `settings:page:play|controls`, `settings:theme:glass|clear|night|linen|walnut`, `settings:look_walk:head|chest|loose`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:memory|grey|wash|lantern|shadows|hatch`, `settings:film:soft|screen|off`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:walk:2.6|3.0|3.4` (the walk law's choices; shown only with the admin link and the law in the script), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
+- Settings: `settings:page:play|controls`, `settings:theme:glass|clear|night|linen|walnut`, `settings:look_walk:head|chest|loose`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:memory|grey|wash|lantern|shadows|hatch`, `settings:film:soft|screen|off`, `settings:hair:crown|soft|today`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:walk:2.6|3.0|3.4` (the walk law's choices; shown only with the admin link and the law in the script), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
 
 Facing sight (`check.py field`, [features/field.md](features/field.md)): drive.py's `--admin-link` gives the client the world admin's token in a mode-600 file it deletes after the drive, as `play.py` does for a scene with `"law_toggle": true`; a `--sync NAME='sql|QUERY;…'` call snapshots the authority (owner SQL, `{me}`, `{ident}`) into `scene.json`'s `snaps`.
 

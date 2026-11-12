@@ -1206,6 +1206,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `say:TEXT`: proximity chat (`human_say`);
 /// - `sightlook:NAME`: how "not seen now" is drawn, among the looks under trial
 ///   (`sightedge::Look`; `LIVING_SIGHT_LOOK` sets the first);
+/// - `shine:NAME`: the hair shine (`style::HAIR_SHINES`: crown, soft, today), as Settings › Play ›
+///   Hair shine sets it, but leaving the open windows be (captures);
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
@@ -1317,7 +1319,7 @@ fn script(
     mut out: ResMut<crate::ui::model::Outbox>,
     (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
-    (target, mut sight): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>),
+    (target, mut sight, mut shine): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>),
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
     (time, mut exit, cams, mut weapon, mut lw): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>, ResMut<crate::twist::LookWalk>),
@@ -1607,6 +1609,18 @@ fn script(
                     info!("sight edge: look {l:?}");
                 }
                 _ => warn!("live script: no look {arg:?}"),
+            }
+            true
+        }
+        "shine" => {
+            // The hair shine (`style::HAIR_SHINES`), as Settings sets it, without opening
+            // Settings (which closes the other windows): to compare shines from one view.
+            match crate::style::HairShine::parse(arg) {
+                Some(x) => {
+                    *shine = x;
+                    info!("hair shine: {arg}");
+                }
+                None => warn!("live script: no hair shine {arg:?}"),
             }
             true
         }

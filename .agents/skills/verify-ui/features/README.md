@@ -17,6 +17,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | The cursor pick: who is under the cursor when two overlap on screen (the one drawn in front; stacked exactly, the nearer the camera, every frame), the same for the nameplate, Enter, a tap and combat's target | [talking.md](talking.md) (`pick`) | `check.py pick` |
 | The cursor while the view turns or zooms: a two-finger pan, a pinch and a left drag keep the cursor at its screen position, and what it points at follows the view | [turns.md](turns.md) | `check.py turns` |
 | The film (`post::Film`): Soft (the default; spares dark pixels by day, the screen at night), Full (the screen, as before film-1) and None; Settings › Play › Film sets it, the settings file keeps a choice once made, `LIVING_GAME_FILM` starts in one | [film.md](film.md) | `check.py film` |
+| The hair shine (`style::HAIR_SHINES`): Crown (the default; a hard band over the crown, off a fringe), Soft and Today (the ring before hair-ring-1); Settings › Play › Hair shine sets it, the settings file keeps a choice once made, `LIVING_GAME_HAIR_SHINE` starts in one; the live script's `shine:` switches it in one view | [hair.md](hair.md) | `check.py hair` |
 | The recipe grid: a way of making's products as cells, greyed with the rules' reasons, rows from the recipe, a cell sends the act | [grid.md](grid.md) | `check.py grid` on a Cullet world |
 | The wheel: hold F on a person or a fuel fire, the held cursor picks a section, let go; pinned sections grey in place with the rules' reason; Esc and the hub send nothing; flick, digits; the cursor back to the pixel | [wheel.md](wheel.md) | `check.py wheel`; `check.py wheel-workplace` on a Cullet world |
 | Themes: Glass (default), Clear, Night, Linen, Walnut; F4 cycles, Settings › Play › Look sets, the settings file keeps; windows stay through a change | [themes.md](themes.md) | `check.py themes`; `LIVING_GAME_THEME=<t> check.py …` for each theme's stills |
@@ -39,6 +40,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | `characters/book.rs`, `characters/seen.rs`, `loading.rs` (the prewarm), `island.rs` (`person_recipe`) | [looks.md](looks.md) |
 | `looks.rs` | [names.md](names.md), [looks.md](looks.md) (`clothes`, `place`) |
 | `post.rs` (`post::Film`) | [film.md](film.md) |
+| `style.rs` (`HAIR_SHINES`, `HairShine`), `toon.wesl` (`hair_light`) | [hair.md](hair.md) |
 | `twist.rs` | [look-walk.md](look-walk.md) |
 | `ui/*` (interface D) | every feature |
 | `verbs.rs`, the skills' `_ui()` declarations | [items.md](items.md), [wheel.md](wheel.md), [grid.md](grid.md), [bar.md](bar.md), [offers.md](offers.md) |

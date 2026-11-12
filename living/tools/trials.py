@@ -22,8 +22,10 @@ TRIALS_NEO4J_CONTAINER, TRIALS_NEO4J_PORT). Databases are always `verify-trial-<
 the runner never publishes or deletes anything else. Evidence: .local/living/trials/<batch>/.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -1223,6 +1225,12 @@ class Instance:
         elif "home_of" in a:
             c = self.rows(f"SELECT * FROM character WHERE id = {self.roles[a['home_of']][0]}")[0]
             p = (c["home_x"], c["home_y"])
+        elif "farthest_town" in a:
+            # The centre of the settlement farthest from another anchor: always walkable ground
+            # (a map corner can be sea), used to clear an arena of animals (docs/PACK_MIND.md).
+            ref = self.anchor(a["farthest_town"])
+            groups = self.census_cache[-1]
+            p = max((self.anchor({"town": g}) for g in groups), key=lambda c: dist(c, ref))
         elif "far_from" in a:
             ref = self.anchor(a["far_from"])
             corners = [(8, 8), (w - 8, 8), (8, h - 8), (w - 8, h - 8)]
@@ -1236,8 +1244,14 @@ class Instance:
             n = max(1e-6, (vx * vx + vy * vy) ** 0.5)
             p = (p[0] + vx / n * a["distance"], p[1] + vy / n * a["distance"])
         dx, dy = a.get("offset", (0, 0))
-        # Members of a group stand a little apart.
-        p = (p[0] + dx + 1.5 * member, p[1] + dy + 0.8 * member)
+        if "spread" in a:
+            # Each member at its own offset from the point (a formation: docs/PACK_MIND.md, the
+            # arena's starts), in order; past the list's end, the last offsets again.
+            sx, sy = a["spread"][min(member, len(a["spread"]) - 1)]
+            p = (p[0] + dx + sx, p[1] + dy + sy)
+        else:
+            # Members of a group stand a little apart.
+            p = (p[0] + dx + 1.5 * member, p[1] + dy + 0.8 * member)
         return (min(max(p[0], 3), w - 3), min(max(p[1], 3), h - 3))
 
     # -- the script
@@ -1310,7 +1324,10 @@ class Instance:
                     b = self.rows(f"SELECT * FROM brain WHERE id = {actor}")
                     if b:
                         self.saved_graphs[actor] = json.loads(b[0]["graph"])
-                self.call("set_behavior", actor, json.dumps(self.graph_of(s["graph"], actor)))
+                # `graphs`: one graph per member, in order (cycling), for fixtures whose members
+                # differ (docs/PACK_MIND.md §5.6, the calibration "sides").
+                g = s["graphs"][i % len(s["graphs"])] if "graphs" in s else s["graph"]
+                self.call("set_behavior", actor, json.dumps(self.graph_of(g, actor)))
             elif kind == "items":
                 for item, qty in s["items"].items():
                     self.call("grant_items", actor, item, qty)
@@ -1327,7 +1344,9 @@ class Instance:
             elif kind == "structure":
                 self.call("place_structure", actor, s["kind"])
             elif kind == "background":
-                self.call("set_background", actor, json.dumps(s["background"]))
+                # Compact, as the seed writes it: the authority reads a pack's `"bold":true` from
+                # the text itself (act.rs), so `"bold": true` would never take effect.
+                self.call("set_background", actor, json.dumps(s["background"], separators=(",", ":")))
             elif kind == "kill":
                 self.call("kill", actor, s.get("cause", "trial"))
             elif kind == "clear_routines":
@@ -1475,6 +1494,10 @@ class Instance:
                    RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
         # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY);
         # with `minds.max` for at most that many at a time (`thinkers`, kept by `slots`).
+        # `minds.roles`: the service thinks for every member of these roles (an arena where both
+        # sides have minds: docs/PACK_MIND.md), not the subject alone.
+        if self.trial.get("minds", {}).get("roles"):
+            env["LIVING_ONLY"] = ",".join(str(i) for r in self.trial["minds"]["roles"] for i in self.roles.get(r, []))
         if self.trial.get("minds", {}).get("only") == "all":
             env.pop("LIVING_ONLY")
             if self.trial["minds"].get("max"):
@@ -1622,6 +1645,61 @@ class Instance:
             for r in sorted(self.rows(f"SELECT * FROM audience WHERE id > {self.cursor['audience']}"), key=lambda r: r["id"]):
                 self.cursor["audience"] = max(self.cursor["audience"], r["id"])
                 self.emit("audience", {"t": self.t(), **r})
+
+    def watch_bodies(self, spec):
+        """`record.bodies` ({"hz": 5}): every member of every role, `hz` times a second, to
+        `bodies.jsonl` (docs/PACK_MIND.md, the arena): position projected to the sample time
+        along its row's motion (to `next_ms`), facing (heading and held look, with their turns,
+        as `common::facing_at`), `running`, alive, the fighter row (band, move code, start,
+        release, end, target) and the activity (skill, creature target). Read-only, on its own
+        thread, until the instance stops. Also ends the run (`stopped_by` "side down") when a
+        role listed in `trial.end.side_down` has had no living member for `end.after_s` (30)."""
+        hz = float(spec.get("hz", 5)) if isinstance(spec, dict) else 5.0
+        end = self.trial.get("end", {})
+        down_roles, after_s = end.get("side_down", []), float(end.get("after_s", 30))
+        down_since = {}
+        ids = sorted({i for ids in self.roles.values() for i in ids})
+        if not ids:
+            return
+        where = " OR ".join(f"id = {i}" for i in ids)
+        (self.dir / "arena.json").write_text(json.dumps({"trial": self.trial["name"], "variant": self.variant, "replicate": self.rep,
+                                                         "arena": self.trial.get("arena", {}), "roles": self.roles, "end": end}, indent=1))
+        pool = concurrent.futures.ThreadPoolExecutor(6)
+        while not getattr(self, "_bodies_stop", False):
+            tick = time.time()
+            try:
+                # The five reads at once (2.14.1's SQL endpoint takes one statement a request), so
+                # a sample costs about one round trip.
+                chars, bodies, fighters, acts, vitals, clock = pool.map(self.rows, [f"SELECT {cols} FROM {t} WHERE {where}" for t, cols in (
+                    ("character", "id, alive, cause"), ("body", "*"), ("fighter", "*"), ("activity", "*"), ("vitals", "*"))] + ["SELECT * FROM clock"])
+                now = self.now_ms()
+                alive = {c["id"]: c["alive"] for c in chars}
+                out = {}
+                for b in bodies:
+                    dt = max(0.0, (min(now, b["next_ms"]) - b["t_ms"]) / 1000)
+                    head = b.get("heading") or 0.0
+                    head += (b.get("turn") or 0.0) * min(dt, b.get("turn_s") or 0.0)
+                    face = head + (b.get("face_off") or 0.0) + (b.get("face_turn") or 0.0) * min(dt, b.get("face_turn_s") or 0.0)
+                    out[str(b["id"])] = [round(b["x"] + b["vx"] * dt, 2), round(b["y"] + b["vy"] * dt, 2), round(math.atan2(math.sin(face), math.cos(face)), 3), bool(b.get("running"))]
+                fighter = {str(f["id"]): [f["band"], f["act"], f["act_ms"], f["release_ms"], f["until_ms"], f["target"]] for f in fighters}
+                act = {str(a["id"]): [a["skill"], a["target"][1] if isinstance(a.get("target"), list) and a["target"] and a["target"][0] == 3 else 0]
+                       for a in acts}
+                hp = {str(v["id"]): [round(v["hp"] + v.get("hp_rate", 0.0) * max(0.0, (now - v["at_ms"]) / 60000), 2), v["max_hp"], round(v["hunger"], 1)]
+                      for v in vitals}
+                # The world's last tick against the wall clock (ms; includes the read's latency) and
+                # the longest gap between ticks it has seen: how far a loaded host slowed it.
+                lag = [now - clock[0]["last_ms"], clock[0].get("max_gap_ms")] if clock else None
+                self.emit("bodies", {"t": self.t(), "ms": now, "b": out, "hp": hp, "lag": lag, "dead": {str(c["id"]): c.get("cause", "") for c in chars if not c["alive"]}, "f": fighter, "act": act})
+                for r in down_roles:
+                    if not any(alive.get(i) for i in self.roles.get(r, [])):
+                        down_since.setdefault(r, time.time())
+                        if time.time() - down_since[r] >= after_s:
+                            self.side_down = r
+                    else:
+                        down_since.pop(r, None)
+            except Exception as e:  # a failed read is a gap in the samples, not a failed run
+                self.emit("events", {"t": self.t(), "bodies_error": str(e)[:200]})
+            time.sleep(max(0.0, 1.0 / hz - (time.time() - tick)))
 
     def stop_mind(self):
         if self.mind and self.mind.alive():
@@ -1966,6 +2044,8 @@ class Instance:
         self.status = "starting"
         self.run_phase("start")
         self.t0 = time.time()
+        if self.trial.get("record", {}).get("bodies"):
+            threading.Thread(target=self.watch_bodies, args=(self.trial["record"]["bodies"],), daemon=True).start()
         self.start_mind()
         if self.trial.get("human"):
             self.human = threading.Thread(target=self.player.session, args=(self.trial["human"],), daemon=True)
@@ -2020,6 +2100,8 @@ class Instance:
                 self.stopped_by = f"mind exited ({self.mind.exit_code() if self.mind else None})"
             elif self.shared.get("abort"):
                 self.stopped_by = "aborted"
+            elif getattr(self, "side_down", None):
+                self.stopped_by = f"side down: {self.side_down}"
             if self.stopped_by or time.time() - last_save > 30:
                 self.save()
                 last_save = time.time()
@@ -2027,6 +2109,7 @@ class Instance:
                 break
             time.sleep(max(0.0, (getattr(self.opts, "sample_s", None) or SAMPLE_S) - (time.time() - tick)))
         self.status = "collecting"
+        self._bodies_stop = True
         self.stop_mind()
         self.read_journal()
         if life:
@@ -2040,6 +2123,8 @@ class Instance:
         try:
             if resume:
                 self.restore()
+                if self.trial.get("record", {}).get("bodies"):
+                    threading.Thread(target=self.watch_bodies, args=(self.trial["record"]["bodies"],), daemon=True).start()
                 if (not self.mind or not self.mind.alive()) and self.shared["variants"][self.variant].get("mind") is not False:
                     self.start_mind()
                 self.loop()
@@ -2249,12 +2334,19 @@ def summarize(d, trial, extra):
         p["capacity_429"] = p.get("capacity_429", 0) + (1 if out_of_capacity(r.get("error")) else 0)
         if r.get("latency_ms"):
             p["latency_ms"].append(r["latency_ms"])
-        m = by_model[r.get("model")]
-        m["calls"] += 1
-        m["tokens"] += r.get("tokens") or 0
-        m["prompt"] += r.get("prompt_tokens") or 0
-        m["completion"] += r.get("completion_tokens") or 0
-        m["cached"] += r.get("cached_tokens") or 0
+        # The rethink gate's decisions (`rethink-gate`) are journaled beside the calls but are not
+        # model calls; its judge's calls are (`rethink`), priced by the mind (`cost_usd`, from the
+        # local prices file for Jev).
+        if r.get("purpose") != "rethink-gate":
+            m = by_model[r.get("model")]
+            m["calls"] += 1
+            m["tokens"] += r.get("tokens") or 0
+            m["prompt"] += r.get("prompt_tokens") or 0
+            m["completion"] += r.get("completion_tokens") or 0
+            m["cached"] += r.get("cached_tokens") or 0
+            if r.get("cost_usd") is not None:
+                m["cost_usd"] = m.get("cost_usd", 0.0) + float(r["cost_usd"])
+                m["cost_known"] = m.get("cost_known", 0) + 1
         if r.get("purpose") == "consolidate":
             rep = parse_reply(r.get("reply"))
             if isinstance(rep, dict) and isinstance(rep.get("remember"), list):
@@ -2816,9 +2908,13 @@ def report(a):
             tok[m]["prompt"] += v["prompt"]
             tok[m]["completion"] += v["completion"]
             tok[m]["cached"] += v["cached"]
+            tok[m]["cost_usd"] += v.get("cost_usd", 0.0)
+            tok[m]["cost_known"] += v.get("cost_known", 0)
     out.append("| Model | Calls | Tokens | Prompt | Completion | Cached | Est. cost (USD) |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for m, v in tok.items():
         c = cost(m, v["prompt"], v["completion"], v["cached"])
+        if c is None and v["calls"] and v["cost_known"] == v["calls"]:
+            c = v["cost_usd"]  # priced by the mind on every call (Jev, from the local prices file)
         out.append(f"| {m} | {v['calls']} | {v['tokens']:,} | {v['prompt']:,} | {v['completion']:,} | {v['cached']:,} | {f'{c:.2f}' if c is not None else 'unknown'} |")
     out.append("")
     pm = defaultdict(lambda: Counter())

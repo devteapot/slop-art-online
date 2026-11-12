@@ -139,9 +139,12 @@ living-disk-clean *args:
 # The store (docs/STORE.md): what this machine holds (`manifest`), what would be published and
 # every redaction (`scrub --dry-run SRC`), `pack`, `fetch motion-library`, `fetch batch NAME`.
 # Publishing to Hugging Face needs --yes-publish AND publish_enabled in ~/.config/slop-store/config.json.
+# huggingface_hub lives in ~/.slop-store-venv (docs/STORE.md, "Library"); its Python is used when present.
 [positional-arguments]
 living-store *args:
-    python3 living/tools/store.py "$@"
+    #!/usr/bin/env bash
+    py=python3; [ -x ~/.slop-store-venv/bin/python ] && py=~/.slop-store-venv/bin/python
+    exec "$py" living/tools/store.py "$@"
 
 # The store's self-test: planted secrets, owner lines, pack/fetch round trips, the publish gate.
 living-store-selftest:

@@ -165,6 +165,84 @@ impl Minds {
         self.sheet_persona(c, bg).await
     }
 
+    /// The first identity of someone born in the world whose mind first starts when they are
+    /// past childhood (`Origin::Grown`): facts only, with no model call and nothing invented.
+    /// Its parents (`CHILD_OF`, and the `parent` relation a newborn's mind starts with), its
+    /// siblings and children, its home and settlement, and its inborn temperament; no values,
+    /// goals, pastimes or mood. Its body's age and stage reach every prompt as the body line,
+    /// and what it lived is consolidated as usual, so its later identity is its own.
+    pub(super) async fn grown_identity(&self, c: &Character) -> Result<()> {
+        let facts = self.world_facts(c).await?;
+        let thought = reference(c.id, "grown");
+        let now = llm::now_ms();
+        let named = |id: u32| -> Option<String> {
+            let p = self.conn.db.character().id().find(&id)?;
+            Some(if p.alive { p.name } else { format!("the late {}", p.name) })
+        };
+        let parents: Vec<(u32, String)> = [c.parent_a, c.parent_b].into_iter().filter(|p| *p != 0).filter_map(|p| Some((p, named(p)?))).collect();
+        let siblings: Vec<String> = self
+            .conn
+            .db
+            .character()
+            .iter()
+            .filter(|k| k.id != c.id && k.alive && k.kind == c.kind && [k.parent_a, k.parent_b].iter().any(|p| *p != 0 && (*p == c.parent_a || *p == c.parent_b)))
+            .map(|k| k.name)
+            .collect();
+        let children: Vec<String> = facts["children"].as_array().into_iter().flatten().filter_map(|k| k["name"].as_str().map(String::from)).collect();
+        let and = |xs: &[String]| match xs {
+            [] => String::new(),
+            [a] => a.clone(),
+            [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        };
+        let mut narrative = format!("I am {}", c.name);
+        if !parents.is_empty() {
+            narrative.push_str(&format!(", child of {}", and(&parents.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>())));
+        }
+        narrative.push('.');
+        if let Some(home) = facts["settlement"]["name"].as_str() {
+            narrative.push_str(&format!(" My home is in {home}."));
+        }
+        if !siblings.is_empty() {
+            narrative.push_str(&format!(" {} {} my parents' child{} too.", and(&siblings), if siblings.len() == 1 { "is" } else { "are" }, if siblings.len() == 1 { "" } else { "ren" }));
+        }
+        if !children.is_empty() {
+            narrative.push_str(&format!(" My child{}: {}.", if children.len() == 1 { "" } else { "ren" }, and(&children)));
+        }
+        let born = self.born_temperament(c.id);
+        let identity = json!({
+            "narrative": narrative, "values": [], "goals": [], "pastimes": [], "calling": "",
+            "traits": born.clone().unwrap_or_else(|| json!({})), "mood": "",
+            "written_by": "facts", "from_facts": facts,
+        });
+        if let Some(store) = &self.store {
+            self.given_facts(c, &facts, &thought, now).await?;
+            let mut kin = memory::Patch::default();
+            for (id, name) in &parents {
+                let key = format!("person:{id}");
+                kin.nodes.push(memory::NodeOp { key: key.clone(), labels: vec!["Person".into(), "Parent".into()], name: Some(name.trim_start_matches("the late ").to_string()), props: Default::default() });
+                kin.edges.push(memory::EdgeOp { from: "self".into(), rel: "CHILD_OF".into(), to: key, confidence: 1.0, because: Vec::new(), props: Default::default(), firsthand: false, sources: Vec::new() });
+            }
+            // The parents as a newborn's mind starts with them (`birth_persona`): they raised it.
+            let alive: Vec<Value> = parents.iter().filter(|(id, _)| self.conn.db.character().id().find(id).is_some_and(|p| p.alive)).map(|(id, _)| json!({"id": id, "trust": 70, "affinity": 80, "label": "parent"})).collect();
+            memory::sugar_into(&json!({"relations": alive}), &mut kin, &[]);
+            kin.lived_under = Some("world".into());
+            store.apply(c.id, &kin, &thought, now).await?;
+            store.set_identity(c.id, 1, &identity, "who I was when my mind began", &thought, now).await?;
+        }
+        log::info!("{} (#{}) grown before its mind began, from facts: {narrative}", c.name, c.id);
+        let persona = PersonaIn {
+            narrative,
+            values: Vec::new(),
+            goals: Vec::new(),
+            traits: born.unwrap_or_else(|| json!({})).to_string(),
+            mood: String::new(),
+            pastimes: Vec::new(),
+            calling: String::new(),
+        };
+        let t = ThoughtIn { kind: "consolidate".into(), summary: "Who I am, from what the world holds about me: grown before my mind began.".into(), detail: json!({"facts": facts, "model_written": [], "traits_from": "genome"}).to_string(), latency_ms: 0, tokens: 0, model: "facts".into(), reference: thought };
+        self.project(c.id, Some(persona), Some(t)).await
+    }
+
     /// Its first identity, written by a model from the world's facts only, and marked so.
     pub(super) async fn facts_identity(&self, c: &Character) -> Result<()> {
         let facts = self.world_facts(c).await?;
