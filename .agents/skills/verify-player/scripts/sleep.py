@@ -155,7 +155,9 @@ def main():
     for who in (f1, f2):
         call("set_behavior", [who, json.dumps({"wait": 120})], as_admin=True)
     snaps["fight"] = got
-    check("a fight about 3 m away wakes it", got, {"distances": [near1, near2], "told": got})
+    snaps["fighters_after"] = sql(f"SELECT id, alive FROM character WHERE id = {f1} OR id = {f2}", admin)
+    snaps["woken_all"] = woken("")
+    check("a fight about 3 m away wakes it", got, {"distances": [near1, near2], "told": got, "woken": snaps["woken_all"][-3:], "fighters": snaps["fighters_after"]})
     call("human_act", [json.dumps({"wait": 1})])
 
     out = V.run_dir(a.run) / "sleep.json"
