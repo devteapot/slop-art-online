@@ -398,13 +398,31 @@ mod tests {
         assert!(checked(|v| v["towns"][0]["residents"][0]["age"] = 15.into()).unwrap_err().contains("youth"));
     }
 
-    /// A seed without looks is unchanged (the island).
+    /// A seed without looks is unchanged (the hamlet).
     #[test]
     fn seeds_without_looks_pass() {
-        let s: Seed = serde_json::from_str(include_str!("../../seeds/island.json")).unwrap();
+        let s: Seed = serde_json::from_str(include_str!("../../seeds/hamlet.json")).unwrap();
         let sc = living_rules::script::Scripts::new(seed::SKILLS).unwrap();
         assert!(s.looks.is_none());
         assert_eq!(check(&s, &sc), Ok(()));
+    }
+
+    /// The island's seed carries the pool alone (living/tools/pool_looks.py: Cullet's pool at the
+    /// same generation): it passes the check, no resident names a look, so all 277 wear a pool
+    /// entry by `pool_pick`, and every pool person has a line for every band.
+    #[test]
+    fn the_island_wears_the_pool() {
+        let s: Seed = serde_json::from_str(include_str!("../../seeds/island.json")).unwrap();
+        let sc = living_rules::script::Scripts::new(seed::SKILLS).unwrap();
+        assert_eq!(check(&s, &sc), Ok(()));
+        let l = s.looks.as_ref().unwrap();
+        let cullet: serde_json::Value = serde_json::from_str(include_str!("../../seeds/worlds/cullet/looks.json")).unwrap();
+        assert_eq!(l.generation, cullet["looks"]["generation"].as_str().unwrap());
+        assert_eq!((l.pool.len(), l.people.len()), (128, 128));
+        let residents: Vec<&seed::SeedResident> = s.towns.iter().chain(s.villages.iter()).flat_map(|t| t.residents.iter()).collect();
+        assert_eq!(residents.len(), 277);
+        assert!(residents.iter().all(|r| r.look.is_empty()));
+        assert!(l.pool.iter().all(|p| LookBand::ALL.iter().all(|b| l.has(p, *b))));
     }
 
     /// Cullet's seed carries char-4's look data (worlds/cullet/looks.json, through
