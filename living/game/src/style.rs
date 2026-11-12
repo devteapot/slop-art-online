@@ -387,20 +387,71 @@ impl Default for Style {
             face_shadow: 1.25,
             face_parts: 0.25,
             face_rim: 0.15,
-            hair_ring: 0.7,
-            hair_ring_width: 0.05,
-            hair_ring_shift: 0.35,
+            hair_ring: 0.0,
+            hair_ring_width: 0.0,
+            hair_ring_shift: 0.0,
             hair_rim: 0.2,
             hair_ring_soft: 0.0,
-            hair_ring_teeth: 1.0,
+            hair_ring_teeth: 0.0,
             hair_ring_strands: 0.0,
-            hair_ring_up: 0.2,
-            hair_ring_front: 2.0,
+            hair_ring_up: 0.0,
+            hair_ring_front: 0.0,
             detail: 1.0,
             detail_relief: 0.0,
             detail_fade: [20.0, 55.0],
         }
-        .with_hair_ring_env()
+        .with_shine(HairShine::default())
+    }
+}
+
+/// A hair shine: the hair ring's style values under a name (Settings › Play › Hair shine).
+pub struct Shine {
+    pub name: &'static str,
+    pub label: &'static str,
+    /// Strength, width, edge softness, comb teeth, strand break-up, tangent shift, how far up a
+    /// surface must face, and from how far it faces forward the ring fades (`Style::hair_ring*`).
+    pub ring: [f32; 8],
+}
+
+/// The hair shines, the default first (hair-ring-1, approved 2026-11-12).
+pub const HAIR_SHINES: [Shine; 3] = [
+    // A hard band over the crown, broken where locks part, never across the fringe.
+    Shine { name: "crown", label: "Crown", ring: [0.7, 0.05, 0.15, 1.0, 0.6, 0.35, 0.3, 0.25] },
+    // A softer, wider band broken by the strands.
+    Shine { name: "soft", label: "Soft", ring: [0.45, 0.16, 1.0, 0.0, 1.0, 0.35, 0.2, 2.0] },
+    // The ring before hair-ring-1: one hard band, which crosses a smooth fringe.
+    Shine { name: "today", label: "Today", ring: [0.7, 0.05, 0.0, 1.0, 0.0, 0.35, 0.2, 2.0] },
+];
+
+/// The chosen hair shine: an index into [`HAIR_SHINES`]. Kept in the settings file only once
+/// chosen, so a viewer who never chose follows the default. `LIVING_GAME_HAIR_SHINE=<name>` starts
+/// in one; `LIVING_GAME_HAIR_RING` overrides single values over any (captures).
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct HairShine(pub usize);
+
+impl HairShine {
+    pub fn parse(s: &str) -> Option<HairShine> {
+        HAIR_SHINES.iter().position(|x| x.name == s).map(HairShine)
+    }
+    pub fn name(self) -> &'static str {
+        HAIR_SHINES[self.0.min(HAIR_SHINES.len() - 1)].name
+    }
+    pub fn from_env() -> Option<HairShine> {
+        std::env::var("LIVING_GAME_HAIR_SHINE").ok().and_then(|v| HairShine::parse(v.trim()))
+    }
+    /// Settings' choices: (label, name).
+    pub fn choices() -> [(&'static str, &'static str); 3] {
+        HAIR_SHINES.each_ref().map(|s| (s.label, s.name))
+    }
+}
+
+/// Keep the style profile's hair ring on the chosen shine (an environment's switch rebuilds the
+/// profile from its defaults); written only when it differs, so materials are not touched each
+/// frame.
+fn apply_shine(shine: Res<HairShine>, mut style: ResMut<Style>) {
+    let want = style.with_shine(*shine);
+    if *style != want {
+        *style = want;
     }
 }
 
@@ -420,6 +471,14 @@ fn hair_ring_env() -> Option<[Option<f32>; 8]> {
 }
 
 impl Style {
+    /// The profile with a shine's ring values, then `LIVING_GAME_HAIR_RING`'s over them.
+    pub fn with_shine(mut self, shine: HairShine) -> Self {
+        let [x, w, soft, teeth, strands, shift, up, front] = HAIR_SHINES[shine.0.min(HAIR_SHINES.len() - 1)].ring;
+        (self.hair_ring, self.hair_ring_width, self.hair_ring_soft, self.hair_ring_teeth) = (x, w, soft, teeth);
+        (self.hair_ring_strands, self.hair_ring_shift, self.hair_ring_up, self.hair_ring_front) = (strands, shift, up, front);
+        self.with_hair_ring_env()
+    }
+
     fn with_hair_ring_env(mut self) -> Self {
         if let Some([x, w, soft, teeth, strands, shift, up, front]) = hair_ring_env() {
             self.hair_ring_front = front.unwrap_or(self.hair_ring_front);
@@ -514,8 +573,9 @@ impl Plugin for StylePlugin {
         app.add_plugins(MaterialPlugin::<Toon>::default())
             .add_plugins(bevy_mod_outline::OutlinePlugin::EXTRUDE_VERTEX)
             .init_resource::<Style>()
+            .insert_resource(HairShine::from_env().unwrap_or_default())
             .add_systems(Startup, load_detail)
-            .add_systems(Update, (apply, fog_outlines).chain());
+            .add_systems(Update, (apply_shine, apply, fog_outlines).chain());
     }
 }
 
