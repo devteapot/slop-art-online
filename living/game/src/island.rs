@@ -1041,7 +1041,7 @@ fn face_share(land: &Land, x: f32, z: f32, step: f32) -> f32 {
 fn person_recipe(it: &Item) -> Option<crate::characters::Recipe> {
     let (seed, folk, style) = it.person.as_ref()?;
     let book = crate::characters::book::book().filter(|_| *folk == "adult" && crate::characters::compose::enabled());
-    let decor = book.and_then(|b| b.decor(*seed, crate::characters::book::ADULT).and_then(|(key, _)| b.recipe(key).ok()));
+    let decor = book.and_then(|b| b.decor(*seed, true).and_then(|(key, _)| b.recipe(key).ok()));
     Some(decor.unwrap_or_else(|| crate::characters::Recipe::random_in(*seed, folk, style)))
 }
 

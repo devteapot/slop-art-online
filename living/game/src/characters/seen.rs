@@ -1,14 +1,16 @@
-//! What the authority projects of a person's look (docs/LOOK.md §2): the columns appended to
-//! `seen_characters` (`look`, `look_band`, `girth`, `height`, `colour`) and the world's
-//! `look_book` generation, read in one place so the rest of the client never touches the row.
+//! What the authority projects of a person's look (docs/LOOK.md §2): the `look` column appended
+//! to `seen_characters` (a line key, `lk_…`, sent to whoever sees the person at every distance)
+//! and the world's `look_book` generation, read in one place so the rest of the client never
+//! touches the row.
 //!
 //! **Until the authority half lands** the bindings have no such columns, and these read a
 //! test-only shim instead: `LIVING_GAME_LOOK_SHIM=pool[;none=ID,…][;missing=ID,…]
-//! [;generation=G][;grow=ID@S]` gives each person a pool entry by their id at the band of their
-//! life stage, no key to the ids in `none`, a key the book lacks to those in `missing`, the world
-//! the generation `G` (default: the book's), and person `ID` the next band `S` seconds after the
-//! first look is read (`grow`). Unset, every person has no key and is drawn
-//! as before. The shim goes with the rebase onto the authority's bindings.
+//! [;generation=G][;grow=ID@S]` gives each person a line the book lets characters wear, of the
+//! age band of their life stage, by their id; no key to the ids in `none`; a key the book lacks
+//! to those in `missing`; the world the generation `G` (default: the book's); and person `ID` a
+//! line of the next band `S` seconds after the first look is read (`grow`). Unset, every person
+//! has no key and is drawn as before. The shim goes with the rebase onto the authority's
+//! bindings.
 
 use super::book::{self, LookBook};
 use living_bindings::SeenCharacter;
@@ -17,22 +19,15 @@ use std::sync::OnceLock;
 /// A person's look as this viewer perceives it.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Seen {
-    /// `lk_…`, or empty: no key (a world from before looks; or a far row, if the authority sends
-    /// none there).
+    /// `lk_…`, or empty: no key (a world from before looks, or not a person).
     pub look: String,
-    /// The look band (`book::INFANT`..`book::ELDER`); 255 for what is not a person.
-    pub band: u8,
-    pub girth: u8,
-    pub height: u8,
-    /// The dominant colour word.
-    pub colour: String,
 }
 
 /// The columns of a person's row.
 pub fn of(c: &SeenCharacter) -> Seen {
     match shim() {
         Some(s) => s.of(c, book::book()),
-        None => Seen { band: 255, girth: 255, height: 255, ..Default::default() },
+        None => Seen::default(),
     }
 }
 
@@ -47,14 +42,13 @@ pub fn generation_warning(world: &str, book: Option<&LookBook>) -> Option<String
     (!world.is_empty() && !b.knows(world)).then(|| format!("looks: the world was made with look generation {world}, which the look book ({}) does not hold; people it lacks are drawn as VRoid bases", b.generation))
 }
 
-/// The band a life stage gives when the age within it is not known: the shim's, and nothing
-/// else's (the authority sends the band).
+/// The age band a life stage gives when the age within it is not known: the shim's, and nothing
+/// else's (the authority sends the key).
 fn band_of_stage(stage: u8) -> u8 {
     match stage {
-        0 => book::INFANT,
-        1 => book::CHILD,
-        3 => book::ELDER,
-        _ => book::ADULT,
+        0 | 1 => 1,
+        3 => 4,
+        _ => 3,
     }
 }
 
@@ -91,23 +85,20 @@ fn shim() -> Option<&'static Shim> {
 
 impl Shim {
     fn of(&self, c: &SeenCharacter, book: Option<&LookBook>) -> Seen {
-        if c.kind != "person" {
-            return Seen { band: 255, girth: 255, height: 255, ..Default::default() };
+        if c.kind != "person" || self.none.contains(&c.id) {
+            return Seen::default();
+        }
+        if self.missing.contains(&c.id) {
+            return Seen { look: "lk_ffffffffffffffff".into() };
         }
         let mut band = band_of_stage(c.stage);
         if self.grow.is_some_and(|(id, t)| id == c.id && self.start.elapsed().as_secs_f32() >= t) {
-            band = (band + 1).min(book::ELDER);
+            band = (band + 1).min(4);
         }
-        let look = match book {
-            _ if self.none.contains(&c.id) => String::new(),
-            _ if self.missing.contains(&c.id) => "lk_ffffffffffffffff".into(),
-            Some(b) if !b.pool.is_empty() => {
-                let entry = &b.pool[(c.id as usize).wrapping_mul(2_654_435_761) % b.pool.len()];
-                b.people.get(entry).and_then(|bands| bands.get(&band.to_string()).or_else(|| bands.values().last())).cloned().unwrap_or_default()
-            }
-            _ => String::new(),
-        };
-        Seen { look, band, girth: 1, height: 1, colour: String::new() }
+        let Some(b) = book else { return Seen::default() };
+        let fit: Vec<&str> = b.wearable().into_iter().filter(|(_, l)| book::band_of_type(&l.person.kind) == Some(band)).map(|(k, _)| k).collect();
+        let look = (!fit.is_empty()).then(|| fit[(c.id as u64).wrapping_mul(2_654_435_761) as usize % fit.len()].to_string()).unwrap_or_default();
+        Seen { look }
     }
 }
 

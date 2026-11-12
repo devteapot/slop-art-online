@@ -3,15 +3,16 @@
 //! bundle).
 //!
 //! **What the authority sends** (`seen_characters`, per viewer): a person's line key (`look`,
-//! `lk_` and 16 hex digits), their look band, and girth, height and colour words. The client
-//! draws the line it finds under the key ([`LookBook::recipe`]); the key says nothing by itself.
+//! `lk_` and 16 hex digits, a hash of the drawn fields), to whoever sees them, at every distance.
+//! The client draws the line it finds under the key ([`LookBook::recipe`]); the key says nothing
+//! by itself, and the book holds only lines (no names, no people across bands, no pool).
 //! A person without a key, a key the book does not hold, or a line whose type or style files are
 //! not on disk is drawn as before this change: a VRoid recipe from the land seed and their id
 //! (`live::recipe_for`), with one warning line.
 //!
 //! **Background people** (an island's extras, who have no authority rows) take lines from
-//! `decor`, a pool kept apart from the newcomers' `pool`, by their own seed ([`LookBook::decor`]),
-//! so an extra is never a real newcomer's twin.
+//! `decor`, a list kept apart from every line a character can wear, by their own seed
+//! ([`LookBook::decor`]), so an extra is never a real person's twin.
 //!
 //! **Loaded once, lazily** ([`book`]): the first person drawn reads it; a missing or broken file
 //! is one warning, and then everyone is drawn as before.
@@ -25,13 +26,18 @@ use std::sync::{Mutex, OnceLock};
 /// The book's path under the asset folder.
 pub const FILE: &str = "characters/looks.json";
 
-/// Look bands (docs/LOOK.md §4), as `seen_characters.look_band` carries them; 255 is not a person.
-pub const INFANT: u8 = 0;
-pub const CHILD: u8 = 1;
-#[allow(dead_code)]
-pub const YOUTH: u8 = 2;
-pub const ADULT: u8 = 3;
-pub const ELDER: u8 = 4;
+/// A line's age band by its type (`child-u-a`, `youth-f-b`, `adult-m-c`, `elder-f-a`): 1 child,
+/// 2 youth, 3 adult, 4 elder (docs/LOOK.md §4's bands; infants wear child types). None for a type
+/// outside them.
+pub fn band_of_type(kind: &str) -> Option<u8> {
+    match kind.split('-').next()? {
+        "child" => Some(1),
+        "youth" => Some(2),
+        "adult" => Some(3),
+        "elder" => Some(4),
+        _ => None,
+    }
+}
 
 /// One line: the person as compose reads it, and the words the generator wrote for it (kept as
 /// the book has them; `living_rules::look::phrase` reads them once the authority half lands).
@@ -51,11 +57,8 @@ pub struct LookBook {
     pub generation: String,
     pub generations: Vec<String>,
     pub lines: HashMap<String, Line>,
-    /// Person entries newcomers and births are drawn from (`lp_…`), and the background pool.
-    pub pool: Vec<String>,
+    /// Lines for background people only (`lk_…`), disjoint from every line a character wears.
     pub decor: Vec<String>,
-    /// A person entry's line for each band (`"3"` → `lk_…`).
-    pub people: HashMap<String, BTreeMap<String, String>>,
 }
 
 /// Why a person is not drawn from the book.
@@ -106,16 +109,22 @@ impl LookBook {
         Ok(from_line(key, &line.person))
     }
 
-    /// A background person's line by their seed: a `decor` entry at `band` (else the entry's
-    /// nearest band). None without a decor pool.
-    pub fn decor(&self, seed: u64, band: u8) -> Option<(&str, &Line)> {
-        if self.decor.is_empty() {
+    /// A background person's line by their seed: one of the `decor` lines whose type is grown
+    /// (youth, adult or elder; a child's when `grown` is false). None without one.
+    pub fn decor(&self, seed: u64, grown: bool) -> Option<(&str, &Line)> {
+        let mut fit: Vec<(&str, &Line)> = self.decor.iter().filter_map(|k| self.lines.get_key_value(k.as_str())).filter(|(_, l)| band_of_type(&l.person.kind).is_some_and(|b| (b >= 2) == grown)).map(|(k, l)| (k.as_str(), l)).collect();
+        if fit.is_empty() {
             return None;
         }
-        let entry = &self.decor[(mix(seed) % self.decor.len() as u64) as usize];
-        let bands = self.people.get(entry)?;
-        let key = bands.get(&band.to_string()).or_else(|| bands.iter().min_by_key(|(b, _)| b.parse::<i32>().map_or(99, |b| (b - band as i32).abs())).map(|(_, k)| k))?;
-        self.lines.get_key_value(key.as_str()).map(|(k, l)| (k.as_str(), l))
+        fit.sort_by(|a, b| a.0.cmp(b.0));
+        Some(fit[(mix(seed) % fit.len() as u64) as usize])
+    }
+
+    /// The lines a character can wear (every line but the decor), in key order.
+    pub fn wearable(&self) -> Vec<(&str, &Line)> {
+        let mut v: Vec<(&str, &Line)> = self.lines.iter().filter(|(k, _)| !self.decor.contains(k)).map(|(k, l)| (k.as_str(), l)).collect();
+        v.sort_by(|a, b| a.0.cmp(b.0));
+        v
     }
 
     /// The fewest lines (greedy) that between them wear every type and every style file of the
@@ -158,7 +167,7 @@ pub fn book() -> Option<&'static LookBook> {
         let path = std::path::Path::new(&crate::lookdev::asset_root()).join(FILE);
         match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|s| LookBook::parse(&s)) {
             Ok(b) => {
-                bevy::log::info!("looks: {} lines, {} pool and {} decor people, generation {}", b.lines.len(), b.pool.len(), b.decor.len(), b.generation);
+                bevy::log::info!("looks: {} lines ({} decor), generation {}", b.lines.len(), b.decor.len(), b.generation);
                 Some(b)
             }
             Err(e) => {
@@ -232,9 +241,7 @@ mod tests {
                 "lk_00000000000000a2": line("adult-f-a", "long", &["jersey-f"]),
                 "lk_00000000000000c1": line("child-u-a", "bob", &["smock_50-f"]),
             },
-            "pool": ["lp_0000000000000001"],
-            "decor": ["lp_0000000000000002"],
-            "people": { "lp_0000000000000002": { "1": "lk_00000000000000c1", "3": "lk_00000000000000a2" } },
+            "decor": ["lk_00000000000000a2", "lk_00000000000000c1"],
         });
         LookBook::parse(&text.to_string()).unwrap()
     }
@@ -257,13 +264,14 @@ mod tests {
     }
 
     #[test]
-    fn a_background_person_keeps_one_decor_entry_across_bands() {
+    fn background_people_wear_decor_lines_only() {
         let b = sample();
-        assert_eq!(b.decor(7, CHILD).map(|(k, _)| k), Some("lk_00000000000000c1"));
-        assert_eq!(b.decor(7, ADULT).map(|(k, _)| k), Some("lk_00000000000000a2"));
-        // No line for the band: the entry's nearest.
-        assert_eq!(b.decor(7, ELDER).map(|(k, _)| k), Some("lk_00000000000000a2"));
-        assert!(LookBook::default().decor(7, ADULT).is_none());
+        assert_eq!(b.decor(7, true).map(|(k, _)| k), Some("lk_00000000000000a2"));
+        assert_eq!(b.decor(7, false).map(|(k, _)| k), Some("lk_00000000000000c1"));
+        assert!(LookBook::default().decor(7, true).is_none());
+        // A character never wears a decor line.
+        assert_eq!(b.wearable().iter().map(|(k, _)| *k).collect::<Vec<_>>(), vec!["lk_00000000000000a1"]);
+        assert_eq!((band_of_type("youth-f-b"), band_of_type("elder-m-a"), band_of_type("giant")), (Some(2), Some(4), None));
     }
 
     #[test]

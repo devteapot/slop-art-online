@@ -30,3 +30,5 @@ __pycache__/
 /living/game/assets/envs/*/
 # Painted textures (living/tools/textures/paint.py; `just living-game-textures`)
 /living/game/assets/textures/
+# The look book (docs/LOOK.md §5): from char-4's bundle, regenerated, never committed.
+/living/game/assets/characters/looks.json

@@ -461,12 +461,11 @@ pub struct DumpExtra<'w, 's> {
 }
 
 impl DumpExtra<'_, '_> {
-    /// Each person drawn: the look it was drawn from (docs/LOOK.md: its key, empty for none, and
-    /// band), whether it is composed from that line or a VRoid recipe, whether a redraw for a new
+    /// Each person drawn: the look key it was drawn from (docs/LOOK.md; empty for none), whether it is composed from that line or a VRoid recipe, whether a redraw for a new
     /// look is under way, and its chips (top and bottom colours as `looks.rs` reads them).
     fn looks_json(&self) -> Vec<serde_json::Value> {
         let Some(live) = self.live.as_ref() else { return vec![] };
-        let mut v: Vec<_> = live.looks().map(|l| serde_json::json!({"id": l.id, "look": l.look, "band": l.band, "composed": l.composed, "swapping": l.swapping, "chips": self.looks.colours.get(&l.id)})).collect();
+        let mut v: Vec<_> = live.looks().map(|l| serde_json::json!({"id": l.id, "look": l.look, "composed": l.composed, "swapping": l.swapping, "chips": self.looks.colours.get(&l.id)})).collect();
         v.sort_by_key(|x| x["id"].as_u64());
         v
     }

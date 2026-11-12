@@ -1970,25 +1970,27 @@ def outer_piece(line, upper):
     return line.get("colors", {}).get("outfit", {}).get(best[1]) if best else None
 
 
+BANDS = {"child": 1, "youth": 2, "adult": 3, "elder": 4}
+
+
 def shim_key(book, cid, band):
-    """The test shim's key for a person (`characters/seen.rs`): a pool entry by id, at a band."""
-    pool = book["pool"]
-    entry = pool[(cid * 2_654_435_761) % 2**64 % len(pool)]
-    bands = book["people"][entry]
-    return bands.get(str(band)) or list(bands.values())[-1]
+    """The test shim's key for a person (`characters/seen.rs`): a line characters wear (not
+    decor) of the band's type, by id."""
+    fit = sorted(k for k, v in book["lines"].items() if k not in book.get("decor", []) and BANDS.get(v["person"]["type"].split("-")[0]) == band)
+    return fit[(cid * 2_654_435_761) % 2**64 % len(fit)] if fit else ""
 
 
 @scenario("looks")
 def looks(run, c):
-    """look-1 (docs/LOOK.md §5): residents are drawn from their projected look. Until the
-    authority projects looks the columns come from the client's test shim
+    """look-1 (docs/LOOK.md §5): residents are drawn from their projected look key. Until the
+    authority projects looks the key comes from the client's test shim
     (`LIVING_GAME_LOOK_SHIM`, `characters/seen.rs`) over the look book on disk. Three residents
     beside the player: A has a key (composed from its line, chips by piece), B has none and C
     has a key the book lacks (both drawn as VRoid bases, one warning line each). A then grows a
     band and is redrawn in place: drawn in every frame through it, crossfaded. My own look comes
     from my own row. A second drive gives the world a generation the book does not hold (one
     warning at connect), and a look-dev island run draws background people from the book's decor
-    pool only."""
+    lines only."""
     s = "looks"
     if not os.path.exists(LOOK_BOOK):
         c.check(s, "a look book is on disk", False, LOOK_BOOK)
@@ -2007,8 +2009,8 @@ def looks(run, c):
     c.check(s, "scene: the three residents are in view", {a, b, d} <= seen0, f"{a}, {b}, {d} in view {sorted(seen0)}")
     by = {x["id"]: x for x in d0.get("looks") or []}
     la, lb, ld = by.get(a, {}), by.get(b, {}), by.get(d, {})
-    band_a = la.get("band")
-    c.check(s, "a resident with a key is composed from its line", la.get("composed") is True and la.get("look") in book["lines"] and la.get("look") == shim_key(book, a, band_a), json.dumps(la))
+    # The residents are grown (stage 2): the shim gives them an adult line, and a grown band an elder's.
+    c.check(s, "a resident with a key is composed from its line", la.get("composed") is True and la.get("look") == shim_key(book, a, 3), json.dumps(la))
     composed = [x for x in by.values() if x.get("composed")]
     c.check(s, "every composed person's key is in the book, and every person with a key the book holds is composed",
             all(x["look"] in book["lines"] for x in composed) and all(x.get("composed") for x in by.values() if x.get("look") in book["lines"]), f"{len(composed)} of {len(by)} composed")
@@ -2023,7 +2025,7 @@ def looks(run, c):
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     mine = by.get(me, {})
-    c.check(s, "my own look comes from my own row", mine.get("composed") is True and mine.get("look") == shim_key(book, me, mine.get("band")), f"me {me}: {json.dumps(mine)}")
+    c.check(s, "my own look comes from my own row", mine.get("composed") is True and mine.get("look") == shim_key(book, me, 3), f"me {me}: {json.dumps(mine)}")
     # The band change, redrawn in place.
     burst_d = [dump(out, f"s{i:02d}") or {} for i in range(48)]
     in_view = [any(x["id"] == a for x in bd.get("seen") or []) for bd in burst_d]
@@ -2031,9 +2033,8 @@ def looks(run, c):
     feet = [next((x["feet"] for x in bd.get("seen") or [] if x["id"] == a), None) for bd in burst_d]
     jumps = [round(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5) for p, q in zip(feet, feet[1:]) if p and q]
     d2 = {x["id"]: x for x in (dump(out, "02") or {}).get("looks") or []}.get(a, {})
-    grown = min((band_a or 0) + 1, 4)
-    c.check(s, "a band change redraws the person from the new band's line", f"looks: #{a} redrawn for band {grown}" in L and d2.get("band") == grown and d2.get("composed") is True and d2.get("swapping") is False
-            and d2.get("look") == shim_key(book, a, grown), f"band {band_a} → {json.dumps(d2)}")
+    c.check(s, "a band change (a new key) redraws the person from the new line", f"looks: #{a} redrawn for a new look" in L and d2.get("composed") is True and d2.get("swapping") is False
+            and d2.get("look") == shim_key(book, a, 4) != la.get("look"), f"{la.get('look')} → {json.dumps(d2)}")
     c.check(s, "the redraw is in place: drawn in every dump through it, never jumping on screen", any(swapping) and all(in_view) and jumps and max(jumps) <= 60,
             f"swapping in {sum(1 for w in swapping if w)} of 48 dumps; in view {sum(in_view)} of 48; largest step {max(jumps) if jumps else None} px")
     c.check(s, "no generation warning when the world's generation is the book's", "looks: the world was made with look generation" not in L)
@@ -2042,8 +2043,8 @@ def looks(run, c):
     L2 = log(out2)
     c.check(s, "a world generation the book does not hold: one warning at connect", code2 == 0 and L2.count("looks: the world was made with look generation c4-not-this-book") == 1, text2[-200:])
     # 3. Background people on the look-dev island: from the decor pool only.
-    pool_lines = {k for lp in book["pool"] for k in book["people"][lp].values()}
-    decor_lines = {k for lp in book["decor"] for k in book["people"][lp].values()}
+    decor_lines = set(book.get("decor", []))
+    pool_lines = set(book["lines"]) - decor_lines
     tour = os.path.join(ROOT, ".local/living/verify", run, "ui", "looks-decor")
     os.makedirs(tour, exist_ok=True)
     client = os.path.join(os.environ.get("CARGO_TARGET_DIR", os.path.join(ROOT, ".local/target")), "release/living-game")
@@ -2053,7 +2054,7 @@ def looks(run, c):
         r3 = subprocess.run([client], env=e3, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT, timeout=600)
     L3 = log(tour)
     drawn = re.findall(r"looks: background person \S+ drawn from decor (lk_[0-9a-f]{16})", L3)
-    c.check(s, "background people are drawn from the decor pool, never a newcomer's line", r3.returncode == 0 and drawn and set(drawn) <= decor_lines and not set(drawn) & pool_lines,
+    c.check(s, "background people are drawn from the decor lines, never a line a character wears", r3.returncode == 0 and drawn and set(drawn) <= decor_lines and not set(drawn) & pool_lines,
             f"{len(drawn)} drawn, {len(set(drawn))} lines; outside decor {sorted(set(drawn) - decor_lines)[:3]}")
 
 

@@ -229,10 +229,9 @@ struct Shown {
     /// How far the body's gaits are the running family's (0–1), eased toward its row's
     /// `running` ([`family`]).
     run_w: f32,
-    /// The look it was drawn from (`characters::seen`): its key (empty for a VRoid recipe) and
-    /// band. A change redraws the person in place ([`swap_look`]).
+    /// The look key it was drawn from (`characters::seen`; empty for none). A new key (a band
+    /// change, a `relook`) redraws the person in place ([`swap_look`]).
     look: String,
-    band: u8,
     /// Drawn from the look's line (else a VRoid recipe).
     composed: bool,
 }
@@ -241,7 +240,6 @@ struct Shown {
 pub struct DrawnLook<'a> {
     pub id: u32,
     pub look: &'a str,
-    pub band: u8,
     pub composed: bool,
     pub swapping: bool,
 }
@@ -327,7 +325,7 @@ impl Live {
 
     /// Each person drawn and the look they were drawn from.
     pub fn looks(&self) -> impl Iterator<Item = DrawnLook<'_>> + '_ {
-        self.shown.iter().filter(|(_, s)| s.person).map(|(id, s)| DrawnLook { id: *id, look: &s.look, band: s.band, composed: s.composed, swapping: self.swaps.iter().any(|w| w.2 == *id) })
+        self.shown.iter().filter(|(_, s)| s.person).map(|(id, s)| DrawnLook { id: *id, look: &s.look, composed: s.composed, swapping: self.swaps.iter().any(|w| w.2 == *id) })
     }
 
     /// The bodies drawn now and their entities (those leaving sight are not among them). While a
@@ -532,8 +530,8 @@ fn swap_look(commands: &mut Commands, assets: &AssetServer, live: &mut Live, q: 
         commands.entity(new).insert(crate::gait::Logged(id));
     }
     let s = live.shown.get_mut(&id).unwrap();
-    info!("looks: #{id} redrawn for band {} ({} → {})", now.band, if s.look.is_empty() { "VRoid" } else { &s.look }, if recipe.person.is_some() { now.look.as_str() } else { "VRoid" });
-    (s.entity, s.look, s.band, s.composed) = (new, now.look, now.band, recipe.person.is_some());
+    info!("looks: #{id} redrawn for a new look ({} → {})", if s.look.is_empty() { "none" } else { &s.look }, if now.look.is_empty() { "none" } else { &now.look });
+    (s.entity, s.look, s.composed) = (new, now.look, recipe.person.is_some());
     live.heights.insert(id, recipe.height);
     live.swaps.push((old, new, id));
 }
@@ -763,16 +761,15 @@ fn bodies(
                 commands.entity(entity).insert(crate::gait::Logged(id));
             }
             let look = character.as_ref().filter(|_| person).map(crate::characters::seen::of).unwrap_or_default();
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, band: look.band, composed });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, composed });
             live.heights.insert(id, height);
             continue;
         }
-        // A new look for someone drawn (a band change; a key their row now carries): redrawn
-        // in place.
+        // A new look key for someone drawn (a band change, a `relook`): redrawn in place.
         if live.shown.get(&id).is_some_and(|s| s.person) {
             if let Some(c) = conn.db.seen_characters().id().find(&id) {
                 let now = crate::characters::seen::of(&c);
-                if live.shown.get(&id).is_some_and(|s| s.look != now.look || s.band != now.band) {
+                if live.shown.get(&id).is_some_and(|s| s.look != now.look) {
                     swap_look(&mut commands, &assets, &mut live, &mut q, (id, mine), &c, island.land.seed, now);
                 }
             }
