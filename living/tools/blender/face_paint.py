@@ -133,7 +133,17 @@ def strands(shape, rng):
     return 0.6 * upsample(fine[..., None], 1)[np.clip(rows // 6, 0, fine.shape[0] - 1)][..., 0] + 0.4 * coarse[np.clip(rows // 14, 0, coarse.shape[0] - 1)]
 
 
-def paint_skin(hf, look, rng):
+# The lips' and the blush's own colours, laid over whatever skin is under them. Deeper than they
+# are to look: the client draws a face's parts unshaded, which comes out lighter than lit skin.
+LIP_PIGMENT = (0.56, 0.16, 0.17)
+BLUSH_PIGMENT = (0.70, 0.26, 0.22)
+
+
+def paint_skin(hf, look, rng, layer=None):
+    """The skin's picture. With `layer` (a dict to fill), the lips' colour and the blush are left
+    out of it and returned as a layer of their own: `rgb` and `alpha`, the skin's layout. The
+    client recolours a person's skin by moving the picture's mean colour to theirs, which washes
+    out anything painted into it that is not skin; a layer over it keeps its own colour."""
     rows, cols = ATLAS - EYE_ROWS, ATLAS
     f = 4
     d = skin_dirs(cols // f, rows // f)
@@ -149,8 +159,27 @@ def paint_skin(hf, look, rng):
     zn, zt, zs, zm, mw = hf.nasion_z, hf.nose_tip_z, hf.nose_base_z, hf.mouth_z, hf.mouth_w
     old = look["lines"]
     # Tone: a blush on the cheeks, warmth on the nose, the temples and jaw a little deeper.
-    c.blob(0.041, ez - 0.036 * L, 0.021, 0.014, warm, look["blush"])
-    c.blob(0.0, zt + 0.001, 0.009, 0.007, warm, 0.5 * look["blush"] + 0.10 * old, mirror=False)
+    # The layer: each stroke's pigment weighted by how much of it lands on a texel, and how much
+    # of the texel is covered in all.
+    acc = dict(sum=np.zeros(x.shape + (3,)), w=np.zeros(x.shape), clear=np.ones(x.shape))
+
+    def lay(pigment, alpha):
+        a_ = np.clip(alpha, 0, 1) * front
+        acc["sum"] += np.array(pigment) * a_[..., None]
+        acc["w"] += a_
+        acc["clear"] *= 1 - a_
+
+    def blob_of(cx, cz, rx, rz, mirror=True):
+        return np.exp(-(((np.abs(x) if mirror else x) - cx) / rx) ** 2 - ((z - cz) / rz) ** 2)
+
+    def blush(cx, cz, rx, rz, amount, mirror=True):
+        if layer is None:
+            c.blob(cx, cz, rx, rz, warm, amount, mirror=mirror)
+        else:
+            lay(BLUSH_PIGMENT, 0.56 * amount * blob_of(cx, cz, rx, rz, mirror))
+
+    blush(0.041, ez - 0.036 * L, 0.021, 0.014, look["blush"])
+    blush(0.0, zt + 0.001, 0.009, 0.007, 0.5 * look["blush"] + 0.10 * old, mirror=False)
     c.blend(shade, 0.16 * smooth((ax - 0.050) / 0.022) * smooth((ez - 0.01 - z) / 0.05))
     c.blend(shade, 0.14 * smooth((z - (ez + hf.eye_up + 0.034)) / 0.03))  # under the hair
     # The eyes' hollows: shade on the upper lid and at the inner corner, a little under the eye.
@@ -183,9 +212,15 @@ def paint_skin(hf, look, rng):
     upper = smooth((lz + up_h - z) / lip_soft + 0.5) * smooth((z - lz) / lip_soft + 0.5) * (u < 1.0)
     lower = smooth((z - (lz - lo_h)) / lip_soft + 0.5) * smooth((lz - z) / lip_soft + 0.5) * (u < 0.92)
     lip = look["lip"]
-    c.blend(mix(lip, shade, 0.25), 0.90 * tint * upper)
-    c.blend(lip, 0.80 * tint * lower)
-    c.blob(0.0, zm - 0.45 * 0.0060 * hf.lip, 0.0050, 0.0013, mix(lip, (1.0, 0.96, 0.92), 0.6), 0.45 * tint * lower, mirror=False)
+    if layer is None:
+        c.blend(mix(lip, shade, 0.25), 0.90 * tint * upper)
+        c.blend(lip, 0.80 * tint * lower)
+        c.blob(0.0, zm - 0.45 * 0.0060 * hf.lip, 0.0050, 0.0013, mix(lip, (1.0, 0.96, 0.92), 0.6), 0.45 * tint * lower, mirror=False)
+    else:
+        # The upper lip a little deeper, the lower fuller with a light on it.
+        lay(mix(LIP_PIGMENT, (0.34, 0.09, 0.10), 0.35), 0.78 * tint * upper)
+        lay(LIP_PIGMENT, 0.72 * tint * lower)
+        lay(mix(LIP_PIGMENT, (1.0, 0.90, 0.86), 0.75), 0.34 * tint * lower * blob_of(0.0, zm - 0.45 * 0.0060 * hf.lip, 0.0050, 0.0013, mirror=False))
     c.blob(0.0, zm - 0.0060 * hf.lip - 0.0028, 0.0095, 0.0022, shade, 0.42, mirror=False)
     pts = [(mw * t_, float(hf.mouth_line(np.array([mw * t_]))[0])) for t_ in np.linspace(0, 1.0, 12)]
     mouth_c = mix(look["mouth_line"], line, 0.2)
@@ -239,6 +274,11 @@ def paint_skin(hf, look, rng):
         fr_c = mix(skin, (0.52, 0.30, 0.18), 0.75)
         for a_, b_, s_ in zip(fx, fz, rng.uniform(0.00045, 0.0010, n)):
             c.blob(a_, b_, s_, s_, fr_c, 0.42, mirror=False, power=4.0)
+    if layer is not None:
+        # Where nothing was painted the layer holds the blush's pigment, so a filtered texel at a
+        # stroke's edge never fades toward black.
+        layer["rgb"] = np.where(acc["w"][..., None] > 1e-5, acc["sum"] / np.maximum(acc["w"], 1e-5)[..., None], np.array(BLUSH_PIGMENT))
+        layer["alpha"] = 1 - acc["clear"]
     # Behind the face the skin is plain; hair or a beard covers most of it.
     return c.img, dict(x=x, y=y, z=z)
 
@@ -266,10 +306,10 @@ def paint_white(hf, look, side):
 
 
 def paint_iris(hf, look, rng):
-    """The iris, drawn as the VRoid controls draw theirs (studied, not copied): a tall ellipse
-    with a dark rim, a shaded upper half under the lid, a ring of fine rays, a bright warm
-    crescent low down, a cool reflected arc high up, and a soft pupil. One picture for both eyes;
-    the highlights are a layer of their own (head_mesh.py)."""
+    """The iris, drawn as the reference draws its own (studied, not copied): a tall ellipse with
+    a thin dark rim; a darker, greyer upper half under the lid with a cool arc of sky along its
+    edge; a glow rising from the bottom toward the pupil, hottest low down; a soft tall pupil.
+    One picture for both eyes; the highlights are a layer of their own (head_mesh.py)."""
     n = IRIS_PX
     half = n * IRIS_FILL
     g = (np.arange(n) + 0.5 - n / 2) / half
@@ -277,47 +317,56 @@ def paint_iris(hf, look, rng):
     rr = np.hypot(dx, dz)
     ang = np.arctan2(dz, dx)
     iris = np.array(look["iris"])
-    deep = np.array(mix(look["iris"], (0.02, 0.02, 0.06), 0.82))
-    dark = np.array(mix(look["iris"], (0.03, 0.03, 0.08), 0.55))
-    pale = np.array(mix(look["iris"], (1, 1, 1), 0.30))
-    # The lit crescent leans warm whatever the iris's colour: it is what makes an eye look lit.
-    warm = np.array(mix(mix(look["iris"], (1.0, 0.80, 0.45), 0.50), (1.0, 0.97, 0.88), 0.30))
-    cool = np.array(mix(look["iris"], (0.62, 0.80, 1.0), 0.60))
+    grey = float(iris @ np.array([0.3, 0.59, 0.11]))
+    deep = np.array(mix(look["iris"], (0.02, 0.02, 0.06), 0.84))
+    # Above, the iris's colour darkened and a little greyed.
+    dark = np.array(mix(mix(look["iris"], (grey, grey, grey * 1.08), 0.30), (0.04, 0.04, 0.10), 0.52))
+    # The glow leans warm whatever the iris's colour: it is what makes an eye look lit.
+    warm = np.array(mix(mix(look["iris"], (1.0, 0.60, 0.22), 0.70), (1.0, 0.92, 0.76), 0.12))
+    hot = np.array(mix(tuple(warm), (1.0, 0.93, 0.62), 0.60))
+    cool = np.array(mix(look["iris"], (0.55, 0.74, 1.0), 0.65))
     img = np.empty((n, n, 3))
     # Outside the ellipse the square is the dark rim's colour, so the mesh's edge never shows pale.
     img[:] = deep
-    # Body: shaded above, the iris's own colour below.
-    t = smooth((0.45 - dz) / 1.25)[..., None]
-    body = dark * (1 - t) + (iris * 1.05) * t
-    # Rays: fine streaks from the pupil, at two scales.
+    # Body: dark above, the iris's own colour from the middle down.
+    t = smooth((0.50 - dz) / 1.15)[..., None]
+    body = dark * (1 - t) + (iris * 1.04) * t
+    # Rays: a few fine streaks from the pupil, faint.
     rays = value_noise((1, 512), 3, rng)[0] * 0.6 + value_noise((1, 512), 9, rng)[0] * 0.4
     ray = rays[((ang / (2 * math.pi) + 0.5) * 511).astype(int) % 512]
-    body = body * (1 + 0.34 * (ray - 0.5) * smooth((rr - 0.36) / 0.2))[..., None]
-    # A paler ring inside the rim, strongest low down.
-    ring = np.exp(-(((rr - 0.70) / 0.085) ** 2)) * smooth((0.30 - dz) / 0.7)
-    body += (pale - body) * (0.42 * ring)[..., None]
-    # The warm crescent along the bottom.
-    cres = smooth((-dz - 0.18) / 0.50) * smooth((0.93 - rr) / 0.20) * smooth((rr - 0.38) / 0.22)
-    body += (warm - body) * (0.92 * cres)[..., None]
-    # The lid's shadow over the top third, and a cool arc of sky just under it.
-    body += (deep - body) * (0.80 * smooth((dz - 0.20) / 0.50))[..., None]
-    arc = np.exp(-(((rr - 0.66) / 0.10) ** 2)) * smooth((dz - 0.15) / 0.25) * smooth((0.80 - dz) / 0.2) * smooth((0.75 - np.abs(dx)) / 0.3)
-    body += (cool - body) * (0.50 * arc)[..., None]
-    # The dark rim.
-    body += (deep - body) * (0.96 * smooth((rr - 0.80) / 0.14))[..., None]
-    # The pupil, soft-edged, with a faint dark halo.
-    body += (deep - body) * (0.45 * np.exp(-((rr / 0.50) ** 2)))[..., None]
-    pup = smooth((0.36 - np.hypot(dx / 0.94, dz + 0.02)) / 0.06 + 0.5)
-    body += (np.array((0.03, 0.028, 0.045)) - body) * pup[..., None]
+    body = body * (1 + 0.14 * (ray - 0.5) * smooth((rr - 0.36) / 0.2))[..., None]
+    # The glow: a flame from the bottom toward the pupil, wide at the rim and narrowing as it rises.
+    low = np.clip(-dz, 0.0, 1.0)
+    glow = smooth((low - 0.02) / 0.62) * np.exp(-((dx / (0.26 + 0.62 * low)) ** 2)) * smooth((0.95 - rr) / 0.10)
+    body += (warm - body) * (0.94 * glow)[..., None]
+    core = np.exp(-((dx / 0.34) ** 2 + ((dz + 0.66) / 0.24) ** 2)) * smooth((0.95 - rr) / 0.10)
+    body += (hot - body) * (0.80 * core)[..., None]
+    # Two pale streaks beside the glow, where light crosses the iris.
+    for sgn in (-1.0, 1.0):
+        st = np.exp(-(((dx - sgn * (0.50 + 0.22 * dz)) / 0.045) ** 2)) * smooth((-dz + 0.05) / 0.25) * smooth((0.88 - rr) / 0.12)
+        body += (np.array(mix(tuple(cool), (1, 1, 1), 0.45)) - body) * (0.38 * st)[..., None]
+    # The lid's shadow over the top, and a cool arc of sky along the rim under it, on the lit side.
+    body += (deep - body) * (0.55 * smooth((dz - 0.30) / 0.50))[..., None]
+    hs = look.get("light_side", 1.0)
+    arc = np.exp(-(((rr - 0.80) / 0.075) ** 2)) * smooth((dz - 0.10) / 0.25) * smooth((0.86 - dz) / 0.2) * smooth((dx * hs + 0.55) / 0.5)
+    body += (cool - body) * (0.70 * arc)[..., None]
+    # The dark rim, thin.
+    body += (deep - body) * (0.97 * smooth((rr - 0.86) / 0.09))[..., None]
+    # The pupil: tall, soft-edged, with a faint dark halo.
+    body += (deep - body) * (0.40 * np.exp(-((np.hypot(dx / 0.42, (dz - 0.04) / 0.52)) ** 2)))[..., None]
+    pup = smooth((1.0 - np.hypot(dx / 0.27, (dz - 0.04) / 0.36)) / 0.22 + 0.5)
+    body += (np.array((0.035, 0.03, 0.05)) - body) * pup[..., None]
     disc = smooth((1.0 - rr) / 0.03 + 0.5)[..., None]
     return img + (np.clip(body, 0, 1) - img) * disc
 
 
-def paint(hf, look):
+def paint(hf, look, layer=None):
+    """The face's atlas. With `layer` (a dict to fill), lips and blush are left out of the skin
+    and come back as their own layer (see `paint_skin`)."""
     rng = np.random.default_rng(int(look.get("seed", 0)) + 77)
     out = np.empty((ATLAS, ATLAS, 3))
     out[:] = look["skin"]
-    skin, where = paint_skin(hf, look, rng)
+    skin, where = paint_skin(hf, look, rng, layer)
     out[EYE_ROWS:] = skin
     for side in (-1, 1):
         c0 = 0 if side < 0 else EYE_COLS
@@ -360,7 +409,7 @@ def paint_far(hf, look, size=FAR):
     # far off they are a texel or two wide, so they are drawn a little heavier than life.
     ss = np.linspace(-1.0, 1.0 + look["lash_wing"], 16)
     up = hf.lid(np.clip(ss, -1, 1))[0]
-    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0006 + 0.0013 * look["lash_k"] * smooth(t / 0.7), look["lash"], 1.0, taper=(0.0, 0.2))
+    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0008 + 0.0019 * look["lash_k"] * smooth(t / 0.5), look["lash"], 1.0, taper=(0.0, 0.2))
     top, bot = brow_shape(hf, 1)
     c.stroke([(xt, (zt + zb) / 2) for (xt, zt), (_, zb) in zip(top, bot)], lambda t: np.maximum(0.62 * hf.brow_w * (1 - 0.6 * smooth((t - 0.5) / 0.5)), 0.0011), look["brow"], 0.92, taper=(0.1, 0.25))
     out[EYE_ROWS:] = c.img

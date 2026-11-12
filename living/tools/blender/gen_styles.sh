@@ -63,6 +63,8 @@ one() {
     grep -v OpenColorIO "$log" | tail -30; rm -rf "$log" "$tmp"; return 1
   fi
   python3 living/tools/merge_primitives.py "$tmp/x.glb" "$root/$item.glb" > /dev/null
+  # One shading mean a class, so the client can share one material between a class's files.
+  python3 living/tools/characters/shade_mean.py "$kind" "$root/$item.glb" > /dev/null
   if [ "$kind" = hair ]; then
     [ -f "$shared" ] || cp "$tmp/strands.png" "$shared"
     python3 living/tools/characters/share.py strands --shared "$shared" "$root/$item.glb" > /dev/null
