@@ -461,7 +461,7 @@ impl Composer<'_> {
         // The source colour the recolour moves to a person's: over the file's meshes in this
         // material. Without it (a picture not yet readable) the material is the file's own and
         // `recolor` finds it from the first mesh, as for any character.
-        let meshes: Vec<&Mesh> = sources.iter().filter_map(|m| self.meshes.get(m)).collect();
+        let meshes: Vec<_> = sources.iter().filter_map(|m| super::mesh_facts::of(m.id(), self.meshes.get(m))).collect();
         let source = super::source_mean(&base, &meshes, &self.thumbs, &self.images);
         let content = format!("{kind:?} {face_map:?} {base:?}");
         let shared = source.filter(|_| !crate::perf::has("filestyles")).and_then(|src| {
@@ -586,6 +586,8 @@ impl Composer<'_> {
                             let uv: Vec<[f32; 2]> = g.iter().enumerate().map(|(i, v)| [*v, ring.as_ref().and_then(|r| r.get(i)).map_or(0.0, |r| 1.0 + r.clamp(0.0, 1.0))]).collect();
                             m.insert_attribute(Mesh::ATTRIBUTE_UV_1, uv);
                         }
+                        // Nothing changes it after this: its facts are kept and its CPU copy goes.
+                        super::mesh_facts::done(p.mesh.id(), &m);
                     }
                 }
                 prims.push((p.mesh.clone(), mname, toon));

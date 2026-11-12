@@ -50,6 +50,7 @@ pub mod book;
 pub mod compose;
 pub mod seen;
 pub mod identity;
+pub mod mesh_facts;
 pub mod outfit;
 
 use crate::lookdev::{Converted, Fitted, Model};
@@ -631,6 +632,7 @@ impl Plugin for CharactersPlugin {
             .init_resource::<SpringClock>()
             .init_resource::<SpringStats>()
             .add_systems(Update, (shape, recolor, rig_springs, outfit::dress, rebuilt, frames))
+            .add_systems(Last, mesh_facts::drop_copies)
             .add_systems(PostUpdate, (hips.after(bevy::app::AnimationSystems).before(TransformSystems::Propagate), springs.after(TransformSystems::Propagate)));
     }
 }
@@ -966,10 +968,10 @@ const HUE_SPREAD: f32 = 0.4;
 /// silver's places on the palette, how grey they are (0 to 1 in 8 bits), bit 24 set, bit 26 the
 /// palette's (bit 25 clear: never wind sway). None without the colours, their `grey`, room on
 /// the palette, or a mesh and material that grey (a hair file's `_GREY`, the shared hair toon).
-fn grey_tag(c: &Character, mesh: &Mesh, toon: &Toon, tints: &mut compose::HairTints, images: &mut Assets<Image>) -> Option<u32> {
+fn grey_tag(c: &Character, mesh: &mesh_facts::Facts, toon: &Toon, tints: &mut compose::HairTints, images: &mut Assets<Image>) -> Option<u32> {
     let p = c.recipe.person.as_ref().filter(|p| p.grey > 0.0)?;
     toon.extension.tints.as_ref()?;
-    mesh.attribute(Mesh::ATTRIBUTE_UV_1)?;
+    mesh.uv1.then_some(())?;
     let byte = |hex: &Option<String>| -> Option<[u8; 3]> {
         let c = Srgba::hex(hex.as_ref()?).ok()?;
         let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -991,16 +993,15 @@ fn tag_color(c: Srgba) -> u32 {
 
 /// A material's mean colour (linear) over the texels its mesh's vertices use, read from its
 /// texture's summary ([`Thumbs`]).
-fn mean_color(toon: &Toon, mesh: &Mesh, thumbs: &Thumbs) -> Option<Vec3> {
+fn mean_color(toon: &Toon, mesh: &mesh_facts::Facts, thumbs: &Thumbs) -> Option<Vec3> {
     let base = toon.base.base_color.to_linear();
     let base = Vec3::new(base.red, base.green, base.blue);
-    let Some(tex) = toon.base.base_color_texture.as_ref() else { return Some(vertex_mean(mesh).map_or(base, |v| v * base)) };
+    let Some(tex) = toon.base.base_color_texture.as_ref() else { return Some(mesh.vertex_sum.and_then(|(s, w)| (w > 0.0).then(|| s / w)).map_or(base, |v| v * base)) };
     let thumb = thumbs.0.get(&tex.id())?;
-    let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else { return Some(base) };
+    let Some(cells) = mesh.uv_cells.as_ref() else { return Some(base) };
     let (mut sum, mut wsum) = (Vec3::ZERO, 0.0);
-    let step = (uvs.len() / 4000).max(1);
-    for uv in uvs.iter().step_by(step) {
-        let c = thumb.at(uv[0], uv[1]);
+    for &cell in cells {
+        let c = thumb.cells[cell as usize];
         sum += c.truncate();
         wsum += c.w;
     }
@@ -1014,13 +1015,13 @@ fn mean_color(toon: &Toon, mesh: &Mesh, thumbs: &Thumbs) -> Option<Vec3> {
 /// texels a short cut uses differ from a long one's), so its whole mean is the one value they
 /// agree on (docs/CHARACTERS.md, "One shading mean a class"). None while the picture is neither
 /// summarised nor readable.
-pub(crate) fn source_mean(base: &StandardMaterial, meshes: &[&Mesh], thumbs: &Thumbs, images: &Assets<Image>) -> Option<Vec3> {
+pub(crate) fn source_mean(base: &StandardMaterial, meshes: &[std::sync::Arc<mesh_facts::Facts>], thumbs: &Thumbs, images: &Assets<Image>) -> Option<Vec3> {
     let b = base.base_color.to_linear();
     let b = Vec3::new(b.red, b.green, b.blue);
     let Some(tex) = base.base_color_texture.as_ref() else {
         let (mut sum, mut w) = (Vec3::ZERO, 0.0);
         for m in meshes {
-            if let Some((s, a)) = vertex_sum(m) {
+            if let Some((s, a)) = m.vertex_sum {
                 sum += s;
                 w += a;
             }
@@ -1077,10 +1078,16 @@ impl Thumb {
     }
 
     /// The cell under a texture coordinate (wrapped).
+    #[cfg(test)]
     fn at(&self, u: f32, v: f32) -> Vec4 {
+        self.cells[Self::cell(u, v)]
+    }
+
+    /// The cell under a texture coordinate (wrapped), as an index into the cells.
+    fn cell(u: f32, v: f32) -> usize {
         let x = ((u.rem_euclid(1.0) * THUMB as f32) as u32).min(THUMB - 1);
         let y = ((v.rem_euclid(1.0) * THUMB as f32) as u32).min(THUMB - 1);
-        self.cells[(y * THUMB + x) as usize]
+        (y * THUMB + x) as usize
     }
 }
 
@@ -1113,8 +1120,9 @@ fn thumb_pictures(mut events: MessageReader<AssetEvent<Image>>, mut images: ResM
     }
 }
 
-/// A mesh's vertex colours summed by area, and the area: [`vertex_mean`]'s parts, to pool
-/// several meshes.
+/// A mesh's vertex colours summed by area, and the area, to pool several meshes. Weighted by area:
+/// the outfit pieces' colours are per vertex, and a brass button's many small triangles shouldn't
+/// outweigh a coat's panels. Read once a mesh ([`mesh_facts::Facts::vertex_sum`]).
 fn vertex_sum(mesh: &Mesh) -> Option<(Vec3, f32)> {
     use bevy::mesh::VertexAttributeValues as V;
     let colours: Vec<Vec3> = match mesh.attribute(Mesh::ATTRIBUTE_COLOR)? {
@@ -1132,13 +1140,6 @@ fn vertex_sum(mesh: &Mesh) -> Option<(Vec3, f32)> {
         wsum += area;
     }
     Some((sum, wsum))
-}
-
-/// A mesh's mean vertex colour (linear), weighted by area: the outfit pieces' colours are per
-/// vertex, and a brass button's many small triangles shouldn't outweigh a coat's panels.
-fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
-    let (sum, w) = vertex_sum(mesh)?;
-    (w > 0.0).then(|| sum / w)
 }
 
 /// Give each character's meshes their recipe's colours. Characters share their base file's toon
@@ -1193,8 +1194,8 @@ pub fn recolor(
         }
         // A greying person's hair, lock by lock from the palette; else the one tint.
         if piece.is_none() && name.is_some_and(|n| n.0.contains("_HAIR") && !n.0.contains("Overlay")) {
-            if let (Some(c), Some(m), Some(t)) = (owner, meshes.get(&mesh.0), toons.get(&mat.0)) {
-                if let Some(tag) = grey_tag(c, m, t, &mut tints, &mut images) {
+            if let (Some(c), Some(m), Some(t)) = (owner, mesh_facts::of(mesh.0.id(), meshes.get(&mesh.0)), toons.get(&mat.0)) {
+                if let Some(tag) = grey_tag(c, &m, t, &mut tints, &mut images) {
                     commands.entity(e).insert((bevy::mesh::MeshTag::new(tag), Recolored));
                     continue;
                 }
@@ -1202,7 +1203,7 @@ pub fn recolor(
         }
         if !ready.contains(&mat.0.id()) {
             let Some(toon) = toons.get(&mat.0) else { continue };
-            let Some(mean) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &thumbs)) else { continue };
+            let Some(mean) = mesh_facts::of(mesh.0.id(), meshes.get(&mesh.0)).and_then(|m| mean_color(toon, &m, &thumbs)) else { continue };
             let m = hsv(mean);
             if let Some(mut t) = toons.get_mut(&mat.0) {
                 t.extension.params.recolor = Vec4::new(0.0, 0.0, 0.0, 3.0);

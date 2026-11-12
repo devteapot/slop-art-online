@@ -537,6 +537,11 @@ pub fn convert(
         if volume && done.1.insert(mesh.0.id()) {
             if let Some(mut m) = meshes.get_mut(&mesh.0) {
                 crate::style::outline_normals(&mut m);
+                // A composed person's type mesh is not changed after this: its facts are kept and
+                // its CPU copy goes (`characters::mesh_facts`). A style mesh's go in `compose`.
+                if crate::characters::mesh_facts::composed(&owner.file) {
+                    crate::characters::mesh_facts::done(mesh.0.id(), &m);
+                }
             }
         }
         // Characters get shell outlines. Environment models only take part as stencils (they hide
@@ -672,8 +677,8 @@ pub fn rig(
                 let node = names.get(d).map(|n| n.as_str().to_string()).unwrap_or_default();
                 let targets = w
                     .first_mesh()
-                    .and_then(|m| meshes.get(m))
-                    .and_then(|m| m.morph_target_names().map(|t| t.to_vec()))
+                    .and_then(|m| crate::characters::mesh_facts::of(m.id(), meshes.get(m)))
+                    .and_then(|f| f.morph_names.clone())
                     .filter(|t| !t.is_empty())
                     .or_else(|| target_names(&model.file, &node));
                 if let Some(t) = targets {

@@ -233,7 +233,7 @@ fn log_assets(
     let px: usize = images.iter().map(|(_, i)| i.data.as_ref().map_or(0, |d| d.len())).sum();
     let curves: usize = clips.iter().map(|(_, c)| c.curves().values().map(|v| v.len()).sum::<usize>()).sum();
     info!(
-        "assets: {} meshes {:.1} MiB (vertices {:.1}, indices {:.1}, morph targets {:.1}); {} images {:.1} MiB; {} clips ({curves} curves); {} graphs; {} glTF files; outline directions generated for {} meshes, brought by {}",
+        "assets: {} meshes {:.1} MiB (vertices {:.1}, indices {:.1}, morph targets {:.1}); {} images {:.1} MiB; {} clips ({curves} curves); {} graphs; {} glTF files; outline directions generated for {} meshes, brought by {}; {} composed meshes on the GPU alone",
         meshes.len(),
         mib(vb + ib + mb),
         mib(vb),
@@ -245,7 +245,8 @@ fn log_assets(
         graphs.len(),
         gltfs.len(),
         crate::style::OUTLINE_NORMALS.0.load(std::sync::atomic::Ordering::Relaxed),
-        crate::style::OUTLINE_NORMALS.1.load(std::sync::atomic::Ordering::Relaxed)
+        crate::style::OUTLINE_NORMALS.1.load(std::sync::atomic::Ordering::Relaxed),
+        crate::characters::mesh_facts::dropped()
     );
 }
 
@@ -382,7 +383,8 @@ pub fn log_views(
     }
     *since = 0.0;
     let people: std::collections::HashSet<Entity> = chars.iter().flat_map(|c| children.iter_descendants(c)).collect();
-    let tris = |e: &Entity| mesh3d.get(*e).ok().and_then(|m| meshes.get(&m.0)).map_or(0, |m| m.indices().map_or(m.count_vertices(), |i| i.len()) / 3);
+    // From a composed mesh's kept facts once its data has gone (`characters::mesh_facts`).
+    let tris = |e: &Entity| mesh3d.get(*e).ok().map_or(0, |m| crate::characters::mesh_facts::tris(m.0.id(), meshes.get(&m.0)));
     let sum = |list: &[Entity]| {
         let (mut n, mut t, mut pn, mut pt) = (0, 0, 0, 0);
         for e in list {
