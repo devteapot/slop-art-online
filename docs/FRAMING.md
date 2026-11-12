@@ -114,6 +114,24 @@ Totals, harm: R 2 of 47, T 3, **N1 8**, N2 4.
 
   A live arm against today's, at Cullet with `first_sight_thinks` off, would show those.
 
+## Built behind a law (think-framing, 2026-11-12)
+
+The general coordinator decided to build N2 behind a world law, off by default.
+- **The law:** `think_framing` (`skills.rhai` `laws()`, `script.rs` `Laws`, `laws_about`), switched at runtime by `set_world_law`.
+  - **Off:** a mind starts from why it is thinking now, today's wording.
+  - **On:** N2, word for word as replayed.
+- **Where:** `living/mind/src/prompts.rs` `think_system` and `think_user`. With the law on, the finished text gets exactly one replacement each (`framed_system`, `framed_user`):
+  - the sentence `TODAY_FRAMING` becomes `NEUTRAL_FRAMING`;
+  - the section `# Why you are thinking now` becomes `# What just happened`, where it stands.
+
+  With the law off, the builders' text is returned untouched. The compile (deliberate) prompt, the talk turn and animal minds are unchanged.
+- **What it adds:** no table, column, reducer, view or binding. The law is a value of the world's script, read by the mind service from the rules it already loads.
+- **Checks:**
+  - mind unit test `prompts::tests::think_framing_is_n2_on_and_today_off`: both frames, with and without projects. Off is identical. On replaces exactly once, and undoing the replacement gives today's text back.
+  - rules test `script::tests::think_framing_is_the_world_s_law`;
+  - verify-minds `think-framing` (the real mind, the fake model). With the law off, the think request carries today's sentence once and "# Why you are thinking now". With it on, the system prompt equals the off one with the sentence replaced, and the user prompt has the same sections in the same order, the reason's renamed.
+  - `just living-check` passes.
+
 ## Cost and evidence
 
 - **Replays:** $0.29 (T $0.094, N1 $0.098, N2 $0.096; 249 calls, no errors), against the $5 cap.
