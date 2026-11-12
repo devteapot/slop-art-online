@@ -79,6 +79,9 @@ pub struct Seen {
     /// The actor is not where it happened (a missile's shooter): each player is given the
     /// actor only if its character sees them, else 0 (`show`).
     pub far_actor: bool,
+    /// A death by a killer the dead did not see: the dead's own row carries 0 for the target
+    /// (the killer), and each onlooker the killer only if it sees them (`show`).
+    pub far_target: bool,
 }
 
 /// One feed row for a viewer (no frame bookkeeping); returns its id.
@@ -120,8 +123,11 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
     let w = common::world(ctx);
     // A far actor (a missile's shooter) only to those who see them.
     let masked = |id: u32| -> std::borrow::Cow<'_, Seen> {
-        if ev.far_actor && ev.actor != 0 && id != ev.actor && !crate::perception::sees_creature(ctx, id, ev.actor, now) {
-            std::borrow::Cow::Owned(Seen { actor: 0, ..ev.clone() })
+        let hide_actor = ev.far_actor && ev.actor != 0 && id != ev.actor && !crate::perception::sees_creature(ctx, id, ev.actor, now);
+        // The dead has no body by now: its own row follows what it saw when the blow came.
+        let hide_target = ev.far_target && ev.target != 0 && id != ev.target && (id == ev.actor || !crate::perception::sees_creature(ctx, id, ev.target, now));
+        if hide_actor || hide_target {
+            std::borrow::Cow::Owned(Seen { actor: if hide_actor { 0 } else { ev.actor }, target: if hide_target { 0 } else { ev.target }, ..ev.clone() })
         } else {
             std::borrow::Cow::Borrowed(&ev)
         }
@@ -560,8 +566,10 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
 }
 
 /// A death: everyone who could see it is told, and the one who died learns who saw it.
-pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64) {
-    show(ctx, now, Seen { kind: seen::DEATH, actor: id, target: killer, at, ..Default::default() });
+/// `unseen`: the dead did not see its killer (a shooter out of its sight): its own death row
+/// carries no killer (0), and an onlooker's carries the killer only if it sees them.
+pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64, unseen: bool) {
+    show(ctx, now, Seen { kind: seen::DEATH, actor: id, target: killer, at, far_target: unseen, ..Default::default() });
     if human(ctx, id).is_some() {
         let w = common::world(ctx);
         let r = crate::perception::widest_sight(ctx, &w, now);
@@ -701,7 +709,7 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
     }
     // A guard is held until let go, at most as long as the rules allow.
     let qty = shape.hold_ms;
-    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), (0, 0), None, now) {
+    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), (0, 0), None, Default::default(), now) {
         Ok(()) => Ok(()),
         Err(why) => {
             // Nothing started, so the walk under way simply goes on.

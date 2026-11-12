@@ -76,6 +76,14 @@ mod tests {
         assert!(parse(json!({"do": "flee", "target": {"nearest": "wolf"}}), None, &Default::default()).unwrap_err().contains("behavior graph"));
         assert!(parse(json!({"do": "goto", "target": {"place": "camp"}}), None, &Default::default()).is_ok());
         assert!(parse(json!({"first": [{"do": "eat", "item": "food"}]}), None, &Default::default()).is_err());
+        // Movement intents that end on their own may be acts; those held over time belong in a graph.
+        let shapes = crate::combat::Shapes::default();
+        let b = parse(json!({"do": "back_off", "target": {"id": 4}, "distance": 6}), None, &shapes).unwrap();
+        assert_eq!(b.distance, Some(6.0));
+        assert!(parse(json!({"do": "close_in", "target": {"id": 4}, "distance": 2}), None, &shapes).is_ok());
+        for held in ["keep_distance", "circle", "follow"] {
+            assert!(parse(json!({"do": held, "target": {"id": 4}}), None, &shapes).unwrap_err().contains("behavior graph"), "{held}");
+        }
     }
 
     /// An answer names the offer or proposal it answers; without one it is the act it always
