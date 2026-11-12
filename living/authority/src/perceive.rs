@@ -12,7 +12,7 @@ const WINDOW: usize = 400;
 
 /// Write an experience row for `observer`; its id, or `None` when nobody would read it.
 pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
-    percept_as(ctx, observer, now, kind, subject, object, at, text, salience, true, true)
+    told(ctx, observer, now, kind, subject, object, at, text, salience, Some(true), true)
 }
 
 /// `percept` for what `observer` saw of an event: written at once and in full either way; a
@@ -20,7 +20,14 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
 /// at) at once, and a bystander at most once per `witness_wake_ms` (`common::wake_bystander`).
 #[allow(clippy::too_many_arguments)]
 pub fn percept_seen(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32, party: bool) -> Option<u64> {
-    percept_as(ctx, observer, now, kind, subject, object, at, text, salience, party, true)
+    told(ctx, observer, now, kind, subject, object, at, text, salience, Some(party), true)
+}
+
+/// `percept` that wakes no one whatever its salience: a folded line of fights watched, whose
+/// first blow woke the onlooker when it landed (`fold`).
+#[allow(clippy::too_many_arguments)]
+pub fn percept_quiet(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
+    told(ctx, observer, now, kind, subject, object, at, text, salience, None, true)
 }
 
 /// A percept about something a person owns (a structure noticed, a theft from a store), whose
@@ -31,14 +38,14 @@ pub fn percept_seen(ctx: &ReducerContext, observer: &Character, now: u64, kind: 
 /// an unknown owner and a stranger once seen are one person is nothing the character perceived.
 #[allow(clippy::too_many_arguments)]
 pub fn percept_owned(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
-    percept_as(ctx, observer, now, kind, subject, object, at, text, salience, true, false)
+    told(ctx, observer, now, kind, subject, object, at, text, salience, Some(true), false)
 }
 
-/// An experience row for `observer`; a salient one wakes it, at once when `party`, else as a
-/// bystander. `far_handles`: a mind's character names people it cannot make out by the
-/// sighting's handle (`percept_owned` not).
+/// An experience row for `observer`; a salient one wakes it: at once when `wake` is `Some(true)`
+/// (a party), as a bystander when `Some(false)`, not at all when `None`. `far_handles`: a mind's
+/// character names people it cannot make out by the sighting's handle (`percept_owned` not).
 #[allow(clippy::too_many_arguments)]
-fn percept_as(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32, party: bool, far_handles: bool) -> Option<u64> {
+fn told(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32, wake: Option<bool>, far_handles: bool) -> Option<u64> {
     // Only minds and human players consume percepts. Infants have no mind yet to form
     // memories; a benchmark crowd's bodies (`common::instinct_only`) have no reader.
     if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
@@ -88,11 +95,13 @@ fn percept_as(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, 
     }
     common::diag(|| format!("percept:{kind}"), 1);
     if salience >= 0.6 {
-        common::diag(|| format!("woke:{kind}"), 1);
-        if party {
-            common::wake(ctx, observer.id);
-        } else {
-            common::wake_bystander(ctx, observer.id, now);
+        match wake {
+            Some(true) => common::wake(ctx, observer.id),
+            Some(false) => common::wake_bystander(ctx, observer.id, now),
+            None => {}
+        }
+        if wake.is_some() {
+            common::diag(|| format!("woke:{kind}"), 1);
         }
     }
     Some(row.id)
@@ -691,7 +700,7 @@ fn round(v: f32) -> f64 {
 /// What the character currently perceives, as compact JSON for the mind.
 pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let _span = common::span("perceive.scene_json");
-    common::diag(|| "scene_json".into(), 1);
+    common::diag(|| "scene_json", 1);
     let w = common::world(ctx);
     let Some(me) = ctx.db.character().id().find(id) else { return "{}".into() };
     let Some(b) = ctx.db.body().id().find(id) else { return "{}".into() };

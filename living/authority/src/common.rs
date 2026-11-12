@@ -65,6 +65,21 @@ pub fn set_profiling(on: bool) {
 }
 
 thread_local! {
+    /// While profiling with the `profile_detail` law: the parts of an evaluation are timed too.
+    static DETAIL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Set at each tick from `set_profile` and the `profile_detail` law.
+pub fn set_profile_detail(on: bool) {
+    DETAIL.with(|p| p.set(on));
+}
+
+/// A span for a part of an evaluation: timed only while profiling with `profile_detail`.
+pub fn detail_span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
+    (DETAIL.with(|p| p.get()) && PROFILE.with(|p| p.get())).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
+}
+
+thread_local! {
     /// While profiling: graph scenes built since the last report, the creatures they saw in
     /// all, and the most one saw.
     static SCENES: std::cell::Cell<(u64, u64, u64)> = const { std::cell::Cell::new((0, 0, 0)) };
@@ -85,13 +100,14 @@ thread_local! {
     /// Diagnostic counts while profiling (docs/BATTLE_SCALE.md): percepts by kind and how many
     /// woke their observer, onlookers per witnessed event, requests to think by reason, graph
     /// evaluations by trigger, wakes. Logged once a second by `report_diag`, then cleared.
-    static DIAG: RefCell<std::collections::BTreeMap<String, u64>> = const { RefCell::new(std::collections::BTreeMap::new()) };
+    static DIAG: RefCell<std::collections::BTreeMap<std::borrow::Cow<'static, str>, u64>> = const { RefCell::new(std::collections::BTreeMap::new()) };
 }
 
-/// Count `n` under the key `key()` while profiling (no work otherwise).
-pub fn diag(key: impl FnOnce() -> String, n: u64) {
+/// Count `n` under the key `key()` while profiling (no work otherwise). A fixed key (`|| "wake"`)
+/// costs no allocation, so counting in hot loops does not weigh on what is measured.
+pub fn diag<K: Into<std::borrow::Cow<'static, str>>>(key: impl FnOnce() -> K, n: u64) {
     if PROFILE.with(|p| p.get()) {
-        DIAG.with(|d| *d.borrow_mut().entry(key()).or_default() += n);
+        DIAG.with(|d| *d.borrow_mut().entry(key().into()).or_default() += n);
     }
 }
 
@@ -1413,7 +1429,7 @@ pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
     if now_wake {
         wake(ctx, id);
     } else {
-        diag(|| "wake:deferred".into(), 1);
+        diag(|| "wake:deferred", 1);
     }
 }
 
@@ -1433,13 +1449,13 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
         out
     });
     for id in due {
-        diag(|| "wake:due".into(), 1);
+        diag(|| "wake:due", 1);
         wake(ctx, id);
     }
 }
 
 pub fn wake(ctx: &ReducerContext, id: u32) {
-    diag(|| "wake".into(), 1);
+    diag(|| "wake", 1);
     if ctx.db.wake().id().find(id).is_none() {
         ctx.db.wake().insert(Wake { id });
     }

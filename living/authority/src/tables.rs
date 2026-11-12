@@ -1491,6 +1491,36 @@ pub struct CombatSeen {
     pub note: String,
 }
 
+/// One blow of a fight as its onlookers saw it (private; docs/BATTLE_SCALE.md, fix 4): who
+/// struck whom, how it ended, and everyone who could see it under the sight rule at that instant
+/// (`perceive::witnessed`'s test), the two in it excepted. Each onlooker is told what it saw as
+/// one folded line per `witness_fold_ms` (`fold::flush`); a row is gone once every onlooker's
+/// window holding it has been told, so the table holds at most one window of fights.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fight_seen)]
+pub struct FightSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub at_ms: u64,
+    pub attacker: u32,
+    pub victim: u32,
+    /// `living_rules::combat::seen`: `HIT`, `BLOCKED`, `DODGED` or `MISS`.
+    pub outcome: u8,
+    /// The first blow of a fight (`act::damage`'s `first_blow`).
+    pub start: bool,
+    /// The blow killed its victim.
+    pub fell: bool,
+    /// The missile's words ("an arrow"); empty for a blow in reach.
+    pub missile: String,
+    pub x: f32,
+    pub y: f32,
+    /// Who saw it; `fold::UNSEEN_SHOOTER` set on one who saw where a missile struck but not who
+    /// shot it.
+    pub onlookers: Vec<u32>,
+}
+
 /// A missile in flight (private: clients draw it from its `LAUNCH` and `IMPACT` events).
 /// Swept along its path every tick (`next_ms`) against bodies and walls.
 #[derive(Clone, Debug)]
