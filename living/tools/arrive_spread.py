@@ -19,7 +19,7 @@ control is `<trial>:arrive-control`. Per run:
   (arrive_report's `first_contact_s` is from its first walk, 20 s after joining);
   `heard_join_s`: to the first line said to it that reached it: not out of earshot by the
   authority's own verdict (the speaker's "silence" experience at the line, "No answer from …; they
-  don't seem to be within earshot", in `experiences_all.jsonl`; without it, the speaker beyond
+  don't seem to be within earshot" or, since `speech_truth`, "… could not have heard you.", in `experiences_all.jsonl`; without it, the speaker beyond
   EARSHOT_M, 12 m, Cullet's speech, of the newcomer's position interpolated from `positions.jsonl`).
   `lines_to`: lines said to the newcomer; `far`: those out of earshot, which never reached it;
   `heard_res`: residents who said at least one line to it that reached it.
@@ -63,6 +63,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import trials  # noqa: E402,F401  (prices, loaded once for every helper below)
+
+# The speaker's `silence` row for a line its addressee could not have heard: its words since
+# `speech_truth`, speech-2's, and the first ("No answer from …"). A planned line not said carries UNSAID.
+UNHEARD = re.compile(r"^No answer from|could not have heard you|is too far to hear you|within earshot")
+UNSAID = "You did not say your planned line"
 
 EARSHOT_M = 12.0
 GIVE_KINDS = {"give", "teach", "host", "trade", "lodge", "offer"}
@@ -127,11 +132,14 @@ def extra(d, sid, names, minds):
     speech = sorted(jl(d / "speech.jsonl"), key=lambda r: r["at_ms"])
     join_ms = next((r["at_ms"] for r in jl(d / "chronicle.jsonl") if r.get("kind") == "arrival" and r.get("a") == sid), st["t0"] * 1000)
     to_new = [s for s in speech if s.get("b") == sid and s.get("a") != sid]
-    # The authority's own verdict, when recorded: a "silence" experience of the speaker, "No answer
-    # from …; they don't seem to be within earshot", at the line's time. It counts every line said,
-    # where speech.jsonl merges a line repeated word for word into its earlier row.
+    # The authority's own verdict, when recorded: a "silence" experience of the speaker at the
+    # line's time ("No answer from …; they don't seem to be within earshot" before `speech_truth`,
+    # "… could not have heard you." since; `UNHEARD`). It counts every line said, where
+    # speech.jsonl merges a line repeated word for word into its earlier row. A planned line the
+    # authority did not say (`speech_truth`: its addressee out of reach as it came due) is no line.
     earshot = {(r["observer"], r["at_ms"]) for r in jl(d / "experiences_all.jsonl")
-               if r.get("kind") == "silence" and r.get("subject") == sid and "earshot" in (r.get("text") or "")}
+               if r.get("kind") == "silence" and r.get("subject") == sid and UNHEARD.search(r.get("text") or "")
+               and UNSAID not in (r.get("text") or "")}
     heard, far = [], []
     for s in to_new:
         if (d / "experiences_all.jsonl").exists():

@@ -21,7 +21,7 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet')
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'queued')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -207,6 +207,8 @@ def run_case(run, case):
         return alongside_case(run)
     if case == 'greet':
         return greet_case(run)
+    if case == 'queued':
+        return queued_case(run)
     if case == 'speech':
         return speech_case(run)
     if case == 'frame':
@@ -1610,6 +1612,108 @@ def speech_case(run):
     replies = [json.loads(t['detail']).get('reply', {}) for t in run.thoughts(actor, 'thoughts-talk') if t['kind'] == 'talk']
     return {'status': 'pass', 'talk_turns': len(talks), 'reply_ways': [r.get('way') for r in replies], 'introduced': intro[0]['text'],
             'heard_rows': len(heard), 'consolidation_tagged': tagged, 'whispered_back': whispered, 'called_back': called}
+
+
+def queued_case(run):
+    """A plan's queued line overtaken by a reply (`speech_truth`, brain.rs `line_overtaken`;
+    docs/COMMUNICATION.md §15). The plan holds a line for the newcomer until the newcomer stands
+    within 2 m (`near`); the newcomer waits 4 m off. It asks the resident a question 1 s after the
+    install; as soon as the resident's talk turn has answered, the newcomer is moved beside it,
+    which releases the queued line. The authority's speaking limit (2 s between two lines of one
+    speaker, `SPEAK_GAP_MS`) holds it until 2 s after the reply, so two answers are never under
+    2 s apart in this engine (the 1.5 s in ar2's inspector is not the authority's line times);
+    here they come 2.3–2.4 s apart (minds-struth5/6-queued). Waking the graph with a second
+    resident's line drew a reply of its own that reset the limit (minds-struth8-queued, 4.4 s). With the law off, the reply and the queued line both reach the
+    newcomer about a second apart: two answers to one line, as Sefa's 1.5 s apart in ar2's
+    `arrive-answer` `all` r3. With it on (the default), only the reply: the queued line is
+    dropped, and nothing is said in its place. Times are the speaker's own `said` rows (the
+    chronicle merges a line repeated word for word). A fixed wait could not do this: the talk
+    turn took 5.7 s in minds-struth-queued and 2.9 s in minds-struth2-queued. (A nod as the
+    release, minds-struth4-queued, never set the resident's `hailed_ms`; not pursued here.)"""
+    people = prepare(run)
+    actor = people[0]['id']
+    run.harness('player', 'join', 'MindsNewcomer')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsNewcomer'", 'player')[0]['id']
+    run.admin('place_near', player, actor)
+    plan = {'first': [{'if': {'near': {'target': {'id': player}, 'within': 2}}, 'then': {'say': {'text': 'verify minds queued line', 'to': {'id': player}}}}, {'wait': 120}]}
+    script = {'replies': {'think': {'thought': 'I will greet the newcomer when they come up to me.', 'intend': ['ask who they are when they come close'], 'say': None},
+                          'deliberate': basic_reply(graph=plan, plan='verify minds queued'),
+                          # Not `end`: a settled pair takes no turn on a line like the last (minds-struth9-queued).
+                          'talk': {'thought': 'I answer them.', 'say': 'verify minds talk reply', 'settled': None, 'end': False}}}
+    models = model(run, script)
+    token = json.loads((run.directory / 'state.json').read_text())['token']
+
+    def as_player(reducer, args):
+        # Over HTTP with the player's token: a harness subprocess takes seconds under load.
+        req = urllib.request.Request(f"{shared.STDB_URL}/v1/database/{run.db}/call/{reducer}", data=json.dumps(args).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'}, method='POST')
+        with urllib.request.urlopen(req, timeout=10) as r:
+            assert r.status == 200
+        with (run.directory / 'actions.log').open('a') as log:
+            log.write(f"{time.strftime('%H:%M:%S')} player {reducer}{json.dumps(args)} -> 200 (HTTP, fast)\n")
+
+    def http(path, body, tok, raw=False):
+        req = urllib.request.Request(f"{shared.STDB_URL}{path}", data=(body if raw else json.dumps(body)).encode(),
+                                     headers={'Content-Type': 'text/plain' if raw else 'application/json', 'Authorization': f'Bearer {tok}'}, method='POST')
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, r.read().decode()
+
+    def reply_seen(installed):
+        # Straight SQL with the admin token (the harness's subprocess takes a second or more under load).
+        _, body = http(f'/v1/database/{run.db}/sql', f'SELECT * FROM experience WHERE observer = {actor}', run.token, raw=True)
+        res = json.loads(body)[-1]
+        names = [e['name'].get('some', '?') for e in res['schema']['elements']]
+        rows = [dict(zip(names, r)) for r in res['rows']]
+        return any(r['kind'] == 'said' and r['object'] == player and r['at_ms'] > installed and 'verify minds talk reply' in r['text'] for r in rows)
+
+    def said(installed, label):
+        exps = run.private(f'SELECT * FROM experience WHERE observer = {actor}', f'exp-{label}')
+        return exps, sorted((e for e in exps if e['kind'] == 'said' and e['object'] == player and e['at_ms'] > installed), key=lambda e: e['at_ms'])
+
+    def arm(label, law):
+        run.admin('set_world_law', 'speech_truth', law)
+        # The newcomer waits 4 m off: within earshot, not within the plan's 2 m.
+        run.admin('place_at', player, home[0] + 4.0, home[1])
+        before = {b['installed_ms'] for b in run.private(f'SELECT * FROM brain WHERE id = {actor}', f'brain-before-{label}')}
+        run.request(actor, 'queued ' + label)
+        brain = run.wait(lambda: [b for b in run.private(f'SELECT * FROM brain WHERE id = {actor}', f'brain-{label}')
+                                  if b['source'] == 'mind' and b['installed_ms'] not in before], f'{label}: the plan installed', 90)[0]
+        installed = brain['installed_ms']
+        while time.time() * 1000 < installed + 1000:
+            time.sleep(0.05)
+        # Each arm asks something new: words mostly like the exchange's earlier ones draw no turn.
+        as_player('human_say', [{'off': 'Hello. I am new here. Who are you?', 'on': 'Another matter entirely: where does the river bend north?'}[label], actor])
+        deadline = time.monotonic() + 40
+        while not reply_seen(installed):
+            assert time.monotonic() < deadline, f'{label}: no talk reply'
+            time.sleep(0.05)
+        status, _ = http(f'/v1/database/{run.db}/call/place_at', [player, home[0] + 1.0, home[1]], run.token)
+        with (run.directory / 'actions.log').open('a') as log:
+            log.write(f"{time.strftime('%H:%M:%S')} admin place_at{json.dumps([player, home[0] + 1.0, home[1]])} -> {status} (HTTP, fast)\n")
+        time.sleep(8)
+        exps, lines = said(installed, label)
+        reply = [e for e in lines if 'verify minds talk reply' in e['text']]
+        queued = [e for e in lines if 'verify minds queued line' in e['text']]
+        gap = (queued[0]['at_ms'] - reply[0]['at_ms']) / 1000 if reply and queued else None
+        silences = [e['text'] for e in exps if e['kind'] == 'silence' and e['at_ms'] > installed]
+        run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', f'chronicle-{label}')
+        return {'installed_ms': installed, 'said': [((e['at_ms'] - installed) / 1000, e['text']) for e in lines], 'reply': len(reply), 'queued': len(queued),
+                'gap_s': gap, 'silences': silences}
+
+    run.request(actor, 'queued warmup')
+    run.start(models, [actor])
+    accepted(run, actor, 'verify minds queued')
+    body = run.private(f'SELECT * FROM body WHERE id = {actor}', 'actor-body')[0]
+    home = (body['x'], body['y'])
+    time.sleep(3)
+    off = arm('off', 'false')
+    assert off['reply'] == 1 and off['queued'] == 1, f'law off: the double answer is not reproduced: {off}'
+    assert off['gap_s'] is not None and 0 < off['gap_s'] <= 3.0, f'law off: the two answers are not within 3 s: {off}'
+    time.sleep(3)
+    on = arm('on', 'true')
+    assert on['reply'] == 1 and on['queued'] == 0, f'law on: the queued line was said on top of the reply: {on}'
+    assert not on['silences'], f'law on: an overtaken line is dropped, not told as unheard: {on}'
+    return {'status': 'pass', 'off': off, 'on': on}
 
 
 def main():

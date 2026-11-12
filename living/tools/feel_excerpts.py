@@ -61,6 +61,11 @@ import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
+# The speaker's `silence` row: the one a line was said to could not have heard it. Its words since
+# `speech_truth` ("Bram is too far away: they could not have heard you.", "… is out of earshot: …",
+# a planned line not said), speech-2's ("… is too far to hear you; …") and the first ("No answer from …").
+UNHEARD = re.compile(r"^No answer from|could not have heard you|is too far to hear you")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import life_feel  # noqa: E402
 import life_share  # noqa: E402
@@ -413,7 +418,7 @@ def feel_dir(life, a_ms, b_ms, root):
     exps = []
     for ms, kind, text in life.percepts:
         if in_ms(ms) and kind not in ("said", "speech"):
-            k = "silence" if text.startswith("No answer from") else ("act" if life_feel.FAIL.match(text) else "seen")
+            k = "silence" if UNHEARD.search(text) else ("act" if life_feel.FAIL.match(text) else "seen")
             exps.append({"t": tt(ms), "at_ms": ms, "observer": R, "kind": k, "text": text})
     write_jl(d / "experiences.jsonl", exps)
     before = [p for ms, p in life.plans if ms < a_ms]
@@ -489,7 +494,7 @@ GROUPS = [  # (pattern, group key, category): repeated percepts shown once, with
     (re.compile(r"^You see an? (wolf|deer|rabbit|boar|fox|bear)\b"), "animal sighted", "other"),
     (re.compile(r"^You hear .*howl"), "howl", "other"),
     (re.compile(r"^You hear "), "sound", "other"),
-    (re.compile(r"^No answer from"), "no answer", "struggle"),
+    (UNHEARD, "no answer", "struggle"),
     (re.compile(r"^You keep turning back and forth"), "dither", "struggle"),
     (re.compile(r"answers your greeting|greets you"), "greeting", "other"),
     (re.compile(r"^(A |An )?[\w .'-]*?(cooked|crafted|built|wrote|gathered|smoked|stored|planted) "), "others at work", "other"),

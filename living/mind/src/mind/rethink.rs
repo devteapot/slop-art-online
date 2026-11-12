@@ -464,11 +464,22 @@ pub fn state(i: &Inputs, lim: &Limits) -> Value {
         .filter(|(to, (_, first, _, _))| !window.iter().any(|e| e.subject == **to && e.at_ms >= *first && matches!(e.kind.as_str(), "speech" | "whisper" | "gesture" | "heard")))
         .filter(|(_, (lines, _, _, _))| *lines > 0)
         .map(|(_, (lines, first, last, silences))| {
-            let mut s = format!("{last} — {lines} line{} to them since {}, no answer", if *lines == 1 { "" } else { "s" }, ago(i.now_ms.saturating_sub(*first)));
-            if *silences > 0 {
-                s.push_str(" (they seemed out of earshot)");
+            let n = format!("{lines} line{} to them since {}", if *lines == 1 { "" } else { "s" }, ago(i.now_ms.saturating_sub(*first)));
+            // The world's `speech_truth`: a line they could not have heard is not an unanswered
+            // one (it reads as a refusal).
+            if *silences > 0 && crate::prompts::speech_truth() {
+                if silences >= lines {
+                    format!("{last} — {n}; they could not have heard you: out of earshot")
+                } else {
+                    format!("{last} — {n}, no answer; {silences} of them could not have reached them (out of earshot)")
+                }
+            } else {
+                let mut s = format!("{last} — {n}, no answer");
+                if *silences > 0 {
+                    s.push_str(" (they seemed out of earshot)");
+                }
+                s
             }
-            s
         })
         .collect();
     let repeats = new.iter().filter(|e| e.kind == "repeat").count();

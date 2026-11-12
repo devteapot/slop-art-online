@@ -159,6 +159,22 @@ def main():
             expect(f"refused: a second {way} within {c['gap_ms'] / 1000:g} s, in its check's words ({words})",
                    code != 200 and body.strip() == words and len(said_since(t0)) == before, body[:200])
             time.sleep(c["gap_ms"] / 1000)
+    # A line to someone out of earshot (`speech_truth`, on by default; docs/COMMUNICATION.md §15):
+    # it is said, and my client is told the truth, as a `silence` row in my_experience and an act
+    # outcome (code `reach`) in my_act_outcomes with the same words, never "No answer".
+    body = sql(f"SELECT * FROM body WHERE id = {me}", admin)[0]
+    call("place_at", [resident, body["x"] + 30.0, body["y"]], admin)
+    time.sleep(2.5)
+    t1 = sql("SELECT last_ms FROM clock", admin)[0]["last_ms"]
+    code, out_body = call("human_say", ["verify speak: can you hear me from there?", resident], me_token)
+    time.sleep(1.5)
+    sil = [r for r in sql("SELECT * FROM my_experience", me_token) if r["kind"] == "silence" and r["at_ms"] >= t1]
+    outs = {o["id"]: o for o in sql("SELECT * FROM my_act_outcomes", me_token)}
+    o = outs.get(sil[0]["id"]) if len(sil) == 1 else None
+    expect("a line out of earshot is said, and told as could-not-have-heard (my_experience + my_act_outcomes, code reach)",
+           code == 200 and len(sil) == 1 and sil[0]["text"].endswith("they could not have heard you.") and not sil[0]["text"].startswith("No answer")
+           and o is not None and (o["kind"], o["code"], o["ok"], o["why"], o["other"]) == ("act", "reach", False, sil[0]["text"], resident),
+           {"code": code, "silence": sil, "outcome": o})
     out = Path(V.run_dir(a.run)) / "speak.json"
     out.write_text(json.dumps({"db": db, "me": me, "resident": resident, "cards": cards, "checks": checks}, indent=2) + "\n")
     print(out)

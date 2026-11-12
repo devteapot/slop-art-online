@@ -766,3 +766,68 @@ Not covered:
 - a real model's use of the ways;
 - walls muffling speech (item 11);
 - one answerer across mind services (item 9).
+
+## 15. Speech that tells the truth (branch `speech-truth`)
+
+Built 2026-11-12 from the arrival batch ar2 (docs/TRIALS.md, "Arrival batch ar2"). There, 62% of the residents' lines to a newcomer were said out of earshot, 25–48 m away at first sight. Each came back to the speaker as "No answer from a stranger; they don't seem to be within earshot." Residents read that as a refusal, and re-asked 5–11 times a run. ar2's build was from before `speech-2`, so every unheard line read "No answer", even to someone the speaker saw. The inspector found two more faults. A plan's queued line was said on top of a talk turn's reply, 1.5 s apart. And some lines were said after the speaker had walked away.
+
+The general coordinator's decisions: tell the speaker the truth, and never hold a line back. The engine does not decide when someone may speak.
+
+### The law: `speech_truth` (default on)
+
+`laws().speech_truth` in `living/scripts/skills.rhai` (`Laws::speech_truth`), settable with `set_world_law speech_truth false` or a seed's `rules`. It is **on by default** because it replaces a false "No answer", which reads as a refusal for a line that was never heard. Off, `speech-2`'s words and behaviour come back exactly.
+
+**One rule for a line no one addressed could hear.** When the addressee (`to` ≠ 0) is not among those who received the words, the speaker's `silence` row (0.35) says so. "Those who received the words" is the same `hearers` list the line's `audience` row lists, which is what `LIVING_GREET=nearest` reads. The words:
+
+| Case | `speech_truth` on | Off (`speech-2`) |
+| --- | --- | --- |
+| The speaker sees them (the sight rule) | "Bram is too far away: they could not have heard you. Call out or go closer." | "Bram is too far to hear you; call out or go closer." |
+| The way used already carries farthest | "… could not have heard you. Go closer." | "…; go closer." |
+| Not seen: out of sight, absent or dead alike | "Bram is out of earshot: they could not have heard you." | "No answer from Bram; they don't seem to be within earshot." |
+
+- The remedy is still the farthest-carrying public way that needs no technique, by its label.
+- Absent, dead and out of sight read alike, so ids cannot be probed.
+- **A player** who speaks to someone out of earshot gets the same row in `my_experience`. They also get an `act_outcome` row keyed by it (`my_act_outcomes`): kind `act`, code `reach`, `ok` false, `skill` the way, `what` "say to Bram", `why` the same words, `other` the addressee. A client can draw its note from the code, not the English.
+- **The minds.** The `silence` row's words reach every prompt as before. The rethink judge's `spoke_to_without_answer` now reads "… — 2 lines to them since just now; they could not have heard you: out of earshot" when every line was unheard. When only some were, it reads "…, no answer; 1 of them could not have reached them (out of earshot)". Before, it was "…, no answer (they seemed out of earshot)". A `silence` still closes that conversation (`talk.rs` `on_speech`).
+
+**A plan's queued line overtaken by a reply** (`brain.rs` `line_overtaken`). A mind plan's `say` node to someone is dropped when it comes due if the conversation has moved past it. That is, since the plan was installed (or the node last spoke):
+
+- that person spoke to the speaker: a line with `object` the speaker, or a room line the authority marked as for them (salience ≥ 0.8, the mind's own "marked");
+- or the speaker spoke to them other than by this plan's own say nodes, such as a talk turn's reply.
+
+Details:
+
+- Lines said in the install's own transaction (the deliberation's `say`) are not "since", so the plan's first words never cancel its later ones. A plan's own say nodes are told apart by their marks.
+- Nothing is said in the dropped line's place, and no row is written: the reply that overtook it is the speaker's current answer.
+- Only a mind's plan (`brain.source = "mind"`): a routine's or an instinct's say is a habit, not a line queued for one conversation.
+- The mind's `LIVING_PARK=concurrent` already withholds a deliberation's own `say` that a turn alongside answered (`unanswered_say`). This covers the plan's later lines, which only the authority sees come due.
+
+**A queued line whose addressee is beyond reach when it comes due.** The root: a graph's `say` node runs whenever its plan reaches it, wherever the body has walked by then (after a `goto`, or after a `wait` while the addressee moved). Before, the line was said, nobody heard it, and the speaker was told only "No answer". Now, with the law on, a graph's `say` to someone who would not receive its words (`speech::within_reach`, the rule `speak` gives the words by) is not said. The speaker gets a `silence` row with the same words, and the line it kept:
+
+> A stranger is too far away: they could not have heard you. Call out or go closer. You did not say your planned line: “Queued words for e.”.
+
+- The node counts as done, so the plan goes on.
+- A way with a reach of its own (a whisper) still refuses in its check's words ("too far to whisper: step closer").
+- Lines a mind says directly (a talk turn's `mind_say`, a deliberation's `say`) and a player's lines are always said, and told truthfully. Only a queued line is not said into the air.
+- The ar2 case in the inspector (Ilsa, `all` r2) was a 20 s deliberation: her prompt had the newcomer at 5.3 m, and her line came from 27 m. That is a direct line, said and now told truthfully. The ar2 journals were not re-read here (the run checkout is off limits), so the share of each kind of late line is not counted.
+
+### Each way's reach in metres (point 2)
+
+The world text's SPEAKING section and the talk turn's reply format name each way with its reach in metres. The reach is read from the spec and the world's hearing (`WaySpec::reach_words`, the same numbers as `speech_card.reach_m`/`carry_m`), not written into the prompts:
+
+> SPEAKING: say (carries 9 m) = Speak aloud. … whisper (to someone within 1.5 m) = Whisper … call (carries 22.5 m) = Call out …
+
+In Cullet (hearing 12 m) this reads "carries 12 m" and "carries 30 m". With the law on, the graph grammar's `say` line adds: "A line to someone is not said if, when it comes due, they are beyond what it carries (you are told instead) or the talk with them has moved on since you planned it (they spoke to you, or you answered them)."
+
+### Data paths and SpacetimeDB
+
+There is no schema change: no table, column, reducer, view or subscription was added or changed, and the bindings are unchanged.
+
+- The player's outcome is one more row in the existing private `act_outcome` table, written only for a played character.
+- `line_overtaken` reads the speaker's own experience rows through the `experience.observer` btree index. The indexes page says "With an index, the database locates matching rows directly" ([indexes](https://spacetimedb.com/docs/tables/indexes/)). Experience rows are bounded per character by the window. This runs once per due say node of a mind's plan, not per tick.
+- `within_reach` is two point lookups (`character`, `body`) and the hearing law.
+- The [performance](https://spacetimedb.com/docs/tables/performance/) page has no guidance on reads within a reducer beyond this.
+
+### Tools
+
+`inspector.py`, `social_report.py`, `feel_excerpts.py` and `arrive_spread.py` found unheard lines by the "No answer from" (or "earshot") text. They now match all three wordings (`UNHEARD`: "No answer from", "could not have heard you", "is too far to hear you"). `arrive_spread.py`, which counts every `silence` row to the newcomer as a line said out of earshot, leaves out a planned line that was not said ("You did not say your planned line"): it has no chronicle line and is no line said. `life_feel.py` counts by the `silence` kind and needed no change. exp-arrive's `arrive_report.py`, on its own branch, is not changed here.

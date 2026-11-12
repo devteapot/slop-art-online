@@ -1,5 +1,18 @@
 # Core validation record
 
+## 2026-11-12 speech-truth (Spark)
+
+Branch `speech-truth` (origin/main `a221a78e` merged). Trial service `slop-trials-stdb` (2.14.1). docs/COMMUNICATION.md §15.
+
+- `just living-check` passes (rules 249 lib tests among them, with `ways_of_speaking_are_read_from_the_script` updated for the reach in metres, and the `speech_truth` law test).
+- **Regression:** `speech.py regress` (`core-struth-regress`) against the base module (`core-struth-base`, a worktree at `a221a78e`, its own target dir). The diff (`speech-diff.json`) is identical over 75 rows except one, the intended outcome text. a's line to d (out of earshot, unseen) reads "A stranger is out of earshot: they could not have heard you." where the base read "No answer from a stranger; they don't seem to be within earshot." The `introduced` rows are as before.
+- **`speech.py channels`** (`core-struth-channels`): every check passes, the new ones among them:
+  - truthful silence to e (seen) and d (unseen);
+  - the player's line to d out of earshot: its row, and an `act_outcome` (act, reach);
+  - a graph's say to e out of earshot as it comes due: not said, and the speaker told "… You did not say your planned line: “Queued words for e.”.";
+  - `set_world_law speech_truth false`: speech-2's "No answer" and the queued line said into the air.
+- **`speech.py ways`** (`core-struth-ways`): passes.
+
 ## 2026-11-12 goods-3: building as recipes, tools on recipes, the carry count, the goods audit (laptop host)
 
 Branch `goods-3`, own container `goods3-stdb` (2.14.1, port 3333), `scoped`, no minds, private `CARGO_TARGET_DIR` under `.local/goods3/`.

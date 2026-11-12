@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-12 speech-truth (Spark)
+
+`speak.py` (`player-struth-speak`, trial service): 16 of 16. New: a `human_say` to the resident 30 m away is said. The player's `my_experience` then holds one `silence` row ending "they could not have heard you." (not "No answer"), and `my_act_outcomes` holds its row: kind `act`, code `reach`, not ok, `why` the same words, `other` the resident.
+
 ## 2026-11-11 speech with the `speech_audience` law off (exp-greet, Spark)
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (port 3320). `player-1111-152137`, the speech part of `player-character.md`, passed. An addressed and an unaddressed `human_say` gave the same chronicle lines and listener experiences as before ("A stranger said to you: …", salience 0.9; the unaddressed line was also 0.9, because the listener was the only one close by). No `audience` row was written. `set_paused` and `install_script` were refused to the player ("admin only"), and the player's SQL on `audience` was refused (a private table). The other recipes were not rerun.
