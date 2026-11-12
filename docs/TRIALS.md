@@ -268,7 +268,7 @@ All four runs re-measured with the fixed `arrive_spread`:
 **Where the asking comes from.**
 1. **The first-sight thought is the pull.** 20 of the 22 askers spoke from a think whose only reason was the first-sight line ("For the first time you see a stranger, 16 tiles south, wait."). The think prompt says "Start from why you are thinking now: that is what this moment of thought is about" (`prompts.rs`). With the stranger as the only reason, the stranger is what the thought is about, and most answer it with a greeting.
 2. **Manners is the models' own norm, not the prompt's.** "costs nothing" appears in 8 thoughts. Neither the shared prompts nor any resident's sheet holds a greeting norm; the nearest is Amara's value "a neighbour is owed what you can carry", and she is not an asker.
-3. **Personality shows only as a lean.** The curious askers have curiosity 55–88 (Lark 88, Lumi 80, Edda 75), the manners askers 35–78.
+3. **Personality shows only as a lean.** The askers who gave curiosity have curiosity 40–88 (Lark 88, Lumi 80, Eamon 78, Edda 75), those who gave manners 30–78 (most 35–45).
 4. **Duty or role came in four lives.** Aldous asked in this run, the first time in any arm. His first line, at 320 s from 22.8 m, went unheard. He asked again at the Marver after Pieter, Eamon and Anselm.
 
 **Held lines** (`heard_first_rethinks`): **33 held, 6 of them to the newcomer.**
