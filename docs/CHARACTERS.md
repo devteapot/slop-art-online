@@ -2546,6 +2546,21 @@ What happened since (2026-11-11):
 - **Hair on spring bones** changes nothing for `animate.py`: the chains hang under the head and the clips do not key them.
 - **Since pass 3 generated people are baked with main's `animate.py` again** (floor-guard-4, `25c1fb92`, which replaced the second and third guards: wrists and ankles are kept above the floor on every clip and body). The board's seven presets and the control were baked with it on the 29 entries this machine holds, and `living/tools/marker_check.py` on that bake reports no errors. On each of our people the guard changed 16 clips; the largest jerk rose by 0.4° at most (`run`, 17.8° to 18.2°, 6° allowed), and one warning stands (`sneak`: the right foot slides 4.5 cm while planted, 4 allowed). The 64 residents used for pass 3's crowd measurement were baked earlier with the first guard, as pass 2's were (`ANIMATE=<a copy from 93a4f3d6>`), so the two sets compared carry the same clips.
 
+## KTX2 pictures in the client (looks-tex-1-client, 2026-11-12)
+
+The client half of [Pictures as KTX2](#pictures-as-ktx2) (that section's "What the client needs" is the spec; the bundle side is dev-box's `looks-tex-1`). A PNG bundle (`pictures: png`, or any bundle before it) loads exactly as before.
+
+- **Summaries from the thumbs** (`characters.rs`, `thumb_pictures`, `Thumb::from_image`): for a `lookdev/` picture whose path ends in `.ktx2`, the `<name>.thumb.png` beside it is read from disk once, when the picture arrives, in place of its pixels. Its 64×64 RGBA 16-bit cells are `Thumb::of`'s, premultiplied linear colour and coverage, `v / 65535`; anything else is no summary. Read in the same frame as the picture, the summary is there when `compose` makes its materials, so KTX2 people share materials as PNG people do. A KTX2 picture without a readable thumb warns once and takes its material's base colour. `Thumb::of` gives no summary for a block-compressed image (it used to give zero cells). The test `a_shipped_summary_reads_back_as_its_pictures_cells` holds the format to `Thumb::of` within 1/65535.
+- **The shadow map** (`lookdev.rs` `convert`, `characters/compose.rs` `toon`, through `lookdev::face_map_files`): `<file>.face.ktx2` first, then `<file>.face.png`, and the same for a page's `face_map` extras; still loaded with `is_srgb = false`.
+- **The GPU's formats at start** (`characters.rs` `gpu_formats`), one line to grep, and a warning when BC is missing (KTX2 pictures would not load; install a PNG bundle):
+
+  ```
+  gpu formats: bc=true astc=true etc2=true (CompressedImageFormats(ASTC_LDR | ASTC_HDR | BC | ETC2))
+  ```
+
+  That is the laptop (Apple M4 Pro, Metal). dev-box (RADV, Vulkan) reports `BC`.
+- **Known leftover: `strands.png` stays installed beside a KTX2 bundle.** The shared clip file `lookdev/anim/own-clips.glb`, which an install makes locally with `gen_person.sh clips=man`, names `../strands.png` by URI, as do the older `lod/anim/own-*` town files. A KTX2 bundle has `strands.ktx2` instead. Bevy 0.20's glTF loader loads every texture a file names whatever its `load_materials` setting, so the client cannot load the clip file for its animations alone. Until gen_person's clips mode exports the skeleton and animations only (asked of char-4), keep the PNG bundle's `strands.png` in `lookdev/` beside a KTX2 bundle; without it the client logs `Path not found: …/lookdev/strands.png` once and draws nothing differently.
+
 ## What was learnt from VRoid
 
 The controls `lookdev/vroid-Sendagaya_Shino.glb` and `vroid-Vivi.glb` were taken apart to see how the look is made. Nothing of theirs is used ([third-party record](../living/tools/blender/THIRD_PARTY.md)). The full study of the reference (form, topology, morphs, rig, materials, VRoid's parameter model, the licence) and what our head should change is [CHARACTER_REFERENCE.md](CHARACTER_REFERENCE.md).

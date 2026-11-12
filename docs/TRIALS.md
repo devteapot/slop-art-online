@@ -188,6 +188,184 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## First sight fs1w (2026-11-12) — fs1n with earshot, now that minds can call; target, written before any paid call
+
+The general coordinator approved this run at about $2.5, with a stop at $3.50 spent. It is evidence for the owner's question: can residents greet without crowding when they can call? It runs only once the trial server is back from the disk cleanup, and only when the Spark coordinator says so.
+
+- **What it runs:** one arm, batch `fs1w`, `strangers-2b-c:strangers-first-sight-n2-earshot`.
+  - Laws on: `first_sight_thinks`, `think_framing` (N2) and `earshot`. They are set by `set_world_law` and read back from `world_law`.
+  - `first_sight_gap_s` is at its default, 300 s. `heard_first_rethinks` is off. The naming fix is on in every world.
+- **Code:** current main, which carries mind-say-way (`da3ff142`): a decision names its line's way (say, call, whisper). It is built from `trials-fs1` after merging main.
+- **The world and script:** as fs1n (Cullet, 63 minds, 20 minutes, the Strand walk). Ways stage 3 (ew1, on `ways-stage`) found that with earshot, 30 of 42 decisions with a call-only target called.
+- **A free fake smoke run first** (`fs1ws`). It checks that the three laws read back, that think prompts carry "# What just happened", and that scenes carry the earshot fact.
+- **Stop rule:** fs1's, unchanged: `converge_60s` 4 or more (the old definition), or `together_4m` 3 or more. The spend guard also stops the run at $3.50.
+- **Measures:**
+  - one table with fs1n against fs1w, the same rows as fs1n's;
+  - from `ways_report.py`: the lines to the newcomer by way (say, call, whisper), and for decisions whose scene put the newcomer within a call's reach but not a said line's, whether the speaker called, said, or walked over.
+- **What would answer yes:** most first lines to the newcomer called from where the speaker stood; fewer residents walked within 4 m than in fs1n (`converge_60s` 5); and the stop rule did not trip.
+
+**Switches:** as fs1n, plus `earshot` on. Otherwise:
+- far-handle on, `fov_on` off, `regard_cache` on;
+- `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`;
+- `LIVING_SKILL_TIMINGS` on and `force_outcomes` true;
+- no arrival laws;
+- `LIVING_CONCURRENCY` 64;
+- the people mix.
+
+## First sight fs1n (2026-11-12) — first sight with the neutral think framing (N2); target, written before any paid call
+
+Approved by the general coordinator at about $2.7, after the ordinary-think replay (docs/FRAMING.md). It runs only once `think-framing` is on main and the trial server is free, and only when the general coordinator says so.
+- **What it runs:** one arm, batch `fs1n`, `strangers-2b-c:strangers-first-sight-n2`, with `first_sight_thinks` and `think_framing` on (set by `set_world_law`, read back from `world_law`). `heard_first_rethinks` and `earshot` are off, so the arm compares with fs1f (first sight alone).
+- **The naming fix** is on in every world.
+- **The world and script:** as fs1 (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **A free fake smoke run first** (`fs1ns`). It checks that both laws read back and that the think prompts carry "# What just happened".
+
+**The target and the stop rule are fs1's, unchanged** (under "First sight fs1").
+- **Stop rule:** `converge_60s` 4 or more (the old definition), or `together_4m` 3 or more.
+- **Measures:** as fs1e:
+  - the stage-2 table beside fs1f, fs1h and fs1e;
+  - `converge_60s` heard and unheard;
+  - lines out of earshot, first sight → thought;
+  - the asks with their reasons grouped (curiosity, duty or role, manners, others asking, greeted first, something else);
+  - false replies with group talk, spoken ids.
+- **Added:** the share of first-sight thoughts that speak to the newcomer (`framing_replay.py asks`' measure, live), against fs1e's 22 of 36 recorded and the replay's N2 17 of 36.
+
+**Switches:** as fs1f, plus `think_framing` on.
+
+### Results (fs1n, 2026-11-12 21:06–21:27): the stop rule tripped (`converge_60s` 5)
+
+**What ran.**
+- **Commit:** main `05e94978` (think-framing on), in `~/slop-trials-fs1`.
+- **Smoke:** a free fake run first (`fs1ns`, 6 minutes). It ran to duration and read both laws back. All 98 think requests carried "# What just happened" and none "# Why you are thinking now"; the system prompt carried the neutral sentence.
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. Both laws were read back from `world_law`.
+- **Cleanup:** the world was paused before deletion; no database is left.
+
+**Cost:** $2.45 (glm-5-3-flash 1,292 calls $1.90; deepseek-v4-1-flash 331 calls $0.55).
+
+**Switches:** `first_sight_thinks` on (gap 300 s), `think_framing` on (N2), the naming fix; `heard_first_rethinks` and `earshot` off. Otherwise as fs1f: far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | fs1 C | fs1f | fs1h | fs1e | **fs1n** | target |
+|---|---|---|---|---|---|---|
+| in range | 18 | 22 | 22 | 35 | 25 | about 18–24 |
+| asks | 1 | 11 | 12 | 22 | **12** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 3 | 1 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 8 | 7 | 3–8 |
+| unaware | 12 | 3 | 2 | 2 | 5 (20%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 | 5 | 1 (Amara Okoro) | 1–4 |
+| first heard line after the join | 91.6 s | 320.7 s | 307.8 s | 96.0 s | **14.3 s, Benedikt Orme** | within 5 minutes |
+| `converge_60s` (old definition) | 2 | 6 | 10 | 10 | **5** | ≤3 |
+| of it: heard / unheard | 2 / 0 | 6 / 2 | 5 / 6 | 8 / 7 | 3 / 3 | — |
+| `together_4m` | 2 | 2 | 2 | 3 | 1 | ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | 10 | 8 | — |
+| lines to the newcomer / out of earshot / residents heard by it | 1 / 0 / 1 | 21 / 7 / 5 | 21 / 12 / 3 | 31 / 16 / 10 | 18 / 11 / 5 | — |
+| re-asks | 0 | 7 | 6 | 1 | 3 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 | 39 → 36 | 26 → 24 | — |
+| **first-sight-only thoughts that speak to the newcomer / speak or mean to** | — | 10 / 15 of 19 (53% / 79%) | 11 / 18 of 24 (46% / 75%) | 22 / 33 of 36 (61% / 92%) | **12 / 15 of 24 (50% / 62%)** | — |
+| false replies / group talk, a minute | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | 0.45 / 0.65 | 0.20 / 0.05 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | 0.07; +0.28 | 0.04; 0.00 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | 22.4 / 13.5 | 18.9 / 10.7 | — |
+| tick mean / > 10 ms / > 25 ms / > 50 ms | 0.88 ms / 28 / 2 / 0 | 0.82 ms / 14 / 1 / 0 | 0.82 ms / 18 / 0 / 0 | not captured | 1.12 ms / 132 / 17 / 6 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 | 0 | 0 |
+| cost | $2.48 | $2.66 | $2.73 | $2.69 | $2.45 | — |
+
+**What N2 changed, live** (one replicate, so indicative):
+- **The live share of first-sight thoughts that speak to the newcomer did not fall:** 50%, against 46–61% in the other first-sight arms.
+- **Fewer meant to:** 62% spoke or meant to, against 75–92%. The replay on fs1e's own prompts had shown a larger drop (67% → 47% speaking). Live thoughts differ from the replayed ones (other moments, other scenes).
+- **Crowding was lower than fs1h and fs1e, though still over the band:** `converge_60s` 5 (3 heard, 3 unheard), `together_4m` 1.
+- **False replies and group talk fell to C's level:** 0.20 and 0.05.
+- **Deliberations per resident-hour came back to C's 18.9.**
+- **Aldous asked** (6 s after the join, from 23.9 m, unheard): "a tally keeper does well to know every face and every newcomer's business, courteously".
+- **Still out of shape:** asks (12), and lines called from out of earshot (11 of 18).
+- **Tick time was higher** (mean 1.12 ms, 132 ticks over 10 ms) than in fs1's runs. Other batches were on the server after the quiet window; tick time was not part of the question.
+
+**The asks: 12 residents, each with the reason its own thought gave** (`fs1_asks.py`; grouped by hand; a thought giving two reasons is in both):
+
+| reason | askers | in their words |
+|---|---|---|
+| **manners** (7) | Aldous, Oswin, Roos, Hana, Gwil, Ren, Ingrid | Aldous: "…, courteously"; Oswin: "new faces in a growing town should be met before gossip makes them"; Roos: "New faces in Cullet are worth a greeting"; Hana: "give a civil word across the road"; Gwil: "I'd not let a new face stand silent in my town"; Ren: "deserves a greeting before anyone else decides what to make of them"; Ingrid: "I'll keep an eye and a civil word ready" |
+| **curiosity** (4) | Benedikt, Roos, Lark, Bram | Benedikt: "curiosity bids me at least offer a word"; Roos: "and a name, if they'll give one"; Lark: "a newcomer might be news from over the water, which is exactly the sort of thing I watch for"; Bram: "new faces are rare in Cullet, and I'd know who's come among us" |
+| **duty or role** (2) | Aldous, Ren | Aldous: "a tally keeper does well to know every face and every newcomer's business"; Ren: "Cullet's first outsider on my watch" |
+| **others asking** (0) | — | — |
+| **greeted first** (0) | — | — |
+| **something else** (2) | Ife, Suri | Ife, a child: "grown-ups would want to know". Suri: "not mine to mind this afternoon"; her line went to the newcomer all the same. |
+
+Against fs1e (manners 13, curiosity 10, duty 4, others 3, else 3 of 22): fewer askers in all, and manners still first. None was pulled by others asking.
+
+**Manners: the residents' or the model's?** (A free count from fs1n's records, 2026-11-12, for the owner's question whether 1–3 asks is the right bar.)
+- **The sheets read:** each of the 25 residents in range (12 askers; 13 who saw the newcomer and did not ask: 1 approached, 7 inward, 5 unaware), as its mind was given it. That is the "# Who you are" section of its own fs1n think prompts: the C world, with the Quill, Morrow and Sato households' sheets from before the lives change.
+- **Each resident classed as:**
+  - *outgoing*: social, curious or duty-bound by a phrase or a trait of 65 or more;
+  - *reserved*: reserved or private by a phrase or sociability of 40 or less;
+  - *both*;
+  - *none*.
+
+| sheet | asked | did not ask |
+|---|---:|---:|
+| outgoing only | 6: Bram ("Values: … exploration"), Ife (curiosity 70, sociability 65), Lark ("I want to be the one who goes and looks"), Oswin ("someone must say what goes where" on the Ladder), Ren (sociability 70), Roos ("I serve at the Marver"; sociability 75) | 5: Greta ("there is not a thing said at that wall I have not heard"), Nell (sociability 72), Neve ("Values: … adventure"), Wick (curiosity 70), Lorcan (sociability 72) |
+| both outgoing and reserved | 2: Aldous ("the ledger is the true history of Cullet" / "I say less about them than she does"), Benedikt (curiosity 95 / "Values: … solitude"; "I have lived alone … the tablets are my company") | 2: Amara (curiosity 70 / "Walking the Wrack Strand at low tide, alone"), Eamon (curiosity 78 / "Values: … keeping my own counsel") |
+| reserved only | 2: Hana ("I keep my peace and gather my kelp"), Suri ("I want a door I can shut") | 3: Davin ("Values: keeping quiet"), Petra ("Values: … not being a bother"), Rafe ("the night's quiet"; "he's the only man I talk to most nights"; sociability 35) |
+| none of these | 2: Gwil ("I keep out of that"; traits 40–60), Ingrid ("keep to what you can see"; curiosity 30) | 3: Joss ("I do not argue with her count, not in front of anyone"), Chidi, Magda |
+| total | 12 | 13 |
+
+- **Shares who asked, by sheet:** outgoing only 6 of 11 (55%), both 2 of 4, reserved only 2 of 5 (40%), none 2 of 5. The sheets lean the asking only a little.
+- **Askers whose sheets suggest reserve, with their own reasons:**
+  - **Benedikt:** "curiosity bids me at least offer a word; caution bids me not close the distance alone at once".
+  - **Aldous:** "a tally keeper does well to know every face and every newcomer's business, courteously".
+  - **Hana:** "I'll note it, keep my distance and my work, and give a civil word across the road".
+  - **Suri:** "A stranger waits south of the road — not mine to mind this afternoon", and spoke to it anyway.
+- **The 7 askers who gave manners as their reason** were 3 outgoing (Oswin, Roos, Ren), 1 both (Aldous), 1 reserved (Hana) and 2 none (Gwil, Ingrid). Manners came from every kind of sheet, including two with no social or curious trait and one written as keeping her peace.
+- **No greeting or hospitality norm was in any sheet, the bible or the seed fs1n ran.**
+  - The only one in Cullet's seed is Aldous's tie in `cast.json`, added with the lives change: "keeps the custom that whoever comes in is asked their name and business at the Counting House". It is not in the C world's seed `trial-cullet-d2a2f187` (0 matches) or in any of Aldous's fs1n prompts.
+  - The bible's customs are about houses, apprentices and the colours of a melt.
+  - The nearest phrase is Amara's value "a neighbour is owed what you can carry", and she did not ask.
+- **Reading:** manners, 7 of 12, is the model's own politeness more than the residents' personality. The sheets carry no greeting norm, and the asking leans only weakly toward the outgoing sheets. The same words recur across unlike sheets ("a civil word", "worth a greeting", "I'd not let a new face stand silent in my town"), and fs1e's thoughts said "costs nothing" 8 times. This is one run's 25 residents, read by hand.
+
+**Is the politeness the model's? A replay of fs1n's first-sight thoughts** (2026-11-12, approved at a $2 cap, $0.095 spent; nothing ships).
+- **The inputs:** `framing_replay.py collect-firsts`. Each in-range resident's first think whose reason holds the first-sight line naming the newcomer, from its recorded fs1n prompt: 22 of the 25 (Magda, Eamon and Rafe had none). All were recorded on GLM 5.3 Flash (`glm-flash`, think effort `low`).
+- **Arms:**
+  - **R:** the recorded reply.
+  - **A:** the same prompt and model, sent again.
+  - **B:** the same prompt on the people mix's other think model, DeepSeek V4.1 Flash (`deepseek-flash`, think effort `low`, from the run's own `models.json`).
+  - **C:** the same as A, with one general line added to the system prompt, right after the framing sentence:
+
+    > "Act from your own temperament and habits as they are written, including any reserve: keep to your nature unless something gives you reason not to."
+
+    It names no situation, stranger, greeting or speech.
+- **Switches,** as recorded in fs1n: `first_sight_thinks` on, `think_framing` on (so the framing sentence is N2's), `heard_first_rethinks` and `earshot` off.
+- **Judging:** three fresh Claude subagents, blind ([FIRST_SIGHT_CODE.md](../living/tools/framing_judge/FIRST_SIGHT_CODE.md)). Each saw only the first-sight line and the reply (thought, intent, speech), not the arm, model or sheet. Each item was coded *speak*, *mean to*, *notice inwardly* or *unaware*, plus *false claim* (claims to know something about the stranger the moment does not show). Agreement on 14 doubly judged items: code 14, false claim 14.
+- **Sheet classes:** from the count above. Of the 22: 11 outgoing, 3 both, 4 reserved, 4 none.
+
+| arm | outgoing (11) | both (3) | reserved (4) | none (4) | all (22): speak / mean to / inward / unaware | false claims |
+|---|---:|---:|---:|---:|---|---:|
+| R recorded (GLM) | 8 (73%) | 3 | 2 | 2 | 13 / 2 / 5 / 2: 15 (68%) speak or mean to | 1 |
+| A again (GLM) | 7 (64%) | 3 | 2 | 2 | 12 / 2 / 6 / 2: 14 (64%) | 1 |
+| B DeepSeek | 7 (64%) | 3 | 2 | 2 | 7 / 7 / 6 / 2: 14 (64%) | 1 |
+| C temperament line (GLM) | 7 (64%) | 2 | 2 | 3 | 13 / 1 / 7 / 1: 14 (64%) | 1 |
+
+(cells: residents who speak or mean to speak to the newcomer)
+
+- **The model is not the source.** DeepSeek speaks or means to as often as GLM (14 of 22 against 14–15). It speaks outright less (7 against 12–13) and means to more (7 against 1–2).
+- **The temperament line changes nothing measurable.** The reserved still speak 2 of 4, the outgoing 7 of 11. One "both" resident (Amara) moved to noticing inwardly, and one "none" (Joss) to speaking.
+- **Reserved sheets do not hold back as a class, under any arm.** Which reserved residents speak depends on the model, not the sheet:
+  - under GLM (R, A, C), Hana and Suri speak, and Davin and Petra notice inwardly;
+  - under DeepSeek, the reverse: Hana unaware, Suri inward, Davin and Petra speak.
+- **Outgoing sheets speak a little more:** 64–73% against 50% for the reserved. That is the same weak lean the count found.
+- **False claims:** one per arm, the same resident each time (Gwil: "claims it already hailed them and that they are at its elbow"). Both models write it, so it comes from his prompt, not the model.
+- **Reading:**
+  - Given a thought whose only reason is the first sight, both models speak or mean to speak to the stranger in about two of three cases, whatever the sheet says.
+  - A general line about temperament does not move that.
+  - The politeness belongs to the situation, a thought about a stranger with nothing else in it, more than to one model or to the residents.
+- **Evidence:** `~/slop-evidence/temperament-20261112/`: `set.jsonl`, `asked-A.jsonl`, `asked-B.jsonl`, `asked-C.jsonl`, `judge/` with the labels, `key.jsonl`, `score.json`.
+- **Tools:** `framing_replay.py` (`collect-firsts`, arms A, B and C), `temperament_score.py`.
+- **Cost:** $0.095 (A $0.023, B $0.046, C $0.026; 66 calls, no errors); the judges are Claude subagents.
+- **Key:** 9 fragments of the 3 key values searched in the evidence, the branch and the logs. Count: 0. The `.env` copy was deleted.
+
+**Measurement note.** The fs1 tools read the reason under "# Why you are thinking now". N2 renames it "# What just happened", so they now read either (`fs1_measures.py`, `fs1_held.py`, `fs1_cluster.py`). A first pass had counted 0 first-sight thoughts.
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1n` and `fs1ns` and the journals `verify-trial-fs1n*`, archived in `~/archive/trials/fs1n-20261112.tar.gz` (14 MB). The archive also holds `fs1n-spread.md`, `fs1n-m.json`, `fs1n-asks.json`, the metrics and spend logs and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
 ## First sight fs1e (2026-11-12) — one combined arm: first sight, heard_first and earshot; target, written before any paid call
 
 Approved by the general coordinator at about $2.7. It runs after the earshot stage, and only when the general coordinator says so.

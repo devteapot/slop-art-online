@@ -1034,7 +1034,70 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "fast_lane": scene_fast_lane, "wolves": scene_wolves, "death": scene_death}
+def scene_onlooker(st):
+    """The player watches two residents fight (docs/BATTLE_SCALE.md, fix 4, `witness_fold_ms`): its
+    per-blow feed (`my_combat`) is unchanged, a row for every blow it saw, and its experience lines
+    fold the fight as a mind's do, one `fight` line a window counting every blow, without the ids
+    a mind's line anchors strangers by; `fight_seen` stays private."""
+    cid = me(st)
+    p = body(st, cid)
+    # Two healthy adult residents (`dummy` returns the first such, so they are picked here).
+    pair = []
+    for r in sql(st, "SELECT id, stage FROM character WHERE kind = 'person' AND alive = true"):
+        if r["id"] != cid and r["stage"] >= 2 and body(st, r["id"]) is not None and (hp(st, r["id"]) or 0) >= 50:
+            pair.append(r["id"])
+        if len(pair) == 2:
+            break
+    a, b = pair
+    for who, dx in ((a, 2.0), (b, 2.8)):
+        spots = free_spots(st, p, dx, 0.0, skip={who}) or [(p[0] + dx, p[1])]
+        call(st, "place_at", [who, spots[0][0], spots[0][1]], "admin")
+        call(st, "set_behavior", [who, '{"wait":60}'], "admin")
+    fold = next((float(r["value"]) for r in sql(st, "SELECT * FROM world_law") if r["name"] == "witness_fold_ms"), 2000.0)
+    t0 = int(time.time() * 1000)
+    call(st, "set_behavior", [a, json.dumps({"first": [{"do": {"skill": "strike", "target": {"id": b}}}, {"wait": 60}]})], "admin")
+    # The feed's rows expire a few seconds after each blow: gathered while the fight goes on.
+    feed_rows = {}
+
+    # The feed's rows as the database holds them too (admin), to tell a row never written from
+    # one written and not shown.
+    written = {}
+
+    def gather(secs):
+        end = time.time() + secs
+        while time.time() < end:
+            for e in seen(st):
+                feed_rows[e["id"]] = e
+            for e in sql(st, f"SELECT * FROM combat_seen WHERE actor = {a} AND target = {b}"):
+                written[e["id"]] = e
+            time.sleep(0.5)
+    gather(6)
+    call(st, "set_behavior", [a, '{"wait":60}'], "admin")
+    # A strike already winding up lands after the stop.
+    gather(3)
+    time.sleep(fold / 1000 + 0.5)
+    struck = [u for u in sql(st, f"SELECT * FROM skill_use WHERE actor = {a}") if u["target"] == b and u["outcome_ms"] >= t0
+              and re.match(r"(hit for|blocked|killed|dodged|missed)", u["outcome"] or "")]
+    feed = [e for e in feed_rows.values() if e["actor"] == a and e["target"] == b and e["kind"] in (2, 3, 4, 5) and e["at_ms"] >= t0]
+    lines = [e for e in sql(st, "SELECT id, kind, text, at_ms FROM my_experience", "player") if e["kind"] == "fight" and e["at_ms"] >= t0]
+    counted = sum(int(n) for n in re.findall(r"(\d+) (?:blow|shot)s? \(", " ".join(e["text"] for e in lines)))
+    check(st, "the fight happened (resolved strikes)", struck, [u["outcome"] for u in struck])
+    to_me = [e for e in written.values() if e["kind"] in (2, 3, 4, 5) and e["at_ms"] >= t0 and e["viewer"] == feed_rows[next(iter(feed_rows))]["viewer"]] if feed_rows else []
+    # An onlooker's feed row stays in `my_combat` only `ONLOOKER_MS` (300 ms; the client reads
+    # each once), so polling twice a second sees some of them: the feed is shown to be there and
+    # to be the strikes', not counted whole.
+    check(st, "the per-blow feed is unchanged: my_combat rows of the blows seen, each a resolved strike's",
+          0 < len(feed) <= len(struck) and all(e["kind"] in (2, 4) for e in feed),
+          {"feed_rows_read": len(feed), "struck": len(struck), "written_rows_read": len(to_me)})
+    check(st, "the player's experience folds the fight: every blow counted, in fewer lines than blows, without scene ids",
+          lines and counted == len(struck) and (len(lines) < counted or counted == 1) and not any("(#" in e["text"] for e in lines), {"lines": [e["text"] for e in lines], "struck": len(struck)})
+    code, body_ = V.http(f"/v1/database/{st['db']}/sql", "SELECT * FROM fight_seen", st.get("token"), raw=True)
+    rows = json.loads(body_)[-1]["rows"] if code == 200 else None
+    check(st, "fight_seen is private: the player reads no row of it", code != 200 or not rows, {"code": code, "rows": None if rows is None else len(rows)})
+    return a
+
+
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "fast_lane": scene_fast_lane, "wolves": scene_wolves, "onlooker": scene_onlooker, "death": scene_death}
 
 
 def main():
