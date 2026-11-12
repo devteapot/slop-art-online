@@ -226,6 +226,44 @@ That is a change to the gate's urgent rules, not to the world.
   - `trials.py clean` removed the Neo4j minds.
   - `clean` itself lists databases with `spacetime list`, so it would miss a kept trial database now.
 
+## The hold fix and the re-run (batch `gl2`): committed before any paid call
+
+**The fix** (branch `gate-hold-fix`, approved by the general coordinator). The gate never holds a request in two situations, both computed from the character's own percepts, which the authority wrote (`rethink.rs` `waits_on`, verdict `waits`, journaled with the fact that fired):
+- a line someone said or whispered *to* the character in the last 10 minutes, with no line of its own to that person since;
+- the same deliberate act failing twice since its last deliberation, or the authority's own line that it keeps turning back and forth.
+
+**Measured first on gl1's 80 judged holds** (the rule applied at each time the gate looked at a held request):
+
+| Rule | "Needed now" released (of 24) | Harmful released (of 6) | Released though "nothing" or "could wait" (of 36) | All holds released (of 80) |
+|---|---:|---:|---:|---:|
+| **both conditions (as built)** | **22**, all at the first hold | **6** | 11 | 41 |
+| failures only | 18 | 4 | 1 | 20 |
+| unanswered lines only | 12 | 5 | 10 | 30 |
+
+- **The cost of the fix.** It removes the harm the judges found, at the price of about half the holds. In gl1 holds were 16–28% of the judged verdicts and deliberations fell 12%. With the fix, roughly 8–14% and 6% are expected.
+- **The precise half is the failure condition:** 18 of 24 needed-now holds, at 1 false release in 36.
+- **The noisy half is unanswered lines:** in a town most lines to a person need no deliberation, so it adds 10 of the 11 false releases.
+- **A threshold of 3 or 4 failures** gives the same numbers as 2: the pacing line carries most of it.
+
+**The re-run, `gl2`.** The same trial (`gate-live`), arms (`gate-off-ds`, `gate-jev-ds`), measures, target spread and stop rule as gl1 above, with three differences:
+- **The mind binary has the fix.** The control arm is unchanged by it, since its gate is off.
+- **The arms are interleaved in time:** `trials.py run --interleave --parallel 2` runs r1 of both arms side by side, then r2, then r3. Each control run shares its 20 minutes of provider load with a gated run.
+- **Jev is counted by its calls** in the record: Jev calls a run, and calls per resident-hour. The dollar measures are the providers' calls, so the committed cost measure is read without Jev's price.
+
+**Expected, written before the run:**
+- deliberations per resident-hour fall about 4–10%, against the 15–35% band. The fix trades the saving for the harm, so the band is expected to stay unmet;
+- holds judged harmful as delayed: 0–3 of 80 (gl1: 6);
+- holds at moments that needed an answer now: at most 10% (gl1: 30%);
+- the first heard line to the newcomer: within the control's spread in at least 2 of 3 gated runs.
+
+**Cost and stop.** About $16 for the providers (gl1: $15.88). The watchdog stops the batch past $18 of known spend. Runaways stop as in gl1, and so does a gate whose fallbacks pass 20% of its verdicts.
+
+```bash
+python3 living/tools/trials.py build gate-live
+python3 living/tools/trials.py run --batch gl2 gate-live --variants gate-off-ds,gate-jev-ds --replicates 3 --parallel 2 --interleave &
+python3 living/tools/gate_quality.py watch gl2 --root . --stop-usd 18 --pid $!
+```
+
 ## Fake smoke run
 
 Batch `glf2`, 2026-11-12 16:24–16:32:

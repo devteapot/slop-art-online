@@ -2618,6 +2618,10 @@ def run(a):
             sys.exit(f"unknown variant {v}; see living/trials/variants.json")
     # A trial may name the only variants it runs with (`variants`): others are skipped for it.
     plan = [(t, v, r) for t in trials for v in names if not t.get("variants") or v in t["variants"] for r in range(1, a.replicates + 1)]
+    if getattr(a, "interleave", False):
+        # Replicate by replicate, the arms side by side (r1 of every variant, then r2, …): with
+        # --parallel equal to the number of variants, the arms share each window of provider load.
+        plan.sort(key=lambda p: (p[2], names.index(p[1])))
     led = ledger()
     spent = sum(b.get("tokens", 0) for b in led["batches"].values())
     print(f"batch {a.batch}: {len(plan)} instances; real tokens so far {spent:,}{f' of a cap of {TOTAL_CAP:,}' if TOTAL_CAP else ' (no cap)'}{' (fake: not counted)' if a.fake else ''}")
@@ -3036,6 +3040,7 @@ def main():
     p.add_argument("trials", nargs="*")
     p.set_defaults(f=build)
     p = sub.add_parser("run")
+    p.add_argument("--interleave", action="store_true", help="order instances replicate by replicate, the variants side by side")
     p.add_argument("--batch", required=True)
     p.add_argument("trials", nargs="+")
     p.add_argument("--variants", default="default")
