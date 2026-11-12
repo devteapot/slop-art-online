@@ -188,6 +188,32 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## First sight fs1e (2026-11-12) — one combined arm: first sight, heard_first and earshot; target, written before any paid call
+
+Approved by the general coordinator at about $2.7. It runs after the earshot stage, and only when the general coordinator says so.
+- **What it runs:** one arm, batch `fs1e`, `strangers-2b-c:strangers-first-sight-hf-earshot`, with `first_sight_thinks`, `heard_first_rethinks` and `earshot` on (set by `set_world_law`, read back from `world_law`).
+- **The naming fix** (whom someone walks to) is on in every world.
+- **The world and script:** as fs1 and fs1h (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **The build:** main as of the run, worktree `~/slop-trials-fs1`.
+- **A free fake smoke run first** (`fs1es`).
+
+**The target and the stop rule are fs1's, unchanged** (under "First sight fs1", below).
+- **Stop rule:** the run stops, and nothing else is reported first, if `converge_60s` is 4 or more or `together_4m` 3 or more.
+- **`converge_60s` keeps its old definition** (arrive_report: the most residents who spoke, gestured or aimed an act at the newcomer within one minute, heard or not), so the comparison with fs1f and fs1h holds.
+
+**Measures:**
+- the stage-2 table against the targets, beside fs1f and fs1h;
+- **`converge_60s` split** (arrive_report since fs1e):
+  - `converge_60s_heard`: lines the authority did not mark unheard, gestures, acts aimed at it;
+  - `converge_60s_unheard`: lines the speaker was told could not have been heard;
+  - the old combined number beside them;
+  - recomputed for the earlier runs: C 2 = 2 heard + 0 unheard, fs1f 6 = 6 + 2, fs1h 10 = 5 + 6 (the halves overlap: one minute can hold both);
+- lines to the newcomer out of earshot (the authority's `silence` verdict), first sight → thought, false replies with group talk, tick time, spoken ids;
+- **held lines** (`fs1_held.py`), as in fs1h;
+- **the asks** (`fs1_asks.py`): each asker, with the reason its own thought gave, quoted and grouped: curiosity, its duty or role, being greeted first, others asking, something else. The tool's word grouping is a first pass; each quote is read and the group corrected by hand in the record.
+
+**Switches:** as fs1h, plus `earshot` on.
+
 ## First sight fs1h (2026-11-12) — the one-arm re-run with the crowd fixes; target, written before any paid call
 
 The re-run of C + first sight after first-sight-crowd (docs/FIRST_SIGHT.md, "Crowds" and "Decisions on the crowd fixes"), approved by the general coordinator at about $2.7.
