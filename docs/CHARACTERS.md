@@ -2,7 +2,7 @@
 
 The game's people are made by our own tool: a set of parameters goes in, a rigged, painted, animated character file comes out. This replaces VRoid Studio bases (decision 2 of [the small city](SMALL_CITY.md)). The owner's bar is VRoid's quality close up, from a parameterized tool of our own.
 
-**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns; hair as shared style files):**
+**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns; hair as shared style files; outfits as shared style files):**
 
 - **The bar is the reference character:** the VRoid model the game has used so far (`lookdev/vroid-Sendagaya_Shino.glb`; the asset board's control `vroid=recipe:shino`), close up included. The owner accepted pass 1 as the base and said of it: "a step up … but still far away from the reference model we have been using so far. That is kind of what we want to get to".
 - **Pass 1 (`char-2`):** faces and the parameter model. A seed or a parameter file gives a repeatable person of any sex and age from 1 to about 80, with real eye openings, a mouth that opens, 15 expressions under VRoid's names, stubble and six beard styles, age lines and freckles. One command makes a household or a whole town and its check page.
@@ -47,6 +47,12 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Hair is 13 shared style files** (`lookdev/styles/hair/<style>.glb`, 4.4 MB together), each built once on one standard head, with its far mesh, its spring chains under `J_Id_Cranium`, neutral shades for the tag to colour, and no clips.
   - **Each type's file carries a fit** of the standard head onto its own (`hair_fit`), so one style sits on all 21 types.
   - **A head composes from a type file and a style file the client's way:** read as glTF it matches the generator's rule to 0.000 mm, and Blender's reading agrees to 0.007 mm.
+- **Pass 3, outfits** ([outfit pieces](#outfit-pieces)). A whole person now composes from shared files.
+  - **26 outfit piece files** (`lookdev/styles/outfit/<piece>.glb`, 6.8 MB): jersey (alone, under a coat, under a smock), coat, six smocks, trousers and boots, each for a man's and a woman's body, and a cap and a kerchief; each with its far mesh, no clips. Hair gained `balding`, `kerchief` and seven styles as worn under a cap.
+  - **Build is the bones':** a piece is built once at the standard build, and the person's girth goes into the recipe's `build`, which the client's proportions already apply.
+  - **Three Cullet residents composed the client's way** (type, hair with its tie, outfit pieces, a cap, identity and build): every attached mesh matches the rule to 0.000 mm. Against each person's own file the clothes differ by 2.0 to 9.7 mm (root mean square), most on a heavy man.
+  - **Cullet's 64 residents wear 51 shared files, 26.4 MB,** where their own files are 149 MB: 121 unique meshes where there were 448. A person is 9 to 11 mesh entities where their own file was 7.
+  - **Not built:** beards, stubble and lines as overlay styles; the apron as a piece of its own.
 - **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: how the hair is finished, the eyes' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
@@ -125,6 +131,8 @@ A pass is also published through the asset board, the record of which version th
 - Step 4b is `character:face-types` `20261112-1fc23e0d-b70164` (step 4 above 4b under the sweep, eyes held open). Pass 3's fifth step (lines) is the versions `20261112-2c79242a-…`: the lines on bare type heads, four presets close up before and after, the head at the game camera near and far, the six presets and `cast-64`.
 
 - The hair step is `character:face-types` `20261112-6cd9d9f4-…`: the wash tests, six shared styles on five types, four presets' hair before and after, and one person composed. The six presets and `cast-64` were not published again: their files changed only in where the spring chains hang.
+
+- The outfit step is `character:face-types` `20261112-c512a401-…`: three Cullet residents composed from shared files above the same people from their own files.
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -509,10 +517,11 @@ For the laptop coordinator. The type files exist since step 3 ([type files](#typ
   "proportions": { "head": 1.0, "shoulders": 0.895, "build": 0.973, "hands": 0.88, "feet": 0.9 },
   "identity": {"cranium_width": -0.384, "cranium_height": -0.31, "brow_ridge": 0.271, "face_length": -0.499, "jaw_width": -0.292, "jaw_square": -0.518, "chin_length": -0.948, "chin_forward": -0.504, "socket_depth": 0.576, "eye_size": 0.387, "eye_open": -0.258, "iris_size": 0.257, "nose_length": -0.273, "mouth_height": -0.29, "mouth_width": -0.648},
   "colors": { "skin": "#e6b89c", "hair": "#4a2a1a", "eyes": "#536f54", "outfit": { "coat": "#5d7f9a", "jersey": "#d8d2bd" } },
-  "styles": { "hair": "bob", "beard": "none", "outfit": { "coat": "smock", "headwear": "none" }, "details": { "lines": 0, "freckles": 0, "stubble": 0 } }
+  "styles": { "hair": "bob", "outfit": ["smock_58-f", "jersey_smock-f", "trousers-f", "boots-f"], "beard": "none" }
 }
 ```
 
+- `styles.hair` is a file under `lookdev/styles/hair/`, and `styles.outfit` a list of files under `lookdev/styles/outfit/`, as the generator writes them into `<name>.params.json` (`person`) since the outfit step.
 - `type`: an id from `types.json`. `identity`: values from -1 to 1 by name; one left out is 0. `proportions` and `height` are as today. `colors` and `styles` replace what pass 2 paints and builds into each person's file.
 - Sixty-four residents are 64 such lines. No file is made for a person.
 
@@ -854,6 +863,91 @@ python3 living/tools/characters/compose.py TYPE.glb OUT.glb --hair STYLE.glb --h
 1. Attach a style by the six steps above. The one new thing beside what outfit pieces do today is `hair_fit` in the inverse bind matrices, and adding the style's own bones.
 2. The rim on hair, as above.
 3. Until outfits are style files too, a person cannot be spawned whole from a type file: `gen_person.sh` still writes one file a person, with its own hair.
+
+### Outfit pieces
+
+Pass 3, after hair (2026-11-12). `living/tools/blender/gen_styles.sh` writes them with the hair styles (about two minutes for everything); `gen_styles.sh outfit` writes only these.
+
+```bash
+living/tools/blender/gen_styles.sh [hair|outfit|hair/<style>|outfit/<piece>]     # the shared style files
+python3 living/tools/characters/compose.py TYPE.glb OUT.glb --person NAME.params.json --drop Far   # a whole person from shared files
+python3 living/tools/characters/person_check.py OUT.glb NAME.params.json [--own OWN.glb]           # against the rule, and against their own file
+```
+
+**The split between a type's body and the pieces.**
+
+- **A type's file holds the skin that shows:** the head, the neck and the hands. There is no torso, arm or leg skin in any file: the clothes are the body, as they were, so no hidden skin is drawn.
+- **A piece holds only what shows of it in the outfit it belongs to.** A jersey is three files: whole (worn alone), as worn under a coat (its front, collar and cuffs) and as worn under a smock (its collar and cuffs). Trousers and boots are whole in every outfit.
+- **Hair under a cap** is the style's `.cap` file, cut where the cap covers it. Under a kerchief it is the style `kerchief`.
+- **A tie** (a braid's, a tail's) is a second mesh in its hair style's file, in cloth, and attaches with it.
+
+**The files.** Every piece is built once (`person.py --variant piece:<name> --parts keep`), on the standard head and at the standard build (weight and muscle 0). It holds the `Cloth` mesh and its far mesh `FarCloth`, skinned to the `J_Bip_*` bones every generated file shares, with outline normals and widths, and no clips.
+
+| Piece | Forms | `Cloth` triangles | `FarCloth` | File |
+|---|---|---|---|---|
+| `jersey` | `-m`, `-f` | 4,320 | 1,080 | 0.39 MB |
+| `jersey_coat` | `-m`, `-f` | 2,128 | 532 | 0.21 MB |
+| `jersey_smock` | `-m`, `-f` | 1,280 | 320 | 0.13 MB |
+| `coat` (with its buttons) | `-m`, `-f` | 7,176 | 844 | 0.43 MB |
+| `smock_50`, `smock_58`, `smock_74` (the hem's height, cm) | `-m`, `-f` | 4,544 to 4,064 | 1,136 to 1,016 | 0.27 to 0.30 MB |
+| the same with `_apron` | `-m`, `-f` | as above | as above | 0.29 to 0.31 MB |
+| `trousers` | `-m`, `-f` | 2,096 | 524 | 0.20 MB |
+| `boots` | `-m`, `-f` | 2,680 | 660 | 0.19 MB |
+| `cap` | one | 660 | 232 | 0.06 MB |
+| `kerchief` | one | 1,188 | 432 | 0.09 MB |
+
+- 26 files, 6.8 MB. Hair is now 22 files, 5.7 MB: the 13 styles, `balding`, `kerchief`, and seven as worn under a cap.
+- **Two forms, `-m` and `-f`,** because a woman's torso and limbs are built differently (the torso's shape, and limbs 0.86 as thick). Children wear `-m`, as they wore a man's garments before.
+- **Colour** is per vertex on one material a file, as the client's outfit pieces are today, so a recipe colour moves the piece's mean colour.
+- **Head pieces** (`cap`, `kerchief`) sit on the standard head and attach with the type's `hair_fit`, as hair does. Body pieces need no fit of their own: every file's body skeleton is the same.
+
+**Build is the bones'.** The client's proportions already move the body (`characters.rs`, `bone_scale`: `build` is the girth of torso and limbs, `shoulders`, `hips`, `torso`, `legs`, `arms`, `neck`). A per-person file also built the person's girth into its meshes (the torso's from 0.91 to 1.15 across Cullet, the limbs' from 0.77 to 1.11). A shared piece cannot, so a person's line carries it in `build`: the per-person recipe's `build` times the mean of the torso's and the limbs' girth, each against the standard for the person's form (`person_params.person_line`). Across Cullet that `build` runs from 0.80 to 1.21.
+
+- **What bones cannot give:** a belly (12 of the 64 have one worth the name) and a strong chest, which were shapes of the mesh. They are gone from composed people until a body type's piece brings them.
+
+**A person's line** is written into `<name>.params.json` as `person`, beside the per-person file's `recipe`: the type, the height, the proportions (with the `build` above), the identity values, the colours and the style files worn. That is the recipe line of [the client format](#the-client-format), as the generator now writes it.
+
+**Proved on three Cullet residents** (`compose.py --person`, then `person_check.py`), each composed onto their type's file: Tamsin Hollin (`adult-f-a`; a braid with its tie; smock with apron, jersey, trousers, boots), Fenn Brandt (`adult-m-b`; `sides` under a cap) and Joss Tarn (`adult-m-b`, `build` 1.18; a coat).
+
+| | Tamsin Hollin | Fenn Brandt | Joss Tarn |
+|---|---|---|---|
+| Hair, as read against the rule | 0.000 mm (3,768 vertices) | 0.000 mm (1,026) | 0.000 mm (2,033) |
+| Clothes, as read against the rule | 0.000 mm (6,900, five files) | 0.000 mm (7,186, four) | 0.000 mm (9,122, four) |
+| Face skin against their own file | 0.4 mm | 0.2 mm | 1.3 mm |
+| Clothes against their own file | 4.2 mm (46 at most) | 2.0 mm (8.8) | 9.7 mm (25.1) |
+| Neck and hands against their own file | 3.7 mm | 2.5 mm | 10.3 mm |
+| Hair against their own file | 47 mm | 5.2 mm | 6.3 mm |
+
+- **Against the rule** is the baked person as before: each style file's own vertices through the type's fit and the identity bones (hair and head pieces) or as they are (body pieces). The composed file, read as glTF, is that to 0.000 mm.
+- **Against their own file** both are posed by the client's proportions (repeated in `person_check.py`), the composed one by its line's and the own file by its recipe's. Root mean square, each vertex to the nearest of the other. This is the cost of sharing: the clothes of a person of ordinary build are within 2 to 4 mm, a heavy man's within a centimetre (25 mm at most), and Tamsin's braid is the style's length, not her own.
+- **In the game** the three stand and move beside their own files (the board's `people-composed-and-baked`), on the shared clips.
+
+**Cullet's 64 residents, as shared files against their own files:**
+
+| | Their own files (pass 3) | Type and styles |
+|---|---|---|
+| Files | 64, one a person | 51 shared (17 types, 14 hair, 20 outfit) and 64 lines of about 1.5 kB |
+| Size on disk | 149 MB (2.33 MB a person, without clips) | 26.4 MB |
+| Unique meshes (near) | 448 (7 a person) | 121 |
+| Unique materials | each person's atlas makes four of their own (face, eyes, lines, skin) unless paged | 38 |
+| Mesh entities a person | 7 | 9 to 11 (10.1 on average) |
+
+- Everything on disk, worn or not: 69 files, 34.2 MB.
+- **A person is more mesh entities than before** (a coat, a jersey, trousers and boots are four where the own file joined all cloth into one), and what that costs depends on whether the client batches the shared meshes. **The draw counts could not be measured:** the crowd tool measures files the client can spawn, and it cannot spawn a person from styles yet.
+
+**What the client needs for outfits** (for the laptop coordinator; nothing in `living/game` was edited):
+
+1. **Pieces attach as outfit pieces do today** (`characters/outfit.rs`): each primitive under the person's root with a `SkinnedMesh` on the person's own bones by name, the piece's own inverse bind matrices. The files are named in the person's line (`styles.outfit`), not in `outfits.json`.
+2. **`cap` and `kerchief` attach as hair does,** with `hair_fit` ([hair styles](#hair-styles)).
+3. **A hair style's second mesh** (its tie) attaches with it.
+4. **`build` in a person's line is larger** than in the per-person recipe, as above; nothing changes in how it is applied.
+5. Beyond the far switch, take each file's `Far*` mesh.
+
+**Not built in this step.**
+
+- **Beards, stubble and lines as overlay styles.** They are still built or painted into a per-person file, so a composed man has no beard and no stubble (Fenn Brandt has stubble in his own file). The plan stands as decided in step 2: a beard is a shell over the type's lower face in the hair's material, one file a beard style and type; stubble, lines and freckles are a thin layer over the type's face with their own picture. Each needs the type's expressions (the blink and the mouth) on the layer, and the client to drive them there.
+- **The apron as a piece of its own.** It is part of its smock's mesh, so one tag colours both, and moving the mean colour shifts the apron with the smock (Tamsin Hollin's on the board).
+- **The eyes' colour** on a composed person is the type's until the client's tag sets it; `compose.py` stands in for the tag on hair, skin and cloth only.
 
 ### Type files
 
@@ -1282,8 +1376,9 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 3. **The cage head for each type, with the rig in it.** Done in pass 3's third step ([the cage head](#the-cage-head)): 21 types from one script, accepted against the reference's measured sections, with its eye depths, outline normals, the trimmed ranges and the type files. Left from it: lips and blush out of the skin texture (with step 6's paint), the style files for hair and outfits, the age direction inside a band, and a second look at bindless colours with the laptop.
 4. **Designed shadows.** Done in pass 3's fourth step ([designed shadows](#designed-shadows)): a planar proxy's normals and a threshold map from script-drawn shapes at 16 light angles, one map a type, in the client's existing format. Left from it: the far head still shades by its own round normals, and the shapes' onset angles wait on the owner's eye.
 5. **Lines where the form turns.** Done in pass 3's fifth step ([lines](#lines-where-the-form-turns)): shell lines at the jaw, chin, ears and mouth in the files, per-vertex outline width in the files, the client's need written out, and the data a post-process inner line would take.
-6. **Hair as shared style files.** Done ([hair styles](#hair-styles)): the wash traced to the client's rim light and film gradient, 13 style files, a fit in each type's file, and a head composed from a type file and a style file the client's way. Left: outfit style files, so a whole person composes; the hair's finish; a style's variety (more files, or a few values on spring and fringe bones).
-7. **The eyes' drawing, lips and blush** (the face's paint; lips and blush out of the skin texture).
-8. **Later:** the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
+6. **Hair and outfits as shared style files.** Done ([hair styles](#hair-styles), [outfit pieces](#outfit-pieces)): a whole person composes from a type's file, a hair style and outfit pieces. Left: beards, stubble and lines as overlay styles; the apron as its own piece; a belly and a chest as body-type pieces.
+7. **Hair finish:** the blocky fringe, ragged ends and the temple gap, and enough styles to vary a town of 64.
+8. **The eyes' drawing, lips and blush** (the face's paint; lips and blush out of the skin texture).
+9. **Later:** the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
 
 Each pass page sets two references beside ours: the VRoid control, and a still from Blue Protocol's published character material (one of the owner's named art references), for comparison only. The stills are kept outside the repository, in `~/archive/asset-board/references/blue-protocol/`, with their sources.

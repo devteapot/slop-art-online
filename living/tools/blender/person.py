@@ -2019,10 +2019,12 @@ def main():
     ap.add_argument("--bake", action="store_true", help="build the identity values into the head itself (the bones stay at rest), to compare with the same person composed by bones")
     ap.add_argument("--lod", default="near", choices=("near", "far", "both"), help="`near` the full model (the default); `far` the far model alone (about 6,000 triangles, for beyond 10 m); "
                     "`both` one file with the two on one skeleton, the far model's meshes named Far*")
-    ap.add_argument("--parts", default="all", choices=("all", "head", "face", "hair"), help="`hair`: only the hair, near and (with --lod both) far, in neutral shades to be coloured by the client's tag: a shared hair style's file; "
+    ap.add_argument("--parts", default="all", choices=("all", "head", "face", "hair", "keep"), help="`keep`: only the parts --keep names (an outfit piece's file); "
+                    "`hair`: only the hair, near and (with --lod both) far, in neutral shades to be coloured by the client's tag: a shared hair style's file; "
                     "`head`: only what a face type's file holds (the whole head, the neck and hands, and the far head with --lod both): no hair, no clothes; "
                     "`face`: the whole head and neck alone, to photograph a type")
     ap.add_argument("--morphs", default="all", choices=("all", "client"), help=f"`client`: keep only the expressions the game drives ({', '.join(CLIENT_MORPHS)}); every expression costs each vertex of the face again")
+    ap.add_argument("--keep", default="", help="with --parts keep: the parts to keep, by name, comma-separated (Jersey, Coat, Buttons, Smock, Trousers, Boots, Cap, CapPeak, Kerchief, KerchiefKnot)")
     ap.add_argument("--no-lines", action="store_true", help="leave out the shell lines at the jaw, ears and mouth (cage_head.CageFace._shell_lines), to compare")
     ap.add_argument("--blend")
     a = ap.parse_args(argv)
@@ -2058,7 +2060,7 @@ def main():
     # Beside the model: the person's full parameters (edit and pass back with --params) and the
     # game recipe's height and proportions.
     with open(stem + ".params.json", "w") as f:
-        json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"]} if spec.get("type") else {})), f, indent=1)
+        json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"], "person": spec.get("person")} if spec.get("type") else {})), f, indent=1)
     g = globals()
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
     g["WHOLE_HEAD"] = a.parts in ("head", "face")
@@ -2070,7 +2072,8 @@ def main():
         g["FAR"] = far
         parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
         if a.parts != "all":
-            keep = [ob for ob in parts if ob.name.split(".")[0] in (TYPE_PARTS if a.parts == "head" else (("Hair", "HairTie") if a.parts == "hair" else ("Face", "Neck")))]
+            wanted = dict(head=TYPE_PARTS, hair=("Hair", "HairTie"), face=("Face", "Neck"), keep=tuple(x for x in a.keep.split(",") if x))[a.parts]
+            keep = [ob for ob in parts if ob.name.split(".")[0] in wanted]
             for ob in parts:
                 if ob not in keep:
                     bpy.data.objects.remove(ob, do_unlink=True)
