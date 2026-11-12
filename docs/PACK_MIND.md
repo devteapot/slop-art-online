@@ -530,8 +530,6 @@ Each waits for a paid arm, or for a mind's plan that cannot be written without i
   - verify-minds `intents`, `minds-packs3-181702`: the reference documents `apart`;
   - not run: verify-player (no player reducer changed) and the 216-character gate.
 
-## Sources
-
 ### The spacing reflex, as a candidate (`pkr1`, 24 runs; decision 1)
 
 This is `instinct:wolf_bold` with one weighted desire beside each hunt (`pack_arena_trials.py` `with_reflex`): "keep apart from mates" (weight 1.2), which acts while a mate is within 3 m and the prey within 6 m, holding 3–5 m from the nearest prey at a run with `apart: 4`. Otherwise the hunt (weight 1) acts as before. It names a kind, as the instinct already does, never a creature or a role. It lives in the wolf's own graph, which its mind may rewrite. It is in the trial files only.
@@ -623,6 +621,57 @@ Both sides with minds (`minds.roles`): 6 people on the default mix and 6 wolves 
 - **Wolves.** On the two-call path, about $0.005 a wolf-hour, so under $0.01 a run.
 - **Total.** 16 runs with people's minds plus 4 without (P2): about **$3–5**.
 - **Bound.** The batch is stopped if the ledger passes $8.
+
+## 9. The paid step's results (`pkp1`, 2026-11-12)
+
+**Run.**
+- 20 runs: P1–P5 × 4, 6v6, spread start, bold wolves, 10 minutes.
+- `packs-2` at `14b103aa`.
+- Variant `pack-minds`: people on the default mix; wolves on GLM Flash with `LIVING_ANIMAL_MINDS=salient`, the impulse-then-compile path.
+- `fast_lane_on` off, `fov_on` off. The howl at loudness 2 (18 m), or 16.7 (150 m) in P5.
+- 5 worlds at a time on `slop-trials-stdb` beside other agents' batches.
+
+**Spend: $2.34** (1,921 calls) of the $8 stop, read from the live journals at `trials.PRICES` by `pack_spend.py`. Evidence: `.local/living/trials/pkp1/` and `pack-paid.json`/`.txt` (Spark, git-ignored). The worlds were deleted after pausing.
+
+**Against §8's thresholds.** The control is `pkb3` spread 6v6, instinct.
+
+| Arm | Coverage ° | Encircled | I | ΔG | Standing together | Assists | People killed | Wolves killed | People's blows on wolves |
+|---|---|---|---|---|---|---|---|---|---|
+| control (instinct) | 114* | – | 1.15 | −0.42 | 0 | – | 0.5 (0–2) | 0 | 0 |
+| P1 people think | 7 | – | 1.15 | −0.61 | 0 (0–0.04) | 0 | 0 | 0 | 2–9 |
+| P2 wolves think | 12 | 0.04 (1 run) | 1.13 | −0.56 | 0 | – | 0 | 0 | 0 |
+| P3 both | 18 (15–100) | 0.5 (1 run) | 1.11 | −0.56 | 0 (0–0.05) | 0 | 0 | 0 | 4–17 |
+| P4 both, with deer | 116 (71–161, 2 runs) | – | 0.99 | −0.22 | **0.09** (0–0.25) | 0 | 0 | 0 (0–1) | 5–36 |
+| P5 both, howl 150 m | 44 (25–58) | 0.03 | 0.81 | −0.28 | **0.12** (0–0.65) | 0 | 0 (0–1) | 0 | 2–20 |
+
+\*The control's coverage is from the 3 runs whose fights began in the wolves' start sector (§7).
+
+**Reading, by the committed thresholds.**
+- **People (P1, P3).**
+  - They do not close up when the wolves appear (ΔG stays negative in every arm).
+  - No person ever struck a wolf that was on someone else (assist rate 0 in all 16 runs with people's minds).
+  - Standing together rose above the control's 0 only in P4 and P5. That is 2 of the 3 people-side thresholds unmet: **no cooperation from people by §8's rule.**
+  - What minds did change: they fight back. They landed 2–36 blows a run, where instinct people landed none, and the wolves lost 8–95 health.
+- **Wolves (P2, P3).**
+  - Coverage stayed far under 180° (12–18° median), encircled stayed about 0 apart from single runs, and I is about 1.1: **no cooperation from wolves.**
+  - Their plans (17–20 per arm, about 4–5 per run, since a wolf thinks at most every 240 s) were mostly attack, flee and a call.
+  - Some plans used the new means: `circle` in 2–3 plans per arm, `count` in 2–3, `apart` once (P4), `keep_distance` 1–2.
+  - Some named mates: "press in with teeth while Frost and Ember close in", "move toward Rook and the pack".
+  - None of these ran long enough, at the thinking pace wolves have, to show in the measures.
+- **The howl (P5, decision 2): unanswered.** In P5's 4 runs no wolf howled. Their minds chose growls and yips (13 growls heard by wolves, 4 yips). P3, on the shipped 18 m howl, had 8 howls heard by wolves and 15 by people. So the 150 m arm measured nothing about the howl's reach. **The shipped value stays at loudness 2.** A howl-reach measure needs wolves that howl: a fixture that howls on a timer, against minds and graphs that can answer it.
+- **Casualties.** Fewer than under instincts: no person died in 16 of the 20 runs, and one wolf died (P4). Wolves with minds attack less doggedly than the bold instinct: P2's people lost 0–15 health against the control's 0–190.
+- **Guards.**
+  - No pack-tactic word appeared in any system prompt. The only phrase hit was "from behind", in the `block` skill's spec ("blows from the front do a quarter of their damage; from behind it does not help"), which is a rule of the body, not a tactic.
+  - Every run's `skills.sha256` is the branch's. Nothing went into a seed.
+  - User prompts carry the characters' own experiences, which were not audited word by word.
+
+**What this says.**
+- **The arena works, and the world now allows a ring.** The spacing reflex, an instinct-level desire, rings prey that stands. The minds, in ten minutes and at a wolf's thinking pace, do not get there.
+- **The open questions are pace and learning, not perception.**
+  - A wolf mind thinks every 240 s.
+  - It has no memory of earlier hunts in a fresh arena.
+  - Whether a pack that keeps hunting together over days, with the reflex in its starting instinct, learns to wait, circle and come in together is the next question. It needs longer life runs, not more arenas.
+- **People.** Whether minds learn to stand together needs the same: days with wolves near, not ten minutes.
 
 ## Sources
 
