@@ -12,7 +12,7 @@ const WINDOW: usize = 400;
 
 /// Write an experience row for `observer`; its id, or `None` when nobody would read it.
 pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
-    percept_seen(ctx, observer, now, kind, subject, object, at, text, salience, true)
+    told(ctx, observer, now, kind, subject, object, at, text, salience, Some(true), true)
 }
 
 /// `percept` for what `observer` saw of an event: written at once and in full either way; a
@@ -20,20 +20,32 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
 /// at) at once, and a bystander at most once per `witness_wake_ms` (`common::wake_bystander`).
 #[allow(clippy::too_many_arguments)]
 pub fn percept_seen(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32, party: bool) -> Option<u64> {
-    told(ctx, observer, now, kind, subject, object, at, text, salience, Some(party))
+    told(ctx, observer, now, kind, subject, object, at, text, salience, Some(party), true)
 }
 
 /// `percept` that wakes no one whatever its salience: a folded line of fights watched, whose
 /// first blow woke the onlooker when it landed (`fold`).
 #[allow(clippy::too_many_arguments)]
 pub fn percept_quiet(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
-    told(ctx, observer, now, kind, subject, object, at, text, salience, None)
+    told(ctx, observer, now, kind, subject, object, at, text, salience, None, true)
+}
+
+/// A percept about something a person owns (a structure noticed, a theft from a store), whose
+/// `owner` is not a figure in sight: the owner is its subject or object only when the line names
+/// them (`common::owner_label` gave the name), by their id and never by a far handle, since
+/// whether one can make someone out is about the person in sight, not their things
+/// (house-owner-label). An owner the line does not name is not tied to it (0): that the house of
+/// an unknown owner and a stranger once seen are one person is nothing the character perceived.
+#[allow(clippy::too_many_arguments)]
+pub fn percept_owned(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
+    told(ctx, observer, now, kind, subject, object, at, text, salience, Some(true), false)
 }
 
 /// An experience row for `observer`; a salient one wakes it: at once when `wake` is `Some(true)`
-/// (a party), as a bystander when `Some(false)`, not at all when `None`.
+/// (a party), as a bystander when `Some(false)`, not at all when `None`. `far_handles`: a mind's
+/// character names people it cannot make out by the sighting's handle (`percept_owned` not).
 #[allow(clippy::too_many_arguments)]
-fn told(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32, wake: Option<bool>) -> Option<u64> {
+fn told(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32, wake: Option<bool>, far_handles: bool) -> Option<u64> {
     // Only minds and human players consume percepts. Infants have no mind yet to form
     // memories; a benchmark crowd's bodies (`common::instinct_only`) have no reader.
     if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
@@ -41,7 +53,7 @@ fn told(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subjec
     }
     // A mind's character names a person it cannot make out by the sighting's handle, not their
     // id (far-handle); a player's client draws by id and keeps it.
-    let (subject, object) = if crate::combat::human(ctx, observer.id).is_none() {
+    let (subject, object) = if far_handles && crate::combat::human(ctx, observer.id).is_none() {
         let map = |id: u32| match (id, ctx.db.character().id().find(id)) {
             (0, _) => 0,
             (id, _) if id == observer.id || crate::far::is_handle(id) => id,
@@ -119,6 +131,32 @@ pub fn minds_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclud
 /// `template` become how each observer refers to `subject` and `object` (its projection's
 /// label: the name when it knows it).
 pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subject: u32, object: u32, template: &str, salience: f32, exclude: &[u32]) {
+    witnessed_as(ctx, now, at, kind, subject, object, template, salience, exclude, None)
+}
+
+/// The id a mind's character perceives a seen doer by: the far handle of a person it cannot make
+/// out (far-handle), else the id (as `percept` maps a subject).
+fn percept_doer(ctx: &ReducerContext, observer: &Character, id: u32, now: u64) -> u32 {
+    if id == 0 || id == observer.id || crate::far::is_handle(id) || crate::combat::human(ctx, observer.id).is_some() {
+        return id;
+    }
+    match ctx.db.character().id().find(id) {
+        Some(t) => crate::far::id_for(ctx, observer, &t, now),
+        None => id,
+    }
+}
+
+/// `witnessed` for a deed done to something someone owns ("{a} took 4 berries from {b}'s
+/// storage"): `{b}` is the owner of a structure of kind `owned`, named as whose a thing is
+/// (`common::owner_label`, owner-known: whether the onlooker knows them, never where they stand
+/// now), else as a stranger by their kind and stage.
+#[allow(clippy::too_many_arguments)]
+pub fn witnessed_owned(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subject: u32, owner: u32, owned: &str, template: &str, salience: f32, exclude: &[u32]) {
+    witnessed_as(ctx, now, at, kind, subject, owner, template, salience, exclude, Some(owned))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn witnessed_as(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subject: u32, object: u32, template: &str, salience: f32, exclude: &[u32], owned: Option<&str>) {
     let w = common::world(ctx);
     let map = common::map(ctx);
     let r = crate::perception::widest_sight(ctx, &w, now);
@@ -133,13 +171,29 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
         let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
         let a = named.next().unwrap_or_default();
         let b = named.next().unwrap_or_default();
+        let whose = owned.map(|k| common::owner_label(ctx, &c, object, k));
+        let b = match &whose {
+            Some(Some(name)) => name.clone(),
+            Some(None) => ctx.db.character().id().find(object).map(|t| crate::perception::unnamed(&t, false)).unwrap_or(b),
+            None => b,
+        };
         let text = rendered(template, &a, &b, object != 0 && c.id == object);
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
-        // Woken at once if party to it (its subject or the one it was done to), else as a
-        // bystander (`witness_wake_ms`); told at once and in full either way.
-        let party = c.id == subject || (object != 0 && c.id == object);
-        percept_seen(ctx, &c, now, kind, subject, object, at, text, sal, party);
+        match whose {
+            // The doer is seen (its handle when far); the owner only as the line names them.
+            Some(named) => {
+                let doer = percept_doer(ctx, &c, subject, now);
+                let owner = if named.is_some() || c.id == object { object } else { 0 };
+                percept_owned(ctx, &c, now, kind, doer, owner, at, text, sal);
+            }
+            None => {
+                // Woken at once if party to it (its subject or the one it was done to), else as a
+                // bystander (`witness_wake_ms`); told at once and in full either way.
+                let party = c.id == subject || (object != 0 && c.id == object);
+                percept_seen(ctx, &c, now, kind, subject, object, at, text, sal, party);
+            }
+        }
         common::diag(|| format!("onlookers:{kind}"), 1);
     }
     common::diag(|| format!("witnessed:{kind}"), 1);
@@ -548,6 +602,13 @@ fn reason_class(reason: &str) -> &'static str {
     CLASSES.iter().find(|(k, _)| reason.contains(k)).map_or("other", |(_, v)| v)
 }
 
+/// Ask the mind again about a decision of its own that could not be carried out as decided (a
+/// line held because another spoke first, `speech::held_for_another`): not refused within
+/// `think_min_s`, since the decision it would protect is the one being undone. A sleeper's waits.
+pub fn ask_again(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bool {
+    request(ctx, id, reason, now, true, None)
+}
+
 fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool, wake: Option<Wake>) -> bool {
     common::diag(|| format!("request:{}", reason_class(reason)), 1);
     let Some(c) = ctx.db.character().id().find(id) else { return false };
@@ -748,6 +809,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": common::scripts(ctx).is_night(hour), "season": common::season(ctx, now), "sight": r});
 
     let mut creatures = Vec::new();
+    // Each person listed, by the id the scene shows them under (a far figure's handle).
+    let mut shown_as: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
     let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, r, now);
@@ -767,6 +830,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             c.id
         };
         o.insert("id".into(), json!(shown));
+        if ch.kind == "person" {
+            shown_as.insert(c.id, shown);
+        }
         if !seen.name.is_empty() {
             o.insert("name".into(), json!(seen.name));
         } else if ch.kind == "person" {
@@ -961,6 +1027,15 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
 
     let mut scene = json!({"you": you, "time": time, "creatures": creatures, "resources": resources, "structures": structures, "terrain_near": terrain});
+    // Whom a line said now would reach, at each way, among the people listed above (earshot;
+    // the rule speech gives the words by), each as the scene shows them.
+    if me.kind == "person" && common::laws(ctx).earshot {
+        let ways = crate::earshot::reach(ctx, id, at, |x| shown_as.contains_key(&x), now);
+        let words = crate::earshot::words(&ways, |x| format!("{} (#{})", common::label_for(ctx, &me, x), shown_as.get(&x).copied().unwrap_or(x)));
+        if !words.is_empty() {
+            scene[living_rules::script::speech::EARSHOT] = json!(words);
+        }
+    }
     if !smelled.is_empty() {
         scene[living_rules::species::SMELLED] = Value::Array(smelled);
     }

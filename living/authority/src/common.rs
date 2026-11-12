@@ -1257,8 +1257,15 @@ pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String 
 }
 
 /// Whose a structure is, as `observer` is told it (owner-known): the owner's name when the
-/// world's `owner_shown` law says so (it knows the owner's name: their label; the structure shows
-/// its owner, a sign: their name), else `None`, and the structure is just its kind.
+/// world's `owner_shown` law says so (it knows the owner's name, `perception::knows_name`, the
+/// shared answer; or the structure shows its owner, its kind's `shows_owner`), else `None`, and
+/// the structure is just its kind.
+///
+/// Where the owner stands now never matters (house-owner-label, 2026-11-12): whether one can make
+/// someone out (`perceived_of`'s `far`, Cullet's `known_within`) is about the person in sight,
+/// never about their house. Before, a known neighbour's house read as "someone too far away to
+/// make out"'s (or "a stranger"'s) whenever its owner was away from it (docs/IDEAS_AUDITS.md §2).
+/// The client names owners the same way, from `my_known_names` (`living/game/src/looks.rs`).
 pub fn owner_label(ctx: &ReducerContext, observer: &Character, owner: u32, kind: &str) -> Option<String> {
     if owner == 0 {
         return None;
@@ -1270,7 +1277,7 @@ pub fn owner_label(ctx: &ReducerContext, observer: &Character, owner: u32, kind:
     if !sc.owner_shown(knows, shows, kind) {
         return None;
     }
-    Some(if knows { label_for(ctx, observer, owner) } else { t.name })
+    Some(t.name)
 }
 
 /// The same, to begin a sentence with.

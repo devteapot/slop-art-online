@@ -241,7 +241,10 @@ mod tests {
         // What the repeat trigger contributes is the event as perceived: no count, no "again".
         let reason = "A stranger winds up an attack at you";
         let user = prompts::fast_user(reason, "Wren", &["A stranger attacked you (9 damage)".into()], "walk to town", "first: …", "- stay safe");
-        let why = user.split("# Who you are").next().unwrap();
+        // The stable parts come first, for the providers' prefix caches; why now and what has just
+        // happened come last.
+        assert!(user.starts_with("# Who you are\nWren") && user.find("# Your routines") < user.find("# Why now"), "{user}");
+        let why = user.split("# Why now").nth(1).unwrap().split("# What has just happened").next().unwrap();
         assert!(!why.contains("again") && !why.chars().any(|c| c.is_ascii_digit()), "{why}");
         // The rules text keeps its own words ("ready again 900 ms"); nothing counts anyone's moves.
         for text in [&user, &prompts::fast_system()] {

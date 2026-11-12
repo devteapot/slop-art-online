@@ -1565,6 +1565,32 @@ impl CharacterSenses {
     }
 }
 
+/// Whom a line said now would reach, for a person's client (private; read through
+/// `my_earshot`): per way of speaking in the rules' order, the people the character perceives
+/// whom a line in it would reach (`earshot::reach`, the rule `speech::speak` gives the words
+/// by), nearest first, and the same in words in the character's own labels (`text`, the words a
+/// mind's scene carries). Someone out of sight is never listed, though a line may reach them.
+/// Written at the character's frames only when it changed (`frame::show_earshot`, at most every
+/// `frame::EARSHOT_MS`). One row per character a person plays now; it goes when the character
+/// dies.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = character_earshot)]
+pub struct CharacterEarshot {
+    #[primary_key]
+    pub id: u32,
+    pub ways: Vec<EarshotWay>,
+    pub text: String,
+    /// When it last changed (authority ms).
+    pub at_ms: u64,
+}
+
+/// One way of speaking's reach in [`CharacterEarshot`]: its name and whom it would reach.
+#[derive(spacetimedb::SpacetimeType, Clone, Debug, PartialEq)]
+pub struct EarshotWay {
+    pub way: String,
+    pub hearers: Vec<u32>,
+}
+
 /// How an act or a death came out, for a person's client (private; read through
 /// `my_act_outcomes`): one row per experience line that tells it, keyed by that line's id and
 /// written in the same transaction (`outcomes::write`). `kind` picks the vocabulary of `code`

@@ -26,6 +26,7 @@ mod tick;
 mod town;
 mod common;
 mod far;
+mod earshot;
 mod fold;
 mod fast;
 
