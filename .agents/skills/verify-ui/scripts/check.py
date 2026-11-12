@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes pick turns look-walk bar offers wheel wheel-workplace support (default: all but support and wheel-workplace, which need a Cullet world)
+  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes pick turns look-walk bar offers wheel wheel-workplace grid support (default: all but support, wheel-workplace and grid, which need a Cullet world)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -213,9 +213,11 @@ def items(run, c):
     t0 = int(time.time() * 1000) - 1000
     plan = ("ready;sync:scene;sync:kit;wait:1.5;menu:f@id:{A};wait:0.5;click:@acts:0:window;wait:0.6;dump:01;key:KeyI:tap;wait:0.6;shot:01_pack_person;dump:02;"
             "click:@pack:berries;wait:0.5;shot:02_item_acts;dump:03;key:Escape:tap;wait:0.3;slide:@pack:berries>@win:Person{A}:head:0.8;wait:2;shot:03_dropped;dump:04;"
-            "menu:f@id:{A};wait:0.5;shot:04_hold_f;dump:05;click:@acts:0:give;wait:0.5;shot:05_give_sub;dump:06;click:@acts:1:berries;wait:2;shot:06_given;quit").replace("{A}", str(a))
+            "menu:f@id:{A};wait:0.5;shot:04_hold_f;dump:05;click:@acts:0:give;wait:0.5;shot:05_give_sub;dump:06;click:@acts:1:berries;wait:2;shot:06_given;dump:07;sync:load;wait:2;shot:07_load;dump:08;quit").replace("{A}", str(a))
     # The newcomer's berries may be gone from earlier runs: the scene grants four (admin).
-    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"], syncs=['kit=grant_items|{me}|"berries"|4'])
+    # Then a basket (room 20) and ten arrows (0.1 each) for the pack's load and limit (goods-3).
+    load = 'load=grant_items|{me}|"basket"|1;grant_items|{me}|"arrow"|10'
+    out, code, text = drive(run, s, plan, places=[f"{a}:-2.5:2.0", f"{b}:-1.0:3.2"], syncs=['kit=grant_items|{me}|"berries"|4', load])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06"]}
     c.check(s, "hold-F list › Their window opens their window", d["01"] and (f"Person{a}", "Left") in wins(d["01"]), str(wins(d["01"])))
@@ -240,9 +242,18 @@ def items(run, c):
     done = [r["text"] for r in gave if "gave 1 berries" in r["text"]]
     c.check(s, "the rules carried out both gives (the player's act outcomes)", len(done) == 2, f"{len(done)} done; outcomes {[r['text'] for r in gave]}")
     c.check(s, "and both reached them (their gift experiences)", len(gifts) == 2, f"{len(gifts)} gifts")
+    p7, p8 = (dump(out, "07") or {}).get("pack") or {}, (dump(out, "08") or {}).get("pack") or {}
+    dl = (p8.get("limit") or 0) - (p7.get("limit") or 0)
+    dc = (p8.get("carried") or 0) - (p7.get("carried") or 0)
+    had = dict(map(tuple, p7.get("items") or [])).get("basket", 0)
+    # The first basket adds its room (20); another adds nothing (the largest room, not a sum).
+    want = 0.0 if had else 20.0
+    c.check(s, f"the pack's limit adds the largest room carried (a basket: {want:.0f} more, {had} carried before)", p7 and p8 and abs(dl - want) < 1e-3, f"limit {p7.get('limit')} -> {p8.get('limit')}")
+    c.check(s, "its load counts each item by its carry (ten arrows at 0.1, a basket)", p7 and p8 and 1.0 - 1e-3 <= dc < 10.0, f"carried {p7.get('carried')} -> {p8.get('carried')}")
 
 
 THEMES = ["glass", "clear", "night", "linen", "walnut"]  # F4's order (`ui::wood::Name::ALL`)
+
 
 
 def themes(run, c):
@@ -455,7 +466,7 @@ def bar(run, c):
     slot; a held guard shows held; the tooltip names the slot and why it is greyed."""
     s = "bar"
     plan = ("ready;wait:2;cursor:0.5,0.3;wait:0.3;shot:01_sheathed;dump:01;cursor:@bar:Primary;wait:0.5;shot:02_tip;dump:02;"
-            "cursor:0.5,0.3;key:KeyX:tap;wait:0.6;shot:03_drawn;dump:03;tap;wait:0.4;shot:04_refused;dump:04;wait:0.6;"
+            "cursor:0.5,0.3;key:KeyX:tap;wait:0.6;shot:03_drawn;dump:03;cursor:0.5,0.06;wait:0.3;tap;wait:0.4;shot:04_refused;dump:04;wait:0.6;cursor:0.5,0.3;"
             "key:KeyQ:down;wait:0.5;shot:05_block;dump:05;key:KeyQ:up;wait:0.3;key:KeyX:tap;wait:0.5;dump:06;quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
@@ -476,6 +487,15 @@ def bar(run, c):
     c.check(s, "a strike at no one is refused, in the rules' words, on the slot and as a note", slot("04", "Primary").get("refused") is True and len(notes) > 0, str((slot("04", "Primary"), notes)))
     c.check(s, "Q held raises the guard: its slot shows held", slot("05", "Skill1").get("held") is True, str(slot("05", "Skill1")))
     c.check(s, "X again sheathes it", ex("06").get("drawn") is False, str(ex("06").get("drawn")))
+    # The bars and pills from the world's rules: `meters()` (the shown ones, in order) and
+    # `status_of` (a plain status is the body's words when all is well: no pill).
+    me = (d["01"] or {}).get("me") or {}
+    ms = me.get("meters") or []
+    # The shipped script (stamina-1): health and stamina shown; focus ("Mana") only while short;
+    # energy and hunger feed the statuses off the screen.
+    names = [m["name"] for m in ms]
+    c.check(s, "the bars are the world's shown meters (health, stamina; mana only while short), each within its max", names[:2] == ["health", "stamina"] and not ({"energy", "hunger"} & set(names)) and all(0 <= m["value"] <= m["max"] + 1e-3 and m["label"] for m in ms) and all(m["value"] < m["max"] for m in ms if m["name"] == "focus"), str(ms))
+    c.check(s, "the pills are the rules' statuses, none plain", all(x["tone"] != "Plain" for x in me.get("statuses") or []), str(me.get("statuses")))
 
 
 def cursor(d):
@@ -1235,23 +1255,141 @@ def wheel_workplace(run, c):
         return
     f = fs[0]
     plan = (f"ready;wait:2;sync:there;wait:6;pointat:{f['x']},{f['y']}:0.8;wait:0.8;dump:00;key:KeyF:down;wait:0.5;shot:01_open;dump:01;"
-            "nudge:0,-50;wait:0.3;shot:02_make;dump:02;key:KeyF:up;wait:3;shot:03_sent;dump:03;quit")
+            "nudge:0,-50;wait:0.3;shot:02_make;dump:02;key:KeyF:up;wait:1;shot:03_grid;dump:03;key:Digit1:tap;wait:2;shot:04_sent;dump:04;quit")
     # Beside the furnace (admin place_at, scene setup); F aims at the nearest thing.
     there = f"there=place_at|{{me}}|{f['x'] + 1.2}|{f['y']}"
     out, code, text = drive(run, s, plan, syncs=[there])
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) for k in ["00", "01", "02", "03"]}
+    d = {k: dump(out, k) for k in ["00", "01", "02", "03", "04"]}
     w = lambda k: (d[k] or {}).get("wheel") or {}
     secs = {x["dir"]: x for x in w("01").get("sections", [])}
     c.check(s, f"F held at a {f['kind']} opens its wheel: Make north, Feed east", secs.get("n", {}).get("what") == "make" and secs.get("e", {}).get("what") == "feed", str({k: v["what"] for k, v in secs.items()}))
     mk = secs.get("n", {})
     c.check(s, "with the fire out, Make greys with the rules' reason", mk.get("allowed") is False and bool(mk.get("reason")), str(mk))
     L = log(out)
-    c.check(s, "choosing it still sends it (grey is a hint)", "ui: wheel chose n make (grey: sent, the authority decides)" in L and re.search(r'verbs: .* → \{"do":"make"', L) is not None)
-    c.check(s, "and the authority's words are noted", len((d["03"] or {}).get("notes") or []) > 0, str((d["03"] or {}).get("notes")))
+    # Make is a way of making with a recipe grid: choosing it opens the grid (its cells greyed with
+    # the rules' reasons), and a greyed cell is still sent (grey is a hint).
+    g3 = (d["03"] or {}).get("grid") or {}
+    c.check(s, "choosing it opens Make's recipe grid, its cells greyed with the rules' reasons", g3.get("skill") == "make" and g3.get("cells") and all(x["reason"] for x in g3["cells"] if not x["allowed"]), str([(x["product"], x["allowed"]) for x in g3.get("cells") or []][:4]))
+    c.check(s, "a greyed cell is still sent (grey is a hint)", re.search(r"ui: grid make chose \w+ \(grey", L) is not None and re.search(r'verbs: .* → \{"do":"make"', L) is not None)
+    c.check(s, "and the authority's words are noted", len((d["04"] or {}).get("notes") or []) > 0, str((d["04"] or {}).get("notes")))
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "support": support}
+def grid(run, c):
+    """A recipe grid (recipes-1, docs/INTERFACE.md example 4), on Cullet: at a cold hearth the
+    wheel's Make opens the grid, every cell greyed with the rules' reason; fed (Feed › wood) it
+    burns, and with 4 kelp Ash is live; choosing its cell makes ash (the authority's own act)."""
+    s = "grid"
+    fs = sql(run, "SELECT id, kind, x, y FROM structure WHERE kind = 'hearth'")
+    bodies = sql(run, "SELECT id, x, y FROM body")
+    alone = lambda f: min([((b["x"] - f["x"]) ** 2 + (b["y"] - f["y"]) ** 2) ** 0.5 for b in bodies] or [99.0])
+    fs.sort(key=alone, reverse=True)
+    c.check(s, "the world has a hearth with no one by it", len(fs) > 0 and alone(fs[0]) > 6.0, str([(f["id"], round(alone(f), 1)) for f in fs[:3]]))
+    if not fs:
+        return
+    f = fs[0]
+    P = f"pointat:{f['x']},{f['y']}:0.8;wait:0.8"
+    make = P + ";key:KeyF:down;wait:0.5;nudge:0,-50;wait:0.3;key:KeyF:up;wait:1"
+    plan = (f"ready;wait:2;sync:there;wait:6;" + make + ";shot:01_cold;dump:01;key:Escape:tap;wait:0.3;"
+            "sync:kit;wait:1;" + P + ";key:KeyF:down;wait:0.5;nudge:50,0;wait:0.3;key:KeyF:up;wait:1;dump:02;click:@acts:1:wood;wait:4;dump:03;"
+            + make + ";shot:02_lit;dump:04;key:Digit1:tap;wait:2;dump:05;wait:12;dump:06;quit")
+    there = f"there=place_at|{{me}}|{f['x'] + 1.2}|{f['y']}"
+    kit = 'kit=grant_items|{me}|"kelp"|4;grant_items|{me}|"wood"|3'
+    me0 = None
+    out, code, text = drive(run, s, plan, syncs=[there, kit])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05"]}
+    g = lambda k: (d[k] or {}).get("grid") or {}
+    cells = lambda k: g(k).get("cells") or []
+    c.check(s, "at a cold hearth, Make opens its recipe grid: a cell per product", len(cells("01")) > 1 and g("01").get("skill") == "make", str([x["product"] for x in cells("01")]))
+    c.check(s, "a cell is greyed exactly when the rules refuse it, with their own reason", cells("01") and all(x["allowed"] == (not x["reason"]) for x in cells("01")) and any(not x["allowed"] for x in cells("01")), str([(x["product"], x["reason"][:40]) for x in cells("01")]))
+    ash = [x for x in cells("01") if x["product"] == "ash"]
+    c.check(s, "a cell's rows are its recipe (takes, where, time) and its detail made_how", bool(ash) and any(r[0] == "Takes" and "kelp" in r[1] for r in ash[0]["rows"]) and any(r[0] == "Where" for r in ash[0]["rows"]) and "kelp" in ash[0]["detail"], str(ash[:1]))
+    L = log(out)
+    # A household's hearth is usually burning already: Feed is then refused as full, in the
+    # rules' words (feed's "fuel" puts on the first fuel I carry).
+    c.check(s, "Feed is sent from the wheel and the authority answers it", re.search(r'verbs: .* → \{"do":"feed"', L) is not None, "")
+    lit = [x for x in cells("04") if x["product"] == "ash"]
+    c.check(s, "burning, with 4 kelp, Ash is live", bool(lit) and lit[0]["allowed"], str(lit[:1]))
+    first = (cells("04") or [{}])[0].get("product")
+    c.check(s, "choosing its cell (1) sends make with its item", re.search(rf'verbs: .* → \{{"do":"make","item":"{first}"', L) is not None, first or "")
+    me = json.load(open(os.path.join(out, "scene.json"))).get("me")
+    got = sum(r["qty"] for r in sql(run, f"SELECT item, qty FROM inventory WHERE owner = {me} AND item = 'ash'")) if me else 0
+    c.check(s, "the authority made it: ash in the pack", first != "ash" or got >= 1, f"ash {got}")
+
+
+def walk_law(run, c):
+    """Settings › Play › Walk speed (stamina-1 made walk_base live): the row reads the world's
+    `walk_base` law from the installed script and, through a play scene's admin link, writes it
+    (`set_world_law`), as the authority records (`law_change`)."""
+    s = "walk-law"
+    plan = ("ready;wait:3;click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;dump:01;shot:01_walk;"
+            "click:@settings:walk:3.0;wait:4;dump:02;shot:02_walk_3;click:@settings:walk:2.6;wait:4;dump:03;quit")
+    out, code, text = drive(run, s, plan, extra=["--admin-link"])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    fs = lambda k: (((dump(out, k) or {}).get("extra") or {}).get("facing_sight") or {})
+    c.check(s, "the row reads walk_base from the installed script (2.6 m/s)", abs((fs("01").get("walk") or 0) - 2.6) < 0.05 and "settings:walk:3.0" in ((dump(out, "01") or {}).get("tags") or {}), str(fs("01")))
+    c.check(s, "with the admin link it can change it", fs("01").get("can_switch") is True, str(fs("01")))
+    changes = [r for r in sql(run, "SELECT name, old, new FROM law_change WHERE name = 'walk_base'")]
+    c.check(s, "3.0 is written as the world's law and read back", abs((fs("02").get("walk") or 0) - 3.0) < 0.05 and any(r.get("new") == "3.0" for r in changes), f"{fs('02').get('walk')}; {changes}")
+    c.check(s, "and 2.6 again", abs((fs("03").get("walk") or 0) - 2.6) < 0.05 and any(r.get("new") == "2.6" for r in changes), f"{fs('03').get('walk')}; {changes}")
+
+
+def pools(run, c):
+    """stamina-1's pools on the bar: the focus bar ("Mana", `while_short`) shows only while short;
+    a slot whose pool is short of its cost greys in the rules' own words (`short_of`: "not enough
+    mana"). The scene lowers `focus_max` to 40 (admin `set_world_law`) so one fire bolt leaves too
+    little for a heal (35) or another bolt (30), and restores it after."""
+    s = "pools"
+    # A fire bolt (R, 30 mana; drawn first: a hostile move) at a point on the ground: 10 of 40 left.
+    plan = ("ready;wait:2;sync:low;wait:3;dump:00;key:KeyX:tap;wait:0.5;cursor:0.5,0.3;wait:0.3;key:KeyR:down;wait:0.4;key:KeyR:up;wait:2;shot:01_short;dump:01;wait:3;dump:01b;"
+            "key:KeyX:tap;sync:back;wait:14;dump:02;quit")
+    low = 'low=set_world_law|"focus_max"|"40"'
+    back = 'back=set_world_law|"focus_max"|"100"'
+    out, code, text = drive(run, s, plan, syncs=[low, back])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["00", "01", "01b", "02"]}
+    ms = lambda k: {m["name"]: m for m in (((d[k] or {}).get("me") or {}).get("meters") or [])}
+    slot = lambda k, n: (((d[k] or {}).get("extra") or {}).get("slots") or {}).get(f"bar:{n}") or {}
+    c.check(s, "full, the mana bar is not shown (while_short)", "focus" not in ms("00"), str(list(ms("00"))))
+    f = ms("01").get("focus")
+    c.check(s, "after a fire bolt it shows, short", f is not None and f["value"] < f["max"], str(f))
+    # The bolt's own slot cools down first (a cooldown shows before a pool), then greys too.
+    heal, bolt = slot("01", "Skill2"), slot("01b", "Skill3")
+    fb = ms("01b").get("focus") or {}
+    c.check(s, "a slot whose pool is short of its cost greys in the rules' words (heal; the bolt once cooled down: not enough mana)", "mana" in (heal.get("off") or "").lower() and "mana" in (bolt.get("off") or "").lower() and fb.get("value", 99) < 30, str((heal.get("off"), bolt.get("off"), fb.get("value"))))
+    c.check(s, "a slot of another pool is not greyed by it (strike: stamina)", "mana" not in (slot("01", "Primary").get("off") or "").lower(), str(slot("01", "Primary").get("off")))
+    c.check(s, "refilled to its max again, the mana bar goes", "focus" not in ms("02"), str(list(ms("02"))))
+
+
+def own(run, c):
+    """mind-act-outcome-far (force_outcomes): my own strikes, shots and casts get an `own`
+    act_outcome row and experience line. The client takes notes and Log events only from `act`
+    and `record` rows, so the `own` rows add no note or Log line: no second word on a strike the
+    bar already answers, no line per blow. Drawn, three strikes at no one, a bow shot and a fire
+    bolt at the ground, then the Log."""
+    s = "own"
+    plan = ("ready;wait:2;key:KeyX:tap;wait:0.6;cursor:0.5,0.3;wait:0.3;tap;wait:0.7;tap;wait:0.7;tap;wait:0.7;"
+            "mouse:right:down;wait:0.5;mouse:right:up;wait:2;key:KeyR:down;wait:0.4;key:KeyR:up;wait:3;dump:01;"
+            "key:KeyL:tap;wait:0.6;shot:02_log;dump:02;key:KeyX:tap;wait:0.4;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    rows = sql(run, f"SELECT id, kind, ok, skill, what, why FROM act_outcome WHERE observer = {me} AND kind = 'own'") if me else []
+    texts = [r.get("text", "") for r in (sql(run, f"SELECT id, text FROM experience WHERE observer = {me} AND kind = 'own'") if me else [])]
+    c.check(s, "the authority told me how my shot and bolt came out (own rows)", len(rows) >= 2 and {"bowshot", "firebolt"} <= {r.get("skill") for r in rows}, str(rows)[:600])
+    d = {k: dump(out, k) or {} for k in ["01", "02"]}
+    shown = [n for k in d for n in (d[k].get("notes") or [])] + [e for k in d for e in ((d[k].get("extra") or {}).get("events") or [])]
+    words = [w for r in rows for w in [r.get("why", "")] if w] + [t for t in texts if t]
+    hit = [x for x in shown if any(w and (w in x or x in w) for w in words) or x.startswith("You finished") or x.startswith("You failed to")]
+    c.check(s, "no note or Log event repeats an own row", not hit, str(hit)[:400])
+    notes = d["01"].get("notes") or []
+    c.check(s, "no line per blow: at most one note per strike, none for the shot or bolt", len(notes) <= 3 and all(notes.count(n) <= 3 for n in notes), str(notes))
+    c.check(s, "the Log is open", "Log" in [w for w, _ in wins(d["02"])], str(wins(d["02"])))
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own}
 
 
 def main():
@@ -1263,7 +1401,7 @@ def main():
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
     # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
-    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace")]:
+    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace", "grid")]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)
