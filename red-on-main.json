@@ -1,16 +1,4 @@
 {
-  "alarms": {
-    "case": "alarms",
-    "first_main": "41d40f50",
-    "first_seen": "2026-11-12T11:01:47+01:00",
-    "last_evidence": ".local/living/verify/core-mainalarms (Spark)",
-    "last_main": "41d40f50",
-    "last_seen": "2026-11-12T11:01:47+01:00",
-    "owner": "verify-core",
-    "reason": "scene fixture stale: its 'meter over a field the row lacks' overlay adds stamina, a shipped meter since stamina-1, so install refuses 'stamina is declared twice' (fix on fix-alarms-infant)",
-    "skill": "verify-core",
-    "times": 0
-  },
   "channels": {
     "case": "channels",
     "first_main": "00d3dc1b",
