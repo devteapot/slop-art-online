@@ -1085,8 +1085,14 @@ class Page:
                 # Each state line covers 0.25 s; the recorder's own main-thread time per second.
                 cost += f" The recorder's own main-thread time: p50 {us[len(us) // 2] * 4 / 1000:.2f} ms per second, p99 {us[int(len(us) * .99) - 1 if len(us) > 1 else 0] / 1000:.2f} ms in a quarter second."
             drop = max((st.get("dropped_stills") or 0 for st in s.client_state), default=0)
+            # By reason (record-guard): a readback still in flight, one back too late, the writer's queue full.
+            last = next((st["dropped"] for st in reversed(s.client_state) if isinstance(st.get("dropped"), dict)), None)
+            why = ""
+            if drop and last:
+                parts = [f"{last.get(k, 0)} {w}" for k, w in (("busy", "while a readback was in flight"), ("late", "back too late"), ("queue", "writer behind")) if last.get(k)]
+                why = " (" + "; ".join(parts) + ")" if parts else ""
             what = "frames" if (self.video_rel or self.player) else "stills, on a clock and at each line, reducer call, bubble and note"
-            P.append(f"<p class=mut>{len(self.stills)} {what}, drawn by the client itself (<code>LIVING_GAME_RECORD</code>).{esc(cost)}{' %d dropped (writer behind).' % drop if drop else ''} Click to enlarge.</p><div class=strip>")
+            P.append(f"<p class=mut>{len(self.stills)} {what}, drawn by the client itself (<code>LIVING_GAME_RECORD</code>).{esc(cost)}{(' %d dropped%s, so the game never waited.' % (drop, esc(why))) if drop else ''} Click to enlarge.</p><div class=strip>")
             step = max(1, len(self.stills) // 120)
             for ms, rel in self.stills[::step]:
                 P.append(f"<figure><img loading=lazy src='{esc(rel)}' onclick='big(this.src)'><figcaption>{clock(ms, False)}</figcaption></figure>")
