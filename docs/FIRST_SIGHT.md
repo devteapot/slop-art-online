@@ -59,7 +59,7 @@ A first sight is the existing bookkeeping, unchanged: no `familiar` row for `(ob
 
 **When it re-arms:**
 - **Never for the same pair while the row lasts.** "You see X again after a long time" (no `familiar` touch for more than a game day, salience 0.25) is recognition of someone familiar, not a first sight. It does not ask.
-- **After forgetting.** The body keeps at most 256 `familiar` rows (`FAMILIAR_LIMIT`) and drops the oldest by `last_ms`. Someone dropped and later seen again is a first sight again, so it asks again. This happens only to a character that has seen more than 256 creatures since, which in practice means a city. The gap below bounds it there.
+- **After forgetting.** The body keeps at most 2,048 `familiar` rows (`FAMILIAR_LIMIT`; 256 before `battle-scale`, docs/BATTLE_SCALE.md). Over it, it drops the oldest by `last_ms`, but never one seen within the last minute or still in view. Someone dropped and later seen again is a first sight again, so it asks again. This happens only to a character that has seen more than 2,048 creatures and things since, which in practice means a city. The gap below bounds it there.
 - **After the person becomes placeable:** someone who told you their name is named in later lines, so they never ask.
 - **A new identity** (a new character after a death) is a new id with no rows, so it is a first sight to everyone.
 
@@ -184,7 +184,7 @@ Both are switched at runtime by `set_world_law` and read back from `world_law`, 
 - After the throttle that is 3.5–5.4 added per resident-hour, about +15–21%.
 - It is front-loaded. Once per pair, the rate falls as people become familiar. Hours of evidence do not exist.
 
-**A city** (no evidence; the bound). Where most people one passes can't be placed and the 256-row `familiar` cap forgets them, the gap is the limit: at most 3,600 / `first_sight_gap_s` added per resident-hour.
+**A city** (no evidence; the bound). Where most people one passes can't be placed and the `familiar` cap (2,048 rows since `battle-scale`) forgets them, the gap is the limit: at most 3,600 / `first_sight_gap_s` added per resident-hour.
 - At 300 s that is 12 an hour, about +60% on 18 an hour.
 - At 60 s it would be 60 an hour, which is why the default is 300 s.
 
