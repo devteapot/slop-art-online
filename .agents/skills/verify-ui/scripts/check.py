@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes pick turns look-walk bar offers wheel wheel-workplace support (default: all but support and wheel-workplace, which need a Cullet world)
+  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes pick turns look-walk bar offers wheel wheel-workplace grid support (default: all but support, wheel-workplace and grid, which need a Cullet world)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -1137,7 +1137,50 @@ def wheel_workplace(run, c):
     c.check(s, "and the authority's words are noted", len((d["03"] or {}).get("notes") or []) > 0, str((d["03"] or {}).get("notes")))
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "support": support}
+def grid(run, c):
+    """A recipe grid (recipes-1, docs/INTERFACE.md example 4), on Cullet: at a cold hearth the
+    wheel's Make opens the grid, every cell greyed with the rules' reason; fed (Feed › wood) it
+    burns, and with 4 kelp Ash is live; choosing its cell makes ash (the authority's own act)."""
+    s = "grid"
+    fs = sql(run, "SELECT id, kind, x, y FROM structure WHERE kind = 'hearth'")
+    bodies = sql(run, "SELECT id, x, y FROM body")
+    alone = lambda f: min([((b["x"] - f["x"]) ** 2 + (b["y"] - f["y"]) ** 2) ** 0.5 for b in bodies] or [99.0])
+    fs.sort(key=alone, reverse=True)
+    c.check(s, "the world has a hearth with no one by it", len(fs) > 0 and alone(fs[0]) > 6.0, str([(f["id"], round(alone(f), 1)) for f in fs[:3]]))
+    if not fs:
+        return
+    f = fs[0]
+    P = f"pointat:{f['x']},{f['y']}:0.8;wait:0.8"
+    make = P + ";key:KeyF:down;wait:0.5;nudge:0,-50;wait:0.3;key:KeyF:up;wait:1"
+    plan = (f"ready;wait:2;sync:there;wait:6;" + make + ";shot:01_cold;dump:01;key:Escape:tap;wait:0.3;"
+            "sync:kit;wait:1;" + P + ";key:KeyF:down;wait:0.5;nudge:50,0;wait:0.3;key:KeyF:up;wait:1;dump:02;click:@acts:1:wood;wait:4;dump:03;"
+            + make + ";shot:02_lit;dump:04;key:Digit1:tap;wait:2;dump:05;wait:12;dump:06;quit")
+    there = f"there=place_at|{{me}}|{f['x'] + 1.2}|{f['y']}"
+    kit = 'kit=grant_items|{me}|"kelp"|4;grant_items|{me}|"wood"|3'
+    me0 = None
+    out, code, text = drive(run, s, plan, syncs=[there, kit])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05"]}
+    g = lambda k: (d[k] or {}).get("grid") or {}
+    cells = lambda k: g(k).get("cells") or []
+    c.check(s, "at a cold hearth, Make opens its recipe grid: a cell per product", len(cells("01")) > 1 and g("01").get("skill") == "make", str([x["product"] for x in cells("01")]))
+    c.check(s, "a cell is greyed exactly when the rules refuse it, with their own reason", cells("01") and all(x["allowed"] == (not x["reason"]) for x in cells("01")) and any(not x["allowed"] for x in cells("01")), str([(x["product"], x["reason"][:40]) for x in cells("01")]))
+    ash = [x for x in cells("01") if x["product"] == "ash"]
+    c.check(s, "a cell's rows are its recipe (takes, where, time) and its detail made_how", bool(ash) and any(r[0] == "Takes" and "kelp" in r[1] for r in ash[0]["rows"]) and any(r[0] == "Where" for r in ash[0]["rows"]) and "kelp" in ash[0]["detail"], str(ash[:1]))
+    L = log(out)
+    # A household's hearth is usually burning already: Feed is then refused as full, in the
+    # rules' words (feed's "fuel" puts on the first fuel I carry).
+    c.check(s, "Feed is sent from the wheel and the authority answers it", re.search(r'verbs: .* → \{"do":"feed"', L) is not None, "")
+    lit = [x for x in cells("04") if x["product"] == "ash"]
+    c.check(s, "burning, with 4 kelp, Ash is live", bool(lit) and lit[0]["allowed"], str(lit[:1]))
+    first = (cells("04") or [{}])[0].get("product")
+    c.check(s, "choosing its cell (1) sends make with its item", re.search(rf'verbs: .* → \{{"do":"make","item":"{first}"', L) is not None, first or "")
+    me = json.load(open(os.path.join(out, "scene.json"))).get("me")
+    got = sum(r["qty"] for r in sql(run, f"SELECT item, qty FROM inventory WHERE owner = {me} AND item = 'ash'")) if me else 0
+    c.check(s, "the authority made it: ash in the pack", first != "ash" or got >= 1, f"ash {got}")
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "support": support}
 
 
 def main():
@@ -1149,7 +1192,7 @@ def main():
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
     # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
-    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace")]:
+    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace", "grid")]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)
