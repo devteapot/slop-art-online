@@ -1456,6 +1456,61 @@ Switches in the fake proofs, to record again with the paid batch: greeting `near
 - The candidate count is a count, not a measure of who met whom. Two settlements a short walk apart still decide who sees whom, and names cross settlements only through the seeded ties.
 
 
+### Why the run-born do not pair: measures and the bi1 reading (2026-11-12)
+
+Branch `births-2-measures`, for [research idea 6](MIND_RESEARCH_IDEAS.md#6-why-the-run-born-do-not-pair). It is free: a reading of existing evidence and a fake run. It adds no rule and no nudge.
+
+`births_report.py` now writes a `why:` line for each person who came of age in the run: the run-born, and seeded children, marked `seeded child`. Each line gives:
+
+- when they came of age (`adult at`, real minutes from the start) and their adult minutes in the run;
+- their candidates at every census while adult (unrelated, unpaired adults, as `Pairing` counts them for the conceive attempts above): mean, peak, share of adult time with any, and a series every 30 minutes;
+- the share of their deliberations whose scene, the `{"creatures": […]}` the prompt carried, held a candidate;
+- the longing percepts their prompts carried ("You long for a child…", once per game time), and when the first came;
+- conceive attempts made as an adult, and the minutes from adulthood to the first;
+- deliberation and talk replies that **name** a candidate, **aim** an act or line at one (`target`/`to` ids: often asking to be taught, not courting), or speak of **partnering**, **longing** or **children** (keyword classes). Examples are printed (`--mentions N`).
+- the body's refusals, by reason, as the mind was told them;
+- the share of adult time with no mind (outside the census `thinkers`);
+- a time budget while adult, from census activities: sleep, work (gather, cook, store, take, give, teach, build, plant, keep, feed, read), idle (wait, wander, follow, rest, none), walk (goto), eat, social, family (conceive).
+
+Per run, `rb_tried_by_cands` gives run-born adults who ever tried, of all, by their mean candidates while adult (0, under 3, 3–6, 6 or more). `coa_*` gives the same for seeded children. `rb_scene_cand` is the mean scene share and `rb_longing` the longing percepts.
+
+```bash
+python3 living/tools/births_report.py --root /home/gooning/dev/slop-runs-arrive/.local/living/trials --attempts 0 --mentions 3 bi1
+```
+
+**bi1 read back.** The table sums the four worlds. "Thinking" means people with a mind for at least half their adult time. In the control the cap of 12 kept Nia, Hana, Sol, Bee and Jory on their graphs for 96–100% of their adult time.
+
+| | Run-born adults | Seeded children come of age |
+| --- | ---: | ---: |
+| People (thinking) | 19 (12) | 12 (12) |
+| Ever tried to conceive | **1** (Uma, provided) | **6** |
+| … within their first 179 minutes as adults | 1 | 5 |
+| By mean candidates: under 3 / 3–6 / 6 or more | 0 of 2 / 1 of 15 / 0 of 2 | – / 6 of 12 / – |
+| Mean candidates while adult (lowest person's mean) | 4.6 (2.1) | 4.0 (3.1) |
+| Share of adult time with at least one candidate | 1.0 for every person | 1.0 for every person |
+| Deliberations whose scene held a candidate (thinking) | 0.90 | 0.93 |
+| Longing percepts per thinking adult (with any) | 3.3 (11 of 12) | 5.2 (12 of 12) |
+| Adult minutes in the run (thinking, mean) | 179 | 284 |
+| Replies speaking of partnering / children / naming a candidate | 0.077 / 0.11 / 0.32 | 0.057 / 0.12 / 0.31 |
+| Time while adult: sleep / work / idle / walk | 0.46 / 0.15 / 0.29 / 0.09 | 0.38 / 0.09 / 0.43 / 0.10 |
+
+What it shows, and what it does not:
+
+- **Candidates and their sight were not missing.** Every run-born adult had at least one unrelated, unpaired adult available the whole time, 4.6 on average, and nine scenes in ten held one. Eleven of the twelve thinking run-born felt the longing.
+- **Yet one tried, against six of the seeded children.** The children had the same choice, 4.0 candidates, and talked of partnering and children as often. The difference is not the count of candidates, nor whether the longing was felt.
+- **Time explains only part of it.** The seeded children had 284 adult minutes in the run against 179. But five of them tried within their first 179 minutes as adults, against the one run-born.
+- **The run-born spent more of their adult time working and sleeping**, 0.15 and 0.46 against 0.09 and 0.38. Their mentions of candidates were mostly asking to be taught: "ask the one cooking fish (#14) to teach me cooking". This fits the journals' reading above, that they learned crafts first. It is a correlation over 12 and 12 people, not a cause.
+- **A lead for the paid batch.** Run-born identities start from a birth narrative. Ada (longing) said "I'm only little — Mama's arm is where I sleep" as an adult. Whether a run-born adult's sheet still describes a child is the next free reading (idea 6's `birth_identity_system` question). It is not measured here.
+- Nothing here is about the larger seed. bi1's worlds are the hamlet's twelve.
+
+**Fake proof** (`b3f`, 2026-11-12 13:30–14:10): `hamlet-6` for 40 minutes on the fake model. A script ([`fake/coming-of-age.json`](../living/trials/fake/coming-of-age.json)) makes every one of Wren Tarn's deliberations decide to start a family with Ivo Ashby. Nobody is born in 40 minutes, so the run-born count is 0. Three seeded children came of age, and each got a `why:` line:
+
+- **Wren** (adult at 14 minutes): 8 candidates on average, at most 9. All 3 of her adult deliberations had a candidate in the scene, and she felt the longing once, at 15 minutes. She made 4 attempts as an adult, out of 7 in all; the other 3 came while she was a child. Her replies spoke of partnering and children 3 times and named Ivo once. The body refused her 6 times in all: twice "not of an age to start a family" (her, while a child), three times "they are not of an age for it" (Ivo, until minute 21) and once "no # in sight". Her time while adult was idle 0.53 and sleep 0.47. By candidates, 1 of these 3 tried, in the 6-or-more band.
+- **Ivo** (adult at 21 minutes): 8.3 candidates, the longing at 20 minutes, no attempts.
+- **Lio** (adult at 34 minutes): asleep for his 6 adult minutes.
+
+`b3f` was cleaned with `trials.py clean`, which pauses each world before deleting it.
+
 ## The greeting trial (2026-11-11)
 
 Branch `exp-greet`. Status: fake proof (`gf4`, `gf5`, below) and paid batches [gr1/gr2](#greeting-batches-gr1gr2-2026-11-11). `nearest` + `concurrent` is the default since 2026-11-11; the `greet-control` variant runs the old rules (`off`, `wait`).
