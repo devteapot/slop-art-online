@@ -12,13 +12,14 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 
 ## The check
 
-`just living-check` runs the five cargo commands of before and, since `tool-8`, the script fuel gate, and since `fix-laws` the seed-laws test, in [`check.py`](../living/tools/check.py):
+`just living-check` runs the five cargo commands of before and, since `tool-8`, the script fuel gate, since `fix-laws` the seed-laws test, and since `check-game-tests` the game client's unit tests, in [`check.py`](../living/tools/check.py):
 
 | Step | Command | Lane |
 | --- | --- | --- |
 | `authority` | `cargo build -p living-authority --target wasm32-unknown-unknown --release` | release |
 | `mind+viewer` | `cargo build -p living-mind -p living-viewer` | debug |
 | `game` | `cargo build --release -p living-game` | release |
+| `game-tests` | `cargo test --release -p living-game`: the client's unit tests on the game step's release tree, headless (no display, GPU or generated assets); names in `GAME_TEST_SKIPS` are skipped here by name (`--exact --skip`) and run by hand: none needs a display; one is a known red test, owned by dev-box (the verify-ui skill lists it). The client reads the rules (`offered()`, the checks), and a rules change turned `verbs::tests::make_is_offered_at_a_furnace_only_while_it_burns_with_fuel` red on main (f0061a07) while the check only built the game. Its stamp covers the game's closure, the rules included. Spark, 2026-11-12: 15 s on top of a built game tree, 0 s stamped | release |
 | `viewer-wasm` | `cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer` | wasm-dev |
 | `rules-tests` | `cargo test -p living-rules` | debug |
 | `seed-laws` | `cargo test -p living-authority --lib seed::tests::a_seeds_laws_are_in_force_after_init`: every seed with its own laws has them in force after `init` | debug |
