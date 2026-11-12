@@ -165,7 +165,7 @@ living/tools/disk_clean_install.sh --floor-gb 40          # Linux: systemd user 
 living/tools/disk_clean_install.sh --uninstall
 ```
 
-On Linux the timer runs without a login when lingering is on (`loginctl enable-linger`). On macOS the same command writes and loads the launchd agent `~/Library/LaunchAgents/dev.slop.disk-clean.plist` (every 30 minutes, log in `~/.local/state/slop-disk/launchd.log`). Full Disk Access is optional; see the known limit above.
+On Linux the timer runs without a login when lingering is on (`loginctl enable-linger`). The Linux timer runs on a calendar schedule (`OnCalendar=*:0/30` for the default 30 minutes) and the installer warns when the timer has no next trigger. The earlier `OnUnitActiveSec` form counted from the service's last run, so a timer stopped and restarted after that moment had passed showed `elapsed` and never fired again (seen on the Spark, 2026-11-12). An interval that does not divide an hour keeps that form, with `OnActiveSec=1min` so a restart always schedules a first run. On macOS the same command writes and loads the launchd agent `~/Library/LaunchAgents/dev.slop.disk-clean.plist` (every 30 minutes, log in `~/.local/state/slop-disk/launchd.log`). Full Disk Access is optional; see the known limit above.
 
 [`disk_report.sh`](../living/tools/disk_report.sh) still reports free space and big folders across the machines; it deletes nothing.
 

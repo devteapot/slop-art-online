@@ -190,6 +190,11 @@ living-people *args:
 living-town *args:
     python3 living/tools/characters/town.py {{args}}
 
+# A character bundle's pictures as BC7 KTX2 (docs/CHARACTERS.md, "Pictures as KTX2"):
+# `just living-pictures bundle IN.tar.gz OUT.tar.gz --pictures ktx2`, `check OUT.tar.gz`, `memory OUT.tar.gz`.
+living-pictures *args:
+    python3 living/tools/characters/pictures.py {{args}}
+
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
 # (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for
 # terrain.rs, `--set material` the model surfaces (bark, planks, plaster, stone, brick,

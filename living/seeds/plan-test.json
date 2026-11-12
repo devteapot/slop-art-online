@@ -79,11 +79,11 @@
         {"kind": "hall", "name": "the Tally Hall", "lot": "hall", "about": "where debts are written"}
       ],
       "residents": [
-        {"name": "Ada Hollis", "age": 41, "household": "hollis", "occupation": "fisher"},
-        {"name": "Tom Hollis", "age": 44, "household": "hollis", "occupation": "fisher"},
-        {"name": "Nell Hollis", "age": 9, "household": "hollis", "occupation": "child", "parents": ["Ada Hollis", "Tom Hollis"]},
-        {"name": "Bryn Wren", "age": 35, "household": "wren", "occupation": "cook"},
-        {"name": "Ivo Wren", "age": 37, "household": "wren", "occupation": "builder"}
+        {"name": "Ada Hollis", "age": 41, "household": "hollis", "occupation": "fisher", "look": "lp_7628c6735414099f"},
+        {"name": "Tom Hollis", "age": 44, "household": "hollis", "occupation": "fisher", "look": "lp_a187a8d79ee818a1"},
+        {"name": "Nell Hollis", "age": 9, "household": "hollis", "occupation": "child", "parents": ["Ada Hollis", "Tom Hollis"], "look": "lp_1ecacc0f06f6e8c4"},
+        {"name": "Bryn Wren", "age": 35, "household": "wren", "occupation": "cook", "look": "lp_6da22f5cf81a6b8b"},
+        {"name": "Ivo Wren", "age": 37, "household": "wren", "occupation": "builder", "look": "lp_7ba532feef7b2d78"}
       ]
     }
   ],
@@ -3738,5 +3738,330 @@
      }
     ]
    }
+  },
+  "looks": {
+    "generation": "fixture-1",
+    "people": {
+      "lp_7628c6735414099f": {
+        "adult": "lk_546724cbc85ae020",
+        "elder": "lk_008883203f09363b"
+      },
+      "lp_a187a8d79ee818a1": {
+        "adult": "lk_06f05cdaf2619397",
+        "elder": "lk_4c22e72c453fb258"
+      },
+      "lp_1ecacc0f06f6e8c4": {
+        "child": "lk_ed0e4304fdf35f4f",
+        "youth": "lk_8cc9dfb7c20da0a5",
+        "adult": "lk_8642336d25c8122f",
+        "elder": "lk_8dcf5b3bb9fd2fdf"
+      },
+      "lp_6da22f5cf81a6b8b": {
+        "adult": "lk_f389f4e693ef9a0b",
+        "elder": "lk_06a9316185286141"
+      },
+      "lp_7ba532feef7b2d78": {
+        "adult": "lk_bc338315ec63fc28",
+        "elder": "lk_671cd87302be4165"
+      },
+      "lp_3b2dea98def54c12": {
+        "infant": "lk_7aa7f2b1a0ed739d",
+        "child": "lk_9af2e7df0ea6d5cb",
+        "youth": "lk_8c931f2f832bdd33",
+        "adult": "lk_aa4f8769cd2b69dc",
+        "elder": "lk_6ba0bda10fac2cd3"
+      },
+      "lp_20070a8396da32be": {
+        "infant": "lk_a0bc51a2832fadf1",
+        "child": "lk_49861bed405dfde4",
+        "youth": "lk_b5e7c66a84e4b2b1",
+        "adult": "lk_188c1b7809221a74",
+        "elder": "lk_77053e76a4070cb2"
+      },
+      "lp_bd8b7e869f1e38a1": {
+        "infant": "lk_ec6c8bfa461329a9",
+        "child": "lk_ee300fcafd2e06ab",
+        "youth": "lk_f8f50885a60286bc",
+        "adult": "lk_44343e9cd19bda68",
+        "elder": "lk_10b9a3596b6635c2"
+      }
+    },
+    "words": {
+      "lk_546724cbc85ae020": {
+        "form": "woman",
+        "girth": 0,
+        "height": 0,
+        "hair": "dark-haired",
+        "top": "a brown coat",
+        "bottom": "blue trousers",
+        "head": "",
+        "beard": ""
+      },
+      "lk_008883203f09363b": {
+        "form": "old woman",
+        "girth": 1,
+        "height": 1,
+        "hair": "grey-haired",
+        "top": "a red waistcoat",
+        "bottom": "a long dark skirt",
+        "head": "",
+        "beard": ""
+      },
+      "lk_06f05cdaf2619397": {
+        "form": "man",
+        "girth": 1,
+        "height": 2,
+        "hair": "fair-haired",
+        "top": "a red waistcoat",
+        "bottom": "a long dark skirt",
+        "head": "",
+        "beard": "stubble"
+      },
+      "lk_4c22e72c453fb258": {
+        "form": "old man",
+        "girth": 2,
+        "height": 0,
+        "hair": "grey-haired",
+        "top": "an oilskin",
+        "bottom": "dark trousers",
+        "head": "a cap",
+        "beard": "a white beard"
+      },
+      "lk_ed0e4304fdf35f4f": {
+        "form": "girl",
+        "girth": 0,
+        "height": 2,
+        "hair": "red-haired",
+        "top": "a brown coat",
+        "bottom": "blue trousers",
+        "head": "",
+        "beard": ""
+      },
+      "lk_8cc9dfb7c20da0a5": {
+        "form": "girl",
+        "girth": 1,
+        "height": 0,
+        "hair": "red-haired",
+        "top": "a red waistcoat",
+        "bottom": "a long dark skirt",
+        "head": "",
+        "beard": ""
+      },
+      "lk_8642336d25c8122f": {
+        "form": "woman",
+        "girth": 2,
+        "height": 1,
+        "hair": "red-haired",
+        "top": "an oilskin",
+        "bottom": "dark trousers",
+        "head": "a cap",
+        "beard": ""
+      },
+      "lk_8dcf5b3bb9fd2fdf": {
+        "form": "old woman",
+        "girth": 0,
+        "height": 2,
+        "hair": "grey-haired",
+        "top": "a white blouse",
+        "bottom": "a grey skirt",
+        "head": "a kerchief",
+        "beard": ""
+      },
+      "lk_f389f4e693ef9a0b": {
+        "form": "woman",
+        "girth": 0,
+        "height": 0,
+        "hair": "brown-haired",
+        "top": "a white blouse",
+        "bottom": "a grey skirt",
+        "head": "a kerchief",
+        "beard": ""
+      },
+      "lk_06a9316185286141": {
+        "form": "old woman",
+        "girth": 1,
+        "height": 1,
+        "hair": "grey-haired",
+        "top": "a kelp-green tunic",
+        "bottom": "brown breeches",
+        "head": "",
+        "beard": ""
+      },
+      "lk_bc338315ec63fc28": {
+        "form": "man",
+        "girth": 1,
+        "height": 2,
+        "hair": "dark-haired",
+        "top": "a kelp-green tunic",
+        "bottom": "brown breeches",
+        "head": "",
+        "beard": ""
+      },
+      "lk_671cd87302be4165": {
+        "form": "old man",
+        "girth": 2,
+        "height": 0,
+        "hair": "grey-haired",
+        "top": "a green smock",
+        "bottom": "blue trousers",
+        "head": "",
+        "beard": "a white beard"
+      },
+      "lk_7aa7f2b1a0ed739d": {
+        "form": "baby",
+        "girth": 2,
+        "height": 1,
+        "hair": "fair-haired",
+        "top": "an oilskin",
+        "bottom": "",
+        "head": "",
+        "beard": ""
+      },
+      "lk_9af2e7df0ea6d5cb": {
+        "form": "girl",
+        "girth": 0,
+        "height": 2,
+        "hair": "fair-haired",
+        "top": "a white blouse",
+        "bottom": "a grey skirt",
+        "head": "a kerchief",
+        "beard": ""
+      },
+      "lk_8c931f2f832bdd33": {
+        "form": "girl",
+        "girth": 1,
+        "height": 0,
+        "hair": "fair-haired",
+        "top": "a kelp-green tunic",
+        "bottom": "brown breeches",
+        "head": "",
+        "beard": ""
+      },
+      "lk_aa4f8769cd2b69dc": {
+        "form": "woman",
+        "girth": 2,
+        "height": 1,
+        "hair": "fair-haired",
+        "top": "a green smock",
+        "bottom": "blue trousers",
+        "head": "",
+        "beard": ""
+      },
+      "lk_6ba0bda10fac2cd3": {
+        "form": "old woman",
+        "girth": 0,
+        "height": 2,
+        "hair": "grey-haired",
+        "top": "a grey jersey",
+        "bottom": "a long dark skirt",
+        "head": "a cap",
+        "beard": ""
+      },
+      "lk_a0bc51a2832fadf1": {
+        "form": "baby",
+        "girth": 0,
+        "height": 0,
+        "hair": "red-haired",
+        "top": "a white blouse",
+        "bottom": "",
+        "head": "",
+        "beard": ""
+      },
+      "lk_49861bed405dfde4": {
+        "form": "boy",
+        "girth": 1,
+        "height": 1,
+        "hair": "red-haired",
+        "top": "a kelp-green tunic",
+        "bottom": "brown breeches",
+        "head": "",
+        "beard": ""
+      },
+      "lk_b5e7c66a84e4b2b1": {
+        "form": "boy",
+        "girth": 2,
+        "height": 2,
+        "hair": "red-haired",
+        "top": "a green smock",
+        "bottom": "blue trousers",
+        "head": "",
+        "beard": ""
+      },
+      "lk_188c1b7809221a74": {
+        "form": "man",
+        "girth": 0,
+        "height": 0,
+        "hair": "red-haired",
+        "top": "a grey jersey",
+        "bottom": "a long dark skirt",
+        "head": "a cap",
+        "beard": ""
+      },
+      "lk_77053e76a4070cb2": {
+        "form": "old man",
+        "girth": 1,
+        "height": 1,
+        "hair": "grey-haired",
+        "top": "a blue shift",
+        "bottom": "dark trousers",
+        "head": "a kerchief",
+        "beard": "a white beard"
+      },
+      "lk_ec6c8bfa461329a9": {
+        "form": "baby",
+        "girth": 1,
+        "height": 2,
+        "hair": "brown-haired",
+        "top": "a kelp-green tunic",
+        "bottom": "",
+        "head": "",
+        "beard": ""
+      },
+      "lk_ee300fcafd2e06ab": {
+        "form": "girl",
+        "girth": 2,
+        "height": 0,
+        "hair": "brown-haired",
+        "top": "a green smock",
+        "bottom": "blue trousers",
+        "head": "",
+        "beard": ""
+      },
+      "lk_f8f50885a60286bc": {
+        "form": "girl",
+        "girth": 0,
+        "height": 1,
+        "hair": "brown-haired",
+        "top": "a grey jersey",
+        "bottom": "a long dark skirt",
+        "head": "a cap",
+        "beard": ""
+      },
+      "lk_44343e9cd19bda68": {
+        "form": "woman",
+        "girth": 1,
+        "height": 2,
+        "hair": "brown-haired",
+        "top": "a blue shift",
+        "bottom": "dark trousers",
+        "head": "a kerchief",
+        "beard": ""
+      },
+      "lk_10b9a3596b6635c2": {
+        "form": "old woman",
+        "girth": 2,
+        "height": 0,
+        "hair": "grey-haired",
+        "top": "a brown coat",
+        "bottom": "a grey skirt",
+        "head": "",
+        "beard": ""
+      }
+    },
+    "pool": [
+      "lp_3b2dea98def54c12",
+      "lp_20070a8396da32be",
+      "lp_bd8b7e869f1e38a1"
+    ]
   }
 }

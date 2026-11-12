@@ -377,6 +377,7 @@ fn dump(
         "grid": verbs.grid.as_ref().map(|g| serde_json::json!({"skill": g.skill, "title": g.title, "sel": g.sel,
             "cells": g.cells.iter().map(|c| serde_json::json!({"product": c.product, "item": c.item, "label": c.label, "allowed": c.allowed, "reason": c.reason, "detail": c.detail, "rows": c.rows})).collect::<Vec<_>>()})),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
+        "looks": extra.looks_json(),
     });
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
         Ok(()) => info!("ui: state written to {}", path.display()),
@@ -458,10 +459,20 @@ pub struct DumpExtra<'w, 's> {
     edge: Option<Res<'w, crate::sightedge::SightEdge>>,
     mouths: Option<Res<'w, crate::mouth::Mouths>>,
     film: Res<'w, crate::post::Film>,
+    live: Option<Res<'w, crate::live::Live>>,
     shine: Res<'w, crate::style::HairShine>,
 }
 
 impl DumpExtra<'_, '_> {
+    /// Each person drawn: the look key it was drawn from (docs/LOOK.md; empty for none), whether it is composed from that line or a VRoid recipe, whether a redraw for a new
+    /// look is under way, and its chips (top and bottom colours as `looks.rs` reads them).
+    fn looks_json(&self) -> Vec<serde_json::Value> {
+        let Some(live) = self.live.as_ref() else { return vec![] };
+        let mut v: Vec<_> = live.looks().map(|l| serde_json::json!({"id": l.id, "look": l.look, "composed": l.composed, "swapping": l.swapping, "chips": self.looks.colours.get(&l.id)})).collect();
+        v.sort_by_key(|x| x["id"].as_u64());
+        v
+    }
+
     fn json(&self) -> serde_json::Value {
         // The bar's slots as drawn: what each is, why it is greyed, held, refused just now.
         let slots: serde_json::Map<_, _> = self.slots.0.iter().map(|(k, v)| (k.0.clone(), serde_json::json!({"label": v.label, "key": v.key, "off": v.off, "held": v.held, "refused": v.refused.is_some(), "count": v.count, "caption": v.caption}))).collect();

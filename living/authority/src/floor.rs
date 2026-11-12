@@ -133,6 +133,7 @@ pub fn check(s: &Seed) -> Result<Option<String>, String> {
     let over: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
     sc.laws_with(&over).map_err(|e| format!("seed rules: {e}"))?;
     plan_kinds(s, &sc)?;
+    crate::look::check(s, &sc)?;
     Ok(laws)
 }
 
