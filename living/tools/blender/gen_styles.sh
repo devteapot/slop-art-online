@@ -70,10 +70,16 @@ one() {
     python3 living/tools/characters/share.py strands --shared "$shared" "$root/$item.glb" > /dev/null
   fi
   if [ "$kind" = overlay ]; then
-    # A layer in the skin's material is lit as the face is: it needs the face's forward and the type's map.
-    python3 living/tools/face_normals.py "$root/$item.glb" "$root/$item.glb" --png "$root/$item.face.png" > /dev/null
-    types=$(dirname "$root")/types
-    if [ -f "$root/$item.face.png" ] && [ -f "$types/${n%%/*}.face.png" ]; then cp "$types/${n%%/*}.face.png" "$root/$item.face.png"; fi
+    case "${n#*/}" in
+      lines|freckles)
+        # One fixed colour in a material the client draws unshaded: no shadow map goes with it.
+        rm -f "$root/$item.face.png" ;;
+      *)
+        # A layer lit as the face is needs the face's forward and the type's map.
+        python3 living/tools/face_normals.py "$root/$item.glb" "$root/$item.glb" --png "$root/$item.face.png" > /dev/null
+        types=$(dirname "$root")/types
+        if [ -f "$root/$item.face.png" ] && [ -f "$types/${n%%/*}.face.png" ]; then cp "$types/${n%%/*}.face.png" "$root/$item.face.png"; fi ;;
+    esac
   fi
   python3 living/tools/characters/outline_normals.py "$root/$item.glb" > /dev/null
   rm -rf "$log" "$tmp"

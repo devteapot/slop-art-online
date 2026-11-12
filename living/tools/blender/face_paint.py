@@ -135,6 +135,12 @@ def strands(shape, rng):
 
 # The lips' and the blush's own colours, laid over whatever skin is under them. Deeper than they
 # are to look: the client draws a face's parts unshaded, which comes out lighter than lit skin.
+# Age lines and freckles as an overlay: one deep colour each, laid over whatever skin is under it
+# with an alpha. PART_GAIN is how much lighter the client draws a face's unshaded parts than
+# lit skin; an overlay's alpha is set so that on a type's own skin it comes out as it was painted.
+LINE_PIGMENT = (0.26, 0.14, 0.12)
+FRECKLE_PIGMENT = (0.36, 0.21, 0.14)
+PART_GAIN = 1.3
 LIP_PIGMENT = (0.56, 0.16, 0.17)
 BLUSH_PIGMENT = (0.70, 0.26, 0.22)
 
