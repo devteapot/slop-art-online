@@ -86,7 +86,9 @@ def main():
     band = BANDS[row.get("band", 0)] if row else "?"
     checks["the world wears the seed's look generation"] = world["look_book"] == looks["generation"]
     checks["the player's look is the pool entry pool_pick(world seed, id, pool length) names"] = row.get("person") == pick
-    checks["its line is that entry's line for its band"] = bool(row) and looks["people"][pick].get(band) == row.get("line")
+    # A seed names a band by its name or its code ("adult" or "3").
+    entry = looks["people"][pick]
+    checks["its line is that entry's line for its band"] = bool(row) and (entry.get(band) or entry.get(str(row.get("band")))) == row.get("line")
     first = own_row(rid)
     time.sleep(1)
     again = own_row(rid)
