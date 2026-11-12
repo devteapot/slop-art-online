@@ -19,8 +19,14 @@
 //! When: a type mesh after `lookdev::convert` gives it its outline directions; a style mesh after
 //! `compose`'s first plan with it gives it outline directions and moves its greying into its
 //! second UVs. A mesh changed later would panic (Bevy's accessors `expect` the data), so nothing
-//! changes them after. `LIVING_GAME_PERF=keepmeshes` keeps every copy (to measure), and the asset
-//! view keeps them for its report.
+//! changes them after.
+//!
+//! **Off by default: `LIVING_GAME_PERF=dropmeshes` turns it on.** bevy_mod_outline 0.14 reads
+//! every outlined mesh in the main world when an outlined entity is spawned or its outline
+//! changes (`compute_outline_key`: `mesh.morph_targets()`, which panics once the data is taken),
+//! and every composed mesh is outlined. Until that reads the render world's mesh instead, the
+//! facts are recorded and counted (the `assets:` line: composed meshes done and their CPU bytes)
+//! and the copies stay. The asset view keeps them for its report either way.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::VertexAttributeValues as V;
@@ -46,6 +52,10 @@ struct Store {
     facts: HashMap<AssetId<Mesh>, Arc<Facts>>,
     queue: Vec<AssetId<Mesh>>,
     dropped: usize,
+    /// Composed meshes done, and their CPU bytes (vertices, indices, morph targets): what goes
+    /// with `dropmeshes`, or would.
+    done: usize,
+    done_bytes: usize,
 }
 
 fn store() -> std::sync::MutexGuard<'static, Store> {
@@ -53,11 +63,11 @@ fn store() -> std::sync::MutexGuard<'static, Store> {
     S.get_or_init(Default::default).lock().unwrap()
 }
 
-/// Whether composed meshes give up their CPU copies (not in the asset view, nor with
-/// `LIVING_GAME_PERF=keepmeshes`).
+/// Whether composed meshes give up their CPU copies: with `LIVING_GAME_PERF=dropmeshes`, never in
+/// the asset view (see the module's note on outlines).
 pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| !crate::view::enabled() && !crate::perf::has("keepmeshes"))
+    *ON.get_or_init(|| !crate::view::enabled() && crate::perf::has("dropmeshes"))
 }
 
 /// A composed person's file: a type's or a style's.
@@ -111,6 +121,14 @@ pub fn tris(id: AssetId<Mesh>, mesh: Option<&Mesh>) -> usize {
 /// The client is done changing this composed mesh: record its facts, and give up its CPU copy at
 /// the end of the frame ([`drop_copies`]).
 pub fn done(id: AssetId<Mesh>, mesh: &Mesh) {
+    if !readable(mesh) {
+        return;
+    }
+    {
+        let mut s = store();
+        s.done += 1;
+        s.done_bytes += mesh.get_vertex_buffer_size() + mesh.get_index_buffer_bytes().map_or(0, |b| b.len()) + mesh.morph_targets().map_or(0, |t| t.len() * std::mem::size_of::<bevy::mesh::morph::MorphAttributes>());
+    }
     if !enabled() {
         return;
     }
@@ -120,9 +138,11 @@ pub fn done(id: AssetId<Mesh>, mesh: &Mesh) {
     s.queue.push(id);
 }
 
-/// Composed meshes handed to the render world alone, this session.
-pub fn dropped() -> usize {
-    store().dropped
+/// Composed meshes handed to the render world alone this session; composed meshes done and their
+/// CPU bytes (the `assets:` line).
+pub fn counts() -> (usize, usize, usize) {
+    let s = store();
+    (s.dropped, s.done, s.done_bytes)
 }
 
 /// Give up the CPU copies of the meshes [`done`] this frame; forget the facts of meshes freed.
