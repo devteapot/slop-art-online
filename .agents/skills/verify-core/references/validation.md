@@ -1,6 +1,19 @@
 # Core validation record
 
+## 2026-11-12 doing-percept: what someone is visibly doing (Spark)
 
+Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-doing-052655`.
+
+- `doing_seen` (new): 10 PASS, 1 XFAIL. Field on (near ring 0.5 m): W's routine dodged A's attack 367 ms into its 650 ms windup (second half), not before; B's attack from behind was not dodged. All round: dodged 383 ms in, A's blow `missed`, W's scene `{"is": "attack", "phase": "about to release", "at": "you"}`. Far overlay (past 3 m): F's guard 5 m off triggered the routine, listed as "someone too far away to make out" with `{"is": "block", "phase": "holding"}`; G's guard 14 m off did not. XFAIL (a product finding): with the field on the dodge was broken off 66 ms in (the dash turned W's back on A) and the blow landed. A first attempt failed the scene check only: a landed blow's "is attacking you!" request overwrote the `think`'s scene; the check moved to the all-round probe.
+- After merging main `dd2c8569` (`core-doingm-055405`): `far` failed once: F's held guard happened to face W, so the scene said `"at": "you"` (a guard's `at` follows its drawn aim; correct). The check now allows `at: you` there; `core-doingm2-055606`: 10 PASS, 1 XFAIL. `just living-check` passes on the merged head.
+- `doing_cost` (new, a measurement): 100 spear fighters; `brain.doing` p50 0.068 ms, p99 0.151 ms, 64 ms/s at about 1,000 evaluations a second; tick p99 9.2 ms (9.5 ms in the `threatened` window). docs/PERCEPTION.md, "What someone is visibly doing".
+- Cargo: `doing::tests` (5), `normalize::tests::doing_reads_what_someone_visibly_does`, `perception::doing_tests` (3); authority lib 23, mind 105; `just living-check` passes.
+- Not run: the other baseline scenes (`fov`, `sight` and `doing` read `perception.rs` too; their paths are unchanged), speech, town, rhythm, lives.
+
+
+## 2026-11-12 fix-missile-told: a missile is told as a shot (Spark)
+
+Branch `fix-missile-told` from `ee8790f4`, the trial service `slop-trials-stdb`. `scenes.py outcomes` on `core-missile-052008` (default seed): 16/16, and 16/16 again after merging main `dd2c8569` (`core-missile2-054023`), its new `missiles_told` 4/4: the target "A stranger shot you with an arrow: hit for 8" (subject the archer), the witness "A stranger shot a stranger with an arrow", the far target 19 m off "An arrow struck you from somewhere you could not see: hit for 8" (subject 0), no line saying "attacked" or a name. Cargo `a_missile_is_called_what_its_skill_says`.
 ## 2026-11-12 owner-known: whose a thing is, and the public land row (Spark)
 
 Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `scenes.py owners` on a plan-test run, `core-owner4-050536`: 9/9 (the public land row carries none of the seed's 4 lot, 7 spot or street names and is no bigger than `land_plan`'s; a newcomer at a household's house is told "house" with no `by`/`home_of` and never the owner's name; the owner is told it is its own; a community member is told "Bryn Wren"). Cargo: `land::tests::public_params_build_the_same_land` (equal digests, lots and props for Cullet and plan-test; size bound on floor-megacity too). `just living-check` exit 0. In place: main's module published fresh on `verify-client-ownmig-044011`, then owner-known over it with `--keep-data`: `Creating table land_plan`, the scrub at `install_script`, characters, structures and land digests unchanged.

@@ -9,6 +9,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - A strike shows its windup (`fighter.act` equals the strike's `skill_card.code`), releases, deals damage, and the player perceives `RELEASE` and `HIT` with the amount; the target's band is public, its health is not.
 - A blow does its full damage (no hurt or kill mode since 2026-11-09, docs/COMBAT.md "One damage rule"): scene `kill` strikes a resident past 40% and 10% of its health, and the strike that exceeds its health kills it (use outcome `killed <name> (<n>)`, `HIT` with the amount, `character.alive = false` with cause `killed by <the player as the victim knew them>`: the player's name only with an `acquaintance` row (an introduction), else `killed by a stranger`; a `chronicle` `killing` row with real names).
 - A bow shot launches a missile that strikes the first body on its path (`LAUNCH`, `IMPACT`, damage); the arrow is spent.
+- **Shot, as a mind is told it** (fix-missile-told; docs/PERCEPTION.md "A missile is told as a shot"): scene `shot`. A resident 6 m off with a clear line shoots the player: `my_experience` holds "A stranger shot you with an arrow: hit for N" (subject the shooter, never "attacked") and `my_combat`'s hit names the shooter. A resident 18-20 m off (past sight, within the bow's 22 m) looses at the player's spot: "An arrow struck you from somewhere you could not see: hit for N" (subject 0), and `my_combat`'s impact and hit carry actor 0 (`Seen::far_actor`). No unseen shooter's id in the player's rows (fix-unseen-killer-id): `my_vitals.hurt_by` is the near archer after its hit and 0 after the far one; the far archer then shoots until the player dies: `my_act_outcomes`' death row has `other` 0, `my_combat`'s death `target` 0, the line "You were killed by an arrow from someone unseen.", while the chronicle's `killing` keeps the archer; after a rejoin the near archer shoots the player dead and both carry its id. The player rejoins after each death. Admin reducers: `place_at`, `grant_items` (a bow and arrows for the residents), `set_behavior`, `join`.
 - **The outcome of one's own move, as a mind is told it** (the `force_outcomes` law, docs/COMBAT.md "The outcome of one's own blow or shot"; since 2026-11-11, branch `mind-act-outcome-far`): after scene `strike` the player's `my_experience` holds "You finished: strike → … hit for N" with its `my_act_outcomes` row (kind `own`, skill `strike`, ok, code `done`); after scene `bow`, "You finished: bowshot → … struck …: hit for N" with its row. Read as the admin, every such line in `experience` and every such row in `act_outcome` belongs to the player's character only (`told` in `combat.py`).
 - A fire bolt burns the creature it meets.
 - A guard facing the blow blocks it (`BLOCKED`, reduced); facing away, the blow lands in full; letting go ends it.
@@ -29,7 +30,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 V=.agents/skills/verify/scripts/verify.py; R=player-combat-$(date +%m%d-%H%M%S)
 $V launch --run $R --seed island && $V doctor --run $R
 $V player --run $R join Tester
-.agents/skills/verify-player/scripts/combat.py --run $R [--scene strike,kill,bow] [--fresh]
+.agents/skills/verify-player/scripts/combat.py --run $R [--scene strike,kill,bow,shot] [--fresh]
 $V cleanup --run $R
 ```
 
