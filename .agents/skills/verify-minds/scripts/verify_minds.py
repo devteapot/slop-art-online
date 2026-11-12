@@ -1589,10 +1589,11 @@ def health_seen_case(run):
 
 @case('animals')
 def animals_case(run):
-    """Cheaper animal minds (LIVING_ANIMAL_MINDS=salient,choose,pack; mind/animal.rs): one deer
-    picks one of a few options in one call and the graph built from it is installed; the deer it
-    sees reuse that decision without a call (pack); asked again with nothing new, it lives by
-    instinct without a call (salient)."""
+    """Cheaper animal minds (LIVING_ANIMAL_MINDS=salient,choose; mind/animal.rs): each deer of a
+    herd decides on its own, in its own `choose` call, and the graph built from its own pick is
+    installed; `pack` in the switch list (retired 2026-11-12, docs/PACK_MIND.md: one animal's
+    decision copied to the others it saw was shared hidden state) changes nothing; asked again
+    with nothing new, the lead lives by instinct without a call (salient)."""
     run.harness('launch')
     run.harness('doctor')
     person = next(p for p in sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id']) if p['alive'] and p['stage'] == 2)
@@ -1607,6 +1608,7 @@ def animals_case(run):
         run.admin('place_at', d, at['x'] + (i % 2), at['y'] + (i // 2))
     time.sleep(1.0)
     models = model(run, {})
+    # `pack` is passed on purpose: it is retired and must not make one deer decide for another.
     run.start(models, deer, extra_env={'LIVING_ANIMAL_MINDS': 'salient,choose,pack', 'LIVING_ANIMAL_PACK_S': '120'})
     detail = lambda t: json.loads(t['detail']) if t['detail'] else {}
     # A mind's install counts as having just thought: within its species' think_min_s (240 s)
@@ -1617,16 +1619,21 @@ def animals_case(run):
     ask(lead, 'animal-lead')
     first = run.wait(lambda: [t for t in run.thoughts(lead, 'lead-thoughts') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'choose'], 'a chosen option', 60)[0]
     d0 = detail(first)
-    assert d0['valid_pick'] and len(d0['options']) >= 3 and set(d0['pack']) >= set(rest), d0
+    assert d0['valid_pick'] and len(d0['options']) >= 3 and 'pack' not in d0, d0
     brain = run.sql(f'SELECT * FROM brain WHERE id = {lead}', 'lead-brain')[0]
     assert brain['source'] == 'mind' or d0['options'][d0['pick']].startswith('carry on'), brain
     for d in rest:
         ask(d, 'animal-member')
-    shared_ = {d: run.wait(lambda d=d: [t for t in run.thoughts(d, f'member-{d}') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'pack'], f'pack decision for {d}', 60)[0] for d in rest}
-    assert all(detail(t)['by'] == lead for t in shared_.values())
+    # Each of the others decides on its own: its own `choose` thought, never one made by the lead.
+    own = {d: run.wait(lambda d=d: [t for t in run.thoughts(d, f'member-{d}') if t['kind'] == 'deliberate' and detail(t).get('mode') == 'choose'], f'own decision for {d}', 90)[0] for d in rest}
+    for d in deer:
+        copied = [t for t in run.thoughts(d, f'copied-{d}') if detail(t).get('mode') == 'pack' or detail(t).get('by') not in (None, d)]
+        assert not copied, (d, copied)
     chosen = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']
     compiled = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
-    assert len(chosen) == 1 and not compiled, (len(chosen), len(compiled))
+    assert len(chosen) == 3 and not compiled, (len(chosen), len(compiled))
+    # No prompt tells an animal that others will do what it picks.
+    assert not any('Your pack' in json.dumps(e) for e in chosen), 'a choose prompt still speaks for a pack'
     # The lead asked again with nothing new, once its thinking throttle (240 s after its chosen
     # option) has passed (since 2026-11-11 no dawn broadcast skips it). Wolves that would come
     # into view meanwhile are news; the scene removes those that range near the herd.
@@ -1638,8 +1645,9 @@ def animals_case(run):
     time.sleep(max(0.0, (first['at_ms'] + 245_000) / 1000 - time.time()))
     ask(lead, 'animal-again')
     run.wait(lambda: any(t['kind'] == 'instinct' for t in run.thoughts(lead, 'lead-again')), 'a request answered by instinct', 60)
-    assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 1, 'nothing new: no call'
-    return {'status': 'pass', 'lead': lead, 'pick': d0['options'][d0['pick']], 'weight': d0.get('weight'), 'members': rest, 'model_calls_for_three_deer': 1}
+    assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 3, 'nothing new: no call'
+    return {'status': 'pass', 'lead': lead, 'pick': d0['options'][d0['pick']], 'weight': d0.get('weight'), 'members': rest,
+            'own_decisions': {d: detail(t).get('pick') for d, t in own.items()}, 'model_calls_for_three_deer': 3}
 
 
 @case('night')

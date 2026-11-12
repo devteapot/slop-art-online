@@ -24,6 +24,7 @@ the runner never publishes or deletes anything else. Evidence: .local/living/tri
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -1236,8 +1237,14 @@ class Instance:
             n = max(1e-6, (vx * vx + vy * vy) ** 0.5)
             p = (p[0] + vx / n * a["distance"], p[1] + vy / n * a["distance"])
         dx, dy = a.get("offset", (0, 0))
-        # Members of a group stand a little apart.
-        p = (p[0] + dx + 1.5 * member, p[1] + dy + 0.8 * member)
+        if "spread" in a:
+            # Each member at its own offset from the point (a formation: docs/PACK_MIND.md, the
+            # arena's starts), in order; past the list's end, the last offsets again.
+            sx, sy = a["spread"][min(member, len(a["spread"]) - 1)]
+            p = (p[0] + dx + sx, p[1] + dy + sy)
+        else:
+            # Members of a group stand a little apart.
+            p = (p[0] + dx + 1.5 * member, p[1] + dy + 0.8 * member)
         return (min(max(p[0], 3), w - 3), min(max(p[1], 3), h - 3))
 
     # -- the script
@@ -1327,7 +1334,9 @@ class Instance:
             elif kind == "structure":
                 self.call("place_structure", actor, s["kind"])
             elif kind == "background":
-                self.call("set_background", actor, json.dumps(s["background"]))
+                # Compact, as the seed writes it: the authority reads a pack's `"bold":true` from
+                # the text itself (act.rs), so `"bold": true` would never take effect.
+                self.call("set_background", actor, json.dumps(s["background"], separators=(",", ":")))
             elif kind == "kill":
                 self.call("kill", actor, s.get("cause", "trial"))
             elif kind == "clear_routines":
@@ -1618,6 +1627,54 @@ class Instance:
             for r in sorted(self.rows(f"SELECT * FROM audience WHERE id > {self.cursor['audience']}"), key=lambda r: r["id"]):
                 self.cursor["audience"] = max(self.cursor["audience"], r["id"])
                 self.emit("audience", {"t": self.t(), **r})
+
+    def watch_bodies(self, spec):
+        """`record.bodies` ({"hz": 5}): every member of every role, `hz` times a second, to
+        `bodies.jsonl` (docs/PACK_MIND.md, the arena): position projected to the sample time
+        along its row's motion (to `next_ms`), facing (heading and held look, with their turns,
+        as `common::facing_at`), `running`, alive, the fighter row (band, move code, start,
+        release, end, target) and the activity (skill, creature target). Read-only, on its own
+        thread, until the instance stops. Also ends the run (`stopped_by` "side down") when a
+        role listed in `trial.end.side_down` has had no living member for `end.after_s` (30)."""
+        hz = float(spec.get("hz", 5)) if isinstance(spec, dict) else 5.0
+        end = self.trial.get("end", {})
+        down_roles, after_s = end.get("side_down", []), float(end.get("after_s", 30))
+        down_since = {}
+        ids = sorted({i for ids in self.roles.values() for i in ids})
+        if not ids:
+            return
+        where = " OR ".join(f"id = {i}" for i in ids)
+        (self.dir / "arena.json").write_text(json.dumps({"trial": self.trial["name"], "variant": self.variant, "replicate": self.rep,
+                                                         "arena": self.trial.get("arena", {}), "roles": self.roles, "end": end}, indent=1))
+        while not getattr(self, "_bodies_stop", False):
+            tick = time.time()
+            try:
+                now = self.now_ms()
+                chars = self.rows(f"SELECT id, alive, cause FROM character WHERE {where}")
+                alive = {c["id"]: c["alive"] for c in chars}
+                out = {}
+                for b in self.rows(f"SELECT * FROM body WHERE {where}"):
+                    dt = max(0.0, (min(now, b["next_ms"]) - b["t_ms"]) / 1000)
+                    head = b.get("heading") or 0.0
+                    head += (b.get("turn") or 0.0) * min(dt, b.get("turn_s") or 0.0)
+                    face = head + (b.get("face_off") or 0.0) + (b.get("face_turn") or 0.0) * min(dt, b.get("face_turn_s") or 0.0)
+                    out[str(b["id"])] = [round(b["x"] + b["vx"] * dt, 2), round(b["y"] + b["vy"] * dt, 2), round(math.atan2(math.sin(face), math.cos(face)), 3), bool(b.get("running"))]
+                fighter = {str(f["id"]): [f["band"], f["act"], f["act_ms"], f["release_ms"], f["until_ms"], f["target"]] for f in self.rows(f"SELECT * FROM fighter WHERE {where}")}
+                act = {str(a["id"]): [a["skill"], a["target"][1] if isinstance(a.get("target"), list) and a["target"] and a["target"][0] == 3 else 0]
+                       for a in self.rows(f"SELECT * FROM activity WHERE {where}")}
+                hp = {str(v["id"]): [round(v["hp"] + v.get("hp_rate", 0.0) * max(0.0, (now - v["at_ms"]) / 60000), 2), v["max_hp"], round(v["hunger"], 1)]
+                      for v in self.rows(f"SELECT * FROM vitals WHERE {where}")}
+                self.emit("bodies", {"t": self.t(), "ms": now, "b": out, "hp": hp, "dead": {str(c["id"]): c.get("cause", "") for c in chars if not c["alive"]}, "f": fighter, "act": act})
+                for r in down_roles:
+                    if not any(alive.get(i) for i in self.roles.get(r, [])):
+                        down_since.setdefault(r, time.time())
+                        if time.time() - down_since[r] >= after_s:
+                            self.side_down = r
+                    else:
+                        down_since.pop(r, None)
+            except Exception as e:  # a failed read is a gap in the samples, not a failed run
+                self.emit("events", {"t": self.t(), "bodies_error": str(e)[:200]})
+            time.sleep(max(0.0, 1.0 / hz - (time.time() - tick)))
 
     def stop_mind(self):
         if self.mind and self.mind.alive():
@@ -1962,6 +2019,8 @@ class Instance:
         self.status = "starting"
         self.run_phase("start")
         self.t0 = time.time()
+        if self.trial.get("record", {}).get("bodies"):
+            threading.Thread(target=self.watch_bodies, args=(self.trial["record"]["bodies"],), daemon=True).start()
         self.start_mind()
         if self.trial.get("human"):
             self.human = threading.Thread(target=self.player.session, args=(self.trial["human"],), daemon=True)
@@ -2016,6 +2075,8 @@ class Instance:
                 self.stopped_by = f"mind exited ({self.mind.exit_code() if self.mind else None})"
             elif self.shared.get("abort"):
                 self.stopped_by = "aborted"
+            elif getattr(self, "side_down", None):
+                self.stopped_by = f"side down: {self.side_down}"
             if self.stopped_by or time.time() - last_save > 30:
                 self.save()
                 last_save = time.time()
@@ -2023,6 +2084,7 @@ class Instance:
                 break
             time.sleep(max(0.0, (getattr(self.opts, "sample_s", None) or SAMPLE_S) - (time.time() - tick)))
         self.status = "collecting"
+        self._bodies_stop = True
         self.stop_mind()
         self.read_journal()
         if life:
@@ -2036,6 +2098,8 @@ class Instance:
         try:
             if resume:
                 self.restore()
+                if self.trial.get("record", {}).get("bodies"):
+                    threading.Thread(target=self.watch_bodies, args=(self.trial["record"]["bodies"],), daemon=True).start()
                 if (not self.mind or not self.mind.alive()) and self.shared["variants"][self.variant].get("mind") is not False:
                     self.start_mind()
                 self.loop()

@@ -96,10 +96,10 @@
   }
  },
  "animal-switches": {
-  "about": "Default with LIVING_ANIMAL_MINDS=pack,salient,choose: one mind per pack, think on salient change, one-call choice from a menu (docs/MIND_HARNESS.md item 3).",
+  "about": "Default with LIVING_ANIMAL_MINDS=salient,choose: think on salient change, one-call choice from a menu (docs/MIND_HARNESS.md item 3). Until 2026-11-12 also `pack` (one animal's decision copied to the others it saw), retired as shared hidden state (docs/PACK_MIND.md).",
   "models": {},
   "env": {
-   "LIVING_ANIMAL_MINDS": "pack,salient,choose"
+   "LIVING_ANIMAL_MINDS": "salient,choose"
   }
  },
  "greet-control": {

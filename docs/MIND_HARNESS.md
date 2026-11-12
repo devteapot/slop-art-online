@@ -6,7 +6,7 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 | --- | --- | --- | --- |
 | 1. Model mixes | per-purpose and per-stage model choice; effort per purpose | `mixes` in `models.json` | defined; Brandholm uses `deepseek-people` |
 | 2. Sleep at night | purpose `reorganize`; night scheduling; night batches, uploaded above 2.4 MB | `LIVING_REORGANIZE` | `night-batch` |
-| 3. Cheaper animal minds | pick among built options; one mind per pack; think on salient change | `LIVING_ANIMAL_MINDS` | off |
+| 3. Cheaper animal minds | pick among built options; think on salient change (one mind per pack retired 2026-11-12) | `LIVING_ANIMAL_MINDS` | off |
 | 4. Jev judgments | `judged` graph condition; background refresh through TypeSafe | `LIVING_JEV` | off |
 | 5. Recall budget | token budget on recalled lines; no repeated `rel` property | `LIVING_RECALL_TOKENS` | `decide=800` |
 | 6. Rethink gate | a fast judge (Jev, or a cheap LLM) in front of non-urgent deliberations decides when the slow mind thinks | `LIVING_RETHINK` (`jev`, `llm`) | off |
@@ -101,7 +101,7 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 ## 3. Cheaper animal minds
 
 **Built** ([animal.rs](../living/mind/src/mind/animal.rs)). Three switches in `LIVING_ANIMAL_MINDS`, any combination:
-- **(a) `pack`:** the animal that thinks decides for the others of its kind it sees. For `LIVING_ANIMAL_PACK_S` (60 s), their requests reuse that decision without a call, each weighed by its own temperament (0.6× to 1.4× by the trait that drives the option).
+- **(a) `pack` (retired 2026-11-12):** the animal that thought decided for the others of its kind it saw: for `LIVING_ANIMAL_PACK_S` (60 s) their requests reused that decision without a call, each weighed by its own temperament. The others perceived nothing of it, so it was shared hidden state, and it was removed ([pack mind](PACK_MIND.md#14-minds)); the word in `LIVING_ANIMAL_MINDS` is now ignored with a warning, and verify-minds `animals` checks that each animal of a herd makes its own `choose` call. The measurements below are kept as history.
 - **(b) `salient`:** the animal thinks only on a salient change since its last thought: a new kind of creature seen or smelled, being attacked or threatened, a wound band crossed, a death among its kind, or hunger crossing a band. Otherwise the request is answered by instinct, with no call.
 - **(c) `choose`:** one call, not two. The model picks a numbered option built from the scene and the species' skills (carry on; flee from, hunt or attack the nearest other creatures; keep close to its kind; rest; roam; signal), with a strength. The graph comes from a template, so it is valid by construction, and it still goes through `from_value_for` and `mind_install`.
 - **The rules are not touched.**
