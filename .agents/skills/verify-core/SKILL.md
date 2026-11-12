@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, building as recipes, tools on recipes, the carry count, the goods audit, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing, and the breath and focus they cost), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), first sights in a crowd, what a graph's "stranger" means (the stranger_by_name law), steering (and running, for every controller), breath, tiredness and focus (`pools`, `walk_base`), fight length (`fights`, `chase`), deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, building as recipes, tools on recipes, the carry count, the goods audit, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing, and the breath and focus they cost), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), first sights in a crowd, what a graph's "stranger" means (the stranger_by_name law), steering (and running, for every controller; movement intents: keep_distance, close_in, circle, back_off, follow), breath, tiredness and focus (`pools`, `walk_base`), fight length (`fights`, `chase`), deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -51,6 +51,9 @@ python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
 python3 "$C/scenes.py" fights --run "$R" > "$E/fights.txt" 2>&1
 python3 "$C/scenes.py" chase --run "$R" > "$E/chase.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
+# Movement intents: band, close in, circle, back off, follow, out of sight, refusals (features/steering.md, about 3 min), and their cost on the tick.
+python3 "$C/scenes.py" intents --run "$R" > "$E/intents.txt" 2>&1
+python3 "$C/scenes.py" intents_cost --run "$R" > "$E/intents_cost.txt" 2>&1
 # Another's health in fight reports and health_of: the band, exact only while appraised (features/combat.md).
 python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).

@@ -688,7 +688,7 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
     }
     // A guard is held until let go, at most as long as the rules allow.
     let qty = shape.hold_ms;
-    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), (0, 0), None, now) {
+    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), (0, 0), None, Default::default(), now) {
         Ok(()) => Ok(()),
         Err(why) => {
             // Nothing started, so the walk under way simply goes on.
