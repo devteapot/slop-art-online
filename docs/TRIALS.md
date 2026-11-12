@@ -907,6 +907,8 @@ Rough estimate: 2 arms × 3 × 10 h × about 15 thinkers × $0.13 ≈ **$120**, 
 - whether provided's roof condition stays: as written it refuses where minds actually decide;
 - the owner's decision on kin.
 
+**Decided (2026-11-12).** The roof rule, `hamlet-provided`'s `conceive_roof` refusal of conception without shelter, is **rejected** and dropped from future arms. It was a hard refusal of a life choice, and the owner's rule is that life choices get no hard-coded refusals. Shelter may matter as a consequence, such as cold or a sick infant, but never as a refusal. No kin rule or norm is added either: the next batch tests a larger seed first ([births 2](#births-2-a-larger-hamlet-2026-11-12)).
+
 ### What this batch does not show
 
 - The spread between replicates. Every number above is one run.
@@ -914,6 +916,148 @@ Rough estimate: 2 arms × 3 × 10 h × about 15 thinkers × $0.13 ≈ **$120**, 
 - A causal account of why the run-born did not conceive. Their prompts and plans suggest craft-learning and having no partner came first. That is a reading of the journals, and the models' stated plans are not proof of cause.
 - Whether the food gate would bind in a leaner world. Here it refused once.
 - Performance. The trial service carried four worlds. Tick timings were not examined.
+
+## Births 2: a larger hamlet (2026-11-12)
+
+Branch `births-2-prep`. Status: **built and proved with fake minds only** (`b2f` and `b2g`, below). Nothing paid has run.
+
+**Why.** In [bi1](#births-batch-bi1-2026-11-12) no world kept its numbers and no one born in the run had a child. Close kin paired: Sefa and Lio, sister and brother, in two worlds, and Wenna and her brother-in-law Cal. The minds knew the kinship. The seed left little choice: twelve people in four households, and at the Reeds' first attempts one or two unrelated, unpaired adults. The general coordinator decided: no kin rule or norm for now; test a larger seed first. The roof rule is rejected ([the decision](#recommendation)), so there is no provided arm.
+
+### The seed
+
+[`hamlet-6`](../living/seeds/hamlet-6.json) is [`hamlet`](../living/seeds/hamlet.json) (itself from [`authored-test`](../living/seeds/authored-test.json)) with four more households, twelve more people. It keeps the hamlet's map, its two settlements, its twelve people and their tensions, its day and its laws (`day_minutes` 48, `laws_file` `worlds/cullet/laws.rhai`, `year_days` 4, `life_pace` 0.0357). Under Cullet's `life_years` a life is 90 years, 617 real minutes. A year of age is 6.9 minutes. One is an adult from 15 years, an elder from 59.5 years, and dies of old age between 75 and 90 years. There is no roof rule, no food rule and no kin rule: `conceive_check` is the shipped one. The hamlet's facts are seed data (sheets, households, stores, resources), not laws.
+
+The old twelve gain a few ties to their new neighbours. Sefa's narrative no longer says everyone in Reedmouth is her family or her uncle's rival. The new households:
+
+| Id | Who | Age | Household (settlement) | Adult at (min) | Dies of old age at (min) |
+| ---: | --- | ---: | --- | ---: | ---: |
+| 9 | Gerd Tarn, weaver, widower | 46 | tarn (Millbrook) | adult | 301 |
+| 10 | Ansel Tarn, his son | 21 | tarn | adult | 420 |
+| 11 | Wren Tarn, his daughter | 13 | tarn | 14 | 507 |
+| 12 | Dagny Tarn, his daughter | 4 | tarn | 75 | 533 |
+| 13 | Sabine Orme, healer, widow | 33 | orme (Millbrook) | adult | 358 |
+| 14 | Tam Orme, her son | 5 | orme | 69 | 539 |
+| 19 | Bram Ashby, fisher | 43 | ashby (Reedmouth) | adult | 242 |
+| 20 | Hild Ashby, fisher, Bram's wife | 40 | ashby | adult | 315 |
+| 21 | Kesta Ashby, their daughter | 17 | ashby | adult | 401 |
+| 22 | Ivo Ashby, their son | 12 | ashby | 21 | 453 |
+| 23 | Nell Ashby, their daughter | 2 | ashby | 89 | 581 |
+| 24 | Fenn Mallory, builder from upriver, lives alone | 23 | mallory (Reedmouth) | adult | 429 |
+
+Ids are the seeding order. Millbrook's five households come first, so the Reeds are now 15–18 and their old-age deaths move: Wenna 307, Cal 213, Sefa 437 and Lio 498 minutes. Pim (adult at 55 minutes) and Tobin (96) keep theirs. Everyone seeded is dead of old age by about 581 minutes (9.7 h).
+
+**Candidates per generation.** The table counts candidates the way `births_report.py` does (below), assuming no births. Paired means the sheets' three couples, Oren+Ilsa, Brisk+Edda and Bram+Hild. A candidate is an unrelated, unpaired adult. For the hamlet at the same moments: 4 unpaired of 8 adults and 2.8 candidates per adult at 0 minutes, 5 of 9 and 3.0 at 60, 6 of 10 and 3.9 at 120.
+
+| Minute | Adults | Unpaired | Candidates per adult | Unpaired adults |
+| ---: | ---: | ---: | ---: | --- |
+| 0 | 15 | 8 | 6.9 | Mara 25, Ansel 21, Sabine 33, Wenna 37, Cal 52, Sefa 19, Kesta 17, Fenn 23 |
+| 60 | 18 | 11 | 9.1 | + Wren, Ivo, Lio, Pim (Cal is an elder from 51) |
+| 120 | 20 | 15 | 12.7 | + Dagny, Tam, Nell, Tobin |
+| 240 | 12 | 12 | 9.8 | the seeded children, Ansel, Sefa, Kesta, Fenn |
+| 300 | 8 | 8 | 6.5 | Pim, Tobin, Wren, Dagny, Tam, Lio, Ivo, Nell |
+| 360 | 4 | 4 | 3.0 | Tobin, Dagny, Tam, Nell |
+| 420 | 0 | 0 | 0 | every seeded person is an elder or dead |
+
+Seeded children come of age at 14, 21, 34, 55, 69, 75, 89 and 96 minutes, from six households. So the first run-born children, adult 103 minutes after birth, overlap the youngest seeded adults until about 400 minutes. After that the run-born have only each other. The old twelve keep their kin: Wenna and Ilsa are sisters, so Wenna is aunt to Pim; Cal is uncle to Sefa and Lio (their late father's brother, by the sheets); Pim is cousin to Sefa and Lio, which is not close kin.
+
+**Food and houses** (verify-generation, `generation-hamlet6-20261112-061500`, 99 of 99 checks). There are 8 houses, one per household, 2 stores and 2 campfires. Within 24 m of the two squares are 38 and 32 berry bushes and 3 and 7 fishing spots; the hamlet had 31 and 22, and 2 and 7. The settlements promise more (`resources` 12 bushes and 3 spots in Millbrook, 6 and 7 in Reedmouth). Stores start with 30 berries, 10 cooked fish and 16 wood in Millbrook, and 12 berries, 8 cooked fish and 10 fish in Reedmouth. Food at the start, in stores and packs, is 153 portions for 24 people. In bi1 the stores grew in every world. Twice the people on about 1.5 times the bushes is a leaner world, but no one should starve for want of bushes or fish.
+
+### Trials
+
+- [`hamlet-6`](../living/trials/hamlet-6.json) (control) and [`hamlet-6-longing`](../living/trials/hamlet-6-longing.json) (`longing_after_min` 120, `longing_food` 4, as `hamlet-longing`). There is no spaced arm and no provided arm.
+- `minutes` 600, census every 30 s, `minds.only` "all".
+- `minds.max` 48. Everyone past infancy thinks. 48 is a cost guard above the expected peak (below), not a cap meant to bind.
+
+**The runner no longer restarts the mind for every new child** (`trials.py`, `slots`/`reslot`). Before, any `minds.max` ran the mind with `LIVING_ONLY` listing the thinkers. Every newborn who became a child restarted the mind service, at most every 2 minutes, which broke off model calls and conversations for everyone. With 20–30 births that would be 20–30 restarts. Now, while everyone the mind would think for fits under the cap, the mind runs without `LIVING_ONLY` and takes up a new child itself. The runner only updates the census `thinkers` (an event `joined`, `capped` false, at most 2 minutes late). The mind is restarted when the cap starts or stops binding, or when a capped set gains someone, as before. When the hamlet's 12 binds, it behaves as it did.
+
+### Measures
+
+`births_report.py` adds the following (read-only, no model calls):
+
+- **Every conceive attempt.** That is every conceive act in deliberation and talk replies. bi1 had 36 in talk replies besides the 123 in deliberations, and `conceive_acts` still counts deliberations only. Each attempt records the actor, the target, what the target is to the actor, and its class: `partner`, `close_kin` or `other`. It also records `candidates`: the unrelated, unpaired adults alive at the census in force at that moment, other than the actor.
+  - **Kin** (`Kin`) comes from parent links (the census `parents`, seeded and run-born) and from seeded people's sheet labels, for kin the parent links miss: Cal is "uncle" to Sefa, while their father is not in the world. Close kin are parent, child, sibling, uncle or aunt, and niece or nephew. Grandparents, cousins and in-laws are named but are not close. `kin_births` now uses the same close kin. bi1's counts are unchanged (2, 0, 0, 1).
+  - **Paired** means co-parent of a child alive at that census, or a sheet's wife, husband or partner label to someone alive. That label is the only recorded agreement: the worlds keep no other. A pregnancy counts only once the child is born.
+- **Per run:** `attempts`, `to_partner`, `to_close_kin`, `close_kin_share`, `cands_at_kin` and `cands_at_all` (the mean candidates at close-kin attempts and at all attempts), and `zero_cand_attempts`. A series gives unpaired adults over adults and the mean candidates per adult every 30 minutes. Each attempt is printed; `--attempts N` limits them.
+- **The run-born generation:** how many grew up (`born_grown`), tried to conceive (`born_tried`, and toward whom, seeded or not), became parents (`born_parents`), their couples (`born_couples`, and how many of them close kin) and their births (`gen2_births`).
+
+Read back on bi1 (`--root /home/gooning/dev/slop-runs-arrive/.local/living/trials bi1`), close kin was not for want of choice. Close-kin attempts were 8 of 81 in the control, 8 of 38 in spaced, 4 of 19 in longing and 1 of 21 in provided. At those attempts the actor had a mean of 2.0, 4.4, 5.0 and 2.0 candidates. In longing, Sefa and Lio asked each other at 239–240 minutes with 5 candidates each. No run-born person tried except Uma, in provided, toward Pim. So the seed's thin choice was not the only cause. The larger seed tests whether more choice changes it.
+
+```bash
+python3 living/tools/trials.py build hamlet-6 hamlet-6-longing
+python3 living/tools/trials.py run --batch b2f hamlet-6 hamlet-6-longing --replicates 1 --minutes 10 --fake
+python3 living/tools/births_report.py --attempts 20 b2f
+python3 living/tools/trials.py clean --batch b2f
+```
+
+### Fake proof
+
+`b2f`, 2026-11-12 06:19–06:30. Fake model (default replies), 10 minutes, one replicate of each arm, on the trial service (`slop-trials-stdb`, load 30–35 from other work). The run checkout was this worktree at `b677166f`, its merge of main `49dfc2cd` (the trials-bi1 merge). The modules were `trial-hamlet-6-8a6bde48` (control) and `-f8161869` (longing).
+
+| Run | Laws guard | Thinkers (census) | Model calls (by purpose) | Calls per real minute per mind | Mind restarts |
+| --- | --- | --- | --- | ---: | ---: |
+| `hamlet-6` | passed: script row as sent, seed laws composed as the world composed them, `day_ms` 2880000 | 22 at the start, 24 by the end; Nell joined at 121 s (`joined`, `capped` false) | 493 (consolidate 161, think 146, deliberate 146, talk 40) | 2.14 | 0 (`LIVING_ONLY=all`) |
+| `hamlet-6-longing` | passed, the same | the same (Nell at 122 s) | 498 (consolidate 161, think 148, deliberate 148, talk 41) | 2.16 | 0 |
+
+The population stayed 24 → 24: 2 infants, 6 children, 15 adults and 1 elder. Nobody is due to die before Teodor at 112 minutes. No one was hungry over 50. The report gave the old-age due times in the seed table above and the candidate series' first point, 8 unpaired of 15 adults and 6.9 candidates per adult, as computed from the seed. Fake replies carry no acts, so the attempt measures were empty there.
+
+`b2g`, 06:30–06:39. A fake script ([`fake/conceive.json`](../living/trials/fake/conceive.json)) makes four people's first two deliberations decide to conceive, one toward each class. It ran `hamlet-6` for 8 minutes. The report classed all 7 attempts correctly:
+
+- Edda → Brisk, `partner` (co-parents of Tobin), 8 candidates, twice;
+- Ansel → Sefa, `other`, 7, twice;
+- Kesta → Fenn, `other`, 7, twice (the eighth decision was not reached in 8 minutes);
+- Sefa → Lio, `close_kin: sibling`, 5. That is the 8 unpaired adults less herself, her mother and her uncle.
+
+The body refused each of them, as each mind was told next: they moved away 2, no partner 2, not in sight 1, not of an age (Lio was a child) 1. So no child came of them. With no one born in the run, the run-born measures read zero. They were exercised on bi1 above (grown 9, 4, 5 and 1; Uma's two attempts toward Pim).
+
+verify-generation was rerun on the merged head `b677166f` (`generation-hamlet6-20261112-063859`): `hamlet-6` passed 99 of 99 checks and `hamlet` 63 of 63, and the original seeds were unchanged. Both batches were cleaned (`trials.py clean`).
+
+### Plan for the paid batch (not run)
+
+Two arms, `hamlet-6` (control) and `hamlet-6-longing`. Each runs 10 hours, `minds.max` 48, on glm-flash (`default`) with the capacity fallback to deepseek-flash, as bi1:
+
+```bash
+python3 living/tools/trials.py build hamlet-6 hamlet-6-longing
+python3 living/tools/trials.py run --batch b2 hamlet-6 hamlet-6-longing --replicates 2 --sample-s 5 --stagger 15
+python3 living/tools/births_report.py --stores b2
+```
+
+**Expected population.** Twenty-four people hold steady at 24 × 600 / 565 ≈ 25 births in 10 hours, about 2.5 an hour. bi1's control had 9 births from 12 people in 6 hours. That pace on twice the people is 3 an hour. Projected thinkers (alive and past infancy), from the seed's death times and births at an even pace:
+
+| Births | Peak alive | Mean thinkers | Resident-hours per run |
+| --- | ---: | ---: | ---: |
+| none (seeded only) | 24 | 15.7 | 157 |
+| 1.7 an hour for 6 h (bi1 longing's pace, doubled) | 29 | 22.5 | 225 |
+| 3 an hour for 6 h, none after (bi1 control's pattern) | 34 | 27.9 | 279 |
+| 3 an hour for 10 h (the run-born keep it up) | 34 | 30.0 | 300 |
+| 4.5 an hour for 10 h (a high case) | 45 | 37.1 | 371 |
+
+The expected peak is about 34; 48 leaves room for the high case.
+
+**Cost** at bi1's census figure, **$0.13 per resident-hour**. Take a control near 300 resident-hours and a longing run near 225, 525 for one replicate of both:
+
+| Replicates | Runs | Resident-hours | Estimate | Range (225–371 a run) |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 4 | 1,050 | **≈ $137** | $117–193 |
+| 3 | 6 | 1,575 | **≈ $205** | $175–290 |
+
+What may move it:
+
+- **More people in each scene.** Fake minds called 2.14 times a real minute per mind here against 1.80 on the hamlet (`hm2`). If paid calls scale the same way, add about a fifth: about $163 or $244.
+- **The sleeper fix.** In bi1, 30–34% of deliberations came from sleepers. `fix-sleep-thinking` would lower that, but it is not on main as of 2026-11-12 06:40, so it was not measured. Rerun one 10-minute fake run of `hamlet-6` on a build with it and compare its deliberations per resident-hour (here 146 in 10 minutes for 22.9 thinkers, 38 an hour) before pricing the batch again.
+- **Provider capacity.** bi1 overflowed 26% of glm-flash calls on capacity with 48 minds in four worlds. This batch puts about 120–140 minds on the service at once (4–6 worlds), so expect more overflow to deepseek-flash. That changes the price mix and the models' mix between worlds. A `--stagger` spreads only the start.
+
+Recommendation: 2 replicates first, about $137 (to about $190). A third pair is worth adding only if the two disagree on whether the run-born have children.
+
+Switches in the fake proofs, to record again with the paid batch: greeting `nearest` and parking `concurrent` (the defaults; `LIVING_GREET` and `LIVING_PARK` unset), skill timings on (`LIVING_SKILL_TIMINGS` unset), the `force_outcomes` law true, and the `meters()` alarm levels in the build. There are no newcomer laws and no roof, food or kin rule.
+
+**SpacetimeDB.** Nothing here adds or changes a table, reducer, view or subscription. The census is the same SQL read of four small tables every 30 s as in the hamlet, for a developer's audit truth. The [HTTP database API](https://spacetimedb.com/docs/http/database/) (checked 2026-11-11) calls that endpoint intended for management and debugging, not a game data path. At 24–45 characters the reads stay small.
+
+### Not covered
+
+- Fake minds do not choose to conceive, so nothing here says whether the larger seed changes whom minds choose. `b2g`'s attempts are scripted.
+- No tick timings or mind memory were examined. The trial service carried other work.
+- The candidate count is a count, not a measure of who met whom. Two settlements a short walk apart still decide who sees whom, and names cross settlements only through the seeded ties.
+
 
 ## The greeting trial (2026-11-11)
 

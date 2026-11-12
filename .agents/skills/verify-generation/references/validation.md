@@ -102,6 +102,10 @@ After merging main `fd2030c` (rules-1), with the hamlet on Cullet's day (`day_mi
 
 After merging main `7837320`: `generation-hamlet-20261111-160615`, `hamlet` 61 of 61, original seeds unchanged.
 
+## 2026-11-12 the hamlet-6 seed (births-2-prep, Spark)
+
+Worktree branch `births-2-prep`, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`). `generation.py --feature worlds --seeds hamlet-6` (`generation-hamlet6-20261112-061500`, main `2ff786aa` with trials-bi1) passed `hamlet-6` with 99 of 99 checks: 24 authored residents in two settlements (14 and 10), 8 households and 8 houses, sheets, parents (one parent for Wren, Dagny, Tam, Sefa and Lio), promised fishing spots and berry bushes, no animals. After merging main `49dfc2cd`, `generation-hamlet6-20261112-063859` passed `hamlet-6` 99 of 99 and `hamlet` 63 of 63, and the original seeds were unchanged.
+
 ## 2026-11-11 plan-2: Cullet's plan, authored relief, plan resources (dev-box)
 
 Branch `plan-2` (from the plan-1 merge `bcbde99d`), own container `plan2-stdb` (2.14.1, port 3314, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. A maintain pass of this skill ran with it: a source reader each for [plans](../features/plans.md) and [seeded-world](../features/seeded-world.md) (the features the change touched; plan-1's pass earlier the same day covered the rest), then every feature driven live. Drift fixed: the `cullet` seed and the authored resources and relief in plans, seeded-world and SKILL.md; the seed-test count (seven); the people-less town's checks.
