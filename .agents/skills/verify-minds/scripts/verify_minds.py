@@ -1860,7 +1860,7 @@ def sissly_scene_case(run):
        7 s by the fake model) installs a plan whose first node says "Verify stale …" to S.
        Meanwhile S asks "verify crust …?" and Sissly answers in a turn alongside, settling that
        she will bring S to the inn. That turn is her third with S.
-    3. Sissly says to S "Verify: … ask Mother first.".
+    3. Sissly says to S "Verify: … ask Mother first. Can they have the crust, Mother?".
 
     Checks: the plan's line is not said (the conversation moved on since the decision perceived
     its scene, `line_overtaken`); turn 3's prompt does not tell her to make it her last word (a
@@ -1918,7 +1918,9 @@ def sissly_scene_case(run):
     (run.directory / 'prompt-turn3.txt').write_text(turn3)
     user3 = next((str(m.get('content', '')) for e in requests() if e['purpose'] == 'talk' and 'verify crust' in sent_text(e) for m in e['body'].get('messages', []) if m.get('role') == 'user'), '')
     time.sleep(2.6)
-    say(sissly, 'Verify Agnes line: you have to ask Mother first.', s)
+    # A remark that asks nothing is answered by temperament (`answers_remarks`), for a named
+    # hearer as for an addressed one; the line also asks, so the turn does not hang on a draw.
+    say(sissly, 'Verify Agnes line: you have to ask Mother first. Can they have the crust, Mother?', s)
     try:
         run.wait(lambda: any(e['purpose'] == 'talk' and 'naming you' in sent_text(e) for e in requests()), 'a turn for Agnes', 20)
     except Exception:
