@@ -39,8 +39,8 @@ The trial file is `living/trials/gate-live.json`, which extends `strangers-2b-c`
 | Item | Per run | Runs | Total |
 |---|---:|---:|---:|
 | `gate-off-ds`: st2b's C arm ($2.49) with think moved from GLM ($0.36) to DeepSeek ($0.0019 a think, 334 thinks) | $2.77 | 3 | $8.3 |
-| `gate-jev-ds`: the same, less 15–25% of think and compile (58% of spend), plus Jev at about $0.00006 a question | $2.4–2.5 | 3 | $7.3 |
-| **Total** | | | **≈ $15.6** |
+| `gate-jev-ds`: the same, less 15–25% of think and compile (58% of spend), plus Jev's questions (price not committed) | not committed | 3 | not committed |
+| **Total** | | | **not committed** (the `gate-off-ds` arm: $8.3) |
 
 Judging (below) uses fresh Claude subagents, so it costs no API money.
 

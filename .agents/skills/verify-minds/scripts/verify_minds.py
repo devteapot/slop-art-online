@@ -1976,7 +1976,12 @@ def jev_case(run):
               'rules': [{'purpose': 'judge', 'noul': 0.9, 'times': -1}]}
     models = model(run, script)
     port = models['profiles']['local']['base_url'].split(':')[2].split('/')[0]
-    run.start(models, [defender], extra_env={'LIVING_JEV': '1', 'LIVING_JEV_URL': f'http://127.0.0.1:{port}/v1/systemone', 'TYPESAFE_API_KEY': 'fake-only'})
+    # Jev's price is never committed (living/mind/src/prices.rs): a scratch prices file with a
+    # made-up price, so the journal's cost is checked against tokens × price
+    price = 2.5
+    (run.directory / 'prices.json').write_text(json.dumps({'models': {'jev-1.14.0': {'input_usd_per_m': price}}}))
+    run.start(models, [defender], extra_env={'LIVING_JEV': '1', 'LIVING_JEV_URL': f'http://127.0.0.1:{port}/v1/systemone', 'TYPESAFE_API_KEY': 'fake-only',
+                                             'LIVING_PRICES': str(run.directory / 'prices.json')})
     run.admin('place_at', defender, at['x'], at['y'])
     run.admin('place_at', attacker, at['x'] - 1.2, at['y'])
     run.admin('set_behavior', defender, json.dumps(graph))
@@ -1989,7 +1994,10 @@ def jev_case(run):
     assert set(state) >= {'actor', 'body', 'recently_perceived'} and 'fight_risk' in asked[0]['body']['questions']
     judged = [e for e in run.exchanges() if e['purpose'] == 'judge']
     assert judged and judged[0]['judged'][0]['q'] == 'fight_risk'
-    return {'status': 'pass', 'judgments': len(judged), 'value': cached[0]['value']}
+    for e in judged:
+        assert e['prompt_tokens'] and abs(e['cost_usd'] - e['prompt_tokens'] * price / 1e6) < 1e-12, (e['prompt_tokens'], e['cost_usd'])
+    assert 'jev-1.14.0 priced from' in run.log()
+    return {'status': 'pass', 'judgments': len(judged), 'value': cached[0]['value'], 'cost_usd_checked': len(judged)}
 # Stacked decorators register bottom first: rethink, then rethink-llm.
 @case('rethink-llm', arm='llm')
 @case('rethink', arm='jev')
@@ -2022,8 +2030,11 @@ def rethink_case(run, arm):
     cfg['jev']['timeout_ms'] = 2000
     cfg['llm'].update(route='local', timeout_ms=4000)
     (run.directory / 'rethink.json').write_text(json.dumps(cfg, indent=2))
+    assert 'usd' not in json.dumps(cfg), 'the committed rethink.json carries a price'
+    # No prices file (LIVING_PRICES names one that does not exist): Jev's cost is unknown, never 0
     run.start(models, [actor], extra_env={'LIVING_RETHINK': arm, 'LIVING_RETHINK_CONFIG': str(run.directory / 'rethink.json'),
-              'LIVING_RETHINK_URL': f'http://127.0.0.1:{port}/v1/systemone', 'TYPESAFE_API_KEY': 'fake-only'})
+              'LIVING_RETHINK_URL': f'http://127.0.0.1:{port}/v1/systemone', 'TYPESAFE_API_KEY': 'fake-only',
+              'LIVING_PRICES': str(run.directory / 'no-prices.json')})
     run.wait(lambda: 'rethink gate on:' in run.log(), 'the gate switched on', 30)
     gates = lambda: [e for e in run.exchanges() if e.get('purpose') == 'rethink-gate']
     thinks = lambda: len([e for e in run.exchanges() if e.get('purpose') == 'think'])
@@ -2092,6 +2103,17 @@ def rethink_case(run, arm):
     out['max_hold_release_s'] = round(time.monotonic() - started, 1)
     verdicts = [g['verdict'] for g in gates()]
     stats = run.wait(lambda: re.findall(r'rethink gate \(\w+\): Stats \{([^}]*)\}', run.log()), 'a stats line', 70)
+    # Cost: unknown without a price, never 0. The Jev arm journals its own exchange (purpose
+    # rethink, cost_usd null); the chat arm's call is journaled by llm.rs, and the gate's own
+    # Judged carries no cost for it either.
+    assert re.search(r'cost_usd: None', stats[-1]), stats[-1]
+    if arm == 'jev':
+        jev = [e for e in run.exchanges() if e.get('purpose') == 'rethink' and e.get('profile') == 'jev']
+        assert jev and all(e['cost_usd'] is None for e in jev), [e.get('cost_usd') for e in jev]
+        assert "jev-1.14.0's cost is unknown" in run.log()
+        unknown = int(re.search(r'cost_unknown: (\d+)', stats[-1])[1])
+        assert unknown > 0, stats[-1]
+        out['jev_cost_unknown'] = len(jev)
     (run.directory / 'rethink.json-result').write_text(json.dumps({'verdicts': verdicts, 'stats': stats[-1], **out}, indent=2))
     return {'status': 'pass', 'arm': arm, 'verdicts': verdicts, 'stats': stats[-1], **out}
 

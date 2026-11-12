@@ -102,7 +102,7 @@ Measures are [Measure 2](COMBAT_MIND.md#43-measure-2-across-fights-and-transfer)
 
 **Evidence.**
 - Blind judging of 650 non-urgent deliberations: 42% wasted, mostly restated plans, phantom targets and asking loops; 16% would have hurt to skip ([MIND_HARNESS §6](MIND_HARNESS.md#6-rethink-gate)).
-- Live, the gate cut deliberations by 37–50% and cost by 24–40%. **The quality cost is not established** ([LIVING_CORE](LIVING_CORE.md#robustness-layers-found-necessary-in-live-runs)).
+- Live, the gate cut deliberations by 37–50%. **The quality cost is not established** ([LIVING_CORE](LIVING_CORE.md#robustness-layers-found-necessary-in-live-runs)).
 - The live run used a lone newcomer among instinct residents. The worlds where minds answer each other (hamlet, Cullet) were never gated.
 - The "quiet moment" timer drove 903 of 1,871 sleepers' deliberations in bi1. Reasons reused from an earlier thought are 31–55% of reason lines ([ar2](TRIALS.md#thinking-and-money-baseline-for-the-meters-alarm-level-change)).
 
@@ -115,7 +115,7 @@ Measures are [Measure 2](COMBAT_MIND.md#43-measure-2-across-fights-and-transfer)
 - Pass reading: cost down by more than the spread, and no guard or reaction time worse.
 
 **Cost.**
-- Free: replay (Jev is about $0.00006 a question, so pennies).
+- Free: replay (Jev's questions cost pennies).
 - Paid: hamlet, 8 runs × 12 thinkers × $0.13 ≈ $12.5, less in the gated arm. Cullet, 2 × $2.5 = $5. **About $16.**
 
 **Risks against the rules.**
