@@ -416,6 +416,87 @@ Found while building step 0, from two pipeline probes (`pk0`, `pk1`, 4 minutes e
 
 Paid runs need the owner's authorization for that run. Track L's local model, when ready, is an arm of step 6 at no API cost.
 
+## 7. Results, steps 0–5 (2026-11-12, branch `packs`)
+
+All runs are free: instinct graphs or the fake model, on the Spark's trial service (`slop-trials-stdb`, SpacetimeDB 2.14.1).
+
+**Switches.**
+- `fast_lane_on` off.
+- `fov_on` off (the shipped island).
+- `force_outcomes` as shipped.
+- The howl as shipped (range 18 m).
+- `LIVING_ANIMAL_MINDS=salient,choose` in the fake arm only.
+- Every run's `skills.sha256` is the shipped script's.
+
+**Evidence** is under `.local/living/trials/` on the Spark (git-ignored): `pkb2`, `pkb3` and `pkb3b` (baseline), `pkc1` and `pkc2` (calibration), `pkf1` (fake minds). It is summed in `pack-baseline.json`/`.txt`, and each batch's commit is in `<batch>.commit`.
+
+**Host load.**
+- Other agents' builds and tests kept the Spark's load at 40–135 on 20 cores through most of these runs.
+- From `pkc1` on, the sampler records each world's tick lag. The world clock ran a median of about 30 ms behind wall time, read latency included. The longest gap between ticks per run was 0.2–1.7 s.
+- The arena worlds themselves are light: the server process sat at about one core.
+- Timing measures (M1's arrival spread, rear blows) carry this caveat. Positions and counts do not.
+
+### Step 0: the harness
+
+- **Built.**
+  - `trials.py`:
+    - `record.bodies`: every role member at 5 Hz, five reads in parallel; 3.5–4.8 Hz reached. It also records tick lag.
+    - per-member `spread` start offsets and per-member `graphs`;
+    - the `farthest_town` anchor;
+    - `end.side_down`;
+    - `minds.roles`, so both sides of an arena can think.
+  - `living/tools/pack_arena.py`, with its self-test reproducing §5.4's nulls: coverage 90.4°, 140.0° and 172.8° for 2, 3 and 4 random bearings.
+  - `living/tools/pack_arena_trials.py`, which writes the trial files.
+- **Found and fixed.**
+  - **A trial's bold flag never took effect** (§5.6).
+  - **Wolves could not use any movement intent.** Setting a graph with `circle` was refused: "a wolf cannot circle". The wolf's species skills now include the four general intents `keep_distance`, `close_in`, `circle` and `back_off` (`living/seeds/species.json`). Before this, no wolf, graph or mind could hold a distance, circle or step back: Muro's two rules could not be written for a wolf at all. This is data, not code. It adds nothing a person lacks; people have had the intents since `move-intents`.
+  - **Spare animals sent to a map corner stayed put** (the corner is sea: "no free walkable tile"), so they stood beside the arena. A first baseline (`pkb1`) was discarded for this. They now go to the settlement farthest from the arena, about 1.86 km away.
+
+### Step 1: the baseline (54 runs)
+
+Instinct against instinct, 6 replicates per arm, 10 minutes. Medians, with the replicate range in brackets.
+
+| Arm | Engagements | Coverage ° | Encircled | Rear blows | I | Focus × chance | ΔG | People killed | Wolves killed | Fight s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| close 3v3 | 15 | 7.5 (1–19) | 0 | 0.86 | 1.08 (0.93–1.14) | 1.0 | −0.22 | 0 (0–1) | 0 | 80 (30–133) |
+| close 6v3 | 17 | 16 (7.5–34) | 0 | 0.93 | 0.96 | 1.5 | −0.45 | 0 (0–1) | 0 | 96 |
+| close 3v6 | 26 | 12 (6.8–13) | 0 | 1.0 | 1.10 | 1.0 | −0.56 | 0 (0–2) | 0 | 214 |
+| close 6v6 | 31 | 20 (14–23) | 0 (0–0.01) | 1.0 | 0.96 (0.66–1.05) | 1.2 | −0.58 | 1 (0–3) | 0 (0–1) | 187 |
+| spread 3v3 | 20 | 6.4 (2.5–10) | 0 | 1.0 | 1.14 | 1.0 | −0.22 | 1 (0–1) | 0 | 108 |
+| spread 6v3 | 10 | 5.9 (one run) | – | 0 | 1.0 | 1.0 | −0.22 | 0 | 0 | 58 |
+| spread 3v6 | 22 | 5.1 (one run) | – | 1.0 | 1.2 (1.1–1.6) | 1.0 | −0.17 | 0.5 (0–2) | 0 | 130 |
+| spread 6v6 | 31 | 110 (110–160, 1–2 runs) | – | 1.0 | 1.2 (1.0–1.6) | 1.1 | −0.42 | 0.5 (0–2) | 0 | 160 |
+| spread 6v6, night | 25 | 11 (3.9–140) | 0 | 0.88 | 1.3 (1.1–1.6) | 1.0 | −0.14 | 0 (0–2) | 0 | 88 |
+
+**Against §5.5's predictions.**
+- **Coverage.** It was predicted at 40–90° from crowding; it is lower. Instinct wolves follow a fleeing person single file and bite from behind (rear blows 86–100%), well below the 90° and 140° random nulls. Spread 6v6's 110° comes from 1–2 runs whose engagements began with the wolves still in their 120° start sector. It is not a ring.
+- **I ≈ 1:** as predicted, the nearest person is bitten.
+- **ΔG < 0:** as predicted, people scatter.
+- **"Spread coordinated ≤ 20%": wrong for 3v3 and 6v3** (1.0), where the second arrival is 2.1–2.5 s after the first. A wolf charging at 5.1 m/s covers 10 m in 2 s, so the start distances alone put a second wolf inside the 3 s window. M1's absolute 50% target therefore does not separate coordination from these instincts. Only the decision rule against this control can.
+- **Fights are short and few people die.** The people outrun the bold instinct's 10 m attack range (`attack the nearest person within 10 m`) within one to three minutes. No wolf was killed: instinct people never strike back.
+
+### Step 2: calibration
+
+- **`pkc1`: the first fixtures walked.** Their intents lacked `run: true`, so the wolves went at 3.4 m/s after people fleeing at a run: a flaw in the fixtures, not in the world. In 20 runs:
+  - C1 (sides) reached 64–68° median coverage (range 23–80°), against the baseline's 6–20°, and was encircled 0–3% of the time;
+  - C2 bit almost never (0–1 blows a run): the wolves kept 3–5 m from people who kept fleeing at 5 m.
+  - Kept as evidence of walking fixtures, nothing more.
+- **`pkc2`: the fixtures at a run, and a standing-prey arm.** Results below.
+
+### Step 4: the hidden `pack` copying, retired
+
+Done (§5.7, decision 4). The mind ignores `pack` with a warning, and the choose prompt's "# Your pack" section is gone. The `animal-switches` variant and `animal_minds.py` drop it. verify-minds `animals` (`minds-packs-133930`) passes: three deer, three separate `choose` calls, no copied decision.
+
+### Step 5: fake-model arms (`pkf1`, 4 runs)
+
+Both sides with minds (`minds.roles`): 6 people on the default mix and 6 wolves on `salient,choose`, close and spread 6v6.
+
+- **Plumbing.** 0 errors. Every wolf decision was its own `choose` (5–10 a run), and no thought was copied.
+- **Calls a 10-minute run**: 139–169. About 150 are the people's (think about 48, compile about 50, talk 9–23, consolidation 35–42). The wolves made 5–10 decisions and 6 consolidations.
+- **What a wolf mind can change in 10 minutes: little.** Wolves think at most every 240 s (`think_min_s`) and only on a salient change, so a wolf thinks once or twice in a fight.
+- **The `choose` menu cannot express spacing.** It offers flee from, hunt or attack a creature by id; keep close to the nearest of its kind; rest; roam; a call. It offers none of the movement intents. A wolf mind in `choose` mode can never hold a distance, circle or step away from a mate. On the two-call path (an impulse, then a compile against the full grammar) it can.
+- **The behaviour measures of fake runs mean nothing** (the replies are fixed), and are not reported.
+
 ## Sources
 
 - MacNulty, Mech & Smith (2007), [*J. Mammal.* 88:595–605](https://pubs.usgs.gov/publication/70030114).
