@@ -69,6 +69,8 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            'far_handle',
            # A sleeper's waiting reasons (fix-sleep-thinking): the authority's only.
            'slumber',
+           # Lines a sleeper heard and did not wake for, told once it wakes (fix-sleep-talk): the authority's only.
+           'heard_asleep',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
            'record', 'record_party', 'record_clock',
            # A world's own law values (its seed's `rules`; docs/WORLD_RULES.md, since laws-2).
