@@ -1544,6 +1544,18 @@ Nothing in `living/game` was edited in step 3, and every file loads in today's c
 
 **Evidence:** `.local/living/compose-1/` in the laptop's main checkout: the shared-materials set's `colour5/` (`colour.json`, `worst.jpg`, every arm's shots and plates), `counts5/` (`compose: material … takes toon …`), `cost5/` and `logs5/` (`cost5.log` records the load and the machine's state around each set); the hair finish's `fidelity3/` (the three cuts and Ode Pontil: `fidelity.json`, `stills/`, each arm's shots, `joints.jsonl` and log), `far3/` (Ode Pontil's far model), `cost4/` (`crowd*.json`, the logs and per-frame records of each set's last run) and `logs3/`; the overlays pass's `fidelity2/`, `talk/`, `cost3/` and `logs2/`; the first pass's `fidelity/`, `cost/`, `cost2/` and `logs/`.
 
+### The client since compose-client-2 (2026-11-12)
+
+For composed people (`LIVING_GAME_COMPOSE=1`) on char-4's files at `06be6921`; whole-person files are drawn as before.
+
+- **Greying lock by lock** (`characters/compose.rs` `ATTRIBUTE_GREY`, `HairTints`; `characters.rs` `grey_tag`; `toon.wesl` `recolor`).
+  - The glTF loader reads a hair file's `_GREY` (main.rs, as `_OUTLINE_NORMAL`). Composing copies it once a shared mesh into its second UVs, which Bevy's own vertex path brings to the fragment shader; the vertex shader turns the second UVs only for a face's skin, so hair's pass as they are.
+  - **The hair stays one material.** The shared hair toon holds a small palette (`ToonExt::tints`, 256 × 2 texels: natural colours, silvers, each once). A greying person's hair meshes carry in their tag their two places on it and their `grey` (8 bits each), bit 24 set and bit 26 the palette's, bit 25 clear so the wind's sway never takes hair. The shader mixes `mix(hair_natural, hair_silver, clamp(grey × _GREY, 0, 1))` in sRGB values and recolours by it as it does by `colors.hair`. A person without `grey`, hair without `_GREY`, or a colour with no room on the palette keeps the one tint.
+  - **Checked:** a person given a pure red natural colour and a pure green silver at `grey` 0.4 shows green and red locks through a short and a long style (`.local/living/compose-1/c2/redgreen.jpg`); Cullet's greying people (25 of 64, `grey` 0.07 to 0.9) mostly sit high, where most locks are already near silver.
+- **Spring blocks:** `rig_springs` takes every bone group and collider group a worn file names, found by name on the person, as it was built to: `long` brings `Hair` and `HairBack` and all 28 spheres, those on `J_Bip_C_Chest` and `J_Bip_C_Spine` included (20 spring joints on Runa Sarro). Nothing changed in the code.
+- **`.collar` cuts** come by the name in the line (`styles.hair` → `lookdev/styles/hair/<name>.glb`): four of Cullet's 64 wear one. Nothing in the client lists hair files.
+- **The types' shared pages:** a type's far head and lip layer are drawn by `lookdev::convert`, which already makes one material for each distinct content, so with the pages every type's `…Body_01_SKIN` and `…FaceTint_00_FACE` are one material each. Nothing changed in the code.
+
 ## Motions on generated people
 
 `animate.py` retargets the clip library onto a generated person unchanged, since the skeleton is VRoid's. Limb lengths are our own, so a take can behave differently on our people than on a VRoid base: our man's arms are longer, and a hand that clears the floor on Shino goes 8 cm into it on him.

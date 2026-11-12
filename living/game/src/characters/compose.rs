@@ -78,6 +78,58 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub const TYPES: &str = "lookdev/types";
 /// Where style files are (`hair/<style>.glb`, `outfit/<piece>.glb`).
 pub const STYLES: &str = "lookdev/styles";
+/// A hair vertex's greying (`_GREY` in the hair files: 1 / a, where its lock is wholly grey once a
+/// person's `grey` reaches a). The glTF loader reads it (main.rs); composing copies it into the
+/// mesh's second UVs, which Bevy's vertex path already brings to the fragment shader, and the
+/// hair's shading reads it there (`toon.wesl` `recolor`). The vertex shader turns the second UVs
+/// only for a face's skin, so hair's pass as they are.
+pub const ATTRIBUTE_GREY: bevy::mesh::MeshVertexAttribute = bevy::mesh::MeshVertexAttribute::new("Grey", 0x5c3e_9a01, bevy::render::render_resource::VertexFormat::Float32);
+
+/// The greying palette the one shared hair material holds (`ToonExt::tints`): row 0 the natural
+/// colours and row 1 the silvers that the people drawn with it carry, as sRGB bytes, each once.
+/// A greying person's hair meshes carry their two places in it and how grey they are in their
+/// tag (`characters::recolor`), so the hair stays one material for everyone. 256 of each; a
+/// person whose colour finds no room keeps the one tint (`colors.hair`).
+#[derive(Resource)]
+pub struct HairTints {
+    pub image: Handle<Image>,
+    rows: [Vec<[u8; 3]>; 2],
+    /// The toons that hold the palette, touched when it grows so their bind groups take it.
+    pub users: Vec<AssetId<Toon>>,
+    pub grown: bool,
+}
+
+impl FromWorld for HairTints {
+    fn from_world(world: &mut World) -> Self {
+        use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+        let img = Image::new_fill(Extent3d { width: 256, height: 2, depth_or_array_layers: 1 }, TextureDimension::D2, &[0, 0, 0, 255], TextureFormat::Rgba8Unorm, bevy::asset::RenderAssetUsages::all());
+        Self { image: world.resource_mut::<Assets<Image>>().add(img), rows: [Vec::new(), Vec::new()], users: Vec::new(), grown: false }
+    }
+}
+
+impl HairTints {
+    /// A colour's place on a row (0 natural, 1 silver), added if new; None when the row is full.
+    pub fn place(&mut self, row: usize, rgb: [u8; 3], images: &mut Assets<Image>) -> Option<u8> {
+        if let Some(i) = self.rows[row].iter().position(|c| *c == rgb) {
+            return Some(i as u8);
+        }
+        let i = self.rows[row].len();
+        if i >= 256 {
+            return None;
+        }
+        self.rows[row].push(rgb);
+        if let Some(mut img) = images.get_mut(&self.image) {
+            if let Some(data) = img.data.as_mut() {
+                let at = (row * 256 + i) * 4;
+                data[at..at + 3].copy_from_slice(&rgb);
+                data[at + 3] = 255;
+            }
+        }
+        self.grown = true;
+        Some(i as u8)
+    }
+}
+
 /// How close two style files' source colours must be (linear, each channel) to share a toon:
 /// under one 8-bit step, so sharing moves no colour the screen shows.
 pub const SAME_SOURCE: f32 = 0.004;
@@ -117,6 +169,10 @@ pub struct Person {
     /// [`BELLY_M`].
     #[serde(default)]
     pub belly: f32,
+    /// How grey the person is (0 to 0.9; none when left out): hair greys lock by lock from
+    /// `colors.hair_natural` to `colors.hair_silver` by the hair file's `_GREY`.
+    #[serde(default)]
+    pub grey: f32,
 }
 
 /// How far `J_Fit_Belly` moves forward for a `belly` of 1 (metres in the file, along -Z).
@@ -310,6 +366,7 @@ pub struct Composer<'w> {
     plans: ResMut<'w, Plans>,
     thumbs: Res<'w, super::Thumbs>,
     images: Res<'w, Assets<Image>>,
+    tints: ResMut<'w, HairTints>,
 }
 
 impl Composer<'_> {
@@ -373,7 +430,15 @@ impl Composer<'_> {
                     toon.extension.params.recolor = recolor;
                     toon.extension.params.recolor_from = from;
                 }
+                // Hair greys lock by lock from the shared palette.
+                let hair = matches!(kind, Kind::Hair) && !name.contains("Overlay");
+                if hair {
+                    toon.extension.tints = Some(self.tints.image.clone());
+                }
                 let h = self.toons.add(toon);
+                if hair {
+                    self.tints.users.push(h.id());
+                }
                 if let Some(src) = source {
                     self.plans.toons.entry(content).or_default().push((src, h.clone()));
                 }
@@ -466,6 +531,11 @@ impl Composer<'_> {
                 if self.plans.outlined.insert(p.mesh.id()) {
                     if let Some(mut m) = self.meshes.get_mut(&p.mesh) {
                         crate::style::outline_normals(&mut m);
+                        // A hair mesh's greying into its second UVs ([`ATTRIBUTE_GREY`]).
+                        if let Some(bevy::mesh::VertexAttributeValues::Float32(g)) = m.remove_attribute(ATTRIBUTE_GREY) {
+                            let uv: Vec<[f32; 2]> = g.iter().map(|v| [*v, 0.0]).collect();
+                            m.insert_attribute(Mesh::ATTRIBUTE_UV_1, uv);
+                        }
                     }
                 }
                 prims.push((p.mesh.clone(), mname, toon));
@@ -608,6 +678,27 @@ mod tests {
         assert_eq!(p.styles.overlays, ["lines", "freckles"]);
         assert_eq!(p.belly, 0.12);
         assert_eq!(p.styles.hair.as_deref(), Some("bob"));
+    }
+
+    /// The greying palette keeps each colour once a row, writes its texel, and refuses a
+    /// 257th colour (that person keeps the one tint).
+    #[test]
+    fn the_greying_palette_holds_each_colour_once() {
+        let mut world = World::new();
+        world.init_resource::<Assets<Image>>();
+        let mut tints = HairTints::from_world(&mut world);
+        let mut images = world.resource_mut::<Assets<Image>>();
+        assert_eq!(tints.place(0, [74, 42, 26], &mut images), Some(0));
+        assert_eq!(tints.place(1, [199, 199, 194], &mut images), Some(0));
+        assert_eq!(tints.place(0, [51, 34, 23], &mut images), Some(1));
+        assert_eq!(tints.place(0, [74, 42, 26], &mut images), Some(0));
+        let data = images.get(&tints.image).unwrap().data.clone().unwrap();
+        assert_eq!(&data[4..8], &[51, 34, 23, 255]);
+        assert_eq!(&data[256 * 4..256 * 4 + 4], &[199, 199, 194, 255]);
+        for i in 2..256u32 {
+            assert!(tints.place(0, [i as u8, (i >> 8) as u8, 1], &mut images).is_some());
+        }
+        assert_eq!(tints.place(0, [9, 9, 9], &mut images), None);
     }
 
     /// compose.py `attach_hair`: a spring bone's inverse bind matrix is its own in the style's
