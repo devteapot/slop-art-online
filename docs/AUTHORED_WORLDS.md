@@ -106,6 +106,8 @@ The first authored world, set up at the user's request on 2026-09-28: a develope
 
 Since 2026-11-10 the island's 277 residents are authored too. `author_world.py island` plans them from `living/seeds/worlds/island/` (`bible.md`, `world.json` with anchor people, routes and stores, `ways.json`): households and situations per settlement, sheets per household with the situations each member is in, ties made mutual, a review pass by a second model, and checks against the rules' catalog. The result is merged into `living/seeds/island.json`. Residents may also carry `places` (another town's market with the stages of the road to it, or a spot on a road). See [seeded lives](SEEDED_LIVES.md).
 
+**Looks** (since `look-1-island`, [LOOK.md](LOOK.md) §9). `living/seeds/worlds/island/looks.json` holds the pool alone, copied by `living/tools/pool_looks.py island --into island` from the generator's world data. The compile writes it into the seed as `looks`, and every resident wears a pool entry. The cast still says `mending` where the seed says `wound_tending`, so a compile today would undo that rename; `pool_looks.py --into` sets only `looks`.
+
 ## Cullet (`cullet`), cast by hand with anchors
 
 The small city's 64 residents ([small city](SMALL_CITY.md) §3) are cast by hand in `living/seeds/worlds/cullet/cast.json`, in the Aske Coast's shape with more per person, and their sheets are drafted from it. Written 2026-11-11 (branch `bible-1`); the sheets are not drafted yet.

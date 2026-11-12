@@ -64,8 +64,10 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.hint = None;
 
     // Requests from the UI.
+    // In the way the box has (the world's ways, `speech_card`), else plainly.
+    let way = talk.as_ref().and_then(|t| t.card.as_ref()).map(|c| c.name.clone());
     for (line, to) in out.say.drain(..) {
-        if controls::say(&net, &line, to) {
+        if controls::say(&net, &line, to, way.as_deref()) {
             input.said.push((now_ms as u64, line.trim().to_string()));
         }
     }
