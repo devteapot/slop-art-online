@@ -458,6 +458,51 @@ At 48 m every graph scene holds about 19 times the area, and on the island's cro
 
 ## Verification
 
+### goods-3
+
+These runs used the worker's own server (`goods3-stdb`, 2.14.1, port 3333), scratch databases only, no model calls and a private `CARGO_TARGET_DIR`. Evidence is under `.local/living/verify/<run>/` and `.local/goods3/evidence/`, both git-ignored. Results are after merging main `94c9e60f`, except where a line says "before the merge".
+
+**Rules.** `cargo test -p living-rules`: 255 pass, 16 ignored. The new tests:
+- the audit: `goods_audit::tests::the_goods_come_from_the_world`, `the_audit_finds_what_is_wrong` and `descriptions_fit_their_budget`;
+- `making_is_one_mechanism_through_four_ways`, which now checks every product with its tools and refuses each without them;
+- `goods_are_data_matched_by_trait_and_fires_eat_fuel`, which now covers a crucible, no cooking at a lamp, and the refusal for something no workplace makes.
+
+**Two ignored comparisons:**
+- **The island against main.** `goods_check::the_island_changes_only_by_carry` (`goods-check.txt`, 4,312,560 states): 0 differ from main with carry forced to 1, and 1,274 differ with carry, every one where an arrow or a mark is held. By skill: give 792, clear 336, take 96 and gather 48, plus the food law's words.
+- **The audit of main.** `goods_audit::tests::audit_of_main`: 8 gaps on the island and 18 on Cullet.
+
+**verify-core** (before the merge):
+- `core-g3-goods`: `goods` 27 of 27, `stock` 4 of 4, `making` 8 of 8, and the new `workplace` 6 of 7. Its one failure was the scene counting fish absolutely.
+- `core-g3-goods2`, re-driven after the scene fixes: `making` 8 of 8, `workplace` 7 of 7.
+- `core-g3-base`: `food` 4 of 4, `refusal` 4 of 4, `teach` 6 of 6.
+- `maintain-verification-skill`, scoped to the goods feature: three overstatements in the map and a vacuous check in `making` were corrected, and the fixes re-driven ([verify-core's validation](../.agents/skills/verify-core/references/validation.md)).
+
+**verify-generation** (`generation-g3-004430`, before the merge): island 979 of 979, cullet 332 of 332, the seeds unchanged. The merge changed Cullet's cast sheets. The merged `cullet.json` is byte-identical to a fresh `author_world.py cullet --compile-only`, and `--check` gives 0 errors and 0 warnings.
+
+**verify-minds:**
+- `minds-g3-004521`, before the merge: `acts` passed and `dealings` failed (a timeout waiting for the demand record), as on main then.
+- `minds-g3m-005412`, after merging main with fix-dealings: `acts` and `dealings` both pass.
+
+**`set -o pipefail; just living-check`:** passes, all seven steps (`living-check.txt`). The fuel gate:
+
+| Law | Fuel | Budget |
+| --- | ---: | ---: |
+| rates | 8,672 | 9,000 |
+| rates-law | 223,912 | 245,000 |
+| strike | 283,051 | 310,000 |
+| cooldown | 1,706 | 2,200 |
+| perceived | 69,658 | 98,000 |
+| hook | 452,532 | 560,000 |
+| senses | 3,236 | 4,000 |
+| senses-law | 77,869 | 91,000 |
+| moves | 2,017 | 2,500 |
+
+**Not run:**
+- **verify-knowledge.** No technique was added or removed; only two of Cullet's briefs changed. verify-core's `teach` passes.
+- **verify-player, verify-client and verify-ui.** No table, column, reducer, view or subscription changed, and the bindings are unchanged. The client's recipe grid, which reads `tools`, is the laptop's.
+- **The rest of verify-core:** `laws`, `decay`, `winter`, `rhythm`, `mechanics`, steering, and the life, town and lives scenes.
+- **No soak.** Whether residents actually build, cast drops or run short of a tool is untested.
+
 ### rules-3
 
 On the worker's own server (`rules3-stdb`, 2.14.1, port 3325), scratch databases only, no mind service, no model calls. Evidence under `.local/living/verify/<run>/` and `.local/rules3/evidence/` on the dev-box (git-ignored).
