@@ -2,7 +2,7 @@
 
 The game's people are made by our own tool: a set of parameters goes in, a rigged, painted, animated character file comes out. This replaces VRoid Studio bases (decision 2 of [the small city](SMALL_CITY.md)). The owner's bar is VRoid's quality close up, from a parameterized tool of our own.
 
-**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns; hair as shared style files; outfits as shared style files; overlays; the hair's finish):**
+**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns; hair as shared style files; outfits as shared style files; overlays; the hair's finish; hair as sheets):**
 
 - **The bar is the reference character:** the VRoid model the game has used so far (`lookdev/vroid-Sendagaya_Shino.glb`; the asset board's control `vroid=recipe:shino`), close up included. The owner accepted pass 1 as the base and said of it: "a step up … but still far away from the reference model we have been using so far. That is kind of what we want to get to".
 - **Pass 1 (`char-2`):** faces and the parameter model. A seed or a parameter file gives a repeatable person of any sex and age from 1 to about 80, with real eye openings, a mouth that opens, 15 expressions under VRoid's names, stubble and six beard styles, age lines and freckles. One command makes a household or a whole town and its check page.
@@ -63,7 +63,13 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **The fringe** is finer locks to one line where it was seven broad blocks; **the ends** of hanging hair are cut to one hem; **the temple** is covered: the hairline on a type's head comes down to a sideburn and sits close over the ear.
   - **Three cuts of every style** (`<style>`, `.2`, `.3`): 50 hair files, 17.0 MB. Cullet's 64 wear 30 of them where they wore 14, and six people (three pairs) share both a file and a colour.
   - **A far beard** for the far head: one plain mesh a beard form, about 450 triangles.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the eyes' drawing, the face's painted softness, clothes and silhouette, hands, and hair that is still locks of one thickness.
+- **Pass 3, hair as sheets** ([hair as sheets](#hair-as-sheets)).
+  - **Hair is a few broad sheets that end in points**, where it was about fifty separate locks: a curtain round the sides and back, a sheet a side from the parting, one from the crown, the fringe; short styles are rings of pointed sheets; a gathered style's scalp is two sheets drawn to the tie.
+  - **From the side the face shows** on every hanging style, and the skin beside a straight fringe is closed by a small sheet at each temple.
+  - **`long` is long and `balding` is bald.** A style's file drew its length and its receding from the style its seed would have picked, so `long` ended at the jaw, `bob` at the shoulders, and `balding` had a full head.
+  - **Cheaper:** 50 hair files, 13.4 MB, where they were 17.0; a bob is 5,300 triangles near and 1,400 far, where it was 10,800 and 2,500.
+  - **Photographs hold the eyes open**, as a rule of the photo tools (`hold_eyes.py`).
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the eyes' drawing, the face's painted softness, clothes and silhouette, hands, and hair's shading (one colour with a soft band, where the reference paints a hard highlight and a dark edge).
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -147,6 +153,8 @@ A pass is also published through the asset board, the record of which version th
 - The overlay step is `character:face-types` `20261112-5511f776-…`: four Cullet residents composed with their beards, stubble, lines, aprons, eye colours and bellies above the same people from their own files.
 
 - The hair finish is `character:face-types` `20261112-334790f0-…`: six type and style pairs before and after from the front, three-quarter and side and at the game camera, with hair normals turned to the camera in place of the client's rim light; the three cuts of six styles; far heads without and with a far beard. The six presets and `cast-64` were not published again.
+
+- Hair as sheets is `character:face-types` `20261112-789ee65c-…`: eight type and style pairs as locks and as sheets from the front, three-quarter and side and at the game camera; every style as sheets from four sides; the three cuts of six styles; six presets whole under the client's own shading. Eyes are held open by the photo tool from this version on. The six presets and `cast-64` were not published again: their clips could not be baked on this machine ([hair as sheets](#hair-as-sheets)).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -1045,7 +1053,7 @@ Pass 3, after outfits (2026-11-12). A composed person lost what a type does not 
 
 ### Hair finish and cuts
 
-Pass 3, after overlays (2026-11-12). Three faults of the hair's finish, more variety, and beards on the far head.
+Pass 3, after overlays (2026-11-12). Three faults of the hair's finish, more variety, and beards on the far head. The finish described here was of separate locks; [hair as sheets](#hair-as-sheets) replaced the locks in the next step. The three cuts and the far beards stand.
 
 **Judged without the rim light.** The client's rim light on hair is being fixed on its own branch (`hair-rim-1`), and with it hair cannot be judged ([hair styles](#hair-styles)). The stand-in used here is `compose.py --hair-toward YAW`: every hair normal turned to the asset view's camera for that one view, which takes the rim out from that side. It also flattens the hair's own light and shade, so the pictures show shape and edge, not the final shading.
 
@@ -1078,6 +1086,56 @@ Pass 3, after overlays (2026-11-12). Three faults of the hair's finish, more var
 2. Beyond the far switch, take a beard overlay's `FarOverlay` mesh with the far head, tinted as the near one is.
 
 **Cullet's 64 after this step:** 95 shared files worn, 36.4 MB (17 types 18.0, 30 hair 11.1, 20 outfit 4.2, 28 overlay 3.2). Everything on disk: 169 files, 53.0 MB.
+
+### Hair as sheets
+
+Pass 3, after the hair's finish (2026-11-12). The reference draws hair as broad smooth shapes that end in a few points. Ours was about fifty separate locks, each a ribbon with its own tone, its own wave and its own end; it read as many waved ribbons, a full `bob` or `long` hid the face from the side, and skin showed beside a straight fringe. This step replaces the locks with sheets. The file names, the three cuts, `hair_fit`, the far mesh, the spring chains and the outline data are as they were, and the client loads the files unchanged.
+
+**A sheet** (`Hair.sheet` in `hair.py`):
+
+- **One surface from a line of roots.** Roots lie along a line on the scalp. Each is combed as a lock used to be: walked in small steps, bending toward the ground, pushed out of the head, the neck and the shoulders. The walked paths are the sheet's columns, and the surface runs through them.
+- **A hem cut into a few points.** A column runs long at a point's tip and is cut back at the notch between two points. A point is five columns: notch, side, tip, side, notch. Points differ in width, and tips in length, by the style's seed.
+- **Closed.** A back surface lies a few millimetres behind the front one and they are joined all round, so a sheet is one solid shape for the outline.
+- **Shaded as one head of hair.** A vertex's normal is half the sheet's own facing and half the direction out from the head. Colour is one tone a head, darker at the root, in the notches and at a sheet's own edges, with a lighter band round the head at one height. Curl waves the whole head together, by height, so sheets that lie over one another do not cut through each other.
+
+**What a style is made of:**
+
+| Styles | Sheets |
+|---|---|
+| `bob`, `bob_parted`, `long`, `shag` | One curtain round the sides and back from the ear's front; a sheet a side from the parting over the top; one from the crown down the back; the fringe; a small sheet at each temple. A `bob`'s ends turn under; `long` ends in a few long points; `shag` in more, deeper ones |
+| `crop`, `short`, `tousled`, `swept`, `sides`, `balding` | Rings of short sheets round the head, one over the next as tiles lie, each cut into points; the rings wander up and down so they do not read as rows. `tousled` splays its points and turns them out |
+| `tail`, `bun`, `braid`, `braids`, `kerchief` | The scalp's hair as two sheets drawn to the tie (from the hairline all round, and from the top); the tail a sheet rolled into a tube that ends in three points; the fringe |
+| Single locks | The locks at the ears' front, sideburns, a bun's coils and a braid's leaves stay locks |
+
+**The side view.** A hanging style's side hair now starts at the ear's front (72° round from the front, where it started at 64° and a lock's width reached to 40°). The sheet from the parting is rooted far enough back that it comes down there too: rooted further forward, where the skull slopes to the forehead, it slides down over the eye. A straight fringe's flanks stay at the brow, a parted fringe's outer part goes to the side of the head, and the locks at the ears' front hang at 72° and 80°. From the exact side the eye, the nose and the mouth show on `bob`, `bob_parted`, `long` and `shag`.
+
+**The skin beside the fringe.** With the side hair back at the ear, the temple between it and the fringe is bare below the hairline. A small sheet a side closes it: from the hairline between 34° and 74°, combed down and back and lying close, ending at the brow in front and a little lower toward the ear, so it stays above and behind the eye. What is left on a `bob` is a slot a millimetre or two wide on one side from the front.
+
+**`long` was not long.** A shared style's file names its style and lets its seed draw the rest. The length was drawn from the range of the style the seed would have picked for a person, not the style named. So `long`'s three cuts drew 9 to 15 cm and ended at the jaw, and `bob` drew 20 cm and hung to the shoulders. `draw` now takes the range of the style that is given: `long` hangs 20 to 36 cm below the ear, `bob` 5 to 11. `balding` had the same fault in its receding: at the standard figure's age a seed draws almost none, so its file had a full head of hair. Its three cuts now have three bald crowns.
+
+**What it costs.** Fewer, larger pieces:
+
+| | Before (locks) | After (sheets) |
+|---|---|---|
+| Hair files on disk | 50, 17.0 MB | 50, 13.4 MB (0.12 to 0.57 MB each) |
+| `bob` | 10,752 triangles near and 2,518 far, 0.63 MB | 5,304 near and 1,436 far, 0.33 MB |
+| `long` | 9,456 near and 2,278 far, 0.57 MB | 9,572 near and 2,464 far, 0.57 MB (it is three times as long) |
+| `tousled` | 4,524 near and 1,318 far, 0.31 MB | 3,796 near and 1,298 far, 0.26 MB |
+| Hair files Cullet's 64 wear | 30, 11.1 MB | 30, 8.6 MB |
+| All shared files the 64 wear | 95, 36.4 MB | 95, 34.0 MB |
+| Everything on disk | 169 files, 53.0 MB | 169 files, 49.4 MB |
+
+**Photographs hold the eyes open.** The asset view shows people alive, and a still that catches a blink reads as a fault of the model. `living/tools/characters/hold_eyes.py` renames the blink's morph target in a file's glTF JSON to a name of the same length for as long as the photograph takes, so the view finds no face to blink, and puts it back. `view_assets.sh` and the board's `capture.py` do this round every still; `LIVING_VIEW_BLINK=1` leaves the eyes alone. Files held are listed in `.local/held-eyes.txt` until released, so a run that was killed is undone by the next one.
+
+**What is left** (judged on the board's `hair-sheets` sheets, with hair normals turned to the camera as in the step before):
+
+- **The shading is not the reference's.** Its hair has a hard painted highlight and a dark edge; ours is one colour with a soft band and fine streaks. Under the client's rim light today it still washes out; that is the client's (`hair-rim-1`).
+- **A short style's rings can read as tiles from behind**, most on `tousled`.
+- **Where long side hair meets the collar** its end can kick forward as a small hook, seen from the side on the `woman` preset.
+- **`long` on a bare type head** lies on shoulders that are not there; on a person it lies on theirs.
+- **The six presets were rebuilt without clips** on this machine: `clips.json` names the take `work_s22`, which the dev-box's copy of the clip library does not hold. Their pictures after this step show the bind pose. The preset and cast families were not published again for that reason.
+
+**What the client needs:** nothing. A person's `styles.hair` names the same files, with the same meshes (`Hair`, `FarHair`, the tie in cloth), bones and attributes.
 
 ### Type files
 
@@ -1425,6 +1483,14 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
+**After hair as sheets**, judged on the board's `hair-sheets` sheets with the reference beside ours, ordered by how much it shows:
+
+1. **The eyes' drawing:** thin lash lines and a plainer iris. Step 6, next.
+2. **Hair's shading.** The shapes are now sheets that end in points, and from the side the face shows. The reference still paints a hard highlight and a dark edge where ours has one colour with a soft band; a short style's rings can read as tiles from behind; under the client's rim light hair still washes out (`hair-rim-1`).
+3. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+4. **Lips and blush are painted into the skin.** Step 6.
+5. **Clothes and silhouette, hands** (unchanged).
+
 **After the hair finish**, judged on the board's `20261112-334790f0-…` version with the reference beside ours and hair normals turned to the camera, ordered by how much it shows:
 
 1. **The eyes' drawing:** thin lash lines and a plainer iris. Step 6, next.
@@ -1516,7 +1582,8 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 5. **Lines where the form turns.** Done in pass 3's fifth step ([lines](#lines-where-the-form-turns)): shell lines at the jaw, chin, ears and mouth in the files, per-vertex outline width in the files, the client's need written out, and the data a post-process inner line would take.
 6. **Hair and outfits as shared style files.** Done ([hair styles](#hair-styles), [outfit pieces](#outfit-pieces)): a whole person composes from a type's file, a hair style and outfit pieces. Overlays, the apron, eye colour and bellies followed ([overlay styles](#overlay-styles)). Left: a far model's overlays; a strong chest.
 7. **Hair finish.** Done ([hair finish and cuts](#hair-finish-and-cuts)): the fringe, the ends, the temple; three cuts of every style; far beards.
-8. **The eyes' drawing, lips and blush** (the face's paint; lips and blush out of the skin texture).
-9. **Later:** the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
+8. **Hair as sheets.** Done ([hair as sheets](#hair-as-sheets)).
+9. **The eyes' drawing, lips and blush** (the face's paint; lips and blush out of the skin texture). Next.
+10. **Later:** the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
 
 Each pass page sets two references beside ours: the VRoid control, and a still from Blue Protocol's published character material (one of the owner's named art references), for comparison only. The stills are kept outside the repository, in `~/archive/asset-board/references/blue-protocol/`, with their sources.
