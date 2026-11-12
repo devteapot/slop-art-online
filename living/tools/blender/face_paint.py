@@ -22,7 +22,7 @@ import zlib
 import numpy as np
 
 from head_form import ORIGIN, lerp, smooth
-from head_mesh import ATLAS, EYE_COLS, EYE_ROWS, IRIS_COL0, IRIS_FILL, IRIS_PX, IRIS_WIDE, brow_shape, eye_frame, iris_centre, skin_dirs
+from head_mesh import ATLAS, EYE_COLS, EYE_ROWS, IRIS_COL0, IRIS_FILL, IRIS_PX, IRIS_WIDE, brow_shape, brow_width, eye_frame, iris_centre, skin_dirs
 
 
 def write_png(path, a):
@@ -438,7 +438,7 @@ def paint_far(hf, look, size=FAR):
     up = hf.lid(np.clip(ss, -1, 1))[0]
     c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0008 + 0.0019 * look["lash_k"] * smooth(t / 0.5), look["lash"], 1.0, taper=(0.0, 0.2))
     top, bot = brow_shape(hf, 1)
-    c.stroke([(xt, (zt + zb) / 2) for (xt, zt), (_, zb) in zip(top, bot)], lambda t: np.maximum(0.62 * hf.brow_w * (1 - 0.6 * smooth((t - 0.5) / 0.5)), 0.0011), look["brow"], 0.92, taper=(0.1, 0.25))
+    c.stroke([(xt, (zt + zb) / 2) for (xt, zt), (_, zb) in zip(top, bot)], lambda t: np.maximum(0.62 * hf.brow_w * brow_width(t), 0.0011), look["brow"], 0.92, taper=(0.1, 0.25))
     out[EYE_ROWS:] = c.img
     k = ATLAS // size
     small = np.clip(out, 0, 1).reshape(size, k, size, k, 3).mean(axis=(1, 3))

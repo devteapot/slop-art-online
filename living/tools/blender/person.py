@@ -141,7 +141,7 @@ TYPED = False  # the head is a face type's cage, with the identity bones in it
 # living/tools/characters/share.py puts on files that people share. `far` is the far model's
 # skin (head, neck and hands), textured with the far picture.
 MAT = dict(
-    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", overlay_face="M00_000_00_FaceOverlay_00_FACE", line="M00_000_00_FaceEyeline_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
+    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", overlay_face="M00_000_00_FaceOverlay_00_FACE", line="M00_000_00_FaceEyeline_00_FACE", brow="M00_000_00_FaceBrow_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
     hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
 )
 FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
@@ -993,12 +993,14 @@ def make_face(arm, spec, atlas_path):
             m.f.append(tuple(index[v] for v in f))
             m.fm.append("tint")
     # The iris shares the eye's material (the atlas); highlights are plain colour, as the lines are.
-    # The lash lines, brows, highlights and the mouth's inside are one material (plain colour).
+    # The lash lines, highlights and the mouth's inside are one material (plain colour).
     # The iris is a material of its own (VRoid's name for it, `EyeIris`), with its own small
     # picture: the client recolours a material by moving its picture's mean colour to the person's,
     # and the tag for the eyes' colour goes to materials named so.
-    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint").get(k, "line") for k in m.fm]
-    order = [k for k in ("face", "eye", "iris", "line", "skin", "tint") if k in set(fm)]
+    # The brows are a material of their own too (VRoid's `FaceBrow`): plain colour as the lines
+    # are, and the one the client gives the person's hair colour.
+    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint", brow="brow").get(k, "line") for k in m.fm]
+    order = [k for k in ("face", "eye", "iris", "line", "brow", "skin", "tint") if k in set(fm)]
     A, C0, PXI = head_mesh.ATLAS, head_mesh.IRIS_COL0, head_mesh.IRIS_PX
     iris_verts = {v for f, k in zip(m.f, m.fm) if k == "iris" for v in f}
     m.uv = [((u * A - C0) / PXI, 1.0 - (1.0 - v) * A / PXI) if i in iris_verts else (u, v) for i, (u, v) in enumerate(m.uv)]
@@ -2383,6 +2385,7 @@ def add_vrm(path, title, springs=None):
 
 
 CLIENT_MORPHS = ("Fcl_EYE_Close", "Fcl_MTH_A")  # what the game drives (living/game/src/lookdev.rs): the blink and the open mouth
+TYPE_BROW = (0.94, 0.94, 0.94)  # a type's brows in its own file, before the client colours them
 TYPE_PARTS = ("Face", "Hands", "Neck", "FarHead")  # a face type's file: its head and skin, near and far
 
 
@@ -2440,6 +2443,11 @@ def main():
     if a.parts == "head" and not a.own_iris:
         # A type's file: its iris is the one every type shares.
         spec["look"]["iris_shared"] = person_params.SHARED_IRIS
+    if a.parts == "head":
+        # A type's brows are coloured by the client, with the person's hair colour through the
+        # mesh tag: their own tone is neutral, and lighter than any hair, so the client only
+        # ever darkens it.
+        spec["look"]["brow"] = TYPE_BROW
     if a.parts == "hair":
         # A shared style is coloured by the client, through the mesh tag: its own shades are
         # neutral, a little darker at the root than the tip, with no grey of its own.

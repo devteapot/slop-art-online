@@ -80,7 +80,8 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
 - **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris was left a type's own then, and is one picture for every type since [one iris for every type](#one-iris-for-every-type).
 - **Pass 3, one iris for every type** ([one iris for every type](#one-iris-for-every-type)). Every type's file names one iris picture, and a person's line carries the colour that brings its body to the person's eye colour. Composed eyes had come out about three times too light, with grey pupils on the lighter colours and stray hues from the type's own iris; the iris's body is now within 3 CIE76 of the eye colour on every type. A whole file's warm glow in a dark or a blue eye is what a composed eye still lacks.
 - **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the brows' drawing, the face's painted softness, clothes and silhouette, hands.
+- **Pass 3, the brows** ([the brows](#the-brows)). A brow is one tapered stroke, as the reference draws its own, in a material of its own under the reference's name for it, so the client's hair colour reaches it. Composed people had their type's brow colour whatever their hair.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the eye's glow on composed people, hair's lifting strands and fringe, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -182,6 +183,7 @@ A pass is also published through the asset board, the record of which version th
 - The neck is `character:face-types` `20261112-4c89b344-…` (`neck-types`: four bare type heads before and after from the front, the side and at the game camera, with their measures; `neck-people`: four whole people before and after; `neck-motion`: the same four on moving frames; each with the reference's row), the six preset families' `20261112-4c89b344-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-4c89b344-…` (the 64 built again whole, with `faces-before-after` and `neck-named`, the four faces named on the sheet before).
 - The tones inside a piece are `character:face-types` `20261112-772c115c-…` (`piece-tones`: eight residents, each as its own file and composed from the shared pieces, before and after, with the measures; `shadow-square`: faces with the light square to them and a few degrees either side, for the shadow map's wait of 0: no straight split down the middle), the six preset families' `20261112-772c115c-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-772c115c-…` (the 64 built again whole, with `lineup-before-after`).
 - One iris for every type is `character:face-types` `20261112-83b3b0e7-…` (`shared-iris`: three types' eyes in the seven eye colours through the client, with a type's own iris and the eye colour in the line, with the shared iris and the line's new colour, and as a whole file paints them; the same by the client's rule in `eye_colours.py`; `shared-iris-people`: four residents composed before and now above their own files). The six preset families and `cast-64` are whole files, whose paint this step does not change (one preset built again: the same iris and atlas, texel for texel), so they have no new version.
+- The brows are `character:face-types` `20261112-46a90cae-…` (`brows`: four types coloured by the client with four hair colours, before and after, from the front and at 35 degrees; `brows-people`: four residents composed before and now above their own files), the six preset families' `20261112-46a90cae-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-46a90cae-…` (the 64 built again whole, with `faces-before-after`).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -339,7 +341,7 @@ The figures are the woman preset's with every face value at 0, computed from `he
 | The head's form | `head_form.py` | A loft: at each height a superellipse set by four curves (the front view's half width, the profile's front and back, how boxy the front is). The outline of jaw, cheekbones and chin and the profile are therefore set directly. Nose, brow ridge, eye hollows, cheeks, lips and chin are bumps on the front. |
 | The head's mesh | `head_mesh.py` | A cube-sphere projected onto the form, denser from the brows to the lip. The skin round each eye is cut away and stitched to a clean ring on the lids, with a rim turned inward as far as the eye. The skin is slit along the mouth; the lower edge drops with the jaw and shows teeth, the dark and the tongue. Ears are lofted rings. |
 | The eyes | `head_mesh.py` | Each eye lies on a ball of 8 cm radius set behind its opening. The white is a patch of the ball. The iris is its own disc just off the white, weighted to the eye's bone (`J_Adj_L_FaceEye`, `J_Adj_R_FaceEye`, at the ball's centre), so turning the bone slides it. Two highlights sit over it and follow the bone half way. `person.py --look` turns them in the file. |
-| Brows and lashes | `head_mesh.py` | Strands, made as the hair's locks are in small: each a tapering, bending card standing off the skin, with its own tone. A brow is 22 to 34 hairs over a soft shape, growing up at the inner end and sweeping out along the brow. A woman's upper lid carries 9 lashes and 4 under the outer corner. The lash line and its wing stay a drawn shape. They move with the expressions. |
+| Brows and lashes | `head_mesh.py` | A brow is one tapered stroke standing off the skin ([the brows](#the-brows); until then 22 to 34 strands over a soft shape). Lashes are strands, made as the hair's locks are in small: each a tapering, bending card with its own tone. A woman's upper lid carries 9 lashes and 4 under the outer corner. The lash line and its wing stay a drawn shape. They move with the expressions. |
 | Expressions | `head_mesh.py` | The whole face is built again for each expression's state (lids, jaw, mouth corners, brows); the difference is the morph target. |
 | The face's texture | `face_paint.py` | One 1024² atlas a person: the whole head's skin, the two eyes, a swatch for the ears. Each texel knows where on the head it lies, so paint follows the form. Painted: tone, blush, shade round eyes, nose and lip, lips, nostrils, the lids' edge, stubble, beards as fine strokes, age lines, freckles; each eye as white, lid shadow, iris with dark rim, gradient, lit crescent and rays, pupil, two highlights. |
 | Beards | `head_form.py`, both above | A beard is the skin itself standing off the face (2 to 7 mm, a full one hanging below the chin) with its hairs painted, so its edge is a painted edge, not a mesh edge. |
@@ -1488,6 +1490,34 @@ By eye colour, the body is nearer in all seven (0.4 to 2.9 against medians of 9.
 - **No code change.** The rule that learns the source colour and the shader's recolouring are used as they are. If either changes (how the source is taken, or the 0.4), `SHARED_IRIS_SOURCE` and `HUE_SPREAD` in `person_params.py` must follow, and `eye_colours.py --check` says so for the first.
 - **An old line with the eye colour itself** on the new type files gives eyes about three times too light, as before; a new line on old type files gives eyes too dark. They go together.
 
+### The brows
+
+Pass 3, 2026-11-12. The reference draws a brow as one tapered stroke in the hair's colour; ours were 22 to 34 strands over a soft shape, in the lash lines' material.
+
+**What a brow is now** (`head_mesh.py` `_brow`, `brow_shape`, `brow_width`):
+
+- **One stroke a side:** a strip of 20 quads standing 1.1 mm off the skin. It begins rounded at the inner end at half its thickness, is full from a fifth of the way out to two fifths, and narrows from there to a point at the tail. No strands.
+- **Its thickness** is the type's brow thickness times 1.15 (`BROW_STROKE`): 2.9 mm on a woman's head, 5 mm on a man's, 5.8 mm on an old man's. The reference's is about 2.9 mm on its one head. The types' numbers were set for a soft shape under hairs that reached past it.
+- **Its place, length, arch and tilt** are unchanged, from the type and the person's identity values (`brow_height`, `brow_tilt`, `brow_thickness`, `brow_length` on `J_Id_Brow_L` and `_R`). The brow expressions move it as before.
+- **One colour,** a tenth darker along the lower edge.
+- **The far head** paints the same stroke on its skin, a little heavier, as before.
+
+**Its material is the reference's own, `M00_000_00_FaceBrow_00_FACE`.** The client already gives materials of that name the person's hair colour (`characters.rs` `slot`), and draws it as it does the lash lines (unshaded). Until now the brows were part of `…FaceEyeline_00_FACE`, which takes no colour, so every person composed on a type had that type's brows: dark brows under white or red hair.
+
+- **In a type's file** the brows are a neutral light grey (0.94, `person.py` `TYPE_BROW`), lighter than any hair, so the client only ever darkens them. A grey material takes the hair colour's hue and saturation and its value by ratio.
+- **In a whole person's file** they are painted in the person's own brow colour, as before, and take no tag.
+- **A composed person's brows are their hair's colour** (`colors.hair`). A whole file's are the natural hair colour taken 0.6 of the way as grey as the hair, and a quarter toward dark on light hair. So composed brows are a little lighter than a whole file's on blond and sandy hair, and as grey as the hair on a greying head. The client has one colour for hair and brows.
+- `compose.py` tints them by the client's rule (`tint_brows`).
+
+**What the client needs:**
+
+- **Nothing in code.** The name is one it knows.
+- **A type's face is seven primitives where it was six:** the brows are a draw of their own on a full head (80 triangles; the lash lines' primitive lost the strands' triangles, 184 on `adult-f-a`). The far head is unchanged in count.
+- **A composer that keys a type's materials by its file** can key `M00_000_00_FaceBrow_00_FACE` by content: it is plain colour with no picture, the same for every type.
+- **Take the 21 type files again.** Lines are unchanged.
+
+**What still separates ours from the reference's brows:** theirs sit higher above the eye (by eye on the board's sheets, the gap from the lash to the brow is about 0.4 of the eye's height on the reference and about 0.2 on ours), and have a soft edge from a picture's alpha where ours is cut geometry. The height is each type's `brow.above_eye`, designed and not measured; it was not changed here, since it moves every face's expression.
+
 ### The neck
 
 Pass 3, 2026-11-12, from the owner on the cast's faces: "the neck is still off, seems too big? maybe the issue are the attachment point to the head". Measured against the reference with a new tool beside ref-1's (`living/tools/characters/reference/neck.py`): horizontal cuts of the skin from the jaw down, the pivots and the seam, on any character file.
@@ -1960,6 +1990,15 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 
 ## What still separates ours from the reference
+
+**After the shared iris and the brows**, judged on the board's `shared-iris`, `brows` and `cast-64` sheets with the reference beside ours, ordered by how much it shows:
+
+1. **Hair.** Short styles' hairlines cut straight across the forehead in a box. The reference's hair has single strands lifting off at the ends and a fringe in a few thick locks; ours is smoother and plainer. A seam runs down the back of parted styles.
+2. **The eye's glow on composed people** ([one iris for every type](#one-iris-for-every-type)): a whole file's warm glow becomes a lighter tone of the eye's own colour. Next.
+3. **The brows' place:** the reference's sit higher above the eye ([the brows](#the-brows)).
+4. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top.
+5. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+6. **Clothes and silhouette, hands** (unchanged).
 
 **After long hair, short hair and the hair's shading**, judged on the board's `hair-short`, `hair-long` and `hair-people` sheets with the reference beside ours, ordered by how much it shows:
 
