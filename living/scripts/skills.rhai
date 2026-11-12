@@ -102,6 +102,12 @@ fn laws() {
         regard_cache: true, regard_cache_check: false,
         // A diagnostic: while profiling, also time the parts of a graph's evaluation.
         profile_detail: false,
+        // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
+        // anyone perceives or does: a move's check before it starts given only the fields it reads;
+        // the body's alarms answered from the last answer while no field crosses one of their
+        // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
+        // difference; `warmth_check` likewise for warmth.
+        check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -2981,6 +2987,13 @@ fn laws_about(l) {
         witness_fold_ms: if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
         witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
+        // How the work is done, not what anyone perceives: plain words (no condition), so the
+        // descriptions stay within the engine's operations.
+        check_ctx_plan: "a move is weighed on what its rules read",
+        check_ctx_check: "a diagnostic: each move is weighed both ways and compared",
+        alarm_cells: "the body's alarms are worked out again only when something they read can change",
+        alarm_cells_check: "a diagnostic: each kept alarm answer is worked out afresh and compared",
+        warmth_check: "a diagnostic: warmth is worked out both ways and compared",
         profile_detail: if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },

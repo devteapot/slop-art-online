@@ -65,6 +65,10 @@ python3 "$C/scenes.py" familiar_dense --run "$R" > "$E/familiar_dense.txt" 2>&1
 python3 "$C/scenes.py" notice_rate --run "$R" > "$E/notice_rate.txt" 2>&1
 python3 "$C/scenes.py" witness_wake --run "$R" > "$E/witness_wake.txt" 2>&1
 python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
+# The fighters' cheaper paths change nothing: each compared with the old way (features/battle.md, about 5 min together).
+python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
+python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
+python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;

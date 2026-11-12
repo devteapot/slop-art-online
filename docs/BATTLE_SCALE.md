@@ -1,6 +1,6 @@
 # Battle scale: why a battle of minded fighters collapses (diagnosis and fix design, 2026-11-12)
 
-Status: **fixes 1–3 built on `battle-scale` and accepted as a step (2026-11-12): the collapse is gone, but 60 Hz is not reached at 200 fighters (see [Acceptance runs](#acceptance-runs-fixes-13-quiet-box-2026-11-12)). Fix 4 (folding) and the remains' caching built on `battle-fold`; its acceptance runs, with deaths permanent, wait for a quiet window. The fighters' 15 Hz evaluations analysed, nothing built for them.** The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
+Status: **fixes 1–3 built on `battle-scale` and accepted as a step (2026-11-12): the collapse is gone, but 60 Hz is not reached at 200 fighters (see [Acceptance runs](#acceptance-runs-fixes-13-quiet-box-2026-11-12)). Fix 4 (folding) and the remains' caching built on `battle-fold`; the fighters' cheaper paths 1–3 on `battle-cheap`. Their acceptance runs, with deaths permanent, wait for a quiet window.** The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
 
 ## Workload
 
@@ -328,6 +328,42 @@ Dev-box owns the sweep (300–440 ms/s at 216 players on Cullet). Nothing here c
   - A thread-local may hold this only as a cache of rows: it must give the same answers when it is empty. The SpacetimeDB reducers docs make module memory across calls undefined.
   - Not built here: it is the sweep's design, and the fold would use it too.
 - **Familiarity.** Nothing in fixes 1–4 is on the sweep's path. The seen set, `familiar` and noticing serve minds' graphs, not players' perceived sets.
+
+## The cheaper paths as built (`battle-cheap`)
+
+The coordinator approved paths 1–3 of [the 15 Hz analysis](#the-fighters-15-hz-evaluations-analysis-nothing-built) (2026-11-12), each to be proven to change nothing a fighter perceives or does. Each is a law, on by default, with a diagnostic `_check` law that also works its answer out the old way and counts any difference (`diag:` `…:differed`).
+
+1. **A move's check on the fields it reads** (`check_ctx_plan`; `act::checked`).
+   - **Why not a remembered refusal.** The approved design was to remember a refusal while nothing the check reads has changed and the pool is short of the cost. It is exact, but it would almost never hit for a person. The strike check reads, through the predators' `dares()` branch, the fighter's hunger, the time since its last blow and its target's health. The script layer's plan of what a check reads cannot tell that branch runs only for animals, and all three change at every look (a probe of the key). So it was not built.
+   - **What is built.** The check before a move starts is given a context of the fields its plan reads alone (`Scripts::check_plan`, `Reads`). The fighter's warmth, its kin near (a scan of the crowd), practice, community and home, inventory, know-how, genes and terrain are left out when unread. So are the target's community, home, owner and hosting, and its bearing and closing.
+   - **Exact by construction.** The script is given every field it reads. The random roll is drawn once either way, so the world's later draws are the same. Its refusals, and the lines told from them, are the check's own.
+2. **The body's alarms from their cell** (`alarm_cells`; `brain::alarm_statuses`, `BodyFacts::next_change_ms`).
+   - **Why not cut points.** `status_of` states no levels of its own, so they cannot be read from it.
+   - **The cell.** Each character's last answer is kept until the first moment any fact the law reads can change: a rounded level crossing its next half, a whole second more since a blow. That moment comes from the body row's levels and rates. The cell also ends on any change to that row, the stage, night or the script.
+   - **The memo key.** `status_of`'s shared memo is now keyed by the facts it reads alone (`Scripts::status_reads`, from the field analysis), so focus and the rates it never reads no longer split its answers.
+   - **Exact.** The law's input is the same throughout a cell, so its answer is too. The rules test `alarm_cells_give_the_law_s_answer_at_every_moment` replays five fighters' rows millisecond by millisecond over 15 s, 75,000 moments; the kept answer is the law's at every one, while the law is asked under a tenth as often.
+3. **Warmth without copying** (`act::warmth`, `common::chunk_warming`).
+   - Only the structures that can warm or shelter are visited, in place. They come from a per-chunk list drawn from the chunk's cached structures, and drawn again whenever that list is.
+   - Remains are never in it, so the answer, an OR over those structures, is the same. `warmth_check` compares it with the full copy.
+
+**Proofs** (verify-core, `scenes.py cheap_check_ctx`, `cheap_alarms`, `cheap_warmth`): 12 fighters on an open line, a campfire, a shelter and three dead among them, with every diagnostic law on for 60 s of strikes, blocks, heals and refusals.
+- Checks on a plan's fields: about 9,400, none differing from the whole context.
+- Alarm answers kept: about 20,000–23,000, against about 10,700 asked, none differing from the law.
+- Warmth: about 60,000 comparisons, none differing.
+- verify-player combat and `just living-check` pass.
+
+**A hazard found on the way.** The shipped `laws_about` is close to the engine's 2,000-operation limit. Five more descriptions with an `if … else` pushed it over, and it then returned nothing: the install refused the script for want of a description of its first law (`address_m`), and every Cullet test failed. The new laws' descriptions are plain words. The next law with a conditional description may hit it again, so the limit, or the descriptions' shape, wants a look.
+
+**Still to measure:** what the paths save at 100 and 200 fighters, in the quiet window ([Acceptance](#acceptance-plan-for-the-second-quiet-window)).
+
+## Acceptance plan for the second quiet window
+
+Three builds at once on the same box, each a scratch world:
+- `battle-scale`: fixes 1–3, the before arm for the fold;
+- `battle-fold`: fix 4, folding at 2,000 ms;
+- `battle-cheap`: paths 1–3 on top of the fold.
+
+The window holds two 30-minute stages: 100 fighters, then 200, with 116 and 16 walkers and the island's residents. Deaths are permanent (`--no-refill`), there is no mind service, and profiling is on. Each run records how long the remains lie. That gives both comparisons, `battle-fold` against `battle-scale` and `battle-cheap` against `battle-fold`, under the same load. Each world takes one core, so the three together add about three cores. About 75 minutes in all: 10 to build and launch, 60 for the runs, 5 to collect.
 
 ## Verification it would need
 
