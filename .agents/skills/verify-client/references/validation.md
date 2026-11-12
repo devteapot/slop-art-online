@@ -1,5 +1,9 @@
 # Client protocol validation
 
+## 2026-11-12 far-label (Spark)
+
+Branch `far-label` (`2095a272`/`18b7754b`), the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-farlabel-023653`: exit 0. New `far_label.py`, `client-far2-024145`: 3/3 (through the SDK probe the player's `seen_characters` labels a stranger at 2 m "a stranger", one at 6 m "someone too far away to make out", neither named; the far one brought to 2 m becomes "a stranger"). The first attempt (`client-far-024057`) read the probe's events wrongly (the rows were right); the script now reads `tables`.
+
 ## 2026-11-12 stamina-1 (Spark)
 
 Branch `stamina-1` with look-2 merged; trial service `slop-trials-stdb`, scoped build. `client-st1c`: **42 of 42**. The new checks:

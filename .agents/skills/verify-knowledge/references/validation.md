@@ -1,5 +1,9 @@
 # Knowledge validation
 
+## 2026-11-12 far-label (Spark)
+
+Branch `far-label` (`18b7754b`), trial Neo4j `slop-trials-neo4j` (:7699). `names.py` 7/7 (it was not executable: `chmod +x`), `strangers.py` 10/10, and the ignored test `memory::tests::strangers_stay_apart` with the far-name guard (a node named "Cal" or "a stranger #200" is not renamed to "someone too far away to make out #id") passes. Not run: the full `verify_knowledge.py` runner.
+
 ## 2026-11-12 fix-stranger-merge: two strangers stay two people (Spark)
 
 Branch `fix-stranger-merge` (from main `23771d59`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), the trial stack's Neo4j (`slop-trials-neo4j`, 7699) for the scenes, private `CARGO_TARGET_DIR`, fake models only. No table, reducer, view or subscription changed (the SpacetimeDB data paths are as before); the change is in the mind's graph naming, recall and integration. Evidence under `.local/living/verify/`.

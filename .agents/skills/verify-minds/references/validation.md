@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-12 far-label (Spark)
+
+Branch `far-label` (`18b7754b`), the trial service `slop-trials-stdb`, the fake model. `minds-farlabel-024238`: `roundtrip` and `conversation` pass (the release mind's non-ignored tests, 104, pass too). Not run: the other cases.
+
 ## 2026-11-12 arrive-2: exp-arrive's trial tooling on main, without the newcomer laws (Spark)
 
 Branch `arrive-2` (exp-arrive `1e63a30` with origin/main `a221a78` merged; the newcomer laws removed after the owner rejected them). Worktree, trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only. The branch's Rust is identical to main's; it changes trials.py, arrive_report.py, the arrive trials and docs.
