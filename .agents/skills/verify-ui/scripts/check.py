@@ -174,6 +174,38 @@ def windows(run, c):
     c.check(s, "Esc again opens Menu (and frees the cursor)", d["12"] and d["12"]["menu"] and "Esc with nothing open: Menu, cursor freed" in log(out))
 
 
+@scenario("room-detail")
+def room_detail(run, c):
+    """speech-address in the client: how a line to the room was said ("to the room, naming you
+    and a stranger") shows beside the speaker in the Log and their window, in the player's own
+    labels; the bubble keeps the words only; a line to someone gets no detail. A fresh player
+    ("Listener") with two residents held beside it; A says to the room a line naming B (by B's
+    given name) and the player (admin `mind_say`, the speech minds use), then a line to the player."""
+    s = "room-detail"
+    a, b = residents(run)
+    names = {r["id"]: r.get("name", "") for r in sql(run, "SELECT id, name FROM character WHERE kind = 'person'")}
+    first = (names.get(b) or "").split(" ")[0]
+    words = f"Come and look, {first} and Listener!"
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    syncs = [f'room=mind_say|{a}|"{words}"|0|""|0|{thought}', f'tome=mind_say|{a}|"Just you, now."|{{me}}|""|0|{thought}']
+    plan = ("ready;sync:scene;wait:2.5;sync:room;wait:1.2;shot:01_bubble;dump:01;key:KeyL:tap;wait:0.6;shot:02_log;dump:02;key:KeyL:tap;wait:0.3;"
+            f"menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:0.6;shot:03_window;dump:03;sync:tome;wait:1.5;shot:04_to_me;dump:04;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"room-detail-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{b}:-2:0"], syncs=syncs, extra=["--token", tok, "--player", "Listener"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("01", "02", "03", "04")}
+    lines = lambda k: (d[k].get("extra") or {}).get("lines") or []
+    room = next((l for l in lines("02") if l.get("speaker") == a and l.get("to") == 0 and l.get("text") == words), None)
+    how = (room or {}).get("how") or ""
+    c.check(s, "the room line carries how it was said, naming you and the other as I know them", how.startswith("to the room, ") and "you" in how and "stranger" in how and first not in how and "Listener" not in how, f"{how!r}; lines {lines('02')[-3:]}")
+    c.check(s, "its words stay the words alone", room is not None and room.get("text") == words, str(room))
+    bub = [x.get("text") for x in d["01"].get("bubbles") or [] if x.get("speaker") == a]
+    c.check(s, "the bubble over them shows the words only", bub == [words], str(bub))
+    c.check(s, "their window is open on the same lines", f"Person{a}" in [w for w, _ in wins(d["03"])], str(wins(d["03"])))
+    tome = next((l for l in lines("04") if l.get("speaker") == a and l.get("text") == "Just you, now."), None)
+    c.check(s, "a line to me carries no detail", tome is not None and not tome.get("how"), str(tome))
+
+
 @scenario("talk")
 def talk(run, c):
     s = "talk"

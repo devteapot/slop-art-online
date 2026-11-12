@@ -340,6 +340,8 @@ fn dump(
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone()), "tab": talk.as_ref().and_then(|t| t.tabbed.as_ref().map(|(p, e, c)| serde_json::json!({"prev": p, "earshot": e, "chose": c})))})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+        // Speech bubbles over heads: whose, and their words only (speech-detail-1).
+        "bubbles": model.bubbles.iter().map(|b| serde_json::json!({"speaker": b.speaker, "text": b.text})).collect::<Vec<_>>(),
         // Where my body is drawn (game x, z) and the authority's row for it as this client holds
         // it (x, y, speed): committed-moves holds movement through a windup or a dash.
         "me_at": me_at(&extra),
@@ -477,6 +479,8 @@ impl DumpExtra<'_, '_> {
         serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
+            // The Log's last lines as the Log and the person windows show them (speech-detail-1).
+            "lines": self.talks.lines.values().rev().take(12).rev().map(|l| serde_json::json!({"speaker": l.speaker, "to": l.to, "mine": l.mine, "how": l.how, "text": l.text})).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
             "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film,
