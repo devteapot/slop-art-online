@@ -145,6 +145,7 @@ fn actor(r: &mut Rng, id: u32) -> ActorFacts {
         pasture: r.range(0.0, 3.0),
         hurt_by: if hurt { r.n(1, 40) } else { 0 },
         hurt_ago: hurt.then(|| r.range(0.0, 20_000.0)),
+        hurt_by_near: hurt && r.range(0.0, 1.0) < 0.5,
         yielded_ago: r.chance(0.1).then(|| r.range(0.0, 30_000.0)),
         sensed,
         bold: r.chance(0.05),

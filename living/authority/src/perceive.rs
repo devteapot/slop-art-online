@@ -508,6 +508,15 @@ pub fn request_waking(ctx: &ReducerContext, id: u32, reason: &str, now: u64, wak
     request(ctx, id, reason, now, false, Some(wake));
 }
 
+/// A blow landed on `id`: if it sleeps, it wakes, whoever plays it, is told why, and a mind is
+/// asked with what waited (as `request_waking` with `Wake::Attack`). Awake, nothing: the first
+/// blow of a fight already asked its mind, and the later ones are the fight report's.
+pub fn wake_struck(ctx: &ReducerContext, id: u32, why: &str, now: u64) {
+    if asleep(ctx, id) {
+        request_waking(ctx, id, why, now, Wake::Attack);
+    }
+}
+
 /// Whether `id` sleeps: in a sleep act, or between two sleeps of one rest (`Slumber`).
 pub fn asleep(ctx: &ReducerContext, id: u32) -> bool {
     ctx.db.slumber().actor().find(id).is_some() || ctx.db.activity().id().find(id).is_some_and(|a| a.skill == "sleep")
