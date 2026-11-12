@@ -45,7 +45,7 @@ On a launched default-seed run (`scenes.py <case> --run "$R"`):
 - **`witness_fold`** (about 1.5 minutes):
   - O stands between two fights: A, with a spear, strikes V until V falls; C strikes D, who blocks.
   - Checks:
-    - the blows O's lines count, landed and blocked, equal the `fight_seen` rows naming O (read while the fights go on; O's facing may hide some), at most the strikes the rules resolved (`skill_use` outcomes);
+    - the blows O's lines count lie between the `fight_seen` rows naming O (read by polling, a lower bound) and the strikes the rules resolved (`skill_use` outcomes). When O is among every row read, they equal the strikes, landed and blocked;
     - V's fall is in O's lines once;
     - fewer lines than blows, at most one a window, the first within `witness_fold_ms` plus 100 ms of the first blow;
     - O is among most rows' onlookers, and neither of the two in a blow is;

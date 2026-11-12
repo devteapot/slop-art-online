@@ -1398,7 +1398,9 @@ def watch_fight_case(run):
     texts = {'fold_ms': fold, 'w_fight_lines': lines[:8], 'w_line_count': len(lines), 'blows_counted': counted, 'struck': len(struck), 'seen_by_w': len(seen_by_w),
              'prompt_lines': in_prompt[:8]}
     checks = {
-        'folded_lines_count_every_blow_w_saw': counted == len(seen_by_w) and 0 < len(seen_by_w) <= len(struck) and counted > len(lines) > 0,
+        # Rows are read by polling (a lower bound); W among every row read saw the fights whole.
+        'folded_lines_count_every_blow_w_saw': 0 < len(seen_by_w) <= counted <= len(struck) and counted > len(lines) > 0
+                                                 and (counted == len(struck) if len(seen_by_w) == len([r for r in rows.values() if (r['attacker'], r['victim']) in ((a, v), (c, d))]) else True),
         'who_is_winning_a_landed_on_v': any(a_on_v.search(l) for l in lines),
         'd_blocked_c': any(re.search(rf'#{c}\) (?:attacked|kept on at) [^:]*#{d}\): \d+ blows? \([^)]*blocked', l) for l in lines),
         'who_fell_v': sum(l.count(f'#{v}) fell.') for l in lines) == 1,

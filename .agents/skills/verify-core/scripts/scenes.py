@@ -5522,8 +5522,12 @@ def witness_fold(s):
         # Every blow O could see: the rows naming O (O's facing may hide some), at most every strike.
         o_rows = [r for r in rows if o in [x & 0x7FFFFFFF for x in r["onlookers"]]]
         m["o_rows"] = len(o_rows)
-        s.expect("every blow O could see is in its folded lines, each with its outcome", o_sum["blows"] == len(o_rows) <= m["struck"]
-                 and o_sum["landed"] == sum(1 for r in o_rows if r["outcome"] == 2) and o_sum["blocked"] == sum(1 for r in o_rows if r["outcome"] == 4) and o_sum["blocked"] >= 1, m)
+        # The rows are read by polling, so a few may go unread under load: a lower bound. When O
+        # was among every row read, it saw the fights whole, and its lines count every strike.
+        whole = len(o_rows) == len(rows)
+        exact = o_sum["blows"] == m["struck"] and o_sum["landed"] == m["struck_landed"] and o_sum["blocked"] == m["struck_blocked"]
+        s.expect("every blow O could see is in its folded lines, each with its outcome",
+                 len(o_rows) <= o_sum["blows"] <= m["struck"] and o_sum["blocked"] >= 1 and (exact if whole else True), m)
         s.expect("O's lines say V fell, once", o_sum["fell"] == 1 and any("fell" in r["text"] and ("attacked" in r["text"] or "kept on at" in r["text"]) for r in o_lines), m)
         s.expect("folded: fewer lines than blows, at most one a window", 0 < len(o_lines) < o_sum["blows"] and len(o_lines) <= (t1 - t0) / fold + 2, m)
         s.expect(f"O's first line comes within witness_fold_ms ({fold:.0f} ms) of the first blow", m["first_line_after_ms"] is not None and 0 < m["first_line_after_ms"] <= fold + 100, m)
