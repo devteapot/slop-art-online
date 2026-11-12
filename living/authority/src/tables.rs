@@ -1538,8 +1538,9 @@ impl CharacterSenses {
 /// Whom a line said now would reach, for a person's client (private; read through
 /// `my_earshot`): per way of speaking in the rules' order, the people the character perceives
 /// whom a line in it would reach (`earshot::reach`, the rule `speech::speak` gives the words
-/// by), nearest first, and the same in words in the character's own labels (`text`, the words a
-/// mind's scene carries). Someone out of sight is never listed, though a line may reach them.
+/// by), nearest first, and the same in short words in the character's own labels (`text`,
+/// `earshot::short_words`: the nearest two named, the rest and what a call adds counted; a
+/// mind's scene carries the full `earshot::words`). Someone out of sight is never listed, though a line may reach them.
 /// Written at the character's frames only when it changed (`frame::show_earshot`, at most every
 /// `frame::EARSHOT_MS`). One row per character a person plays now; it goes when the character
 /// dies.

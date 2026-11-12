@@ -368,7 +368,7 @@ fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
         return;
     }
     let ways = crate::earshot::reach(ctx, id, common::pos(&b, now), |x| scene.contains(&x), now);
-    let text = crate::earshot::words(&ways, |x| common::label_for(ctx, &me, x));
+    let text = crate::earshot::short_words(&ways, |x| common::label_for(ctx, &me, x));
     let row = CharacterEarshot { id, ways, text, at_ms: now };
     match v.earshot.as_ref() {
         Some(old) if old.ways == row.ways && old.text == row.text => {}

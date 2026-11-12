@@ -9,8 +9,9 @@ names ("I'm …", admin `mind_say`). Then A stands 3 m east (seen, within a said
 (seen by day, beyond a said line, within a call) and C 15 m west (beyond sight, within a call).
 With the `earshot` law off (as shipped) the player has no `my_earshot` row; the admin turns it
 on (`set_world_law`). The player's `my_earshot` row, read through the Rust SDK probe (`drive.py --query --as-player`),
-must list A at `say`, add B at `call` by day, never list C, and say the same in words with A by
-name, B as "a stranger" and no word of C's name. The player then says a line to the room
+must list A at `say`, add B at `call` by day, never list C, and say it in the player's short form:
+"Within earshot: <A>; a call would also reach 1 more" (by night "Within earshot: <A>"), with no
+word of C's name. The player then says a line to the room
 (`human_say`) and calls one (`human_speak … "call"`): the people who receive each, among the
 three, are the row's list at that way, and C, unseen, receives the call. Turned off again, the row
 goes. Admin calls
@@ -144,8 +145,8 @@ def main():
         "say lists A": ways.get("say", set()) & ours == {a},
         "call lists A and B by day (A alone by night)": ways.get("call", set()) & ours == ({a} if night else {a, b}),
         "the unseen are never listed": not (unseen & listed),
-        "the words name A, B as a stranger by day, and never C": text.startswith(f"Within earshot if you say it: {names[a]}") and names[c] not in text
-        and (("a call would reach no one more" in text) if night else ("a call would also reach: a stranger" in text)),
+        "the short words name A, count B as one more for a call by day, and never name C": names[c] not in text
+        and (text == f"Within earshot: {names[a]}" if night else text == f"Within earshot: {names[a]}; a call would also reach 1 more"),
         "a said line reaches exactly the say list": heard_say == ways.get("say", set()) & ours,
         "a call reaches the call list and the unseen": heard_call - unseen == ways.get("call", set()) & ours and unseen <= heard_call,
     }

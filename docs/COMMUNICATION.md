@@ -898,7 +898,7 @@ Approved 2026-11-12 by the general coordinator as a perception fact. It is #4 in
 **Both controllers, from one place.**
 - **A mind:** its deliberation scene (`perceive::scene_json`) has the key "who would hear you now" (`living_rules::script::speech::EARSHOT`), read in its think and deliberate prompts.
   - A talk turn's prompt does not have it. That prompt has no scene of its own: it answers a line just heard, and its `how` already says when the line was a call from afar.
-- **A player:** the private table `character_earshot` holds one row per character a person plays: `ways` (each way's `way` and `hearers`, the ids nearest first) and `text`, the same words in the player's labels.
+- **A player:** the private table `character_earshot` holds one row per character a person plays: `ways` (each way's `way` and `hearers`, the ids nearest first) and `text`, a short form of the words in the player's labels (since `earshot-short`, below).
   - The row is read through the view `my_earshot`, a point lookup by the caller's living character, like `my_senses`.
   - The player's frame writes it (`frame::show_earshot`) at most every 250 ms (`EARSHOT_MS`), and only when the people or the words changed.
   - It goes when the law is off or the character dies (`forget_dead`).
@@ -908,6 +908,25 @@ Approved 2026-11-12 by the general coordinator as a perception fact. It is #4 in
 - **Today.** The client draws its own earshot ring and Tab marks from `seen_characters` and the `senses` law with partial facts (`talk.rs` `earshot`, the say way only).
 - **The minimal change.** Subscribe `SELECT * FROM my_earshot`. While a row exists, take the Tab marks (whom a said line reaches) from `ways` where `way` = `say` instead of computing them. A call's and a whisper's lists are there too, for marks per way. The text can be shown as it is.
 - **With no row** (the law off), keep the client's own ring.
+
+**A short form for players (branch `earshot-short`).** In a crowd, the full sentence ran to several lines under the talk box (the laptop, 2026-11-12), and the owner wants less on screen. `text` is now `earshot::short_words`:
+
+> Within earshot: Ife Okoro, a stranger and 4 others; a call would also reach 3 more
+
+- **The parts:** the nearest two a said line reaches are named, and the rest counted. A wider way adds only a count, and only when it adds someone ("a call would also reach 3 more"; with no one in say range, "a call would reach 3"). A narrower way, a whisper, is left out of the words.
+- **Edge cases:** "Within earshot: no one you see" when a said line reaches no one the player sees. A repeated label reads "another stranger".
+- **Every id stays in `ways`,** each way's full list, for the client's marks.
+
+**Minds keep the full form: one text per controller, by need.** A mind's scene keeps `earshot::words`, every person by label and the id it can act on, up to 8 a way. A short form would hide what a mind needs: whether the stranger it means to speak to is within reach ("a stranger and 4 others" does not say which stranger).
+- **The cost**, measured on the fake smoke `es1s` (8 scene prompts with the fact): the sentence's median was 206 characters (max 281), 5% of the scene's 3,787 and 1.5% of the whole user prompt's 13,843, about 55 tokens.
+- **Same fact, two texts.** The two texts state the same fact from the same lists. A player sees the people themselves on screen, so the short form loses nothing a player cannot see.
+
+**A player cannot yet choose the way (a client gap, not a rule gap).** The game's talk box says every line (`human_say`). Whisper is a greyed placeholder and there is no call, so the client receives the `whisper` and `call` lists and has no use for them yet. Minds can call or whisper, so today a player only ever says. The authority already treats both alike:
+- `human_speak(text, to, way)` takes any way of the world's rules ("" is `say`);
+- it runs the same `speech::speak` as a mind's `mind_say`, with the same reach, refusals in the world's words, cut to the way's `max_chars`, and gaps;
+- it is verified for players by verify-player's `speak.py`.
+
+What is missing is the client's choice of way, read from `speech_card`.
 
 ### Data paths and SpacetimeDB
 
@@ -919,3 +938,19 @@ Checked against the [views](https://spacetimedb.com/docs/functions/views/), [tab
 - **Cost per frame:** one `creatures_near` gather within the widest carry (22.5 m on the island, 30 m in Cullet) and one hearing lookup per person in the scene, the per-moment cached `senses` law.
 - **A mind's scene:** the same gather once per deliberation request, inside `scene_json`.
 - **Retained data:** one small row per played character.
+
+### Late lines: three options for the owner (prepared 2026-11-12; to be chosen after the ways change is measured)
+
+**What a late line is.** The earshot stage (`es1`, docs/TRIALS.md "Earshot stage") found the largest single share of unheard lines: 65–73 a 20-minute run at Cullet, of 151–179. In each, the addressee was within a said line when the mind thought, and gone by the time the line was said: a median of 7.6–8.1 s later, the model's time. The fact a mind is told is true when it thinks; people move meanwhile.
+
+The ways change comes first: a deliberation's line naming a way, which addresses another 22–33 lines a run ("only a call would reach"). Its measure decides how much remains for these options.
+
+| | (a) "Speak to" walks into hearing first | (b) Reach re-checked when the line falls due | (c) As it is |
+|---|---|---|---|
+| **What changes** | A line to a named person beyond the way's reach becomes an act: the speaker walks toward them, as `give` walks into reach, and says it once within the way's carry. It gives up, and is told, past a bound of distance or time. | When a mind's decided line comes due (`mind_install`, `mind_say`: a deliberation's line or a talk turn's), the authority checks the addressee against the way's reach (`speech::within_reach`). If they are beyond it, the line is not said. The speaker is told ("You had not yet said “…” to Magda Tarn: Magda Tarn is now too far away to hear you.") and thinks again with that in front of it, as `heard_first_rethinks` does (`held_for_another`). | Every decided line is said. The speaker is told at once that it was not heard ("Magda Tarn is too far away: they could not have heard you."), and may say it again. |
+| **For whom** | Both: a mind's line, and a player's if the client offers it as an act (`human_act`). `human_say` and `human_speak` stay immediate. | Minds. A player's line is said when they send it, with the people in view, so nothing is decided in advance to fall due. | Both, as now. |
+| **Rule change** | Act semantics: saying takes time and moves the body. | A new law, off by default, of the same kind as `heard_first_rethinks`. Like that law, it does not contradict "direct lines are always said" (§15): the line is not said into the air, it waits on a perceived fact at the moment it would be said. | None. |
+| **Cost and risk** | A walk interrupts what the speaker was doing; long walks across a quay; a line that arrives later than the model meant. Needs a bound and the words for giving up. | One more deliberation for each late line: about 65–73 a run on about 430, so +15–17% deliberations at Cullet. A mind may give up, call, walk, or say nothing, which is its choice. | Lines go unheard (about a quarter of residents' lines at Cullet); re-asks and "silence" readings as they are. |
+| **What it fixes** | The late line and some "not listed" ones: the speaker goes to the listener. | The late line: the mind sees it is late and chooses again. | Nothing. |
+
+The owner decides (a), which is act semantics, and whether (b) is turned on by default.

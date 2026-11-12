@@ -37,9 +37,6 @@ pub struct Provider {
     pub url: String,
     pub model: String,
     pub key_env: String,
-    /// $ per million input tokens (output is free), for the journal's cost estimate.
-    #[serde(default)]
-    pub input_usd_per_m: f64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -78,6 +75,8 @@ pub struct File {
 
 pub struct Jev {
     pub file: File,
+    /// Input price, from the local prices file (crate::prices); unknown without one.
+    pub prices: crate::prices::Prices,
     key: String,
     http: reqwest::Client,
 }
@@ -100,7 +99,9 @@ impl Jev {
         }
         let key = std::env::var(&file.provider.key_env).map_err(|_| anyhow!("LIVING_JEV=1 but {} is not set", file.provider.key_env))?;
         let http = reqwest::Client::builder().timeout(Duration::from_secs(10)).user_agent("sao-living-mind/0.1").build()?;
-        Ok(Some(Self { file, key: key.trim().to_string(), http }))
+        let prices = crate::prices::Prices::load(root)?;
+        log::info!("judgments: {}", prices.describe(&file.provider.model));
+        Ok(Some(Self { file, prices, key: key.trim().to_string(), http }))
     }
 
     /// What the compile prompt tells a mind about these judgments.
@@ -262,7 +263,7 @@ impl Minds {
             "at_ms": llm::now_ms(), "actor": c.name, "purpose": "judge", "profile": "jev", "model": jev.file.provider.model,
             "latency_ms": latency_ms, "lane": "urgent", "queue_wait_ms": 0, "prompt_tokens": input_tokens,
             "completion_tokens": result.as_ref().ok().and_then(|v| v["usage"]["output_tokens"].as_u64()), "cached_tokens": null,
-            "cost_usd": input_tokens.map(|t| t as f64 * jev.file.provider.input_usd_per_m / 1e6),
+            "cost_usd": jev.prices.input_cost(&jev.file.provider.model, input_tokens),
             "request": body, "reply": result.as_ref().ok().map(|v| v.to_string()), "tokens": input_tokens,
             "judged": items.iter().map(|i| json!({"q": i.q, "value": i.value, "choice": i.choice, "ttl_ms": i.ttl_ms})).collect::<Vec<_>>(),
             "error": result.as_ref().err().map(|e| format!("{e:#}")),
