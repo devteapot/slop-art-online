@@ -2166,6 +2166,40 @@ mod tests {
     /// the name.
     #[tokio::test]
     #[ignore]
+    async fn a_far_figure_joins_the_person() {
+        // far-handle: what a mind remembered of a figure too far away to make out (person:<handle>)
+        // becomes the person's once made out (the made-out merge), and the handle's node is gone.
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-farhandle-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Lark").await.unwrap();
+        let now = crate::llm::now_ms();
+        let h = living_rules::script::FAR_HANDLE_BASE + 7;
+        let v = json!({
+            "nodes": [{"key": format!("person:{h}"), "labels": ["Person"], "name": format!("{FAR_NAME_KEPT} #{h}")}, {"key": "person:15", "labels": ["Person"], "name": "Thessaly Marl"}],
+            "edges": [{"from": format!("person:{h}"), "rel": "WALKS", "to": "place:the_strand", "confidence": 0.8, "because": [20]}],
+            "remember": [{"exp": 20, "gist": "Someone too far away to make out walked the strand at dawn."}]
+        });
+        let (p, _) = patch_from(&v, &[20], &|_| Some((now - 1000, 0.8, vec![format!("person:{h}")])));
+        s.apply(1, &p, "t1", now).await.unwrap();
+        let join = Patch { merges: vec![(format!("person:{h}"), "person:15".into())], ..Default::default() };
+        s.apply(1, &join, "t2", now + 1000).await.unwrap();
+        let mut cues = Cues::default();
+        cues.key("person:15", 1.0);
+        let r = s.recall(1, &cues.bounded(), 12, 3).await.unwrap();
+        let facts: Vec<String> = r.facts.iter().map(|f| render(f, &|_| String::new())).collect();
+        assert!(facts.iter().any(|f| f.contains("person:15") && f.contains("WALKS")), "the figure's deed is the person's: {facts:?}");
+        let mut q = s.g.execute(query("MATCH (c:Concept {run: $run, actor: 1}) WHERE c.key STARTS WITH 'person:' RETURN c.key AS key, c.name AS name, c:Merged AS merged ORDER BY key").param("run", run.clone())).await.unwrap();
+        let mut people = Vec::new();
+        while let Some(row) = q.next().await.unwrap() {
+            people.push(format!("{}={} merged={}", row.get::<String>("key").unwrap(), row.get::<String>("name").unwrap_or_default(), row.get::<bool>("merged").unwrap_or(false)));
+        }
+        assert_eq!(people, vec![format!("person:{h}={FAR_NAME_KEPT} #{h} merged=true"), "person:15=Thessaly Marl merged=false".to_string()], "{people:?}");
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
     async fn strangers_stay_apart() {
         let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
         let run = format!("test-strangers-{}", crate::llm::now_ms());

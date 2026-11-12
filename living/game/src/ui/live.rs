@@ -43,6 +43,11 @@ pub struct Last {
     /// the same update as the death itself, so the death screen names my killer and the
     /// witnesses from this, as my character saw them, not from the authority's cause text.
     labels: HashMap<u32, String>,
+    /// When each creature was last among those I perceive (authority ms), and when I noticed my
+    /// death: a killer is named only if my character saw them just before ([`KILLER_SEEN_MS`]);
+    /// a missile's unseen shooter is not, whatever id the death row carries.
+    seen_ms: HashMap<u32, f64>,
+    died_ms: f64,
     /// Speech I heard, by experience id: `my_experience` holds only my newest lines (the
     /// authority's window, `frame::LINES_SHOWN`), so the log keeps what it has received.
     heard: BTreeMap<u64, Experience>,
@@ -89,15 +94,22 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     if last.labels.len() > 4096 {
         last.labels.clear();
     }
+    if last.seen_ms.len() > 4096 {
+        last.seen_ms.clear();
+    }
     for c in chars.values() {
         if last.labels.get(&c.id) != Some(&c.label) {
             last.labels.insert(c.id, c.label.clone());
         }
+        last.seen_ms.insert(c.id, now_ms);
     }
 
     // Death: the character I played is no longer alive.
     if let Some(prev) = last.id {
         if net.my_id.is_none() && mine.get(&prev).is_some_and(|c| !c.alive) {
+            if last.dead != Some(prev) {
+                last.died_ms = now_ms;
+            }
             last.dead = Some(prev);
         }
     }
@@ -105,10 +117,15 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         last.id = net.my_id;
         last.dead = None;
     }
-    let perceived = |id: u32| chars.get(&id).map(|c| c.label.clone()).or_else(|| last.labels.get(&id).cloned());
+    // Named as everywhere else (`Looks`: a known name, a stranger by their colours, someone too
+    // far away to make out); the authority's last label kept at frame rate covers the moment
+    // before `Looks` (4 Hz) has them.
+    let perceived = |id: u32| looks.of(id).map(String::from).or_else(|| last.labels.get(&id).cloned());
     // The death row (`my_act_outcomes`, kind `death`): its code and, killed, the killer's id.
     let died = conn.db.my_act_outcomes().iter().filter(|o| o.kind == "death").max_by_key(|o| o.at_ms);
-    model.death = last.dead.and_then(|id| mine.get(&id)).map(|c| death(c, died.as_ref().filter(|o| o.other != 0).map(|o| o.other).or(combat.killer).and_then(perceived), died.as_ref())).map(|mut d| {
+    // The killer only if my character saw them just before it died (id 0 is no one).
+    let saw_then = |id: &u32| *id != 0 && last.seen_ms.get(id).is_some_and(|t| *t >= last.died_ms - KILLER_SEEN_MS);
+    model.death = last.dead.and_then(|id| mine.get(&id)).map(|c| death(c, died.as_ref().filter(|o| o.other != 0).map(|o| o.other).or(combat.killer).filter(saw_then).and_then(perceived), died.as_ref())).map(|mut d| {
         // Who saw it, as my character perceived (the authority's `WITNESS` rows).
         if !combat.witnesses.is_empty() {
             d.witnesses = Some(combat.witnesses.iter().map(|w| perceived(*w).unwrap_or_else(|| "someone".to_string())).collect());
@@ -243,7 +260,9 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         }
         let Some((p, _)) = scene.shown.get(&e.subject) else { continue };
         let kind = chars.get(&e.subject).map_or("person", |c| c.kind.as_str());
-        bubbles.push(Bubble { speaker: e.subject as u64, name: name_of(e.subject), text, head: head(e.subject, *p, kind), age, life, mine: false });
+        // Over their head, as their plate names them (someone too far: by the colours drawn).
+        let name = looks.plate(e.subject).map(String::from).unwrap_or_else(|| name_of(e.subject));
+        bubbles.push(Bubble { speaker: e.subject as u64, name, text, head: head(e.subject, *p, kind), age, life, mine: false });
     }
     if let (Some(id), Some((t, text))) = (me, input.said.last()) {
         let age = ((now_ms - *t as f64) / 1000.0) as f32;
@@ -385,36 +404,45 @@ pub fn default_bar(state: impl Fn(Key) -> SkillState) -> Vec<Skill> {
     ]
 }
 
-/// The death screen's words: from the death row's code (`living_rules::outcome`), else from
-/// `cause`. A killer is named as I perceived them (`killer`: the label of the one the death row
-/// or my `DEATH` row names), never from `cause`, whose text carries the real name.
+/// The death screen's words, from the cause's kind only (`living_rules::outcome::death`): the
+/// death row's code, else the kind of the authority's own fixed cause words ([`cause_kind`]). A
+/// killer is named as I perceived them (`killer`: `Looks`). Free text never shows: `cause` (and a
+/// cause given by an admin, code `other`) can carry real names; then "You died".
 fn death(c: &Character, killer: Option<String>, row: Option<&ActOutcome>) -> Death {
-    let by = || format!("Killed by {}", killer.clone().unwrap_or_else(|| "someone".to_string()));
-    let cause = match row.map(|o| o.code.as_str()) {
-        Some("starved") => "You starved".to_string(),
-        Some("cold") => "You died of cold".to_string(),
-        Some("exhausted") => "You died of exhaustion".to_string(),
-        Some("old_age") => "You died of old age".to_string(),
-        Some("killed") | Some("killed_yielding") => by(),
-        Some(_) if !row.is_some_and(|o| o.why.trim().is_empty()) => super::label(row.map_or("", |o| o.why.trim()).trim_end_matches('.')),
-        _ => {
-            let cause = c.cause.trim();
-            if cause.is_empty() {
-                "You died".to_string()
-            } else if cause == "starvation" {
-                "You starved".to_string()
-            } else if cause == "old age" {
-                "You died of old age".to_string()
-            } else if cause.starts_with("killed by ") {
-                by()
-            } else {
-                format!("You died of {cause}")
-            }
-        }
-    };
     let lived_ms = c.died_ms.saturating_sub(c.born_ms);
-    Death { cause, place: None, lived: (lived_ms > 0).then(|| lived(lived_ms)), witnesses: None }
+    let code = row.map(|o| o.code.as_str()).or_else(|| cause_kind(&c.cause));
+    Death { cause: death_words(code, killer.as_deref()), place: None, lived: (lived_ms > 0).then(|| lived(lived_ms)), witnesses: None }
 }
+
+/// The kind of a cause without a death row: the authority's own fixed words for a death that
+/// names no one (`brain.rs` needs, `tick.rs` age), compared whole. Anything else has no kind.
+fn cause_kind(cause: &str) -> Option<&'static str> {
+    use living_rules::outcome::death;
+    match cause.trim() {
+        "starvation" => Some(death::STARVED),
+        "cold and exposure" => Some(death::COLD),
+        "exhaustion" => Some(death::EXHAUSTED),
+        "old age" => Some(death::OLD_AGE),
+        _ => None,
+    }
+}
+
+/// What the death screen says for a cause's kind; a killing names the killer as perceived.
+fn death_words(code: Option<&str>, killer: Option<&str>) -> String {
+    use living_rules::outcome::death;
+    match code {
+        Some(death::STARVED) => "You starved".to_string(),
+        Some(death::COLD) => "You died of cold".to_string(),
+        Some(death::EXHAUSTED) => "You died of exhaustion".to_string(),
+        Some(death::OLD_AGE) => "You died of old age".to_string(),
+        Some(death::KILLED) | Some(death::KILLED_YIELDING) => format!("Killed by {}", killer.unwrap_or("someone")),
+        _ => "You died".to_string(),
+    }
+}
+
+/// How recently my character must have seen its killer to name them on the death screen (ms):
+/// the death takes my perceived rows away in the same update.
+const KILLER_SEEN_MS: f64 = 2_000.0;
 
 /// Authority time lived, in words.
 pub fn lived(ms: u64) -> String {
@@ -433,5 +461,27 @@ fn quoted(text: &str) -> &str {
     match (text.find('“'), text.rfind('”')) {
         (Some(a), Some(b)) if b > a => &text[a + '“'.len_utf8()..b],
         _ => text,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{cause_kind, death_words};
+    use living_rules::outcome::death;
+
+    #[test]
+    fn a_death_says_its_kind_and_never_a_free_cause() {
+        // The authority's own words for deaths that name no one have a kind.
+        assert_eq!(death_words(cause_kind("starvation"), None), "You starved");
+        assert_eq!(death_words(cause_kind("old age"), None), "You died of old age");
+        assert_eq!(death_words(cause_kind("cold and exposure"), None), "You died of cold");
+        assert_eq!(death_words(cause_kind("exhaustion"), None), "You died of exhaustion");
+        // Free text (an admin's cause, the authority's "killed by" with a real name) has none.
+        assert_eq!(cause_kind("killed by Vessa Pontil"), None);
+        assert_eq!(death_words(cause_kind("killed by Vessa Pontil"), None), "You died");
+        assert_eq!(death_words(Some(death::OTHER), None), "You died");
+        // A killing names the killer only as perceived.
+        assert_eq!(death_words(Some(death::KILLED), Some("a stranger in green")), "Killed by a stranger in green");
+        assert_eq!(death_words(Some(death::KILLED_YIELDING), None), "Killed by someone");
     }
 }

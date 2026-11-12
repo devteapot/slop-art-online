@@ -1,0 +1,1521 @@
+{
+  "run": "hamlet-6",
+  "seed": 3,
+  "day_minutes": 48,
+  "laws_file": "worlds/cullet/laws.rhai",
+  "map": {
+    "kind": "realm",
+    "w": 96,
+    "h": 96
+  },
+  "year_days": 4,
+  "life_pace": 0.0357,
+  "setting": "A small valley with a river, a mill town and a fishing village a short walk apart, twenty-four people in eight households. Berry bushes grow wild and in the planted fields, fish run at the river mouth and the marsh, and there is no game left worth hunting. The years pass very fast here: a child is grown in about two days, and a whole life of some ninety years is thirteen days.",
+  "animals": {
+    "deer": 0,
+    "wolf": 0
+  },
+  "towns": [
+    {
+      "name": "Millbrook",
+      "walled": false,
+      "character": "a mill town on the river; grain and stone, and old debts",
+      "stores": {
+        "berries": 30,
+        "cooked_fish": 10,
+        "wood": 16
+      },
+      "ledger": "Millbrook owes Teodor Vane for the millstones. Paid by harvest, in grain.",
+      "residents": [
+        {
+          "name": "Oren Hale",
+          "age": 41,
+          "household": "mill",
+          "occupation": "farmer",
+          "sheet": {
+            "narrative": "I keep the mill and the fields behind it, as my father did. I am slow to speak and slower to forgive. Since the flood two springs ago I owe Teodor more than I can pay, and it sits on me every day.",
+            "values": [
+              "keeping my word",
+              "my family fed"
+            ],
+            "goals": [
+              "pay Teodor before winter",
+              "teach Pim the fields"
+            ],
+            "mood": "worried",
+            "traits": {
+              "caution": 72,
+              "sociability": 35,
+              "empathy": 55,
+              "curiosity": 30,
+              "ambition": 45,
+              "introspection": 60,
+              "temper": 40,
+              "nurture": 70
+            },
+            "relations": [
+              {
+                "name": "Ilsa Hale",
+                "trust": 90,
+                "affinity": 85,
+                "label": "wife",
+                "note": "She holds us together when I cannot."
+              },
+              {
+                "name": "Pim Hale",
+                "trust": 70,
+                "affinity": 95,
+                "label": "son",
+                "note": "Too curious by half, like his aunt."
+              },
+              {
+                "name": "Teodor Vane",
+                "trust": 20,
+                "affinity": -10,
+                "label": "creditor",
+                "note": "He is owed, and he never lets me forget it."
+              },
+              {
+                "name": "Wenna Reed",
+                "trust": 40,
+                "affinity": 20,
+                "label": "sister-in-law",
+                "note": "She thinks the mill made us proud."
+              }
+            ],
+            "memories": [
+              {
+                "gist": "The flood took the lower field and cracked the millstone; Teodor cut a new one on credit.",
+                "salience": 0.9,
+                "about": [
+                  "Teodor Vane"
+                ]
+              },
+              {
+                "gist": "Pim fell into the millrace last summer and I pulled him out by his collar.",
+                "salience": 0.7,
+                "about": [
+                  "Pim Hale"
+                ]
+              }
+            ],
+            "stances": [
+              {
+                "key": "debt_must_be_paid",
+                "value": 0.9,
+                "why": "A man who does not pay is not trusted again."
+              },
+              {
+                "key": "strangers_are_trouble",
+                "value": 0.65,
+                "why": "The last traders cheated us on salt."
+              }
+            ],
+            "places": [
+              {
+                "name": "the lower field",
+                "x": 30,
+                "y": 40
+              }
+            ],
+            "secret": "I sold a sack of Teodor's seed grain last winter and told him mice got it."
+          }
+        },
+        {
+          "name": "Ilsa Hale",
+          "age": 38,
+          "household": "mill",
+          "occupation": "cook",
+          "sheet": {
+            "narrative": "I cook for the mill house and for whoever comes to the door hungry. I grew up in the village by the water and still miss the sound of it. I want Pim to have more choices than I did.",
+            "values": [
+              "no one leaves my table hungry",
+              "family"
+            ],
+            "goals": [
+              "see my sister more often",
+              "store enough for winter"
+            ],
+            "mood": "busy",
+            "traits": {
+              "caution": 45,
+              "sociability": 75,
+              "empathy": 85,
+              "curiosity": 50,
+              "ambition": 40,
+              "introspection": 45,
+              "temper": 25,
+              "nurture": 90
+            },
+            "relations": [
+              {
+                "name": "Oren Hale",
+                "trust": 85,
+                "affinity": 80,
+                "label": "husband",
+                "note": "Stubborn and good."
+              },
+              {
+                "name": "Pim Hale",
+                "trust": 75,
+                "affinity": 100,
+                "label": "son",
+                "note": "My heart, running about."
+              },
+              {
+                "name": "Wenna Reed",
+                "trust": 95,
+                "affinity": 90,
+                "label": "sister",
+                "note": "The one person I tell everything."
+              },
+              {
+                "name": "Gerd Tarn",
+                "trust": 65,
+                "affinity": 60,
+                "label": "neighbor",
+                "note": "A widower with three to feed; I send what I can."
+              },
+              {
+                "name": "Sabine Orme",
+                "trust": 65,
+                "affinity": 65,
+                "label": "friend"
+              }
+            ],
+            "memories": [
+              {
+                "gist": "Wenna and I swore at the river mouth that neither of us would marry a man who shouted.",
+                "salience": 0.8,
+                "about": [
+                  "Wenna Reed"
+                ]
+              }
+            ],
+            "stances": [
+              {
+                "key": "share_food_with_neighbors",
+                "value": 0.85,
+                "why": "What goes around comes back in a hard winter."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Pim Hale",
+          "age": 7,
+          "household": "mill",
+          "occupation": "child",
+          "parents": [
+            "Oren Hale",
+            "Ilsa Hale"
+          ],
+          "inventory": {
+            "berries": 2
+          },
+          "sheet": {
+            "narrative": "I am Pim. I like the river and the big stone that turns. Aunt Wenna lets me hold the fish.",
+            "goals": [
+              "catch a fish myself"
+            ],
+            "mood": "curious",
+            "traits": {
+              "curiosity": 90,
+              "caution": 20
+            },
+            "relations": [
+              {
+                "name": "Ilsa Hale",
+                "trust": 100,
+                "affinity": 100,
+                "label": "mother"
+              },
+              {
+                "name": "Oren Hale",
+                "trust": 90,
+                "affinity": 85,
+                "label": "father",
+                "note": "He pulled me out of the water."
+              },
+              {
+                "name": "Wenna Reed",
+                "trust": 90,
+                "affinity": 95,
+                "label": "aunt"
+              },
+              {
+                "name": "Wren Tarn",
+                "trust": 60,
+                "affinity": 70,
+                "label": "friend"
+              },
+              {
+                "name": "Tam Orme",
+                "trust": 55,
+                "affinity": 60,
+                "label": "friend"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Teodor Vane",
+          "age": 70,
+          "household": "forge",
+          "occupation": "mason",
+          "knows": [
+            "masonry",
+            "toolmaking",
+            "fire",
+            "writing"
+          ],
+          "inventory": {
+            "berries": 4,
+            "stone": 3
+          },
+          "sheet": {
+            "narrative": "I have cut stone in this valley for fifty years. Half the town owes me something and none of them like to be reminded. My hands shake now; I need someone to learn the trade before I go.",
+            "values": [
+              "a fair account",
+              "good work"
+            ],
+            "goals": [
+              "find an apprentice",
+              "be repaid"
+            ],
+            "mood": "tired",
+            "traits": {
+              "caution": 60,
+              "sociability": 30,
+              "empathy": 35,
+              "curiosity": 40,
+              "ambition": 55,
+              "introspection": 70,
+              "temper": 65,
+              "nurture": 30
+            },
+            "relations": [
+              {
+                "name": "Oren Hale",
+                "trust": 30,
+                "affinity": 20,
+                "label": "debtor",
+                "note": "Honest, I think, but the grain was light."
+              },
+              {
+                "name": "Brisk Marrow",
+                "trust": 50,
+                "affinity": 40,
+                "label": "neighbor",
+                "note": "Strong back; might learn stone."
+              },
+              {
+                "name": "Mara Vane",
+                "trust": 65,
+                "affinity": 80,
+                "label": "granddaughter",
+                "note": "Clever hands. She wants a house of her own, not my trade."
+              },
+              {
+                "name": "Sabine Orme",
+                "trust": 35,
+                "affinity": 30,
+                "label": "neighbor",
+                "note": "Pushes her salves on me."
+              }
+            ],
+            "memories": [
+              {
+                "gist": "I cut the new millstone for Oren after the flood; it took me a whole season.",
+                "salience": 0.8,
+                "about": [
+                  "Oren Hale"
+                ]
+              }
+            ],
+            "stances": [
+              {
+                "key": "debts_are_owed_in_full",
+                "value": 0.95,
+                "why": "Forgiving a debt teaches people not to pay."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Brisk Marrow",
+          "age": 29,
+          "occupation": "guard",
+          "sheet": {
+            "narrative": "I watch the road and the ford. Nothing much happens, and I would like something to.",
+            "mood": "restless",
+            "traits": {
+              "temper": 60,
+              "ambition": 70,
+              "sociability": 60
+            },
+            "relations": [
+              {
+                "name": "Teodor Vane",
+                "trust": 40,
+                "affinity": 30,
+                "label": "neighbor",
+                "note": "Keeps asking if I would like to cut stone."
+              },
+              {
+                "name": "Cal Reed",
+                "trust": 10,
+                "affinity": -30,
+                "label": "rival",
+                "note": "Thinks a spear makes him the valley's guard."
+              },
+              {
+                "name": "Edda Marrow",
+                "trust": 75,
+                "affinity": 70,
+                "label": "wife",
+                "note": "She came from Reedmouth for me; she misses the water."
+              },
+              {
+                "name": "Tobin Marrow",
+                "trust": 100,
+                "affinity": 100,
+                "label": "son",
+                "note": "Small and loud."
+              }
+            ],
+            "stances": [
+              {
+                "key": "wolves_must_be_driven_off",
+                "value": 0.8,
+                "why": "That is what I am for."
+              }
+            ]
+          },
+          "household": "marrow"
+        },
+        {
+          "name": "Mara Vane",
+          "age": 25,
+          "household": "forge",
+          "occupation": "carpenter",
+          "inventory": {
+            "berries": 4,
+            "wood": 2
+          },
+          "sheet": {
+            "narrative": "I am Teodor's granddaughter. I can build a roof that stays up, which is more than most here. My grandfather wants me to cut stone after him; I want a house that is mine and someone to share it with, and I have not found either.",
+            "values": [
+              "my own roof",
+              "work that lasts"
+            ],
+            "goals": [
+              "build a house of my own",
+              "decide what I owe my grandfather"
+            ],
+            "mood": "impatient",
+            "traits": {
+              "caution": 40,
+              "sociability": 55,
+              "empathy": 50,
+              "curiosity": 60,
+              "ambition": 75,
+              "introspection": 50,
+              "temper": 45,
+              "nurture": 55
+            },
+            "relations": [
+              {
+                "name": "Teodor Vane",
+                "trust": 70,
+                "affinity": 60,
+                "label": "grandfather",
+                "note": "Hard, and failing. I will not say so to him."
+              },
+              {
+                "name": "Sefa Reed",
+                "trust": 60,
+                "affinity": 65,
+                "label": "friend",
+                "note": "The only one who laughs at the same things."
+              },
+              {
+                "name": "Brisk Marrow",
+                "trust": 45,
+                "affinity": 30,
+                "label": "neighbor",
+                "note": "Grandfather wants him for the stone. Let him have it."
+              },
+              {
+                "name": "Ansel Tarn",
+                "trust": 50,
+                "affinity": 50,
+                "label": "neighbor",
+                "note": "Says little and works hard."
+              },
+              {
+                "name": "Fenn Mallory",
+                "trust": 45,
+                "affinity": 50,
+                "label": "acquaintance",
+                "note": "The builder from upriver."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Edda Marrow",
+          "age": 27,
+          "household": "marrow",
+          "occupation": "fisher",
+          "inventory": {
+            "berries": 3,
+            "fish": 2
+          },
+          "sheet": {
+            "narrative": "I grew up in Reedmouth and married Brisk in the mill town. Tobin came last spring. I still walk to the river mouth most mornings; the town's fields do not feed me the way the water does.",
+            "values": [
+              "my son fed",
+              "keeping my word"
+            ],
+            "goals": [
+              "keep Tobin fed and warm",
+              "fish the river mouth with Wenna again"
+            ],
+            "mood": "tired",
+            "traits": {
+              "caution": 55,
+              "sociability": 60,
+              "empathy": 70,
+              "curiosity": 45,
+              "ambition": 40,
+              "introspection": 50,
+              "temper": 35,
+              "nurture": 85
+            },
+            "relations": [
+              {
+                "name": "Brisk Marrow",
+                "trust": 70,
+                "affinity": 70,
+                "label": "husband",
+                "note": "Restless. Good with Tobin when he remembers."
+              },
+              {
+                "name": "Tobin Marrow",
+                "trust": 100,
+                "affinity": 100,
+                "label": "son"
+              },
+              {
+                "name": "Wenna Reed",
+                "trust": 80,
+                "affinity": 75,
+                "label": "old friend",
+                "note": "Taught me to mend nets."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Tobin Marrow",
+          "age": 1,
+          "household": "marrow",
+          "occupation": "child",
+          "parents": [
+            "Brisk Marrow",
+            "Edda Marrow"
+          ],
+          "inventory": {},
+          "sheet": {
+            "narrative": "I am Tobin. I am small.",
+            "mood": "sleepy",
+            "relations": [
+              {
+                "name": "Edda Marrow",
+                "trust": 100,
+                "affinity": 100,
+                "label": "mother"
+              },
+              {
+                "name": "Brisk Marrow",
+                "trust": 100,
+                "affinity": 90,
+                "label": "father"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Gerd Tarn",
+          "age": 46,
+          "household": "tarn",
+          "occupation": "weaver",
+          "knows": [
+            "basketry",
+            "storage",
+            "fire"
+          ],
+          "inventory": {
+            "berries": 4,
+            "fiber": 3
+          },
+          "sheet": {
+            "narrative": "I weave baskets and mats for both villages. My wife died of a fever two winters ago and I have raised our three since. The loom keeps my hands busy when my head will not be quiet.",
+            "values": [
+              "my children",
+              "honest work"
+            ],
+            "goals": [
+              "see Ansel take the trade",
+              "keep Dagny fed through winter"
+            ],
+            "mood": "tired",
+            "traits": {
+              "caution": 55,
+              "sociability": 45,
+              "empathy": 70,
+              "curiosity": 40,
+              "ambition": 30,
+              "introspection": 65,
+              "temper": 30,
+              "nurture": 80
+            },
+            "relations": [
+              {
+                "name": "Ansel Tarn",
+                "trust": 80,
+                "affinity": 85,
+                "label": "son",
+                "note": "Better at the loom than I was at his age."
+              },
+              {
+                "name": "Wren Tarn",
+                "trust": 75,
+                "affinity": 95,
+                "label": "daughter",
+                "note": "Wants to be anywhere but here."
+              },
+              {
+                "name": "Dagny Tarn",
+                "trust": 90,
+                "affinity": 100,
+                "label": "daughter"
+              },
+              {
+                "name": "Ilsa Hale",
+                "trust": 70,
+                "affinity": 60,
+                "label": "neighbor",
+                "note": "Feeds my girls when I forget to."
+              },
+              {
+                "name": "Bram Ashby",
+                "trust": 60,
+                "affinity": 50,
+                "label": "trading partner",
+                "note": "I weave his net floats; he pays in fish."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Ansel Tarn",
+          "age": 21,
+          "household": "tarn",
+          "occupation": "weaver",
+          "knows": [
+            "basketry",
+            "fire"
+          ],
+          "inventory": {
+            "berries": 3,
+            "fiber": 2
+          },
+          "sheet": {
+            "narrative": "I am Gerd's son. Since my mother died I have been half a father to my sisters. I am good with my hands and not good with words.",
+            "values": [
+              "my sisters",
+              "doing a thing properly"
+            ],
+            "goals": [
+              "make a basket worth trading to Reedmouth",
+              "a house of my own one day"
+            ],
+            "mood": "quiet",
+            "traits": {
+              "caution": 60,
+              "sociability": 35,
+              "empathy": 70,
+              "curiosity": 45,
+              "ambition": 40,
+              "introspection": 70,
+              "temper": 25,
+              "nurture": 75
+            },
+            "relations": [
+              {
+                "name": "Gerd Tarn",
+                "trust": 75,
+                "affinity": 80,
+                "label": "father"
+              },
+              {
+                "name": "Wren Tarn",
+                "trust": 70,
+                "affinity": 85,
+                "label": "sister"
+              },
+              {
+                "name": "Dagny Tarn",
+                "trust": 85,
+                "affinity": 95,
+                "label": "sister"
+              },
+              {
+                "name": "Mara Vane",
+                "trust": 50,
+                "affinity": 50,
+                "label": "neighbor",
+                "note": "She builds; I weave. We both work while the others talk."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Wren Tarn",
+          "age": 13,
+          "household": "tarn",
+          "occupation": "child",
+          "parents": [
+            "Gerd Tarn"
+          ],
+          "inventory": {
+            "berries": 2
+          },
+          "sheet": {
+            "narrative": "I am Wren. I am nearly grown and nobody lets me do anything. I can climb higher than anyone in Millbrook.",
+            "goals": [
+              "be let to go to Reedmouth alone"
+            ],
+            "mood": "sulky",
+            "traits": {
+              "curiosity": 80,
+              "caution": 25,
+              "temper": 55
+            },
+            "relations": [
+              {
+                "name": "Gerd Tarn",
+                "trust": 70,
+                "affinity": 80,
+                "label": "father"
+              },
+              {
+                "name": "Ansel Tarn",
+                "trust": 70,
+                "affinity": 75,
+                "label": "brother"
+              },
+              {
+                "name": "Dagny Tarn",
+                "trust": 80,
+                "affinity": 85,
+                "label": "sister"
+              },
+              {
+                "name": "Pim Hale",
+                "trust": 55,
+                "affinity": 60,
+                "label": "friend",
+                "note": "Too young, but he follows me."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Dagny Tarn",
+          "age": 4,
+          "household": "tarn",
+          "occupation": "child",
+          "parents": [
+            "Gerd Tarn"
+          ],
+          "inventory": {
+            "berries": 2
+          },
+          "sheet": {
+            "narrative": "I am Dagny. Ansel carries me on his back.",
+            "mood": "happy",
+            "traits": {
+              "curiosity": 85,
+              "caution": 20
+            },
+            "relations": [
+              {
+                "name": "Gerd Tarn",
+                "trust": 100,
+                "affinity": 100,
+                "label": "father"
+              },
+              {
+                "name": "Ansel Tarn",
+                "trust": 100,
+                "affinity": 100,
+                "label": "brother"
+              },
+              {
+                "name": "Wren Tarn",
+                "trust": 85,
+                "affinity": 90,
+                "label": "sister"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Sabine Orme",
+          "age": 33,
+          "household": "orme",
+          "occupation": "healer",
+          "inventory": {
+            "berries": 5,
+            "fiber": 2
+          },
+          "sheet": {
+            "narrative": "I came to Millbrook from the hills when I married. My husband drowned at the ford three years ago. I know which leaves close a wound and which berries turn a stomach, and people come to me for both.",
+            "values": [
+              "knowing things others do not",
+              "my son"
+            ],
+            "goals": [
+              "teach someone what I know before it is lost",
+              "keep Tam out of the river"
+            ],
+            "mood": "wary",
+            "traits": {
+              "caution": 65,
+              "sociability": 40,
+              "empathy": 75,
+              "curiosity": 70,
+              "ambition": 45,
+              "introspection": 75,
+              "temper": 35,
+              "nurture": 70
+            },
+            "relations": [
+              {
+                "name": "Tam Orme",
+                "trust": 95,
+                "affinity": 100,
+                "label": "son"
+              },
+              {
+                "name": "Ilsa Hale",
+                "trust": 65,
+                "affinity": 60,
+                "label": "friend",
+                "note": "She sends me the burnt and the coughing."
+              },
+              {
+                "name": "Teodor Vane",
+                "trust": 40,
+                "affinity": 30,
+                "label": "neighbor",
+                "note": "Too proud to ask for a salve."
+              },
+              {
+                "name": "Hild Ashby",
+                "trust": 55,
+                "affinity": 50,
+                "label": "acquaintance",
+                "note": "Trades me marsh herbs for salves."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Tam Orme",
+          "age": 5,
+          "household": "orme",
+          "occupation": "child",
+          "parents": [
+            "Sabine Orme"
+          ],
+          "inventory": {
+            "berries": 2
+          },
+          "sheet": {
+            "narrative": "I am Tam. My mother knows every plant.",
+            "mood": "curious",
+            "traits": {
+              "curiosity": 90,
+              "caution": 30
+            },
+            "relations": [
+              {
+                "name": "Sabine Orme",
+                "trust": 100,
+                "affinity": 100,
+                "label": "mother"
+              },
+              {
+                "name": "Pim Hale",
+                "trust": 60,
+                "affinity": 70,
+                "label": "friend"
+              }
+            ]
+          }
+        }
+      ],
+      "resources": {
+        "berry_bush": 12,
+        "fishing_spot": 3
+      }
+    }
+  ],
+  "villages": [
+    {
+      "name": "Reedmouth",
+      "walled": false,
+      "character": "a fishing village where the river meets the marsh",
+      "stores": {
+        "fish": 10,
+        "cooked_fish": 8,
+        "berries": 12
+      },
+      "residents": [
+        {
+          "name": "Wenna Reed",
+          "age": 37,
+          "household": "reed",
+          "occupation": "fisher",
+          "sheet": {
+            "narrative": "I fish the river mouth with my late husband's nets. My sister married into the mill; I miss her and I worry about the debt her husband carries.",
+            "values": [
+              "the river provides",
+              "my sister"
+            ],
+            "goals": [
+              "teach Pim to fish",
+              "see Sefa settled"
+            ],
+            "mood": "steady",
+            "traits": {
+              "caution": 50,
+              "sociability": 60,
+              "empathy": 75,
+              "curiosity": 55,
+              "ambition": 35,
+              "introspection": 55,
+              "temper": 30,
+              "nurture": 70
+            },
+            "relations": [
+              {
+                "name": "Ilsa Hale",
+                "trust": 95,
+                "affinity": 90,
+                "label": "sister"
+              },
+              {
+                "name": "Cal Reed",
+                "trust": 70,
+                "affinity": 60,
+                "label": "brother-in-law",
+                "note": "Loud, but he brings meat."
+              },
+              {
+                "name": "Pim Hale",
+                "trust": 80,
+                "affinity": 90,
+                "label": "nephew"
+              },
+              {
+                "name": "Sefa Reed",
+                "trust": 70,
+                "affinity": 95,
+                "label": "daughter",
+                "note": "Grown, and wants to be gone."
+              },
+              {
+                "name": "Lio Reed",
+                "trust": 85,
+                "affinity": 100,
+                "label": "son",
+                "note": "Follows Cal everywhere."
+              },
+              {
+                "name": "Hild Ashby",
+                "trust": 75,
+                "affinity": 70,
+                "label": "friend"
+              },
+              {
+                "name": "Fenn Mallory",
+                "trust": 60,
+                "affinity": 55,
+                "label": "lodger once",
+                "note": "Quiet, and mends what he breaks."
+              }
+            ],
+            "memories": [
+              {
+                "gist": "Ilsa and I swore at the river mouth that neither of us would marry a man who shouted.",
+                "salience": 0.8,
+                "about": [
+                  "Ilsa Hale"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "Cal Reed",
+          "age": 52,
+          "household": "reed",
+          "occupation": "hunter",
+          "inventory": {
+            "berries": 3,
+            "spear": 1
+          },
+          "sheet": {
+            "narrative": "I hunt the marsh edge and the woods above it. Twice I have driven wolves off the village's nets while the town's guard slept. I say what I think.",
+            "mood": "proud",
+            "traits": {
+              "caution": 35,
+              "temper": 70,
+              "sociability": 55
+            },
+            "relations": [
+              {
+                "name": "Wenna Reed",
+                "trust": 80,
+                "affinity": 70,
+                "label": "sister-in-law"
+              },
+              {
+                "name": "Brisk Marrow",
+                "trust": 15,
+                "affinity": -20,
+                "label": "rival",
+                "note": "A guard who has never seen a wolf."
+              },
+              {
+                "name": "Lio Reed",
+                "trust": 70,
+                "affinity": 80,
+                "label": "nephew",
+                "note": "Wants to hunt. There is nothing left to hunt."
+              },
+              {
+                "name": "Bram Ashby",
+                "trust": 45,
+                "affinity": 35,
+                "label": "neighbor",
+                "note": "Sets his nets where I hunt."
+              }
+            ],
+            "stances": [
+              {
+                "key": "town_folk_are_soft",
+                "value": 0.7,
+                "why": "They have walls of habit, not of stone."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Sefa Reed",
+          "age": 19,
+          "household": "reed",
+          "occupation": "fisher",
+          "inventory": {
+            "berries": 3,
+            "fish": 1
+          },
+          "sheet": {
+            "narrative": "I am Wenna's daughter. I have fished the river mouth since I could stand. Half of Reedmouth is my family and the rest are the Ashbys; I want a life that is my own choosing.",
+            "values": [
+              "choosing for myself",
+              "the river"
+            ],
+            "goals": [
+              "have a house of my own",
+              "see what the mill town is like to live in"
+            ],
+            "mood": "restless",
+            "traits": {
+              "caution": 30,
+              "sociability": 70,
+              "empathy": 60,
+              "curiosity": 80,
+              "ambition": 60,
+              "introspection": 40,
+              "temper": 40,
+              "nurture": 50
+            },
+            "relations": [
+              {
+                "name": "Wenna Reed",
+                "trust": 80,
+                "affinity": 85,
+                "label": "mother",
+                "note": "She worries about everything."
+              },
+              {
+                "name": "Lio Reed",
+                "trust": 70,
+                "affinity": 80,
+                "label": "brother"
+              },
+              {
+                "name": "Mara Vane",
+                "trust": 65,
+                "affinity": 70,
+                "label": "friend",
+                "note": "She builds things. I like her."
+              },
+              {
+                "name": "Cal Reed",
+                "trust": 60,
+                "affinity": 45,
+                "label": "uncle",
+                "note": "Loud."
+              },
+              {
+                "name": "Kesta Ashby",
+                "trust": 60,
+                "affinity": 65,
+                "label": "friend",
+                "note": "She thinks she can out-row me."
+              }
+            ]
+          },
+          "parents": [
+            "Wenna Reed"
+          ]
+        },
+        {
+          "name": "Lio Reed",
+          "age": 10,
+          "household": "reed",
+          "occupation": "child",
+          "parents": [
+            "Wenna Reed"
+          ],
+          "inventory": {
+            "berries": 2
+          },
+          "sheet": {
+            "narrative": "I am Lio. Uncle Cal says I will hunt one day. I want to see a wolf.",
+            "goals": [
+              "go with Uncle Cal"
+            ],
+            "mood": "eager",
+            "traits": {
+              "curiosity": 85,
+              "caution": 25
+            },
+            "relations": [
+              {
+                "name": "Wenna Reed",
+                "trust": 100,
+                "affinity": 95,
+                "label": "mother"
+              },
+              {
+                "name": "Cal Reed",
+                "trust": 90,
+                "affinity": 95,
+                "label": "uncle"
+              },
+              {
+                "name": "Sefa Reed",
+                "trust": 80,
+                "affinity": 80,
+                "label": "sister"
+              },
+              {
+                "name": "Ivo Ashby",
+                "trust": 50,
+                "affinity": 55,
+                "label": "friend"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Bram Ashby",
+          "age": 43,
+          "household": "ashby",
+          "occupation": "fisher",
+          "inventory": {
+            "berries": 2,
+            "fish": 2
+          },
+          "sheet": {
+            "narrative": "I mend nets and set them at the marsh edge. Hild and I came down from upriver when the eldest was small, and we have made Reedmouth ours.",
+            "values": [
+              "a full net",
+              "a quiet house"
+            ],
+            "goals": [
+              "teach Ivo the nets",
+              "trade fish to the mill for grain"
+            ],
+            "mood": "content",
+            "traits": {
+              "caution": 55,
+              "sociability": 50,
+              "empathy": 60,
+              "curiosity": 35,
+              "ambition": 35,
+              "introspection": 45,
+              "temper": 30,
+              "nurture": 70
+            },
+            "relations": [
+              {
+                "name": "Hild Ashby",
+                "trust": 85,
+                "affinity": 85,
+                "label": "wife"
+              },
+              {
+                "name": "Kesta Ashby",
+                "trust": 70,
+                "affinity": 80,
+                "label": "daughter",
+                "note": "Restless, like her mother was."
+              },
+              {
+                "name": "Ivo Ashby",
+                "trust": 75,
+                "affinity": 90,
+                "label": "son"
+              },
+              {
+                "name": "Nell Ashby",
+                "trust": 90,
+                "affinity": 100,
+                "label": "daughter"
+              },
+              {
+                "name": "Gerd Tarn",
+                "trust": 60,
+                "affinity": 55,
+                "label": "trading partner"
+              },
+              {
+                "name": "Cal Reed",
+                "trust": 45,
+                "affinity": 35,
+                "label": "neighbor",
+                "note": "Loud, but he knows the marsh."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Hild Ashby",
+          "age": 40,
+          "household": "ashby",
+          "occupation": "fisher",
+          "inventory": {
+            "berries": 3,
+            "fish": 1
+          },
+          "sheet": {
+            "narrative": "I fish beside Wenna most mornings. I gather marsh herbs for Sabine in the mill town and she pays me in salves. Three children and a husband keep me busier than the river.",
+            "values": [
+              "my children fed",
+              "a fair trade"
+            ],
+            "goals": [
+              "see Kesta settled somewhere she is happy",
+              "smoke enough fish for winter"
+            ],
+            "mood": "busy",
+            "traits": {
+              "caution": 45,
+              "sociability": 65,
+              "empathy": 70,
+              "curiosity": 50,
+              "ambition": 40,
+              "introspection": 45,
+              "temper": 35,
+              "nurture": 80
+            },
+            "relations": [
+              {
+                "name": "Bram Ashby",
+                "trust": 85,
+                "affinity": 80,
+                "label": "husband"
+              },
+              {
+                "name": "Kesta Ashby",
+                "trust": 75,
+                "affinity": 85,
+                "label": "daughter"
+              },
+              {
+                "name": "Ivo Ashby",
+                "trust": 80,
+                "affinity": 90,
+                "label": "son"
+              },
+              {
+                "name": "Nell Ashby",
+                "trust": 95,
+                "affinity": 100,
+                "label": "daughter"
+              },
+              {
+                "name": "Wenna Reed",
+                "trust": 75,
+                "affinity": 70,
+                "label": "friend",
+                "note": "We fish the same water and do not fight over it."
+              },
+              {
+                "name": "Sabine Orme",
+                "trust": 55,
+                "affinity": 55,
+                "label": "acquaintance"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Kesta Ashby",
+          "age": 17,
+          "household": "ashby",
+          "occupation": "fisher",
+          "parents": [
+            "Bram Ashby",
+            "Hild Ashby"
+          ],
+          "inventory": {
+            "berries": 3,
+            "fish": 1
+          },
+          "sheet": {
+            "narrative": "I am the Ashbys' eldest. I was born upriver and do not remember it. I can out-fish my father and he knows it.",
+            "values": [
+              "being good at something",
+              "my own way"
+            ],
+            "goals": [
+              "have a net of my own",
+              "see the mill town's fair"
+            ],
+            "mood": "bold",
+            "traits": {
+              "caution": 30,
+              "sociability": 70,
+              "empathy": 55,
+              "curiosity": 75,
+              "ambition": 65,
+              "introspection": 40,
+              "temper": 45,
+              "nurture": 50
+            },
+            "relations": [
+              {
+                "name": "Bram Ashby",
+                "trust": 70,
+                "affinity": 70,
+                "label": "father"
+              },
+              {
+                "name": "Hild Ashby",
+                "trust": 70,
+                "affinity": 75,
+                "label": "mother"
+              },
+              {
+                "name": "Ivo Ashby",
+                "trust": 60,
+                "affinity": 70,
+                "label": "brother"
+              },
+              {
+                "name": "Nell Ashby",
+                "trust": 80,
+                "affinity": 90,
+                "label": "sister"
+              },
+              {
+                "name": "Sefa Reed",
+                "trust": 60,
+                "affinity": 65,
+                "label": "friend",
+                "note": "We race the boats."
+              }
+            ]
+          }
+        },
+        {
+          "name": "Ivo Ashby",
+          "age": 12,
+          "household": "ashby",
+          "occupation": "child",
+          "parents": [
+            "Bram Ashby",
+            "Hild Ashby"
+          ],
+          "inventory": {
+            "berries": 2
+          },
+          "sheet": {
+            "narrative": "I am Ivo. I can tie every knot my father knows.",
+            "goals": [
+              "catch more fish than Lio"
+            ],
+            "mood": "eager",
+            "traits": {
+              "curiosity": 70,
+              "caution": 40
+            },
+            "relations": [
+              {
+                "name": "Bram Ashby",
+                "trust": 85,
+                "affinity": 90,
+                "label": "father"
+              },
+              {
+                "name": "Hild Ashby",
+                "trust": 85,
+                "affinity": 90,
+                "label": "mother"
+              },
+              {
+                "name": "Kesta Ashby",
+                "trust": 70,
+                "affinity": 70,
+                "label": "sister"
+              },
+              {
+                "name": "Nell Ashby",
+                "trust": 70,
+                "affinity": 85,
+                "label": "sister"
+              },
+              {
+                "name": "Lio Reed",
+                "trust": 50,
+                "affinity": 55,
+                "label": "friend"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Nell Ashby",
+          "age": 2,
+          "household": "ashby",
+          "occupation": "child",
+          "parents": [
+            "Bram Ashby",
+            "Hild Ashby"
+          ],
+          "inventory": {
+            "berries": 1
+          },
+          "sheet": {
+            "narrative": "I am Nell. I am small.",
+            "mood": "sleepy",
+            "relations": [
+              {
+                "name": "Hild Ashby",
+                "trust": 100,
+                "affinity": 100,
+                "label": "mother"
+              },
+              {
+                "name": "Bram Ashby",
+                "trust": 100,
+                "affinity": 100,
+                "label": "father"
+              },
+              {
+                "name": "Kesta Ashby",
+                "trust": 90,
+                "affinity": 95,
+                "label": "sister"
+              },
+              {
+                "name": "Ivo Ashby",
+                "trust": 85,
+                "affinity": 90,
+                "label": "brother"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Fenn Mallory",
+          "age": 23,
+          "household": "mallory",
+          "occupation": "builder",
+          "inventory": {
+            "berries": 4,
+            "wood": 2
+          },
+          "sheet": {
+            "narrative": "I came down the river last spring with my tools and no family left to speak of. I cut reeds and put up roofs for whoever feeds me. Reedmouth took me in; I am still deciding whether to stay.",
+            "values": [
+              "a roof over every head",
+              "owing no one"
+            ],
+            "goals": [
+              "build a house that is mine",
+              "decide whether to stay"
+            ],
+            "mood": "unsettled",
+            "traits": {
+              "caution": 45,
+              "sociability": 50,
+              "empathy": 55,
+              "curiosity": 70,
+              "ambition": 55,
+              "introspection": 60,
+              "temper": 35,
+              "nurture": 55
+            },
+            "relations": [
+              {
+                "name": "Wenna Reed",
+                "trust": 60,
+                "affinity": 55,
+                "label": "landlady",
+                "note": "She let me sleep in her shed the first month."
+              },
+              {
+                "name": "Bram Ashby",
+                "trust": 50,
+                "affinity": 45,
+                "label": "neighbor"
+              },
+              {
+                "name": "Mara Vane",
+                "trust": 45,
+                "affinity": 50,
+                "label": "acquaintance",
+                "note": "The only other builder in the valley."
+              }
+            ]
+          }
+        }
+      ],
+      "resources": {
+        "fishing_spot": 7,
+        "berry_bush": 6
+      }
+    }
+  ]
+}
