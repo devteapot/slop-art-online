@@ -21,6 +21,8 @@ pub mod body;
 mod check;
 #[cfg(test)]
 mod seed_check;
+#[cfg(test)]
+mod overlay_check;
 pub mod context;
 pub mod fields;
 pub mod speech;
@@ -928,6 +930,9 @@ pub struct StructureTraits {
     /// The kind it counts as wherever a kind is asked by name (`like: "storage"`: a graph's
     /// `nearest storage` finds it too); empty: only its own name.
     pub like: String,
+    /// It shows whose it is to anyone who looks (a shop's sign, a marker): its owner is named
+    /// to an observer who does not know them (`owner_shown`, `o.shows`). Off by default.
+    pub shows_owner: bool,
 }
 
 /// One product of a way of making, as a recipe grid lays it out (`Scripts::recipe_parts`): the
@@ -1563,7 +1568,7 @@ impl Scripts {
                     l
                 }
             };
-            out.insert(k.clone(), StructureTraits { warms: flag("warms")?, roof: flag("roof")?, lights, burns, holds, like });
+            out.insert(k.clone(), StructureTraits { warms: flag("warms")?, roof: flag("roof")?, lights, burns, holds, like, shows_owner: flag("shows_owner")? });
         }
         if self.has("structure_traits") {
             let legacy = self.law_map("structure_traits")?;
@@ -1583,9 +1588,29 @@ impl Scripts {
         Ok(out)
     }
 
+    /// Whether an observer is told whose a structure of `kind` is (the `owner_shown(o)` law;
+    /// owner-known): `knows`, it knows the owner's name; `shows`, the structure shows its owner
+    /// (its kind's `shows_owner`). Without the law: when it knows them or the structure shows it.
+    pub fn owner_shown(&self, knows: bool, shows: bool, kind: &str) -> bool {
+        if !self.has("owner_shown") {
+            return knows || shows;
+        }
+        let key = format!("{knows}:{shows}:{kind}");
+        if let Some(v) = self.names.borrow().get("owner_shown").and_then(|t| t.get(&key)) {
+            return v.is_some_and(|x| x != 0.0);
+        }
+        let mut o = Map::new();
+        o.insert("knows".into(), Dynamic::from(knows));
+        o.insert("shows".into(), Dynamic::from(shows));
+        o.insert("kind".into(), Dynamic::from(kind.to_string()));
+        let v = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "owner_shown", (o,)).ok().and_then(|d| d.as_bool().ok()).unwrap_or(knows || shows);
+        self.names.borrow_mut().entry("owner_shown".into()).or_default().insert(key, Some(if v { 1.0 } else { 0.0 }));
+        v
+    }
+
     /// What a kind of structure does for those near it.
     pub fn structure(&self, kind: &str) -> &StructureTraits {
-        static NONE: StructureTraits = StructureTraits { warms: false, roof: false, lights: 0.0, burns: None, holds: None, like: String::new() };
+        static NONE: StructureTraits = StructureTraits { warms: false, roof: false, lights: 0.0, burns: None, holds: None, like: String::new(), shows_owner: false };
         self.structures.get(kind).unwrap_or(&NONE)
     }
 

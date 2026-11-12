@@ -63,6 +63,39 @@ Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trial
 
 Branch `mind-skill-timings` at c6af2ff6, the trial service (port 3320), fake model. Scoped maintain-verification-skill pass on `features/deliberation.md`: its citations brought to the current lines (`perceive.rs:270`, `mind.rs:1286`, `:1812`, authority `mind.rs:360`, `:409`, `brain.rs:517`), the `timings` case and `LIVING_SKILL_TIMINGS` mapped. Live: `minds-time3-234118` `roundtrip`, `acts`, `timings` pass, `minds-time3-off-234118-roundtrip` passes with the switch off; `reasons` passed in `minds-time3-233156`, and its later attempts stopped in the suite's own `cargo test -p living-mind` on two timing tests of `llm.rs` (`a_failed_poll_keeps_the_batch…`, `unreachable_provider_holds_calls`; the file is main's) at a load average of 76 on 20 cores.
 
+## 2026-11-12 fix-request: the shared `Run.request` helper (Fedora host)
+
+Branch `fix-request` (from main with fix-takeover merged, `a33826413`), own container `fixreq-stdb` (2.14.1, port 3335, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, fake model only. Host load 8–60 from other work. Evidence under the worktree's `.local/living/verify/minds-fixreq-*`. The scratch reproduction drivers are in `.local/fixreq/repro/scripts/`.
+
+- **The greet failure in `minds-fixtake-full2-013217` was not a reply replacing the test graph.**
+  - Datha's journal shows the deliberation the mind sent at 01:23:48 gave the reason "I finished my plan. verify off-1". That is the helper's own think.
+  - The test graph went in at 01:23:35, but the think node asks only once the deliberation clock has settled 45 s (brain.rs). A seeded person's clock starts 20 s before its birth (seed.rs), so the ask came about 25 s after the world's birth.
+  - The service was already running, and the fake answered at once. The pending row lived under a second, and the helper polled only for that row. It never saw the row and timed out after 65 s.
+- **The race fix-takeover described is real too, in another timing.** A reply already in flight when the test think fires takes the think's reason as a merged line. With its new plan, `clear_deliberation` drops that line (`reasons::PLAN_STATE` holds "I finished my plan"). The reply then replaces the test graph and sets the clock. The old helper returned at once on the merged row, and nothing was asked for the marker.
+- **Reproduced** with scratch copies of the helper (`old.py`, `new.py`, `repro.py`):
+  - `minds-fixreq-repro-old-greet1`: the old helper with a 3 s lag in its poll fails `greet` like full2. The deliberation carried "verify off-1" and was installed at 01:34:10, and the helper timed out after 65 s.
+  - `minds-fixreq-repro-old-inflight2`, a probe: a deliberation for another reason is held 12 s at the fake, and the helper is called meanwhile. The old helper returned after 1.2 s on the merged row (`verify spontaneous\nI finished my plan. verify probe`). The reply dropped the line, and no prompt's reasons carried "verify probe" within 75 s.
+- **Fix, in `Run.request`** (feature map, features/README.md). While the mind runs, the helper does three things:
+  - It waits, for up to 40 s, until the actor has no request pending.
+  - It counts the ask by the marker in a newer `thought` row's `detail.reason`, or in a pending row the marker's line made (`arrived` against `requested_ms`). Before the mind starts it accepts the pending row as before.
+  - If a reply replaces the test graph and no thought carries the marker, it installs the graph again, up to three times.
+- **The fix holds under the same lags:**
+  - `minds-fixreq-repro-new-greet1` passes with the 3 s lag. All six asks were counted by their thought rows.
+  - `-new-inflight1` passes: the probe's prompt came 59 s after the call, the in-flight reply plus the 45 s settle.
+  - `-noquiet-inflight1`, with the quiet wait switched off, passes through the reinstall: "the test graph was replaced (source 'mind') … installing it again", answered 58 s after the call.
+- **A second `greet` flake, in the case's scene:** `minds-fixreq-g02` failed in its `nearest` arm, with the helper fine. `place_at` takes the nearest free tile, so with someone on a target tile the nearer resident ended 3 m from the player and the farther one 2 m. The rule rightly drew the farther one. `place()` now reads the bodies back and tries another direction until the scene is as meant (features/conversations.md, Gotchas). In g05 it re-placed once and passed.
+- **Results:**
+  - `greet`: 10 in a row on the final code (`minds-fixreq-h01`–`h10`), 10/10 pass. The earlier loop `g01`–`g10` went 9/10: g01–g04 ran without the placement check, and g02 failed as above.
+  - Across `full1`, g and h, the helper counted the ask by its thought 55 times in 19 `greet` runs, nearly every ask. Neither the reinstall nor the held merge fired outside the probe.
+  - Full suite `minds-fixreq-full1`, on the request fix without the placement check (`2c3cabb25`): exit 1. 29 cases pass; `consolidation` is its known XFAIL; `animals` hit its known gap ("a request answered by instinct").
+  - Full suite `minds-fixreq-full2`, on the final code (`8cafbe444`): exit 1. 28 cases pass, `greet` among them; `consolidation` is its known XFAIL; `animals` hit its known gap again.
+  - `jev` failed in full2 at load 60. The attacker struck and the judge cached `fight_risk` 0.9, refreshed four times, but the defender's activity read `wait` at every poll for 30 s, not `flee`. `jev` uses neither the helper nor `place()`, and it has failed under load before (recipes-1, laws-2, l2c). Alone it passed 2 of 2 completed runs (`minds-fixreq-jev1`, `-jev3`), with the flee branch taken. `jev2` never ran its case: its launch timed out at 240 s, because it builds the authority in the same target directory while `living-check` held the build lock (no database was created).
+- **After merging origin/main `52a446042`**, which added `queued`, a caller of the helper while the mind runs: `queued` passed 3/3 (`minds-fixreq-m1`–`m3`), and `greet` and `alongside` pass (`m1`). In every `queued` arm the helper counted the ask by its thought: the mind had answered between two polls.
+- `set -o pipefail; just living-check` passes in 449 s (`.local/fixreq/living-check.log`). It ran every step, but the game step was not stamped: `living-game` reads `living/tools/characters/types.json`, outside the check's declared inputs. That is in `living/tools/check.py` and unrelated to this branch. On the head after merging main it passes in 168 s (`living-check-2.log`).
+- **Not covered:**
+  - Cases with their own asks (`drop`, `death-names`, `reasons`, `rethink`) wait on the fake log rather than the row, so the missed-row race does not apply to them. A reply in flight at their ask could still drop it. Not seen; not changed here.
+  - The helper's held merge (a request the mind holds for over 40 s) was not exercised by any case.
+
 ## 2026-11-12 fix-takeover: the in-flight reply is the takeover's own deliberation (Fedora host)
 
 Branch `fix-takeover` (from main `8c5b8530`), own container `fixtake-stdb` (2.14.1, port 3334, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 9–53 from other work. Evidence under the worktree's `.local/living/verify/minds-fixtake-*`.
