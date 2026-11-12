@@ -309,3 +309,14 @@ This design adds no table, column, view, reducer, subscription or index. It read
 It writes `deliberation` rows through the existing path, so the mind service's existing subscription gets the same row kinds, and no client gets anything new. The owed set is thread-local, like `CUE_HELD`.
 
 The documentation was not fetched again for this design. The pages docs/ATTENTION.md recorded for the cue design on 2026-11-12 apply ([indexes](https://spacetimedb.com/docs/tables/indexes/), [performance](https://spacetimedb.com/docs/tables/performance/), [access permissions](https://spacetimedb.com/docs/tables/access-permissions/); docs 2.0.0, pinned 2.14.1). The build must check them again if it changes any storage.
+
+## Decisions on the crowd fixes (2026-11-12)
+
+The general coordinator decided on first-sight-crowd's two changes ("Crowds", above):
+1. **Naming whom someone walks to is always on.** It is a perception fact, like the `doing` line itself: no law.
+2. **`heard_first_rethinks` is allowed, off by default, as designed.**
+
+**Why it does not contradict "direct lines are always said".** That rule (docs/COMMUNICATION.md §15, the general coordinator, 2026-11-12) covers a line said into the air: an addressee who has left or is out of earshot. Such a line is said and told truthfully. `heard_first_rethinks` holds a direct line in one case only, and for a different reason:
+- **The gap it closes is an artifact of our latency.** A mind's scene is taken before its model call, which takes seconds. Meanwhile someone else spoke to the same person. A person deciding in the moment would have heard that before speaking.
+- **It applies only to lines heard after the decision, as defined:** after the later of the request's scene (`seen_ms`) and the start of the model calls (now less the thought's `latency_ms`). A line the prompt already held does not count.
+- **The mind gets the truthful event and decides again.** It is told what it had not yet said and the line it heard. Nothing tells it what to choose: it may say the same line, another, or nothing.

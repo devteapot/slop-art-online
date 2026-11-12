@@ -250,5 +250,15 @@
   "env": {
    "LIVING_RETHINK": "jev"
   }
+ },
+ "strangers-first-sight-hf-earshot": {
+  "about": "C + first sight, heard_first and earshot (fs1e, docs/TRIALS.md): `first_sight_thinks`, `heard_first_rethinks` and `earshot` on (set_world_law after the laws guard); the naming fix is on in every world since first-sight-crowd.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "heard_first_rethinks": true,
+   "earshot": true
+  }
  }
 }
