@@ -324,6 +324,9 @@ pub struct SeedResident {
     /// Their daily rhythm (docs/SEEDED_LIVES.md); whatever it leaves out is drawn.
     #[serde(default)]
     pub rhythm: Option<SeedRhythm>,
+    /// Their person entry in the seed's `looks` (`lp_…`, docs/LOOK.md); none: a pool entry.
+    #[serde(default)]
+    pub look: String,
 }
 
 /// When a person rises and goes to bed (hours of the day, any hour; past 24 for after
@@ -574,6 +577,10 @@ pub struct Seed {
     /// `create_floor`); a seed that names a file without its text is refused.
     #[serde(default)]
     pub laws_file: String,
+    /// The world's look data (docs/LOOK.md §5): person entries, their lines' words and the pool;
+    /// residents name their entry (`look`). Never sent to clients.
+    #[serde(default)]
+    pub looks: Option<crate::look::SeedLooks>,
 }
 
 impl Seed {
@@ -1006,6 +1013,8 @@ pub fn world_row(ctx: &ReducerContext, s: &Seed, map: &living_rules::map::Map) {
 /// households and communities, structures, artifacts, bands and animals.
 pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::Map, hosted: Option<&crate::island::Hosted>, realm: Option<&living_rules::realm::Realm>, mut settlements: Vec<(&'a SeedTown, living_rules::city::Layout)>, now: u64) {
     let _draws = Creating::start(s.seed, STEP_POPULATE);
+    // The look data first: everyone made from here on is given a look as they are.
+    crate::look::genesis(ctx, s.looks.as_ref());
     // A land world's settlements are already laid out; seeded ones get residents.
     let seeded: Vec<Option<&SeedTown>> = hosted.map(|h| crate::island::match_seed(h, &s.towns, &s.villages)).unwrap_or_default();
     if let Some(h) = hosted {
@@ -1358,6 +1367,10 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     });
     if kind == "person" && parents.0 == 0 {
         common::chronicle(ctx, now, "arrival", id, 0, at, format!("{name} arrived"));
+    }
+    // A look from the world's pool (an authored resident is given its own after: `town`).
+    if kind == "person" {
+        crate::look::assign(ctx, id, None, now);
     }
     if kind != "person" && c.stage >= 2 {
         give_ways(ctx, id, kind, now);
@@ -2034,6 +2047,9 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
             log::warn!("{}: {} years is past the first deaths of old age; seeded just short of them", r.name, r.age);
         }
         let id = spawn_with(ctx, &r.name, "person", admin, minded, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)));
+        if !r.look.is_empty() {
+            crate::look::assign(ctx, id, Some(&r.look), now);
+        }
         author_temperament(ctx, id, &r.sheet);
         let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
         // The young live a child's day whatever the sheet calls them.
