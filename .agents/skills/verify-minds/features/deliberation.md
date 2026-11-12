@@ -34,7 +34,13 @@ R=minds-deliberation-$(date +%Y%m%d-%H%M%S)
 
 `reasons` installs a one-off `think` feeling and a sequence root before the mind starts, makes every think call take 9 s, and reinstalls a sequence root over each plan the mind installs, so "I finished my plan." arrives during calls. A player's offer is sent while a call is in flight. It waits for five deliberations and checks `reasons.json`: the feeling in deliberation 0 only, the offer in exactly one later deliberation, every `carried_before` 0, and at least two later deliberations asked for by the plan finishing. With the clear reverted to the pre-2026-11-11 rule (keep everything but plan reasons whenever something arrived during the call) the feeling is in all five and the offer in two.
 
-`scene-since` holds the first think call 9 s and the next one 6 s. A player 2 m from the resident offers a trade while the first call is in flight, and is checked as near in the request the offer merged into. The player is then placed about 30 m off (`place_at`, the first free of eight offsets) before the call ends. After the first install, the request handed on must carry only lines that arrived before the move (otherwise a merge would refresh the scene and the check proves nothing), with `updated_ms` at or after the install, and must not place the player within 10 m, in the pending row's scene or in the next prompt's "# What you perceive right now". Writes `scene-since.json` and `prompt-after.txt`. Before 2026-11-12 `clear_deliberation` left the scene from the offer, with the player 2 m away; the case has not yet been run against that code (the trial server was being stopped).
+`scene-since` holds the first deliberation's think call 9 s and its compile 8 s, and the next think 6 s. A player 2 m from the resident offers a trade during the think. During the compile, 1.5 s after it is sent, the request still places the player near: the think reply's routine rework has merged into it and refreshed its scene. The player is then placed about 30 m off (`place_at`, the first free of eight offsets).
+- After the install, the request handed on must have `updated_ms` at or after the install.
+- It must not place the player within 10 m, in the pending row's scene or in the next prompt's "# What you perceive right now".
+- A merge between the move and the install would refresh the scene on its own, so the case raises "inconclusive" then rather than pass.
+- It writes `scene-since.json` and `prompt-after.txt`.
+
+On main before this change (`minds-sceneold2`) all three checks fail: the row and the next prompt place the player 1.4 m away while they stand 30 m off. With an instant compile (the first version of the case, `minds-sceneold1`) the routine rework's merge lands 0.4 s before the install, and the old code's scene is fresh by chance.
 
 ## Gotchas
 
