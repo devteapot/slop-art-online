@@ -389,3 +389,51 @@ Every update after that is guarded. The paused reference worlds follow the same 
 - **`living_rules::script`:** `Regard.look: LookSeen` (`pub use crate::look::LookSeen`); `Scripts::look_bands() -> LookBands`, `Scripts::appearance_in_scene() -> AppearanceInScene` (and `_law()` forms returning what is wrong).
 - **Authority, for the Spark's scene:** `perception::Projection.look` (the key), `perception::appearance(ctx, observer, target, now) -> String` (the phrase as the regard grants it), and the `look` row's `words` and `band` (point lookup `look.id()`).
 - **Laws:** `look_bands()` returns `#{ youth: 12.0, adult: 18.0 }`; `appearance_in_scene()` returns `"unnamed"`, `"all"` or `"none"`. Both `_law()` texts are placeholders with no topic, so the world text is unchanged. A world's `perceived_of` may return `look: "full" | "far" | "none"`.
+
+## 8. The client half as built (`look-1-client`, 2026-11-12)
+
+Built on the laptop on look-1-auth (`e15557cd`) and main. The book is char-4's (`living/game/assets/characters/looks.json`, git-ignored; bundle `f81d8a47`, generation `c4-aa393793`, 887 lines, 96 of them decor).
+
+### What was built
+
+- **The book** (`characters/book.rs`): `generation`, `generations` (a book without it holds its own generation only), `lines` (`person`, `words`) and `decor`; read once on first use; `LIVING_GAME_LOOK_BOOK=<path>` reads a test's copy. A key's line is composed on its type at the line's own height, its files checked on disk once a key.
+- **The row** (`characters/seen.rs`): `SeenCharacter.look` and `world.look_book`, read in one place.
+- **`live::recipe_for(book, land_seed, c)`:** the line under `c.look`; else (no key, a key the book lacks, a file not on disk, no book, `LIVING_GAME_COMPOSE=0`) the VRoid recipe from the land seed and the id, as before looks, `stage_scale` applied to it alone. In a world with looks each such case is one warning line a session; a world made before looks (`look_book` "") falls back quietly with one line at connect; a generation the book does not hold is one warning at connect. My own character comes from my own row; `LIVING_GAME_PLAYER` is look-dev only.
+- **A new key** (a band change, a `relook`) redraws the person where and as they are (`live::swap_look`): a new body with the old one's transform and motion; the old drawn and moving with it until the new is fitted (`Live::swaps`; `drawn()` gives the old meanwhile), then the two cross-fade. On real keys the redraw takes one dump of 0.2 s or less, and the person is never off the screen.
+- **Labels** (`looks.rs`): someone drawn from a line is named by `living_rules::look::phrase` over the line's words, the words a mind is told: made out, "a woman in a black smock with an apron and dark trousers, grey-haired"; too far to make out, the Log keeps the projection's far words and plates and hover say "a tall figure in a yellow coat and dark trousers, heavy-set". The band is the line's type's (a child type for an infant: the far phrase says "child" for both). A VRoid base keeps its colour words.
+- **Chips by piece:** the outermost upper and lower pieces' own colours, the pieces' places from each outfit style file's scene extras `outfit: {piece, slot, layer, trim}` (`upper` and `lower` give a chip, the higher layer worn over the lower; `feet`, `head` and trim pieces none), else their names with the same values.
+- **Background people** on an offline or look-dev island take a grown decor line by their own seed (`living_rules::look::pool_pick(seed, 0, n)`), one recipe for their preload and their spawn (`island::person_recipe`).
+- **The prewarm** (`loading.rs`): under the loading cover, the fewest lines that wear every type and style file of the looks perceived when the cover is up (connected: `seen_characters`, waiting up to 5 s for the rows; offline and look-dev: the decor). A first version covered the whole book: 64 people whose 101 files stayed resident for the session (`characters::kept`), +345 MiB resident and +470 MiB footprint, steady, on Cullet; the perceived looks need 17 people and cost what no prewarm does.
+- **The asset view** shows a line: `LIVING_GAME_VIEW=look:<lk_…>`.
+
+### Memory (bundle `f81d8a47`; Cullet, the play camera; `live_crowd.py`, uncapped, two runs an arm; worlds fresh from each module)
+
+| | main (VRoid) | look-1, prewarm of the looks in sight | look-1, whole-book prewarm (the first version) | look-1, no prewarm |
+|---|---|---|---|---|
+| Resident, steady (peak) | 846 (849) MiB | 983 (994) MiB | 1,328 (1,430) MiB | 958 (968) MiB |
+| Physical footprint, steady (peak) | 1,671 (1,700) MiB | 1,947 (2,037) MiB | 2,416 (2,470) MiB | 1,927 (1,977) MiB |
+| Graphics (IOAccelerator), steady | 96 MiB | 99 MiB | 97 MiB | 100 MiB |
+| Textures on the GPU (`batches:`) | 260 MiB (147) | 402 MiB (206) | 526 MiB (276) | 400 MiB (204) |
+| Main-world meshes (morph targets) | 176 (88) MiB | 207 (96) MiB | 231 (101) MiB | 205 (96) MiB |
+| Pictures kept on the CPU | 28.9 MiB | 28.9 MiB | 28.9 MiB | 28.9 MiB |
+| glTF files (the two runs) | 26, 26 | 98, 83 | 192, 192 | 94, 90 |
+
+- Composed residents cost about 140 MiB resident and 280 MiB footprint over VRoid bases, most of it the shared types' and styles' pictures on the GPU. Their pictures keep no CPU copy (`thumb_pictures`, as crowd-1's).
+- **What grows with a crowd:** every type and style file anyone in sight wears stays loaded for the session. The whole-book prewarm is what a view showing nearly every file costs: about 480 MiB resident over VRoid. Two changes would bound it, neither small: free a file's assets when no one wears it (count `kept`'s users), and drop composed meshes' main-world copies once their summaries (recolour means, bounds, outline directions) are kept.
+
+### Cost before and after (bundle `26d705b5`; `live_crowd.py`, uncapped, three runs an arm)
+
+Before: main `9fa0d254`'s client on a fresh world of main's module (VRoid residents); after: this branch's on a fresh world of its own, each pair launched back to back and measured at once. Load average 7.3 to 11.7. The verify-ui record `2026-11-12-1825-look-1-client.md` has the full table.
+
+| Cullet | main (VRoid) | look-1 (composed) | look-1, no prewarm |
+|---|---|---|---|
+| Play camera: frame p50 / p99 | 6.31 / 7.13 ms | 5.21 / 6.11 ms | 4.97 / 5.77 ms |
+| Materials, mesh-material pairs on people | 33, 35 | 6, 37 | 5, 37 |
+| Resident, steady; footprint, steady | 837; 1,654 MiB | 938; 1,904 MiB | 905; 1,832 MiB |
+| GPU textures | 260 MiB | 402 MiB | 388 MiB |
+| First-sight hitches walking (longest) | 6 (350 ms) | 6 (261 ms) | 6 (196 ms) |
+| Full model: frame p50 / p99; resident steady | 6.19 / 7.03 ms; 834 MiB | 5.85 / 6.79 ms; 897 MiB | – |
+
+- Composed residents draw faster than VRoid bases (1.1 ms at the game camera, 0.3 ms on the full model) and hold about 100 MiB more resident memory, 250 MiB more footprint: the shared pictures on the GPU.
+- **The prewarm does not reduce the first-sight hitches** here: six while walking in every arm, the longest 200 to 350 ms in all of them, main's too (the walk's own arrivals, not composed people). It costs about 33 MiB resident. It is kept for now; whether to drop it is open.
+- Brackenford's people have no looks (the island seed carries none): VRoid both ways, equal within noise.

@@ -1,6 +1,6 @@
 # Offers to me
 
-Each standing swap offered to me (`my_offers`, `incoming`) and each proposal of terms (an open `agreement` record in `my_records`, `offered`, where I am `to`) is a card in its maker's person window, oldest first, at most three. A new one opens their window when the left anchor is free (or holds Log and people) and is noted ("A stranger in green offers you 2 berries for 1 wood."); terms are noted by the rules' own record note. The card's buttons are the skills whose `_ui()` puts them on `offer` (Accept, Decline), sent as `living_rules::ui::act_node` toward `ActTarget::Offer { from, offer }` (`"offer": <trade_offer id>`) or, for terms, `ActTarget::Record { from, record }` (`"record": <record id>`), so each card's act takes exactly that card's offer. A refusal is noted in the rules' words and the card stays. Decline tells the maker ("A stranger declined your offer of 2 berries for 5 hide.") and the rules drop the offer. A card goes when its row does: taken, declined, withdrawn, offered again or out of time (`trade_window_s`). `answer_offer` in `ui/people.rs` builds every answer.
+Each standing swap offered to me (`my_offers`, `incoming`) and each proposal of terms (an open `agreement` record in `my_records`, `offered`, where I am `to`) is a card in its maker's person window, oldest first, at most three; my own standing offer to someone (`my_offers`, not `incoming`) is the last card in their window, "You offer … for ….", with no buttons and no note. Each card ends with the time left to answer ("  ·  m:ss left", from the offer's `until_ms` or the terms' `due_ms`). A new one opens their window when the left anchor is free (or holds Log and people) and is noted ("A stranger in green offers you 2 berries for 1 wood."); terms are noted by the rules' own record note. The card's buttons are the skills whose `_ui()` puts them on `offer` (Accept, Decline), sent as `living_rules::ui::act_node` toward `ActTarget::Offer { from, offer }` (`"offer": <trade_offer id>`) or, for terms, `ActTarget::Record { from, record }` (`"record": <record id>`), so each card's act takes exactly that card's offer. A refusal is noted in the rules' words and the card stays. Decline tells the maker ("A stranger declined your offer of 2 berries for 5 hide.") and the rules drop the offer. A card goes when its row does: taken, declined, withdrawn, offered again or out of time (`trade_window_s`). `answer_offer` in `ui/people.rs` builds every answer.
 
 ## Sub-features
 
@@ -9,6 +9,7 @@ Each standing swap offered to me (`my_offers`, `incoming`) and each proposal of 
 - `decline`: the rules' decline, naming the offer; the maker is told; the card closes.
 - `re-offer`: offered again, a new card.
 - `terms-card`: proposed terms in the proposer's window; Accept agrees (the record becomes `agreed`).
+- `mine`: my own offer (Offer › an item › a swap) as the last card in their window, "You offer …", counting down, without buttons.
 
 ## How to get to it (user POV)
 
@@ -18,12 +19,13 @@ Each standing swap offered to me (`my_offers`, `incoming`) and each proposal of 
 
 Preconditions: baseline; two residents placed within reach (3 m: farther, the rules refuse an accept, "Out of reach"); goods granted (admin `grant_items`); the residents' offers made by admin `mind_act`, as a mind decides (`check.py`'s `act()`: `mind_act|<ID>|["{\"do\":\"offer\",\"target\":{\"id\":{me}},…}"]|"verify-ui"`). Scene setup only: the player's answers go through its own `human_act`.
 
-- **A card.** After `sync:swap;wait:4`: dump `windows` has `Person<A>` Left; `tags` has `person:offer:<A>:0:0` (Accept, the first skill on `offer`) and `person:offer:<A>:0:1` (Decline); `notes` has "offers you 2 berries for 1 wood".
-- **Accept.** `click:@person:offer:<A>:0:0` → log `verbs: Accept → {"do":"accept","offer":<id>,"target":{"id":<A>}}`; the card's tag gone; owner SQL: their `wood` up by one.
+- **A card.** After `sync:swap;wait:4`: dump `windows` has `Person<A>` Left; `tags` has `person:offer:<A>:0:0` (Accept, the first skill on `offer`) and `person:offer:<A>:0:1` (Decline); `notes` has "offers you 2 berries for 1 wood"; the card's text (`extra.cards`) ends "m:ss left", at most 180 s; client.log has `ui: proposal Offer(<id>) from #<A>: …`.
+- **Accept.** `click:@person:offer:<A>:0:0` → log `verbs: Accept → {"do":"accept","offer":<id>,"target":{"id":<A>}}`; the card's tag gone. The scene has the player accept two swaps (this one and the one offered again), so owner SQL has their `wood` up by two over the drive.
 - **Refused.** An offer asking what the player lacks; Accept → a note in the rules' words; the tag stays.
 - **Decline.** `click:@person:offer:<A>:0:1` → log `verbs: Decline → {"do":"decline","offer":<id>,…}`; the tag gone; owner SQL `experience` for the maker: "… declined your offer …".
-- **Terms.** `offer_terms` by B; `menu:f@id:<B>;click:@acts:0:window` → `person:offer:<B>:0:0`; Accept → log `{"do":"accept","record":<id>,…}`; owner SQL `SELECT status FROM record WHERE kind = 'agreement'` has `agreed`.
-- Scenario: `check.py --run $R offers` (20 checks). It leaves nothing standing toward the player.
+- **Terms.** `offer_terms` by B; `menu:f@id:<B>;click:@acts:0:window` → `person:offer:<B>:0:0`; Accept → log `{"do":"accept","record":<id>,…}`; owner SQL `SELECT status FROM record WHERE kind = 'agreement'` has `agreed`. client.log has `ui: proposal Terms(<id>) from #<B>: … proposes terms: they give 1 berries, you give 1 stone …`.
+- **My own offer.** `menu:f@id:<B>;click:@acts:0:offer;click:@acts:1:berries;click:@acts:1:berries_for_wood`, then their window → a card of B's starting "You offer" and ending "left", and no `person:offer:<B>:0:0` tag.
+- Scenario: `check.py --run $R offers` (24 checks). It leaves nothing standing toward the player.
 
 ## Gotchas
 
