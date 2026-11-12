@@ -1777,7 +1777,7 @@ impl Scripts {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", LAW_TRAITS.join(", ")));
             }
             let text = |k: &str| m.get(k).map_or(Ok(String::new()), |v| v.clone().into_string().map_err(|_| format!("{f}: `{k}` must be a string")));
-            let about = text("about")?;
+            let about = self.timed_words(f, &text("about")?)?;
             if about.trim().is_empty() {
                 return Err(format!("{f}: `about` says what the law is, for a mind (in the world's units: one tile is one metre)"));
             }
@@ -1788,6 +1788,26 @@ impl Scripts {
             };
             out.insert(law.to_string(), LawSpec { name: law.to_string(), about, cadence, topic: text("topic")?, covers });
         }
+        Ok(out)
+    }
+
+    /// A law's words with each `{windup:<skill>}` replaced by that combat skill's windup as the
+    /// skill cards show it (`timing`, a person's), so a description follows the laws in force
+    /// (a law changed on a running world installs the script again). A token naming no timed
+    /// skill is refused at install.
+    fn timed_words(&self, f: &str, about: &str) -> Result<String, String> {
+        let mut out = String::new();
+        let mut rest = about;
+        while let Some(i) = rest.find("{windup:") {
+            out.push_str(&rest[..i]);
+            let tail = &rest[i + "{windup:".len()..];
+            let end = tail.find('}').ok_or_else(|| format!("{f}: an unclosed `{{windup:` in `about`"))?;
+            let skill = &tail[..end];
+            let t = self.timing(skill).filter(|t| t.windup_ms > 0).ok_or_else(|| format!("{f}: `{{windup:{skill}}}` names no combat skill with a windup"))?;
+            out.push_str(&seconds(t.windup_ms));
+            rest = &tail[end + 1..];
+        }
+        out.push_str(rest);
         Ok(out)
     }
 
@@ -2752,6 +2772,12 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
     })
 }
 
+/// Milliseconds as a mind reads them: "0.65 s", "1 s", "1.5 s".
+fn seconds(ms: u32) -> String {
+    let s = format!("{:.2}", ms as f64 / 1000.0);
+    format!("{} s", s.trim_end_matches('0').trim_end_matches('.'))
+}
+
 fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
     let m = d.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
@@ -2977,6 +3003,25 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_combat_law_tells_the_attack_windup_the_cards_show() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let s = Scripts::new(src).unwrap();
+        let about = &s.law_specs()["combat"].about;
+        assert_eq!(s.timing("attack").unwrap().windup_ms, 650);
+        assert!(about.contains("A person's attack winds up for 0.65 s before it lands") && !about.contains("{windup"), "{about}");
+        // A world whose attack winds up longer is told so: the words follow the laws.
+        let slow = src.replace("if inv(a, \"spear\") > 0 { 750 } else { 650 }", "if inv(a, \"spear\") > 0 { 750 } else { 900 }");
+        assert_ne!(slow, src, "attack_duration's shape changed: update this test");
+        let about = Scripts::new(&slow).unwrap().law_specs()["combat"].about.clone();
+        assert!(about.contains("winds up for 0.9 s before it lands"), "{about}");
+        // A token that names no combat skill with a windup is refused at install.
+        let odd = src.replace("{windup:attack}", "{windup:gather}");
+        assert!(Scripts::new(&odd).err().unwrap_or_default().contains("{windup:gather}"));
+        assert_eq!(seconds(1000), "1 s");
+        assert_eq!(seconds(1500), "1.5 s");
+    }
 
     fn scripts() -> Scripts {
         Scripts::new(include_str!("../../scripts/skills.rhai")).expect("skills compile")

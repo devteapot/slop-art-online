@@ -236,7 +236,7 @@ def timings_told(run, actor, sent, fire_bolt):
     assert users and all('- bowshot: winds up 300 ms' in u and '- strike: winds up 350 ms' in u for u in users), users[0][-3000:]
     assert all(('- firebolt: winds up 450 ms' in u) == fire_bolt for u in users), [u.count('firebolt') for u in users]
     # The shared system prompt carries no one's own timings. (The world rules' COMBAT law says
-    # "An attack winds up for about 0.6-0.75 s": the script's own law text, not a skill's timing line.)
+    # "A person's attack winds up for 0.65 s": the world's rules, from the cards' timing, not anyone's own line.)
     assert not any(OWN_TIMING.search(system_text(e['body'])) for e in sent), 'timings in the shared system prompt'
 
 
@@ -380,7 +380,9 @@ def run_case(run, case):
         # laws-2): the sections and the numbers the script's laws give, the same in every prompt.
         told = [json.dumps(e, ensure_ascii=False).replace('\\n', '\n') for e in sent]
         for part in ('SENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m',
-                     'MOVING: How creatures move', 'FOOD: berries 12, fish 16', 'SETTLEMENTS: walls block the way'):
+                     'MOVING: How creatures move', 'FOOD: berries 12, fish 16', 'SETTLEMENTS: walls block the way',
+                     # The attack's windup from the skill cards' timing (`{windup:attack}`), not a hand-written range.
+                     "COMBAT: fights are fast. A person's attack winds up for 0.65 s before it lands"):
             assert all(part in m for m in told), part
         timings_told(run, actor, sent, fire_bolt=False)
     elif case == 'timings':
