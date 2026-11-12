@@ -1456,8 +1456,9 @@ class Instance:
         if self.trial.get("minds", {}).get("only") == "all":
             env.pop("LIVING_ONLY")
             if self.trial["minds"].get("max"):
-                self.thinkers = self.slots()
-                env["LIVING_ONLY"] = ",".join(map(str, self.thinkers))
+                self.thinkers, self.capped = self.slots()
+                if self.capped:
+                    env["LIVING_ONLY"] = ",".join(map(str, self.thinkers))
         if self.opts.fake:
             # A fake run must never reach a provider: no provider keys in its environment.
             for k in ("MISTRAL_API_KEY", "CARLID_NPC_API_KEY", "TYPESAFE_API_KEY"):
@@ -1480,35 +1481,45 @@ class Instance:
         self.save()
 
     def slots(self):
-        """Who thinks under `minds.max` N: those already thinking who are alive, then the
-        earliest-born of the rest the mind would think for (alive, past infancy), up to N. A
-        death frees a slot; a newborn takes one when it becomes a child and one is free."""
+        """Who thinks under `minds.max` N, and whether the cap binds. While everyone the mind would
+        think for (alive, past infancy) fits under N, all of them think and the mind runs without
+        LIVING_ONLY, so it takes up a newborn turned child itself, with no restart. Once they are
+        more than N: those already thinking who are alive, then the earliest-born of the rest, up
+        to N. A death frees a slot; a newborn takes one when it becomes a child and one is free."""
         n = self.trial["minds"]["max"]
         cs = {c["id"]: c for c in self.rows("SELECT * FROM character WHERE alive = true")}
         admin = self.world["admin"]
         able = [c for c in cs.values() if c["ai"] and c["controller"] == admin and c["stage"] != 0]
+        if len(able) <= n:
+            return sorted(c["id"] for c in able), False
         keep = [i for i in (getattr(self, "thinkers", None) or []) if i in cs]
         for c in sorted(able, key=lambda c: (c["born_ms"], c["id"])):
             if len(keep) >= n:
                 break
             if c["id"] not in keep:
                 keep.append(c["id"])
-        return keep
+        return keep, True
 
     def reslot(self):
         """Restart the mind when the thinkers under `minds.max` change (at most every 2 minutes):
-        the mind reads LIVING_ONLY when it starts."""
+        the mind reads LIVING_ONLY when it starts. While the cap does not bind (no LIVING_ONLY) the
+        mind already thinks for everyone able, so only the census's list is brought up to date;
+        it is restarted when the cap starts or stops binding, or a capped set gains someone."""
         if not self.trial.get("minds", {}).get("max") or not self.mind or time.time() - getattr(self, "reslot_at", 0) < 120:
             return
         self.reslot_at = time.time()
-        want = self.slots()
+        want, capped = self.slots()
+        # A state saved before this flag ran capped whenever it had a `minds.max`.
+        was = True if getattr(self, "capped", None) is None else self.capped
         gone, new = sorted(set(self.thinkers or []) - set(want)), sorted(set(want) - set(self.thinkers or []))
-        if new:
-            self.emit("events", {"t": self.t(), "reslot": want, "left": gone, "joined": new})
+        if capped != was or (capped and new):
+            self.emit("events", {"t": self.t(), "reslot": want, "left": gone, "joined": new, "capped": capped})
             self.stop_mind()
             self.start_mind(planned=True)
-        elif gone:
-            # Only deaths: the mind already leaves the dead alone, so it is not restarted.
+        elif gone or new:
+            # Deaths (the mind leaves the dead alone), or children the uncapped mind took up itself.
+            if new:
+                self.emit("events", {"t": self.t(), "joined": new, "capped": False})
             self.thinkers = want
 
     def take_census(self, row):
@@ -1593,7 +1604,7 @@ class Instance:
 
     # -- state kept for `resume`
     STATE = ("status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
-             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "census_at", "outages")
+             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "capped", "census_at", "outages")
 
     def save(self):
         st = {k: getattr(self, k, None) for k in self.STATE}

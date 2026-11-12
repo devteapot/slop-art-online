@@ -25,6 +25,10 @@ pub const GOAL_POINT: u8 = 1;
 pub const GOAL_CREATURE: u8 = 2;
 pub const GOAL_DIRECTION: u8 = 3;
 pub const GOAL_FLEE: u8 = 4;
+/// Hold a range band from a creature (`keep_distance`): `keep` the near edge, `far` the far one.
+pub const GOAL_BAND: u8 = 5;
+/// Go round a creature (`circle`): `keep` the radius, `far` the side (+1 left as one faces it).
+pub const GOAL_ORBIT: u8 = 6;
 
 /// Report arrival when the final approach begins (the body glides on to the spot), so the
 /// next activity takes over with momentum. Without it, arrival is reported at the goal.
@@ -43,6 +47,17 @@ const FLAG_STUCK: u8 = 16;
 const FLAG_WINDED: u8 = 32;
 /// The run is draining breath now: its rate is on the vitals row (internal).
 const FLAG_DRAIN: u8 = 64;
+/// Held to a creature by perception (the movement intents, `living_rules::steer::INTENTS`):
+/// at each steering update the target is tested with the one sight rule (or the body's scent);
+/// seen, the body aims at where it is now and keeps that as last seen (`gx`/`gy`); unseen, it
+/// goes by where it was last seen, and the goal is lost once the `lost_after_s` law has passed
+/// since steering first found it out of sight (`unseen_ms`).
+/// The body faces it as far as walking allows (a held look, `settle_face`).
+pub const FLAG_SIGHT: u8 = 128;
+
+/// While a held target stays in sight, its last-seen place is written when it has moved this
+/// far (metres): a private row write now and then, not one per steering update.
+const SEEN_MOVED_M: f32 = 0.5;
 
 /// Minimum time between steering updates (except arrival at a spot).
 const MIN_STEP_MS: u64 = 40;
@@ -113,14 +128,20 @@ pub struct Goal {
     pub flags: u8,
     /// A run's speed without breath (`speed` is the run's); the speed for any other goal.
     pub pace: f32,
+    /// A band's far edge or a circle's side (`GOAL_BAND`, `GOAL_ORBIT`).
+    pub far: f32,
 }
 
 impl Goal {
     pub fn point(at: (f32, f32), speed: f32, flags: u8) -> Self {
-        Self { kind: GOAL_POINT, target: 0, at, keep: 0.0, speed, flags, pace: speed }
+        Self { kind: GOAL_POINT, target: 0, at, keep: 0.0, speed, flags, pace: speed, far: 0.0 }
     }
     pub fn creature(id: u32, keep: f32, speed: f32, flags: u8) -> Self {
-        Self { kind: GOAL_CREATURE, target: id, at: (0.0, 0.0), keep, speed, flags, pace: speed }
+        Self { kind: GOAL_CREATURE, target: id, at: (0.0, 0.0), keep, speed, flags, pace: speed, far: 0.0 }
+    }
+    /// A movement intent held to creature `id`, seen at `at` (`FLAG_SIGHT`).
+    pub fn held(kind: u8, id: u32, at: (f32, f32), keep: f32, far: f32, speed: f32, flags: u8) -> Self {
+        Self { kind, target: id, at, keep, speed, flags: flags | FLAG_SIGHT, pace: speed, far }
     }
     /// The same goal at a run of `speed`: without breath it goes at its own speed.
     pub fn run(self, speed: f32) -> Self {
@@ -216,7 +237,7 @@ pub fn speed_of(b: &Body) -> f32 {
 }
 
 fn fresh_steer(id: u32) -> Steer {
-    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0, look_on: false, look: 0.0, pace: 0.0, run_pace: 0.0 }
+    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0, look_on: false, look: 0.0, pace: 0.0, run_pace: 0.0, far: 0.0, unseen_ms: 0 }
 }
 
 fn load_steer(ctx: &ReducerContext, id: u32) -> (Steer, bool) {
@@ -462,6 +483,109 @@ fn angle(from: (f32, f32), to: (f32, f32)) -> f32 {
     (to.1 - from.1).atan2(to.0 - from.0)
 }
 
+/// Where a goal held by perception (`FLAG_SIGHT`) aims now.
+struct Held {
+    /// Where the target is (seen) or was last seen.
+    at: (f32, f32),
+    /// Its velocity when seen (zero when going by its last-seen place).
+    vel: (f32, f32),
+    seen: bool,
+}
+
+/// The target of a goal held by perception: tested with the one sight rule
+/// (`perception::in_sight`, the keep margins of something already seen, the body's facing now)
+/// or within the body's scent. Seen, it is where it is now, kept as last seen when it has moved
+/// `SEEN_MOVED_M` (`dirty`); unseen, it is where it was last seen, until the `lost_after_s` law
+/// has passed since steering first found it out of sight. The steer row is written only at
+/// those changes. Err: why the goal is lost.
+fn held(ctx: &ReducerContext, b: &Body, st: &mut Steer, p: (f32, f32), now: u64, laws: &living_rules::script::Laws, dirty: &mut bool) -> Result<Held, String> {
+    let alive = ctx.db.character().id().find(st.target).is_some_and(|c| c.alive);
+    let tb = ctx.db.body().id().find(st.target).filter(|_| alive);
+    if let Some(tb) = &tb {
+        let tp = common::pos(tb, now);
+        let d = dist(p, tp);
+        let map = common::map(ctx);
+        let w = common::world(ctx);
+        let seen = crate::perception::in_sight(ctx, &map, b.id, p, common::facing_at(b, now), tb.id, tp, d, &w, now, true) || common::scent_of(&b.kind).is_some_and(|s| s.reaches(&tb.kind, d));
+        if seen {
+            if dist((st.gx, st.gy), tp) > SEEN_MOVED_M || st.unseen_ms != 0 {
+                st.gx = tp.0;
+                st.gy = tp.1;
+                st.unseen_ms = 0;
+                *dirty = true;
+            }
+            return Ok(Held { at: tp, vel: (tb.vx, tb.vy), seen: true });
+        }
+    }
+    if st.unseen_ms == 0 {
+        st.unseen_ms = now.max(1);
+        *dirty = true;
+    }
+    if now.saturating_sub(st.unseen_ms) as f32 > laws.lost_after_s * 1000.0 {
+        return Err(match tb {
+            Some(_) => "lost sight of them".into(),
+            None if alive => "it is gone".into(),
+            None => "they are dead".into(),
+        });
+    }
+    Ok(Held { at: (st.gx, st.gy), vel: (0.0, 0.0), seen: false })
+}
+
+/// Face what a held goal aims at, as far as walking allows (`settle_face`): a held look, as a
+/// player's mouse holds one. Not written by itself: it is the steer row's when the row is.
+fn look_at(st: &mut Steer, p: (f32, f32), at: (f32, f32)) {
+    if dist(p, at) > 0.05 {
+        st.look_on = true;
+        st.look = angle(p, at);
+    }
+}
+
+/// Heading for a creature at `tp` moving at `tv` until `keep` from it: straight at where it
+/// will be (a second ahead at most) when the line is clear, else along a coarse path planned at
+/// most every `REPLAN_MS`. Err: it cannot be reached.
+#[allow(clippy::too_many_arguments)]
+fn toward(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, map: &Map, p: (f32, f32), tp: (f32, f32), tv: (f32, f32), keep: f32, max_dt: f32, laws: &living_rules::script::Laws, moves: &living_rules::script::Moves, agile: bool, now: u64, dirty: &mut bool) -> Result<Want, String> {
+    let d = dist(p, tp);
+    let cruise = b.speed.max(0.1);
+    let mut v = cruise * ((d - keep) / laws.slow_radius.max(0.1)).clamp(0.35, 1.0);
+    // A movement intent (`FLAG_SIGHT`) slowing near its distance does not drop below the speed
+    // at which the target draws away, so it closes on one that walks off instead of trailing it
+    // forever just beyond (up to its own speed: a slower body still cannot catch a faster one).
+    if st.flags & FLAG_SIGHT != 0 && d > 1e-3 {
+        let away = ((tp.0 - p.0) * tv.0 + (tp.1 - p.1) * tv.1) / d;
+        v = v.max((away + 0.3).min(cruise));
+    }
+    // Aim where they are going to be.
+    let lead = (d / cruise).min(1.0);
+    let ahead = (tp.0 + tv.0 * lead, tp.1 + tv.1 * lead);
+    let aim = if map.free(ahead.0, ahead.1) { ahead } else { tp };
+    let mut w = aim;
+    if map.line_clear(p, aim) {
+        b.path.clear();
+    } else {
+        let stale = b.path.last().map_or(true, |l| dist((l.x, l.y), tp) > 2.0);
+        if stale && now.saturating_sub(st.plan_ms) >= REPLAN_MS {
+            st.plan_ms = now;
+            *dirty = true;
+            match leg(map, p, tp, laws) {
+                Some(path) => b.path = path,
+                None => {
+                    if b.path.is_empty() {
+                        return Err("cannot reach them".into());
+                    }
+                }
+            }
+        }
+        advance_corners(map, p, &mut b.path, laws.corner_radius);
+        if let Some(c) = b.path.first() {
+            w = (c.x, c.y);
+        }
+    }
+    let max_dt = max_dt.min(((d - keep) / v).max(0.05));
+    let (dir, _) = separate(ctx, b.id, p, angle(p, w), st.target, moves, now);
+    Ok(Want { dir, speed: v, agile, max_dt })
+}
+
 /// One steering update at `now`, with a run's breath: a run out of breath walks (and runs again
 /// when it can), the drain follows the body, and the next look comes when the breath changes it.
 fn update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Option<Event>, bool) {
@@ -503,6 +627,8 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
     // Stand still until `stand` (IDLE: until something changes the goal).
     let mut stand: Option<u64> = None;
     let mut want: Option<Want> = None;
+    // A band's way when it moves: closing in (a path may be planned) or backing off.
+    let mut closing: Option<bool> = None;
     match st.goal {
         GOAL_POINT => {
             let goal = (st.gx, st.gy);
@@ -593,25 +719,44 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
             }
         }
         GOAL_CREATURE => {
-            let target = ctx.db.body().id().find(st.target);
-            let alive = ctx.db.character().id().find(st.target).map_or(false, |c| c.alive);
-            match target {
-                None => ev = Some(Event::Lost(if alive { "it is gone".into() } else { "they are dead".into() })),
-                Some(tb) => {
-                    let tp = common::pos(&tb, now);
+            let sight = st.flags & FLAG_SIGHT != 0;
+            let found = if sight {
+                held(ctx, b, st, p, now, &laws, &mut dirty)
+            } else {
+                let alive = ctx.db.character().id().find(st.target).map_or(false, |c| c.alive);
+                match ctx.db.body().id().find(st.target) {
+                    None => Err(if alive { "it is gone".into() } else { "they are dead".into() }),
+                    Some(tb) => {
+                        let tp = common::pos(&tb, now);
+                        let d = dist(p, tp);
+                        let w = common::world(ctx);
+                        // A creature one smells is followed by its scent as far as that reaches.
+                        let scent = common::scent_of(&b.kind).filter(|s| s.reaches(&tb.kind, d)).map_or(0.0, |s| s.radius);
+                        if d > (common::sight_for(ctx, b.id, &w, now) * laws.chase_lost_share).max(scent) {
+                            Err("lost sight of them".into())
+                        } else {
+                            Ok(Held { at: tp, vel: (tb.vx, tb.vy), seen: true })
+                        }
+                    }
+                }
+            };
+            match found {
+                Err(why) => ev = Some(Event::Lost(why)),
+                Ok(h) => {
+                    if sight {
+                        look_at(st, p, h.at);
+                    }
+                    let tp = h.at;
                     let d = dist(p, tp);
-                    let w = common::world(ctx);
                     // A moving target is watched at chase cadence (combat cadence in a fight);
-                    // a still one needs a look only when getting there.
-                    let target_moving = tb.vx != 0.0 || tb.vy != 0.0;
+                    // a still one needs a look only when getting there. One out of sight is
+                    // looked for at chase cadence.
+                    let target_moving = h.vel.0 != 0.0 || h.vel.1 != 0.0 || !h.seen;
                     let fast = target_moving && ctx.db.mind_state().id().find(b.id).map_or(false, |m| m.fast_until > now);
                     let look = if fast { 1.0 / laws.combat_hz } else { 1.0 / laws.chase_hz };
-                    let mut max_dt = if target_moving { look } else { laws.steer_s };
-                    // A creature one smells is followed by its scent as far as that reaches.
-                    let scent = common::scent_of(&b.kind).filter(|s| s.reaches(&tb.kind, d)).map_or(0.0, |s| s.radius);
-                    if d > (common::sight_for(ctx, b.id, &w, now) * laws.chase_lost_share).max(scent) {
-                        ev = Some(Event::Lost("lost sight of them".into()));
-                    } else if d <= st.keep + 0.3 && st.flags & FLAG_EARLY != 0 {
+                    let max_dt = if target_moving { look } else { laws.steer_s };
+                    // Only one seen is reached: its last-seen place is not it.
+                    if h.seen && d <= st.keep + 0.3 && st.flags & FLAG_EARLY != 0 {
                         ev = Some(Event::Arrived);
                         st.goal = GOAL_NONE;
                         dirty = true;
@@ -619,53 +764,74 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                         b.path.clear();
                         b.chunk = chunk_of(p.0, p.1);
                         return (ev, dirty);
+                    }
+                    if h.seen && d <= st.keep + 0.3 && st.flags & FLAG_EACH != 0 {
+                        ev = Some(Event::Arrived);
+                    }
+                    if d <= st.keep {
+                        b.heading = angle(p, tp);
+                        b.path.clear();
+                        stand = Some(due(t0, if target_moving { look } else { 1.0 }, MIN_STEP_MS));
                     } else {
-                        if d <= st.keep + 0.3 && st.flags & FLAG_EACH != 0 {
-                            ev = Some(Event::Arrived);
-                        }
-                        if d <= st.keep {
-                            b.heading = angle(p, tp);
-                            b.path.clear();
-                            stand = Some(due(t0, if target_moving { look } else { 1.0 }, MIN_STEP_MS));
-                        } else {
-                            let cruise = b.speed.max(0.1);
-                            let v = cruise * ((d - st.keep) / laws.slow_radius.max(0.1)).clamp(0.35, 1.0);
-                            // Aim where they are going to be.
-                            let lead = (d / cruise).min(1.0);
-                            let ahead = (tp.0 + tb.vx * lead, tp.1 + tb.vy * lead);
-                            let aim = if map.free(ahead.0, ahead.1) { ahead } else { tp };
-                            let mut w = aim;
-                            if map.line_clear(p, aim) {
-                                b.path.clear();
-                            } else {
-                                let stale = b.path.last().map_or(true, |l| dist((l.x, l.y), tp) > 2.0);
-                                if stale && now.saturating_sub(st.plan_ms) >= REPLAN_MS {
-                                    st.plan_ms = now;
-                                    dirty = true;
-                                    match leg(&map, p, tp, &laws) {
-                                        Some(path) => b.path = path,
-                                        None => {
-                                            if b.path.is_empty() {
-                                                ev = Some(Event::Lost("cannot reach them".into()));
-                                            }
-                                        }
-                                    }
-                                }
-                                advance_corners(&map, p, &mut b.path, laws.corner_radius);
-                                if let Some(c) = b.path.first() {
-                                    w = (c.x, c.y);
-                                }
-                            }
-                            if !matches!(ev, Some(Event::Lost(_))) {
-                                max_dt = max_dt.min(((d - st.keep) / v).max(0.05));
-                                let (dir, _) = separate(ctx, b.id, p, angle(p, w), st.target, &moves, now);
-                                want = Some(Want { dir, speed: v, agile, max_dt });
-                            }
+                        match toward(ctx, b, st, &map, p, tp, h.vel, st.keep, max_dt, &laws, &moves, agile, now, &mut dirty) {
+                            Ok(w) => want = Some(w),
+                            Err(why) => ev = Some(Event::Lost(why)),
                         }
                     }
                 }
             }
         }
+        GOAL_BAND => match held(ctx, b, st, p, now, &laws, &mut dirty) {
+            Err(why) => ev = Some(Event::Lost(why)),
+            Ok(h) => {
+                look_at(st, p, h.at);
+                let target_moving = h.vel.0 != 0.0 || h.vel.1 != 0.0 || !h.seen;
+                let fast = ctx.db.mind_state().id().find(b.id).map_or(false, |m| m.fast_until > now);
+                let look = if fast { 1.0 / laws.combat_hz } else { 1.0 / laws.chase_hz };
+                let go = geo::going(p, (b.vx, b.vy), h.at);
+                match geo::band_way(p, h.at, st.keep, st.far, go) {
+                    // In the band: stand facing it, looking again at chase cadence while it moves.
+                    None => {
+                        b.path.clear();
+                        stand = Some(due(t0, if target_moving { look } else { 1.0 }, MIN_STEP_MS));
+                    }
+                    // Too near: straight away from it, a margin into the band.
+                    Some((way, false)) => {
+                        closing = Some(false);
+                        let edge = st.keep + geo::band_margin(st.keep, st.far);
+                        let cruise = b.speed.max(0.1);
+                        let max_dt = look.min(((edge - dist(p, h.at)) / cruise).max(0.05));
+                        let (dir, _) = separate(ctx, b.id, p, way, st.target, &moves, now);
+                        b.path.clear();
+                        want = Some(Want { dir, speed: cruise, agile, max_dt });
+                    }
+                    // Too far: toward it as a pursuit does, a margin into the band.
+                    Some((_, true)) => {
+                        closing = Some(true);
+                        let keep = (st.far - geo::band_margin(st.keep, st.far)).max(st.keep);
+                        match toward(ctx, b, st, &map, p, h.at, h.vel, keep, look, &laws, &moves, agile, now, &mut dirty) {
+                            Ok(w) => want = Some(w),
+                            Err(why) => ev = Some(Event::Lost(why)),
+                        }
+                    }
+                }
+            }
+        },
+        GOAL_ORBIT => match held(ctx, b, st, p, now, &laws, &mut dirty) {
+            Err(why) => ev = Some(Event::Lost(why)),
+            Ok(h) => {
+                look_at(st, p, h.at);
+                let fast = ctx.db.mind_state().id().find(b.id).map_or(false, |m| m.fast_until > now);
+                let look = if fast { 1.0 / laws.combat_hz } else { 1.0 / laws.chase_hz };
+                let cruise = b.speed.max(0.1);
+                let way = geo::orbit_way(p, h.at, st.keep, st.far);
+                // Round a circle in steps of about 0.3 rad of it, at chase cadence at most.
+                let max_dt = look.min((0.3 * st.keep / cruise).max(0.1));
+                let (dir, _) = separate(ctx, b.id, p, way, st.target, &moves, now);
+                b.path.clear();
+                want = Some(Want { dir, speed: cruise, agile, max_dt });
+            }
+        },
         GOAL_DIRECTION => {
             // The way it is told to go, at full speed: a held look (`human_face`) turns only the
             // facing (`settle_face`), never the travel.
@@ -675,11 +841,23 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
             want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt });
         }
         GOAL_FLEE => {
-            let body = if st.target != 0 { ctx.db.body().id().find(st.target) } else { None };
-            let threat = body.as_ref().map(|t| common::pos(t, now)).unwrap_or((st.gx, st.gy));
+            let (threat, moving) = if st.flags & FLAG_SIGHT != 0 {
+                // Backing off (`back_off`): from where it is seen, else from where it was last
+                // seen, facing it as far as walking allows.
+                let h = held(ctx, b, st, p, now, &laws, &mut dirty).unwrap_or(Held { at: (st.gx, st.gy), vel: (0.0, 0.0), seen: false });
+                look_at(st, p, h.at);
+                (h.at, h.vel.0 != 0.0 || h.vel.1 != 0.0)
+            } else {
+                let body = if st.target != 0 { ctx.db.body().id().find(st.target) } else { None };
+                (body.as_ref().map(|t| common::pos(t, now)).unwrap_or((st.gx, st.gy)), body.as_ref().map_or(false, |t| t.vx != 0.0 || t.vy != 0.0))
+            };
             // A threat that moves is watched; a still one only needs the way ahead looked at.
-            let max_dt = if body.as_ref().map_or(false, |t| t.vx != 0.0 || t.vy != 0.0) { 1.0 / laws.chase_hz } else { laws.steer_s };
+            let mut max_dt = if moving { 1.0 / laws.chase_hz } else { laws.steer_s };
             let d = dist(p, threat);
+            if st.flags & FLAG_SIGHT != 0 {
+                // Backing off looks again when it is due at its distance, and stops there.
+                max_dt = max_dt.min(((st.keep - d) / b.speed.max(0.1)).max(0.05));
+            }
             if d >= st.keep {
                 ev = Some(Event::Arrived);
                 st.goal = GOAL_NONE;
@@ -715,11 +893,15 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
             // built, or pushed off the path): find a new way, or give up.
             let dest = match st.goal {
                 GOAL_POINT => Some((st.gx, st.gy)),
+                // Held by perception: a way to where it was last seen.
+                GOAL_CREATURE | GOAL_BAND if st.flags & FLAG_SIGHT != 0 => Some((st.gx, st.gy)),
                 GOAL_CREATURE => ctx.db.body().id().find(st.target).map(|t| common::pos(&t, now)),
                 _ => None,
             };
-            if st.goal == GOAL_FLEE {
+            if st.goal == GOAL_FLEE || (st.goal == GOAL_BAND && closing != Some(true)) {
                 ev = Some(Event::Lost("cornered".into()));
+            } else if st.goal == GOAL_ORBIT {
+                ev = Some(Event::Lost("the way round is blocked".into()));
             } else if st.flags & FLAG_STUCK != 0 {
                 // A fresh plan did not get it moving either.
                 ev = Some(Event::Lost("the way is blocked".into()));
@@ -839,6 +1021,9 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
     st.gx = at.0;
     st.gy = at.1;
     st.keep = goal.keep;
+    st.far = goal.far;
+    // Held by sight: it starts in sight (the act's check).
+    st.unseen_ms = 0;
     // A run already under way keeps its drain (and needs no breath to start again).
     let draining = st.flags & FLAG_DRAIN;
     st.flags = goal.flags | draining;
@@ -983,7 +1168,7 @@ pub fn intent(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, run: bool,
                     (walk * if run { common::moves_of(ctx, id, now).run } else { 1.0 }, walk)
                 }
             };
-            start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: u, keep: 0.0, speed, flags: run_flag, pace }, now).map(|_| ())
+            start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: u, keep: 0.0, speed, flags: run_flag, pace, far: 0.0 }, now).map(|_| ())
         }
     }
 }
@@ -1025,7 +1210,7 @@ pub fn look(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, now: u64) ->
     save_steer(ctx, st, exists);
     if walking && moving {
         // Steer again now: the facing toward the look or back to the way (the travel is unchanged).
-        start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: (gx, gy), keep: 0.0, speed, flags, pace }, now).map(|_| ())
+        start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: (gx, gy), keep: 0.0, speed, flags, pace, far: 0.0 }, now).map(|_| ())
     } else if let (Some(w), false) = (want, moving) {
         let p = common::pos(&b, now);
         face(ctx, id, (p.0 + w.cos(), p.1 + w.sin()), now);
