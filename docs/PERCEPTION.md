@@ -127,7 +127,7 @@ All are per-sender (`ViewContext`), take no arguments, declare `primary_key = id
 | View | Returns | Reads (its read set) |
 |---|---|---|
 | `seen_bodies` | [`Motion`](#the-moving-body-stream) rows of my living character and every creature I perceive | my characters (`character.controller`), my body (`body.id`), my `motion_seen` rows (`motion_seen.viewer`; [frames](#frames-what-others-do-reaches-a-player-once-per-frame), since the fourth change) |
-| `seen_characters` | `SeenCharacter`: what I perceive of each creature in my scene, mine included (`id`, `name` when known else empty, `label`, `kind`, `stage`, `folk`, `style`, `own`, `band`, exact `hp`/`max_hp` or -1) | my `projected` rows (`projected.viewer`) only |
+| `seen_characters` | `SeenCharacter`: what I perceive of each creature in my scene, mine included (`id`, `name` when known else empty, `label`, `kind`, `stage`, `folk`, `style`, `own`, `band`, exact `hp`/`max_hp` or -1, and since look-1 `look`: the `lk_` key of a seen person's line, [LOOK.md](LOOK.md)) | my `projected` rows (`projected.viewer`) only |
 | `seen_fighters` | their `fighter` rows, with the band I perceive (the projection's; 255 when hidden) | my characters, my `fighter` row (`fighter.id`), my `fighter_seen` rows (`fighter_seen.viewer`; frames) |
 | `seen_doing` | their `doing` rows | my characters, my `doing` row, my `doing_seen` rows (`doing_seen.viewer`; frames) |
 | `my_characters` | my characters, the dead included (the death screen) | `character.controller` |

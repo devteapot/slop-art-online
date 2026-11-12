@@ -97,14 +97,14 @@ pub fn stage_code(s: Stage) -> u8 {
     }
 }
 
-/// The life stage at `age_years` under a life table (stage ends are fractions of `life.years`).
+/// The life stage at `age_years` under a life table (stage ends are fractions of `life.years`),
+/// compared in years, so the age [`next_change`] names for a stage end is in the new stage.
 fn stage_at_years(life: &Life, age_years: f32) -> u8 {
-    let f = age_years / life.years.max(0.0001);
-    stage_code(if f < life.infant {
+    stage_code(if age_years < life.infant * life.years {
         Stage::Infant
-    } else if f < life.child {
+    } else if age_years < life.child * life.years {
         Stage::Child
-    } else if f < life.elder {
+    } else if age_years < life.elder * life.years {
         Stage::Adult
     } else {
         Stage::Elder

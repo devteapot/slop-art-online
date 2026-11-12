@@ -1,6 +1,6 @@
 # Look: one appearance for players and minds (design, 2026-11-12)
 
-Status: **design agreed 2026-11-12, with the [decisions](#decisions-2026-11-12) below; not built.** Read from main `42ca0b67`. Nothing here has been built, measured or run, and the sizes are estimates from the row layouts. dev-box builds the authority half first. The Spark's minds half starts after it lands.
+Status: **design agreed 2026-11-12, with the [decisions](#decisions-2026-11-12) below. The authority half is built on branch `look-1-auth` ([§7](#7-the-authority-half-as-built-look-1-auth-2026-11-12)); the minds' and the client's halves are not.** §1–§6 are the design as agreed; Read from main `42ca0b67`. Nothing here has been built, measured or run, and the sizes are estimates from the row layouts. dev-box builds the authority half first. The Spark's minds half starts after it lands.
 
 **The gaps.**
 - **The live game draws no generated people.** Every resident, and the player, is a VRoid base that `live::recipe_for` (`living/game/src/live.rs:466`) picks from the land seed and the id. `recipes.json` holds no person lines, so all the character work so far ([characters](CHARACTERS.md), compose-1) shows only in look-dev.
@@ -269,3 +269,76 @@ A clothes change is not modelled. When it is, it is one more writer.
 | verify-knowledge | — | Not touched: memory names are unchanged | no |
 
 Each surface's skill gets `maintain-verification-skill` in the change that alters it. None of these runs establishes cost at 2,000 characters; that claim needs the measurement in §4.
+
+## 7. The authority half as built (`look-1-auth`, 2026-11-12)
+
+Built on dev-box from main `e704ec0d` (char-4's look data merged). This is the authority half only: the Spark's `appearance` in scenes and the laptop's drawing are not built.
+
+### SpacetimeDB documentation, checked again for the build
+
+The pages of §1 were read again on 2026-11-12 (version selector 2.0.0; all loaded), against the pinned `spacetimedb = "=2.14.1"`, SDK 2.14.1 and the `v2.14.1` server image:
+- [Indexes](https://spacetimedb.com/docs/tables/indexes/): "For multi-column indexes, pass a tuple of values"; String and integer keys; ranges on a B-tree (`filter(18..=65)`). `look_line.by_person_band().filter((person, band))` compiles against 2.14.1 as a point lookup on both columns, and `look.due().filter(..=now)` as a range on the one `u64` column.
+- [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/): adding tables and indexes is safe; a column may be added "to the end of a table with a default value" (listed as potentially breaking: clients need new bindings); changing a column's type, or adding a unique or primary-key constraint to an existing table, is forbidden. Both new tables are new, so their keys are free; `projected.look` and `world.look_book` are appended last with `#[default("")]`.
+- [Default values](https://spacetimedb.com/docs/tables/default-values/): `#[default("")]` on a `String` is the page's own example; it cannot be combined with a primary key, `unique` or `auto_inc`.
+- [Auto-increment](https://spacetimedb.com/docs/tables/auto-increment/): ids come from a sequence allocated in batches, with gaps after a restart. `look_line.id` is only a row id; nothing reads meaning into it.
+- [Views](https://spacetimedb.com/docs/functions/views/): a view is re-evaluated when something in its read set changes, separately for each subscriber, and reads only through indexed lookups. `seen_characters` keeps its read set (`projected.viewer`); a look change writes only the `projected` rows of the person's observers (`projected.body`), so only their views re-run.
+- [Tables](https://spacetimedb.com/docs/tables/), [access permissions](https://spacetimedb.com/docs/tables/access-permissions/), [performance](https://spacetimedb.com/docs/tables/performance/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/): as §1. Private tables "can only be accessed by reducers and views"; no table or subscription is added for clients.
+- Not re-tested: changing a view's row type in place on a world with clients connected (§1). The migration of an older world was tried on a scratch database (below).
+
+### What was built
+
+- **Rules (`living_rules::look`, pure, unit-tested):** `LookBand` (0 infant … 4 elder), `LookBands` (the `look_bands()` law, default 12 and 18), `look_band(stage, age_years, &LookBands)`, `band_at(&Life, age_years, &LookBands)`, `next_change(&Life, age_years, &LookBands) -> Option<f32>` (the age in years of the next band change, `None` for an elder), `splitmix64`, `pool_pick(world_seed, id, pool_len) -> Option<usize>` (`splitmix64(world_seed ^ id × 0xD1B5_4A32_D192_ED03) mod pool_len`), `LookSeen` (`Full | Far | None`), `LookWords` (§2's fields, serde, unknown fields refused), `phrase(&LookWords, LookSeen, LookBand)`, `AppearanceInScene` (`Unnamed | All | None`), `is_line_key`, `is_person_key`.
+- **Script:** `Regard.look: LookSeen` (re-exported as `living_rules::script::LookSeen`): `Far` when the law marks the target `far` (never for oneself), else `Full`; a `perceived_of` law may return `look: "full" | "far" | "none"`, anything else is refused at install. `Scripts::look_bands()` and `appearance_in_scene()` read the two laws, checked at install. `skills.rhai` ships `look_bands()` (`#{ youth: 12.0, adult: 18.0 }`) and `appearance_in_scene()` (`"unnamed"`), each with a `_law()` whose `topic` is "", so the minds' world text is unchanged until the Spark writes their words. Cullet's overlay overrides neither.
+- **Tables** (private): `look` and `look_line` as §2, `LookWords` as §2; `projected.look` and `SeenCharacter.look` appended with "", `world.look_book` appended with "".
+- **Writes:** genesis writes `look_line` and `world.look_book` before people are made (`seed::populate`, so `init`, `create_floor` and the staged people step); `seed::spawn_with` gives every person a pool look (births, joins, newcomers, crowds), and an authored resident is then given its own entry; `grew` rewrites the look in the stage change's transaction; housekeeping's `look::due` reads `look.due().filter(..=now)` after the second's stage changes; `install_source` retimes every row once (`retime_all`); `perception::gone` deletes the row at death; `relook(generation)` (admin, chronicled).
+- **Projection:** `project()` adds one point lookup, `look.id().find(target)`, for a person; the key goes on every perceived person row, made out or far (decision 1). A look change rewrites the observers' rows through `projected.body` (`look::reproject`). `perception::appearance(ctx, observer, target, now)` gives a mind's words through `phrase` and the regard's `look`; nothing calls it yet (the Spark's scene).
+- **Seed tools:** `author_world.py cullet --compile-only` writes each resident's `look` and the seed's `looks` from `worlds/cullet/looks.json`; `cullet_plan.py` keeps them when it rewrites the rest. `plan-test.json` carries a small fixture (`fixture-1`).
+
+### Where this departs from §1–§6
+
+1. **`look_line`'s key.** §2 makes `key` the primary key. Two people with the same line share its key (§2, "What the key can tell"), so a primary key on `key` would refuse the second person's row. The row has an `auto_inc` `id` as its primary key, `key` is an ordinary column, and lookups go through `by_person_band` only.
+2. **Where the pool lives.** §4 says a birth or join picks "over the world's pool" without naming a store. The pool is read from the world's seed (`seed::active()`: the compiled seed, or a floor's `floor_seed`), parsed once per instance, and used only while the seed's `looks.generation` equals `world.look_book`. No table is added for it.
+3. **`relook(generation)`'s data.** It reads the module's (or floor's) seed: the generation given must be the seed's, else it is refused. Residents are matched by name among minded characters (a player of the same name keeps a pool look); everyone else gets a pool look. It is one pass over the living people and is rare and explicit.
+4. **A resident without `look`** in a seed with looks wears a pool entry rather than being refused.
+5. **Two people may draw the same pool entry** and look alike; nothing keeps picks apart.
+6. **Bands at odd ages.** §4 does not say what a grown person (stage 2) under `youth` years or a child (stage 1) at or past `adult` years is: both are youths.
+7. **`next_change` in years.** It returns the age in years, not world ms; the authority turns it into `next_ms` (a millisecond past the threshold, and at least a second ahead, so one read a hair early looks again a second later).
+8. **Retiming** happens at every script install, which covers a changed life law (`year_days` is fixed at genesis).
+9. **The `appearance_in_scene` law** ships with placeholder words and no topic, for the Spark to write; `appearance()` is provided but not called.
+
+The general coordinator's brief for this branch asked for `look_band`, `girth`, `height` and `colour` columns on the rows; main's §2 drops them (no stand-in, no night rule), and the coordinator confirmed main's version. They are not built.
+
+### Rows written, how often, and what grows
+
+| Path | Rows read | Rows written | How often |
+|---|---|---|---|
+| Genesis | the seed | `look_line`: one per (person entry, band) in the data (Cullet 791, plan-test 27); `world` once; `look`: one per person (authored residents twice: the pool pick, then their own) | once |
+| Birth, join, newcomer | `world`, the seed (parsed once per instance), `look_line` (point) | one `look` insert | per person made |
+| Band change | `look.due` range (only the due rows), `character`, `look_line` (point), `projected.body` | the `look` row; each observer's `projected` row (+ the views of those observers) | at most 4 a life |
+| Script install | every `look` row | rows whose band or time moved | per install (admin) |
+| `relook` | every living person, `look_line` | `look_line` rewritten, one `look` per person, a chronicle line | admin only |
+| Death | – | the `look` row deleted | per death |
+| Projection | `look.id` (point) per projected person | – | per projection write, as before |
+
+Growth: `look` is bounded by the living people (deleted at death); `look_line` is static world data (Cullet about 791 rows); `projected` gains 4 B per row plus the key (24 B for an `lk_` key, 4 B for ""). The pool's parsed copy lives in module memory (Cullet's seed is about 1 MB of text; parsed once).
+
+### Verification and cost
+
+**Projection cost before and after** (dev-box, 2026-11-12, `living/tools/look_cost.py`; evidence in the worktree's `.local/look1/cost/`, git-ignored). Each run publishes one module fresh on the worker's own `v2.14.1` server, joins **216 real players** over their own WebSocket connections (`gate-load players`, the gate's client query set), places them in **7 clusters of 31 within 3 m** of lot doors at least 40 m apart, and lets them walk small circles (a new direction every 1.5 s, the gate's walkers: people come into and go out of each other's sight at the edges). After a 30 s warm-up, it profiles a **120 s window**: the module's `Timing span` lines (ms of span per second) and the server's `spacetime_num_bytes_sent_to_clients_total` for the database. At the end, 24 sampled players each read their own `seen_characters`, and their BSATN size is computed. "Before" is main `acfe1be4`'s module on the same seed text without looks (plan-test) or main's Cullet seed; "after" is this branch with plan-test's fixture and with Cullet's char-4 data. No minds, no game client, no observer. The host is shared with other workers: its load average was 9–45 on 32 cores during the runs (recorded per run).
+
+| World (in sight at placement) | Build | `tick.perception` ms/s | `tick` ms/s | perception per tick p50 / p99 ms | bytes sent/s (Update) | `seen_characters` per player: rows, BSATN B | of which `look` |
+|---|---|---|---|---|---|---|---|
+| plan-test (27) | main | 37.0, 35.4 | 87.8, 82.4 | 0.035 / 8.4, 0.031 / 8.0 | 608 k, 582 k | 14.8, 846; 13.5, 772 | 0 |
+| plan-test (27) | look-1-auth | 34.7, 41.7 | 80.1, 91.0 | 0.030 / 7.8, 0.040 / 11.0 | 621 k, 599 k | 14.3, 1,146; 12.8, 1,026 | 23.0 B a row |
+| Cullet (43) | main | 347.5, 296.8 | 411.6, 363.5 | 0.035 / 81.7, 0.033 / 64.8 | 1,474 k, 1,532 k | 43.8, 2,809; 46.6, 3,003 | 0 |
+| Cullet (43) | look-1-auth | 341.2, 441.1 | 403.0, 495.3 | 0.032 / 81.0, 0.040 / 143.9 | 1,503 k, 1,411 k | 43.8, 3,787; 44.8, 3,901 | 23.0 B a row |
+
+What this shows:
+- **The bytes per row are exact:** every perceived person row is 23 B larger (the 4-byte length and the 19-character key; an animal's or an old world's row 4 B). A plan-test row grows from about 57 to 80 B and a Cullet row from about 64 to 87 B. For the 216 gate with 30 in sight that is about 150 KB held across all clients, as §4 estimated.
+- **The Update stream** to clients moved by less than its run-to-run spread (plan-test +2.5% between the means, Cullet −3%): most of what a client receives is bodies and frames, not `seen_characters`.
+- **`tick.perception` shows no difference this host can resolve.** The two runs of one build differ by up to 17% (Cullet main: 297 and 347 ms/s). Plan-test's means are 36.2 and 38.2 ms/s; Cullet's are 322 and 391, and the high branch run (441) ended with the host's load at 45. The branch adds one point lookup (`look.id().find`) to each projection. Cullet re-projects every row at every sweep, because its `perceived_of` reads the distance (`Scripts::regard_reads_dist`, `perception::sweep_one`), so that is about 216 × 44 × 5 ≈ 48,000 lookups a second. Acceptance should repeat this on a quiet host.
+- **Not from this change:** Cullet's sweep costs 300–440 ms of every second at 216 players, ten times plan-test's. Its distance-reading law re-projects every row at every sweep, which is the next perception cost to look at.
+
+**Migration** (a scratch `verify-lookmig-*` world made by main's module on plan-test, then this branch published over it with its data kept): the update is accepted, the old world has no `look` rows, no lines and `look_book` "". `relook("fixture-2")` is refused ("carries looks of generation `fixture-1`"); `relook("fixture-1")` writes 27 lines and the 5 residents' looks and chronicles it. **One tick panics** right after the update (`datastore_index_scan_point_bsatn: No such index`), and the ticks go on at 60 Hz after it. It happened 3 times in 3 updates from main to this branch, and 0 in 2 updates from main to main. So it comes with the schema change of an in-place update (`projected` and `world` gain a column, two tables and their indexes are added), probably an index id this instance resolved before the migration. It loses one tick's transaction. It was not chased into the server source.
+
+VERIFY_RESULTS

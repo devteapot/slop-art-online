@@ -398,14 +398,35 @@ mod tests {
         assert!(checked(|v| v["towns"][0]["residents"][0]["age"] = 15.into()).unwrap_err().contains("youth"));
     }
 
-    /// Seeds without looks are unchanged: Cullet (until char-4's data) and the island pass.
+    /// A seed without looks is unchanged (the island).
     #[test]
     fn seeds_without_looks_pass() {
-        for text in [include_str!("../../seeds/cullet.json"), include_str!("../../seeds/island.json")] {
-            let s: Seed = serde_json::from_str(text).unwrap();
-            let sc = living_rules::script::Scripts::new(seed::SKILLS).unwrap();
-            assert!(s.looks.is_none());
-            assert_eq!(check(&s, &sc), Ok(()));
+        let s: Seed = serde_json::from_str(include_str!("../../seeds/island.json")).unwrap();
+        let sc = living_rules::script::Scripts::new(seed::SKILLS).unwrap();
+        assert!(s.looks.is_none());
+        assert_eq!(check(&s, &sc), Ok(()));
+    }
+
+    /// Cullet's seed carries char-4's look data (worlds/cullet/looks.json, through
+    /// author_world.py): it passes the check under Cullet's laws, every resident wears an entry,
+    /// and each band case of look-cases.json names the resident's entry and its line.
+    #[test]
+    fn cullet_s_looks_resolve() {
+        let mut v: serde_json::Value = serde_json::from_str(include_str!("../../seeds/cullet.json")).unwrap();
+        v["laws"] = include_str!("../../seeds/worlds/cullet/laws.rhai").into();
+        let s: Seed = serde_json::from_value(v).unwrap();
+        let sc = living_rules::script::Scripts::new(&s.script().unwrap().unwrap()).unwrap();
+        assert_eq!(check(&s, &sc), Ok(()));
+        let l = s.looks.as_ref().unwrap();
+        let residents: Vec<&seed::SeedResident> = s.towns.iter().flat_map(|t| t.residents.iter()).collect();
+        assert_eq!((residents.len(), l.pool.len()), (64, 128));
+        assert!(residents.iter().all(|r| l.people.contains_key(&r.look)));
+        let cases: serde_json::Value = serde_json::from_str(include_str!("../../seeds/worlds/cullet/look-cases.json")).unwrap();
+        assert_eq!(cases["generation"].as_str(), Some(l.generation.as_str()));
+        for c in cases["bands"]["cases"].as_array().unwrap() {
+            let r = residents.iter().find(|r| r.name == c["resident"].as_str().unwrap()).unwrap();
+            assert_eq!(r.look, c["look"].as_str().unwrap(), "{}", r.name);
+            assert_eq!(l.people[&r.look][&c["band"].to_string()], c["line"].as_str().unwrap(), "{}", r.name);
         }
     }
 }

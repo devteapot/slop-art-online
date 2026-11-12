@@ -67,8 +67,9 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            'cue',
            # Handles for figures too far away to make out (far-handle, docs/STRANGERS.md §1): the authority's only.
            'far_handle',
-           # A sleeper's waiting reasons (fix-sleep-thinking): the authority's only.
-           'slumber',
+           # A sleeper's waiting reasons (fix-sleep-thinking) and the quiet lines heard asleep
+           # (fix-sleep-talk; main left it off this list): the authority's only.
+           'slumber', 'heard_asleep',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
            'record', 'record_party', 'record_clock',
            # A world's own law values (its seed's `rules`; docs/WORLD_RULES.md, since laws-2).
@@ -87,7 +88,10 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            # What each player's character senses (the `senses` law), read through my_senses.
            'character_senses',
            # How each player's acts and death came out, in codes; read through my_act_outcomes.
-           'act_outcome']
+           'act_outcome',
+           # A person's look and the world's look lines (docs/LOOK.md): a client gets only the
+           # `lk_` key on its seen_characters rows.
+           'look', 'look_line']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
@@ -128,6 +132,8 @@ ADMIN = {
     'stop_genesis': [], 'resume_genesis': [],
     # Change a law on a running world (fov-1, admin only).
     'set_world_law': ['fov_on', 'false'],
+    # Move a live world to its seed's looks (look-1, admin only).
+    'relook': ['probe'],
 }
 
 
