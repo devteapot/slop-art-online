@@ -243,6 +243,8 @@ pub const ITEM_ICONS: &[&str] = &[
     "berries", "bread", "meat", "arrow", "spear", "wood", "stone", "herb", "torch", "cloth", "tablet", "tool", "vessel", "bundle",
     "fish", "cooked_fish", "cooked_meat", "fiber", "hide", "cloak", "clay", "axe", "pick", "smoked_fish", "smoked_meat", "net", "basket", "bow", "salve", "leather", "armor", "mark",
     "kelp", "ash", "sand", "glass", "roots", "baked_roots", "greens", "peat", "lamp_oil",
+    // goods-3: Cullet's glass goods and tools (a pot draws as `vessel`).
+    "pane", "float", "bottle", "crucible", "mould", "blowpipe",
 ];
 /// Clip families (`look.clip`): the client maps a family to its clips, rates and beats. `throw`
 /// is the spear throw's take; `turn`, `step` and `play` are the town-life looks of `_shows()`.
