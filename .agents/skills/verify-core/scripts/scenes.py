@@ -2866,6 +2866,204 @@ def stranger_filter(s):
 
 
 
+def doing_seen(s):
+    """What someone is visibly doing, and how far into it (docs/PERCEPTION.md, "What someone is
+    visibly doing"; docs/COMBAT_MIND.md §3.2): a graph's `doing` condition and the scene's
+    `visibly`, read from the `fighter` and `doing` rows a player's client draws, under the same
+    sight rules. On an open line W stands facing east; A 2 m ahead, B 2 m behind, F 5 m ahead
+    with Y beside it, G 14 m ahead (beyond the day's 11 m sight) with Z beside it. An overlay of
+    `perceived_of` makes anyone beyond 3 m too far away to make out (as Cullet's law beyond 24 m).
+    With sight on a field (`fov_on`, near ring 0.5 m): W's routine dodges when a person in sight is
+    about to release a hostile move at it; A's attack (a 650 ms windup) is dodged in the second
+    half of its windup, and W's scene (a `think` in the same branch) shows A `visibly` attacking,
+    about to release, at you; B's attack from behind (outside the field) is not dodged. With the
+    field off, W's routine dodges when a person in sight holds up a guard: F's guard 5 m off
+    triggers it and W's scene shows F as someone too far away to make out, holding a block;
+    G's guard beyond sight does not. About two minutes (a `think` waits 45 s from arrival)."""
+    people = {c["id"] for c in s.rows("SELECT id, kind FROM character WHERE alive = true") if c["kind"] == "person"}
+    line = open_line(s, length=20, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT id, x, y FROM body") if b["id"] in people])
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    born = time.monotonic()
+    w, a, b, f, y, g, z = cast = s.people(7)
+    e = line[2]
+    home = {w: e, a: line[4], b: line[0], f: line[7], y: line[8], g: line[16], z: line[17]}
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"W": w, "A": a, "B": b, "F": f, "Y": y, "G": g, "Z": z}) + "\n")
+    rounds = iter(range(1000))
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+
+    def place():
+        for c, at in home.items():
+            s.call("place_at", c, at[0], at[1])
+
+    def facing_east():
+        s.graph(w, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [e[0] + 4.0, e[1]]}}}, {"wait": 0.1}]}, {"wait": 60 + next(rounds)}]})
+        time.sleep(2)
+
+    def routine(tag, cond):
+        # A graph of its own each time (the same graph again would not start over).
+        s.graph(w, {"first": {"label": "doing-seen", "children": [
+            {"if": {"cond": {"doing": cond}, "then": {"seq": [{"think": f"doing_seen {tag}"}, {"do": "dodge"}]}}},
+            {"wait": 0.2 + 0.001 * next(rounds)}]}})
+
+    def uses(t0, label):
+        return [x for x in s.rows("SELECT * FROM skill_use", f"uses-{label}") if x["at_ms"] >= t0]
+
+    def scene_since(t0, label):
+        row = next((d for d in s.rows(f"SELECT * FROM deliberation WHERE actor = {w}") if d["updated_ms"] >= t0), None)
+        if not row:
+            return None
+        sc = json.loads(row["scene"])
+        (s.out / f"{s.name}-scene-{label}.json").write_text(json.dumps(sc, indent=1, ensure_ascii=False) + "\n")
+        return {c["id"]: c for c in sc.get("creatures", [])}
+
+    def attack(who, target, label):
+        """`who` turns to `target` and attacks it once; its use, once it has an outcome."""
+        t0 = now()
+        at = home[target]
+        s.graph(who, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [at[0], at[1]]}}}, {"wait": 0.1}]},
+                              {"do": {"skill": "attack", "target": {"id": target}}}, {"wait": 60 + next(rounds)}]})
+        done = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == who and x["skill"] == "attack" and x["outcome"]] or None, seconds=30, every=1)
+        s.graph(who, {"wait": 1.0 + 0.01 * next(rounds)})
+        time.sleep(1)
+        return t0, done[0], uses(t0, label)
+
+    at_me = {"who": "person", "is": "hostile", "phase": "about to release", "at_me": True}
+    try:
+        for c in cast:
+            s.graph(c, {"wait": 60 + next(rounds)})
+        place()
+        s.call("install_script", compose(shipped, {"perceived_of": 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 3.0 { r.name = false; r.health = "none"; r.far = true; } r }'}))
+        set_law(s, "fov_on", True)
+        set_law(s, "fov_near_m", 0.5)
+        set_law(s, "fov_near_dark_m", 0.5)
+        # A `think` asks only 45 s after arrival (`brain.rs`: a fresh decision is not second-guessed).
+        time.sleep(max(1.0, 47.0 - (time.monotonic() - born)))
+
+        # 1. In front, in the field: the routine dodges in the second half of the windup.
+        place()
+        facing_east()
+        routine("front", at_me)
+        time.sleep(1)
+        t0, use, got = attack(a, w, "front")
+        dodges = [x for x in got if x["actor"] == w and x["skill"] == "dodge"]
+        wind = (use["accepted_ms"], use["released_ms"])
+        half = wind[0] + (wind[1] - wind[0]) / 2
+        s.expect("front (field on): W's routine dodges A's attack", dodges, {"attack": use, "dodges": dodges})
+        s.expect("front (field on): the dodge starts in the second half of the windup (about to release), not before",
+                 wind[0] > 0 and half - 1 <= dodges[0]["at_ms"] <= wind[1], {"windup": wind, "half": half, "dodge_at": dodges[0]["at_ms"]})
+        # Found 2026-11-12: a graph's dodge dashes away from the threat and the body turns with
+        # it, so the attacker leaves the field, the routine's condition stops holding and the
+        # dodge is broken off (as a `threatened` guard would be): the blow lands.
+        s.expect("front (field on): the dodge carries through (known: broken off when the dash turns the back on A)",
+                 not dodges[0]["outcome"].startswith("broken off"), {"dodge": dodges[0]["outcome"], "attack": use["outcome"]}, fatal=False, known=True)
+        # 2. Behind, outside the field (near ring 0.5 m): not seen, not dodged.
+        place()
+        facing_east()
+        routine("behind", at_me)
+        time.sleep(1)
+        t0, use, got = attack(b, w, "behind")
+        dodges = [x for x in got if x["actor"] == w and x["skill"] == "dodge"]
+        s.expect("behind: B's attack from outside the field is not dodged", use["accepted_ms"] > 0 and not dodges, {"attack": use, "dodges": dodges})
+
+        # 3. Field off (sight all round): the same routine against A again; nothing turns A out
+        # of sight, the dodge carries through, and W's scene (taken by the branch's `think`, the
+        # last request: no blow lands to ask again) shows what W saw.
+        set_law(s, "fov_on", False)
+        place()
+        facing_east()
+        routine("front-all-round", at_me)
+        time.sleep(1)
+        t0, use, got = attack(a, w, "front-all-round")
+        dodges = [x for x in got if x["actor"] == w and x["skill"] == "dodge"]
+        wind = (use["accepted_ms"], use["released_ms"])
+        half = wind[0] + (wind[1] - wind[0]) / 2
+        s.expect("front (all round): the dodge starts in the second half of the windup", dodges and wind[0] > 0 and half - 1 <= dodges[0]["at_ms"] <= wind[1],
+                 {"windup": wind, "half": half, "dodges": dodges})
+        s.expect("front (all round): A's blow does not land", "hit" not in use["outcome"], {"attack": use["outcome"], "dodge": dodges[0]["outcome"] if dodges else None}, fatal=False)
+        seen = s.wait(lambda: scene_since(t0, "front"), seconds=10)
+        v = seen.get(a, {}).get("visibly")
+        s.expect("front: W's scene shows A visibly attacking, about to release, at you", v == {"is": "attack", "phase": "about to release", "at": "you"}, seen.get(a))
+
+        # 4. F, 5 m off and too far to make out, holds up a guard: seen, and W reacts.
+        place()
+        guard = {"who": "person", "is": "guard", "phase": "holding"}
+        routine("far", guard)
+        t0 = now()
+        s.graph(f, {"first": [{"do": {"skill": "block", "qty": 5000}}]})
+        got = s.wait(lambda: [x for x in uses(t0, "far") if x["actor"] == w and x["skill"] == "dodge"] or None, seconds=15)
+        s.expect("far: F's guard 5 m off (seen) triggers W's routine", got, got[:1])
+        seen = s.wait(lambda: scene_since(t0, "far"), seconds=10)
+        fe = seen.get(f, {})
+        s.expect("far: W's scene shows F as someone too far away to make out, visibly holding a block",
+                 fe.get("who") == FAR and "name" not in fe and fe.get("visibly") == {"is": "block", "phase": "holding"}, fe)
+        s.graph(f, {"wait": 60 + next(rounds)})
+        time.sleep(1.5)
+
+        # 5. G's guard 14 m off, beyond sight: nothing.
+        place()
+        routine("beyond", guard)
+        t0 = now()
+        s.graph(g, {"first": [{"do": {"skill": "block", "qty": 5000}}]})
+        time.sleep(6)
+        got = uses(t0, "beyond")
+        blocks = [x for x in got if x["actor"] == g and x["skill"] == "block"]
+        dodges = [x for x in got if x["actor"] == w and x["skill"] == "dodge"]
+        s.expect("beyond sight: G's guard (14 m) does not trigger W's routine", blocks and not dodges, {"blocks": len(blocks), "dodges": dodges})
+    finally:
+        s.call("install_script", shipped, check=False)
+        set_law(s, "fov_on", False, check=False)
+        set_law(s, "fov_near_m", 3.0, check=False)
+        set_law(s, "fov_near_dark_m", 2.0, check=False)
+        for c in cast:
+            s.graph(c, {"wait": 60 + next(rounds)})
+        off_the_line(s, line, cast, dy=56)
+
+
+def doing_cost(s):
+    """What the `doing` condition costs in a crowded fight (docs/PERCEPTION.md, "What someone is
+    visibly doing", cost): `spawn_battle` packs N spear fighters within 14 m; each attacks the
+    nearest person and defends when threatened. Two windows of `living/tools/bench.py` (profiling
+    spans): the battle's own graphs (`threatened`), then the same graphs with the guard read from
+    `{"doing": {"who": "person", "is": "hostile", "phase": "about to release", "at_me": true}}`.
+    Reports `brain.doing` (count, p50, p99, ms/s), `brain.scene` and the tick in each. No pass
+    mark: a measurement. N from DOING_COST_N (default 100), seconds from DOING_COST_S (20)."""
+    n = int(os.environ.get("DOING_COST_N", "100"))
+    secs = int(os.environ.get("DOING_COST_S", "20"))
+    before = {c["id"] for c in s.rows("SELECT id FROM character")}
+    s.call("spawn_battle", n)
+    fighters = [c["id"] for c in s.rows("SELECT id, name FROM character") if c["id"] not in before and c["name"].startswith("Fighter")]
+    s.expect("the battle's fighters are spawned", len(fighters) >= n * 0.9, len(fighters))
+
+    def bench(label):
+        r = subprocess.run(["python3", str(ROOT / "living/tools/bench.py"), "--db", s.db, "--seconds", str(secs), "--settle", "2", "--log-lines", str(secs * 4000 + 20000)],
+                           capture_output=True, text=True, timeout=secs * 6 + 300)
+        (s.out / f"{s.name}-bench-{label}.txt").write_text(r.stdout + r.stderr)
+        rep = json.loads(r.stdout[r.stdout.index("{"):])
+        (s.out / f"{s.name}-bench-{label}.json").write_text(json.dumps(rep, indent=2) + "\n")
+        return rep
+
+    def pick(rep):
+        sp = rep.get("spans_ms", {})
+        return {"tick_ms": rep.get("tick_ms"), "evals_per_s": rep.get("evals_per_s"), "combat": rep.get("combat"), **{k: sp.get(k) for k in ("brain.doing", "brain.scene", "tick.combat")}}
+
+    base = bench("threatened")
+    for fid in fighters:
+        defend = "dodge" if fid % 2 == 0 else "block"
+        s.call("set_behavior", fid, json.dumps({"first": {"label": "combat", "children": [
+            {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "about to release", "at_me": True}}, "then": {"do": {"skill": defend}}}},
+            {"do": {"skill": "attack", "target": {"nearest": "person"}}}]}}))
+    s.rows(f"SELECT * FROM brain WHERE id = {fighters[0]}", "installed-graph")
+    arm = bench("doing")
+    out = {"fighters": len(fighters), "seconds": secs, "threatened": pick(base), "doing": pick(arm),
+           "graph_scenes": {"threatened": base.get("graph_scenes"), "doing": arm.get("graph_scenes")}}
+    (s.out / f"{s.name}-cost.json").write_text(json.dumps(out, indent=2) + "\n")
+    print(json.dumps(out, indent=2), flush=True)
+    s.expect("the doing condition was evaluated and timed", (arm.get("spans_ms", {}).get("brain.doing") or {}).get("n", 0) > 0, out["doing"])
+    for fid in fighters:
+        s.call("set_behavior", fid, json.dumps({"wait": 300}), check=False)
+
+
 def outcomes(s):
     """Whoever strikes or shoots is told how it came out (the `force_outcomes` law,
     docs/COMBAT_MIND.md §3.1). Before 2026-11-11 a mind-held archer was never told how its
@@ -3491,6 +3689,8 @@ SCENES["winter"] = winter
 SCENES["stamina"] = stamina
 SCENES["fights"] = fights
 SCENES["chase"] = chase
+SCENES["doing_seen"] = doing_seen
+SCENES["doing_cost"] = doing_cost
 
 
 def main():

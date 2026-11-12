@@ -471,6 +471,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
     let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, r, now);
+    let sc = common::scripts(ctx);
     for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
         let seen = crate::perception::project(ctx, &me, &ch, now);
@@ -510,6 +511,20 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         o.insert("dir".into(), json!(direction(at, c.pos)));
         if let Some(doing) = crate::perception::doing_of(ctx, c.id, (id, &me.kind, at), &in_sight, now) {
             o.insert("doing".into(), json!(doing));
+        }
+        // What their body visibly shows, and how far into it (docs/PERCEPTION.md, "What someone is
+        // visibly doing"): the move or act a player sees drawn, its phase, and whom it is aimed
+        // at when that is me or someone I see.
+        if let Some(v) = crate::perception::visibly(ctx, &sc, c.id, now) {
+            let mut m = JMap::new();
+            m.insert("is".into(), json!(v.skill));
+            m.insert("phase".into(), json!(v.phase.word()));
+            if v.at(id, at, c.pos) {
+                m.insert("at".into(), json!("you"));
+            } else if v.target != 0 && in_sight.iter().any(|x| x.id == v.target) {
+                m.insert("at".into(), json!(v.target));
+            }
+            o.insert("visibly".into(), Value::Object(m));
         }
         if ch.kind == "person" {
             if let Some(s) = gave_in(c.id) {

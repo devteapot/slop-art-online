@@ -889,6 +889,33 @@ impl<'a> Ev<'a> {
                 }
                 c.at_least.map_or(true, |a| n >= a) && c.at_most.map_or(true, |b| n <= b)
             }
+            // What someone in sight is visibly doing (docs/PERCEPTION.md, "What someone is visibly
+            // doing"): over the scene this evaluation already gathered (sight, field, sight line),
+            // two point lookups per creature that fits `who` and `within`; nothing else is read.
+            Cond::Doing(d) => {
+                let _span = common::span("brain.doing");
+                let (me, at, now) = (self.me.id, self.at, self.now);
+                let sc = common::scripts(self.ctx);
+                let want = d.phase.as_deref().and_then(living_rules::doing::Phase::parse);
+                self.scene();
+                let scene = self.scene.as_ref().expect("scene built");
+                for x in &scene.creatures {
+                    if d.within.is_some_and(|w| dist(at, x.pos) > w) {
+                        continue;
+                    }
+                    if let Some(f) = &d.who {
+                        if (f.kind != "creature" && *x.kind != *f.kind) || f.relation.as_deref().is_some_and(|rel| !self.relation_ok(x.id, rel)) {
+                            continue;
+                        }
+                    }
+                    let Some(v) = crate::perception::visibly(self.ctx, &sc, x.id, now) else { continue };
+                    if want.is_some_and(|p| !v.phase.fits(p)) || d.is.as_deref().is_some_and(|i| !v.is(&sc, i)) || d.at_me.is_some_and(|m| v.at(me, at, x.pos) != m) {
+                        continue;
+                    }
+                    return true;
+                }
+                false
+            }
             Cond::HealthOf(h) => {
                 let Some(r) = self.resolve(&h.target).filter(|r| r.class == 3) else { return false };
                 // As this character perceives it (its own exactly, another's band unless

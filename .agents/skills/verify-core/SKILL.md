@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, building as recipes, tools on recipes, the carry count, the goods audit, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing, and the breath and focus they cost), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), first sights in a crowd, what a graph's "stranger" means (the stranger_by_name law), steering (and running, for every controller), breath, tiredness and focus (`pools`, `walk_base`), fight length (`fights`, `chase`), deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, building as recipes, tools on recipes, the carry count, the goods audit, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing, and the breath and focus they cost), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), what someone is visibly doing (the `doing` condition and the scene's `visibly`), first sights in a crowd, what a graph's "stranger" means (the stranger_by_name law), steering (and running, for every controller), breath, tiredness and focus (`pools`, `walk_base`), fight length (`fights`, `chase`), deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -39,6 +39,9 @@ python3 "$C/scenes.py" seize --run "$R" > "$E/seize.txt" 2>&1
 python3 "$C/scenes.py" sight --run "$R" > "$E/sight.txt" 2>&1
 python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
 python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
+# What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
+# and far label (features/doing.md, about 2 min).
+python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
 # First sights in a crowd: everyone in sight is told, several in one line (features/sight.md, about 30 s).
 python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 # A graph's "stranger" under the stranger_by_name law, off and on (features/graphs.md, about 30 s).
@@ -58,6 +61,9 @@ python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
 # Admin placement on free walkable tiles (features/steering.md#admin-placement); last: its bodies stay.
 python3 "$C/scenes.py" placement --run "$R" > "$E/placement.txt" 2>&1
+# The doing condition's cost in a 100-fighter battle (features/doing.md; a measurement, about
+# 2 min; its fighters stay on the world, so it runs last).
+python3 "$C/scenes.py" doing_cost --run "$R" > "$E/doing_cost.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
 
 # Speech (features/speech.md): each scene on its own launched run (they spawn people named
