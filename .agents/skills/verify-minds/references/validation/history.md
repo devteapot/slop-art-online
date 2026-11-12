@@ -7,6 +7,7 @@ With origin/main `a07f5919` merged and `throw` committed: `minds-commit5-071222`
 ## 2026-11-12 committed-moves (Spark)
 
 Branch `committed-moves` from origin/main `2ff786aa`, the trial service, the fake model. `minds-commit-062424`: `acts` passes; `doing` failed on its fixture: the eye's first turn east was refused ("you already face it", which leaves no `skill_use` row) when it already faced east. The case now turns it west first and waits for the east turn's row; `minds-commit3-063146` `doing` passes.
+
 ## 2026-11-12 far-handle (Spark)
 
 Branch `far-handle` (from main `b657a344`), the trial service `slop-trials-stdb`, the fake model. New case `far-figure` (`minds-farhandle2-*`): 8/8. F, in M's relations as "Walker2 (#266)", stood 5 m off under an overlay making everyone past 4 m far:
@@ -26,9 +27,11 @@ Branch `move-intents`, the trial service, the fake model, `--no-unit-tests` (the
 
 Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb`, the fake model, private target dir. `minds-doing-053436`: `doing` (new) passes: the pending request's scene lists the other, holding a guard 3 m in front, with `visibly` `{"is": "block", "phase": "holding"}`; the think prompt carries it; the deliberate prompt's grammar documents `{"doing": ...}`. `fov` passes alongside. The mind's non-ignored tests (105) pass. Not run: the other cases. After merging main `dd2c8569`, with the check allowing a guard's `at: you` (its drawn aim): `minds-doingm-055740` `doing` passes.
 
-## 2026-11-12 far-label (Spark) After merging main with speech-truth (`03d32e09`, `minds-farlabel3-031420`): `roundtrip`, `queued` and `conversation` pass.
+## 2026-11-12 far-label (Spark)
 
 Branch `far-label` (`18b7754b`), the trial service `slop-trials-stdb`, the fake model. `minds-farlabel-024238`: `roundtrip` and `conversation` pass (the release mind's non-ignored tests, 104, pass too). Not run: the other cases.
+
+After merging main with speech-truth (`03d32e09`, `minds-farlabel3-031420`): `roundtrip`, `queued` and `conversation` pass.
 
 ## 2026-11-12 speech-truth (Spark)
 
@@ -265,6 +268,7 @@ Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb`
 - `fov` (new): `minds-fov1-h` passes on the final build before the merge (`minds-fov1-f` on the one before). `minds-fov1-g` failed the habit check: the turn was `broken off` once the sound came into view, because the branch is a continuous guard. The case now accepts a turn toward the sound, done or broken off. The scene and the prompt sent to the fake model list `you hear (out of sight)` as `{"what": "a person", "where": "behind you, to the east", "how far": "near"}`, with no id, and `you.facing` is west. The percept reads "You hear a person near, behind you, to the east." Given the person instinct, the resident turns to the sound (a `face` use aimed at the other's spot).
 - Earlier attempts found harness faults, now fixed in the case: the service prunes consumed experiences (read the percept first); a long `wait` is not evaluated (`{"wait": 1}`); hold both bodies before placing them (a resident walked into the near ring); the heading after the turn is not the test (the instinct walks on).
 - `sight` passes (`minds-fov1-a-sight`). Not run: the rest of the suite.
+
 ## 2026-11-11 fix-stale-reasons (Spark)
 
 Branch `fix-stale-reasons` from `bade5c0`, worktree on the DGX Spark, trial container `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only.
@@ -299,6 +303,7 @@ Main at `7837320` (the merge of `fix-death-labels`), branch `fix-death-names-min
 - Full suite `minds-vdeath-20261111-161806`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink, rethink-llm, parked and the new `death-names` pass; `consolidation` is its known XFAIL; `animals` fails at its last step ("nothing new: no call"), the known gap below; `dealings` failed waiting for a deliberation.
 - `death-names` (new): passes on main. With the fix reverted in the worktree (`act.rs`, `perceive.rs`, `perception.rs` from `285a20e^1`, `minds-vprefix-20261111-170057`) it fails as it should: no acquaintance row; the member reads "A stranger was killed by a stranger after yielding"; the killer reads "A stranger was killed by Walker3 after yielding"; the after-death prompt lists "a stranger (#256): neighbour" and "{someone=#256, …}". On main: "Walker1 was killed by a stranger after yielding", the killer "A stranger was killed by you after yielding", the prompt "Walker1 (#256): neighbour" and "{Walker1=#256, …}" (`death-names.json`).
 - `dealings`: post-fix 4 of 7 runs pass (`minds-vdeal-*`, `minds-vdeal1`–`5-*`; the last three in a row), pre-fix 3 of 3 (`minds-vprefix-*`, `minds-vpre1`/`2-*`; a third attempt stopped at an unrelated `living-mind` unit test, `llm::tests::unreachable_provider_holds_calls`, under load). The failures are the case's recorded load timing: either the demander's demand act or the rules' ask was late (the first deliberation at about 70 s instead of 2.4 s), and the driver's `run.request` wait timed out. Passing runs pre- and post-fix have the same timeline (think at 2.4 s, the requested think at about 48 s). Neither changed path (`remember_member` in `die`, the "you" rendering for a death's killer or a storage's owner) is on the demand path.
+
 ## 2026-11-11 projects (exp-projects, DGX Spark)
 
 Worktree from `origin/main` `e09365b`, branch `exp-projects` (`LIVING_PROJECTS=1`, off by default: docs/LIVING_CORE.md, "Projects"), against the trial server `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`, its port published on `0.0.0.0`) while a six-mind trial batch ran on it, private `CARGO_TARGET_DIR`, fake model only.

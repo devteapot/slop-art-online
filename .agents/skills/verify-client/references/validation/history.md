@@ -12,9 +12,11 @@ Branch `fix-unseen-killer-id` from `7729fc9b`, the trial service `slop-trials-st
 
 Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-owner4-050631`: 42/42 (`land_plan` private; `my_known_names` returns only the caller's own known names). An earlier run, `client-owner-043942`, failed "own mind and player effects" once: the first identity's `{"wait":30}` command had ended (28 s passed before the effects probe on a loaded machine) and its plan was back to "waiting for you"; on rerun the gap was 7 s and it passed. That is a harness timing gap, not this change; the drive's 30 s command is short for a slow machine.
 
-## 2026-11-12 far-label (Spark) After merging main (`03d32e09`, `client-far3-031340`): `far_label.py` 3/3.
+## 2026-11-12 far-label (Spark)
 
 Branch `far-label` (`2095a272`/`18b7754b`), the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-farlabel-023653`: exit 0. New `far_label.py`, `client-far2-024145`: 3/3 (through the SDK probe the player's `seen_characters` labels a stranger at 2 m "a stranger", one at 6 m "someone too far away to make out", neither named; the far one brought to 2 m becomes "a stranger"). The first attempt (`client-far-024057`) read the probe's events wrongly (the rows were right); the script now reads `tables`.
+
+After merging main (`03d32e09`, `client-far3-031340`): `far_label.py` 3/3.
 
 ## 2026-11-12 stamina-1 (Spark)
 
@@ -120,6 +122,7 @@ Own scratch container `scale-verify` (image `v2.14.1`, port 3427) named by `LIVI
 - `client-scale-open-011435` (`LIVING_PERCEPTION=open`): 30 PASS and the known XFAIL (anonymous `experience` in the open build).
 - After merging main `fe6ec66` (megacity-1, soak-1): `client-scale-merge-scoped-091456` 30 of 30; private table visibility 63 tables; permission matrix 206 calls, 0 mismatches. The run before it stopped at the reducer inventory: megacity's `create_floor` (admin only, now in `ADMIN`) and `genesis_step` (scheduled only, now in `SCHEDULED` with `tick` and `housekeeping`) were not listed on main either.
 - The two runs before stopped at the driver's inventories: the four new private tables, and `judged` (table) and `mind_judged` (reducer) from the harness merge, which the driver did not list. Both inventories now name them; `mind_judged` is called with one judgment for the caller's own character and refused for others'.
+
 ## 2026-11-10 `guest`, and harness-1's `judged` and `mind_judged` (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
