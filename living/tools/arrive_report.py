@@ -354,9 +354,14 @@ def run_report(d):
             if dd <= RANGE_M:
                 in_range.add(i)
     exps = defaultdict(list)
+    # A speaker's `silence` rows, whoever they name: one about someone too far away to make out
+    # names them by a far handle, not their id (fs1e's heard/unheard split).
+    silences = defaultdict(list)
     for r in jl(d / "experiences_all.jsonl"):
         if r.get("subject") == sid or r.get("object") == sid:
             exps[r["observer"]].append(r)
+        if r.get("kind") == "silence":
+            silences[r["observer"]].append(r)
     jcols = journal_columns(d / "journal", sid, wins, {names.get(i, ""): [x["text"] for x in xs] for i, xs in exps.items()})
     # Asked at any time (a first sight on the walk in can ask for a thought before the stand).
     jall = journal_columns(d / "journal", sid, [(0, 1 << 62)], {names.get(i, ""): [x["text"] for x in xs] for i, xs in exps.items()})
@@ -391,6 +396,10 @@ def run_report(d):
 
     rows, contacts, passes = [], [], []
     converge = []  # (ms, resident, deliberate): an approach to within 4 m, a line, gesture or act at them
+    # The deliberate part split by whether a line reached them (fs1e): (ms, resident, kind) with kind
+    # "heard" (a line the authority did not mark unheard, a gesture, an act aimed at them) or
+    # "unheard" (a line the speaker was told could not have been heard: its `silence` row).
+    converge_split = []
     for i in sorted((set(in_range) | {s["a"] for s in speech if s.get("b") == sid}) & (minds or set(in_range) | {s["a"] for s in speech})):
         mine = sorted(exps.get(i, []), key=lambda r: r["at_ms"])
         first = next((r for r in mine if "first time you see" in r["text"]), None)
@@ -416,12 +425,15 @@ def run_report(d):
         for s in to_them:
             contacts.append((s["at_ms"], "line", i))
             converge.append((s["at_ms"], i, True))
+            unheard = any(0 <= e["at_ms"] - s["at_ms"] <= 1500 and ("could not have heard" in e.get("text", "") or "within earshot" in e.get("text", "")) for e in silences.get(i, []))
+            converge_split.append((s["at_ms"], i, "unheard" if unheard else "heard"))
         about = [s for s in speech if s.get("a") == i and s.get("b") != sid and inwin(s["at_ms"]) and WORDS.search(s.get("text", "")) and (near_at(i, s["at_ms"]) or 99) <= RANGE_M]
         aim = aimed.get(i, [])
         if aim:
             contacts.append((aim[0][0], "aimed:" + aim[0][1], i))
         g = [x for x in gestures if x.get("actor") == i]
         converge += [(x["at_ms"], i, True) for x in g] + [(ms, i, True) for ms, _ in aim]
+        converge_split += [(x["at_ms"], i, "heard") for x in g] + [(ms, i, "heard") for ms, _ in aim]
         for x in g:
             contacts.append((x["at_ms"], "gesture:" + x["skill"], i))
         name = names.get(i, f"#{i}")
@@ -477,6 +489,9 @@ def run_report(d):
     def most_within(evs):
         return max((len({who for t, who, _ in evs[k:] if t - ms <= CONVERGE_S * 1000}) for k, (ms, _, _) in enumerate(evs)), default=0)
     most, most_any = most_within([c for c in converge if c[2]]), most_within(converge)
+    converge_split.sort()
+    most_heard = most_within([c for c in converge_split if c[2] == "heard"])
+    most_unheard = most_within([c for c in converge_split if c[2] == "unheard"])
     # At once: within 4 m and, in the minute before, having spoken, gestured or aimed an
     # activity at them (deliberate) or come from beyond LEAVE_M (any).
     together = together_any = 0
@@ -531,7 +546,7 @@ def run_report(d):
         "tok_min": round((summary.get("tokens") or 0) / run_min) if run_min else None,
         "usd_h": round(usd / run_min * 60, 2) if run_min else None,
         "usd": round(usd, 2),
-        "converge_60s": most, "together_4m": together, "converge_any_60s": most_any, "together_any_4m": together_any,
+        "converge_60s": most, "converge_60s_heard": most_heard, "converge_60s_unheard": most_unheard, "together_4m": together, "converge_any_60s": most_any, "together_any_4m": together_any,
         "reasons": reasons["reasons"], "reused": reasons["reused"], "reused_events": reasons["reused_events"],
         "reused_share": round(reasons["reused"] / reasons["reasons"], 2) if reasons["reasons"] else None,
         "carried": reasons["carried"], "carried_again": reasons["carried_again"],

@@ -205,8 +205,8 @@ For newer models:
 |---|---|---|---|
 | fast `patch` | DeepSeek: about 2.0 / 3.9 s (think-sized; fast-sized not yet measured), about $0.0013 (bound; FAST_LANE §4). With the full 12.5k-token prompt, mostly cached: $0.0006–0.0013. | 4.3–4.8 s (3 s with MTP) | **No** on latency; yes on money |
 | fast `switch`/`keep` | the same call | 0.8–1.2 s | Yes, if the reply is restricted to these kinds |
-| routine choice | Jev 135–174 ms p50, 166–240 ms p95, $0.00006 a question | 0.15–0.45 s | Close; Jev faster. Local is free and never rate-limited. |
-| rethink gate | Jev $0.00006 a question; GLM `low` 1.4 / 4.0 s, $0.00016 | 0.2–0.9 s | Yes against GLM; equal against Jev on price, slower than Jev |
+| routine choice | Jev 135–174 ms p50, 166–240 ms p95 (price not committed) | 0.15–0.45 s | Close; Jev faster. Local is free and never rate-limited. |
+| rethink gate | Jev (price not committed); GLM `low` 1.4 / 4.0 s, $0.00016 | 0.2–0.9 s | Yes against GLM; equal against Jev on price, slower than Jev |
 | animal impulse | GLM `low` 1.9 / 5.2 s, €0.17 a 1k calls (about $0.0002) | 0.9–1.7 s | Slightly on latency; the money saved is small |
 | talk | DeepSeek 0.67 / 1.8 s, about $0.0005 | 1.9–2.3 s | **No** |
 | person think, compile | DeepSeek 2.1 / 4.5 s and 3.7 / 8.0 s; GLM 6.6 / 13 s | 5–9 s, 10–25 s | No, and capacity runs out |
@@ -225,7 +225,7 @@ Both act on the same stream of non-urgent deliberations (think plus compile; abo
 
 | Lever | What it removes | Measured so far | Quality cost |
 |---|---|---|---|
-| **Gate** (`LIVING_RETHINK=jev`, built, off) | whole deliberations: fewer calls | Replay: 42% of 650 non-urgent deliberations judged wasted, 16% harmful to skip. Live: −37% to −50% deliberations, −24% to −40% cost. Lone newcomer among instinct residents only. | The **harmful holds**: Jev at 0.3 held 46%, catching 62% of waste and 19% of harmful-to-skip. Never measured where every resident thinks. |
+| **Gate** (`LIVING_RETHINK=jev`, built, off) | whole deliberations: fewer calls | Replay: 42% of 650 non-urgent deliberations judged wasted, 16% harmful to skip. Live: −37% to −50% deliberations. Lone newcomer among instinct residents only. | The **harmful holds**: Jev at 0.3 held 46%, catching 62% of waste and 19% of harmful-to-skip. Never measured where every resident thinks. |
 | **Local model** | the price of each call that runs | none | **Each call that runs is worse.** Unmeasured on our prompts for current models; the Ministral record is the prior. |
 
 ### How they combine

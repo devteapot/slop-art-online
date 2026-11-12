@@ -6,6 +6,7 @@
 mod llm;
 mod memory;
 mod mind;
+mod prices;
 mod prompts;
 
 use anyhow::{anyhow, Context, Result};
