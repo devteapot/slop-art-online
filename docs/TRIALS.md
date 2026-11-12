@@ -188,6 +188,85 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## Strangers stage 2 (2026-11-12, st2)
+
+docs/STRANGERS.md section 6, stage 2: the pilot. All 63 minds think (Dory, the infant, lives by her graph). The arms are C, L and LS, 1 replicate each, run in one batch.
+- **C** is `strangers-c:strangers-control`: the six residents from dc2ecfc8^, and the filter off.
+- **L** is `strangers:strangers-control`: main's lives, and the filter off.
+- **LS** is `strangers:strangers-filter`: main's lives, and `stranger_by_name` on (set by `set_world_law` and read back).
+
+The script:
+- the world starts at 07:00;
+- the newcomer "Arlen" joins at 09:31 at the arrival point (540.5, 766.5), the Counting House yard;
+- it stands 5 minutes there, then 5 at the densest group, then stays (20 minutes);
+- it never speaks.
+
+**Build and switches.**
+- Build `6111bc74` on the worktree `~/slop-stage2`: main `c4e6b04d`, which has strangers-1, far-label and speech-truth, plus `strangers-c.json` and the new arrive_spread measures. The batch started 05:30:20, right after the births batch bi1 ended.
+- `speech_truth` on (the shipped default). `stranger_by_name` off in C and L, on in LS.
+- Mind defaults: `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`.
+- The meters() alarms are present; `force_outcomes` is the shipped default; `LIVING_CONCURRENCY` 64. No arrival laws.
+- Models: the people mix (glm-5-3-flash about 72% of calls, deepseek-v4-1-flash the rest).
+
+**Cost:** $7.47 for the batch: $2.47, $2.48 and $2.52 a run, about 15.7 M tokens and 1,770 calls each. That is $0.12 per thinking resident-hour, below the plan's $0.16–0.20.
+
+**Stage 0 for this build** (`st2f`, fake, 3 minutes, the same three arms): all ran to duration and every measure below computes.
+
+### Against the target spread (STRANGERS.md, "Target spread"; one replicate, indicative only)
+
+| | C | L | LS | target (L, LS) |
+|---|---|---|---|---|
+| in range (≤12 m during a stand) | 16 | 22 | 15 | about 10–16 |
+| asks | 1 (Fenn Brandt, 514 s, out of earshot) | **0** | 2 (Posy Fenwick, Sabine Quill) | 1–3, Aldous among them |
+| approaches silently | 6 | **13** | 6 | 0–2 |
+| notices inwardly | 1 | **0** | **0** | 3–8 |
+| unaware | 8 (50%) | 9 (41%) | 7 (47%) | ≤6, ≤40% |
+| tells others (all residents) | 0 | **0** | 3 (Mirren, Hana, Posy; all beyond 12 m at the join) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | none | none | 630 s (Posy) | within 5 minutes |
+| `converge_60s` / `together_4m` | 1 / 1 | 3 / **3** | 3 / 2 | ≤3 / ≤2 |
+| re-asks | 0 | 0 | 1 (Sabine) | — |
+| guards: false replies a min, repeated lines, `led_res` − placebo | 0.20, 0.05, +0.15 | 1.05, 0.00, −0.04 | 0.35, 0.06, +0.41 | within C's spread |
+
+- **Not in shape.**
+  - Aldous asked in neither L nor LS.
+  - No arm reaches the inward band.
+  - Silent approaches are far over the band, but they include residents whose routines walk them past: arrive_report's `approach`/`close` count movement, not intent.
+  - L had 3 residents within 4 m at once, an out-of-shape mark.
+- **Ingrid** was not in range in any arm and told no one.
+- **The asks:**
+  - The two LS askers have high curiosity (Sabine 92) and high sociability (Posy 80). The newcomer's second stand put it at the Readers' yard during a lesson: Posy: "You at the yard edge — who are you? I'm Posy. You've watched us the whole lesson."; Sabine: "Friend, I'm Sabine Quill … Who are you, and what brings you to watch the marks?"
+  - In C, Fenn Brandt's greeting ("You'll be new to the yard …") was said beyond earshot, so the newcomer never heard it.
+
+**Why Aldous did not ask.**
+- In L and LS he was in range during a stand and got the first-sight line.
+- He thought only 3–6 times after the join, and the newcomer was in none of those prompts.
+- A first sight has salience 0.45 and does not ask for a thought (only ≥0.6 does), so his life had no moment in which to act.
+- The lives reach the model only when it is already thinking with the newcomer in the scene. Whether a first sight of a stranger should ask for a thought is not decided here (it would be an attention rule, which the owner rejected as a world law). This is the question for stage 3.
+
+**Spoken `#id` lines:** 0 in all three runs (ar2: 1 of 3,042).
+
+**First sights in crowds** (the crowd fix):
+- every person within 12 m of the newcomer after the join got a first-sight line naming it (16/16, 25/25 and 18/18);
+- per run there were 1,380–1,554 first-sight lines. Of these, 255–293 named several people at once, at most 8 to a line, covering 2,160–2,349 people.
+
+**Room lines nobody heard** (speech-truth's "Nobody was near enough to hear you."): 8, 10 and 4, by 7, 9 and 3 residents.
+
+**Deliberations:** 18.3–18.5 per thinking resident-hour, against ar2's 24. Talk turns: 12–14 per resident-hour.
+
+**How the far label showed up in thoughts.**
+- 353–375 think prompts per run listed someone too far away to make out.
+- No reply used the label's words. Replies speak of far people by name instead: "Thessaly is thirty metres off, too far for words" (Lark Morrow, LS).
+- **The cause:** the far entry keeps its `id` (as decided), and the same prompt maps ids to names. "You belong to Cullet (… Thessaly Marl (#15) …)" and the relations list "Thessaly Marl (#15): neighbour" turn `{"id": 15, "who": "someone too far away to make out", "dist": 30.5}` back into Thessaly.
+- Lark then spoke to "Thessaly" across 30 m and was told "Someone too far away to make out is too far away: they could not have heard you."
+- So the far label hides the name from the scene, but not from a mind that knows the person's id. It does keep "a stranger" off far neighbours, which was its purpose: no far neighbour was written as a stranger.
+- **Wording:** speech-truth's silence line doubles the label ("Someone too far away to make out is too far away").
+- Both are for the general coordinator to decide before stage 3. Options:
+  - give a far figure a handle that is not their id;
+  - or drop ids from the community and relations lines;
+  - and let speech-truth say "They are too far away …" for a far figure.
+
+**Evidence:** `~/slop-stage2/.local/living/trials/st2` and `st2f` (runs, summaries, journals under `.local/living/journal/verify-trial-st2-*`); `~/slop-strangers-logs/st2-spread.md` and `st2-spread.json`.
+
 ## Results of the wide batch (finished 22:58)
 
 36 runs, 7,556 model calls, 62.0M tokens, about **$10.57** (GLM 5.3 Flash and DeepSeek 4.1 Flash at the prices above). No runaway, no mind restart and no failed instance. Tick p99 per world stayed within 2.0–4.3 ms through the ramp to 39 worlds. The trial volume grew to 39 GB.
