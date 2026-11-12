@@ -141,7 +141,7 @@ TYPED = False  # the head is a face type's cage, with the identity bones in it
 # living/tools/characters/share.py puts on files that people share. `far` is the far model's
 # skin (head, neck and hands), textured with the far picture.
 MAT = dict(
-    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", line="M00_000_00_FaceEyeline_00_FACE",
+    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", line="M00_000_00_FaceEyeline_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
     hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
 )
 FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
@@ -960,13 +960,40 @@ def make_face(arm, spec, atlas_path):
     keep = lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.016 or bald_depth(c) > -0.012
     face = cage_head.CageFace(HF, look, keep=keep) if TYPED else head_mesh.Face(HF, look, keep=keep)
     m = face.mesh
+    # Lips and blush are a layer of their own over the skin they lie on, in a material the client
+    # does not recolour (`…_FACE`: drawn as the lash lines are, unshaded and in its own colours):
+    # painted into the skin, the skin's recolouring washed them out. The layer is the skin's own
+    # faces under the paint, a hair's width out, with the skin's weights and expressions.
+    layer = None if OVERLAY else {}
+    atlas = face_paint.paint(HF, look, layer)
+    tint_src = []
+    if layer is not None:
+        rows_ = head_mesh.ATLAS - head_mesh.EYE_ROWS
+        uv0 = np.array(m.uv)
+        nsk = face.skin_n + len(face._extra)
+        px = np.clip((uv0[:nsk, 0] % 1.0) * head_mesh.ATLAS, 0, head_mesh.ATLAS - 1).astype(int)
+        py = np.clip((1.0 - uv0[:nsk, 1]) * head_mesh.ATLAS - head_mesh.EYE_ROWS, 0, rows_ - 1).astype(int)
+        touched = layer["alpha"][py, px] > 0.02
+        near = {v for f in face.skin_faces if any(touched[v] for v in f) for v in f}  # and the faces round them
+        tint_faces = [f for f in face.skin_faces if any(v in near for v in f)]
+        tint_src = sorted({v for f in tint_faces for v in f})
+        index = {v: len(m.v) + i for i, v in enumerate(tint_src)}
+        nrm_ = np.array(face.skin_normals)
+        for v in tint_src:
+            m.v.append(tuple(np.array(m.v[v]) + nrm_[v] * OVERLAY_OUT))
+            m.col.append((1.0, 1.0, 1.0))
+            m.uv.append(m.uv[v])
+            m.eye.append(m.eye[v])
+        for f in tint_faces:
+            m.f.append(tuple(index[v] for v in f))
+            m.fm.append("tint")
     # The iris shares the eye's material (the atlas); highlights are plain colour, as the lines are.
     # The lash lines, brows, highlights and the mouth's inside are one material (plain colour).
     # The iris is a material of its own (VRoid's name for it, `EyeIris`), with its own small
     # picture: the client recolours a material by moving its picture's mean colour to the person's,
     # and the tag for the eyes' colour goes to materials named so.
-    fm = [dict(iris="iris", face="face", eye="eye", under="skin").get(k, "line") for k in m.fm]
-    order = [k for k in ("face", "eye", "iris", "line", "skin") if k in set(fm)]
+    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint").get(k, "line") for k in m.fm]
+    order = [k for k in ("face", "eye", "iris", "line", "skin", "tint") if k in set(fm)]
     A, C0, PXI = head_mesh.ATLAS, head_mesh.IRIS_COL0, head_mesh.IRIS_PX
     iris_verts = {v for f, k in zip(m.f, m.fm) if k == "iris" for v in f}
     m.uv = [((u * A - C0) / PXI, 1.0 - (1.0 - v) * A / PXI) if i in iris_verts else (u, v) for i, (u, v) in enumerate(m.uv)]
@@ -985,14 +1012,17 @@ def make_face(arm, spec, atlas_path):
                 weights[i] = {eye_bone[e[0]]: e[1], orbit: 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}
         for i in face.under_neck:  # the neck's ring turns with the neck
             weights[i] = {"J_Bip_C_Neck": 0.75, "J_Bip_C_Head": 0.25}
+    for i, v in enumerate(tint_src):  # the layer moves exactly as the skin under it
+        weights[len(m.v) - len(tint_src) + i] = weights[v]
     ob = raw_object("Face", world, m.f, weights, m.col, None, arm, uvs=m.uv, materials=[MAT[k] for k in order], face_mats=[order.index(k) for k in fm])
     ob.shape_key_add(name="Basis", from_mix=False)
     for name, delta in face.morphs.items():
         key = ob.shape_key_add(name=name, from_mix=False)
+        if tint_src:
+            delta = np.vstack([delta, delta[tint_src]])
         key.data.foreach_set("co", (world + delta * HEAD_SCALE).ravel())
         # A new key starts at 1, and the file would say every expression is on.
         key.value = float(spec.get("expression", {}).get(name, 0.0))
-    atlas = face_paint.paint(HF, look)
     face_paint.write_png(atlas_path, atlas)
     iris_path = atlas_path.replace(".atlas.png", ".iris.png")
     face_paint.write_png(iris_path, np.ascontiguousarray(atlas[:PXI, C0 : C0 + PXI]))
@@ -1005,6 +1035,36 @@ def make_face(arm, spec, atlas_path):
             tex.image = img
             bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
             mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    if tint_src:
+        # The layer's picture: the skin's layout at half its size, pigment with an alpha.
+        A2 = head_mesh.ATLAS
+        pic = np.zeros((A2, A2, 4))
+        pic[..., :3] = face_paint.BLUSH_PIGMENT
+        pic[head_mesh.EYE_ROWS :, :, :3] = layer["rgb"]
+        pic[head_mesh.EYE_ROWS :, :, 3] = layer["alpha"]
+        # Averaged with the alpha as weight, so a half-covered texel keeps the pigment's colour.
+        blocks = pic.reshape(A2 // 2, 2, A2 // 2, 2, 4)
+        a_ = blocks[..., 3:4]
+        rgb_ = (blocks[..., :3] * a_).sum(axis=(1, 3)) / np.maximum(a_.sum(axis=(1, 3)), 1e-6)
+        rgb_ = np.where(a_.sum(axis=(1, 3)) > 1e-6, rgb_, np.array(face_paint.BLUSH_PIGMENT))
+        small = np.concatenate([rgb_, a_.mean(axis=(1, 3))], axis=2)
+        small = (np.clip(small, 0, 1) * 255 + 0.5).astype(np.uint8)
+        path = atlas_path.replace(".atlas.png", ".tint.png")
+        timg = bpy.data.images.new("tint", small.shape[1], small.shape[0], alpha=True)
+        timg.pixels.foreach_set((small[::-1].astype(np.float32) / 255.0).ravel())
+        timg.filepath_raw = path
+        timg.file_format = "PNG"
+        timg.save()
+        timg = bpy.data.images.load(path)
+        timg.colorspace_settings.name = "sRGB"
+        timg.pack()
+        mat = material(MAT["tint"])
+        mat.blend_method = "BLEND"
+        tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        tex.image = timg
+        bsdf = next(x for x in mat.node_tree.nodes if x.type == "BSDF_PRINCIPLED")
+        mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        mat.node_tree.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
     if OVERLAY:
         layer = make_overlay(arm, spec, face, m, world, weights, atlas_path)
         bpy.data.objects.remove(ob, do_unlink=True)  # the file holds the layer alone
@@ -1778,10 +1838,10 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             band = zs.index(1.06)
             apron = spec["apron"]
 
-            def stag(kind, k, r):
+            def btag(kind, k, r):  # the sleeve bands alone: a part of their own, so they take a colour of their own
                 if kind == "sleeve" and r in (3, 4):
                     return 4
-                return 0
+                return Part.HIDE
 
             def atag(kind, k, r):  # the apron alone: a part of its own, so it takes a colour of its own
                 if kind == "torso" and r == band:
@@ -1792,8 +1852,12 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
 
             p = upper_garment(
                 Part("Smock"), 0.018, zs, hem=[(-0.004, -0.008)], cuff=(-0.655, [(-0.022, 0.004), (-0.024, -0.004)]),
-                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, tag_fn=stag,
+                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0,
             ).mirrored()
+            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
+            # The bands round the sleeves, in another cloth: over the smock's own sleeve, a hair's
+            # width out. Its own part, so a shared smock's bands are a piece with its own colour.
+            p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
             if apron:
                 p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag).mirrored()

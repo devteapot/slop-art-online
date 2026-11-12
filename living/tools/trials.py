@@ -1523,7 +1523,9 @@ class Instance:
         minds integrate and delete them, to `experiences_all.jsonl`; `gestures`, every use of a
         gesture or turn (`wave`, `nod`, `face`, `appraise`; `skill_use`) to `gestures.jsonl`;
         `positions`, every person's position, heading and activity (its skill, and whom it is aimed
-        at) each sample to `positions.jsonl`; `thoughts`, every character's thought rows (with
+        at) each sample to `positions.jsonl`; `uses`, every skill use by the subject and the cast
+        (`skill_use`: the attempt, acceptance, release and outcome), written again each time its
+        outcome changes (a missile "in flight", then what it struck), to `uses.jsonl`; `thoughts`, every character's thought rows (with
         `detail.reasons`, what each deliberation carried) to `thoughts_all.jsonl`; `audience`,
         who heard each line and how they stood (the `audience` table, where the world keeps it)
         to `audience.jsonl` (greet_report.py)."""
@@ -1546,6 +1548,18 @@ class Instance:
                 self.cursor["gesture"] = max(self.cursor["gesture"], r["id"])
                 if r.get("skill") in ("wave", "nod", "face", "appraise"):
                     self.emit("gestures", {"t": self.t(), **r})
+        if rec.get("uses"):
+            # `skill_use` keeps each character's last 24 uses; read them per role each sample and
+            # write a row again when its outcome has changed, so the last copy per id is final.
+            seen = self.cursor.setdefault("uses_seen", {})
+            actors = sorted({i for ids in self.roles.values() for i in ids})
+            for actor in actors:
+                for r in self.rows(f"SELECT * FROM skill_use WHERE actor = {actor}"):
+                    key = str(r["id"])
+                    state = (r.get("accepted_ms"), r.get("released_ms"), r.get("outcome"), r.get("outcome_ms"))
+                    if seen.get(key) != list(state):
+                        seen[key] = list(state)
+                        self.emit("uses", {"t": self.t(), **r})
         if rec.get("positions"):
             people = {c["id"] for c in self.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true")}
             now = self.now_ms()

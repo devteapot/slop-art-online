@@ -2759,9 +2759,319 @@ pub(crate) fn connect_walled(tiles: &mut [u8], w: usize) -> (u32, u32) {
     connect(tiles, w, 0, &[], true)
 }
 
+/// The land's parameters as any client may read them (the public `land` row's `params`): the
+/// same land, with none of what its people call things (owner-known, 2026-11-12). The full
+/// parameters stay with the authority (`land_plan`, private), for minds and records.
+///
+/// - Only what generation reads is kept: the params as given, less every key [`LandParams`]
+///   does not parse (a lot's address, household, keepsake, notes and causes). Values keep their
+///   given text, and defaults the params left out stay out (the typed form would write them
+///   all, the ~575 KB building catalogue among them), so the row is no bigger than given.
+/// - Lots lose their `name`; the keys that tie a plan together are renamed in step, so every
+///   reference still holds: levels `v0…`, lots `l0…`, a lot's spots `s0…`, streets `r0…`,
+///   stairs `w0…`, fixtures `f0…`, owners' household keys `household:o0…`, resource pools
+///   `p0…`, relief stamps `t0…`. A plan's own `id` (the seed's site name, which `match_seed`
+///   reads) and every kind, style, model and number stay.
+///
+/// The land a client builds from it is the one the authority built: the same digests (test
+/// `public_params_build_the_same_land`).
+pub fn public_params(full: &serde_json::Value) -> Result<serde_json::Value, String> {
+    use serde_json::{json, Value};
+    use std::collections::HashMap;
+    if full.is_null() || full.as_object().is_some_and(|o| o.is_empty()) {
+        return Ok(full.clone());
+    }
+    let typed: LandParams =
+        serde_json::from_value(full.clone()).map_err(|e| format!("map.params: {e}"))?;
+    // The params as given, less what the land does not read (notes, addresses, households,
+    // keepsakes): every key the typed form does not carry. The typed form itself is not used:
+    // it writes every default out (the building catalogue alone is ~575 KB) and f32s long.
+    let mut v = full.clone();
+    keep_given(
+        &mut v,
+        &serde_json::to_value(&typed).map_err(|e| format!("map.params: {e}"))?,
+    );
+    let rename = |map: &mut HashMap<String, String>, prefix: &str, old: &str| -> String {
+        let n = map.len();
+        map.entry(old.to_string())
+            .or_insert_with(|| format!("{prefix}{n}"))
+            .clone()
+    };
+    let mut owners: HashMap<String, String> = HashMap::new();
+    for plan in v
+        .get_mut("plans")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        let mut levels: HashMap<String, String> = HashMap::new();
+        let mut lots: HashMap<String, String> = HashMap::new();
+        let mut spots: HashMap<(String, String), String> = HashMap::new();
+        for l in plan
+            .get_mut("levels")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(id) = l["id"].as_str().map(String::from) {
+                l["id"] = json!(rename(&mut levels, "v", &id));
+            }
+        }
+        // Only keys the params have are touched (indexing a missing key would add a null).
+        let level = |levels: &HashMap<String, String>, x: Option<&mut Value>| {
+            if let Some(x) = x {
+                if let Some(id) = x.as_str() {
+                    if let Some(n) = levels.get(id) {
+                        *x = json!(n);
+                    }
+                }
+            }
+        };
+        for l in plan
+            .get_mut("lots")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            let old = l["id"].as_str().unwrap_or_default().to_string();
+            if l.get("id").is_some() {
+                l["id"] = json!(rename(&mut lots, "l", &old));
+            }
+            if let Some(o) = l.as_object_mut() {
+                o.remove("name");
+            }
+            level(&levels, l.get_mut("level"));
+            for (k, sp) in l
+                .get_mut("spots")
+                .and_then(Value::as_array_mut)
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
+                if let Some(name) = sp["name"].as_str().map(String::from) {
+                    spots.insert((old.clone(), name), format!("s{k}"));
+                    sp["name"] = json!(format!("s{k}"));
+                }
+            }
+        }
+        for (k, st) in plan
+            .get_mut("streets")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if st["id"].as_str().is_some_and(|s| !s.is_empty()) {
+                st["id"] = json!(format!("r{k}"));
+            }
+            level(&levels, st.get_mut("level"));
+        }
+        for (k, st) in plan
+            .get_mut("stairs")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if st.get("id").is_some() {
+                st["id"] = json!(format!("w{k}"));
+            }
+            level(&levels, st.get_mut("from"));
+            level(&levels, st.get_mut("to"));
+        }
+        if let Some(sq) = plan.get_mut("square").filter(|q| q.is_object()) {
+            level(&levels, sq.get_mut("level"));
+        }
+        for (k, f) in plan
+            .get_mut("fixtures")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if f["id"].as_str().is_some_and(|s| !s.is_empty()) {
+                f["id"] = json!(format!("f{k}"));
+            }
+        }
+        // A resource's `pool` (the node whose stock several share) is a key too.
+        let mut pools: HashMap<String, String> = HashMap::new();
+        for r in plan
+            .get_mut("resources")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(p) = r["pool"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .map(String::from)
+            {
+                r["pool"] = json!(rename(&mut pools, "p", &p));
+            }
+        }
+        for st in plan
+            .get_mut("structures")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            let lot = st["lot"].as_str().map(String::from);
+            if let (Some(lot), Some(spot)) = (lot.clone(), st["spot"].as_str().map(String::from)) {
+                if let Some(n) = spots.get(&(lot, spot)) {
+                    st["spot"] = json!(n);
+                }
+            }
+            if let Some(n) = lot.and_then(|l| lots.get(&l).cloned()) {
+                st["lot"] = json!(n);
+            }
+            // An owner is `household:<key>` (the key is a family's name): only the key is renamed.
+            if let Some(o) = st["owner"].as_str().map(String::from) {
+                let (head, key) = o.split_once(':').map_or(("", o.as_str()), |(h, k)| (h, k));
+                let n = rename(&mut owners, "o", key);
+                st["owner"] = json!(if head.is_empty() {
+                    n
+                } else {
+                    format!("{head}:{n}")
+                });
+            }
+        }
+    }
+    for (k, st) in v
+        .pointer_mut("/relief/stamps")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        if st["id"].as_str().is_some_and(|s| !s.is_empty()) {
+            st["id"] = json!(format!("t{k}"));
+        }
+    }
+    Ok(v)
+}
+
+/// Drop from `out` every object key that `known` does not have, element by element through
+/// arrays.
+fn keep_given(out: &mut serde_json::Value, known: &serde_json::Value) {
+    use serde_json::Value;
+    match (out, known) {
+        (Value::Object(o), Value::Object(g)) => {
+            o.retain(|k, _| g.contains_key(k));
+            for (k, x) in o.iter_mut() {
+                keep_given(x, &g[k]);
+            }
+        }
+        (Value::Array(o), Value::Array(g)) => {
+            for (x, y) in o.iter_mut().zip(g) {
+                keep_given(x, y);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_params_build_the_same_land() {
+        for (name, src) in [
+            ("cullet", include_str!("../../seeds/cullet.json")),
+            ("plan-test", include_str!("../../seeds/plan-test.json")),
+        ] {
+            let seed: serde_json::Value = serde_json::from_str(src).unwrap();
+            let full = &seed["map"]["params"];
+            let size = seed["map"]["size"].as_u64().unwrap() as u32;
+            let public = public_params(full).unwrap();
+            let text = public.to_string();
+            // What the people call things is not in it: lot names, spot names, street names,
+            // notes, households.
+            for lot in full["plans"][0]["lots"].as_array().unwrap() {
+                if let Some(n) = lot["name"].as_str() {
+                    assert!(
+                        !text.contains(&format!("\"{n}\"")),
+                        "{name}: lot name {n:?} in the public params"
+                    );
+                }
+                for sp in lot["spots"].as_array().into_iter().flatten() {
+                    let n = sp["name"].as_str().unwrap();
+                    assert!(
+                        !text.contains(&format!("\"{n}\"")),
+                        "{name}: spot name {n:?} in the public params"
+                    );
+                }
+            }
+            for word in [
+                "note",
+                "household_name",
+                "address",
+                "keepsake",
+                "district",
+                "Cinder Row",
+                "the Heron",
+                "arcade bay 1",
+            ] {
+                assert!(
+                    !text.contains(word),
+                    "{name}: {word:?} in the public params"
+                );
+            }
+            // Households are named by their families: no original key is left.
+            for st in full["plans"][0]["structures"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
+                if let Some(o) = st["owner"].as_str() {
+                    assert!(
+                        !text.contains(&format!("\"{o}\"")),
+                        "{name}: owner {o:?} in the public params"
+                    );
+                }
+            }
+            // No bigger than what was given (no defaults written out).
+            assert!(
+                text.len() <= full.to_string().len(),
+                "{name}: public params {} bytes, given {}",
+                text.len(),
+                full.to_string().len()
+            );
+            // And the land built from it is the same land.
+            let a: LandParams = serde_json::from_value(full.clone()).unwrap();
+            let b: LandParams = serde_json::from_value(public.clone()).unwrap();
+            crate::settle::validate_plans(&b.plans, size).unwrap();
+            let (la, lb) = (generate(7, size, &a), generate(7, size, &b));
+            let (ma, _) = crate::host::hosted_map(&la, &a);
+            let (mb, _) = crate::host::hosted_map(&lb, &b);
+            let (da, db) = (
+                crate::host::digests(&la, &ma),
+                crate::host::digests(&lb, &mb),
+            );
+            assert!(
+                da.tiles == db.tiles && da.heights == db.heights && da.layout == db.layout,
+                "{name}: the public params build another land"
+            );
+            // What a client derives besides the digests: lots (models, frontage, landmarks) and
+            // props, drawn from the regenerated land and never sent as rows.
+            assert_eq!(serde_json::to_string(&la.lots).unwrap(), serde_json::to_string(&lb.lots).unwrap(), "{name}: other lots");
+            assert_eq!(serde_json::to_string(&la.props).unwrap(), serde_json::to_string(&lb.props).unwrap(), "{name}: other props");
+        }
+        assert_eq!(
+            public_params(&serde_json::json!({})).unwrap(),
+            serde_json::json!({})
+        );
+        // The megacity floor's params (too big a land to build here): public, parsed, its plans
+        // valid, and no bigger than given.
+        let seed: serde_json::Value =
+            serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).unwrap();
+        let full = &seed["map"]["params"];
+        let public = public_params(full).unwrap();
+        let b: LandParams = serde_json::from_value(public.clone()).unwrap();
+        crate::settle::validate_plans(&b.plans, seed["map"]["size"].as_u64().unwrap() as u32)
+            .unwrap();
+        assert!(public.to_string().len() <= full.to_string().len());
+    }
 
     /// An authored coastline replaces the generated island, and stamps set the ground's height,
     /// region and tiles where they say; lake basins keep off them. Lands without either are
