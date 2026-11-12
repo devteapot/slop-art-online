@@ -456,6 +456,7 @@ fn show_band(ctx: &ReducerContext, who: Identity, body: u32, now: u64) {
         q.hp = hp.max(0.0).round();
     }
     if q != p {
+        crate::perception::row_written(who, body);
         ctx.db.projected().id().update(q);
     }
 }
