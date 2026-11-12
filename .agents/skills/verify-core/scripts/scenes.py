@@ -3116,6 +3116,10 @@ def sleeper_sounds(s):
     sleep(z_line)
     quiet = f"{names[z_line]}, are you awake? verify quiet line"
     s.call("mind_say", speaker, quiet, z_line, "", 0, THOUGHT)
+    time.sleep(2.2)
+    # A quiet line to the room that names the sleeper: kept too, with how it was said
+    # (speech-address) in the sleeper's own labels.
+    s.call("mind_say", speaker, f"{names[z_line]}, the boat is in. verify room line", 0, "", 0, THOUGHT)
     time.sleep(4)
     kept = s.rows(f"SELECT * FROM heard_asleep WHERE actor = {z_line}", "heard-asleep")
     told_now = [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {z_line}") if "verify quiet line" in e["text"]]
@@ -3126,6 +3130,8 @@ def sleeper_sounds(s):
     s.expect("a called name wakes the sleeper, told why", bool(told), told)
     heard = [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {z_line}", "heard-on-waking") if "verify quiet line" in e["text"]]
     s.expect("on waking, the quiet line is told as heard while asleep", len(heard) == 1 and heard[0]["kind"] == "heard_asleep" and heard[0]["text"].startswith("While you slept, you heard: "), heard)
+    room = [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {z_line}", "heard-room-on-waking") if "verify room line" in e["text"]]
+    s.expect("a line to the room heard asleep is told with how it was said, in the sleeper's labels", len(room) == 1 and room[0]["kind"] == "heard_asleep" and "to the room, naming you" in room[0]["text"], room)
     s.expect("nothing is left waiting", not s.rows(f"SELECT * FROM heard_asleep WHERE actor = {z_line}"))
     for who in (speaker, z_line):
         s.graph(who, {"wait": 120})
