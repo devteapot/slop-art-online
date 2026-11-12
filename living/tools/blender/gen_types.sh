@@ -50,3 +50,8 @@ python3 living/tools/characters/share.py types --dir "$(dirname "$out")/pages" "
 # Every type's iris is the one shared picture, with the source colour that the lines' eye
 # colours are worked out from (person_params.eye_line_colour).
 python3 living/tools/characters/eye_colours.py "$out" --check | tail -1
+# Every type's brows are there and stay before the skin when a person's values move the face
+# (at rest and at every value's ends; brow_check.py --book tries a look book's lines too).
+if [ ${#types[@]} -ge 21 ]; then
+  python3 living/tools/characters/brow_check.py "$out" | tail -4
+fi

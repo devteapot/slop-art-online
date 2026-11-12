@@ -224,6 +224,13 @@ pub struct ToonParams {
     /// Hair: x angel-ring strength, y ring width, z ring position (tangent shift), w rim
     /// strength.
     pub hair: Vec4,
+    /// Hair's ring, its shape: x edge softness (0 a hard edge, 1 fading from the band's middle),
+    /// y comb teeth (0 none, 1 full), z break-up by the strand picture (0 none, 1 full).
+    pub hair_sheen: Vec4,
+    /// Where on the head the ring may lie: x how far up a surface must face (N·up where it
+    /// starts, full 0.25 above), y from how far it faces the character's forward it fades (gone
+    /// 0.3 beyond; 2 never).
+    pub hair_place: Vec4,
     /// Painted detail: x 1 on scenery whose vertex colours name surfaces ([`with_detail`]), z
     /// full detail until (m), w none from (m). The style sets z and w; x is the material's own.
     pub detail: Vec4,
@@ -315,6 +322,19 @@ pub struct Style {
     pub hair_ring_width: f32,
     pub hair_ring_shift: f32,
     pub hair_rim: f32,
+    /// The ring's shape: its edge's softness (0 hard, 1 fading from the middle), the comb teeth
+    /// that break its edge (0 none, 1 full) and how far the strand picture breaks it (0 none, 1
+    /// full: light strands carry it, dark ones lose it).
+    pub hair_ring_soft: f32,
+    pub hair_ring_teeth: f32,
+    pub hair_ring_strands: f32,
+    /// How far up a surface must face to carry the ring (N·up where it starts, full 0.25
+    /// above): 0.2 lets it onto a fringe, which faces forward; about 0.55 keeps it to the crown.
+    pub hair_ring_up: f32,
+    /// From how far a surface faces the character's forward (N·forward) the ring fades, gone 0.3
+    /// beyond: about 0.25 keeps it off a fringe, which faces forward, and on the crown, sides and
+    /// back; 2 never fades it.
+    pub hair_ring_front: f32,
     /// Painted detail on scenery: strength (0 off), how far its relief (the painted height) moves
     /// the sun's band edge, and the distances (m) from which it fades and by which it is gone.
     pub detail: f32,
@@ -371,10 +391,47 @@ impl Default for Style {
             hair_ring_width: 0.05,
             hair_ring_shift: 0.35,
             hair_rim: 0.2,
+            hair_ring_soft: 0.0,
+            hair_ring_teeth: 1.0,
+            hair_ring_strands: 0.0,
+            hair_ring_up: 0.2,
+            hair_ring_front: 2.0,
             detail: 1.0,
             detail_relief: 0.0,
             detail_fade: [20.0, 55.0],
         }
+        .with_hair_ring_env()
+    }
+}
+
+/// `LIVING_GAME_HAIR_RING=strength,width,soft,teeth,strands,shift,up,front` (look-dev captures
+/// and A/B): the hair ring's style values over the profile's; a value left empty keeps the
+/// profile's.
+fn hair_ring_env() -> Option<[Option<f32>; 8]> {
+    static V: std::sync::OnceLock<Option<[Option<f32>; 8]>> = std::sync::OnceLock::new();
+    *V.get_or_init(|| {
+        let v = std::env::var("LIVING_GAME_HAIR_RING").ok().filter(|v| !v.trim().is_empty())?;
+        let mut out = [None; 8];
+        for (i, x) in v.split(',').take(8).enumerate() {
+            out[i] = x.trim().parse().ok();
+        }
+        Some(out)
+    })
+}
+
+impl Style {
+    fn with_hair_ring_env(mut self) -> Self {
+        if let Some([x, w, soft, teeth, strands, shift, up, front]) = hair_ring_env() {
+            self.hair_ring_front = front.unwrap_or(self.hair_ring_front);
+            self.hair_ring_shift = shift.unwrap_or(self.hair_ring_shift);
+            self.hair_ring_up = up.unwrap_or(self.hair_ring_up);
+            self.hair_ring = x.unwrap_or(self.hair_ring);
+            self.hair_ring_width = w.unwrap_or(self.hair_ring_width);
+            self.hair_ring_soft = soft.unwrap_or(self.hair_ring_soft);
+            self.hair_ring_teeth = teeth.unwrap_or(self.hair_ring_teeth);
+            self.hair_ring_strands = strands.unwrap_or(self.hair_ring_strands);
+        }
+        self
     }
 }
 
@@ -393,6 +450,8 @@ impl Style {
             atmo: Vec4::new(self.wind, self.wet, if crate::perf::has("nodetail") { 0.0 } else { self.detail }, self.detail_relief),
             face: Vec4::new(self.face_softness.max(0.001), self.face_shadow, self.face_parts, self.face_rim),
             hair: Vec4::new(self.hair_ring, self.hair_ring_width.max(0.01), self.hair_ring_shift, self.hair_rim),
+            hair_sheen: Vec4::new(self.hair_ring_soft.clamp(0.0, 1.0), self.hair_ring_teeth.clamp(0.0, 1.0), self.hair_ring_strands.clamp(0.0, 1.0), 0.0),
+            hair_place: Vec4::new(self.hair_ring_up, self.hair_ring_front, 0.0, 0.0),
             detail: Vec4::new(0.0, 0.0, self.detail_fade[0], self.detail_fade[1].max(self.detail_fade[0] + 1.0)),
             layers: surface_layers(),
         }
