@@ -511,6 +511,11 @@ pub struct Laws {
     /// scene the decision read, is not said yet: the speaker is told so and asked to think
     /// again with that line in front of it (first-sight-crowd, docs/FIRST_SIGHT.md). Off: said.
     pub heard_first_rethinks: bool,
+    /// The think prompt's framing (docs/FRAMING.md): off, today's ("Start from why you are
+    /// thinking now: that is what this moment of thought is about. …"); on, the neutral one
+    /// replayed as N2 ("What just happened is shown beside what you perceive. …", the reason's
+    /// section headed "# What just happened" where it stands).
+    pub think_framing: bool,
     /// A person's scene says whom a line said now would reach, at each way of speaking, among
     /// the people they perceive (earshot, docs/COMMUNICATION.md §17): a mind's deliberation scene
     /// ("who would hear you now") and a player's `my_earshot`. Off: neither is told.
@@ -617,6 +622,7 @@ impl Default for Laws {
             earshot: false,
             first_sight_gap_s: 300.0,
             heard_first_rethinks: false,
+            think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
             regard_cache: true,
@@ -2606,6 +2612,7 @@ impl Scripts {
             earshot: flag("earshot", l.earshot),
             first_sight_gap_s: g("first_sight_gap_s", l.first_sight_gap_s).clamp(0.0, 3_600.0),
             heard_first_rethinks: flag("heard_first_rethinks", l.heard_first_rethinks),
+            think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
@@ -3533,6 +3540,20 @@ mod tests {
         assert_eq!(l.first_sight_gap_s, 3_600.0);
         let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
         assert!(about["first_sight_thinks"].contains("brings you to think"), "{about:?}");
+    }
+
+    /// The think prompt's framing (docs/FRAMING.md): today's by default, a world may set the
+    /// neutral one.
+    #[test]
+    fn think_framing_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(!shipped.laws().think_framing);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["think_framing"].contains("why one is thinking"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("think_framing".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().think_framing);
     }
 
     /// A line overtaken by someone else's (first-sight-crowd): off by default, a world may set it.
