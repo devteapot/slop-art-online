@@ -188,6 +188,24 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## First sight fs1h (2026-11-12) — the one-arm re-run with the crowd fixes; target, written before any paid call
+
+The re-run of C + first sight after first-sight-crowd (docs/FIRST_SIGHT.md, "Crowds" and "Decisions on the crowd fixes"), approved by the general coordinator at about $2.7.
+- **What it runs:** one arm, batch `fs1h`, `strangers-2b-c:strangers-first-sight-hf`, with `first_sight_thinks` and `heard_first_rethinks` on (set by `set_world_law`, read back from `world_law`).
+- **The naming fix** (whom someone walks to, in the observer's words) is on in every world since first-sight-crowd; it has no switch.
+- **The world and script:** as fs1 (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **The build:** main with first-sight-crowd merged, worktree `~/slop-trials-fs1`.
+
+**The target and the stop rule are fs1's, unchanged** (the table and the rule under "First sight fs1", above). The run stops, and nothing else is reported first, if `converge_60s` is 4 or more or `together_4m` 3 or more.
+
+**Measures:**
+- the stage-2 table against the targets, beside fs1's C and C + first sight (fs1f);
+- the raw 4 m convergence, lines out of earshot, first sight → thought;
+- false replies with group talk, tick time, spoken ids;
+- **held lines** (`fs1_held.py`): how many lines `heard_first_rethinks` held, how many of them were still said after the re-think (the same words again), and what the minds decided instead: another line to them, speaking to someone else, or silence. The re-think's thought is quoted.
+
+**Switches:** as fs1, plus `heard_first_rethinks` on and the naming fix.
+
 ## First sight fs1 (2026-11-12) — target, written before any paid call
 
 The paid stage of docs/FIRST_SIGHT.md, approved by the owner (2026-11-12) at about $13. It runs on main `dc45c259` (first-sight merged), worktree `~/slop-trials-fs1`, branch `trials-fs1`.
