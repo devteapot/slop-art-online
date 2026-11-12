@@ -18,6 +18,12 @@ Since `doing-percept` (2026-11-12; docs/PERCEPTION.md, "What someone is visibly 
 - `doing`: a resident faces another 3 m east who holds up a guard (`block`, held, a `fighter` row with `act`). The pending request's scene lists the other with `visibly` `{is: block, phase: holding}`, with `at: you` only when the other's guard happens to face the eye (a guard has no target; its drawn aim decides); the think prompt the fake model is sent carries it; the deliberate prompt's grammar carries `{"doing": {"who": "person", "is": "hostile", "phase": "winding up"` (a kind word since fix-dodge-told, not a skill the reader may never face) and `about to release`. Evidence: `scene.json`, `sent-prompts.txt`, `result.json`.
 - What the routine does with it on the tick, the field, the far label and beyond sight are verify-core's ([doing](../../verify-core/features/doing.md)).
 
+## Who would hear you now
+
+Since `earshot` (2026-11-12; docs/COMMUNICATION.md §17), behind the world's `earshot` law (off as shipped). A person's deliberation scene says whom a line said now would reach, at each way, among the people it lists: `"who would hear you now": "Within earshot if you say it: Walker2 (#269); a whisper would reach no one; a call would also reach: a stranger (#270)."` (`perceive::scene_json`, `earshot::reach` and `words`; the key is `living_rules::script::speech::EARSHOT`). Each person is named as the mind knows them, with the id the scene shows them under (a far figure's handle). Someone the scene does not list is never named, though a line may reach them.
+
+- `earshot`: on a quiet open line (`open_line`, a copy of verify-core's `quiet_line`), H (thought for) stands with A 3 m east, B 10 m east and C 15 m west; A and C tell H their names first. With the law off, H's think prompt has no such key (`prompt-earshot-off.txt`). The admin turns it on (`set_world_law earshot true`), and H's next think prompt (`prompt-earshot.txt`) lists A by name at say, B as a stranger added by a call (by day; sight 11 m), and never C (15 m, beyond sight). H then says a line to the room and calls one (admin `mind_say`). Among A, B and C, those who receive each are exactly the list at that way, and C receives the call unlisted. By night (sight 6 m) B is out of sight too, and the case expects "a call would reach no one more". Evidence: `earshot.json`.
+
 ## Driving it
 
 ```bash
@@ -25,6 +31,7 @@ Since `doing-percept` (2026-11-12; docs/PERCEPTION.md, "What someone is visibly 
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case sight
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case death-names
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case health-seen
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case earshot
 ```
 
 ## Gotchas

@@ -1345,6 +1345,15 @@ pub fn my_senses(ctx: &ViewContext) -> Vec<CharacterSenses> {
     living(ctx).and_then(|c| ctx.db.character_senses().id().find(c.id)).into_iter().collect()
 }
 
+/// Whom a line I said now would reach, at each way of speaking (`character_earshot`): the
+/// people my living character perceives, and the same in words. One point lookup; it re-runs
+/// when the row changes (someone steps into or out of a way's reach, a label changes), at most
+/// every `frame::EARSHOT_MS`.
+#[spacetimedb::view(accessor = my_earshot, public, primary_key = id)]
+pub fn my_earshot(ctx: &ViewContext) -> Vec<CharacterEarshot> {
+    living(ctx).and_then(|c| ctx.db.character_earshot().id().find(c.id)).into_iter().collect()
+}
+
 /// How my acts and my death came out lately, in codes (`act_outcome`, one row per line of
 /// `my_experience` that tells one, keyed by its id): of my living character, or of the one that
 /// died last until I join again (the death screen). One btree point read by character.

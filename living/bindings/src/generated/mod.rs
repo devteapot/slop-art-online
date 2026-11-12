@@ -30,6 +30,8 @@ pub mod bond_offer_table;
 pub mod bond_offer_type;
 pub mod brain_table;
 pub mod brain_type;
+pub mod character_earshot_table;
+pub mod character_earshot_type;
 pub mod character_senses_table;
 pub mod character_senses_type;
 pub mod character_table;
@@ -59,6 +61,7 @@ pub mod doing_seen_table;
 pub mod doing_seen_type;
 pub mod doing_table;
 pub mod doing_type;
+pub mod earshot_way_type;
 pub mod expecting_table;
 pub mod expecting_type;
 pub mod experience_table;
@@ -171,6 +174,7 @@ pub mod my_characters_table;
 pub mod my_combat_table;
 pub mod my_deliberations_table;
 pub mod my_doing_table;
+pub mod my_earshot_table;
 pub mod my_experience_table;
 pub mod my_fighter_table;
 pub mod my_heard_table;
@@ -331,6 +335,8 @@ pub use bond_offer_table::*;
 pub use bond_offer_type::BondOffer;
 pub use brain_table::*;
 pub use brain_type::Brain;
+pub use character_earshot_table::*;
+pub use character_earshot_type::CharacterEarshot;
 pub use character_senses_table::*;
 pub use character_senses_type::CharacterSenses;
 pub use character_table::*;
@@ -360,6 +366,7 @@ pub use doing_seen_table::*;
 pub use doing_seen_type::DoingSeen;
 pub use doing_table::*;
 pub use doing_type::Doing;
+pub use earshot_way_type::EarshotWay;
 pub use expecting_table::*;
 pub use expecting_type::Expecting;
 pub use experience_table::*;
@@ -472,6 +479,7 @@ pub use my_characters_table::*;
 pub use my_combat_table::*;
 pub use my_deliberations_table::*;
 pub use my_doing_table::*;
+pub use my_earshot_table::*;
 pub use my_experience_table::*;
 pub use my_fighter_table::*;
 pub use my_heard_table::*;
@@ -1173,6 +1181,7 @@ pub struct DbUpdate {
     bond_offer: __sdk::TableUpdate<BondOffer>,
     brain: __sdk::TableUpdate<Brain>,
     character: __sdk::TableUpdate<Character>,
+    character_earshot: __sdk::TableUpdate<CharacterEarshot>,
     character_senses: __sdk::TableUpdate<CharacterSenses>,
     chronicle: __sdk::TableUpdate<Chronicle>,
     clock: __sdk::TableUpdate<Clock>,
@@ -1225,6 +1234,7 @@ pub struct DbUpdate {
     my_combat: __sdk::TableUpdate<CombatSeen>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
     my_doing: __sdk::TableUpdate<Doing>,
+    my_earshot: __sdk::TableUpdate<CharacterEarshot>,
     my_experience: __sdk::TableUpdate<Experience>,
     my_fighter: __sdk::TableUpdate<Fighter>,
     my_heard: __sdk::TableUpdate<LineHeard>,
@@ -1330,6 +1340,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "character" => db_update
                     .character
                     .append(character_table::parse_table_update(table_update)?),
+                "character_earshot" => db_update
+                    .character_earshot
+                    .append(character_earshot_table::parse_table_update(table_update)?),
                 "character_senses" => db_update
                     .character_senses
                     .append(character_senses_table::parse_table_update(table_update)?),
@@ -1486,6 +1499,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_doing" => db_update
                     .my_doing
                     .append(my_doing_table::parse_table_update(table_update)?),
+                "my_earshot" => db_update
+                    .my_earshot
+                    .append(my_earshot_table::parse_table_update(table_update)?),
                 "my_experience" => db_update
                     .my_experience
                     .append(my_experience_table::parse_table_update(table_update)?),
@@ -1724,6 +1740,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.character = cache
             .apply_diff_to_table::<Character>("character", &self.character)
+            .with_updates_by_pk(|row| &row.id);
+        diff.character_earshot = cache
+            .apply_diff_to_table::<CharacterEarshot>("character_earshot", &self.character_earshot)
             .with_updates_by_pk(|row| &row.id);
         diff.character_senses = cache
             .apply_diff_to_table::<CharacterSenses>("character_senses", &self.character_senses)
@@ -2001,6 +2020,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_doing = cache
             .apply_diff_to_table::<Doing>("my_doing", &self.my_doing)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_earshot = cache
+            .apply_diff_to_table::<CharacterEarshot>("my_earshot", &self.my_earshot)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_experience = cache
             .apply_diff_to_table::<Experience>("my_experience", &self.my_experience)
             .with_updates_by_pk(|row| &row.id);
@@ -2093,6 +2115,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "character" => db_update
                     .character
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "character_earshot" => db_update
+                    .character_earshot
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "character_senses" => db_update
                     .character_senses
@@ -2249,6 +2274,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_doing" => db_update
                     .my_doing
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_earshot" => db_update
+                    .my_earshot
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_experience" => db_update
                     .my_experience
@@ -2476,6 +2504,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "character" => db_update
                     .character
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "character_earshot" => db_update
+                    .character_earshot
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "character_senses" => db_update
                     .character_senses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2631,6 +2662,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_doing" => db_update
                     .my_doing
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_earshot" => db_update
+                    .my_earshot
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_experience" => db_update
                     .my_experience
@@ -2834,6 +2868,7 @@ pub struct AppliedDiff<'r> {
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
     brain: __sdk::TableAppliedDiff<'r, Brain>,
     character: __sdk::TableAppliedDiff<'r, Character>,
+    character_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
     character_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
     chronicle: __sdk::TableAppliedDiff<'r, Chronicle>,
     clock: __sdk::TableAppliedDiff<'r, Clock>,
@@ -2886,6 +2921,7 @@ pub struct AppliedDiff<'r> {
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
     my_doing: __sdk::TableAppliedDiff<'r, Doing>,
+    my_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
     my_experience: __sdk::TableAppliedDiff<'r, Experience>,
     my_fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     my_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
@@ -2974,6 +3010,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
         callbacks.invoke_table_row_callbacks::<Brain>("brain", &self.brain, event);
         callbacks.invoke_table_row_callbacks::<Character>("character", &self.character, event);
+        callbacks.invoke_table_row_callbacks::<CharacterEarshot>(
+            "character_earshot",
+            &self.character_earshot,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<CharacterSenses>(
             "character_senses",
             &self.character_senses,
@@ -3066,6 +3107,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Doing>("my_doing", &self.my_doing, event);
+        callbacks.invoke_table_row_callbacks::<CharacterEarshot>(
+            "my_earshot",
+            &self.my_earshot,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Experience>(
             "my_experience",
             &self.my_experience,
@@ -3849,6 +3895,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         bond_offer_table::register_table(client_cache);
         brain_table::register_table(client_cache);
         character_table::register_table(client_cache);
+        character_earshot_table::register_table(client_cache);
         character_senses_table::register_table(client_cache);
         chronicle_table::register_table(client_cache);
         clock_table::register_table(client_cache);
@@ -3901,6 +3948,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_combat_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
         my_doing_table::register_table(client_cache);
+        my_earshot_table::register_table(client_cache);
         my_experience_table::register_table(client_cache);
         my_fighter_table::register_table(client_cache);
         my_heard_table::register_table(client_cache);
@@ -3974,6 +4022,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "bond_offer",
         "brain",
         "character",
+        "character_earshot",
         "character_senses",
         "chronicle",
         "clock",
@@ -4026,6 +4075,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_combat",
         "my_deliberations",
         "my_doing",
+        "my_earshot",
         "my_experience",
         "my_fighter",
         "my_heard",
