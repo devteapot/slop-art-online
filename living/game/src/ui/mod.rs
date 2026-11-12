@@ -315,6 +315,7 @@ fn dump(
     typing: Res<say::Typing>,
     talk: Option<Res<crate::talk::Talk>>,
     (extra, model, pick): (DumpExtra, Res<model::HudModel>, Option<Res<crate::pick::Pick>>),
+    (notes, prompt): (Query<(&Node, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<verbs::ToastRow>>, Query<(&Node, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<prompt::Prompt>>),
 ) {
     let Some(path) = d.0.take() else { return };
     let size = cams.iter().find_map(|c| c.physical_viewport_size()).map_or(Vec2::new(1600.0, 900.0), |s| s.as_vec2());
@@ -339,6 +340,11 @@ fn dump(
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone()), "tab": talk.as_ref().and_then(|t| t.tabbed.as_ref().map(|(p, e, c)| serde_json::json!({"prev": p, "earshot": e, "chose": c})))})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+        // Where the notes and the F prompt are drawn (UI px: x, y, w, h), those showing.
+        "rects": {
+            "notes": notes.iter().filter(|(n, c, _)| n.display != Display::None && c.size().x > 0.0).map(|(_, c, t)| { let tl = (t.affine().translation - c.size() / 2.0) / k; [tl.x, tl.y, c.size().x / k, c.size().y / k] }).collect::<Vec<_>>(),
+            "prompt": prompt.iter().find(|(n, c, _)| n.display != Display::None && c.size().x > 0.0).map(|(_, c, t)| { let tl = (t.affine().translation - c.size() / 2.0) / k; [tl.x, tl.y, c.size().x / k, c.size().y / k] }),
+        },
         // The pack's load and limit as its header shows them (while the pack is open).
         "pack": model.verbs.inventory.as_ref().map(|i| serde_json::json!({"carried": i.carried, "limit": i.limit, "items": i.rows.iter().map(|r| (r.0.clone(), r.1)).collect::<Vec<_>>()})),
         // My bars (`meters()`) and pills (`status_of`) as drawn.
