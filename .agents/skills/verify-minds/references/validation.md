@@ -5,6 +5,7 @@
 Branch `fix-sleep-thinking`, the trial service `slop-trials-stdb`, the fake model, private target dir.
 
 - `sleeper` (new). The first two attempts failed on the case itself, not the change: an admin `set_behavior` before the mind started cleared the first request, so no first thought came. The case now asks it with `run.request`. `minds-sleeper3-sleeper` passes, and after merging main `49dfc2cd` `minds-sleepreg1-sleeper` passes. An offer to the sleeping actor waited in `slumber` with 0 deliberate model calls, no thought and no pending row for 15 s. The other adult's graph attack woke it, and the next thought's reason was "You woke up: Femi is attacking you!\nFemi offers you 1 stone for 1 wood. …". The percept read "You woke up: Femi is attacking you!".
+- After merging main `c67bb6e1`, `minds-sleepm3-sleeper` passes ("You woke up: Kelkelly is attacking you!" with the offer on the next line).
 - `minds-sleepreg1` also ran `roundtrip`, `reasons` and `takeover`: all pass. The mind's non-ignored tests pass (105).
 - Measurement, fake hamlet batch `sleep1` (55 min, one game day including its night, `latency.json` fake latencies, 12 thinkers). Variant `default` ran this branch; variant `main` (`wasm_tag`) ran origin/main `49dfc2cd` with the same seed and mind. Counted from the per-character journals:
   - main: 290 deliberations, 26.7 per resident-hour; 42 began while the resident was asleep (at the census samples on both sides).

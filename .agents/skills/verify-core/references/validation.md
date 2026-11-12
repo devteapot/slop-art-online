@@ -6,7 +6,7 @@ Branch `fix-sleep-thinking` from origin/main `2ff786aa`, then merged with `49dfc
 
 - `sleeper` (new): `core-sleeper2` 8/8 before the merge, `core-sleepreg1` 8/8 after it. A `think` between two short sleeps waited in `slumber`, not in `deliberation`, and the body slept on through the gap. A new graph woke it: the request read "You woke up." then the waited line. Asleep again, another adult's graph `attack` woke it: the request's first line was "You woke up: … is attacking you!", with the waited line after it, and its `body` percept said the same. A first attempt (`core-sleeper1`) used `mind_act` for the attack, which is refused ("belongs in your behavior graph").
 - Regressions on `core-sleepreg1`: `tick` 6/6 and `skirmish` 8/8. `alarms`: 5 PASS; its last check, the meter refusal, failed with "meters: `stamina` is declared twice" instead of "not a my_vitals field". This branch does not change meters; the alarm checks themselves (told once, "Your body: …" asked, told again) pass. `infant` on its fixture: still running at the time of writing (`core-sleepinf1`).
-- `just living-check` passes on the merged head.
+- `just living-check` passes on the merged head. After merging main `c67bb6e1` (move-intents): `living-check` passes again and `sleeper` 8/8 (`core-sleepm3`).
 - Not run: needs, food, refusal, teach, seize, sight, senses, doing, moves, death-names, say, town, rhythm, lives, laws, lifecycle, family_laws, wildlife, flee, mechanics, steering, fov.
 
 ## 2026-11-12 move-intents: movement intents (Spark)
