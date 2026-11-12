@@ -36,6 +36,12 @@ WHY = "\n# Why you are thinking now\n"
 JUST = "\n# What just happened\n"
 FS = "For the first time you see "
 
+ORDINARY = {
+    "finished": r"^I finished my plan\.$",
+    "quiet": r"^A quiet moment to take stock of how things are going\.$",
+    "need": r"^You feel something: ",
+}
+
 CLASSES = {
     "attacked": r"attacking you|The fight with|shot you|struck you|is attacking|threatens you|threatened you",
     "body": r"^Your body:|You are starving|badly hurt|bleeding|You are freezing",
@@ -126,6 +132,31 @@ def cmd_collect(a):
             out.append(record(run, e, msgs, why, k))
         print(f"{k}: {min(len(pool), caps[k])} of {len(pool)}")
     print(f"first_sight: {sum(1 for r in out if r['class'] == 'first_sight')}")
+    with open(a.out, "w") as f:
+        for r in out:
+            f.write(json.dumps(r) + "\n")
+
+
+def cmd_collect_ordinary(a):
+    """Ordinary thinks: a seeded sample of prompts whose only reason is a finished plan, a quiet
+    moment, or a felt need, each with what it was doing."""
+    rnd = random.Random(a.seed)
+    pools = {k: [] for k in ORDINARY}
+    for root in a.roots:
+        for run in sorted(glob.glob(os.path.join(root, "*/"))):
+            for e, msgs, why in think_entries(run.rstrip("/")):
+                lines = [l for l in why.split("\n") if l.strip()]
+                if len(lines) != 1:
+                    continue
+                for k, pat in ORDINARY.items():
+                    if re.search(pat, lines[0]):
+                        pools[k].append((run.rstrip("/"), e, msgs, why))
+    out = []
+    for k, pool in pools.items():
+        rnd.shuffle(pool)
+        for run, e, msgs, why in pool[: a.n]:
+            out.append(record(run, e, msgs, why, k))
+        print(f"{k}: {min(len(pool), a.n)} of {len(pool)}")
     with open(a.out, "w") as f:
         for r in out:
             f.write(json.dumps(r) + "\n")
@@ -252,8 +283,9 @@ def cmd_items(a):
         user = next(m["content"] for m in p["messages"] if m["role"] == "user")
         # The situation in one neutral form for every arm: the reason as what just happened.
         sit = gq.situation(user).replace("# Why you are thinking now", "# What just happened")
+        doing = user.split("\n# What you were doing\n", 1)[1].split("\n#", 1)[0].strip() if "\n# What you were doing\n" in user else ""
         iid = f"f{i:04d}"
-        items.append({"item": iid, "situation": sit, "what_just_happened": p["reason"], "reply": gq.reply_view(raw)})
+        items.append({"item": iid, "situation": sit, "what_just_happened": p["reason"], "what_you_were_doing": doing[:600], "reply": gq.reply_view(raw)})
         key.append({"item": iid, "id": pid, "arm": arm, "class": p["class"]})
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -280,7 +312,7 @@ def cmd_score(a):
     for f in a.labels:
         for l in gq.rows(f):
             labels.setdefault(l["item"], []).append(l)
-    agree = {"matters": [0, 0], "addressed": [0, 0], "harm": [0, 0]}
+    agree = {"matters": [0, 0], "addressed": [0, 0], "harm": [0, 0], "abandons": [0, 0]}
     cell = {}
     for iid, ls in labels.items():
         k = key.get(iid)
@@ -291,17 +323,19 @@ def cmd_score(a):
                 agree[f][1] += 1
                 agree[f][0] += ls[0].get(f) == ls[1].get(f)
         l = ls[0]
-        c = cell.setdefault((k["class"], k["arm"]), {"n": 0, "matters": 0, "addressed_when_matters": 0, "matters_n": 0, "harm": 0})
+        c = cell.setdefault((k["class"], k["arm"]), {"n": 0, "matters": 0, "addressed_when_matters": 0, "matters_n": 0, "harm": 0, "abandons_with_reason": 0, "abandons_without_reason": 0})
         c["n"] += 1
         c["matters"] += l.get("matters") is True
         if l.get("matters") is True:
             c["matters_n"] += 1
             c["addressed_when_matters"] += l.get("addressed") == "yes"
         c["harm"] += l.get("harm") is True
-    print("| class | arm | n | matters | addressed when it matters | harm |")
-    print("|---|---|---:|---:|---:|---:|")
+        c["abandons_with_reason"] += l.get("abandons") == "with reason"
+        c["abandons_without_reason"] += l.get("abandons") == "without reason"
+    print("| class | arm | n | matters | addressed when it matters | harm | abandons the plan, with reason | without reason |")
+    print("|---|---|---:|---:|---:|---:|---:|---:|")
     for (cls, arm), c in sorted(cell.items()):
-        print(f"| {cls} | {arm} | {c['n']} | {c['matters']} | {c['addressed_when_matters']} of {c['matters_n']} | {c['harm']} |")
+        print(f"| {cls} | {arm} | {c['n']} | {c['matters']} | {c['addressed_when_matters']} of {c['matters_n']} | {c['harm']} | {c['abandons_with_reason']} | {c['abandons_without_reason']} |")
     for f, (s, n) in agree.items():
         print(f"agreement {f}: {s} of {n}")
     if a.json:
@@ -313,6 +347,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("collect"); p.add_argument("out"); p.add_argument("--fs1e"); p.add_argument("--urgent", nargs="*"); p.add_argument("--slept", nargs="*")
     p.add_argument("--seed", type=int, default=1); p.add_argument("--n", type=int, default=15); p.add_argument("--n-addressed", type=int, default=12); p.set_defaults(f=cmd_collect)
+    p = sub.add_parser("collect-ordinary"); p.add_argument("out"); p.add_argument("roots", nargs="+"); p.add_argument("--seed", type=int, default=1); p.add_argument("--n", type=int, default=20); p.set_defaults(f=cmd_collect_ordinary)
     p = sub.add_parser("ask"); p.add_argument("set"); p.add_argument("out"); p.add_argument("--arm", required=True, choices=["T", "N1", "N2"])
     p.add_argument("--cap", type=float, required=True); p.add_argument("--root", default="."); p.set_defaults(f=cmd_ask)
     p = sub.add_parser("asks"); p.add_argument("set"); p.add_argument("asked", nargs="*"); p.add_argument("--json"); p.set_defaults(f=cmd_asks)
