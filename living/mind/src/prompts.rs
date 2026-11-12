@@ -983,16 +983,19 @@ Use only what you have perceived and what you know how to do. Refer to people by
     )) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str()
 }
 
-/// The fast lane's user prompt: why now (the event as perceived), who the character is (with its
-/// own moves' timings), what has just happened, its top level and its routines.
+/// The fast lane's user prompt: who the character is (with its own moves' timings), its top
+/// level and its routines, then why now (the event as perceived) and what has just happened.
+/// Ordered from the most to the least stable between one character's fast calls, so a
+/// provider's prefix cache can reuse the person, the plan and the routines across the calls of
+/// one fight (docs/FAST_LANE.md); the content is the same in any order.
 pub fn fast_user(reason: &str, persona: &str, experiences: &[String], plan: &str, outline: &str, repertoire: &str) -> String {
-    let mut out = format!("# Why now\n{reason}\n\n# Who you are\n{persona}\n\n# What has just happened (oldest first)\n");
-    for e in experiences {
-        out.push_str(&format!("- {e}\n"));
-    }
-    out.push_str(&format!("\n# Your top level (plan: {plan})\n{outline}\n"));
+    let mut out = format!("# Who you are\n{persona}\n\n# Your top level (plan: {plan})\n{outline}\n");
     if !repertoire.is_empty() {
         out.push_str(&format!("\n# Your routines\n{repertoire}\n"));
+    }
+    out.push_str(&format!("\n# Why now\n{reason}\n\n# What has just happened (oldest first)\n"));
+    for e in experiences {
+        out.push_str(&format!("- {e}\n"));
     }
     out
 }
