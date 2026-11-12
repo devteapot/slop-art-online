@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Assert core behavior through the authority on a shared-harness scratch run."""
 import argparse
+import importlib.util
 import json
 import math
 import re
@@ -3353,7 +3354,12 @@ def committed(s):
     with a clear line), so it covers about half its length and ends in about half its time;
     the same dodge the open way covers its whole length. Then W winds up an attack on Y and is
     killed (admin `kill`) inside its 650 ms windup: the attack never releases, Y takes no blow.
-    (No rule staggers on a hit today, so a blow does not end a committed move.)"""
+    (No rule staggers on a hit today, so a blow does not end a committed move.) Last, a routine
+    that dodges while it stands (`{"moving": false}`, a condition the dash itself ends): the dodge
+    runs its course; then the world's own laws make the dodge uncommitted (an overlay through
+    `floors::compose`, `install_script.py`'s `compose_laws`, installed by the admin), and the same
+    routine's dodge is broken off as its condition stops holding, while a jump stays committed.
+    The shipped script is installed again at the end."""
     geo = wall_geometry(s)
     (s.out / f"{s.name}-geometry.json").write_text(json.dumps(geo) + "\n")
     eye, hidden, opened = geo["eye"], geo["hidden"], geo["open"]
@@ -3414,6 +3420,39 @@ def committed(s):
     s.expect("death inside a committed windup ends it: the attack never releases and lands nothing",
              use and use["accepted_ms"] > 0 and use["released_ms"] == 0 and not dead["alive"] and not hit and s.vitals(y)["hp"] >= hp0 - 0.01,
              {"use": use, "dead": dead, "hit": hit, "tries": len(tries)})
+
+    # A condition the dash ends: shipped, the dodge runs on; uncommitted by the world's laws, it is
+    # broken off; the jump, still committed there, runs on.
+    tool = importlib.util.spec_from_file_location("install_script", ROOT / "living/tools/install_script.py")
+    inst = importlib.util.module_from_spec(tool)
+    tool.loader.exec_module(inst)
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+
+    def standing(label, skill):
+        s.call("place_at", p, *opened)
+        s.graph(p, {"wait": 30 + next(rounds)})
+        time.sleep(1.0)
+        t0 = now()
+        s.graph(p, {"first": {"label": f"standing-{label}", "children": [
+            {"if": {"cond": {"moving": False}, "then": {"do": skill}}}, {"wait": 0.2 + 0.001 * next(rounds)}]}})
+        u = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == p and x["skill"] == skill and x["outcome"]] or None, 15)[0]
+        s.graph(p, {"wait": 30 + next(rounds)})
+        (s.out / f"{s.name}-standing-{label}.json").write_text(json.dumps(u, indent=2) + "\n")
+        return u
+
+    u = standing("shipped", "dodge")
+    s.expect("shipped: a routine's dodge runs its course though the condition that started it (standing) stops holding", u["outcome"] == "made way", u)
+    try:
+        s.call("install_script", inst.compose_laws(shipped, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }"))
+        src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
+        s.expect("the world's laws make the dodge uncommitted (an overlay over the shipped script)", "base_dodge_combat" in src and "s.committed = false" in src, len(src))
+        time.sleep(1.5)
+        u = standing("uncommitted", "dodge")
+        s.expect("uncommitted by the world's laws: the same routine's dodge is broken off as its condition stops holding", u["outcome"].startswith("broken off"), u)
+        j = standing("jump", "jump")
+        s.expect("the jump, still committed in that world, runs its course", j["outcome"] == "made way", j)
+    finally:
+        s.call("install_script", shipped, check=False)
 
 
 def doing_cost(s):

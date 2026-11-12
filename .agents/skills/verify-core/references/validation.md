@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-12 committed-moves, second pass: throw committed, a world switches it per skill (Spark)
+
+Branch `committed-moves` with origin/main `a07f5919` (move-intents) merged, the trial service. `core-commit5-070457` (default seed): `committed` 8/8, its new part: a routine dodging while it stands (`{"moving": false}`) runs its course (`made way`, 515 ms); with the world's overlay `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }` installed, the same routine's dodge is `broken off` (484 ms) and a jump still `made way`; the shipped script reinstalled. `doing_seen` 11/11, `refusal` 4/4. Island `core-commitk5-070835`: `skirmish` 8/8. Cargo: `script::tests::a_world_switches_committed_per_skill_in_its_own_laws`, `combat::committed_tests` (2). `just living-check` passes on this head.
+
 ## 2026-11-12 committed-moves: a started committed move runs its course (Spark)
 
 Branch `committed-moves` from origin/main `2ff786aa` (doing-percept in), the trial service `slop-trials-stdb`, private `CARGO_TARGET_DIR`. Default seed `core-commit-060917`: `committed` (new) 4/4 (a dodge the open way 2.6 m in 516 ms; toward a wall 0.78 m in 166 ms; W killed inside its attack's windup: never released, no blow on Y); `doing_seen` 11/11, its former XFAIL now a pass (field on: the dodge `made way`, the blow missed); `tick` 6/6, `refusal` 4/4, `fov` 18/18; `stamina` failed once (the first walk-speed sample after the run caught a slowdown with 30 breath left: a goto run, untouched here) and passed 26/26 on rerun. Island `core-commitk-062220`: `skirmish` 8/8, `outcomes` 11/11. Cargo: `combat::committed_tests`, `script::tests` (the committed set). `just living-check` passes. After merging main `a07f5919`: `committed` 4/4 and `doing_seen` 11/11 (`core-commitm-065648`); `just living-check` passes on the merged head.

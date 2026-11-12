@@ -1601,6 +1601,8 @@ fn winded(a) {
 //              end), whoever controls the body: no movement key, new plan, condition that stops
 //              holding or target leaving sight ends it; its timing or something physical
 //              (death, a wall in a dash's way) does. Only a dash may cut in on a windup.
+//              A world may switch it per skill in its own laws (an overlay through
+//              `floors::compose`): `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }`.
 //   hostile    aimed at a creature, that creature is its victim and sees it coming
 //   reflex     it takes the body back from a deliberate act
 //   real_time  behavior of the moment: a graph's, not a one-off act's
@@ -1626,7 +1628,7 @@ fn dodge_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, 
 fn jump_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true, evades: false } }
 fn attack_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
 fn shoot_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
-fn throw_combat() { #{ aim: "creature", timed: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn throw_combat() { #{ aim: "creature", timed: true, committed: true, hostile: true, reflex: true, real_time: true, force: true } }
 fn threaten_combat() { #{ aim: "creature", hostile: true, closes_in: true, menace: true } }
 fn yield_combat() { #{ reflex: true, force: true } }
 fn seize_combat() { #{ aim: "creature", dares: true } }

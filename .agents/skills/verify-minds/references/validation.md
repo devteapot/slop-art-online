@@ -1,5 +1,9 @@
 # Internal mind validation
 
+## 2026-11-12 committed-moves, second pass (Spark)
+
+With origin/main `a07f5919` merged and `throw` committed: `minds-commit5-071222` `acts` passes.
+
 ## 2026-11-12 committed-moves (Spark)
 
 Branch `committed-moves` from origin/main `2ff786aa`, the trial service, the fake model. `minds-commit-062424`: `acts` passes; `doing` failed on its fixture: the eye's first turn east was refused ("you already face it", which leaves no `skill_use` row) when it already faced east. The case now turns it west first and waits for the east turn's row; `minds-commit3-063146` `doing` passes.

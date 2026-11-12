@@ -642,7 +642,9 @@ def scene_committed(st):
     """A committed move runs its course for a player as for a graph (committed-moves, the
     `committed` trait of `<skill>_combat()`): a guard pressed in the middle of a dodge is refused
     ("in the middle of a dodge") and the dodge covers its whole length, where before the guard
-    broke the dash off; a dash still cuts in on a committed windup (a strike), as before."""
+    broke the dash off; a dash still cuts in on a committed windup (a strike), as before; movement
+    keys during a throw's windup wait for it; and in a world whose laws make the dodge uncommitted
+    (`committed: false` in an overlay), a guard breaks the dodge off again."""
     cid = me(st)
     p = body(st, cid)
     ready(st, "dodge")
@@ -670,6 +672,66 @@ def scene_committed(st):
     check(st, "a dodge still cuts in on a committed windup (the strike is broken off)",
           s_ and s_["accepted_ms"] > 0 and s_["released_ms"] == 0 and s_["outcome"].startswith("broken off") and d and d["outcome"] == "made way",
           {"strike": s_ and s_["outcome"], "dodge": d and d["outcome"]})
+    # A throw (through `human_act`: it is not on the bar) is committed too: the movement keys
+    # pressed during its 800 ms windup wait for it, and the spear flies (before committed-moves
+    # the keys broke it off: "you moved").
+    call(st, "set_behavior", [t, '{"wait":60}'], "admin")
+    call(st, "place_at", [cid, p[0], p[1]], "admin")
+    time.sleep(0.3)
+    p = body(st, cid)
+    t = dummy(st, p, 3.0, 0.0)
+    call(st, "grant_items", [cid, "spear", 1], "admin")
+    time.sleep(0.4)
+    ready(st, "throw")
+    before = last_use(st, "throw")
+    call(st, "human_act", [json.dumps({"do": "throw", "target": {"id": t}})])
+    code = code_of(st, "throw")
+    wound = False
+    for _ in range(40):
+        f = sql(st, f"SELECT act, release_ms FROM fighter WHERE id = {cid}")
+        if f and f[0]["act"] == code and f[0]["release_ms"] > time.time() * 1000:
+            wound = True
+            break
+        time.sleep(0.03)
+    at0 = body(st, cid)
+    call(st, "human_move", [0.0, 1.0, False])
+    time.sleep(0.25)
+    mid = body(st, cid)
+    time.sleep(1.5)
+    call(st, "human_move", [0.0, 0.0, False])
+    u = last_use(st, "throw")
+    end = body(st, cid)
+    check(st, "movement keys during a throw's windup wait for it: the spear flies, then the body walks",
+          wound and u and u != before and u["released_ms"] > 0 and not u["outcome"].startswith("broken off") and mid and math.dist(at0, mid) < 0.2 and end and math.dist(at0, end) > 0.5,
+          {"windup seen": wound, "throw": u and u["outcome"], "moved during windup": mid and round(math.dist(at0, mid), 2), "moved after": end and round(math.dist(at0, end), 2)})
+    call(st, "set_behavior", [t, '{"wait":60}'], "admin")
+    # The world's own laws may make a skill uncommitted (an overlay through `floors::compose`,
+    # `install_script.py`'s `compose_laws`): with the dodge uncommitted, a guard pressed mid-dodge
+    # breaks it off again, as before committed-moves. The shipped script is installed again after.
+    spec2 = importlib.util.spec_from_file_location("install_script", V.ROOT / "living/tools/install_script.py")
+    inst = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(inst)
+    shipped = (V.ROOT / "living/scripts/skills.rhai").read_text()
+    try:
+        code_, body_ = call(st, "install_script", [inst.compose_laws(shipped, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }")], "admin")
+        time.sleep(1.0)
+        call(st, "place_at", [cid, p[0], p[1]], "admin")
+        time.sleep(0.3)
+        p = body(st, cid)
+        ready(st, "dodge")
+        ready(st, "block")
+        call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+        call(st, "use_skill", ["block", 0, p[0] + 1.0, p[1]])
+        time.sleep(1.0)
+        call(st, "release_skill", ["block"])
+        p2 = body(st, cid)
+        moved = p2 and math.dist(p, p2)
+        d, b = last_use(st, "dodge"), last_use(st, "block")
+        check(st, "a world whose laws make the dodge uncommitted: a guard pressed mid-dodge breaks the dodge off",
+              code_ == 200 and d and d["outcome"].startswith("broken off") and moved is not None and moved < 2.0 and b and not b["outcome"].startswith("refused"),
+              {"install": code_, "dodge": d and d["outcome"], "block": b and b["outcome"], "moved": moved and round(moved, 2)})
+    finally:
+        call(st, "install_script", [shipped], "admin")
 
 
 def my_vitals(st):

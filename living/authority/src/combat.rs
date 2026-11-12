@@ -809,12 +809,24 @@ mod committed_tests {
         let sc = living_rules::script::Scripts::new(crate::seed::SKILLS).expect("shipped script");
         // A windup being performed and a dash are committed; walking into reach is not, nor a guard.
         assert!(committed(&sc, &act("strike", 1)) && committed(&sc, &act("attack", 1)) && committed(&sc, &act("dodge", 0)) && committed(&sc, &act("jump", 0)));
-        assert!(!committed(&sc, &act("strike", 0)) && !committed(&sc, &act("block", 1)) && !committed(&sc, &act("throw", 1)) && !committed(&sc, &act("goto", 0)));
+        assert!(committed(&sc, &act("throw", 1)));
+        assert!(!committed(&sc, &act("strike", 0)) && !committed(&sc, &act("block", 1)) && !committed(&sc, &act("goto", 0)));
         // Nothing starts over a committed move but a dash over a windup.
         assert!(held_by(&sc, &act("dodge", 0), "block").is_err() && held_by(&sc, &act("dodge", 0), "wait").is_err() && held_by(&sc, &act("dodge", 0), "jump").is_err());
         assert_eq!(held_by(&sc, &act("strike", 1), "goto").unwrap_err(), "in the middle of a strike");
         assert!(held_by(&sc, &act("strike", 1), "dodge").is_ok() && held_by(&sc, &act("attack", 1), "jump").is_ok());
         // What is not committed holds nothing.
         assert!(held_by(&sc, &act("block", 1), "strike").is_ok() && held_by(&sc, &act("strike", 0), "wait").is_ok());
+    }
+
+    #[test]
+    fn a_world_that_makes_a_dodge_uncommitted_lets_it_be_broken_off() {
+        // The world's own laws (`floors::compose`): the dodge is no longer committed, so a guard,
+        // a wait (a graph's next branch) or a player's movement no longer waits on it; a jump is.
+        let src = living_rules::floors::compose(crate::seed::SKILLS, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }").unwrap();
+        let sc = living_rules::script::Scripts::new(&src).expect("composed script");
+        assert!(!committed(&sc, &act("dodge", 0)) && committed(&sc, &act("jump", 0)));
+        assert!(held_by(&sc, &act("dodge", 0), "block").is_ok() && held_by(&sc, &act("dodge", 0), "wait").is_ok());
+        assert!(held_by(&sc, &act("jump", 0), "block").is_err());
     }
 }

@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-12 committed-moves, second pass (Spark)
+
+With origin/main `a07f5919` merged, island, `player-commit5-070922`: `combat.py` all scenes 48 of 48. The `committed` scene's two new checks: movement keys pressed in a throw's windup (`human_act`, a granted spear, a dummy 3 m off) wait for it: the body moved 0.0 m during it, the spear `hit for 12`, then the body walked 3.15 m; with the world's overlay making the dodge uncommitted (installed through `install_script`, the shipped script after), a guard pressed mid-dodge breaks it off (`broken off`, 0.08 m, the guard `done`).
+
 ## 2026-11-12 committed-moves (Spark)
 
 Branch `committed-moves` from origin/main `2ff786aa`, an island run on the trial service. `player-commit-061743`: `combat.py` (all scenes) 39 of 39, then the new `committed` scene 2/2: a guard pressed mid-dodge refused "in the middle of a dodge" and the dodge whole (`made way`); a dodge pressed in a strike's windup still cuts in (the strike `broken off`, unreleased). The same scene on main `2ff786aa` (`player-cmain-062029`, a temporary worktree): 1 of 2, the guard broke the dodge off 0.07 m in: the one player-path change, recorded in docs/COMBAT.md "Committed moves". After merging main `a07f5919` (with fix-missile-told's `shot`): `player-commitm-065415` all scenes 43 of 43.
