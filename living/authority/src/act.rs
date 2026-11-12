@@ -258,7 +258,7 @@ fn facts_reading(ctx: &ReducerContext, id: u32, now: u64, reads: &Reads) -> Acto
         pasture: 0.0,
         hurt_by,
         hurt_ago,
-        hurt_by_near: hurt_by_near(ctx, at, hurt_by, hurt_ago, now),
+        hurt_by_near: reads.actor("hurt_by_near") && hurt_by_near(ctx, at, hurt_by, hurt_ago, now),
         yielded_ago: None,
         sensed: Vec::new(),
         bold: false,
@@ -417,7 +417,7 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
 /// (docs/BATTLE_SCALE.md, battle-cheap path 1); `all` for every field.
 pub struct Reads {
     all: bool,
-    actor: u32,
+    actor: u64,
     target: u32,
 }
 
@@ -431,7 +431,7 @@ impl Reads {
     }
 
     fn actor(&self, f: &str) -> bool {
-        self.all || living_rules::script::context::ACTOR.iter().position(|t| *t == f).is_some_and(|i| self.actor & (1 << i) != 0)
+        self.all || living_rules::script::context::ACTOR.iter().position(|t| *t == f).is_some_and(|i| self.actor & (1u64 << i) != 0)
     }
 
     fn target(&self, f: &str) -> bool {
