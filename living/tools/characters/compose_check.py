@@ -19,7 +19,8 @@ spring bones and `J_Fit_Belly` left out, in metres and in file units, the ratio 
 scales, and how far the belly's bone stands from the whole file's, `belly_mm`) and
 OUT/stills/<name>.jpg (whole, composed, control side by side). It rewrites recipes.json for the
 runs and restores it after: never run it beside crowd.py. SHOTS overrides the shots, SIZE the
-frame. The control in file units is the composing rule itself: 0.000 mm when it holds.
+frame, FAR the far switch's distance (default 1000 m: always the full model; 0.01 shows the far
+model). The control in file units is the composing rule itself: 0.000 mm when it holds.
 """
 import json, os, subprocess, sys, math
 
@@ -50,7 +51,7 @@ def run(arm, compose, suffix):
     if os.path.exists(joints):
         os.remove(joints)
     env = dict(os.environ, LIVING_GAME_VIEW=",".join(f"recipe:town-{n}{suffix}" for n in people), LIVING_GAME_VIEW_OUT=d, LIVING_GAME_VIEW_SHOTS=SHOTS,
-               LIVING_GAME_VIEW_JOINTS=joints, LIVING_GAME_COMPOSE=compose, LIVING_GAME_FAR="1000", LIVING_GAME_SIZE=os.environ.get("SIZE", "900x1200"),
+               LIVING_GAME_VIEW_JOINTS=joints, LIVING_GAME_COMPOSE=compose, LIVING_GAME_FAR=os.environ.get("FAR", "1000"), LIVING_GAME_SIZE=os.environ.get("SIZE", "900x1200"),
                RUST_LOG="warn,living_game=info,living_game::characters::compose=debug")
     with open(os.path.join(d, "view.log"), "w") as f:
         subprocess.run([binary], cwd=os.path.join(REPO, "living/game"), env=env, stdout=f, stderr=subprocess.STDOUT, timeout=900)

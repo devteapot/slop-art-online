@@ -45,8 +45,9 @@
 //! **The belly** (`belly`, 0 to about 0.35) moves `J_Fit_Belly` forward by `belly` × 0.108 m (the
 //! file's -Z) from its rest when the scene comes in, and `shape` keeps it under the spine's girth.
 //!
-//! **Not here** (the files' limits): one strength an overlay; the belly a forward bulge only; far
-//! models carry no overlays, so a bearded man's far head is clean-shaven.
+//! A beard's far mesh (`FarOverlay`) comes with it and shows with the far head, tinted the same.
+//!
+//! **Not here** (the files' limits): one strength an overlay; the belly a forward bulge only.
 
 use super::{Colors, Proportions, Recipe};
 use crate::lookdev::{asset_root, glb_json, Converted};
