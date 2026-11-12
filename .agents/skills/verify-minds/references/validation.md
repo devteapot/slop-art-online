@@ -1,5 +1,16 @@
 # Internal mind validation
 
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle` (from main `b657a344`), the trial service `slop-trials-stdb`, the fake model. New case `far-figure` (`minds-farhandle2-*`): 8/8. F, in M's relations as "Walker2 (#266)", stood 5 m off under an overlay making everyone past 4 m far:
+- the scene showed `{"id": 1000000059, "who": "someone too far away to make out"}`;
+- F's line read "Someone too far away to make out said: “Fine weather on the strand today.” {someone too far away to make out=#1000000059}";
+- no line tied the handle to Walker2 or #266;
+- a wave at the handle reached #266;
+- at 2 m the `made_out` row joined the handle to #266 and the scene named Walker2.
+
+The first attempt failed only because F's graph room line was never said; F now speaks by admin `mind_say`. The release mind's tests: 106 pass.
+
 ## 2026-11-12 far-label (Spark) After merging main with speech-truth (`03d32e09`, `minds-farlabel3-031420`): `roundtrip`, `queued` and `conversation` pass.
 
 Branch `far-label` (`18b7754b`), the trial service `slop-trials-stdb`, the fake model. `minds-farlabel-024238`: `roundtrip` and `conversation` pass (the release mind's non-ignored tests, 104, pass too). Not run: the other cases.

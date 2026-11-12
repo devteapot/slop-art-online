@@ -61,6 +61,8 @@ pub mod experience_table;
 pub mod experience_type;
 pub mod familiar_table;
 pub mod familiar_type;
+pub mod far_handle_table;
+pub mod far_handle_type;
 pub mod fighter_seen_table;
 pub mod fighter_seen_type;
 pub mod fighter_table;
@@ -342,6 +344,8 @@ pub use experience_table::*;
 pub use experience_type::Experience;
 pub use familiar_table::*;
 pub use familiar_type::Familiar;
+pub use far_handle_table::*;
+pub use far_handle_type::FarHandle;
 pub use fighter_seen_table::*;
 pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
@@ -1102,6 +1106,7 @@ pub struct DbUpdate {
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
     familiar: __sdk::TableUpdate<Familiar>,
+    far_handle: __sdk::TableUpdate<FarHandle>,
     fighter: __sdk::TableUpdate<Fighter>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
     floor_seed: __sdk::TableUpdate<FloorSeed>,
@@ -1276,6 +1281,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "familiar" => db_update
                     .familiar
                     .append(familiar_table::parse_table_update(table_update)?),
+                "far_handle" => db_update
+                    .far_handle
+                    .append(far_handle_table::parse_table_update(table_update)?),
                 "fighter" => db_update
                     .fighter
                     .append(fighter_table::parse_table_update(table_update)?),
@@ -1650,6 +1658,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.familiar = cache
             .apply_diff_to_table::<Familiar>("familiar", &self.familiar)
             .with_updates_by_pk(|row| &row.id);
+        diff.far_handle = cache
+            .apply_diff_to_table::<FarHandle>("far_handle", &self.far_handle)
+            .with_updates_by_pk(|row| &row.id);
         diff.fighter = cache
             .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
             .with_updates_by_pk(|row| &row.id);
@@ -1997,6 +2008,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "familiar" => db_update
                     .familiar
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "far_handle" => db_update
+                    .far_handle
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
@@ -2359,6 +2373,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "familiar" => db_update
                     .familiar
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "far_handle" => db_update
+                    .far_handle
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2672,6 +2689,7 @@ pub struct AppliedDiff<'r> {
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
+    far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
     floor_seed: __sdk::TableAppliedDiff<'r, FloorSeed>,
@@ -2813,6 +2831,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
+        callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
         callbacks.invoke_table_row_callbacks::<FighterSeen>(
             "fighter_seen",
@@ -3669,6 +3688,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
         familiar_table::register_table(client_cache);
+        far_handle_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
         floor_seed_table::register_table(client_cache);
@@ -3787,6 +3807,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "expecting",
         "experience",
         "familiar",
+        "far_handle",
         "fighter",
         "fighter_seen",
         "floor_seed",
