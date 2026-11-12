@@ -657,10 +657,18 @@ pub fn input(
 /// holds them, `combat::resume_move`), and a press starts nothing over it but a dash over a windup.
 pub fn my_committed(sc: &living_rules::script::Scripts, cards: &Cards, f: &Fighter, now: f64) -> Option<(String, bool)> {
     let card = cards.by_code(f.act).filter(|_| f.act != 0)?;
-    let shape = sc.shapes().get(&card.skill)?;
+    committed_now(sc, &card.skill, f.act_ms, f.release_ms, f.until_ms, now).map(|dash| (card.skill.clone(), dash))
+}
+
+/// Whether `skill`, started at `act_ms`, runs its course now, by the world's script: its
+/// `<skill>_combat()` spec's `committed` (a world's laws may turn it off for one skill, and then
+/// the client predicts a cancel again), a windup before its release or a dash before its end.
+/// `Some(dash)` when it does.
+pub fn committed_now(sc: &living_rules::script::Scripts, skill: &str, act_ms: u64, release_ms: u64, until_ms: u64, now: f64) -> Option<bool> {
+    let shape = sc.shapes().get(skill)?;
     let dash = shape.aim == living_rules::combat::Aim::Dash;
-    let under_way = if dash { now < f.until_ms as f64 } else { (f.act_ms as f64) <= now && now < f.release_ms as f64 };
-    (shape.committed && under_way).then(|| (card.skill.clone(), dash))
+    let under_way = if dash { now < until_ms as f64 } else { (act_ms as f64) <= now && now < release_ms as f64 };
+    (shape.committed && under_way).then_some(dash)
 }
 
 /// Whether a press would start over `cur` (a committed move under way: its skill, whether a
@@ -894,7 +902,23 @@ pub fn cooldown(conn: &DbConnection, me: u32, skill: &str, now_ms: f64) -> Optio
 
 #[cfg(test)]
 mod committed_tests {
-    use super::held;
+    use super::{committed_now, held};
+
+    #[test]
+    fn committed_comes_from_the_world_script_per_skill() {
+        let shipped = include_str!("../../scripts/skills.rhai");
+        let sc = living_rules::script::Scripts::new(shipped).expect("shipped script");
+        // A strike winding up (started at 1000, released at 1650) runs its course; a dodge too.
+        assert_eq!(committed_now(&sc, "strike", 1000, 1650, 1900, 1200.0), Some(false));
+        assert_eq!(committed_now(&sc, "strike", 1000, 1650, 1900, 1700.0), None);
+        assert_eq!(committed_now(&sc, "dodge", 1000, 1000, 1300, 1200.0), Some(true));
+        // A world that turns it off for the strike: no longer held, the dodge still is.
+        let line = shipped.lines().find(|l| l.starts_with("fn strike_combat()")).expect("strike_combat");
+        let off = shipped.replace(line, &line.replace("committed: true", "committed: false"));
+        let sc = living_rules::script::Scripts::new(&off).expect("script without a committed strike");
+        assert_eq!(committed_now(&sc, "strike", 1000, 1650, 1900, 1200.0), None);
+        assert_eq!(committed_now(&sc, "dodge", 1000, 1000, 1300, 1200.0), Some(true));
+    }
 
     #[test]
     fn a_press_over_a_committed_move_is_held_but_a_dash_over_a_windup() {
