@@ -1665,7 +1665,7 @@ Nothing in `living/game` was edited in step 3, and every file loads in today's c
 
 **What the client does now** (`characters/compose.rs`), against the files of char-4's hair finish (Cullet's 64 wear 95 shared files, 36.4 MB):
 
-- **The switch.** `LIVING_GAME_COMPOSE=1` composes every recipe that carries a person line (`person` in a recipe: the generator's `<name>.params.json` line). Off, the default, the same recipe is its whole `base` file, as before.
+- **The switch.** `LIVING_GAME_COMPOSE=1` composes every recipe that carries a person line (`person` in a recipe: the generator's `<name>.params.json` line). Off, the default, the same recipe is its whole `base` file, as before. Since compose-client-2 composing is the default and `LIVING_GAME_COMPOSE=0` turns it off ([below](#the-client-since-compose-client-2-2026-11-12)).
 - **A recipe's `person`** is read as the generator writes it: type, height, proportions, identity, colours (`outfit` by piece name, `beard`, `eyes`), styles (`hair`, `outfit`, `overlays`) and `belly`. A composed character is spawned from `lookdev/types/<type>.glb` with the line's numbers; identity, proportions, height, recolouring, the far switch, springs and the shared clips then run as for any generated person.
 - **Attaching**, when the type's scene comes in and before the person is first fitted (the height is measured over the styles), by `compose.py`'s rule for every file worn:
   - every mesh node of the file comes across, its `Far*` meshes too, each primitive an entity under the person's root;

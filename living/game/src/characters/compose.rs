@@ -2,9 +2,11 @@
 //! identity bones) and the style files the person wears (hair, outfit pieces), in place of one
 //! whole file a person (docs/CHARACTERS.md, "The client format", "Hair styles", "Outfit pieces").
 //!
-//! **The switch.** `LIVING_GAME_COMPOSE=1` composes every recipe that carries a person line
-//! (`person`: the generator's `<name>.params.json` line). Off (the default), a recipe is its whole
-//! `base` file as before. A recipe without a person line is its base file either way.
+//! **The switch.** Every recipe that carries a person line (`person`: the generator's
+//! `<name>.params.json` line) is composed, by default since compose-client-2; `LIVING_GAME_COMPOSE=0`
+//! turns it off, and a recipe is then its whole `base` file as before. A recipe without a person
+//! line is its base file either way (in live play today every recipe: `live::recipe_for` gives
+//! none a line, so the default changes nothing there).
 //!
 //! **The person line** names the type, the height, the proportions (`build` carries the girth a
 //! whole file built into its meshes), the identity values, the colours and the style files. The
@@ -139,16 +141,21 @@ pub const SAME_SOURCE: f32 = 0.004;
 /// Outfit pieces worn on the head: attached with the type's `hair_fit`, as hair is.
 const HEAD_PIECES: [&str; 2] = ["cap", "kerchief"];
 
-/// `LIVING_GAME_COMPOSE=1`: compose people who have a person line from shared files.
+/// Compose people who have a person line from shared files: on unless `LIVING_GAME_COMPOSE=0`.
 pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
-        let on = std::env::var("LIVING_GAME_COMPOSE").is_ok_and(|v| v == "1");
+        let on = switch(std::env::var("LIVING_GAME_COMPOSE").ok().as_deref());
         if on {
             info!("compose: people with a person line are composed from {TYPES} and {STYLES}");
         }
         on
     })
+}
+
+/// The switch's value: on unless it is `0` (unset, empty or anything else is on).
+fn switch(v: Option<&str>) -> bool {
+    v.map(str::trim) != Some("0")
 }
 
 /// A person as the client composes one: the generator's person line (`person_params.person_line`).
@@ -719,6 +726,16 @@ mod tests {
             assert!(tints.place(0, [i as u8, (i >> 8) as u8, 1], &mut images).is_some());
         }
         assert_eq!(tints.place(0, [9, 9, 9], &mut images), None);
+    }
+
+    /// Composing is the default; only `LIVING_GAME_COMPOSE=0` turns it off.
+    #[test]
+    fn composing_is_on_unless_set_to_zero() {
+        assert!(switch(None));
+        assert!(switch(Some("1")));
+        assert!(switch(Some("")));
+        assert!(!switch(Some("0")));
+        assert!(!switch(Some(" 0 ")));
     }
 
     /// Lines and freckles are a fixed-colour face part, untagged, without a shadow map; a beard is

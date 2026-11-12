@@ -127,8 +127,8 @@ pub struct Recipe {
     #[serde(default)]
     pub identity: BTreeMap<String, f32>,
     /// The person as shared files compose it (`compose.rs`): a type, style files, colours and
-    /// the line's own numbers. With `LIVING_GAME_COMPOSE=1` it replaces `base` and the numbers
-    /// above; off, it is ignored.
+    /// the line's own numbers. It replaces `base` and the numbers above unless
+    /// `LIVING_GAME_COMPOSE=0`, which ignores it.
     #[serde(default)]
     pub person: Option<compose::Person>,
 }
