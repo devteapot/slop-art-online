@@ -2925,6 +2925,53 @@ def outcomes(s):
     s.expect("with force_outcomes off, a hit is not told", after == before, {"before": before, "after": after})
 
     names_told(s)
+    missiles_told(s)
+
+
+def missiles_told(s):
+    """A hit by a missile is told as a shot, never as an attack (fix-missile-told): to the one
+    struck, by the shooter as it perceives them when it sees them ("A stranger shot you with an
+    arrow: hit for 7"), else by the missile alone ("An arrow struck you from somewhere you could
+    not see: hit for 7"); to a witness the same way ("A stranger shot a stranger with an
+    arrow"). The missile is named by its skill's `called` (`<skill>_missile`). Four strangers:
+    an archer, a target 6 m off with a witness beside it, and a far target 19 m off (past day
+    sight, within the bow's 22 m) shot at by a point aim. No line any of them is told about the
+    arrows says "attacked", and the unseen shot names no one."""
+    a, b, w, f = s.people(4)
+    here = body_at(s, a)
+    s.call("place_at", b, here[0] + 6.0, here[1])
+    s.call("place_at", w, here[0] + 6.0, here[1] + 1.5)
+    s.call("place_at", f, here[0] + 19.0, here[1] - 3.0)
+    s.call("grant_items", a, "bow", 1)
+    s.call("grant_items", a, "arrow", 20)
+    time.sleep(1.0)
+    names = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM character") if c["id"] in (a, b, w, f)}
+
+    def lines(obs):
+        return s.rows(f"SELECT kind, subject, text FROM experience WHERE observer = {obs}")
+
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"id": b}}}, {"wait": 60}]})
+    struck = s.wait(lambda: [r for r in lines(b) if r["kind"] == "attacked"], seconds=20)
+    s.rows(f"SELECT * FROM experience WHERE observer = {b}", "shot-victim-told")
+    s.expect("the one struck is told it was shot with an arrow, by the shooter as it sees them",
+             any(re.match(r"^(A stranger|Someone[^:]*) shot you with an arrow: (hit for \d+|blocked, \d+ got through)$", r["text"]) and r["subject"] == a for r in struck),
+             [r["text"] for r in struck])
+    seen = s.wait(lambda: [r for r in lines(w) if r["kind"] == "fight"], seconds=10)
+    s.rows(f"SELECT * FROM experience WHERE observer = {w}", "shot-witness-told")
+    s.expect("a witness who sees the shooter is told it shot the one struck with an arrow",
+             any(re.search(r"shot .* with an arrow", r["text"]) for r in seen), [r["text"] for r in seen])
+
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"at": [here[0] + 19.0, here[1] - 3.0]}}}, {"wait": 60}]})
+    far = s.wait(lambda: [r for r in lines(f) if r["kind"] == "attacked"], seconds=20)
+    s.rows(f"SELECT * FROM experience WHERE observer = {f}", "unseen-victim-told")
+    s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "archer-uses")
+    s.expect("one struck by an unseen shooter is told only the arrow, from somewhere it could not see",
+             any(re.match(r"^An arrow struck you from somewhere you could not see: (hit for \d+|blocked, \d+ got through)$", r["text"]) and r["subject"] == 0 for r in far),
+             [(r["text"], r["subject"]) for r in far])
+    told = [r for o in (b, w, f) for r in lines(o) if r["kind"] in ("attacked", "fight", "combat")]
+    s.expect("no line about the arrows says \"attacked\", or a name its hearer was not told",
+             told and not [r for r in told if "attacked" in r["text"] or any(n in r["text"] for n in names.values())],
+             [r["text"] for r in told])
 
 
 def names_told(s):

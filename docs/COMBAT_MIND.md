@@ -40,7 +40,7 @@ Everything here is on `main` unless marked.
 ### 1.2 What a character perceives of a fight
 
 - **On novelty and danger** (`saw`): "A wolf is close: 7 tiles west, attack → person." What a creature is doing, how far and which way, with hysteresis, not every second.
-- **Blows taken** (`attacked`): "A wolf attacked you (13 damage)." The attacker as the victim knows it; not which skill, nor from how far.
+- **Blows taken** (`attacked`): "A wolf attacked you (13 damage)." The attacker as the victim knows it; not which skill, nor from how far. Since fix-missile-told (2026-11-12) a missile is told as a shot: "A stranger shot you with an arrow: hit for 7", or "An arrow struck you from somewhere you could not see: hit for 7"; melee blows are as before.
 - **One's own melee outcome** (`own`): "You finished: attack → wolf. hit for 7." Defences: "You blocked Grim's blow", "Grim dodged your attack", "Your blow missed: …".
 - **Refusals and failed decisions:** "You failed to bowshot → #308: bowshot is not ready yet (0.2 s)", "What you had decided did not work out: …".
 - **Fight reports** (`act.rs` `fight_report`): while people fight, at least 3 s apart, when health crosses a quarter, three blows come to nothing, three land or one's defence works three times, else after 12 s: "The fight with Grim: you have been hit 3 times … Your health 61; theirs looks about 70%." It is a reason to think. *(Finding: "theirs looks about 70%" is exact health; others otherwise see only a band, `fighter.band`. That is a perception leak, separate from this design.)*

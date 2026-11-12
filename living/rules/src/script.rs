@@ -2236,6 +2236,15 @@ impl Scripts {
         decode_missile(&f, self.call(&f, ctx)?)
     }
 
+    /// What a missile of `skill` is to one it strikes or who sees it strike: the `called` of
+    /// `<skill>_missile(a)` ("an arrow"), "something" when the script does not say.
+    pub fn missile_called(&self, skill: &str) -> String {
+        let f = format!("{skill}_missile");
+        let ctx = SkillCtx { skill: skill.to_string(), ..Default::default() };
+        let called = if self.has(&f) { self.call(&f, &ctx).ok().and_then(|d| d.try_cast::<Map>()).and_then(|m| m.get("called").and_then(|v| v.clone().into_string().ok())) } else { None };
+        called.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "something".into())
+    }
+
     /// What the rules make of an event (`on_<event>(a)`: `on_give`, `on_store`, `on_host` after
     /// that skill was done, `on_expire` when a record falls due, `on_death`): effects on records,
     /// and what is told and seen. None when the script has no such hook.
@@ -2808,6 +2817,9 @@ fn seconds(ms: u32) -> String {
 fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
     let m = d.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
+    if m.get("called").is_some_and(|v| !v.is_string()) {
+        return Err(format!("{f}: `called` is what the missile is called, a string (\"an arrow\")"));
+    }
     Ok(crate::combat::MissileSpec { speed: g("speed")?.clamp(1.0, 120.0), range: g("range")?.clamp(0.5, 80.0), radius: g("radius")?.clamp(0.05, 3.0) })
 }
 
@@ -3712,6 +3724,21 @@ mod tests {
 
     /// The shapes the script declares classify the existing skills exactly as the name lists
     /// they replaced (2026-11-09) did.
+    #[test]
+    fn a_missile_is_called_what_its_skill_says() {
+        let s = scripts();
+        assert_eq!(s.missile_called("bowshot"), "an arrow");
+        assert_eq!(s.missile_called("firebolt"), "a bolt of fire");
+        // A skill with no missile, or a missile that does not say: "something".
+        assert_eq!(s.missile_called("strike"), "something");
+        // Every missile the shipped script has says what it is.
+        for (skill, shape) in s.shapes().iter() {
+            if shape.missile {
+                assert_ne!(s.missile_called(skill), "something", "{skill}_missile has no `called`");
+            }
+        }
+    }
+
     #[test]
     fn combat_shapes_classify_the_existing_skills_as_before() {
         use crate::combat::Aim;

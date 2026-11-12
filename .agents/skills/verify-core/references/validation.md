@@ -1,6 +1,10 @@
 # Core validation record
 
 
+## 2026-11-12 fix-missile-told: a missile is told as a shot (Spark)
+
+Branch `fix-missile-told` from `ee8790f4`, the trial service `slop-trials-stdb`. `scenes.py outcomes` on `core-missile-052008` (default seed): 16/16, its new `missiles_told` 4/4: the target "A stranger shot you with an arrow: hit for 8" (subject the archer), the witness "A stranger shot a stranger with an arrow", the far target 19 m off "An arrow struck you from somewhere you could not see: hit for 8" (subject 0), no line saying "attacked" or a name. Cargo `a_missile_is_called_what_its_skill_says`.
+
 ## 2026-11-12 fix-kill-name: told lines name others as the teller perceives them (Spark)
 
 Branch `fix-kill-name` from origin/main `c4e6b04d` (far-label in), the trial service (port 3320), private `CARGO_TARGET_DIR`. `core-kill2-034840-skirmish`: `outcomes` 11 of 11, its new `names_told` part driving every audited path among four strangers: a gift ("A stranger gave you 1 stone"), an offer and its acceptance ("A stranger and a stranger traded 1 stone for 1 berries"), a demand, teaching ("taught a stranger fire"), a bow shot ("struck a stranger: hit for 7"), a melee kill ("You finished: strike → person. killed a stranger (9)", before: "killed Agnes Fenner (9)") and the witness's "A stranger was killed by a stranger"; no told line or own `skill_use` outcome named one not introduced (`outcomes-names.json`). A first run (`core-kill-034622-skirmish`) passed with teaching broken off by the next step; the scene now waits for its outcome. verify-player `player-kill-035011`: `combat.py` 39 of 39 (the player's own kill record "killed an old stranger (6)"; the chronicle keeps "Tester killed Aldric Marrow"). `just living-check` passes.

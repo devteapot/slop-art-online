@@ -1728,6 +1728,9 @@ fn aim_check(a) {
     winded(a)
 }
 // An arrow flies straight and hits the first creature in its path.
+// `<skill>_missile(a)`: its flight (metres a second, how far, its radius) and `called`, what it
+// is to one it strikes or who sees it strike ("A stranger shot you with an arrow", "An arrow
+// struck you from somewhere you could not see"); "something" when it does not say.
 fn bowshot_check(a) {
     if inv(a, "bow") < 1 { return "no bow to shoot with"; }
     if inv(a, "arrow") < 1 { return `no arrows (arrow: ${source_of("arrow")})`; }
@@ -1735,7 +1738,7 @@ fn bowshot_check(a) {
 }
 fn bowshot_duration(a) { 300 }
 fn bowshot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "launch" }] + spent("bowshot") }
-fn bowshot_missile(a) { #{ speed: 30.0, range: 22.0, radius: 0.15 } }
+fn bowshot_missile(a) { #{ speed: 30.0, range: 22.0, radius: 0.15, called: "an arrow" } }
 fn bowshot_hit(a) { [#{ op: "damage", amount: law("dmg_bowshot") * a.actor.strength * a.actor.factor * armor(a) }] }
 
 // A bolt of fire: slower, shorter, wider and much harder, at a great cost of focus.
@@ -1745,7 +1748,7 @@ fn firebolt_check(a) {
 }
 fn firebolt_duration(a) { 450 }
 fn firebolt_done(a) { [#{ op: "launch" }] + spent("firebolt") }
-fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35 } }
+fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35, called: "a bolt of fire" } }
 fn firebolt_hit(a) { [#{ op: "damage", amount: law("dmg_firebolt") * a.actor.factor * armor(a) }] }
 
 // Closing wounds by hand (wound_tending): yourself or an ally in sight, quickly, even mid-fight.
