@@ -4,11 +4,11 @@
     room_address.py --run client-...      (a run launched with verify.py launch, any seed)
 
 The player joins (its own identity). The admin spawns two minded strangers, K and S, holds them
-still and places them beside the player. S says to the room a line calling K and the player by
-name (admin `mind_say`): the player's own speech row (`my_experience`, read through the Rust SDK
-probe) reads "A stranger said to the room, calling a stranger and you: …", with no name the player
-does not know. K then tells its name ("I'm K."), and S says to the room a line calling K: the row
-now reads "calling <K>". Then S says a line to K and a line to the room: "while talking with <K>".
+still and places them beside the player. S says to the room a line naming K and the player
+(admin `mind_say`): the player's own speech row (`my_experience`, read through the Rust SDK
+probe) reads "A stranger said to the room, naming a stranger and you: …", with no name the player
+does not know. K then tells its name ("I'm K."), and S says to the room a line naming K: the row
+now reads "naming <K>". Then S says a line to K and a line to the room: "while talking with <K>".
 Admin calls (`spawn_crowd`, `set_behavior`, `place_at`, `mind_say`) set the scene; they are not
 something a player can do. Writes `RUN/address-*.jsonl` and `RUN/room_address.json`. Python
 standard library only.
@@ -85,9 +85,9 @@ def main():
     known = next((t for t in rows if "tide is turning" in t), "")
     talking = next((t for t in rows if "seen the cart" in t), "")
     checks = {
-        "unknown called is a stranger, the player is you": first.startswith("A stranger said to the room, calling a stranger and you:"),
+        "unknown named is a stranger, the player is you": first.startswith("A stranger said to the room, naming a stranger and you:"),
         "no name the player does not know before the words": kn not in first.split("“")[0],
-        "once introduced, K is named": known.startswith(f"A stranger said to the room, calling {kn}:"),
+        "once introduced, K is named": known.startswith(f"A stranger said to the room, naming {kn}:"),
         "while talking with K": talking.startswith(f"A stranger said to the room while talking with {kn}:"),
     }
     (out / "room_address.json").write_text(json.dumps({"player": me, "k": kn, "rows": rows, "checks": checks}, indent=1, ensure_ascii=False) + "\n")

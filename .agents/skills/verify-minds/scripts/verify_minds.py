@@ -1274,8 +1274,8 @@ TALK_THOUGHT = {'kind': 'talk', 'summary': 'verify room-address line', 'detail':
 def room_address_case(run):
     """How a line to the room was said reaches a mind in its own labels (speech-address,
     `speech::room_address`). H (thought for) founds a community and welcomes K; S and U are
-    strangers to H. All four stand within a few metres. S says to the room a line calling K and U
-    by name: H's experience reads "A stranger said to the room, calling <K> and a stranger: …"
+    strangers to H. All four stand within a few metres. S says to the room a line naming K and U:
+    H's experience reads "A stranger said to the room, naming <K> and a stranger: …"
     (K known, U not; no name H does not know). Then S says a line to K, and a line to the room:
     H's experience reads "… said to the room while talking with <K>: …". H's next prompt carries
     both lines as they were heard."""
@@ -1311,7 +1311,7 @@ def room_address_case(run):
     say(sp, 'Has anyone seen the cart?', 0)
     time.sleep(1.5)
     heard = [e['text'] for e in run.private(f'SELECT * FROM experience WHERE observer = {h}', 'experiences-h') if e['kind'] == 'speech' and e['subject'] == sp]
-    calling = next((t for t in heard if 'Come and look' in t), '')
+    naming = next((t for t in heard if 'Come and look' in t), '')
     talking = next((t for t in heard if 'seen the cart' in t), '')
     requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
     sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
@@ -1319,10 +1319,10 @@ def room_address_case(run):
     prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify address' in sent_text(e)], 'prompt after the lines', 60)[0]
     (run.directory / 'prompt-address.txt').write_text(prompt)
     checks = {
-        'calling_reads_known_then_stranger': calling.startswith(f'A stranger said to the room, calling {kn} and a stranger:'),
-        'no_unknown_name_in_the_detail': un not in calling.split('“')[0],
+        'naming_reads_known_then_stranger': naming.startswith(f'A stranger said to the room, naming {kn} and a stranger:'),
+        'no_unknown_name_in_the_detail': un not in naming.split('“')[0],
         'talking_with_reads_the_partner': talking.startswith(f'A stranger said to the room while talking with {kn}:'),
-        'prompt_carries_both': f'calling {kn} and a stranger' in prompt and f'while talking with {kn}' in prompt,
+        'prompt_carries_both': f'naming {kn} and a stranger' in prompt and f'while talking with {kn}' in prompt,
         'addressed_line_has_no_room_detail': not any('to the room' in t for t in heard if 'Good morning' in t),
     }
     result = {'h': h, 'k': kn, 'u': un, 'heard': heard, 'checks': checks}
