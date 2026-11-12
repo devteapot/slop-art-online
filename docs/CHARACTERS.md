@@ -559,6 +559,8 @@ For the laptop coordinator. The type files exist since step 3 ([type files](#typ
 
 - `styles.hair` is a file under `lookdev/styles/hair/`, and `styles.outfit` a list of files under `lookdev/styles/outfit/`, as the generator writes them into `<name>.params.json` (`person`) since the outfit step.
 - `type`: an id from `types.json`. `identity`: values from -1 to 1 by name; one left out is 0. `proportions` and `height` are as today. `colors` and `styles` replace what pass 2 paints and builds into each person's file.
+- `colors.outfit[<piece>]` is the colour the piece is painted in the person's own file (the mean of its vertex colours as built and shaded), not the cloth it is cut from: the client moves a shared piece's mean to it ([one shading mean a class](#one-shading-mean-a-class)).
+- `grey` (left out when none) with `colors.hair_natural` and `colors.hair_silver`: how grey the person is, for a client that greys hair lock by lock from the hair file's `_GREY` ([the mix](#long-hair-short-hair-and-the-hairs-shading)). `colors.hair` is the one tint for a client that does not.
 - Sixty-four residents are 64 such lines. No file is made for a person.
 
 **What the client loads:**
@@ -1231,6 +1233,13 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **Every piece worn has a colour in the person's line.** The line named a colour for the jersey, the coat or smock and headwear. It now names one for the **apron** (`#b4b1a3`), the **trousers** (`#353840`) and the **boots** (`#332820`) too: the cloth every resident's were built in (`person_params.PIECE_COLOURS`).
 - **A smock's sleeve bands are a piece of their own,** `smock_bands-m` and `-f` (320 triangles, 0.04 MB), with their own colour in the line, as the apron is. The bands were faces of the smock in another cloth, and would have taken the smock's hue. A piece needs nothing new from the client; a second tag inside one file would have needed a second mesh and a new key. A person in a smock wears the bands, so wears one more piece.
 
+**The line's colour is the painted colour** (2026-11-12, after the laptop's check of composed people against their own files). The line named the cloth each piece is cut from. A person's own file paints that cloth paler and darker (the weave, the wear, the painted shade under a coat or a smock), and the client moves a shared piece's mean to the line's colour, so composed clothes came out stronger: a red jersey redder than its own file's.
+
+- **Measured, not looked up.** `person.py painted_pieces` measures each piece in the person's own build, after the painted shade: the mean of its vertex colours, by area, in linear light. That goes into `colors.outfit[<piece>]`, in `<name>.params.json` beside the person's file.
+- **How far the lines moved,** over Cullet's 64 (293 pieces), as CIE76 ΔE between the old line colour and the new: 2.7 at the median, 12.2 at the 90th percentile, 20.2 at most. By piece, at the median: jerseys 11.9 (they lie in a coat's or a smock's painted shade), coats 6.1, trousers 4.1, caps 2.8, boots 0.8, smocks 0.7, aprons 0.0.
+- **What that is.** It is the error the old lines put on a piece's mean colour. With the new lines a composed piece's mean is its own file's by construction. What is left between a composed person and their own file is how the shade is spread inside a piece; the laptop's rendered check measures that, and this machine has not run it.
+- **A line with painted colours needs the person built.** `person_params.py` alone still prints the cloth each piece is cut from. The lines of Cullet's 64 are in the pass page's `cullet-people.json`.
+
 **Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
 
 ### Long hair, short hair and the hair's shading
@@ -1258,7 +1267,17 @@ Pass 3, after the nose wedge (2026-11-12). Three things the board showed: long s
 - **`sides`, `balding`:** one sheet from a line round the head down to the hairline (`Hair.skirt`), left out where the crown is bald or a cap covers it.
 - **`swept`:** the cap, and one sheet from the front hairline combed back over it. Its two rows of loose sheets stood up at the crown as flaps.
 - **Sideburns** are a small sheet a side where they were six short locks, which read as a clump in front of the ear.
-- **Greying blends.** A lock went grey whole, one lock in so many. On a sheet's points that made grey tiles beside coloured ones. A sheet's points now all take the head's share of grey, each a little more or less.
+- **Greying** goes by the column, in streaks, where a whole point of a sheet went grey at once and read as a grey tile beside a coloured one. See below.
+
+**Greying lock by lock, for shared styles too.** A person's own file greyed lock by lock; a shared style took one tint, so a composed elder's hair was one flat colour. Hair files now carry the order in which their locks go grey, and a person's line how grey they are.
+
+- **The attribute: `_GREY`,** one float a vertex (glTF `SCALAR`, float), on `Hair` and `FarHair` in every hair style's file. It is 1 / a, where the vertex's lock is wholly grey once the person's `grey` reaches a. a is spread evenly from 0.15 to 0.90 over a head's locks (a sheet's columns, a single lock, a braid's leaf), so `_GREY` runs from 1.11 to 6.67. The scalp's cap carries the middle value, 1.90.
+- **The line:** `grey`, a number from 0 to 0.9, left out when the person has none; and, with it, `colors.hair_natural` and `colors.hair_silver`.
+- **The exact mix,** for each hair vertex: `t = clamp(grey × _GREY, 0, 1)`; `tint = mix(colors.hair_natural, colors.hair_silver, t)`, the two colours mixed as written (sRGB values); the vertex is then tinted with `tint` as it would be with `colors.hair`. A lock with a large `_GREY` is wholly silver early; the rest grey by degrees; at `grey` 0.9 every lock is silver.
+- **`colors.hair` stays** the one colour for a client that does not mix: the natural colour gone as grey as the head is on the whole. It is now the mean of the mix above over a head's locks. Before, it was mixed by the look's raw amount, which was less grey than the person's own file showed (0.50 where the file's locks came to 0.66).
+- **`grey` is not the look's `hair_grey`.** It is the amount at which the mix is as grey on the whole as the person's own file was (`person_params.grey_amount`): a look of 0.3 is a `grey` of 0.128, 0.5 is 0.312, 0.7 is 0.586.
+- **A person's own file is painted by the same mix** (`hair.py _lock_colour`), so the two agree. `compose.py --person` makes it too.
+- **What the client needs:** read `_GREY` on hair meshes (a custom vertex attribute, as `_OUTLINE_WIDTH` is), and tint hair by vertex as above. Until it does, `colors.hair` gives one tint as before.
 
 **The shading.**
 
@@ -1268,9 +1287,10 @@ Pass 3, after the nose wedge (2026-11-12). Three things the board showed: long s
 - **The dark edge in the file:** a sheet's ends are drawn 22% darker over its last fifth (`HEM_DARK`), so the hem reads as a line; inner surfaces are 0.55 of the outer, as before.
 - **One shading mean, as before.** The strand picture is unchanged (its whole mean 0.55), and every hair mesh's outer surfaces have mean 0.78 (`shade_mean.py --check`: 159 files, 0 off).
 
-**What the client needs:** nothing new.
+**What the client needs:** nothing for the ring, the shadow's edge or the back's spheres on a whole-person file; three things for composed people.
 
 - The ring's strength, width and height are its own settings (`hair_ring` 0.7, `hair_ring_width` 0.05, `hair_ring_shift` 0.35 in `style.rs`), and the files are made for those values.
+- Greying lock by lock needs the client to read `_GREY` and mix by it ([above](#long-hair-short-hair-and-the-hairs-shading)); without that a composed head has one tint, as before.
 - A `.collar` file is loaded by the name in the person's line, like a `.cap` file. A composer that builds the hair's path from `styles.hair` needs no change; one that lists the hair files it knows needs the nine names.
 - **A composer must take a hair file's whole spring block:** every bone group (`long` has two, `Hair` and `HairBack`) and every collider group they name, on `J_Bip_C_Head`, `J_Bip_C_Neck`, `J_Bip_C_UpperChest`, `J_Bip_C_Chest` and `J_Bip_C_Spine` (found by name on the person, as the head's were). `compose.py` does this already. Without the back's spheres long hair passes into the back when the head tips. The game's own reader (`characters.rs rig_springs`) takes any number of groups and spheres as it is: a whole-person file needs nothing.
 - If the ring is wanted nearer the reference's, that is client work and two numbers: the teeth are 2.4 mm wide on our hair (`uv.x * 90` on a picture that repeats every 22 cm round the head) where the reference's strands make them about three times as wide, and the ring is drawn full strength all the way round where the reference's breaks at its strands.

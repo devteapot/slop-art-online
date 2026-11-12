@@ -393,6 +393,52 @@ def hexed(c):
     return "#" + "".join(f"{round(min(max(x, 0.0), 1.0) * 255):02x}" for x in c[:3])
 
 
+# Greying. A hair vertex carries how soon its lock goes grey (`_GREY`, in hair files): 1 / a, where
+# a lock is wholly grey once the person's `grey` reaches a, and a is spread evenly from GREY_FIRST
+# to GREY_LAST over a head's locks. A vertex's hair is the natural colour mixed toward the silver
+# by clamp(grey x _GREY, 0, 1): some locks grey early and wholly, the rest by degrees.
+GREY_FIRST, GREY_LAST = 0.15, 0.90
+
+
+def grey_mask(u):
+    """`_GREY` for a lock whose place among the head's locks is u (0 the first to go grey, 1 the last)."""
+    return 1.0 / (GREY_FIRST + (GREY_LAST - GREY_FIRST) * min(max(u, 0.0), 1.0))
+
+
+def grey_share(g):
+    """How grey a head is on the whole (0..1) at the look's `hair_grey` g: what a person's own
+    file showed, where a share of the locks was wholly grey and the rest three quarters of g."""
+    if g >= 0.95:
+        return 1.0
+    whole = smooth((g - 0.15) / 0.75)
+    return whole + (1 - whole) * min(1.0, 0.75 * max(g, 0.0))
+
+
+def grey_mean(amount):
+    """The mean of clamp(amount x _GREY, 0, 1) over a head's locks."""
+    import math
+    a, b = GREY_FIRST, GREY_LAST
+    if amount <= 0:
+        return 0.0
+    if amount >= b:
+        return 1.0
+    lo = max(amount, a)
+    return (lo - a) / (b - a) + amount * math.log(b / lo) / (b - a)
+
+
+def grey_amount(g):
+    """The `grey` a person's line carries for the look's `hair_grey` g: the amount at which the
+    mask's mix is as grey on the whole as the person's own file was (`grey_share`)."""
+    want = grey_share(g)
+    if want <= 0.004:
+        return 0.0
+    lo, hi = 0.0, GREY_LAST
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (mid, hi) if grey_mean(mid) < want else (lo, mid)
+    return round(hi, 3)
+
+
 def person_line(spec, recipe, male):
     """A person as the client composes one from shared files (docs/CHARACTERS.md, "The client
     format"): a type, identity values, the style files worn, colours, and proportions. The
@@ -409,10 +455,13 @@ def person_line(spec, recipe, male):
     # own file put its girth on below the shoulders only, so the shoulders give the girth back.
     props["shoulders"] = round(props.get("shoulders", 1.0) / g, 3)
     look = spec["look"]
-    # One colour for the hair: the natural colour gone as grey as this person's is (a per-person
-    # file greys lock by lock; a shared style takes one tint). The beard has its own.
-    grey = min(max(float(look.get("hair_grey", 0.0)), 0.0), 1.0)
-    colours = dict(skin=hexed(look["skin"]), hair=hexed(mix(look["hair_natural"], look["hair_silver"], grey)), beard=hexed(look["beard_colour"]))
+    # One colour for the hair: the natural colour gone as grey as this person's is on the whole.
+    # A client that mixes by the hair file's `_GREY` takes `hair_natural`, `hair_silver` and the
+    # line's `grey` in its place and greys lock by lock. The beard has its own.
+    grey = grey_amount(min(max(float(look.get("hair_grey", 0.0)), 0.0), 1.0))
+    colours = dict(skin=hexed(look["skin"]), hair=hexed(mix(look["hair_natural"], look["hair_silver"], grey_mean(grey))), beard=hexed(look["beard_colour"]))
+    if grey > 0.02:
+        colours.update(hair_natural=hexed(look["hair_natural"]), hair_silver=hexed(look["hair_silver"]))
     cloth_ = {}
     for name in pieces + head:
         base = name[:-2] if name[-2:] in ("-m", "-f") else name
@@ -441,6 +490,8 @@ def person_line(spec, recipe, male):
                 styles=dict(hair=hair, outfit=pieces + head, overlays=over))
     if spec["belly"] > 0.02:
         line["belly"] = round(spec["belly"], 3)
+    if grey > 0.02:
+        line["grey"] = grey
     return line
 
 

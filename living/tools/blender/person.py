@@ -1362,6 +1362,10 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     lock_faces = [tuple(base + i for i in f) for f in h.f]
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
     orient_islands(ob, skip=len(faces))
+    # How soon each vertex's lock goes grey (`_GREY`, person_params.grey_mask): the client mixes a
+    # shared style's tint toward the person's silver by it. The scalp's cap is a middling lock.
+    mask = ob.data.attributes.new("_GREY", "FLOAT", "POINT")
+    mask.data.foreach_set("value", np.concatenate([np.full(base, person_params.grey_mask(0.5)), np.asarray(h.grey, float)]).astype(np.float32))
     # Shading normals: the cap's are the head's, the locks' their own (hair.py).
     normals = [tuple(head_normal(np.array(p_)[None, :])[0]) for p_ in cp] + [None] * len(extra)
     for i, k in extra.items():
@@ -1971,6 +1975,37 @@ AO_FLAT = ("Face", "FarHead")  # the face shades others (the neck under the jaw)
 AO_SOFT = {"Neck": 0.7, "Hands": 0.6}
 
 
+def painted_pieces(parts, line):
+    """Give each outfit piece in a person's line the colour it is painted in this file: the mean
+    of the piece's vertex colours as built and shaded, by area, in linear light. The client
+    moves a shared piece's mean to the line's colour, so the line must carry the colour as it
+    appears. The cloth a piece is cut from is more saturated than its paint (the weave, the
+    wear and the painted shade pale and darken it), and tinted with that, a composed person's
+    clothes came out stronger than their own file's."""
+    by = {}
+    for ob in parts:
+        me = ob.data
+        attr = me.color_attributes.get("Color")
+        if attr is None or not len(me.polygons):
+            continue
+        data = np.empty(len(me.loops) * 4, np.float32)
+        attr.data.foreach_get("color", data)
+        data = data.reshape(-1, 4)[:, :3].astype(float)
+        tot, area = np.zeros(3), 0.0
+        for p in me.polygons:
+            tot += data[list(p.loop_indices)].mean(axis=0) * p.area
+            area += p.area
+        by.setdefault(ob.name.split(".")[0], []).append((tot, area))
+    outfit = line["colors"].get("outfit", {})
+    for piece in list(outfit):
+        tot, area = np.zeros(3), 0.0
+        for part in person_params.piece_parts(piece):
+            for t, a_ in by.get(part, []):
+                tot, area = tot + t, area + a_
+        if area > 0:
+            outfit[piece] = person_params.hexed([1.055 * x ** (1 / 2.4) - 0.055 if x > 0.0031308 else 12.92 * x for x in tot / area])
+
+
 def bake_shade(obs, strength=0.50, reach=0.11):
     """Darken each vertex's colour by how much of the sky its neighbours hide in the rest pose
     (under the collar and the coat's skirt, inside cuffs, between the legs, under the fringe).
@@ -2324,8 +2359,11 @@ def main():
     stem = os.path.splitext(out)[0]
     # Beside the model: the person's full parameters (edit and pass back with --params) and the
     # game recipe's height and proportions.
-    with open(stem + ".params.json", "w") as f:
-        json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"], "person": spec.get("person")} if spec.get("type") else {})), f, indent=1)
+    def write_params():
+        with open(stem + ".params.json", "w") as f:
+            json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"], "person": spec.get("person")} if spec.get("type") else {})), f, indent=1)
+
+    write_params()
     g = globals()
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
     g["WHOLE_HEAD"] = a.parts in ("head", "face", "overlay")
@@ -2356,6 +2394,8 @@ def main():
                 bake_identity(parts, spec["identity"])
         if not a.no_shade:
             bake_shade(parts)
+        if not far and a.parts == "all" and spec.get("person"):
+            painted_pieces(parts, spec["person"])
         for ob in parts:
             ob.data.calc_loop_triangles()
             tris[("Far" if far and not ob.name.startswith("Far") else "") + ob.name] = len(ob.data.loop_triangles)
@@ -2363,11 +2403,13 @@ def main():
     g["FAR"] = False
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
+    write_params()  # again: the line's piece colours are now the painted ones
     bpy.ops.export_scene.gltf(
         filepath=out, export_format="GLB", export_yup=True, export_skins=True, export_animations=False, export_vertex_color="ACTIVE",
         export_all_vertex_colors=False, export_normals=True, export_materials="EXPORT", export_def_bones=False, export_leaf_bone=False,
         export_rest_position_armature=True, use_selection=False, export_morph=True, export_morph_normal=False,
         export_try_sparse_sk=False,  # Bevy's loader rejects sparse morph accessors
+        export_attributes=True,  # the hair's `_GREY`
     )
     # The far model alone hangs rigid: it lists no spring bones, so the game simulates none.
     j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})", spec.get("springs") if a.lod != "far" else None)

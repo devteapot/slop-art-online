@@ -34,6 +34,7 @@ import random
 
 import numpy as np
 
+import person_params
 from head_form import ORIGIN, lerp, smooth
 
 STYLES = ("crop", "short", "tousled", "swept", "shag", "bob", "bob_parted", "long", "tail", "bun", "braid", "braids", "sides", "kerchief", "balding")
@@ -225,6 +226,7 @@ class Hair:
         self.comb = Comb(hf, body)
         self.rng = random.Random(f"hair/{spec.get('seed', 0)}")
         self.v, self.f, self.col, self.uv, self.nrm, self.chain, self.along = [], [], [], [], [], [], []
+        self.marks = []  # (first vertex, `_GREY`): the grey mask of the vertices from there on
         self.hang_chains = set()  # the chains of sheets that lie on the back (their joints are on the hair, not inside its arc)
         self.chains = []
         self.locks = []
@@ -802,6 +804,10 @@ class Hair:
             self._bun_mesh(base, tipc, silver, grey)
         for b in getattr(self, "braid", []):
             self._braid_mesh(b, base, tipc, silver, grey)
+        # The grey mask of every vertex, from the marks set as locks and columns were written.
+        self.grey = np.full(len(self.v), person_params.grey_mask(0.5))
+        for (a, m), (b, _) in zip(self.marks, self.marks[1:] + [(len(self.v), 0.0)]):
+            self.grey[a:b] = m
         self.v = np.array(self.v).reshape(-1, 3)
         self.col = np.clip(np.array(self.col).reshape(-1, 3), 0, 1)
         self.uv = np.array(self.uv).reshape(-1, 2)
@@ -810,16 +816,18 @@ class Hair:
         self.along = np.array(self.along, float)
 
     def _lock_colour(self, k, base, tipc, silver, grey):
-        """A lock's own colour: a tone of the hair's, or one of the grey hairs."""
+        """A lock's own colour: a tone of the hair's, gone as grey as its place among the head's
+        locks makes it. Greying goes lock by lock before it goes all over: the mix is the one
+        the client makes from the file's `_GREY` and the person's `grey` (person_params), so a
+        person's own file and the same person composed from a shared style grey alike. The
+        vertices that follow carry the lock's mask."""
         c = base * (1 + 0.04 * k["tone"] + k["shade"])
         t = tipc * (1 + 0.04 * k["tone"] + k["shade"])
+        mask = person_params.grey_mask(k["grey"])
+        if not k.get("column"):
+            self.marks.append((len(self.v), mask))
         if grey > 0.02:
-            # Greying goes lock by lock before it goes all over.
-            share = smooth((grey - 0.15) / 0.75)
-            if k.get("blend"):  # a sheet's point: every point greys, some a little more
-                mixk = np.clip(0.75 * grey + 0.9 * share + 0.16 * (k["grey"] - 0.5) * (1 - share), 0, 1) if grey < 0.95 else 1.0
-            else:
-                mixk = np.clip(0.75 * grey + (0.9 if k["grey"] < share else 0.0), 0, 1) if grey < 0.95 else 1.0
+            mixk = float(np.clip(person_params.grey_amount(grey) * mask, 0, 1))
             c, t = lerp(c, silver * (1 + 0.06 * k["tone"]), mixk), lerp(t, silver * 1.05, mixk)
         return c, t
 
@@ -991,9 +999,12 @@ class Hair:
         # Colour: each point a shade of its own, slight; darker at the root, in the notches
         # between points and at the sheet's own edges; a lighter band round the head.
         cb, ct = np.zeros((M, 3)), np.zeros((M, 3))
+        # Each column has its own place in the greying, so a sheet greys in streaks a column wide
+        # and not a whole point at a time.
+        places = [self.rng.random() for _ in range(M)]
         for j in range(M):
-            tone, gr = sp["tone"][sp["q"][j]]
-            cb[j], ct[j] = self._lock_colour(dict(tone=0.6 * tone, shade=sp["shade"], grey=gr, blend=True), base, tipc, silver, grey)
+            tone, _ = sp["tone"][sp["q"][j]]
+            cb[j], ct[j] = self._lock_colour(dict(tone=0.6 * tone, shade=sp["shade"], grey=places[j], column=True), base, tipc, silver, grey)
         even = sp["even"]
         rootshade = lerp(lerp(0.76, 0.92, even), 1.0, smooth(T / 0.22))
         grad = smooth((T - 0.35) / 0.65) * (1 - 0.8 * even)
@@ -1023,6 +1034,7 @@ class Hair:
         for j in range(Mx):
             jj = j % M
             first = len(self.v)
+            self.marks.append((first, person_params.grey_mask(places[jj])))
             for i in range(R + 1):
                 self.v += [F[jj, i], B[jj, i]]
                 self.col += [col[jj, i], col[jj, i] * 0.55]
