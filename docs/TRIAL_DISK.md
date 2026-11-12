@@ -135,6 +135,28 @@ The list is [`docs/trial-disk/removal-list-20261112.tsv`](trial-disk/removal-lis
 - **unknown is 181 directories (15.7 GB), not 92 (9.9 GB):** verify runs are now matched only by their own publish lines, not by folder times. All 181 are held.
 - **The two ticking verify worlds of the plan have since ended.** The live rows are the four bi1 hamlets, the merge gate's world, and six directories written in the last 15 minutes. All are kept.
 
+## Done (2026-11-12 22:58 to 2026-11-13 00:2x)
+
+The owner approved the plan with the general coordinator's two recommendations (keep the no-model commitlogs too; hold the unknown directories). It was run as written.
+
+1. **Waited.** At the stop, the server hosted only the four paused bi1 hamlets. No directory on the list had been written since the list was made; the one new directory (6001679) was not on the list. The merge queue was held (the Spark coordinator's lock, 22:55:40).
+2. **Stopped `slop-trials-stdb` only** (SIGINT, then `docker stop`; exit 0 at 22:58:56). The trial Neo4j and the `sao-living` containers were untouched.
+3. **Archived through read-only `alpine` mounts:** 497 of 497 commitlogs (the paid and no-model classes), each with its `module_logs` and `db.lock`.
+   - **Where:** `~/slop-evidence/commitlogs-20261112/<batch>/<instance>-<replica>.tar.zst`, **6.8 GB** from 68.7 GB.
+   - **Checks:** each was tested with `zstd -t`, and its tar listing was compared with the source's files and byte sizes before the next one started. All 497 passed.
+   - **Modules:** the module that wrote each batch's commitlogs (34 modules for 32 batches), copied from the trial server's served copies (exact names) by `trial_disk_modules.py`, recorded in `MODULES.jsonl`. The first pass looked only in each checkout's `wasm/` under the served name and found 8; nothing was missing after the second.
+   - **Records:** `MANIFEST.jsonl` (one row per commitlog: replica, class, batch, instance, sha256, sizes, lock time) and `SHA256SUMS` (539 entries). `sha256sum -c SHA256SUMS` passed in full before the first removal.
+   - The archive log is [`trial-disk/archive-20261112.log`](trial-disk/archive-20261112.log).
+4. **Removed exactly the list** (`trial_disk.py remove`, server stopped): 1,731 directories.
+   - **Left:** 194 directories, the 192 kept as listed (11 live, 181 unknown held) plus the 2 created after the list.
+   - **The data directory** is now 39.3 GB, from 262 GB.
+5. **Restarted.**
+   - **File limit:** the soft open-file limit had reset to 1024, so the stack record's `prlimit --pid 1 --nofile=65536:524288` was applied (65,536 since).
+   - **The four bi1 hamlets** answer SQL, read `paused` true, and keep their worlds: about 1.3 million ticks, with 15, 10, 7 and 11 people alive.
+   - `spacetime list` works.
+
+**Free space** on the host went from 207 GB before the removal (58 GB at the stop; other work freed the rest meanwhile) to **483 GB** after.
+
 ## How it would be done (once the owner approves; not before)
 
 1. **In a quiet window.** Announce it, because the two ticking verify worlds belong to other sessions. Stop the trial server (`trials.py down`; SIGINT, then stop).
