@@ -142,6 +142,10 @@ pub const WAY_TRAITS: &[&str] = &[
 /// The way every line takes when none is named, and the one a script without ways speaks by.
 pub const SAY: &str = "say";
 
+/// Scene key under which a person's scene says whom a line said now would reach, at each way
+/// (earshot; docs/COMMUNICATION.md §17).
+pub const EARSHOT: &str = "who would hear you now";
+
 impl WaySpec {
     /// Today's speech (before ways were declared): the shipped `say_speech()`.
     pub fn say() -> Self {

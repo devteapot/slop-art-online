@@ -45,6 +45,15 @@ Per run:
                partner label: the worlds record no other agreement); zero_cand_attempts; each
                attempt is printed (* marks an actor born in the run), and the free adults over
                time (`unpaired/adults~mean candidates per adult`)
+  why          per person who came of age in the run (run-born, and seeded children), why they
+               did or did not pair (docs/MIND_RESEARCH_IDEAS.md #6): when they came of age, their
+               candidates while adult (mean, peak, share of time with any, a series), the share of
+               their deliberations whose scene held a candidate, the longing percepts their prompts
+               carried, conceive attempts as adults and the time to the first, replies that name or
+               aim at a candidate or speak of partnering, longing or children (examples printed,
+               --mentions), the body's refusals, adult time on no mind, and their time budget by
+               activity; per run rb_tried_by_cands: run-born adults who ever tried, of all, by mean
+               candidates while adult (coa_* the same for seeded children)
   born_*       the run-born generation: how many grew up, tried to conceive, became parents, and
                their couples (with their births and close-kin couples in the printed line)
   conceive_acts  conceive acts in grown and young minds' replies, by whether the actor was seeded
@@ -286,6 +295,7 @@ def run_dir(d, args):
 
     extra = lineage(census, persons, seeded, t0_ms, rows, args, seed)
     extra |= attempts(census, persons, seeded, t0_ms, rows, seed, args)
+    extra |= why_unpaired(census, persons, seeded, rows, seed, extra["_att"], args)
 
     share = lambda c, k: round(c[k] / c["all"], 3) if c["all"] else None  # noqa: E731
     return extra | {
@@ -414,6 +424,36 @@ def census_at(census, ms):
     return census[lo]
 
 
+class Pairing:
+    """Who is paired and who an actor's candidates are at a census row: unpaired adults alive
+    then, not the actor and not the actor's close kin. Paired: co-parent of a child alive at that
+    census (census parent links), or a seed sheet's wife, husband or partner label to someone
+    alive (the only recorded agreement; the worlds keep no other)."""
+
+    def __init__(self, k):
+        self.k, self.smemo, self.cmemo = k, {}, {}
+
+    def state(self, c):
+        key = c["now_ms"]
+        if key not in self.smemo:
+            alive = {p["id"] for p in c["people"] if p["alive"]}
+            pairs = {frozenset(s) for s in self.k.spouses if s <= alive}
+            for p in c["people"]:
+                ps = tuple(q for q in (p.get("parents") or ()) if q)
+                if p["alive"] and len(ps) == 2 and set(ps) <= alive:
+                    pairs.add(frozenset(ps))
+            adults = [p["id"] for p in c["people"] if p["kind"] == "person" and p["alive"] and p["stage"] == 2]
+            self.smemo[key] = (adults, pairs, {i for s in pairs for i in s})
+        return self.smemo[key]
+
+    def cands(self, c, actor):
+        key = (c["now_ms"], actor)
+        if key not in self.cmemo:
+            adults, _, paired = self.state(c)
+            self.cmemo[key] = frozenset(b for b in adults if b != actor and b not in paired and not self.k.close(actor, b))
+        return self.cmemo[key]
+
+
 def attempts(census, persons, seeded, t0_ms, rows, seed, args):
     """Every conceive act the minds decided (deliberation and talk replies alike): who, toward
     whom, what the target is to the actor, and how many others the actor could have asked at that
@@ -430,29 +470,11 @@ def attempts(census, persons, seeded, t0_ms, rows, seed, args):
     at = lambda ms: round((ms - t0_ms) / 60_000, 1)  # noqa: E731
     born_ids = {i for i in persons if i not in seeded}
 
-    def pairs_at(c):
-        alive = {p["id"] for p in c["people"] if p["alive"]}
-        out = {frozenset(s) for s in k.spouses if s <= alive}
-        for p in c["people"]:
-            ps = tuple(q for q in (p.get("parents") or ()) if q)
-            if p["alive"] and len(ps) == 2 and set(ps) <= alive:
-                out.add(frozenset(ps))
-        return out
-
-    def state(c):
-        adults = [p["id"] for p in c["people"] if p["kind"] == "person" and p["alive"] and p["stage"] == 2]
-        pairs = pairs_at(c)
-        paired = {i for s in pairs for i in s}
-        return adults, pairs, paired
-
-    memo = {}
+    pr = Pairing(k)
+    state = pr.state
 
     def cands(c, actor):
-        key = (c["now_ms"], actor)
-        if key not in memo:
-            adults, _, paired = state(c)
-            memo[key] = sum(1 for b in adults if b != actor and b not in paired and not k.close(actor, b))
-        return memo[key]
+        return len(pr.cands(c, actor))
 
     out = []
     for r in rows:
@@ -505,7 +527,195 @@ def attempts(census, persons, seeded, t0_ms, rows, seed, args):
         "cands_at_all": round(statistics.mean(x["cands"] for x in out), 1) if out else None,
         "zero_cand_attempts": sum(x["cands"] == 0 for x in out),
         "born_grown": gen["grown"], "born_tried": gen["tried"], "born_parents": gen["parents"], "born_couples": gen["couples"],
-        "_gen": gen, "_attempts": lines, "_cands": series,
+        "_gen": gen, "_attempts": lines, "_cands": series, "_att": out,
+    }
+
+
+PARTNER = re.compile(r"\b(partner\w*|wife|husband|wed\w*|marr\w*|court\w*|sweetheart|beloved|lover|betroth\w*|my heart|hearth with|share my (?:hearth|house|home|life)|a life together|be together|start a family|family of (?:my|our) own)\b", re.I)
+LONGING = re.compile(r"\b(long(?:s|ed|ing)? for|yearn\w*|ache for|wish(?:ed)? for a child|want(?:ed)? a child)\b", re.I)
+LONG_PERCEPT = re.compile(r"\[(?:\d+\] )?day (\d+) (\d+:\d+)\]? You long for a child[^\n]*")
+# Census activities by what they are for, for the run-born's time budget.
+ACT_CLASS = {"sleep": "sleep", "gather": "work", "cook": "work", "store": "work", "take": "work", "give": "work", "teach": "work",
+             "build": "work", "plant": "work", "keep": "work", "feed": "work", "craft": "work", "eat": "eat", "goto": "walk",
+             "wait": "idle", "wander": "idle", "follow": "idle", "rest": "idle", None: "idle", "conceive": "family",
+             "wave": "social", "nod": "social", "signal": "social", "offer": "social", "offer_terms": "social", "accept": "social",
+             "host": "social", "read": "work"}
+CAND_BINS = ((0, 0, "0"), (0.01, 2.99, "<3"), (3, 5.99, "3-6"), (6, 1e9, "6+"))
+
+
+def strings(x, skip=("do", "nearest", "kind", "item", "believes")):
+    """Every string in a reply, except act and selector words (`do: conceive` is not talk of children)."""
+    if isinstance(x, str):
+        yield x
+    elif isinstance(x, dict):
+        for k2, v in x.items():
+            if k2 not in skip:
+                yield from strings(v, skip)
+    elif isinstance(x, list):
+        for v in x:
+            yield from strings(v, skip)
+
+
+def ids_in(x):
+    """Ids a reply aims at: `target`/`to` ids and `{"id": n}` selectors."""
+    if isinstance(x, dict):
+        for k2, v in x.items():
+            if k2 in ("id", "to") and isinstance(v, int):
+                yield v
+            else:
+                yield from ids_in(v)
+    elif isinstance(x, list):
+        for v in x:
+            yield from ids_in(v)
+
+
+def scene_ids(r):
+    """The creatures in the scene a request carried (`{"creatures": [...]}` under "What you perceive")."""
+    for m in (r.get("request") or {}).get("messages") or []:
+        t = m.get("content")
+        if isinstance(t, str) and '{"creatures"' in t:
+            i = t.find('{"creatures"')
+            j = t.find("\n", i)
+            try:
+                return {c.get("id") for c in json.loads(t[i:j if j > 0 else None]).get("creatures") or []}
+            except ValueError:
+                return set()
+    return set()
+
+
+def prompt_text(r):
+    return "\n".join(m["content"] for m in (r.get("request") or {}).get("messages") or [] if isinstance(m.get("content"), str))
+
+
+def why_unpaired(census, persons, seeded, rows, seed, att, args):
+    """Why the run-born do not pair (docs/MIND_RESEARCH_IDEAS.md #6), per run-born person who came
+    of age: when (`adult_at`, real minutes from the run's start); their candidates while adult
+    (`Pairing.cands` at each census: mean, peak, share of adult time with any, and a series); the
+    share of their deliberations whose scene held a candidate; the longing percepts their prompts
+    carried ("You long for a child…", one per game time) against their conceive attempts and the
+    time from adulthood to the first; their deliberation and talk replies that name a candidate (by
+    name or aimed id) or speak of partnering, longing or children (the printed lines show them);
+    the body's refusals, by reason; their share of adult time on no mind (outside the census
+    `thinkers`); and their time budget while adult (census activities by ACT_CLASS). Per run: how
+    many came of age and how many ever tried, overall and by mean candidates while adult."""
+    k = Kin(persons, seed)
+    pr = Pairing(k)
+    census_s = (census[1]["now_ms"] - census[0]["now_ms"]) / 1000 if len(census) > 1 else 0
+    t_of = lambda c: (c["t"] or 0) / 60  # noqa: E731
+    # Everyone who came of age in the run: the run-born, and seeded children (`seeded_child`).
+    young0 = {p["id"] for p in census[0]["people"] if p["kind"] == "person" and p["stage"] < 2}
+    born = sorted((i for i in persons if persons[i]["kind"] == "person" and (i not in seeded or i in young0)), key=lambda i: (persons[i]["born_ms"], i))
+    by_actor = defaultdict(list)
+    for r in rows:
+        by_actor[r["_id"]].append(r)
+    att_by = defaultdict(list)
+    for x in att:
+        att_by[x["actor"]].append(x)
+    people, lines = [], []
+    for i in born:
+        adult = [c for c in census if any(p["id"] == i and p["alive"] and p["stage"] == 2 for p in c["people"])]
+        if not adult:
+            continue
+        name = persons[i]["name"]
+        adult_at = t_of(adult[0])
+        cs = [len(pr.cands(c, i)) for c in adult]
+        series, nxt = [], adult_at
+        for c, n in zip(adult, cs):
+            if t_of(c) >= nxt:
+                series.append(f"{round(t_of(c))}m:{n}")
+                nxt += args.every
+        acts = Counter()
+        unthought = 0
+        for c in adult:
+            p = next(p for p in c["people"] if p["id"] == i)
+            acts[ACT_CLASS.get((p.get("activity") or [None])[0], "other")] += 1
+            if c.get("thinkers") is not None and i not in c["thinkers"]:
+                unthought += 1
+        budget = {kk: round(v / len(adult), 2) for kk, v in acts.most_common()}
+        delib = talk = scene_hit = 0
+        mention = Counter()
+        ex = []
+        longing, refused = set(), Counter()
+        seen_ref = set()
+        first_long = None
+        for r in sorted(by_actor.get(i, []), key=lambda r: r.get("at_ms") or 0):
+            if r.get("error"):
+                continue
+            c = census_at(census, r.get("at_ms") or 0)
+            me = next((p for p in c["people"] if p["id"] == i), None)
+            text = prompt_text(r)
+            for m in LONG_PERCEPT.finditer(text):
+                if (m.group(1), m.group(2)) not in longing:
+                    longing.add((m.group(1), m.group(2)))
+                    first_long = first_long if first_long is not None else t_of(c)
+            for m in REFUSED.finditer(text):
+                key = (m.group(1), m.group(2), m.group(3))
+                if key not in seen_ref:
+                    seen_ref.add(key)
+                    refused[re.sub(r"\d+", "#", m.group(3))] += 1
+            if not me or me["stage"] != 2 or r.get("purpose") not in ("deliberate", "talk"):
+                continue
+            cands = pr.cands(c, i)
+            if r["purpose"] == "deliberate":
+                delib += 1
+                scene_hit += bool(scene_ids(r) & cands)
+            else:
+                talk += 1
+            rep = life_share.reply(r)
+            words = " ".join(strings(rep))
+            hit = []
+            names = [persons[b]["name"] for b in cands if b in persons]
+            if any(re.search(rf"\b{re.escape(n)}\b", words) or re.search(rf"\b{re.escape(n.split()[0])}\b", words) for n in names):
+                hit.append("names_candidate")
+            if set(ids_in(rep)) & cands:
+                hit.append("aims_at_candidate")
+            if PARTNER.search(words):
+                hit.append("partnering")
+            if LONGING.search(words):
+                hit.append("longing")
+            if CHILD.search(words):
+                hit.append("children")
+            for h in hit:
+                mention[h] += 1
+            if hit and len(ex) < args.mentions:
+                ex.append(f"{round(t_of(c), 1)}m {r['purpose']} [{','.join(hit)}] {words[:160]}")
+        mine = [x for x in att_by.get(i, []) if x["t"] >= adult_at - 0.5]
+        rec = {
+            "id": i, "name": name, "born": i not in seeded, "adult_at": round(adult_at), "adult_min": round(len(adult) * census_s / 60),
+            "cands_mean": round(statistics.mean(cs), 1), "cands_max": max(cs), "with_cands": round(sum(n > 0 for n in cs) / len(cs), 2),
+            "unthought": round(unthought / len(adult), 2), "deliberations": delib, "talk": talk,
+            "scene_cand": round(scene_hit / delib, 2) if delib else None, "longing": len(longing),
+            "first_longing": round(first_long) if first_long is not None else None,
+            "attempts": len(mine), "to_first": round(mine[0]["t"] - adult_at) if mine else None,
+            "mentions": dict(mention), "refused": dict(refused), "budget": budget,
+        }
+        people.append(rec)
+        dash = lambda v: "-" if v is None else v  # noqa: E731
+        lines.append(f"{name} (#{i}{'' if rec['born'] else ', seeded child'}) adult at {rec['adult_at']}m for {rec['adult_min']} min; candidates mean {rec['cands_mean']} max {rec['cands_max']} "
+                     f"(any {rec['with_cands']}); no mind {rec['unthought']}; deliberations {delib} (scene with a candidate {rec['scene_cand']}), talk {talk}; "
+                     f"longing {rec['longing']} (first {dash(rec['first_longing'])} m); attempts {rec['attempts']} (first {dash(rec['to_first'])} min after adulthood); "
+                     f"mentions {rec['mentions']}; refused {rec['refused']}; time {budget}")
+        lines.append(f"    candidates over time: {' '.join(series)}")
+        lines += [f"    e.g. {x}" for x in ex]
+    def tried_by(group):
+        bins = {}
+        for lo, hi, lab in CAND_BINS:
+            g = [r for r in group if lo <= r["cands_mean"] <= hi]
+            if g:
+                bins[lab] = f"{sum(r['attempts'] > 0 for r in g)}/{len(g)}"
+        return bins
+
+    rb = [r for r in people if r["born"]]
+    co = [r for r in people if not r["born"]]
+    tried = [r for r in rb if r["attempts"]]
+    scene = [r["scene_cand"] for r in rb if r["scene_cand"] is not None]
+    return {
+        "rb_adults": len(rb), "rb_tried": len(tried),
+        "rb_tried_share": round(len(tried) / len(rb), 2) if rb else None, "rb_tried_by_cands": tried_by(rb),
+        "rb_scene_cand": round(statistics.mean(scene), 2) if scene else None,
+        "rb_longing": sum(r["longing"] for r in rb),
+        "coa_adults": len(co), "coa_tried": sum(1 for r in co if r["attempts"]), "coa_tried_by_cands": tried_by(co),
+        "_why": lines, "_people": people,
     }
 
 
@@ -605,6 +815,7 @@ def main():
     ap.add_argument("--every", type=float, default=30.0, help="population every so many real minutes")
     ap.add_argument("--examples", type=int, default=2)
     ap.add_argument("--attempts", type=int, default=1000, help="print at most so many conceive attempts per run")
+    ap.add_argument("--mentions", type=int, default=3, help="example replies per run-born adult that name a candidate or speak of partnering, longing or children")
     ap.add_argument("--stores", action="store_true", help="food in each store over time, from the storage contents in residents' scenes (slow)")
     a = ap.parse_args()
     rows = []
@@ -643,6 +854,10 @@ def main():
                   f"parents {g['parents']}, couples {g['couples']} (close kin {g['couples_close_kin']}), births {g['births']}")
             for x in r["_attempts"][:a.attempts]:
                 print(f"   attempt: {x}")
+            print(f"   {r['run']} run-born adults: {r['rb_adults']}, ever tried {r['rb_tried']}; tried by mean candidates while adult: {r['rb_tried_by_cands']}; "
+                  f"seeded children come of age: {r['coa_adults']}, tried {r['coa_tried']} {r['coa_tried_by_cands']}")
+            for x in r["_why"]:
+                print(f"   why: {x}")
             for sid, ser in r["_stores"].items():
                 print(f"   {r['run']} store #{sid} food (latest scene within 15 min): {ser}")
             for k, xs in r["_ex"].items():

@@ -794,6 +794,14 @@ The general coordinator's decisions: tell the speaker the truth, and never hold 
 - **A newcomer talking to an empty yard** is the strangers trial's situation, so the room case had to be in before stage 2.
 - **The minds.** The `silence` row's words reach every prompt as before. The rethink judge's `spoke_to_without_answer` now reads "… — 2 lines to them since just now; they could not have heard you: out of earshot" when every line was unheard. When only some were, it reads "…, no answer; 1 of them could not have reached them (out of earshot)". Before, it was "…, no answer (they seemed out of earshot)". A `silence` still closes that conversation (`talk.rs` `on_speech`).
 
+**A mind's line when another spoke to its listener first** (`heard_first_rethinks`, off by default; first-sight-crowd, docs/FIRST_SIGHT.md "Crowds"):
+- **The rule.** A line a mind decided to say to someone is not said yet when, since its decision read its scene, the speaker heard another address that person.
+  - "Since its decision" means the later of the request's scene (`seen_ms`) and the start of its model calls (now less the thought's `latency_ms`). A line that arrived before the prompt was built was in front of it.
+  - It covers a deliberation's `say`, delivered by `mind_install` or by `mind_say` carrying on, and a mind plan's `say` node, counted since its install or its last line. A conversation turn's reply is not held, and neither is a routine's say.
+- **What the speaker gets.** It is told "You had not yet said “…” to <who> when you heard: <the line it heard>", an experience of kind `unsaid`. Its mind is asked to think again with that line as the reason (`perceive::ask_again`, not refused within `think_min_s`, because the decision it would protect is the one held).
+- **Not a back-off.** It may still say it; what it decides then is said as it decides.
+- **Implementation:** `speech::addressed_by_another`, `speech::held_for_another`. The check is one range of the speaker's own `experience` rows by `observer`.
+
 **A plan's queued line overtaken by a reply** (`brain.rs` `line_overtaken`). A mind plan's `say` node to someone is dropped when it comes due if the conversation has moved past it. That is, since the plan was installed (or the node last spoke):
 
 - that person spoke to the speaker: a line with `object` the speaker, or a room line the authority marked as for them (salience ≥ 0.8, the mind's own "marked");
@@ -871,3 +879,43 @@ There is no schema change: no table, column, reducer, view or subscription was a
 - `talking_with` runs once per line to the room. It reads the `chronicle` rows of the last 60 s through the `chronicle.at_ms` btree index. A range scan on an index reads only the rows in range ([indexes](https://spacetimedb.com/docs/tables/indexes/)).
 - The calls are matched against `near`, which `speak` already holds.
 - The labels are one `label_for` per called person and hearer: the cached regard lookup.
+
+## 17. Who would hear you now (branch `earshot`)
+
+Approved 2026-11-12 by the general coordinator as a perception fact. It is #4 in docs/MIND_RESEARCH_IDEAS.md, "Speaking within earshot". In ar2's best arm, 62% of lines to the newcomer went unheard, and residents read the silence as a threat. At Cullet (st2b, re-read with `arrive_spread.py`'s new columns), 22–25% of all residents' lines reached no one they were for. 62–102 a run went to someone the speaker could see who was too far away (`far_seen`).
+
+**The fact.** A person's scene says whom a line said now would reach, at each way of speaking:
+
+> Within earshot if you say it: Ife Okoro (#12), a stranger (#40); a whisper would reach no one; a call would also reach: Edda Hollin (#7).
+
+- **The rule.** It is the same rule `speech::speak` gives the words by (`earshot::reach`): one gather within the ways' widest carry, then each person within `carry_for(their hearing)` of the way. The listener's hearing is the `senses` law, as for a line actually said. So "within earshot if you say it" names exactly the people who would receive a line said then.
+- **Only people the speaker perceives.** A speaker cannot know someone out of sight is there, so they are left out. A line still reaches them: an unseen listener within a call's carry hears the call and is never named in the fact. For a mind, the people listed are those in the scene's `creatures`. For a player, they are those in its scene (`seen_characters`). People heard but not seen (`fov_on`) are not listed: the scene's "you hear (out of sight)" entries already say how far, in bands.
+- **Words.** Each person is named in the speaker's own labels (`label_for`). That is a name only when known and near enough to make out, otherwise "a stranger" or "someone too far away to make out". A mind also gets the id the scene shows them under, a far figure's handle (far-handle). A way that reaches everyone a said line does says only whom it adds ("a call would also reach: …", or "a call would reach no one more"); one that reaches fewer lists its own ("a whisper would reach: …", or "no one"). At most 8 are named per way; the rest are counted ("…, 3 more"). Ways come in the rules' order and are named by their script name ("a call", "a whisper"), so a world's own way reads "a <name>".
+- **No advice.** The fact says nothing about whether anyone is listening, and nothing about what to do. It adds no rule about when to speak, and no line is held back or delivered differently.
+
+**The law: `earshot`, off as shipped.** `laws().earshot` (`Laws::earshot`), set with `set_world_law earshot true` or a seed's `rules`. Turning a behaviour on by default in the game is the owner's call, so it stays off until the stage below has been read. Off, neither controller is told anything, and the world is as before.
+
+**Both controllers, from one place.**
+- **A mind:** its deliberation scene (`perceive::scene_json`) has the key "who would hear you now" (`living_rules::script::speech::EARSHOT`), read in its think and deliberate prompts.
+  - A talk turn's prompt does not have it. That prompt has no scene of its own: it answers a line just heard, and its `how` already says when the line was a call from afar.
+- **A player:** the private table `character_earshot` holds one row per character a person plays: `ways` (each way's `way` and `hearers`, the ids nearest first) and `text`, the same words in the player's labels.
+  - The row is read through the view `my_earshot`, a point lookup by the caller's living character, like `my_senses`.
+  - The player's frame writes it (`frame::show_earshot`) at most every 250 ms (`EARSHOT_MS`), and only when the people or the words changed.
+  - It goes when the law is off or the character dies (`forget_dead`).
+
+**What the game client needs (laptop, `living/game`).** The bindings are regenerated (`my_earshot`, `CharacterEarshot`, `EarshotWay`).
+
+- **Today.** The client draws its own earshot ring and Tab marks from `seen_characters` and the `senses` law with partial facts (`talk.rs` `earshot`, the say way only).
+- **The minimal change.** Subscribe `SELECT * FROM my_earshot`. While a row exists, take the Tab marks (whom a said line reaches) from `ways` where `way` = `say` instead of computing them. A call's and a whisper's lists are there too, for marks per way. The text can be shown as it is.
+- **With no row** (the law off), keep the client's own ring.
+
+### Data paths and SpacetimeDB
+
+Checked against the [views](https://spacetimedb.com/docs/functions/views/), [tables](https://spacetimedb.com/docs/tables/) and [performance](https://spacetimedb.com/docs/tables/performance/) pages (labelled 2.0.0), and against the module's own 2.14.1 behaviour recorded in `frame.rs`.
+
+- **Table.** `character_earshot` is private, as the tables page has it: "Visible only to reducers and the database owner". A per-sender view exposes the caller's row: "you can use view functions to expose computed subsets of your data to clients".
+- **Reads.** The view does one `find` on the primary key, so its read set is that row. It re-runs only when that row changes, and the frame writes it only on a change. The pages do not say outright that a view may read a private table; `my_senses` over `character_senses` already does so on 2.14.1.
+- **Writes.** Per player at most four a second, while someone steps into or out of a way's reach, or a label changes. Nothing is written while the scene stands still.
+- **Cost per frame:** one `creatures_near` gather within the widest carry (22.5 m on the island, 30 m in Cullet) and one hearing lookup per person in the scene, the per-moment cached `senses` law.
+- **A mind's scene:** the same gather once per deliberation request, inside `scene_json`.
+- **Retained data:** one small row per played character.

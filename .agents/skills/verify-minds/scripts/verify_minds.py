@@ -1104,11 +1104,13 @@ def fast_lane_case(run):
     first = run.wait(lambda: requests() or None, 'a fast request after a blow', 30)[0]
     patched = run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-patched') if b['source'] == 'fast' and '"wait":0.7' in b['graph'].replace(' ', '')] or None, 'the fast patch installed', 20)[0]
     text = body(first)
-    why = text.split('# Who you are')[0]
+    why = text.split('# Why now')[1].split('# What has just happened')[0]
     blows = [x['text'] for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'eye-blows') if x['kind'] == 'attacked' and x['at_ms'] >= t0]
     assert '# What has just happened' in text and '# Your top level' in text and '# Your routines' in text, text[:600]
+    # Stable parts first (the providers' prefix caches): who, the top level, the routines, then why now.
+    assert text.startswith('# Who you are') and text.index('# Your routines') < text.index('# Why now') < text.index('# What has just happened'), text[:600]
     assert blows and any(b in why for b in blows), {'why': why, 'blows': blows}
-    assert not COUNT_WORDS.search(why) and not COUNT_WORDS.search(text.split('# What has just happened')[1].split('# Your top level')[0]), 'a count or "again" in the fast prompt'
+    assert not COUNT_WORDS.search(why) and not COUNT_WORDS.search(text.split('# What has just happened')[1]), 'a count or "again" in the fast prompt'
     assert any('combat branch rewritten' in t['summary'] for t in fast_thoughts()), fast_thoughts()
     time.sleep(5.5)
     in_gap = [x for x in requests() if x['at_ms'] < first['at_ms'] + 5500]
@@ -1403,6 +1405,96 @@ def far_figure_case(run):
     return {'status': 'pass', **result}
 
 
+@case('house-owner')
+def house_owner_case(run):
+    """Whose a house is reaches a mind's prompt whatever its owner is doing (house-owner-label,
+    docs/PERCEPTION.md "Whose a thing is"). M and its neighbour F share a community; X is a
+    stranger to M. F has a house, X a house and a storage. An overlay makes anyone past 4 m too far
+    away to make out (as Cullet's `perceived_of` past 24 m) and lets a storage show its owner
+    (`shows_owner`). With F and X 30 m off, M's think prompt shows F's house with F's name
+    (`home_of`, `by`), X's house with no owner, X's storage with X's name (it shows its owner), and
+    no structure labelled by a far figure. What M notices of F's house and X's storage names them
+    and is tagged with their ids (`{F=#id}`), never a far figure's handle; X's house is noticed
+    with no tag (an owner the line does not name is not tied to it)."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 3, True)
+    m, f, x = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    for who in (m, f, x):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    act = lambda who, node: run.admin('mind_act', who, [json.dumps(node)], 'verify-minds')
+    run.admin('place_near', f, m)
+    act(m, {'do': 'found', 'text': f'Verify Row {m}'})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {m}', 'm-membership'), 'community founded', 20)
+    act(f, {'do': 'join', 'target': {'id': m}})
+    run.wait(lambda: run.sql(f'SELECT * FROM join_request WHERE asker = {f}', 'join-request'), 'join request', 20)
+    act(m, {'do': 'welcome', 'target': {'id': f}})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {f}', 'f-membership'), 'neighbour welcomed', 20)
+    shipped = (ROOT / 'living/scripts/skills.rhai').read_text()
+    overlay = shipped.replace('fn perceived_of(p)', 'fn base_perceived_of(p)', 1).replace('fn structures()', 'fn base_structures()', 1) + \
+        '\nfn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }\n' + \
+        'fn structures() { let l = base_structures(); for i in 0..l.len() { if l[i].name == "storage" { l[i].shows_owner = true; } } l }\n'
+    (run.directory / 'house-overlay.rhai').write_text(overlay)
+    subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db, str(run.directory / 'house-overlay.rhai')], check=True, cwd=ROOT, capture_output=True, timeout=120)
+    try:
+        body = run.sql(f'SELECT * FROM body WHERE id = {m}', 'm-body')[0]
+        bx, by = body['x'], body['y']
+        # Offsets toward the middle of the map (a body near an edge has no room the other way).
+        dy = 40.0 if by < 200 else -40.0
+        dx = 30.0 if bx < 200 else -30.0
+        # M away while the houses go up, so it first sees them with their owners gone.
+        run.admin('place_at', m, bx, by + dy)
+        run.admin('place_at', f, bx - 3.0, by)
+        run.admin('place_structure', f, 'house')
+        run.admin('place_at', x, bx + 3.0, by)
+        run.admin('place_structure', x, 'house')
+        run.admin('place_at', x, bx + 3.0, by + 2.0)
+        run.admin('place_structure', x, 'storage')
+        st = {(s['owner'], s['kind']): s['id'] for s in run.sql('SELECT * FROM structure', 'structures') if s['owner'] in (f, x)}
+        run.admin('place_at', f, bx + dx, by - 3.0)
+        run.admin('place_at', x, bx + dx, by + 3.0)
+        t0 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+        run.admin('place_at', m, bx, by + 1.0)
+        time.sleep(2.0)
+        script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        run.start(model(run, script), [m])
+        requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+        sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+        run.request(m, 'house')
+        prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify house' in sent_text(e)], 'prompt with the houses', 60)[0]
+        (run.directory / 'prompt-house.txt').write_text(prompt)
+        entries, dec = {}, json.JSONDecoder()
+        for at in [mm.start() for mm in re.finditer(r'\{"at":', prompt)]:
+            try:
+                o, _ = dec.raw_decode(prompt, at)
+            except ValueError:
+                continue
+            if o.get('kind') in ('house', 'storage'):
+                entries[o.get('id')] = o
+        fh, xh, xs = entries.get(st.get((f, 'house'))), entries.get(st.get((x, 'house'))), entries.get(st.get((x, 'storage')))
+        # The mind integrates its experience rows; what it noticed is read from what it was sent.
+        everything = '\n'.join(sent_text(e) for e in shared.rows(run.directory / 'fake-requests.jsonl'))
+        noticed = sorted(set(re.findall(r'You notice a (?:house|storage)[^"\\\n]*', everything)))
+        checks = {
+            'neighbour_away_house_named': bool(fh) and fh.get('home_of') == names[f] and fh.get('by') == names[f],
+            'stranger_house_unnamed': bool(xh) and 'home_of' not in xh and 'by' not in xh,
+            'shows_owner_storage_named': bool(xs) and xs.get('by') == names[x],
+            'no_structure_by_a_far_figure': not [o for o in entries.values() if FAR in json.dumps(o)],
+            'noticed_house_built_by_neighbour_tagged_by_id': any(f'house built by {names[f]}' in t and f'{{{names[f]}=#{f}}}' in t for t in noticed),
+            'noticed_storage_built_by_x_tagged_by_id': any(f'storage built by {names[x]}' in t and f'{{{names[x]}=#{x}}}' in t for t in noticed),
+            'stranger_house_noticed_untagged': any(t.startswith('You notice a house,') and '=#' not in t for t in noticed),
+            'no_notice_line_tagged_by_a_far_handle': not [t for t in noticed if FAR in t],
+        }
+    finally:
+        subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db], cwd=ROOT, capture_output=True, timeout=120)
+    result = {'m': m, 'f': names[f], 'x': names[x], 'entries': list(entries.values()), 'noticed': noticed, 'checks': checks}
+    (run.directory / 'house-owner.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('first-sight')
 def first_sight_case(run):
     """A first sight of someone one cannot place asks for one thought (docs/FIRST_SIGHT.md, the
@@ -1527,6 +1619,115 @@ def room_address_case(run):
     (run.directory / 'room-address.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
+
+def open_line(run, length, clear=30.0):
+    """A row of `length` open tiles (west to east), five tiles wide, that nothing blocks the sight
+    along, with no body within `clear` m of it (verify-core's `quiet_line`)."""
+    w = run.sql('SELECT width, height FROM world', 'world-size')[0]
+    W, H = w['width'], w['height']
+    tiles = bytearray(W * H)
+    for row in run.sql('SELECT * FROM terrain_chunk', 'terrain'):
+        data = row['tiles']
+        data = bytes.fromhex(data.removeprefix('0x')) if isinstance(data, str) else bytes(data)
+        cx, cy = row['id'] & 0xFFFF, row['id'] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    bodies = [(b['x'], b['y']) for b in run.private('SELECT x, y FROM body', 'bodies')]
+    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7, 8, 9)
+    for y in range(8, H - 8, 3):
+        for x in range(8, W - length - 8, 2):
+            if not all(walk(x + i, y + d) for i in range(length) for d in (-2, -1, 0, 1, 2)):
+                continue
+            mid = (x + length / 2, y + .5)
+            if all(math.dist(mid, b) > clear + length / 2 for b in bodies):
+                return [(x + i + .5, y + .5) for i in range(length)]
+    raise RuntimeError('no quiet open line on this map')
+
+
+@case('earshot')
+def earshot_case(run):
+    """Who would hear you now, as a perception fact (earshot, `earshot::reach`,
+    docs/COMMUNICATION.md §17). On a quiet open line by day (sight 11 m, a said line carries 9 m,
+    a call 22.5 m): H (thought for) stands with A 3 m east (seen, within a said line), B 10 m east
+    (seen, beyond a said line, within a call) and C 15 m west (beyond sight, within a call). A and
+    C first tell H their names from beside H. H's think prompt then carries "who would hear you
+    now" once the `earshot` law is on (off as shipped, its prompt has no such key): A by name at
+    say, B as a stranger added by a call, C nowhere (not perceived, so never named). H then says a line to the room and calls one: the people who receive each, among the
+    ones H sees, are exactly the scene's list at that way, and C, unseen, receives the call."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 4, True)
+    h, a, b, c = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    names = {x['id']: x['name'] for x in run.sql('SELECT id, name FROM character', 'names')}
+    for who in (h, a, b, c):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 28)
+    at = lambda i: line[i]
+    run.admin('place_at', h, *at(15))
+    for who, i in ((a, 16), (c, 14), (b, 17)):
+        run.admin('place_at', who, *at(i))
+    time.sleep(1.5)
+    say = lambda who, text, to, way='say': run.admin('mind_say', who, text, to, way, 0, TALK_THOUGHT)
+    say(a, f"I'm {names[a]}.", 0)
+    say(c, f"I'm {names[c]}.", 0)
+    time.sleep(1.0)
+    known = {x['known'] for x in run.private(f'SELECT * FROM acquaintance WHERE observer = {h}', 'h-knows')}
+    for who, i in ((a, 18), (b, 25), (c, 0)):
+        run.admin('place_at', who, *at(i))
+    time.sleep(1.5)
+    bodies = {x['id']: (x['x'], x['y']) for x in run.private('SELECT id, x, y FROM body', 'bodies-placed') if x['id'] in (h, a, b, c)}
+    dist = {who: round(math.dist(bodies[h], bodies[who]), 1) for who in (a, b, c)}
+    script = {'replies': {'think': {'thought': 'I listen.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}}}
+    run.start(model(run, script), [h])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    # Off as shipped (the `earshot` law): the scene does not say it.
+    run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify earshot-off'}))
+    off = run.wait(lambda: [sent_text(e) for e in requests() if 'verify earshot-off' in sent_text(e)], 'prompt with the law off', 60)[0]
+    (run.directory / 'prompt-earshot-off.txt').write_text(off)
+    run.admin('set_world_law', 'earshot', 'true')
+    run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify earshot-on'}))
+    prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify earshot-on' in sent_text(e)], 'prompt with the earshot', 60)[0]
+    (run.directory / 'prompt-earshot.txt').write_text(prompt)
+    m = re.search(r'"who would hear you now":"((?:[^"\\]|\\.)*)"', prompt)
+    earshot = json.loads(f'"{m.group(1)}"') if m else ''
+    parts = {p.strip().split(' would')[0].split(' if')[0]: p for p in earshot.rstrip('.').split(';')}
+    ids_in = lambda part: {int(x) for x in re.findall(r'#(\d+)', part)}
+    said_part = next((p for p in parts.values() if p.startswith('Within earshot if you say it')), '')
+    call_part = next((p for p in parts.values() if 'a call would' in p), '')
+    ours = {a, b, c}
+    # The lines: a said one, then a call (the call's own 6 s gap does not apply to a first call).
+    say(h, 'Is anyone near enough to hear me?', 0)
+    time.sleep(2.6)
+    say(h, 'Hello out there!', 0, 'call')
+    time.sleep(1.5)
+    rows = run.private(f'SELECT * FROM experience WHERE subject = {h}', 'heard-h')
+    got = lambda words: {r['observer'] for r in rows if r['kind'] == 'speech' and words in r['text']} & ours
+    heard_say, heard_call = got('near enough to hear me'), got('Hello out there')
+    seen_ids = ids_in(said_part) | ids_in(call_part)
+    # By night (sight 6 m) B at 10 m is out of sight too: a call then adds no one H sees.
+    night = '"night":true' in prompt
+    unseen = {c} | ({b} if night else set())
+    checks = {
+        'placed_as_planned': dist[a] <= 6.0 and 9.0 < dist[b] <= 11.0 and 11.0 < dist[c] <= 22.5,
+        'a_and_c_are_known_by_name': {a, c} <= known,
+        'off_as_shipped_the_scene_does_not_say_it': 'who would hear you now' not in off,
+        'scene_carries_earshot': bool(earshot),
+        'said_lists_a_by_name': ids_in(said_part) & ours == {a} and names[a] in said_part,
+        'call_adds_b_as_a_stranger_by_day': ('a call would reach no one more' in call_part) if night else ('also reach' in call_part and ids_in(call_part) & ours == {b} and 'a stranger' in call_part),
+        'unseen_are_never_named': not (unseen & seen_ids) and names[c] not in earshot,
+        'said_line_reaches_exactly_the_said_list': heard_say == ids_in(said_part) & ours,
+        'call_reaches_the_listed_and_the_unseen': heard_call - unseen == seen_ids & ours and unseen <= heard_call,
+    }
+    result = {'h': h, 'a': a, 'b': b, 'c': c, 'night': night, 'dist': dist, 'earshot': earshot, 'heard_say': sorted(heard_say), 'heard_call': sorted(heard_call), 'checks': checks}
+    (run.directory / 'earshot.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
 
 @case('health-seen')
 def health_seen_case(run):
@@ -2492,6 +2693,180 @@ def queued_case(run):
     assert on['reply'] == 1 and on['queued'] == 0, f'law on: the queued line was said on top of the reply: {on}'
     assert not on['silences'], f'law on: an overtaken line is dropped, not told as unheard: {on}'
     return {'status': 'pass', 'off': off, 'on': on}
+
+
+# A year of age every 20 real seconds on Cullet's day (48 minutes) and laws (90-year lives,
+# adult from 15, old from 59.5): year = year_days 4 x pace x 48 min.
+BODY_PACE = 20 / (4 * 48 * 60)
+
+
+def body_seed(run):
+    """The hamlet (12 people, two settlements, Cullet's day and laws) on a fast life pace, with
+    a child who comes of age and an adult who grows old a couple of minutes in, written under
+    this run's directory and named relative to living/seeds (as trials name derived seeds)."""
+    seed = json.loads((ROOT / 'living/seeds/hamlet.json').read_text())
+    seed['run'] = 'verify-body'
+    seed['life_pace'] = BODY_PACE
+    for t in seed['towns'] + seed['villages']:
+        for r in t['residents']:
+            if r['name'] == 'Lio Reed':
+                r['age'] = 7.0       # adult (15) about 160 s after world creation
+            if r['name'] == 'Cal Reed':
+                r['age'] = 51.0      # old (59.5) about 170 s after
+    path = run.directory / 'body-seed.json'
+    path.write_text(json.dumps(seed, indent=1))
+    return os.path.relpath(path.with_suffix(''), ROOT / 'living/seeds')
+
+
+def prompts_of(run, name):
+    """Every request the fake model got for `name`, oldest first: (purpose, prompt text). Think,
+    deliberate and consolidate prompts head `# Who you are (Name)`; talk and reorganize prompts
+    `# Who you are\nName`."""
+    out = []
+    path = run.directory / 'fake-requests.jsonl'
+    for line in path.read_text().splitlines() if path.exists() else []:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        text = '\n'.join(m.get('content', '') for m in (e.get('body') or {}).get('messages', []) if isinstance(m.get('content'), str))
+        if f'# Who you are ({name})' in text or f'# Who you are\n{name}\n' in text:
+            out.append((e.get('purpose'), text))
+    return out
+
+
+def body_lines(text):
+    return re.findall(r'^Your body: [^\n]*$', text, re.M)
+
+
+@case('body')
+def body_case(run):
+    """The body's age and stage in every prompt's "# Who you are" (prompts::body_line), and a
+    first identity from facts for a mind that starts once its character is grown (Origin::Grown).
+
+    1. Coming of age: Lio Reed is a child when his mind starts; after his character row turns
+       adult, his next talk prompt and his next consolidation prompt say "an adult for".
+    2. Growing old: Cal Reed's prompts say "an adult" before and "old for" after.
+    3. A late-starting run-born mind: Brisk and Edda Marrow (graph-only) start a family; the
+       child is born and grows up with no mind; the mind is then restarted with it. Its first
+       identity is written from facts with no model call (no identity request for it), names its
+       parents, and has no values, goals, pastimes or mood; its first prompt carries it and the
+       adult body line. With LIVING_PRIVACY_NEO4J set (privacy.py's scratch Neo4j), its mind
+       also holds CHILD_OF edges to both parents and the `parent` relation rows are projected."""
+    rel = body_seed(run)
+    target = Path(os.environ['CARGO_TARGET_DIR']) / 'verify-body' if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-body'
+    run.harness('launch', '--seed', str((ROOT / 'living/seeds' / rel).resolve()) , '--target-dir', str(target))
+    run.harness('doctor')
+    people = {p['name']: p for p in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people')}
+    lio, cal, brisk, edda = (people[n]['id'] for n in ('Lio Reed', 'Cal Reed', 'Brisk Marrow', 'Edda Marrow'))
+    assert people['Lio Reed']['stage'] == 1 and people['Cal Reed']['stage'] == 2, people
+    # The couple lives on graphs (no mind) and starts a family.
+    run.admin('place_near', edda, brisk)
+    for a, b in ((brisk, edda), (edda, brisk)):
+        run.admin('grant_items', a, 'berries', 6)
+        run.admin('set_behavior', a, json.dumps({'seq': [{'do': 'conceive', 'target': {'id': b}}, {'wait': 600}]}))
+    run.harness('player', 'join', 'BodyListener')
+    me = run.sql("SELECT id FROM character WHERE name = 'BodyListener'", 'player')[0]['id']
+    run.admin('place_near', me, lio)
+    script = {'replies': {'think': {'thought': 'I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'Someone speaks to me.', 'say': 'verify body: I hear you.', 'end': True},
+                          'consolidate': {'summary': 'verify body summary', 'identity': None, 'nodes': [], 'edges': []}},
+              'rules': [{'purpose': 'consolidate', 'delay_s': 1, 'times': -1}]}
+    models = model(run, script)
+    neo = os.environ.get('LIVING_PRIVACY_NEO4J') and os.environ.get('LIVING_PRIVACY_NEO4J_ENV')
+    extra = {}
+    if neo:
+        container, uri = os.environ['LIVING_PRIVACY_NEO4J'].split(':', 1)
+        pw = next(l.split('=', 1)[1].strip() for l in Path(os.environ['LIVING_PRIVACY_NEO4J_ENV']).read_text().splitlines() if l.startswith('LIVING_NEO4J_PASSWORD='))
+        extra = {'LIVING_NEO4J': 'on', 'LIVING_NEO4J_URI': uri, 'LIVING_NEO4J_PASSWORD': pw}
+    run.start(models, [lio, cal], seed=rel, extra_env=extra)
+    stage = lambda who, save: run.sql(f'SELECT * FROM character WHERE id = {who}', save)[0]['stage']
+
+    said = [0]
+
+    def talked(words, skip, seconds=150):
+        """Lines to Lio, standing beside him, until a talk prompt after the first `skip` carries
+        `words` in its body line (the first line of an exchange may be answered by a thought)."""
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            run.admin('place_near', me, lio)
+            run.harness('player', 'say', f'verify body: line {said[0]}, can you hear me?', '--to', str(lio))
+            said[0] += 1
+            end = time.monotonic() + 8
+            while time.monotonic() < end:
+                hits = [b for p, t in prompts_of(run, 'Lio Reed')[skip:] if p == 'talk' for b in body_lines(t) if words in b]
+                if hits:
+                    return hits
+                time.sleep(0.5)
+        raise RuntimeError(f'no talk prompt with {words!r} in {seconds}s')
+
+    # Before: a child's body line.
+    talked('a child for', 0)
+    n_before = len(prompts_of(run, 'Lio Reed'))
+    run.wait(lambda: stage(lio, 'lio-stage') == 2, 'Lio comes of age', 240)
+    seen_at = len(prompts_of(run, 'Lio Reed'))
+    def after(purpose, who='Lio Reed', words='an adult for', skip=seen_at):
+        return [b for p, t in prompts_of(run, who)[skip:] if p == purpose for b in body_lines(t) if words in b]
+    # The first talk and the first consolidation prompts after he came of age: none says a child.
+    talk_after = talked('an adult for', seen_at)
+    first_talk = next(b for p, t in prompts_of(run, 'Lio Reed')[seen_at:] if p == 'talk' for b in body_lines(t))
+    cons_after = run.wait(lambda: after('consolidate'), 'the next consolidation prompt carries the adult body line', 240)
+    first_cons = next(b for p, t in prompts_of(run, 'Lio Reed')[seen_at:] if p == 'consolidate' for b in body_lines(t))
+    # Growing old.
+    cal_before = [b for p, t in prompts_of(run, 'Cal Reed') for b in body_lines(t)]
+    run.wait(lambda: stage(cal, 'cal-stage') == 3, 'Cal grows old', 240)
+    cal_seen = len(prompts_of(run, 'Cal Reed'))
+    run.admin('set_behavior', cal, json.dumps({'think': 'I finished my plan. verify body old'}))
+    cal_after = run.wait(lambda: after('deliberate', 'Cal Reed', 'old for', cal_seen) or after('think', 'Cal Reed', 'old for', cal_seen), 'Cal\'s next prompt says old', 120)
+    # The couple's child, born and grown with no mind.
+    child = run.wait(lambda: next((c for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'children')
+                                   if c['parent_a'] in (brisk, edda) and c['parent_b'] in (brisk, edda)), None), 'a child born to Brisk and Edda', 240)
+    cid, cname = child['id'], child['name']
+    run.wait(lambda: stage(cid, 'child-stage') == 2, f'{cname} grows up with no mind', 420)
+    run.note(f'{cname} (#{cid}) is grown; restarting the mind with it')
+    shared.stop(run.mind)
+    subscriptions = run.log().count('world subscribed:')
+    run.env['LIVING_ONLY'] = ','.join(map(str, [lio, cal, cid]))
+    run.launch_mind()
+    run.wait(lambda: run.log().count('world subscribed:') > subscriptions, 'the restarted mind subscribed')
+    persona = run.wait(lambda: run.private(f'SELECT * FROM persona WHERE id = {cid}', 'grown-persona'), f'{cname}\'s first identity', 60)[0]
+    thoughts = run.thoughts(cid, 'grown-thoughts')
+    first = [t for t in thoughts if 'grown before my mind began' in t['summary']]
+    parents = sorted(people[n]['name'] for n in ('Brisk Marrow', 'Edda Marrow'))
+    narrative = persona['narrative']
+    run.admin('set_behavior', cid, json.dumps({'think': 'I finished my plan. verify body grown'}))
+    grown_prompt = run.wait(lambda: [t for p, t in prompts_of(run, cname) if p in ('think', 'deliberate')], f'{cname}\'s first prompt', 90)[0]
+    identity_calls = [p for p, t in prompts_of(run, cname) if p == 'consolidate' and ('Newborn:' in t or 'world holds about' in t)]
+    checks = {
+        'lio_child_line_before': n_before > 0,
+        'lio_talk_after': talk_after[0], 'lio_consolidate_after': cons_after[0],
+        'lio_next_talk_is_adult': 'an adult for' in first_talk, 'lio_next_consolidation_is_adult': 'an adult for' in first_cons,
+        'cal_first_adult': next((b for b in cal_before if 'an adult for' in b), None), 'cal_after': cal_after[0],
+        'grown_first_identity_thought': bool(first) and first[0]['model'] == 'facts',
+        'grown_names_parents': all(n in narrative for n in parents),
+        'grown_no_invented_wants': not persona['values'] and not persona['goals'] and not persona['pastimes'] and not persona['mood'] and not persona['calling'],
+        'grown_no_identity_call': not identity_calls,
+        'grown_prompt_has_identity': narrative in grown_prompt,
+        'grown_prompt_body_line': next((b for b in body_lines(grown_prompt) if 'an adult for' in b), None),
+    }
+    if neo:
+        q = (f"MATCH (s:Concept {{run: '{run.db}', actor: {cid}, key: 'self'}})-[r:CHILD_OF]->(p) RETURN p.key AS k, r.lived_under AS by;")
+        out = subprocess.run(['docker', 'exec', '-i', container, 'sh', '-c', 'NEO4J_PASSWORD="${NEO4J_AUTH#*/}" cypher-shell -a bolt://localhost:7687 -u neo4j --format plain'],
+                             input=q, capture_output=True, text=True, timeout=60)
+        (run.directory / 'grown-child-of.txt').write_text(out.stdout + out.stderr)
+        checks['grown_child_of'] = all(f'person:{p}' in out.stdout for p in (brisk, edda))
+        rels = run.wait(lambda: [r for r in run.private(f'SELECT * FROM relation WHERE actor = {cid}', 'grown-relations') if r['label'] == 'parent'], 'parent relations projected', 60)
+        checks['grown_parent_relations'] = sorted(r['other'] for r in rels) == sorted((brisk, edda))
+        clean = subprocess.run(['docker', 'exec', '-i', container, 'sh', '-c', 'NEO4J_PASSWORD="${NEO4J_AUTH#*/}" cypher-shell -a bolt://localhost:7687 -u neo4j --format plain'],
+                               input=f"MATCH (n) WHERE n.run = '{run.db}' DETACH DELETE n;", capture_output=True, text=True, timeout=60)
+        checks['neo4j_cleaned'] = clean.returncode == 0
+    else:
+        checks['neo4j'] = 'skipped: set LIVING_PRIVACY_NEO4J and LIVING_PRIVACY_NEO4J_ENV to check CHILD_OF and parent relations'
+    (run.directory / 'body.json').write_text(json.dumps({'checks': checks, 'grown': {'id': cid, 'name': cname, 'narrative': narrative,
+        'persona': persona}, 'lio': talk_after + cons_after, 'cal': cal_after}, indent=2))
+    ok = all(v for k, v in checks.items() if k != 'neo4j')
+    return {'status': 'pass' if ok else 'fail', 'checks': checks}
 
 
 def main():

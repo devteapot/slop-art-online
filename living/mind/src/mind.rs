@@ -148,6 +148,11 @@ enum Origin {
     Birth,
     /// From its background row (town, occupation, household), by one identity call.
     Background,
+    /// Born in the world and past childhood when its mind first starts (a capped trial
+    /// thinks for it only later): who it is from facts only, with no model call
+    /// (`grown_identity`): its parents, siblings and children, its home, its inborn temperament,
+    /// and what it lives from then on. Before this, such a mind had no identity and no parents.
+    Grown,
     /// The seed's own persona for it, if the seed has one (and animals' species nature).
     /// Nothing is written otherwise: a joined player's character, for one, is who its
     /// conduct shows (docs/PLAYER_MEMORY.md).
@@ -166,6 +171,7 @@ impl Origin {
             (true, true, ..) => Self::Sheet,
             (true, false, true, ..) => Self::Birth,
             (true, false, false, true, _) => Self::Background,
+            (true, false, false, false, false) if parent => Self::Grown,
             (true, false, false, false, _) => Self::Seed,
         }
     }
@@ -892,7 +898,7 @@ impl Minds {
                 match self.origin(&c) {
                     // An authored sheet is installed as written (no model call); a background
                     // takes a model call. Both run concurrently with the rest.
-                    o @ (Origin::Sheet | Origin::Background) => {
+                    o @ (Origin::Sheet | Origin::Background | Origin::Grown) => {
                         let me = self.clone();
                         let c = c.clone();
                         pending.push(tokio::spawn(async move {
@@ -1149,6 +1155,7 @@ impl Minds {
             Origin::Birth => self.birth_persona(c).await,
             Origin::Background => self.facts_identity(c).await,
             Origin::Seed => self.seed_persona(c).await,
+            Origin::Grown => self.grown_identity(c).await,
         }
     }
 
@@ -1699,7 +1706,40 @@ impl Minds {
         Some(rows.iter().map(|c| prompts::cue_line(c, &|id| self.known_as(actor, id), now)).collect())
     }
 
+    /// "Your body: 15 years old, an adult for a few hours." from the character row and the
+    /// world's pace (`prompts::body_line`); empty when either row is missing.
+    pub(crate) fn body_line(&self, actor: u32) -> String {
+        let (Some(c), Some(w)) = (self.conn.db.character().id().find(&actor), self.conn.db.world().id().find(&0)) else { return String::new() };
+        let Some(base) = self.life_table(&c.kind) else { return String::new() };
+        let age = c.birth_age_days + llm::now_ms().saturating_sub(c.born_ms) as f32 / w.day_ms.max(1) as f32;
+        prompts::body_line(&c.kind, c.stage, age, base, living_rules::life::Pace { year_days: w.year_days.max(1) as f32, pace: w.life_pace })
+    }
+
+    /// A species' life table as the world was built with it: species.json with the seed's own
+    /// `species.<kind>.life` merged over it, as the authority's build merges it.
+    fn life_table(&self, kind: &str) -> Option<living_rules::life::Life> {
+        let base = self.species.get(kind)?.life;
+        let over = &self.seed["species"][kind]["life"];
+        if !over.is_object() {
+            return Some(base);
+        }
+        let mut life = base;
+        let f = |k: &str, d: f32| over[k].as_f64().map_or(d, |x| x as f32);
+        life.years = f("years", life.years);
+        life.infant = f("infant", life.infant);
+        life.child = f("child", life.child);
+        life.elder = f("elder", life.elder);
+        Some(life)
+    }
+
     fn persona_text(&self, actor: u32) -> String {
+        let body = self.body_line(actor);
+        let body = if body.is_empty() { body } else { format!("\n{body}") };
+        let text = self.persona_core(actor);
+        format!("{text}{body}")
+    }
+
+    fn persona_core(&self, actor: u32) -> String {
         match self.conn.db.persona().id().find(&actor) {
             Some(p) => {
                 let mut knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == actor).map(|k| k.technique).collect();
@@ -2580,7 +2620,8 @@ mod tests {
         use Origin::*;
         // (person, sheet, background, stage, parent, seeded)
         assert_eq!(Origin::of(true, false, true, 2, true, false), Background, "an adult with parents and a background");
-        assert_eq!(Origin::of(true, false, false, 3, true, false), Seed, "an elder with parents and nothing else: no newborn identity, and nothing invented");
+        assert_eq!(Origin::of(true, false, false, 3, true, false), Grown, "an elder with parents and nothing else: no newborn identity, facts only");
+        assert_eq!(Origin::of(true, false, false, 2, true, false), Grown, "a run-born adult whose mind starts late: facts only, with its parents");
         assert_eq!(Origin::of(true, false, false, 2, true, true), Seed, "an adult the seed describes");
         assert_eq!(Origin::of(true, false, true, 1, true, false), Birth, "a child raised by its parents");
         assert_eq!(Origin::of(true, false, false, 0, true, false), Birth, "a newborn");

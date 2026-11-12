@@ -44,6 +44,25 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "types.json")
+# How far above the eye's opening a brow's lower edge is drawn, in heights of the opening:
+# the reference's two faces measure 0.85 and 0.60 (reference/brow.py), and this is between.
+BROW_GAP = 0.72
+
+
+def brow_lift(eye, brow):
+    """How far above the head's own brow line a type's brow is drawn, in H: what brings its
+    lower edge to `BROW_GAP` openings above the eye's opening, and never below the brow line.
+
+    The brow line is where the head's form has its brow (the type's `above_eye`, set by the
+    form); the reference draws its brows well above its own, on the forehead. Where the drawn
+    brow's lower edge is without a lift follows from the type's numbers as head_mesh.brow_shape
+    draws it: the brow line over the opening's top, the arch at the opening's middle, less
+    under half the stroke's thickness (and 0.0024 H, which the built types measure lower)."""
+    arch = 0.0048 * (brow["arch"] / 0.3) / 0.2564
+    low = brow["above_eye"] - 0.5 * eye["h"] + 0.44 * arch - 0.5 * brow["thick"] * 1.15 * 0.9 - 0.0024
+    return round(max(BROW_GAP * eye["h"] - low, 0.0), 4)
+
+
 Z = [0.04, 0.12, 0.20, 0.28, 0.40, 0.52, 0.64, 0.76, 0.88]  # the heights sections are kept at, in H above the chin
 BANDS = [("child", 0, 12), ("youth", 12, 18), ("adult", 18, 60), ("elder", 60, 200)]
 LINES = dict(a="round", b="even", c="long")
@@ -349,6 +368,8 @@ def compose(measured):
                     body=dict(height_m=[round(bh[0] + dh, 2), round(bh[1] + dh, 2), round(bh[2] + dh, 2)], weight=round(bw + dw, 2), muscle=round(bm + dm, 2), head_power=0.6),
                     made_from=f"reference + (pass 2's {band} {dict(f='woman', m='man', u='child')[sex]} − pass 2's adult woman)" + dict(a=" + 0.8 × (sister − reference)", b="", c=" − 0.5 × (sister − reference), lengthened")[line],
                 )
+                # The brow is drawn above the head's own brow line, as the reference's is (brow_lift).
+                types[tid]["brow"]["lift"] = brow_lift(types[tid]["eye"], types[tid]["brow"])
     return types
 
 
@@ -500,8 +521,10 @@ def apply(t, values):
     e["behind_brow"] -= g("socket_depth")
     e["behind_cheek"] -= g("socket_depth")
     e["iris"] *= g("iris_size")
-    b["above_eye"] += g("brow_height") + g("eye_height") * 0  # the brow rides the face, not the eye
-    b["brow_z"] = shift(brow) + g("brow_height")
+    # The brow's height is the drawn brow's (its bone carries the brow alone): the head's own
+    # brow line stays where the face's length puts it.
+    b["lift"] = b.get("lift", 0.0) + g("brow_height")
+    b["brow_z"] = shift(brow)
     b["thick"] *= g("brow_thickness")
     b["tilt_deg"] += g("brow_tilt")
     b["length"] = g("brow_length")
@@ -657,7 +680,7 @@ def draw_front(d, box, t, ghost=None, labels=True, bones=False):
         d.line(poly(lens[:17]), fill=INK, width=2 * SS)
         bl = hw * 1.25 * b.get("length", 1.0)
         bt = math.radians(b["tilt_deg"])
-        brow = [(ex + sx * u * bl, brow_z + b["arch"] * 0.03 * (1 - u * u) - math.tan(bt) * u * bl) for u in (-1, -0.5, 0, 0.5, 1)]
+        brow = [(ex + sx * u * bl, brow_z + b.get("lift", 0.0) + b["arch"] * 0.03 * (1 - u * u) - math.tan(bt) * u * bl) for u in (-1, -0.5, 0, 0.5, 1)]
         d.line(poly(brow), fill=(70, 50, 44), width=max(SS, round(b["thick"] * k)))
     # The nose as a wedge, the mouth as a line.
     d.polygon(poly([(0, no["bridge_z"] - 0.02), (no["width"] / 2 * 0.85, no["base_z"] + 0.004), (0, no["base_z"] - 0.006), (-no["width"] / 2 * 0.85, no["base_z"] + 0.004)]), fill=(238, 214, 198), outline=SKIN_LINE)
@@ -678,7 +701,7 @@ def bone_places(t):
     out = [("Cranium", 0, brow_z + 0.02), ("Forehead", 0, 0.70), ("Glabella", 0, brow_z), ("Face", 0, e["z"]), ("Nose", 0, no["bridge_z"] - 0.01), ("NoseTip", 0, no["tip_z"]), ("Mouth", 0, m["z"]),
            ("Chin", 0, 0.012), ("Jaw", 0, 0.075)]
     for sx, side in ((-1, "R"), (1, "L")):
-        out += [(f"Orbit_{side}", sx * e["apart"] / 2, e["z"]), (f"Brow_{side}", sx * e["apart"] / 2, brow_z), (f"Corner_{side}", sx * at(s, "w15", e["z"]) / 2, e["z"]),
+        out += [(f"Orbit_{side}", sx * e["apart"] / 2, e["z"]), (f"Brow_{side}", sx * e["apart"] / 2, brow_z + b.get("lift", 0.0)), (f"Corner_{side}", sx * at(s, "w15", e["z"]) / 2, e["z"]),
                 (f"Zygoma_{side}", sx * at(s, "w30", 0.28) / 2 * 0.92, 0.28), (f"Cheek_{side}", sx * at(s, "w15", 0.18) / 2 * 0.8, 0.18), (f"Gonion_{side}", sx * at(s, "wide", t["jaw"]["angle_z"]) / 2, t["jaw"]["angle_z"]),
                 (f"MouthCorner_{side}", sx * (m["w"] / 2 + 0.035), m["z"] - 0.022), (f"Ear_{side}", sx * (at(s, "wide", t["ear"]["z"]) / 2 + 0.02), t["ear"]["z"])]
     return out

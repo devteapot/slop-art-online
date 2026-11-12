@@ -1,0 +1,11 @@
+# verify-client: house-owner-label
+
+Scoped maintain-verification-skill pass for `house-owner-label` (Spark, trial server `slop-trials-stdb` 2.14.1, private `CARGO_TARGET_DIR`; branch head `c367e043` = origin/main `e704ec0d` merged). Scope: the features this change touches, read from source by the coordinator (no subagent wave); every other feature of the skill is out of scope and unchanged. `just living-check` passed on the merged tree (all steps, 1702 s). Every scratch world was paused before deletion by `verify.py cleanup`.
+
+The change: `common::owner_label` names a structure's owner whenever the `owner_shown` law shows it (the viewer knows them, or the kind `shows_owner`), whatever the owner's distance (before: `label_for`, which read the owner's distance, so a known neighbour's house read "someone too far away to make out"'s when they were away). Lines about something owned (a notice line, a witnessed theft) carry the owner as subject or object only when they name them, by id, never by a far handle (`perceive::percept_owned`, `witnessed_owned`). docs/PERCEPTION.md "Whose a thing is".
+
+- New script `scripts/house_label.py` (SKILL.md, features/perception.md, README row): `client-hol3-155327` 6/6 PASS. `my_known_names` has the introduced F and not the stranger X; the public `structure` rows carry owners, so the client's rule (`looks::structure_name`) reads "<F>'s house" and "house"; the player sees a theft "from <F>'s storage" with F too far away to make out.
+- Drift found and recorded: a player's character is told no "You notice …" lines (`brain.rs` `noticed` returns for a non-`ai` character), so the first version's notice checks were wrong for players (`client-hol2-155118`, 3 FAIL); the script now checks the theft line, and the feature file says so. The probe must be built first in a new worktree (`client-hol-153306` failed for that; the SKILL's build line is unchanged).
+- Product gap for the client, not fixed: the client ignores `shows_owner` and a world's own `owner_shown` law (`client_reads_storage_as` = "storage" where minds are told "built by <X>").
+
+Not covered: performance (no tick timings were read; the change adds no per-tick work: one `owner_label` per structure line as before), paid model runs, and the other features of this skill.

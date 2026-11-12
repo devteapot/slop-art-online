@@ -683,7 +683,10 @@ class Gates(unittest.TestCase):
     def test_models(self):
         cfg = store.load_config(local_config="/nonexistent/config.json")
         store.check_models({"models": {"zai-glm-5-3-flash": 3, "deepseek-v4-1-flash-1017": 1, "fake-trials": 2}}, cfg)
-        for bad in ("mistral-small-latest", "gpt-6-luna", "ministral-8b-latest", "something-new"):
+        # read 2026-11-12 (docs/STORE.md, "Model terms")
+        store.check_models({"models": {"mistral-small-latest": 1, "ministral-8b-latest": 1, "ministral-14b-2512": 1,
+                                       "jev-1.14.0": 2, "jev": 3, "claude-opus-5-5": 4}}, cfg)
+        for bad in ("gpt-6-luna", "ministral-8b-2410", "claude-sonnet-5-5", "something-new"):
             with self.assertRaises(store.Refused):
                 store.check_models({"models": {"zai-glm-5-3-flash": 3, bad: 1}}, cfg)
 
@@ -692,6 +695,26 @@ class Gates(unittest.TestCase):
             fake_batch(t)
             store.check_batch_complete(t)
             os.remove(os.path.join(t, "life-iter11-r2", "summary.json"))
+            with self.assertRaises(store.Refused):
+                store.check_batch_complete(t)
+
+    def test_analysis_record(self):
+        cfg = store.load_config(local_config="/nonexistent/config.json")
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "analysis/out/curve.json", "{}")
+            b = {"batch": "gq0", "kind": "analysis", "files": [{"path": "analysis/out/curve.json"}],
+                 "models_in_outputs": {"zai-glm-5-3-flash": 2}}
+            write(t, "batch.json", json.dumps(b))
+            self.assertEqual(store.check_batch_complete(t), [])
+            # the models whose words it carries go through the same gate as a batch's calls
+            b["models_in_outputs"]["gpt-6-luna"] = 1
+            write(t, "batch.json", json.dumps(b))
+            man = store.pack_batch(t, os.path.join(t, "packed"), scrubber(), name="gq0")
+            self.assertIn("gpt-6-luna", man["models"])
+            with self.assertRaises(store.Refused):
+                store.check_models(man, cfg)
+            b.pop("models_in_outputs")
+            write(t, "batch.json", json.dumps(b))
             with self.assertRaises(store.Refused):
                 store.check_batch_complete(t)
 
@@ -736,7 +759,7 @@ class ManyBatches(unittest.TestCase):
                 srcs.append(src)
             # bd called an unverified model: held
             write(srcs[3], "life-iter11-r1/journal/Arlen.jsonl",
-                  json.dumps({"actor": "Arlen", "purpose": "think", "model": "mistral-small-latest",
+                  json.dumps({"actor": "Arlen", "purpose": "think", "model": "gpt-6-luna",
                               "request": {"messages": []}, "reply": "{}"}) + "\n")
             lst = write(t, "list.txt", "\n".join(srcs) + "\n")
             calls = []
@@ -768,7 +791,7 @@ class ManyBatches(unittest.TestCase):
             commits = [c for c in calls if c != "create_repo"]
             self.assertEqual(commits, [("commit", ["ba", "bb"]), ("commit", ["bc"])])
             self.assertIn("held bd", out.getvalue())
-            self.assertIn("mistral-small-latest", out.getvalue())
+            self.assertIn("gpt-6-luna", out.getvalue())
 
     def test_packed_must_match(self):
         with tempfile.TemporaryDirectory() as t:
@@ -784,6 +807,130 @@ class ManyBatches(unittest.TestCase):
                 store.verify_pack(out, other, cfg, "test")
             with self.assertRaises(store.Refused):
                 store.verify_pack(out, src, cfg, "laptop")
+
+
+class JevPricing(unittest.TestCase):
+    """TypeSafe Jev's price, per-call costs and share of totals leave every record (decision
+    jev_pricing); other models' costs stay. Planted Jev figures are distinctive numbers."""
+    PRICE, CALL, SHARE = 0.0427, 7.31e-05, 0.0813
+
+    def records(self):
+        P, C, S = self.PRICE, self.CALL, self.SHARE
+        return {
+            "journal/A.jsonl": [
+                {"model": "jev-1.14.0", "profile": "jev", "purpose": "rethink", "cost_usd": C, "tokens": 9,
+                 "reply": '{"answers":{"plan_broken":{"noul":0.18}}}'},
+                {"model": "zai-glm-5-3-flash", "profile": "glm-flash", "purpose": "rethink", "cost_usd": 0.000191}],
+            "rethink.json": {"jev": {"proceed_above": 0.3, "provider": {"url": "https://api.typesafe.ai/v1/systemone",
+                                                                         "model": "jev-1.14.0", "input_usd_per_m": P}},
+                             "llm": {"route": "glm-flash@low"}},
+            "points.jsonl": [{"jev": {"p": 0.4, "cost_usd": C}, "llm": {"p": 0.6, "cost_usd": 0.000192},
+                              "think": {"model": "deepseek-v4-1-flash-1017", "cost_usd": 0.00189},
+                              "deliberation_cost_usd": 0.0031}],
+            "replay-jev.jsonl": [{"arm": "jev", "judged": {"p": 0.4, "cost_usd": C}}],
+            "replay-llm.jsonl": [{"arm": "llm", "judged": {"p": 0.6, "cost_usd": 0.000193}}],
+            "curve.json": {"gates": [{"gate": "off", "usd_per_trigger": 0.00197, "cost_vs_off": 1.0},
+                                     {"gate": "jev p>=0.3", "held": 0.27, "usd_per_trigger": 0.00151,
+                                      "cost_vs_off": 0.7612},
+                                     {"gate": "llm p>=0.7", "usd_per_trigger": 0.00139, "cost_vs_off": 0.7044}]},
+            "batch.json": {"spend_usd": {"jev": S, "glm_gate": 0.23, "re_asks": 0.455, "total": 0.7663}},
+            "summary.json": {"by_model": {"jev-1.14.0": {"calls": 3, "cost_usd": C},
+                                          "zai-glm-5-3-flash": {"calls": 2, "cost_usd": 0.0042}}},
+        }
+
+    def test_structured(self):
+        acc = store.Findings()
+        out = {k: store.jev_strip(v, acc) for k, v in self.records().items()}
+        text = json.dumps(out)
+        for v in (self.PRICE, self.CALL, self.SHARE, 0.00151, 0.7612):
+            self.assertNotIn(repr(v), text)
+        for kept in (0.000191, 0.000192, 0.000193, 0.00189, 0.0031, 0.00197, 0.00139, 0.7044, 0.0042, 0.23):
+            self.assertIn(repr(kept), text)
+        self.assertEqual(out["batch.json"]["spend_usd"], {"glm_gate": 0.23, "re_asks": 0.455, "total": 0.685})
+        self.assertEqual(out["rethink.json"]["jev"]["provider"]["model"], "jev-1.14.0")
+        self.assertEqual(out["curve.json"]["gates"][1], {"gate": "jev p>=0.3", "held": 0.27})
+        self.assertEqual(out["points.jsonl"][0]["jev"], {"p": 0.4})
+        self.assertEqual(out["journal/A.jsonl"][0]["tokens"], 9)
+        self.assertIn("jev-pricing", acc.counts)
+        # the report names what was removed, never the figure
+        shown = json.dumps(acc.as_dict())
+        for v in (self.PRICE, self.CALL, self.SHARE):
+            self.assertNotIn(repr(v), shown)
+
+    MD = "\n".join([
+        "**Spend: $0.88 of the $5 ceiling.**",
+        "",
+        "| Item | Cost |",
+        "|---|---:|",
+        "| Jev gate replay | $0.083 |",
+        "| GLM gate replay | $0.231 |",
+        "",
+        "| Gate | Held | Harm | Cost vs off |",
+        "|---|---:|---:|---:|",
+        "| Jev p ≥ 0.3 | 27% | 3.3% | 77% |",
+        "| GLM p ≥ 0.7 | 40% | 11.2% | 71% |",
+        "",
+        "- **Both gates.** Jev is cheaper ($0.00006 against $0.00019 a question) and faster.",
+        "  - Jev 0.3 with GLM is 9.2%, as with no gate, at 74% of the cost.",
+        "- **DeepSeek alone** lowers harm (4.2%) at 29% more cost.",
+        "  - Halving it holds 8% of the harmful, at a cost of 77% against 64%.",
+        "",
+        "**Jev at p ≥ 0.3, shipped:**",
+        "- about 24% fewer deliberation dollars, not 37–50%;",
+        "- 37% of the waste caught.",
+    ])
+
+    def test_text(self):
+        acc = store.Findings()
+        out = store.jev_text(self.MD, acc)
+        for gone in ("$0.88", "$0.083", "77%", "$0.00006", "74%", "24%", "37–50%"):
+            self.assertNotIn(gone, out)
+        for kept in ("$0.231", "71%", "11.2%", "27%", "3.3%", "is 9.2%", "8% of the harmful", "64%",
+                     "29% more cost", "4.2%", "37% of the waste"):
+            self.assertIn(kept, out)
+        # a text that never names Jev is untouched, dollars and all
+        plain = "Spend: $0.77.\n| Item | Cost |\n|---|---|\n| GLM | $0.2 |"
+        self.assertEqual(store.jev_text(plain, store.Findings()), plain)
+
+    def test_pack_and_decision(self):
+        with tempfile.TemporaryDirectory() as t:
+            src = os.path.join(t, "gq9")
+            for rel, v in self.records().items():
+                body = "\n".join(json.dumps(x) for x in v) + "\n" if rel.endswith(".jsonl") else json.dumps(v)
+                write(src, rel if rel == "batch.json" else "analysis/" + rel, body)
+            write(src, "analysis/GATE.md", self.MD)
+            with open(os.path.join(src, "batch.json"), encoding="utf-8") as f:
+                b = json.load(f)
+            b.update({"kind": "analysis", "models_in_outputs": {"jev-1.14.0": 1},
+                      "files": [{"path": "analysis/GATE.md"}]})
+            write(src, "batch.json", json.dumps(b))
+            for decision, present in (("exclude", False), ("include", True)):
+                out = os.path.join(t, "p-" + decision)
+                sc = scrubber({"jev_pricing": decision, "model_exchanges": "include"})
+                man = store.pack_batch(src, out, sc, name="gq9", machine="test")
+                self.assertEqual(man["held"], [])
+                blob = b""
+                with tarfile.open(os.path.join(out, "files.tar.gz")) as tf:
+                    for m in tf.getmembers():
+                        if m.isfile():
+                            blob += tf.extractfile(m).read()
+                for n in store.PACK_FILES[:-1]:
+                    if n.endswith(".jsonl.gz"):
+                        with gzip.open(os.path.join(out, n)) as f:
+                            blob += f.read()
+                with open(os.path.join(out, "MANIFEST.json"), "rb") as f:
+                    blob += f.read()
+                for v in (repr(self.PRICE), repr(self.CALL), repr(self.SHARE), "$0.083", "$0.00006"):
+                    self.assertEqual(v.encode() in blob, present, (decision, v))
+                self.assertIn(b"0.000191", blob)
+                self.assertIn(b"$0.231", blob)
+                self.assertEqual("jev-pricing" in man["redactions"], not present)
+
+    def test_shipped_decision(self):
+        cfg = store.load_config(local_config="/nonexistent/config.json")
+        self.assertEqual(cfg["decisions"]["jev_pricing"], "exclude")
+        # undecided scrubs too: only an explicit include keeps Jev's pricing
+        self.assertTrue(scrubber()._jev_on())
 
 
 class SessionAllowList(unittest.TestCase):

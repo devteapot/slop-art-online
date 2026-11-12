@@ -8,7 +8,7 @@ docs/FAST_LANE.md; `living/mind/src/mind/fast.rs` (serving an issued `fast_ask` 
 
 - `fast-lane`: the other strikes at the eye with a spear's heavy blow over and over.
   - (e) asleep: the eye sleeps; the other's one blow issues nothing.
-  - (a) a blow taken issues one fast request; its prompt holds why now (the eye's own line for the blow), what has just happened, the top level and the routines, and no count or "again"; the reply's `combat` branch is installed through `mind_patch` (source `fast`, a `fast` thought "… → combat branch rewritten").
+  - (a) a blow taken issues one fast request; its prompt holds, in this order, who you are, the top level, the routines, why now (the eye's own line for the blow) and what has just happened (stable parts first, for the providers' prefix caches), and no count or "again"; the reply's `combat` branch is installed through `mind_patch` (source `fast`, a `fast` thought "… → combat branch rewritten").
   - (b) blows inside the 6 s gap merge: one request in the first 5.5 s.
   - (g) the slow deliberation the same blow started (its compile held 5 s) installs after the patch and keeps the patched `combat` branch.
   - (c) the next reply is held 2.5 s while an admin `set_behavior` changes the plan: refused by the plan check ("refused: the plan changed since it was asked").
