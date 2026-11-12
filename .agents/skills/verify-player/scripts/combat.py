@@ -283,6 +283,26 @@ def scene_refusals(st):
     check(st, "a second fire bolt within the cooldown is refused", len(us) == 2 and us[0]["accepted_ms"] > 0 and us[1]["accepted_ms"] == 0 and ("not ready" in us[1]["outcome"] or "middle of" in us[1]["outcome"]), [u["outcome"] for u in us])
 
 
+def told(st, cid, skill, t0_ms, secs=4.0):
+    """How the player's own `skill` came out, as its character is told it (the `force_outcomes`
+    law, docs/COMBAT.md "The outcome of one's own blow or shot"): its `own` lines in
+    `my_experience` since `t0_ms`, each with its `my_act_outcomes` row, and, read as the admin,
+    every such line and row in the world (to show they reach the one who made the move only)."""
+    t = time.time() + secs
+    lines = []
+    while time.time() < t:
+        lines = [e for e in sql(st, "SELECT id, kind, text, at_ms FROM my_experience", "player")
+                 if e["kind"] == "own" and e["at_ms"] >= t0_ms and (e["text"].startswith(f"You finished: {skill}") or e["text"].startswith(f"You failed to {skill}"))]
+        if lines:
+            break
+        time.sleep(0.2)
+    rows = {o["id"]: o for o in sql(st, "SELECT * FROM my_act_outcomes", "player")}
+    everyone = [e for e in sql(st, f"SELECT id, observer, kind, text FROM experience WHERE at_ms >= {t0_ms}")
+                if e["kind"] == "own" and (e["text"].startswith(f"You finished: {skill}") or e["text"].startswith(f"You failed to {skill}"))]
+    outcomes = [o for o in sql(st, f"SELECT id, observer, skill FROM act_outcome WHERE at_ms >= {t0_ms}") if o["skill"] == skill]
+    return lines, [rows.get(l["id"]) for l in lines], everyone, outcomes
+
+
 def scene_strike(st):
     cid = me(st)
     p = body(st, cid)
@@ -304,6 +324,12 @@ def scene_strike(st):
     check(st, "the player perceives release and hit, with the amount", 1 in kinds and hits and hits[-1]["amount"] > 0, [(e["kind"], round(e["amount"], 1)) for e in ev[-4:]])
     fd = sql(st, f"SELECT band FROM fighter WHERE id = {d}")
     check(st, "the target's band is public, not its health", fd and 0 <= fd[0]["band"] <= 4, fd)
+    lines, rows, everyone, outcomes = told(st, cid, "strike", int(t0 * 1000))
+    check(st, "the player is told its strike's outcome as a mind is: 'You finished: strike → … hit for N', with its my_act_outcomes row",
+          lines and "hit for" in lines[-1]["text"] and rows[-1] and rows[-1]["kind"] == "own" and rows[-1]["ok"] and rows[-1]["skill"] == "strike" and rows[-1]["code"] == "done",
+          {"lines": [l["text"] for l in lines], "rows": rows})
+    check(st, "the strike's line and row reach the striker only", everyone and {e["observer"] for e in everyone} == {cid} and {o["observer"] for o in outcomes} <= {cid},
+          {"lines_to": sorted({e["observer"] for e in everyone}), "rows_to": sorted({o["observer"] for o in outcomes})})
     return d
 
 
@@ -374,6 +400,12 @@ def scene_bow(st):
     impact = [e for e in ev if e["kind"] == 11 and e["actor"] == cid]
     check(st, "an arrow flies (launch and impact perceived) and strikes the first body in its path", launch and impact and h0 is not None and h1 is not None and h1 < h0, f"{u and u['outcome']} (#{hit}{', the dummy' if hit == d else ', in the path'}) hp {h0}->{h1} launch speed {launch and launch[-1]['amount']}")
     check(st, "the arrow is spent", arrows1 == arrows0 - 1, f"{arrows0}->{arrows1}")
+    lines, rows, everyone, outcomes = told(st, cid, "bowshot", t0)
+    check(st, "the player is told where its arrow went as a mind is: 'You finished: bowshot → … struck …: hit for N', with its my_act_outcomes row",
+          lines and "struck" in lines[-1]["text"] and ("hit for" in lines[-1]["text"] or "got through" in lines[-1]["text"] or "killed" in lines[-1]["text"]) and rows[-1] and rows[-1]["kind"] == "own" and rows[-1]["skill"] == "bowshot",
+          {"lines": [l["text"] for l in lines], "rows": rows})
+    check(st, "the arrow's line and row reach the shooter only", everyone and {e["observer"] for e in everyone} == {cid} and {o["observer"] for o in outcomes} <= {cid},
+          {"lines_to": sorted({e["observer"] for e in everyone}), "rows_to": sorted({o["observer"] for o in outcomes})})
 
 
 def scene_bolt(st):

@@ -11,6 +11,10 @@ Branch `stamina-1` with look-2 merged; trial service `slop-trials-stdb`, scoped 
 The driver's `SCOPED` gained `audience`. That table came from main (exp-greet), and the inventory check had stopped on it (`client-st1b`).
 
 
+## 2026-11-11 the scoped inventory gains `audience` (mind-act-outcome-far, Spark)
+
+`drive.py`'s `SCOPED` lacked the `audience` table that exp-greet added under the `LIVING_PERCEPTION` switch, so `run.py` stopped at the inventory guard ("scoped table inventory changed") on origin/main `3216b06d` too (`client-far2-233156`, drive.log). With `audience` added: `client-far3-234118` on branch `mind-act-outcome-far` at 3328c7bb, every check passes (39), the reducer permission matrix 229 calls and 0 mismatches, 77 tables private in the scoped build; `my_act_outcomes` gives only the caller's character's rows.
+
 ## 2026-11-11 look-2 (dev-box)
 
 Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.

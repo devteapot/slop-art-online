@@ -368,7 +368,7 @@ def resolve(p):
         # Height changes the head's proportion and not only the scale (face_types.head_scale).
         body = face_types.load()["types"][p["type"]]["body"]
         recipe["proportions"]["head"] = round(recipe["proportions"].get("head", 1.0) * face_types.head_scale(body, b["height"]) / face_types.head_scale(body, child_height(age, male) if age < 18 else body["height_m"][1]), 3)
-    return dict(
+    spec = dict(
         type=p["type"] if typed else None, identity=dict(p.get("identity") or {}),
         seed=seed, masc=masc, child=child, elder=elder, face=face, look=look, style=drawn, head_scale=1.08 * (1 + STYLE["head"] * drawn), girth=girth, limb=limb, belly=belly, chest=chest, woman_torso=bool(not male and age >= 13),
         hair_style=hair_p["style"], hair_length=hair_p.get("length", 0.07), recede=0.024 * clip(hair_p.get("recede", 0.0), 0, 1),
@@ -380,6 +380,37 @@ def resolve(p):
         patches=(cloth(seed, "patch1", "canvas"), cloth(seed, "patch2", "olive"), cloth(seed, "patch3", "red")), apron=bool(outfit.get("apron", False)), hem=float(outfit.get("hem", 0.74)),
         recipe=recipe,
     )
+    if typed:
+        spec["person"] = person_line(spec, recipe, male)
+    return spec
+
+
+def hexed(c):
+    return "#" + "".join(f"{round(min(max(x, 0.0), 1.0) * 255):02x}" for x in c[:3])
+
+
+def person_line(spec, recipe, male):
+    """A person as the client composes one from shared files (docs/CHARACTERS.md, "The client
+    format"): a type, identity values, the style files worn, colours, and proportions. The
+    proportions differ from the per-person file's recipe in one number: `build` also carries the
+    girth the per-person file builds into its own meshes, because a shared piece is built at the
+    standard build and the bones give it this person's (the mean of the torso's and the limbs'
+    girth, each against the standard for the person's form)."""
+    hair, pieces, head = worn(spec)
+    g = ((spec["girth"] / 1.02) * (spec["limb"] / (1.0 if male else 0.86))) ** 0.5
+    props = dict(recipe["proportions"])
+    props["build"] = round(props.get("build", 1.0) * g, 3)
+    look = spec["look"]
+    colours = dict(skin=hexed(look["skin"]), hair=hexed(look["hair_natural"]))
+    cloth_ = {}
+    for name in pieces + head:
+        base = name[:-2] if name[-2:] in ("-m", "-f") else name
+        tone = spec["jersey"] if base.startswith("jersey") else (spec["headwear_colour"] if base in HEAD_PIECES else (spec["coat_colour"] if base.startswith(("coat", "smock")) else None))
+        if isinstance(tone, (tuple, list)) and len(tone) >= 3 and all(isinstance(x, (int, float)) for x in tone[:3]):
+            cloth_[name] = hexed(tone)
+    colours["outfit"] = cloth_
+    return dict(type=spec["type"], height=recipe["height"], proportions={k: v for k, v in props.items() if abs(v - 1) > 0.004}, identity={k: v for k, v in spec["identity"].items() if abs(v) > 1e-6}, colors=colours,
+                styles=dict(hair=hair, outfit=pieces + head, beard=spec["beard"]))
 
 
 def from_type(tid):
@@ -394,21 +425,67 @@ def from_type(tid):
     sex = t["sex"] if t["sex"] in ("male", "female") else ("male" if t["line"] == "b" else "female")
     body = t["body"]
     return dict(type=tid, identity=dict(), seed=1000 + sorted(types).index(tid), sex=sex, age=dict(child=8, youth=15, adult=32, elder=68)[t["band"]],
-                build=dict(height=body["height_m"][1], weight=body.get("weight", 0.0), muscle=body.get("muscle", 0.0)), skin=dict(tone=0.25, freckles=0.0, weathered=0.0), beard=dict(style="none", stubble=0.0))
+                build=dict(height=body["height_m"][1], weight=0.0, muscle=0.0), skin=dict(tone=0.25, freckles=0.0, weathered=0.0), beard=dict(style="none", stubble=0.0))
 
 
-STYLES = ("tousled", "short", "crop", "shag", "swept", "sides", "bob", "bob_parted", "braids", "tail", "long", "bun", "braid")
+STYLES = ("tousled", "short", "crop", "shag", "swept", "sides", "balding", "bob", "bob_parted", "braids", "tail", "long", "bun", "braid", "kerchief")
+CAPPED = ("tousled", "short", "crop", "shag", "swept", "sides", "balding")  # the styles also written as worn under a cap (`<style>.cap`)
 STYLE_HEAD = "adult-f-b"  # the head every shared hair style is built on; a type's file carries its fit onto that type (hair_fit.py)
 
 
 def from_style(style):
     """The figure a shared hair style's file is built on (`style:<name>`): the standard head with
     every identity value at 0, and the style at the lengths and parting its own seed draws."""
-    if style not in STYLES:
-        raise SystemExit(f"style {style!r}: not one of {STYLES}")
-    male = style in ("short", "crop", "swept", "sides", "shag", "tousled")
+    style, _, under = style.partition(".")
+    if style not in STYLES or under not in ("", "cap") or (under and style not in CAPPED):
+        raise SystemExit(f"style {style!r}: not one of {STYLES}, or `<style>.cap` for {CAPPED}")
+    male = style in ("short", "crop", "swept", "sides", "shag", "tousled", "balding")
     return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style), sex="male" if male else "female", age=30, hair=dict(style=style), beard=dict(style="none", stubble=0.0),
-                outfit=dict(headwear="none"))
+                build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none")))
+
+
+# Outfit pieces as shared style files (gen_styles.sh): the outfit that makes each, and the parts of
+# it the file keeps. A piece worn on the body comes in two forms, `-m` and `-f` (a woman's torso
+# and limbs are built differently); a piece worn on the head is fitted like hair.
+PIECES = dict(
+    jersey=(dict(coat="none"), ("Jersey",)), jersey_coat=(dict(coat="coat"), ("Jersey",)), jersey_smock=(dict(coat="smock", hem=0.58), ("Jersey",)),
+    coat=(dict(coat="coat"), ("Coat", "Buttons")), trousers=(dict(coat="none"), ("Trousers",)), boots=(dict(coat="none"), ("Boots",)),
+    **{f"smock_{round(h * 100)}{'_apron' if a else ''}": (dict(coat="smock", hem=h, apron=a), ("Smock",)) for h in (0.50, 0.58, 0.74) for a in (False, True)},
+)
+HEAD_PIECES = dict(cap=(dict(headwear="cap"), ("Cap", "CapPeak")), kerchief=(dict(headwear="kerchief"), ("Kerchief", "KerchiefKnot")))
+
+
+def piece_parts(name):
+    base = name[:-2] if name[-2:] in ("-m", "-f") else name
+    return (PIECES.get(base) or HEAD_PIECES[base])[1]
+
+
+def from_piece(name):
+    """The figure an outfit piece's file is built on (`piece:<name>`): the standard head and the
+    standard build (weight and muscle 0), a man's body for `-m` and a woman's for `-f`."""
+    base, form = (name[:-2], name[-1]) if name[-2:] in ("-m", "-f") else (name, "m")
+    if (base in PIECES) == (base in HEAD_PIECES) or (base in HEAD_PIECES and name != base):
+        raise SystemExit(f"piece {name!r}: not one of {sorted(PIECES)} with -m or -f, or {sorted(HEAD_PIECES)}")
+    outfit = dict(coat_colour="oilskin" if form == "m" else "blue", jersey_colour="cream", headwear="none", apron=False)
+    outfit.update((PIECES.get(base) or HEAD_PIECES[base])[0])
+    return dict(type=STYLE_HEAD, identity=dict(), seed=2500, sex="male" if form == "m" else "female", age=30, build=dict(weight=0.0, muscle=0.0), hair=dict(style="kerchief" if base == "kerchief" else "short"),
+                beard=dict(style="none", stubble=0.0), outfit=outfit)
+
+
+def worn(spec):
+    """The shared style files a resolved person wears: (hair style, outfit pieces, head pieces)."""
+    form = "f" if spec["woman_torso"] else "m"
+    coat, head = spec["coat"], spec["headwear"]
+    if coat == "coat":
+        top = [f"coat-{form}", f"jersey_coat-{form}"]
+    elif coat == "smock":
+        top = [f"smock_{int(round(max(spec['hem'], 0.50) * 100))}{'_apron' if spec['apron'] else ''}-{form}", f"jersey_smock-{form}"]
+    else:
+        top = [f"jersey-{form}"]
+    style = spec["hair"]["style"]
+    hair = "kerchief" if head == "kerchief" else (f"{style}.cap" if head == "cap" and style in CAPPED else style)
+    return hair, top + [f"trousers-{form}", f"boots-{form}"], [head] if head else []
+
 
 
 def from_variant(name):
@@ -417,6 +494,8 @@ def from_variant(name):
         return from_type(name[5:])
     if name.startswith("style:"):
         return from_style(name[6:])
+    if name.startswith("piece:"):
+        return from_piece(name[6:])
     if ":" in name:
         seed, kind = name.split(":")
         sex, lo, hi = KINDS[kind]
