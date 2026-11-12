@@ -127,7 +127,7 @@ def widths(j, binary):
     out = {}
     for m, p, n in prims:
         q = pos[id(p)]
-        if n.endswith("_EYE") or n.endswith("_FACE"):
+        if n.endswith("_EYE") or n.endswith("_FACE") or "Overlay" in n:
             w = np.full(len(q), W_NONE)
         elif n.endswith("Face_00_SKIN"):
             w = ease(0.003, 0.008, nearest(q, eyes)) * (1.0 + (W_JAW - 1.0) * (1 - ease(0.004, 0.014, nearest(q, jaw))))
