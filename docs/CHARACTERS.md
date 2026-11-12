@@ -1137,6 +1137,34 @@ Pass 3, after the hair's finish (2026-11-12). The reference draws hair as broad 
 
 **What the client needs:** nothing. A person's `styles.hair` names the same files, with the same meshes (`Hair`, `FarHair`, the tie in cloth), bones and attributes.
 
+### One shading mean a class
+
+Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed people (`compose-1`, Cullet's 64). Mesh data for people fell from 270 to 39 MiB and textures from 354 to 213 MiB, but materials on people rose from 20 to 96 at the play camera and the frame from 4.7 to 7.1 ms. With style materials shared in a test that got the colours wrong, composed people were about as fast as whole files. So the cost was materials: every hair cut, outfit piece, overlay and far beard was one of its own.
+
+**Why they could not be shared.** The client tints a person's pieces through each mesh's tag: a material holds the mean colour of what it draws, and the shader moves that mean to the person's colour. Every file's mean differed, so a material could be shared by the people wearing one file and no further.
+
+**What changed.** `living/tools/characters/shade_mean.py` gives each class one mean, and `gen_styles.sh` runs it on every file it writes. `shade_mean.py --check living/game/assets/lookdev/styles` reads every file back: 150 files, 228 meshes and pictures, none off its class's mean.
+
+| Class | Material | Picture | What is equal in every file | Tint |
+|---|---|---|---|---|
+| Outfit pieces (28 files) | `M00_001_01_Cloth_01_CLOTH` | none | Vertex colours are grey shading; the mesh's mean lightness, by area and in linear light, is 0.30, for `Cloth` and `FarCloth` | `colors.outfit[<piece>]`: every piece a person wears now has one |
+| Hair (50 files) | `M00_000_Hair_00_HAIR` | the one shared picture of strands | The mean vertex colour of a mesh's outer surfaces (its lighter half by area) is 0.78, for `Hair` and `FarHair` | `colors.hair` |
+| Far beards | `M00_000_00_FarOverlay_00_HAIR` | none | One grey, 0.71, as before | `colors.beard` |
+| Overlays (72 files) | per file | each its own | The picture's mean grey over what it covers is 0.50 | hair or skin, as before |
+
+**What the client may key on.** For outfit pieces, hair and far beards: the material's kind and content, which is the key of the laptop's shared-materials test (`sharestyles`). Every piece's `Cloth` material is now the same material, and so is every hair cut's. The mean a shared material holds is right whichever tagged mesh it is measured from.
+
+- **A hair style's tie** has the cloth's material and no tag, and keeps its own colour. It is never what the mean is measured from, since only tagged meshes are measured.
+- **Hair's mean** is its picture's, over the texels a mesh uses; the picture is one file, and meshes use it alike, so it differs between cuts only in the third decimal.
+- **Overlays stay a material a file.** Each has a picture of its own, and lines and freckles are lit with their type's shadow map. The 64 wear 28 of them. One material a class would need the pictures laid on shared pages, and lines and freckles drawn as lips and blush now are (a fixed colour with an alpha, no shadow map). That is not done here.
+
+**What a piece's colour is now.** A piece is grey, so its colour is only the person's. What was another hue inside a piece (a coat's patches, its lining, the hem's weathering) is a lighter or darker tone of the piece's colour, as the client's recolouring already made it.
+
+- **Every piece worn has a colour in the person's line.** The line named a colour for the jersey, the coat or smock and headwear. It now names one for the **apron** (`#b4b1a3`), the **trousers** (`#353840`) and the **boots** (`#332820`) too: the cloth every resident's were built in (`person_params.PIECE_COLOURS`).
+- **A smock's sleeve bands are a piece of their own,** `smock_bands-m` and `-f` (320 triangles, 0.04 MB), with their own colour in the line, as the apron is. The bands were faces of the smock in another cloth, and would have taken the smock's hue. A piece needs nothing new from the client; a second tag inside one file would have needed a second mesh and a new key. A person in a smock wears the bands, so wears one more piece.
+
+**Cullet's 64 after this:** 97 shared files worn (17 types, 30 hair, 22 outfit, 28 overlay). On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
+
 ### Type files
 
 `living/tools/blender/gen_types.sh` writes `lookdev/types/<type>.glb` for the 21 types, with `<type>.face.png` (the face's shadow map) and `<type>.params.json` beside each. A file holds:

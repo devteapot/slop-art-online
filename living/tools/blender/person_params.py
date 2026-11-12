@@ -416,7 +416,10 @@ def person_line(spec, recipe, male):
     cloth_ = {}
     for name in pieces + head:
         base = name[:-2] if name[-2:] in ("-m", "-f") else name
-        tone = spec["jersey"] if base.startswith("jersey") else (spec["headwear_colour"] if base in HEAD_PIECES else (spec["coat_colour"] if base.startswith(("coat", "smock")) else None))
+        if base.split("_")[0] in PIECE_COLOURS:
+            cloth_[name] = PIECE_COLOURS[base.split("_")[0]]
+            continue
+        tone = spec["patches"][0] if base == "smock_bands" else (spec["jersey"] if base.startswith("jersey") else (spec["headwear_colour"] if base in HEAD_PIECES else (spec["coat_colour"] if base.startswith(("coat", "smock")) else None)))
         if isinstance(tone, (tuple, list)) and len(tone) >= 3 and all(isinstance(x, (int, float)) for x in tone[:3]):
             cloth_[name] = hexed(tone)
     colours["outfit"] = cloth_
@@ -489,7 +492,12 @@ PIECES = dict(
     coat=(dict(coat="coat"), ("Coat", "Buttons")), trousers=(dict(coat="none"), ("Trousers",)), boots=(dict(coat="none"), ("Boots",)),
     **{f"smock_{round(h * 100)}": (dict(coat="smock", hem=h, apron=False), ("Smock",)) for h in (0.50, 0.58, 0.74)},
     **{f"apron_{round(h * 100)}": (dict(coat="smock", hem=h, apron=True), ("Apron",)) for h in (0.50, 0.58, 0.74)},
+    smock_bands=(dict(coat="smock", hem=0.58, apron=False), ("SmockBands",)),  # the bands round a smock's sleeves, the same on every length
 )
+# The colour of a piece that a person does not choose: every resident's trousers, boots and apron
+# are the same cloth. A shared piece is grey shading round one mean (shade_mean.py), so a person's
+# line names a colour for every piece worn; these are what the pieces were built in.
+PIECE_COLOURS = dict(trousers="#353840", boots="#332820", apron="#b4b1a3")
 # Details a person has and a type does not, as overlay styles (gen_styles.sh): each is built on a
 # type's own face, for the types that can wear it.
 BEARD_FORMS = ("moustache", "goatee", "chinstrap", "short", "full")
@@ -550,7 +558,7 @@ def worn(spec):
         top = [f"coat-{form}", f"jersey_coat-{form}"]
     elif coat == "smock":
         hem = int(round(max(spec["hem"], 0.50) * 100))
-        top = [f"smock_{hem}-{form}", f"jersey_smock-{form}"] + ([f"apron_{hem}-{form}"] if spec["apron"] else [])
+        top = [f"smock_{hem}-{form}", f"smock_bands-{form}", f"jersey_smock-{form}"] + ([f"apron_{hem}-{form}"] if spec["apron"] else [])
     else:
         top = [f"jersey-{form}"]
     style = spec["hair"]["style"]

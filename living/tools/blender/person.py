@@ -1838,10 +1838,10 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             band = zs.index(1.06)
             apron = spec["apron"]
 
-            def stag(kind, k, r):
+            def btag(kind, k, r):  # the sleeve bands alone: a part of their own, so they take a colour of their own
                 if kind == "sleeve" and r in (3, 4):
                     return 4
-                return 0
+                return Part.HIDE
 
             def atag(kind, k, r):  # the apron alone: a part of its own, so it takes a colour of its own
                 if kind == "torso" and r == band:
@@ -1852,8 +1852,12 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
 
             p = upper_garment(
                 Part("Smock"), 0.018, zs, hem=[(-0.004, -0.008)], cuff=(-0.655, [(-0.022, 0.004), (-0.024, -0.004)]),
-                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, tag_fn=stag,
+                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0,
             ).mirrored()
+            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
+            # The bands round the sleeves, in another cloth: over the smock's own sleeve, a hair's
+            # width out. Its own part, so a shared smock's bands are a piece with its own colour.
+            p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
             if apron:
                 p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag).mirrored()
