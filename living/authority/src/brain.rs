@@ -507,6 +507,29 @@ impl<'a> Ev<'a> {
                     self.status = format!("about to {}", graph::describe(n));
                     return St::Run;
                 }
+                // A queued line to someone is not said into the air (`speech_truth`): one the
+                // conversation has moved past is dropped, and one whose addressee is beyond what
+                // the way carries as it comes due is told to the speaker instead of said. (A way
+                // with a reach of its own, a whisper, refuses that in its check's words.)
+                if to != 0 && common::laws(self.ctx).speech_truth {
+                    if self.line_overtaken(id, to) {
+                        self.set_mark(id);
+                        self.status = format!("let go of {} (the talk moved on)", graph::describe(n));
+                        return St::Ok;
+                    }
+                    let sc = common::scripts(self.ctx);
+                    if let Some(w) = sc.way(way).filter(|w| w.reach <= 0.0) {
+                        if !crate::speech::within_reach(self.ctx, w, self.at, to, self.now) {
+                            return match crate::speech::unsaid(self.ctx, self.me.id, to, way, &s.text, self.now) {
+                                Ok(()) => {
+                                    self.set_mark(id);
+                                    St::Ok
+                                }
+                                Err(why) => self.say_failed(id, n, &why),
+                            };
+                        }
+                    }
+                }
                 match crate::speech::speak(self.ctx, self.me.id, &s.text, to, way, self.now) {
                     Ok(()) => {
                         self.set_mark(id);
@@ -526,6 +549,29 @@ impl<'a> Ev<'a> {
                 St::Ok
             }
         }
+    }
+
+    /// Whether a mind's plan's queued line to `to` (say node `id`) has been overtaken by the
+    /// conversation (`speech_truth`): since the plan was installed, or since this node last
+    /// spoke, `to` spoke to me (a line to me, or to no one in particular that the authority
+    /// marked as for me, salience 0.8 and above), or I spoke to them other than by this plan's
+    /// own say nodes (a conversation turn's reply). The plan's line was meant for a
+    /// conversation that has moved on; saying it now answers twice. Lines said in the plan's
+    /// own install (its deliberation's `say`) are not after it. Only a mind's plan: a routine's
+    /// or an instinct's say is the body's habit, not a line queued for one conversation.
+    fn line_overtaken(&self, id: u16, to: u32) -> bool {
+        let Some(brain) = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind") else { return false };
+        let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
+        let since = brain.installed_ms.max(own_mark);
+        // The times this plan's own say nodes spoke (their marks; a line is written at the
+        // moment its node is marked).
+        let own: Vec<u64> = self.st.marks.iter().filter(|m| m.node < DESIRE_MARK).map(|m| m.at_ms).collect();
+        let sc = common::scripts(self.ctx);
+        let words: Vec<&str> = sc.ways().iter().map(|w| w.kind.as_str()).collect();
+        self.ctx.db.experience().observer().filter(self.me.id).filter(|e| e.at_ms > since).any(|e| {
+            (e.kind == "said" && e.object == to && !own.contains(&e.at_ms))
+                || (e.subject == to && words.contains(&e.kind.as_str()) && (e.object == self.me.id || e.object == 0 && e.salience >= 0.8))
+        })
     }
 
     /// A say that cannot be spoken is a failure the body is told about, like a refused leaf

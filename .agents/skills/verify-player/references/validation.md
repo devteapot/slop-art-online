@@ -1,5 +1,13 @@
 # Validation record (player)
 
+## 2026-11-12 speech-truth (Spark)
+
+`speak.py` (`player-struth-speak`, trial service): 16 of 16. New: a `human_say` to the resident 30 m away is said. The player's `my_experience` then holds one `silence` row ending "they could not have heard you." (not "No answer"), and `my_act_outcomes` holds its row: kind `act`, code `reach`, not ok, `why` the same words, `other` the resident.
+
+- Rerun after the coordinator's changes, `player-struth2-speak`: 18 of 18. The addressed line out of earshot reads the fact alone. New:
+  - a room line from a spot with no one within the 9 m voice gives one `silence` row (subject 0) "Nobody was near enough to hear you." and its `my_act_outcomes` row (act, reach, not ok, other 0);
+  - with the resident placed beside the player, a room line gives no row, and `my_heard` lists the resident.
+
 ## 2026-11-12 stamina-1: breath through the player's reducers (Spark)
 
 Branch `stamina-1` with look-2 merged, trial service `slop-trials-stdb`. `player-st1b` (island):
@@ -14,6 +22,10 @@ Branch `stamina-1` with look-2 merged, trial service `slop-trials-stdb`. `player
   The kill scene failed: at the new blows (5) a kill takes about 20 strikes, paused by breath. It counted the pauses as misses and stopped at 45 s. With the fix (pauses waited out, 120 s), `--scene kill` passed 2 of 2.
 - **`player-st1a` (before the fixes): 24 of 35.** The strike scenes were refused "out of reach" (main's `fix-place-free` placement), and the breath scene dodged where there was no room. Both were fixed or noted.
 
+
+## 2026-11-11 force_outcomes: a player is told its own strike and shot as a mind is (mind-act-outcome-far, Spark)
+
+Branch `mind-act-outcome-far` at 3328c7bb, the trial service (port 3320), island seed. `player-far2-233156`: `combat.py --fresh`, 31 of 31, with the new checks: the strike's line "You finished: strike → person. hit for 9" and its `my_act_outcomes` row (`own`, `strike`, ok, `done`), the arrow's "You finished: bowshot → a stranger. struck a stranger: hit for 12" and its row (`own`, `bowshot`, `done`, `other` the one struck); every such line in `experience` and row in `act_outcome` the player's character's only. `player-far2-233156-outcomes`: `outcomes.py` 14 of 14 (the 64-row bound, scoping), `told.py` 12 of 12.
 
 ## 2026-11-11 speech with the `speech_audience` law off (exp-greet, Spark)
 

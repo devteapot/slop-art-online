@@ -10,6 +10,11 @@ fn laws() {
         gestation_days: 1.0, bond_window_s: 120.0,
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
         repeat_failure_s: 120.0,
+        // Whoever strikes, shoots or casts is told how it came out (an `own` experience): a blow's
+        // hit, guard or kill when it lands, a missile's when it strikes, is dodged, hits a wall or
+        // nothing, or flies out of the shooter's sight (docs/COMBAT_MIND.md §3.1). Off: only
+        // notable skills (attack) and failures are told, as before 2026-11-11.
+        force_outcomes: true,
         road_speed: 1.4,
         // Steering: where bodies slow down and cut corners, and how often they look again
         // (how each creature turns and keeps apart is its `motion` law).
@@ -55,6 +60,13 @@ fn laws() {
         // (the private `audience` table, kept a minute), for the minds' conversation rules
         // (LIVING_GREET, `nearest` by default). Off: nothing is written.
         speech_audience: true,
+        // A line to someone who could not have heard it tells the speaker so ("Bram is too far
+        // away: they could not have heard you."), never a "No answer" that reads as a refusal.
+        // A plan's queued line to someone is not said into the air: dropped when the
+        // conversation has moved past it (they spoke to the speaker, or the speaker answered
+        // them, since the plan), and told to the speaker instead of said when they are beyond
+        // the way's reach as it comes due. Off: the old words, and queued lines said when due.
+        speech_truth: true,
         // A grown person longs for a child this many real minutes after its own birth or its
         // youngest child's (the most nurturing sooner, down to a sixth of it), and only while
         // carrying at least `longing_food` food (0: whatever it carries).
@@ -2774,7 +2786,7 @@ fn remains_law() {
 
 fn combat_law() {
     #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "combat_pool", "lunge", "max_hp", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
-       about: `fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). Every move takes stamina (fire and healing hands take mana instead), so a fight is paced by breath: about ten blows or five dodges from fresh, then a few seconds to get it back. While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
+       about: `fights are fast. A person's attack winds up for {windup:attack} before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). Every move takes stamina (fire and healing hands take mana instead), so a fight is paced by breath: about ten blows or five dodges from fresh, then a few seconds to get it back. While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
 }
 
 fn force_law() {
@@ -2841,8 +2853,10 @@ fn laws_about(l) {
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
         speech_audience: if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
+        speech_truth: if l.speech_truth { "a speaker learns when the one they spoke to could not have heard them, and a planned line is not said to someone out of earshot or after the talk has moved on" } else { "a speaker whose words did not reach the one they spoke to, unseen, gets no answer, and a planned line is said when it comes due" },
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
+        force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,

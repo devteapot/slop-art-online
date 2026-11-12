@@ -11,7 +11,7 @@ $V launch --run $R && $V doctor --run $R
 $V cleanup --run $R
 ```
 
-The default seed. Admin calls set the scene only: `grant_items`, `kill`. About 40 s. Writes `RUN/outcomes.json`. A death by killing (code `killed`, the killer in `other`, the line "You were killed by …" with the killer as the dead knew them) is checked by `combat.py --scene death` on an island run ([combat.md](combat.md)).
+The default seed. Admin calls set the scene only: `grant_items`, `kill`. About 40 s. Writes `RUN/outcomes.json`. A death by killing (code `killed`, the killer in `other`, the line "You were killed by …" with the killer as the dead knew them) is checked by `combat.py --scene death` on an island run ([combat.md](combat.md)). So are the `own` rows of the player's strikes and shots (the `force_outcomes` law: `combat.py --scene strike,bow`), which go with their lines under the same 64-line bound.
 
 ## What it checks
 

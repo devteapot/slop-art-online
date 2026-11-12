@@ -560,8 +560,11 @@ pub fn input(
     if !input.demo && !typing {
         // Held keys show their skill's indicator.
         c.aiming = [Act::Secondary, Act::Skill1, Act::Primary, Act::Skill3, Act::Skill2].into_iter().chain((0..crate::keys::EXTRA).map(Act::Extra)).find(|a| ok(*a) && binds.down(*a, &keys, &mouse)).and_then(|a| roles.skill(a)).map(String::from);
+        // Digits belong to an open list, wheel or grid (1–3 are also the skill keys' twins).
+        let digits = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9];
+        let numbered = ui.menu && digits.iter().any(|k| keys.just_pressed(*k));
         for a in BAR_ACTS {
-            let down = binds.went_down(a, &keys, &mouse) && ok(a) && !(a == Act::Primary && tapped_talk);
+            let down = binds.went_down(a, &keys, &mouse) && ok(a) && !(a == Act::Primary && tapped_talk) && !numbered;
             if let Some(s) = roles.skill(a).filter(|_| down) {
                 presses.push((s.to_string(), None, None));
             }

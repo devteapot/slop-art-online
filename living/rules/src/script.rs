@@ -386,6 +386,9 @@ pub struct Laws {
     pub danger_near: f32,
     pub danger_far: f32,
     pub repeat_failure_s: f32,
+    /// Every blow, shot or bolt a character makes is told to it with how it came out, as far as
+    /// it sees (docs/COMBAT_MIND.md §3.1). Off: only notable skills and failures, as before.
+    pub force_outcomes: bool,
     /// Walking speed multiplier on road tiles.
     pub road_speed: f32,
     // ---- steering (see `steer.rs`; how each creature turns and keeps apart is its `motion`) ----
@@ -446,6 +449,13 @@ pub struct Laws {
     /// `audience` table), for the mind service's conversation rules (on since 2026-11-11, when
     /// `LIVING_GREET=nearest` became the minds' default).
     pub speech_audience: bool,
+    /// A line to someone tells the speaker the truth when they could not have heard it ("Bram
+    /// is too far away: they could not have heard you."), and a plan's queued line is not said
+    /// into the air: dropped once the conversation has moved past it, and when its addressee is
+    /// beyond the way's reach as it comes due, told to the speaker instead (docs/COMMUNICATION.md
+    /// §15). Off: `speech-2`'s words ("No answer from …" when the addressee is not seen), and a
+    /// queued line is said whenever it comes due.
+    pub speech_truth: bool,
     /// Real minutes after one's own birth, or one's youngest child's, before a grown person
     /// feels the longing for a child; the most nurturing feel it sooner ([`longing_wait_ms`]).
     pub longing_after_min: f32,
@@ -485,6 +495,7 @@ impl Default for Laws {
             danger_near: 8.0,
             danger_far: 12.0,
             repeat_failure_s: 120.0,
+            force_outcomes: true,
             road_speed: 1.4,
             slow_radius: 1.2,
             corner_radius: 0.9,
@@ -513,6 +524,7 @@ impl Default for Laws {
             pasture_per_tile: 0.02,
             cry_prompts_carers: true,
             speech_audience: true,
+            speech_truth: true,
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
@@ -1773,7 +1785,7 @@ impl Scripts {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", LAW_TRAITS.join(", ")));
             }
             let text = |k: &str| m.get(k).map_or(Ok(String::new()), |v| v.clone().into_string().map_err(|_| format!("{f}: `{k}` must be a string")));
-            let about = text("about")?;
+            let about = self.timed_words(f, &text("about")?)?;
             if about.trim().is_empty() {
                 return Err(format!("{f}: `about` says what the law is, for a mind (in the world's units: one tile is one metre)"));
             }
@@ -1784,6 +1796,26 @@ impl Scripts {
             };
             out.insert(law.to_string(), LawSpec { name: law.to_string(), about, cadence, topic: text("topic")?, covers });
         }
+        Ok(out)
+    }
+
+    /// A law's words with each `{windup:<skill>}` replaced by that combat skill's windup as the
+    /// skill cards show it (`timing`, a person's), so a description follows the laws in force
+    /// (a law changed on a running world installs the script again). A token naming no timed
+    /// skill is refused at install.
+    fn timed_words(&self, f: &str, about: &str) -> Result<String, String> {
+        let mut out = String::new();
+        let mut rest = about;
+        while let Some(i) = rest.find("{windup:") {
+            out.push_str(&rest[..i]);
+            let tail = &rest[i + "{windup:".len()..];
+            let end = tail.find('}').ok_or_else(|| format!("{f}: an unclosed `{{windup:` in `about`"))?;
+            let skill = &tail[..end];
+            let t = self.timing(skill).filter(|t| t.windup_ms > 0).ok_or_else(|| format!("{f}: `{{windup:{skill}}}` names no combat skill with a windup"))?;
+            out.push_str(&seconds(t.windup_ms));
+            rest = &tail[end + 1..];
+        }
+        out.push_str(rest);
         Ok(out)
     }
 
@@ -1841,9 +1873,10 @@ impl Scripts {
             if let Some((_, t)) = world.iter().find(|(k, _)| k == topic) {
                 parts.push(t.trim().to_string());
             }
-            // The ways of speaking, each in its own words, in their order.
+            // The ways of speaking, each in its own words and with its reach in metres (from its
+            // spec and the world's hearing, as `speech_card` gives them), in their order.
             if topic == "speech" {
-                parts.extend(self.ways.iter().map(|w| format!("{} = {}", w.name, w.about.trim())));
+                parts.extend(self.ways.iter().map(|w| format!("{} ({}) = {}", w.name, w.reach_words(self.reach.hearing), w.about.trim())));
             }
             if parts.is_empty() {
                 continue;
@@ -2379,6 +2412,7 @@ impl Scripts {
             danger_near: g("danger_near", l.danger_near),
             danger_far: g("danger_far", l.danger_far),
             repeat_failure_s: g("repeat_failure_s", l.repeat_failure_s),
+            force_outcomes: flag("force_outcomes", l.force_outcomes),
             road_speed: g("road_speed", l.road_speed),
             slow_radius: g("slow_radius", l.slow_radius).clamp(0.0, 8.0),
             corner_radius: g("corner_radius", l.corner_radius).clamp(0.0, 4.0),
@@ -2409,6 +2443,7 @@ impl Scripts {
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
             cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
             speech_audience: flag("speech_audience", l.speech_audience),
+            speech_truth: flag("speech_truth", l.speech_truth),
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
@@ -2747,6 +2782,12 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
     })
 }
 
+/// Milliseconds as a mind reads them: "0.65 s", "1 s", "1.5 s".
+fn seconds(ms: u32) -> String {
+    let s = format!("{:.2}", ms as f64 / 1000.0);
+    format!("{} s", s.trim_end_matches('0').trim_end_matches('.'))
+}
+
 fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
     let m = d.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
@@ -2973,6 +3014,25 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_combat_law_tells_the_attack_windup_the_cards_show() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let s = Scripts::new(src).unwrap();
+        let about = &s.law_specs()["combat"].about;
+        assert_eq!(s.timing("attack").unwrap().windup_ms, 650);
+        assert!(about.contains("A person's attack winds up for 0.65 s before it lands") && !about.contains("{windup"), "{about}");
+        // A world whose attack winds up longer is told so: the words follow the laws.
+        let slow = src.replace("if inv(a, \"spear\") > 0 { 750 } else { 650 }", "if inv(a, \"spear\") > 0 { 750 } else { 900 }");
+        assert_ne!(slow, src, "attack_duration's shape changed: update this test");
+        let about = Scripts::new(&slow).unwrap().law_specs()["combat"].about.clone();
+        assert!(about.contains("winds up for 0.9 s before it lands"), "{about}");
+        // A token that names no combat skill with a windup is refused at install.
+        let odd = src.replace("{windup:attack}", "{windup:gather}");
+        assert!(Scripts::new(&odd).err().unwrap_or_default().contains("{windup:gather}"));
+        assert_eq!(seconds(1000), "1 s");
+        assert_eq!(seconds(1500), "1.5 s");
+    }
+
     fn scripts() -> Scripts {
         Scripts::new(include_str!("../../scripts/skills.rhai")).expect("skills compile")
     }
@@ -3002,7 +3062,11 @@ mod tests {
         assert_eq!(say.about, speech::WaySpec::say().about);
         say.about = speech::WaySpec::say().about;
         assert_eq!(say, speech::WaySpec::say());
-        assert!(s.world_text(&[]).contains("SPEAKING: say = Speak aloud."));
+        // Each way with its reach in metres, from its spec and the world's hearing (9 m here).
+        let t = s.world_text(&[]);
+        assert!(t.contains("SPEAKING: say (carries 9 m) = Speak aloud."), "{t}");
+        assert!(t.contains(" whisper (to someone within 1.5 m) = Whisper") && t.contains(" call (carries 22.5 m) = Call out"), "{t}");
+        assert_eq!((say.reach_words(12.0), whisper.reach_words(12.0), call.reach_words(12.0)), ("carries 12 m".into(), "to someone within 1.5 m".into(), "carries 30 m".into()));
         let src = include_str!("../../scripts/skills.rhai");
         let with = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap());
         // A way the engine cannot keep is refused, naming the key.
@@ -3020,7 +3084,7 @@ mod tests {
         assert_eq!(two.ways().iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["say", "whisper", "hush", "call"]);
         assert_eq!((w.carry, w.only_to, w.animals.as_str(), w.label.as_str()), (speech::Carry::Within(1.5), true, "", "Hush"));
         assert_eq!((w.carry_for(9.0), w.widest(9.0)), (1.5, 1.5));
-        assert!(two.world_text(&[]).contains("say = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper = Whisper to someone beside you (within 1.5 m)."));
+        assert!(two.world_text(&[]).contains("say (carries 9 m) = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper (to someone within 1.5 m) = Whisper to someone beside you (within 1.5 m)."));
         // A script with no ways at all speaks by today's `say`.
         let none = Scripts::new(&src.replace("_speech()", "_speech_old()")).unwrap();
         assert_eq!(none.way("say"), Some(&speech::WaySpec::say()));
@@ -3349,6 +3413,8 @@ mod tests {
         assert!(over("cry_prompts_carers", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
         // Who heard a line is kept by default (the minds' `LIVING_GREET=nearest` reads it); a world may turn it off.
         assert!(sc.laws().speech_audience && !over("speech_audience", serde_json::json!(false)).unwrap().speech_audience);
+        // A speaker is told the truth about a line no one addressed could hear (on by default); a world may turn it off.
+        assert!(sc.laws().speech_truth && !over("speech_truth", serde_json::json!(false)).unwrap().speech_truth);
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));

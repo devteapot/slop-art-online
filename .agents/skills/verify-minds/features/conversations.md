@@ -34,6 +34,14 @@ The `alongside` case runs the service with `LIVING_PARK=concurrent` and first as
 
 The `greet` case relies on the shipped rules keeping who heard each line (`speech_audience`, on by default; it checks the skills file says so). It places a resident 1 m west of a joined player and another 3 m east, and runs the service three times, with `LIVING_GREET` set explicitly to off, nearest and facing. Each time it waits for both residents' deliberations, then says one line to no one. Before the facing line it re-places everyone and the player turns to the farther resident with the `face` gesture. Expected answers (`greet.json`): none, the nearer resident, the farther resident, checked against the rule's own reading of each line's `audience` row.
 
+- `speech_truth` (a law, on by default; docs/COMMUNICATION.md §15; authority `brain.rs` `line_overtaken`): a mind plan's queued `say` to someone is dropped when it comes due if, since the plan was installed, that person spoke to the speaker or the speaker answered them by a line not this plan's (a talk turn's reply). Case `queued`.
+
+The `queued` case installs a plan through the fake: `first`, if the newcomer is within 2 m say "verify minds queued line" to them, else wait. The newcomer waits 4 m off. One second after the install (`brain.installed_ms`), it asks the resident a question over HTTP. As soon as the fake's talk reply ("verify minds talk reply") is in the resident's `said` rows, the driver moves the newcomer beside it, which releases the queued line. Times come from the speaker's own `said` rows, because the chronicle merges a repeated line. With `set_world_law speech_truth false`, both answers reach the newcomer, 0–3 s apart (`gap_s` in `result.json`): the double answer of ar2's `arrive-answer` `all` r3. With it `true`, only the reply does, and the speaker gets no `silence` row for the dropped line. The authority's 2 s speaking limit sets the floor. Two lines of one speaker are never under 2 s apart, so the reproduction cannot show the inspector's 1.5 s, which is not the authority's own line times. A fixed wait could not place the lines either: the talk turn took 5.7 s and then 2.9 s. A nod never set `hailed_ms`. Waking the graph with a second resident's line drew a reply that reset the limit.
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case queued
+```
+
 The `parked` case selects `LIVING_PARK=wait` (the old rule); every other case runs on the defaults, `nearest` and `concurrent`.
 
 ```bash

@@ -501,6 +501,11 @@ pub fn esc(mut keys: ResMut<ButtonInput<KeyCode>>, mut ws: ResMut<Windows>, mut 
         return;
     }
     keys.clear_just_pressed(KeyCode::Escape);
+    // A recipe grid closes without choosing.
+    if verbs.grid.take().is_some() {
+        info!("ui: grid closed (Esc): nothing sent");
+        return;
+    }
     // The wheel first: it closes without choosing (nothing is sent).
     if verbs.wheel.take().is_some() {
         info!("ui: wheel closed (Esc): nothing sent");

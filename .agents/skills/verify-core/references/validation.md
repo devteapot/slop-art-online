@@ -1,5 +1,25 @@
 # Core validation record
 
+## 2026-11-12 speech-truth (Spark)
+
+Branch `speech-truth` (origin/main `a221a78e` merged). Trial service `slop-trials-stdb` (2.14.1). docs/COMMUNICATION.md §15.
+
+- `just living-check` passes (rules 249 lib tests among them, with `ways_of_speaking_are_read_from_the_script` updated for the reach in metres, and the `speech_truth` law test).
+- **Regression:** `speech.py regress` (`core-struth-regress`) against the base module (`core-struth-base`, a worktree at `a221a78e`, its own target dir). The diff (`speech-diff.json`) is identical over 75 rows except one, the intended outcome text. a's line to d (out of earshot, unseen) reads "A stranger is out of earshot: they could not have heard you." where the base read "No answer from a stranger; they don't seem to be within earshot." The `introduced` rows are as before.
+- **`speech.py channels`** (`core-struth-channels`): every check passes, the new ones among them:
+  - truthful silence to e (seen) and d (unseen);
+  - the player's line to d out of earshot: its row, and an `act_outcome` (act, reach);
+  - a graph's say to e out of earshot as it comes due: not said, and the speaker told "… You did not say your planned line: “Queued words for e.”.";
+  - `set_world_law speech_truth false`: speech-2's "No answer" and the queued line said into the air.
+- **`speech.py ways`** (`core-struth-ways`): passes.
+
+- **Coordinator's changes** (same branch, origin/main merged):
+  - the outcome states only the fact ("A stranger is too far away: they could not have heard you.", no "Call out or go closer.");
+  - a room line no one receives gives "Nobody was near enough to hear you." (subject 0).
+- Results:
+  - `regress` (`core-struth2-regress`) against `core-struth-base`: the same single intended difference over 75 rows;
+  - `channels` (`core-struth2-channels`) and `ways` (`core-struth2-ways`): every check passes. New: the room line from d with no person within 9 m gives the row; a's room line, heard by b, gives none; with the law off, d's room line gives no row.
+
 ## 2026-11-12 goods-3: building as recipes, tools on recipes, the carry count, the goods audit (laptop host)
 
 Branch `goods-3`, own container `goods3-stdb` (2.14.1, port 3333), `scoped`, no minds, private `CARGO_TARGET_DIR` under `.local/goods3/`.
@@ -9,6 +29,11 @@ Branch `goods-3`, own container `goods3-stdb` (2.14.1, port 3333), `scoped`, no 
 - `core-g3-base` (default seed): `food` 4 of 4, `refusal` 4 of 4, `teach` 6 of 6.
 - `maintain-verification-skill`, scoped to `features/goods.md`: the source reader found no wrong refusal string or scene order. It found three overstatements, now corrected: the rules test checks products and does not make them; no test builds Cullet's other kinds; `making` depends on the seeded hearth's first 12 minutes, not on `goods`. The run block's time was corrected to 11 minutes. Both harness fixes were re-driven live (`core-g3-goods2`).
 - Not run: the rest of the baseline, `laws`, `decay`, `winter`, `rhythm`, `mechanics` and steering. The carry count has no scene; the rules' comparison `goods_check` covers it.
+
+
+## 2026-11-11 force_outcomes: a move's outcome told to its maker (mind-act-outcome-far, Spark)
+
+Branch `mind-act-outcome-far` at 3328c7bb (origin/main `3216b06d` merged), the trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`. Scoped maintain-verification-skill pass on `features/combat.md`: its file:line citations were brought to the current source (`skills.rhai:1001,1025,1038` and `:1342-1358`, `act.rs:366-369`, `:579`, `:2126`; the new rule at `act.rs:991,1034,1069`, `combat.rs:479-543`). Live: `core-far2-233156-skirmish`: `outcomes` 7 of 7 (an archer told "You finished: bowshot → a stranger. struck a stranger: hit for 15", a striker "… hit for 9", an arrow to an empty point told as coming to nothing, every outcome line the maker's own, none with the law off), `skirmish` 8 of 8, `health_seen` 9 pass and its documented XFAIL; `core-far2-233156`: `seize` 6 of 6, `refusal` 4 of 4, `codes.py` 14 of 14; `core-far4-234837-mechanics` passes (`verify_mechanics.py --wasm <the launched run's module>`: on a trial service the module is served under the run's name, not `living_authority.wasm`, and the recorder accepts only its own run's database, so the drive needs a run of its own beside the launched one).
 
 ## 2026-11-12 fix-dealings: sight through one wall's corner is the same both ways (dev-box)
 

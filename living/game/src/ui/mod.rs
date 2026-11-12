@@ -19,7 +19,7 @@ mod death;
 mod facing;
 mod frame;
 pub mod hit;
-mod icons;
+pub mod icons;
 pub mod kit;
 mod link;
 mod live;
@@ -36,6 +36,7 @@ pub mod settings;
 mod theme;
 pub mod tips;
 pub mod wheel;
+pub mod grid;
 mod top;
 mod verbs;
 pub mod win;
@@ -88,17 +89,17 @@ impl Plugin for UiPlugin {
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
             .init_resource::<ThemeState>()
             // The UI's trees are spawned once the theme is known, and again on each new theme.
-            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, wheel::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
+            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, wheel::spawn, grid::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
         let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
-        let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update, wheel::update);
+        let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update, wheel::update, grid::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(sample::fill).before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
-            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
+            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, grid::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
                 .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
@@ -338,6 +339,10 @@ fn dump(
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone())})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+        // The pack's load and limit as its header shows them (while the pack is open).
+        "pack": model.verbs.inventory.as_ref().map(|i| serde_json::json!({"carried": i.carried, "limit": i.limit, "items": i.rows.iter().map(|r| (r.0.clone(), r.1)).collect::<Vec<_>>()})),
+        // My bars (`meters()`) and pills (`status_of`) as drawn.
+        "me": model.me.as_ref().map(|m| serde_json::json!({"meters": m.meters.iter().map(|x| serde_json::json!({"name": x.name, "label": x.label, "value": x.value, "max": x.max})).collect::<Vec<_>>(), "statuses": m.statuses.iter().map(|x| serde_json::json!({"name": x.name, "tone": format!("{:?}", x.tone), "text": x.text})).collect::<Vec<_>>()})),
         // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.
         "under": pick.as_ref().and_then(|p| p.under),
         // `holds`: the cursor is inside its outline as `pick.rs` draws it (its own test).
@@ -351,6 +356,9 @@ fn dump(
         "wheel": verbs.wheel.as_ref().map(|w| serde_json::json!({"title": w.title, "held": w.held, "sel": w.sel.map(|d| d.as_str()), "vec": [w.vec.x, w.vec.y], "at": [w.at.x, w.at.y],
             "sections": w.layout.sections.iter().map(|s| serde_json::json!({"dir": s.dir.as_str(), "what": s.what.name(), "label": w.labels.get(&s.what), "allowed": s.allowed, "pinned": s.pinned, "sub": s.sub, "reason": w.reasons.get(&s.what)})).collect::<Vec<_>>(),
             "more": w.layout.more.iter().map(|p| p.name()).collect::<Vec<_>>()})),
+        // The open recipe grid: its way, its cells (live or greyed, with the rules' reason) and rows.
+        "grid": verbs.grid.as_ref().map(|g| serde_json::json!({"skill": g.skill, "title": g.title, "sel": g.sel,
+            "cells": g.cells.iter().map(|c| serde_json::json!({"product": c.product, "item": c.item, "label": c.label, "allowed": c.allowed, "reason": c.reason, "detail": c.detail, "rows": c.rows})).collect::<Vec<_>>()})),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
     });
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
@@ -393,12 +401,13 @@ impl DumpExtra<'_, '_> {
         // Facing sight: whether it is on, the field's five values, whether this client can switch
         // it, and the heard marks (`facing.rs`, `heardmark.rs`).
         let fov = self.fov.as_ref().map(|f| {
-            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last,
+            serde_json::json!({"known": f.known, "on": f.on(), "changes": f.changes, "can_switch": f.can_switch, "last": f.last, "walk": f.walk,
                 "sight": self.edge.as_ref().and_then(|e| e.senses.map(|s| s.sight)), "source": self.edge.as_ref().and_then(|e| e.source.map(|s| format!("{s:?}"))),
                 "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
         });
         serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
+            "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
             "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()),

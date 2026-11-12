@@ -72,7 +72,7 @@ pub struct Rules {
     pub skills: Vec<Skill>,
     /// How items look by the rules' `item_look` (icon id, label), kept for the revision they were
     /// read under (a Rhai call each, so never per frame).
-    looks: std::cell::RefCell<(u32, HashMap<String, (String, String)>)>,
+    looks: std::cell::RefCell<(u32, HashMap<String, (String, String, String)>)>,
 }
 
 /// A skill as the world's script declares it (`<skill>_spec()`): whether it takes a target or an
@@ -96,16 +96,29 @@ impl Rules {
     /// How an item looks: its icon id and its label, from the world's `item_look` (goods-2: an
     /// item's `icon`, `label` traits), else its name and the name with spaces.
     pub fn item_look(&self, item: &str) -> (String, String) {
+        let (icon, label, _) = self.item_look_full(item);
+        (icon, label)
+    }
+
+    /// The same with the item's `group` (food, tool, glass…; empty: none).
+    pub fn item_look_full(&self, item: &str) -> (String, String, String) {
         let mut c = self.looks.borrow_mut();
         if c.0 != self.revision {
             *c = (self.revision, HashMap::new());
         }
         c.1.entry(item.to_string())
             .or_insert_with(|| match self.scripts.as_ref().and_then(|sc| sc.item_look_of("item_look", item)) {
-                Some(l) if !l.icon.is_empty() => (l.icon, if l.label.is_empty() { item.replace('_', " ") } else { l.label }),
-                _ => (item.to_string(), item.replace('_', " ")),
+                Some(l) if !l.icon.is_empty() => (l.icon, if l.label.is_empty() { item.replace('_', " ") } else { l.label }, l.group),
+                _ => (item.to_string(), item.replace('_', " "), String::new()),
             })
             .clone()
+    }
+
+    /// The pack's drawing for an item: its icon id's, else its group's (an item a world adds
+    /// draws as its kind of thing until it has its own).
+    pub fn item_glyph(&self, item: &str) -> crate::ui::icons::ItemMark {
+        let (icon, _, group) = self.item_look_full(item);
+        crate::ui::icons::item_or_group(&icon, &group)
     }
 
     /// Recompile when the `script` row changes (an install).
@@ -311,6 +324,13 @@ fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &S
     let wants_target = *aim != Aim::Me;
     if spec.target != wants_target {
         return None;
+    }
+    // Only toward a target of a class its spec takes (`target_class`, `living_rules::ui::
+    // offered_toward`): looking over is for creatures, not a bush.
+    if let (true, Some(t), Some(k)) = (wants_target, target, sc.skills().get(skill)) {
+        if !k.takes_class(&t.class) {
+            return None;
+        }
     }
     let checked = has_check(sc, skill);
     let on_thing = matches!(aim, Aim::Thing { .. });
@@ -613,6 +633,9 @@ pub struct Verbs {
     /// The open wheel (`ui/wheel.rs`, docs/INTERFACE.md §8), and a script's direction for it.
     pub wheel: Option<crate::ui::wheel::WheelOpen>,
     pub wheel_point: Option<living_rules::ui::Dir>,
+    /// The open recipe grid (`ui/grid.rs`), and a cell picked in it.
+    pub grid: Option<crate::ui::grid::GridOpen>,
+    pub grid_pick: Option<usize>,
     /// Where the cursor was when F went down (a flick opens the wheel with its direction).
     f_at: Option<Vec2>,
     composing: bool,
@@ -849,6 +872,67 @@ fn place_of(conn: &DbConnection, aim: &Aim) -> (living_rules::ui::On, String) {
         Aim::Thing { kind, .. } => (On::Thing, kind.clone()),
         Aim::Me => (On::Me, String::new()),
     }
+}
+
+/// A way of making's recipe grid toward a target (`ui/grid.rs`), where its `_ui()` says
+/// `choose: "grid"` from `products`: a cell per product, live or greyed by the rules' check with
+/// that cell's item (`making_item`), its rows from `recipe_parts`. None keeps the list.
+fn grid_toward(conn: &DbConnection, sc: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim, skill: &str, title: String) -> Option<crate::ui::grid::GridOpen> {
+    use living_rules::ui::{Choose, ItemSource};
+    let u = sc.ui(skill).filter(|u| u.choose == Choose::Grid && u.source == Some(ItemSource::Products))?;
+    let spec = skills.iter().find(|s| s.name == skill)?;
+    let products = sc.products_of(skill);
+    if products.is_empty() {
+        return None;
+    }
+    let t = toward(conn, sc, me, my_at, aim);
+    let words = |p: &living_rules::script::RecipePart| {
+        let what = if p.any_of.len() > 1 { format!("{} {} ({})", p.qty, p.look.label, p.any_of.iter().map(|i| i.replace('_', " ")).collect::<Vec<_>>().join(", ")) } else { format!("{} {}", p.qty, p.look.label) };
+        what
+    };
+    let cells = products
+        .iter()
+        .filter_map(|product| {
+            let parts = sc.recipe_parts(skill, product)?;
+            let (why, _) = refusal_with(sc, me, t.target.as_ref(), spec, &parts.item);
+            let mut rows: Vec<(String, String)> = Vec::new();
+            if !parts.takes.is_empty() {
+                rows.push(("Takes".into(), parts.takes.iter().map(words).collect::<Vec<_>>().join(", ")));
+            }
+            if !parts.tools.is_empty() {
+                rows.push(("Holds".into(), parts.tools.iter().map(words).collect::<Vec<_>>().join(", ")));
+            }
+            let place = match parts.at.as_str() {
+                "" => "anywhere".to_string(),
+                "fire" => "at a fire".to_string(),
+                k => format!("at a {}", k.replace('_', " ")),
+            };
+            let heat = match (parts.lit, parts.fuel > 0.0) {
+                (_, true) => format!(", burning, {} fuel from it", parts.fuel),
+                (true, false) => ", burning".to_string(),
+                _ => String::new(),
+            };
+            rows.push(("Where".into(), format!("{place}{heat}")));
+            if !parts.knows.is_empty() {
+                rows.push(("Knowing".into(), parts.knows.replace('_', " ")));
+            }
+            if parts.ms > 0 {
+                rows.push(("Time".into(), format!("{:.0} s", parts.ms as f64 / 1000.0)));
+            }
+            let detail = u.detail.as_deref().and_then(|d| sc.text_of(d, product)).unwrap_or_default();
+            Some(crate::ui::grid::GridCell { product: product.to_string(), item: parts.item.clone(), label: parts.look.label.clone(), icon: parts.look.icon.clone(), makes: parts.makes, allowed: why.is_empty(), reason: why, detail, rows })
+        })
+        .take(crate::ui::grid::CELLS)
+        .collect::<Vec<_>>();
+    let title = format!("{} — {}", u.label, title);
+    Some(crate::ui::grid::GridOpen { aim: aim.clone(), skill: skill.to_string(), title, cells, sel: 0 })
+}
+
+/// A skill's check with this item toward the target: the rules' refusal words (empty: allowed).
+fn refusal_with(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill, item: &str) -> (String, String) {
+    let t = target.cloned().unwrap_or_else(|| TargetFacts { class: "none".into(), ..Default::default() });
+    let ctx = SkillCtx { actor: me.actor.clone(), target: t, item: item.to_string(), qty: 1, night: me.night, hour: me.hour, season: me.season.clone(), roll: 0.5, skill: spec.name.clone(), raining: me.raining, ..Default::default() };
+    (sc.check(&spec.name, &ctx).err().unwrap_or_default(), item.to_string())
 }
 
 /// The rules' own words for refusing a skill toward this target now (its `_check`), for the
@@ -1107,7 +1191,7 @@ pub fn input(
 ) {
     let now = time.elapsed_secs_f64();
     let now_ms = scene.now_ms;
-    wants.menu = v.menu.is_some() || v.wheel.is_some();
+    wants.menu = v.menu.is_some() || v.wheel.is_some() || v.grid.is_some();
     let (Some(conn), Some(me), Some(me3), Some(sc)) = (net.conn.as_ref(), net.my_id, target.0, rules.scripts.as_ref()) else {
         v.menu = None;
         v.wheel = None;
@@ -1233,11 +1317,19 @@ pub fn input(
                                 send(&net, conn, sc, &w.aim, &c, None, now_ms, &mut v, &mut controls);
                             }
                         }
+                        // A greyed way of making with a grid: the grid, its cells greyed with why.
+                        [] if grid_toward(conn, sc, &rules.skills, &facts(&w.aim), my_at, &w.aim, &k, w.title.clone()).is_some() => {
+                            v.grid = grid_toward(conn, sc, &rules.skills, &facts(&w.aim), my_at, &w.aim, &k, w.title.clone());
+                        }
                         // Greyed: sent all the same; the authority decides and says why.
                         [] => {
                             let item = w.grey_items.get(&Pin::Skill(k.clone())).cloned();
                             let c = Choice { item, ..Choice::new(&k, pretty(&k)) };
                             send(&net, conn, sc, &w.aim, &c, None, now_ms, &mut v, &mut controls);
+                        }
+                        // A way of making with a recipe grid: the grid (greyed cells say why).
+                        _ if grid_toward(conn, sc, &rules.skills, &facts(&w.aim), my_at, &w.aim, &k, w.title.clone()).is_some() => {
+                            v.grid = grid_toward(conn, sc, &rules.skills, &facts(&w.aim), my_at, &w.aim, &k, w.title.clone());
                         }
                         // A further choice: its sub-list, beside the hub.
                         _ => {
@@ -1324,6 +1416,22 @@ pub fn input(
         }
     } else if v.menu.as_ref().is_some_and(|m| m.aim != Aim::Me) && pressed(INTERACT) {
         v.menu = None;
+    }
+    // A recipe grid's cell (a click, or its number): the way's act with that cell's item, a
+    // greyed one too (the authority decides; its note says why).
+    if v.grid.is_some() {
+        const NUM: [KeyCode; 9] = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9];
+        if let Some(i) = NUM.iter().position(|c| pressed(*c)) {
+            v.grid_pick = Some(i);
+        }
+    }
+    if let (Some(i), Some(g)) = (v.grid_pick.take(), v.grid.clone()) {
+        if let Some(c) = g.cells.get(i) {
+            v.grid = None;
+            info!("ui: grid {} chose {}{}", g.skill, c.product, if c.allowed { String::new() } else { format!(" (grey: {}; sent, the authority decides)", c.reason) });
+            let ch = Choice { item: Some(c.item.clone()), ..Choice::new(&g.skill, format!("{} {}", pretty(&g.skill), c.label)) };
+            send(&net, conn, sc, &g.aim, &ch, None, now_ms, &mut v, &mut controls);
+        }
     }
     // The wheel holds the cursor while it is open (`pointer.rs`).
     pointer.hold = v.wheel.is_some();
@@ -1456,11 +1564,18 @@ pub fn input(
     // A pick in the open list.
     if let (Some(i), Some(m)) = (pick, v.menu.clone()) {
         match m.rows().get(i) {
-            Some(Row::Group { name, .. }) => {
-                if let Some(mm) = v.menu.as_mut() {
-                    mm.group = Some(name.clone());
+            Some(Row::Group { name, .. }) => match grid_toward(conn, sc, &rules.skills, &facts(&m.aim), my_at, &m.aim, name, m.title.clone()) {
+                // A way of making with a recipe grid opens it in place of its sub-list.
+                Some(g) => {
+                    v.grid = Some(g);
+                    v.menu = None;
                 }
-            }
+                None => {
+                    if let Some(mm) = v.menu.as_mut() {
+                        mm.group = Some(name.clone());
+                    }
+                }
+            },
             Some(Row::Talk) => {
                 if let (Aim::Creature { id }, Some(t)) = (&m.aim, talk.as_mut()) {
                     t.open_to = Some(*id);
@@ -1524,6 +1639,19 @@ pub fn input(
     wants.menu = v.menu.is_some();
 }
 
+/// An outcome line's note, from its structured row (`my_act_outcomes`, joined by the line's
+/// id): whether it worked from the row; done, the line's words (they say what came of it,
+/// "traded with …: 2 berries for 1 wood"); refused, the rules' own words for why. A line whose
+/// row has not come (an older line, a row not yet here) is read from its words.
+pub fn outcome_of(conn: &DbConnection, e: &Experience) -> (Option<bool>, String) {
+    match conn.db.my_act_outcomes().id().find(&e.id) {
+        Some(o) if o.ok => (Some(true), outcome_text(&e.text).1),
+        Some(o) if !o.why.trim().is_empty() => (Some(false), crate::ui::label(o.why.trim().trim_end_matches('.'))),
+        Some(o) => (Some(false), crate::ui::label(&o.what)),
+        None => outcome_text(&e.text),
+    }
+}
+
 /// The authority's word on what I sent: my `act` experiences and refused calls.
 fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: ResMut<Verbs>) {
     let now = time.elapsed_secs_f64();
@@ -1551,7 +1679,7 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
         if (e.at_ms as f64) + 1_000.0 < oldest || v.pending.is_empty() {
             continue;
         }
-        let (ok, text) = outcome_text(&e.text);
+        let (ok, text) = outcome_of(conn, &e);
         v.toasts.push(Toast { text, ok, at: now });
         if let Some(i) = v.pending.iter().position(|p| p.act) {
             let p = v.pending.remove(i);
@@ -1653,12 +1781,12 @@ mod tests {
 
     #[test]
     fn make_is_offered_at_a_furnace_only_while_it_burns_with_fuel() {
-        // Cullet's glass: at a furnace, lit, 1 fuel, 2 sand and an alkali (ash), glassmaking.
+        // Cullet's glass: at a furnace, lit, 1 fuel, 2 sand and an alkali (ash), a crucible held, glassmaking.
         let src = living_rules::floors::compose(SKILLS, include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
         let day = 2_880_000;
         let sc = Scripts::with_day(&src, day).unwrap();
         let aim = Aim::Thing { class: "structure", kind: "furnace".into(), at: Vec2::ZERO, id: 5, amount: 0.0, nearest: true };
-        let m = me(&[("sand", 2), ("ash", 1)], &["glassmaking"]);
+        let m = me(&[("sand", 2), ("ash", 1), ("crucible", 1)], &["glassmaking"]);
         let glass = |lit_until: u64| {
             let mut t = thing_facts("structure", "furnace", 5, 0.0, 1.0);
             workplace(&sc, &mut t, lit_until, 1_000_000, day);
@@ -1675,6 +1803,27 @@ mod tests {
         // Out.
         let (lit, fuel, offered) = glass(999_000);
         assert!(!lit && fuel == 0.0 && !offered, "lit {lit} fuel {fuel} offered {offered}");
+        // goods-3: the crucible is a tool held, not used up. Burning with fuel but none in the
+        // pack: not offered, and the recipe grid's cell is greyed with the rules' words naming it.
+        let bare = me(&[("sand", 2), ("ash", 1)], &["glassmaking"]);
+        let mut t = thing_facts("structure", "furnace", 5, 0.0, 1.0);
+        workplace(&sc, &mut t, 1_000_000 + 2 * hour, 1_000_000, day);
+        let all = skills_of(&sc);
+        assert!(!choices(&sc, &bare, &aim, Some(&t), &all).iter().any(|c| c.skill == "make" && c.item.as_deref() == Some("glass")));
+        let (why, _) = refusal_with(&sc, &bare, Some(&t), all.iter().find(|s| s.name == "make").unwrap(), "glass");
+        assert!(why.contains("crucible"), "{why}");
+    }
+
+    #[test]
+    fn only_skills_that_take_a_things_class_are_offered_toward_it() {
+        // `offered_toward`: a spec's `target_class` (appraise: creature) keeps it off a bush.
+        let sc = Scripts::new(SKILLS).unwrap();
+        let (aim, t) = bush();
+        let full = me(&[("berries", 3), ("wood", 2)], &["fire"]);
+        for c in choices(&sc, &full, &aim, Some(&t), &skills_of(&sc)) {
+            assert!(sc.skills().get(&c.skill).is_none_or(|k| k.takes_class("resource")), "{} offered toward a bush", c.skill);
+        }
+        assert!(sc.skills().get("appraise").is_some_and(|k| !k.takes_class("resource")), "appraise is for creatures");
     }
 
     #[test]
