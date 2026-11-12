@@ -13,7 +13,8 @@ no byte moves, and `release` puts it back. The photo tools do both round every s
 
 TOKENS is what the asset view takes (`LIVING_GAME_VIEW`): files and folders under the game's
 assets, comma separated, and `recipe:<name>`, whose base file is looked up in
-`characters/recipes.json`. A `recipe:<folk>:<seed>` person is not held (its base is drawn in the
+`characters/recipes.json`. A file's animated copy (`anim/<name>.glb` beside it), which is what the
+game draws when there is one, is held with it. A `recipe:<folk>:<seed>` person is not held (its base is drawn in the
 game). Files held are listed in `.local/held-eyes.txt` until released, so a run that was killed
 is undone by the next one. Two runs photographing the same file at once can release it under
 each other; the second may then catch a blink.
@@ -50,7 +51,15 @@ def files_of(tokens, assets=ASSETS):
             out += [os.path.join(p, f) for f in sorted(os.listdir(p)) if f.endswith((".glb", ".vrm"))]
         elif os.path.exists(p):
             out.append(p)
-    return [f for f in dict.fromkeys(out) if f.endswith((".glb", ".vrm"))]
+    # The game draws a character's animated copy when there is one (`anim/<name>.glb` beside it):
+    # that is the file whose eyes blink, so it is held with the file named.
+    both = []
+    for f in out:
+        both.append(f)
+        anim = os.path.join(os.path.dirname(f), "anim", os.path.basename(f))
+        if os.path.exists(anim):
+            both.append(anim)
+    return [f for f in dict.fromkeys(both) if f.endswith((".glb", ".vrm"))]
 
 
 def _swap(path, old, new):
