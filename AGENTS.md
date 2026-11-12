@@ -47,7 +47,7 @@ Use the [Justfile](Justfile) and the [living core](docs/LIVING_CORE.md). The leg
 
 ```bash
 just living-check     # authority wasm + mind + both observers + game client + rules tests + script fuel gate; run before every commit
-just living-merge <branch> -m "Merge <branch>: …"  # coordinators: --no-ff merge, check, push, retry when main moved (docs/TOOLING.md)
+just living-merge <branch> -m "Merge <branch>: …" --scenes  # coordinators: --no-ff merge, check, scene gate, push, retry when main moved (docs/TOOLING.md)
 just living-game-assets # regenerate the game client's git-ignored assets (needs Blender; Kimodo cache for clips)
 just living-test      # rules tests
 just living-up        # SpacetimeDB + Neo4j containers

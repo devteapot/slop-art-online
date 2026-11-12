@@ -155,7 +155,19 @@ def main():
         expect("merged meanwhile by someone else: exit 0, nothing pushed over it", code == 0 and "merged into main by someone else" in o
                and after != before and sh(f"git --git-dir={origin} log -1 --format=%s main", t).strip() == "other", o)
 
-        # 11. a branch that is on neither the remote nor here
+        # 11. --scenes: a failing scene gate stops the push (exit 10), a passing one pushes
+        sh("git fetch -q origin && git switch -qc fifth origin/main", seed)
+        commit(seed, "v.txt", "v\n", "fifth work")
+        sh("git push -q origin fifth", seed)
+        before = sh(f"git --git-dir={origin} rev-parse main", t).strip()
+        code, o = merge(coord, ["fifth", "--scenes"], env_extra={"LIVING_MERGE_SCENES_CMD": "echo scene-gate: FAILED dealings; exit 1"})
+        expect("failing scene gate stops (exit 10), nothing pushed", code == 10 and "scene gate failed" in o
+               and sh(f"git --git-dir={origin} rev-parse main", t).strip() == before, o)
+        code, o = merge(coord, ["fifth", "--scenes"], env_extra={"LIVING_MERGE_SCENES_CMD": "echo scene-gate: passed"})
+        expect("passing scene gate pushes (exit 0)", code == 0 and "scene gate passed" in o
+               and sh(f"git --git-dir={origin} rev-parse main", t).strip() != before, o)
+
+        # 12. a branch that is on neither the remote nor here
         code, o = merge(coord, ["no-such-branch"])
         expect("unknown branch refused (exit 2)", code == 2, o)
     print("merge_selftest:", "FAILED " + ", ".join(failures) if failures else "all passed")
