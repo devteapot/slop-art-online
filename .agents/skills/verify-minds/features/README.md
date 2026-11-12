@@ -9,6 +9,7 @@
 | A mind is told of drops and low things in words (`terrain_near`), and sees the one across them, on the island | `drop` | [drop.md](drop.md) |
 | A mind sees what its character sees: the scene the model is sent and the deaths it witnesses follow the sight line | `sight` | [sight.md](sight.md) |
 | A resident of the seeded island knows its past and its people: relations as rows from world creation, its authored persona, people and `[before all this]` memories in its first prompt, secrets kept to their owner (scratch Neo4j) | `lives_mind.py` on an island run | [lives-mind.md](lives-mind.md) |
+| A sleeper thinks only on what wakes it: an offer to a sleeping mind starts no deliberation and waits in `slumber`; an attack wakes it and its thought says why it woke, with the offer that waited | `sleeper` | [deliberation.md](deliberation.md) |
 | An island resident is a mind from the start: this service thinks for it, it answers, takes talk turns, accepts the trade and teaches through its own acts, keeps its given places through a replacing update | `resident` | [resident.md](resident.md) |
 | An offline player's character: takeover after `takeover_s`, thought for like any AI, handback (plan stops, graph held), a reply in flight refused | `takeover` | [takeover.md](takeover.md) |
 | Answer speech and close an exchange; a line parked while a deliberation runs; `LIVING_PARK=concurrent` turns alongside; `LIVING_GREET` modes over the `audience` table | `conversation`, `parked`, `alongside`, `greet` | [conversations.md](conversations.md) |

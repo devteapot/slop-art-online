@@ -32,6 +32,8 @@ python3 "$C/cargo_checks.py" --run "$R"
 python3 "$C/scenes.py" tick --run "$R" > "$E/tick.txt" 2>&1
 python3 "$C/scenes.py" needs --run "$R" > "$E/needs.txt" 2>&1
 python3 "$C/scenes.py" alarms --run "$R" > "$E/alarms.txt" 2>&1
+# A sleeper thinks only on what wakes it; other requests wait in `slumber` (features/needs.md, about 4 min).
+python3 "$C/scenes.py" sleeper --run "$R" > "$E/sleeper.txt" 2>&1
 python3 "$C/scenes.py" food --run "$R" > "$E/food.txt" 2>&1
 python3 "$C/scenes.py" refusal --run "$R" > "$E/refusal.txt" 2>&1
 python3 "$C/scenes.py" teach --run "$R" > "$E/teach.txt" 2>&1
