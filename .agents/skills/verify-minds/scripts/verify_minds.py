@@ -1499,15 +1499,32 @@ def greet_case(run):
     # a, the player 1 m east of a, b 3 m east of the player (both within the 6 m address distance).
     body = run.sql(f'SELECT * FROM body WHERE id = {a}', 'body-a')[0]
 
+    def placed():
+        # `place_at` takes the nearest free tile: a body standing on a target moves one elsewhere
+        # (minds-fixreq-g02: a 3 m and b 2 m from the player). Check what the scene became:
+        # a nearer than b, b within the 6 m address distance, and a outside a 0.6 rad cone toward b.
+        pos = {r['id']: (r['x'], r['y']) for i in (a, player, b) for r in run.sql(f'SELECT * FROM body WHERE id = {i}', 'body-placed')}
+        if len(pos) < 3:
+            return False
+        (px, py), (ax, ay), (bx, by) = pos[player], pos[a], pos[b]
+        da, db = math.hypot(ax - px, ay - py), math.hypot(bx - px, by - py)
+        off = abs(math.atan2(ay - py, ax - px) - math.atan2(by - py, bx - px)) % (2 * math.pi)
+        return da + 1 <= db <= 5 and min(off, 2 * math.pi - off) > 1.0
+
     def place():
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            try:
-                run.admin('place_at', a, body['x'], body['y'])
-                run.admin('place_at', player, body['x'] + dx, body['y'] + dy)
-                run.admin('place_at', b, body['x'] + 4 * dx, body['y'] + 4 * dy)
-                return
-            except Exception:
-                continue
+        anchors = [(body['x'], body['y'])]
+        for x, y in anchors + [(r['x'], r['y']) for r in run.sql(f'SELECT * FROM body WHERE id = {a}', 'body-a-now')]:
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                try:
+                    run.admin('place_at', a, x, y)
+                    run.admin('place_at', player, x + dx, y + dy)
+                    run.admin('place_at', b, x + 4 * dx, y + 4 * dy)
+                except Exception:
+                    continue
+                if placed():
+                    return
+                run.note(f'greet: the scene at ({x:.1f}, {y:.1f}) toward ({dx}, {dy}) did not come out as placed; trying another')
+        raise RuntimeError('greet: no placement put a nearer than b within 5 m of the player (body-placed.json)')
     place()
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
                           'deliberate': basic_reply(),
