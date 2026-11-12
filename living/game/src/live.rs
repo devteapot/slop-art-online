@@ -499,10 +499,15 @@ pub fn recipe_for(book: Option<&crate::characters::book::LookBook>, land_seed: u
         None => Some(Err(Miss::NoBook)),
         Some(b) => Some(b.recipe(&seen.look)),
     };
+    // A world made before looks (no `look_book`) has no keys: its people fall back quietly (one
+    // line at connect, `sight`).
+    let quiet = crate::characters::book::world().is_none_or(|g| g.is_empty());
     match drawn {
         Some(Ok(r)) => r,
         Some(Err(m)) => {
-            warn_once(&m);
+            if !(quiet && matches!(m, Miss::NoKey | Miss::NoBook)) {
+                warn_once(&m);
+            }
             vroid_for(land_seed, c)
         }
         None => vroid_for(land_seed, c),
@@ -599,13 +604,21 @@ fn bodies(
         }
         live.heights.clear();
         live.looks_checked = false;
+        crate::characters::book::set_world(None);
         return;
     };
-    // The world's look generation against the book's, once a connection.
+    // The world's look generation against the book's, once a connection: one line either way
+    // when it is not the book's, and one when the world has no looks.
     if !live.looks_checked && conn.db.world().iter().next().is_some() {
         live.looks_checked = true;
-        if let Some(w) = crate::characters::seen::generation_warning(&crate::characters::seen::world_generation(), crate::characters::book::book()) {
+        let generation = crate::characters::seen::world_generation();
+        crate::characters::book::set_world(Some(generation.clone()));
+        if generation.is_empty() {
+            info!("looks: this world was made before looks; its people are drawn as VRoid bases");
+        } else if let Some(w) = crate::characters::seen::generation_warning(&generation, crate::characters::book::book()) {
             warn!("{w}");
+        } else if crate::characters::book::book().is_none() {
+            crate::characters::book::warn_once(&crate::characters::book::Miss::NoBook);
         }
     }
     let dt = time.delta_secs().max(1e-4);

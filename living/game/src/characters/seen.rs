@@ -5,7 +5,7 @@
 //!
 //! **Until the authority half lands** the bindings have no such columns, and these read a
 //! test-only shim instead: `LIVING_GAME_LOOK_SHIM=pool[;none=ID,…][;missing=ID,…]
-//! [;generation=G][;grow=ID@S]` gives each person a line the book lets characters wear, of the
+//! [;generation=G][;grow=ID@S]`, or `old` (a world made before looks: no keys, no generation), gives each person a line the book lets characters wear, of the
 //! age band of their life stage, by their id; no key to the ids in `none`; a key the book lacks
 //! to those in `missing`; the world the generation `G` (default: the book's); and person `ID` a
 //! line of the next band `S` seconds after the first look is read (`grow`). Unset, every person
@@ -57,6 +57,7 @@ struct Shim {
     missing: Vec<u32>,
     generation: String,
     grow: Option<(u32, f32)>,
+    old: bool,
     start: std::time::Instant,
 }
 
@@ -64,17 +65,18 @@ fn shim() -> Option<&'static Shim> {
     static SHIM: OnceLock<Option<Shim>> = OnceLock::new();
     SHIM.get_or_init(|| {
         let v = std::env::var("LIVING_GAME_LOOK_SHIM").ok().filter(|v| !v.is_empty())?;
-        let mut s = Shim { none: vec![], missing: vec![], generation: String::new(), grow: None, start: std::time::Instant::now() };
+        let mut s = Shim { none: vec![], missing: vec![], generation: String::new(), grow: None, old: false, start: std::time::Instant::now() };
         for part in v.split(';').map(str::trim) {
             match part.split_once('=') {
                 Some(("none", n)) => s.none = n.split(',').filter_map(|x| x.trim().parse().ok()).collect(),
                 Some(("missing", n)) => s.missing = n.split(',').filter_map(|x| x.trim().parse().ok()).collect(),
                 Some(("generation", g)) => s.generation = g.to_string(),
                 Some(("grow", g)) => s.grow = g.split_once('@').and_then(|(id, t)| Some((id.parse().ok()?, t.parse().ok()?))),
+                None if part == "old" => s.old = true,
                 _ => {}
             }
         }
-        if s.generation.is_empty() {
+        if s.generation.is_empty() && !s.old {
             s.generation = book::book().map(|b| b.generation.clone()).unwrap_or_default();
         }
         bevy::log::warn!("looks: test shim on ({v}): look columns are made up on the client");
@@ -85,7 +87,7 @@ fn shim() -> Option<&'static Shim> {
 
 impl Shim {
     fn of(&self, c: &SeenCharacter, book: Option<&LookBook>) -> Seen {
-        if c.kind != "person" || self.none.contains(&c.id) {
+        if c.kind != "person" || self.old || self.none.contains(&c.id) {
             return Seen::default();
         }
         if self.missing.contains(&c.id) {

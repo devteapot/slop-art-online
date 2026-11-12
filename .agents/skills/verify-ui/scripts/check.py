@@ -1986,7 +1986,8 @@ def looks(run, c):
     authority projects looks the key comes from the client's test shim
     (`LIVING_GAME_LOOK_SHIM`, `characters/seen.rs`) over the look book on disk. Three residents
     beside the player: A has a key (composed from its line, chips by piece), B has none and C
-    has a key the book lacks (both drawn as VRoid bases, one warning line each). A then grows a
+    has a key the book lacks (both drawn as VRoid bases, one warning line each, in a world with
+    looks; a world made before looks falls back quietly, one line at connect). A then grows a
     band and is redrawn in place: drawn in every frame through it, crossfaded. My own look comes
     from my own row. A second drive gives the world a generation the book does not hold (one
     warning at connect), and a look-dev island run draws background people from the book's decor
@@ -2017,7 +2018,7 @@ def looks(run, c):
     c.check(s, "no key: drawn as a VRoid base", lb.get("look") == "" and lb.get("composed") is False, json.dumps(lb))
     c.check(s, "a key the book lacks: drawn as a VRoid base", ld.get("look") == "lk_ffffffffffffffff" and ld.get("composed") is False, json.dumps(ld))
     c.check(s, "one warning line each for no key and for a key the book lacks",
-            L.count("looks: people without a look key are drawn as VRoid bases") == 1 and L.count("looks: lk_ffffffffffffffff is not in the look book") == 1,
+            L.count("looks: people without a look key in a world with looks") == 1 and L.count("looks: lk_ffffffffffffffff is not in the look book") == 1,
             f"{L.count('people without a look key')} and {L.count('lk_ffffffffffffffff is not in')}")
     wrong = [(x["id"], x.get("chips"), [outer_piece(book["lines"][x["look"]]["person"], True), outer_piece(book["lines"][x["look"]]["person"], False)]) for x in composed
              if (x.get("chips") or [None, None]) != [outer_piece(book["lines"][x["look"]]["person"], True), outer_piece(book["lines"][x["look"]]["person"], False)]]
@@ -2042,6 +2043,14 @@ def looks(run, c):
     out2, code2, text2 = drive(run, "looks-generation", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_SHIM": "pool;generation=c4-not-this-book"})
     L2 = log(out2)
     c.check(s, "a world generation the book does not hold: one warning at connect", code2 == 0 and L2.count("looks: the world was made with look generation c4-not-this-book") == 1, text2[-200:])
+    # 2b. A world made before looks: everyone falls back quietly, one line at connect.
+    out2b, code2b, text2b = drive(run, "looks-old", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_SHIM": "old"})
+    L2b = log(out2b)
+    olds = {x["id"]: x for x in (dump(out2b, "00") or {}).get("looks") or []}
+    per_person = [l for l in L2b.splitlines() if "looks:" in l and "WARN" in l and "test shim" not in l]
+    c.check(s, "a world made before looks: VRoid bases, one line at connect and no warning per person",
+            code2b == 0 and olds and not any(x.get("composed") for x in olds.values()) and L2b.count("looks: this world was made before looks") == 1 and not per_person,
+            f"{len(olds)} drawn, {sum(1 for x in olds.values() if x.get('composed'))} composed; {L2b.count('made before looks')} connect lines; warnings {per_person[:2]}")
     # 3. Background people on the look-dev island: from the decor pool only.
     decor_lines = set(book.get("decor", []))
     pool_lines = set(book["lines"]) - decor_lines

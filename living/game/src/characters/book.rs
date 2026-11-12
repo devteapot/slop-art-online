@@ -57,8 +57,12 @@ pub struct LookBook {
     pub generation: String,
     pub generations: Vec<String>,
     pub lines: HashMap<String, Line>,
-    /// Lines for background people only (`lk_…`), disjoint from every line a character wears.
+    /// Background people only, kept apart from everyone a character can be: lines (`lk_…`, the
+    /// merged design's book) or person entries (`lp_…`, resolved through `people`).
     pub decor: Vec<String>,
+    /// A person entry's line for each band (`"3"` → `lk_…`), where the book carries them
+    /// (dev-box's book); the client reads it only to resolve `lp_` decor entries.
+    pub people: HashMap<String, BTreeMap<String, String>>,
 }
 
 /// Why a person is not drawn from the book.
@@ -79,7 +83,7 @@ impl Miss {
     pub fn warning(&self) -> String {
         match self {
             Miss::NoBook => format!("looks: no look book at {FILE}; people are drawn as VRoid bases"),
-            Miss::NoKey => "looks: people without a look key are drawn as VRoid bases (a world from before looks)".into(),
+            Miss::NoKey => "looks: people without a look key in a world with looks are drawn as VRoid bases".into(),
             Miss::Unknown(k) => format!("looks: {k} is not in the look book; drawn as a VRoid base"),
             Miss::NoFile(k, f) => format!("looks: {k} wears {f}, which is not on disk; drawn as a VRoid base"),
         }
@@ -112,7 +116,7 @@ impl LookBook {
     /// A background person's line by their seed: one of the `decor` lines whose type is grown
     /// (youth, adult or elder; a child's when `grown` is false). None without one.
     pub fn decor(&self, seed: u64, grown: bool) -> Option<(&str, &Line)> {
-        let mut fit: Vec<(&str, &Line)> = self.decor.iter().filter_map(|k| self.lines.get_key_value(k.as_str())).filter(|(_, l)| band_of_type(&l.person.kind).is_some_and(|b| (b >= 2) == grown)).map(|(k, l)| (k.as_str(), l)).collect();
+        let mut fit: Vec<(&str, &Line)> = self.decor_lines().into_iter().filter_map(|k| self.lines.get_key_value(k)).filter(|(_, l)| band_of_type(&l.person.kind).is_some_and(|b| (b >= 2) == grown)).map(|(k, l)| (k.as_str(), l)).collect();
         if fit.is_empty() {
             return None;
         }
@@ -120,9 +124,19 @@ impl LookBook {
         Some(fit[(mix(seed) % fit.len() as u64) as usize])
     }
 
-    /// The lines a character can wear (every line but the decor), in key order.
+    /// The decor's lines: its `lk_` entries, and every band's line of its `lp_` entries.
+    pub fn decor_lines(&self) -> BTreeSet<&str> {
+        self.decor.iter().flat_map(|e| match self.people.get(e) {
+            Some(bands) => bands.values().map(|k| k.as_str()).collect::<Vec<_>>(),
+            None => vec![e.as_str()],
+        })
+        .collect()
+    }
+
+    /// The lines a character can wear (every line but the decor's), in key order.
     pub fn wearable(&self) -> Vec<(&str, &Line)> {
-        let mut v: Vec<(&str, &Line)> = self.lines.iter().filter(|(k, _)| !self.decor.contains(k)).map(|(k, l)| (k.as_str(), l)).collect();
+        let decor = self.decor_lines();
+        let mut v: Vec<(&str, &Line)> = self.lines.iter().filter(|(k, _)| !decor.contains(k.as_str())).map(|(k, l)| (k.as_str(), l)).collect();
         v.sort_by(|a, b| a.0.cmp(b.0));
         v
     }
@@ -178,6 +192,19 @@ pub fn book() -> Option<&'static LookBook> {
     })
     .as_ref()
 }
+
+/// The world's look generation (`world.look_book`) once connected: empty for a world made before
+/// looks, whose people are drawn as VRoid bases without a warning each.
+pub fn set_world(generation: Option<String>) {
+    *WORLD.lock().unwrap() = generation;
+}
+
+/// The connected world's look generation (None while not connected).
+pub fn world() -> Option<String> {
+    WORLD.lock().unwrap().clone()
+}
+
+static WORLD: Mutex<Option<String>> = Mutex::new(None);
 
 /// Each miss's warning once a session.
 pub fn warn_once(miss: &Miss) {
@@ -272,6 +299,19 @@ mod tests {
         // A character never wears a decor line.
         assert_eq!(b.wearable().iter().map(|(k, _)| *k).collect::<Vec<_>>(), vec!["lk_00000000000000a1"]);
         assert_eq!((band_of_type("youth-f-b"), band_of_type("elder-m-a"), band_of_type("giant")), (Some(2), Some(4), None));
+    }
+
+    #[test]
+    fn decor_may_be_person_entries() {
+        let text = serde_json::json!({
+            "generation": "c4-test",
+            "lines": { "lk_00000000000000a1": line("adult-f-a", "bob", &[]), "lk_00000000000000a2": line("adult-m-a", "crop", &[]), "lk_00000000000000c2": line("child-u-a", "bob", &[]) },
+            "people": { "lp_0000000000000002": { "1": "lk_00000000000000c2", "3": "lk_00000000000000a2" } },
+            "pool": ["lp_0000000000000001"], "decor": ["lp_0000000000000002"], "swatches": {}, "far": {},
+        });
+        let b = LookBook::parse(&text.to_string()).unwrap();
+        assert_eq!(b.decor(3, true).map(|(k, _)| k), Some("lk_00000000000000a2"));
+        assert_eq!(b.wearable().iter().map(|(k, _)| *k).collect::<Vec<_>>(), vec!["lk_00000000000000a1"]);
     }
 
     #[test]
