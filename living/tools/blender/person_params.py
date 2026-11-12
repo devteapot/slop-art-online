@@ -605,6 +605,27 @@ def from_overlay(spec):
 HEAD_PIECES = dict(cap=(dict(headwear="cap"), ("Cap", "CapPeak")), kerchief=(dict(headwear="kerchief"), ("Kerchief", "KerchiefKnot")))
 
 
+# Where an outfit piece is worn and how far out: its slot (`upper`, `lower`, `feet` or `head`)
+# and its layer within the slot, 0 innermost. A client finds the outermost upper and lower
+# piece by these (for a colour chip, say) and need not read a piece's name. `trim` marks a
+# piece that is a garment's trimming and not a garment: the smock's bands of other cloth.
+PIECE_WEAR = dict(
+    jersey=("upper", 0), jersey_coat=("upper", 0), jersey_smock=("upper", 0), coat=("upper", 1), smock=("upper", 1), smock_bands=("upper", 2), apron=("upper", 3),
+    trousers=("lower", 0), boots=("feet", 0), cap=("head", 0), kerchief=("head", 0),
+)
+
+
+def piece_wear(name):
+    """An outfit piece's slot and layer (`PIECE_WEAR`), by its file's name: `smock_58-f`."""
+    base = name[:-2] if name[-2:] in ("-m", "-f") else name
+    kind = base if base in PIECE_WEAR else base.rsplit("_", 1)[0]
+    slot, layer = PIECE_WEAR[kind]
+    out = dict(slot=slot, layer=layer)
+    if kind == "smock_bands":
+        out["trim"] = True
+    return out
+
+
 def piece_parts(name):
     base = name[:-2] if name[-2:] in ("-m", "-f") else name
     return (PIECES.get(base) or HEAD_PIECES[base])[1]

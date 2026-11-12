@@ -5,6 +5,8 @@
 # Output is git-ignored: lookdev/own-<name>.glb with <name>.params.json (the person's full
 # parameters and the game recipe's height and proportions) and <name>.atlas.png (the painted face)
 # beside it, and lookdev/anim/own-<name>.{glb,clips.json,face.png}, which is what the game loads.
+# Both copies are finished the same way (shading data, the person's identity on the bones); the
+# one under anim/ has the clips.
 # Usage: living/tools/blender/gen_person.sh [PERSON ...]     (default: the presets)
 #   PERSON is [NAME=]SPEC. SPEC is a preset (man, woman, elder, youth, boy, girl, heavy), `<seed>:<kind>` (kind: man,
 #   woman, elder_man, elder_woman, boy, girl), a seed alone, or a parameter file (*.json). NAME
@@ -83,24 +85,29 @@ for p in "${people[@]}"; do
       fi
       grep -E '^(SKELETON|GRAFT|SUMMARY)' "$log" | cut -c1-220 || true
     fi
-    python3 living/tools/merge_primitives.py "$dir/anim/$name.glb" "$dir/anim/$name.glb.tmp" && mv "$dir/anim/$name.glb.tmp" "$dir/anim/$name.glb"
-    python3 living/tools/face_normals.py "$dir/anim/$name.glb" "$dir/anim/$name.glb.tmp" --png "$dir/anim/$name.face.png" && mv "$dir/anim/$name.glb.tmp" "$dir/anim/$name.glb"
-    # The strand texture is the same for everyone: every file names the one copy (share.py).
-    [ -f "$src/strands.png" ] || cp "$dir/strands.png" "$src/strands.png"
-    python3 living/tools/characters/share.py strands --shared "$src/strands.png" "$dir/anim/$name.glb" > /dev/null
-    # A face type's head takes its designed shadows: the planar proxy's normals and the type's
-    # drawn threshold map (face_shadow.py), in place of the ellipsoid's. SHADOWS=ellipsoid keeps
-    # face_normals.py's, to compare.
-    if [ "${SHADOWS:-designed}" = designed ]; then
-      python3 living/tools/characters/face_shadow.py --if-typed "$dir/anim/$name.glb" --png "$dir/anim/$name.face.png" > /dev/null
-    fi
-    # One smoothed direction a point for the outline, written once here (outline_normals.py).
-    python3 living/tools/characters/outline_normals.py "$dir/anim/$name.glb" > /dev/null
-    # A person of a face type: the type's mesh with its identity bones moved, as the client
-    # composes one (compose.py). Last, so the designed normals are the type's own.
-    if [ "${IDENTITY:-bones}" != bake ] && grep -q '"identity"' "$dir/$name.params.json"; then
-      python3 living/tools/characters/compose.py "$dir/anim/$name.glb" "$dir/anim/$name.glb" --params "$dir/$name.params.json"
-    fi
+    # The copy the game draws, and then the builder's own copy beside it, are finished the same
+    # way: shown by itself, an unfinished file shades with a straight split down the face and
+    # has the type's face and not the person's.
+    for f in "$dir/anim/$name.glb" "$dir/$name.glb"; do
+      python3 living/tools/merge_primitives.py "$f" "$f.tmp" && mv "$f.tmp" "$f"
+      python3 living/tools/face_normals.py "$f" "$f.tmp" --png "${f%.glb}.face.png" && mv "$f.tmp" "$f"
+      # The strand texture is the same for everyone: every file names the one copy (share.py).
+      [ -f "$src/strands.png" ] || cp "$dir/strands.png" "$src/strands.png"
+      python3 living/tools/characters/share.py strands --shared "$src/strands.png" "$f" > /dev/null
+      # A face type's head takes its designed shadows: the planar proxy's normals and the type's
+      # drawn threshold map (face_shadow.py), in place of the ellipsoid's. SHADOWS=ellipsoid keeps
+      # face_normals.py's, to compare.
+      if [ "${SHADOWS:-designed}" = designed ]; then
+        python3 living/tools/characters/face_shadow.py --if-typed "$f" --png "${f%.glb}.face.png" > /dev/null
+      fi
+      # One smoothed direction a point for the outline, written once here (outline_normals.py).
+      python3 living/tools/characters/outline_normals.py "$f" > /dev/null
+      # A person of a face type: the type's mesh with its identity bones moved, as the client
+      # composes one (compose.py). Last, so the designed normals are the type's own.
+      if [ "${IDENTITY:-bones}" != bake ] && grep -q '"identity"' "$dir/$name.params.json"; then
+        python3 living/tools/characters/compose.py "$f" "$f" --params "$dir/$name.params.json"
+      fi
+    done
   done
   rm -f "$log"
 done
