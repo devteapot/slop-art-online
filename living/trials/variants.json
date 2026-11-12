@@ -218,5 +218,13 @@
    "first_sight_thinks": true,
    "heard_first_rethinks": true
   }
+ },
+ "strangers-earshot": {
+  "about": "Strangers control + earshot (docs/COMMUNICATION.md §17): the `earshot` law on (set_world_law after the laws guard): a person's scene says whom a line said now would reach, at each way, among the people they see (\"who would hear you now\"). Everything else as `strangers-control`.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "earshot": true
+  }
  }
 }
