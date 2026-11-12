@@ -514,8 +514,10 @@ def takeover_case(run):
     me = run.sql("SELECT id FROM character WHERE name = 'MindsAway'", 'player')[0]['id']
     script = {'replies': {'think': {'thought': 'Alone now, I wait.', 'intend': ['wait'], 'say': None},
                           'deliberate': basic_reply()},
-              # Replies take 8 s, so one can still be in flight when the person returns.
-              'rules': [{'purpose': 'deliberate', 'delay_s': 8, 'times': -1}]}
+              # The first takeover's reply takes 8 s; the second takeover's takes 25 s, so it is
+              # still in flight when the person returns, however slowly the driver polls.
+              'rules': [{'purpose': 'deliberate', 'delay_s': 8, 'times': 1},
+                        {'purpose': 'deliberate', 'delay_s': 25, 'times': -1}]}
     models = model(run, script)
     run.start(models, [me])
     # The join was an HTTP call: its connection is closed, so a takeover is pending.
@@ -542,17 +544,25 @@ def takeover_case(run):
     assert not run.private(f'SELECT * FROM act_queue WHERE actor = {me}', 'acts-back')
     kept = run.private(f'SELECT * FROM experience WHERE observer = {me}', 'experiences-back')
     assert {e['id'] for e in lived} <= {e['id'] for e in kept}, 'experiences lived under the minds must stay'
-    # Away again: the held graph is installed again; then a reply in flight is refused on return.
+    deliberations = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    asked_before = len(deliberations())
+    # Away again: the held graph is installed again, and the takeover asks for a fresh
+    # deliberation (presence.rs take_over: request, then reinstall). That deliberation is the
+    # reply in flight, refused on return. The case does not ask again itself: reinstalling the
+    # minds' graph counts as having just thought, so the rules ask nothing more for 45 s (the
+    # think node's settle) or `think_min_s`; a `set_behavior` think here only showed up when it
+    # landed before the mind sent the takeover's prompt (fix-takeover).
     run.wait(lambda: [p for p in run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-taken-2') if p['ai']], 'second takeover', 50)
     again = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-taken-2')[0]
     assert again['source'] == 'mind' and again['plan'] == 'verify minds wait' and again['graph'] == installed, again
-    run.admin('set_behavior', me, json.dumps({'think': 'I finished my plan. verify in flight'}))
-    run.wait(lambda: any(e['purpose'] == 'deliberate' for e in shared.rows(run.directory / 'fake-requests.jsonl')
-                         if 'in flight' in json.dumps(e)), 'deliberation in flight', 40)
+    in_flight = run.wait(lambda: deliberations()[asked_before:], 'the takeover deliberation in flight', 40)[0]
+    assert 'A quiet moment to take stock' in json.dumps(in_flight), in_flight['body_excerpt']
     run.harness('player', 'move', '0', '1')
-    run.wait(lambda: 'not your character' in run.log(), 'in-flight reply refused', 30)
+    assert time.time() * 1000 < in_flight['at_ms'] + 25_000, 'the person returned after the reply was due'
+    run.wait(lambda: 'not your character' in run.log(), 'in-flight reply refused', 50)
     final = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-final')[0]
     assert final['source'] == 'human', final
+    assert final['revision'] > again['revision'], (again, final)
     return {'status': 'pass', 'takeover_after_s': (taken['control_ms'] - pending['changed_ms']) / 1000,
             'held_graph': 'kept and reinstalled', 'in_flight': 'refused'}
 
@@ -633,9 +643,14 @@ def answers_case(run):
     models = model(run, script)
     wood0 = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {actor}', 'inventory-before')}.get('wood', 0)
     run.start(models, [actor])
-    if not run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'asked'):
-        run.request(actor, 'answers')
-    declined = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-declined') if r['id'] == rec['id'] and r['status'] == 'declined'], 'proposal declined', 120)
+    # As in `dealings` (recipes-1): the mind may answer before the first read, its deliberation
+    # row gone once it replies. Ask again only while the terms are still open, and take either
+    # the pending request or the terms declined as the answer (fix-takeover).
+    declined_now = lambda label: [r for r in run.private('SELECT * FROM record', label) if r['id'] == rec['id'] and r['status'] == 'declined']
+    if not run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'asked') and not declined_now('records-before-request'):
+        run.admin('set_behavior', actor, json.dumps({'think': 'I finished my plan. verify answers'}))
+        run.wait(lambda: run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'pending-answers') or declined_now('records-while-asking'), 'authority deliberation or the terms declined', 65)
+    declined =run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-declined') if r['id'] == rec['id'] and r['status'] == 'declined'], 'proposal declined', 120)
     inv = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {actor}', 'inventory-after')}
     assert inv.get('wood', 0) == wood0 + 2, ('the named trade was taken', wood0, inv)
     assert not [o for o in run.private('SELECT * FROM trade_offer', 'trade-offer-after') if o['id'] == offer['id']], 'the accepted offer is gone'
