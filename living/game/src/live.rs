@@ -233,6 +233,17 @@ struct Shown {
     /// band. A change redraws the person in place ([`swap_look`]).
     look: String,
     band: u8,
+    /// Drawn from the look's line (else a VRoid recipe).
+    composed: bool,
+}
+
+/// A person drawn, as the UI dump reports them (`ui::DumpExtra::looks_json`).
+pub struct DrawnLook<'a> {
+    pub id: u32,
+    pub look: &'a str,
+    pub band: u8,
+    pub composed: bool,
+    pub swapping: bool,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -314,9 +325,16 @@ impl Live {
         self.hosted.clone()
     }
 
-    /// The bodies drawn now and their entities (those leaving sight are not among them).
+    /// Each person drawn and the look they were drawn from.
+    pub fn looks(&self) -> impl Iterator<Item = DrawnLook<'_>> + '_ {
+        self.shown.iter().filter(|(_, s)| s.person).map(|(id, s)| DrawnLook { id: *id, look: &s.look, band: s.band, composed: s.composed, swapping: self.swaps.iter().any(|w| w.2 == *id) })
+    }
+
+    /// The bodies drawn now and their entities (those leaving sight are not among them). While a
+    /// person is redrawn for a new look, the body still on screen (the old one) until the new
+    /// one is fitted.
     pub fn drawn(&self) -> impl Iterator<Item = (u32, Entity)> + '_ {
-        self.shown.iter().map(|(id, s)| (*id, s.entity))
+        self.shown.iter().map(|(id, s)| (*id, self.swaps.iter().find(|w| w.2 == *id && w.1 == s.entity).map_or(s.entity, |w| w.0)))
     }
 }
 
@@ -515,7 +533,7 @@ fn swap_look(commands: &mut Commands, assets: &AssetServer, live: &mut Live, q: 
     }
     let s = live.shown.get_mut(&id).unwrap();
     info!("looks: #{id} redrawn for band {} ({} → {})", now.band, if s.look.is_empty() { "VRoid" } else { &s.look }, if recipe.person.is_some() { now.look.as_str() } else { "VRoid" });
-    (s.entity, s.look, s.band) = (new, now.look, now.band);
+    (s.entity, s.look, s.band, s.composed) = (new, now.look, now.band, recipe.person.is_some());
     live.heights.insert(id, recipe.height);
     live.swaps.push((old, new, id));
 }
@@ -718,6 +736,7 @@ fn bodies(
             }
             let h = h.unwrap_or(body.heading);
             let size = character.as_ref().map_or(1.0, |c| stage_scale(c.stage));
+            let mut composed = false;
             let (entity, height, person, beast) = if body.kind == "person" {
                 let c = character.as_ref().unwrap();
                 let mut recipe = recipe_for(crate::characters::book::book(), island.land.seed, c);
@@ -725,6 +744,7 @@ fn bodies(
                 if recipe.person.is_none() {
                     recipe.height *= stage_scale(c.stage);
                 }
+                composed = recipe.person.is_some();
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
                 (e, recipe.height, true, false)
             } else if let Some(e) = crate::bodies::spawn_beast(&mut commands, &assets, &body.kind, at, yaw_of(Vec2::new(h.cos(), h.sin())), size) {
@@ -743,7 +763,7 @@ fn bodies(
                 commands.entity(entity).insert(crate::gait::Logged(id));
             }
             let look = character.as_ref().filter(|_| person).map(crate::characters::seen::of).unwrap_or_default();
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, band: look.band });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, band: look.band, composed });
             live.heights.insert(id, height);
             continue;
         }

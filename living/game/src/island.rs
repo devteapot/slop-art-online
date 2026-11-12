@@ -1112,6 +1112,9 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     let y = it.floor.unwrap_or_else(|| land.height(it.at.x, it.at.y));
     let at = Vec3::new(it.at.x, y, it.at.y);
     if let Some(recipe) = person_recipe(it) {
+        if recipe.person.is_some() {
+            debug!("looks: background person {:?} drawn from decor {}", it.person.as_ref().map(|p| p.0), recipe.name);
+        }
         let e = crate::characters::spawn(commands, assets, &recipe, at, it.yaw);
         commands.entity(e).insert(EnvPart);
         return vec![e];

@@ -3,11 +3,11 @@
 //! `look_book` generation, read in one place so the rest of the client never touches the row.
 //!
 //! **Until the authority half lands** the bindings have no such columns, and these read a
-//! test-only shim instead: `LIVING_GAME_LOOK_SHIM=pool[;none=N][;missing=N][;generation=G]
-//! [;grow=ID@S]` gives each person a pool entry by their id at the band of their life stage,
-//! no key to every id with `id % N == 0` (`none`), a key the book lacks to every id with
-//! `id % N == 1` (`missing`), the world the generation `G`, and person `ID` the next band `S`
-//! seconds after the first look is read (`grow`). Unset, every person has no key and is drawn
+//! test-only shim instead: `LIVING_GAME_LOOK_SHIM=pool[;none=ID,…][;missing=ID,…]
+//! [;generation=G][;grow=ID@S]` gives each person a pool entry by their id at the band of their
+//! life stage, no key to the ids in `none`, a key the book lacks to those in `missing`, the world
+//! the generation `G` (default: the book's), and person `ID` the next band `S` seconds after the
+//! first look is read (`grow`). Unset, every person has no key and is drawn
 //! as before. The shim goes with the rebase onto the authority's bindings.
 
 use super::book::{self, LookBook};
@@ -59,8 +59,8 @@ fn band_of_stage(stage: u8) -> u8 {
 }
 
 struct Shim {
-    none: Option<u32>,
-    missing: Option<u32>,
+    none: Vec<u32>,
+    missing: Vec<u32>,
     generation: String,
     grow: Option<(u32, f32)>,
     start: std::time::Instant,
@@ -70,11 +70,11 @@ fn shim() -> Option<&'static Shim> {
     static SHIM: OnceLock<Option<Shim>> = OnceLock::new();
     SHIM.get_or_init(|| {
         let v = std::env::var("LIVING_GAME_LOOK_SHIM").ok().filter(|v| !v.is_empty())?;
-        let mut s = Shim { none: None, missing: None, generation: String::new(), grow: None, start: std::time::Instant::now() };
+        let mut s = Shim { none: vec![], missing: vec![], generation: String::new(), grow: None, start: std::time::Instant::now() };
         for part in v.split(';').map(str::trim) {
             match part.split_once('=') {
-                Some(("none", n)) => s.none = n.parse().ok().filter(|n| *n > 0),
-                Some(("missing", n)) => s.missing = n.parse().ok().filter(|n| *n > 1),
+                Some(("none", n)) => s.none = n.split(',').filter_map(|x| x.trim().parse().ok()).collect(),
+                Some(("missing", n)) => s.missing = n.split(',').filter_map(|x| x.trim().parse().ok()).collect(),
                 Some(("generation", g)) => s.generation = g.to_string(),
                 Some(("grow", g)) => s.grow = g.split_once('@').and_then(|(id, t)| Some((id.parse().ok()?, t.parse().ok()?))),
                 _ => {}
@@ -99,8 +99,8 @@ impl Shim {
             band = (band + 1).min(book::ELDER);
         }
         let look = match book {
-            _ if self.none.is_some_and(|n| c.id % n == 0) => String::new(),
-            _ if self.missing.is_some_and(|n| c.id % n == 1) => "lk_ffffffffffffffff".into(),
+            _ if self.none.contains(&c.id) => String::new(),
+            _ if self.missing.contains(&c.id) => "lk_ffffffffffffffff".into(),
             Some(b) if !b.pool.is_empty() => {
                 let entry = &b.pool[(c.id as usize).wrapping_mul(2_654_435_761) % b.pool.len()];
                 b.people.get(entry).and_then(|bands| bands.get(&band.to_string()).or_else(|| bands.values().last())).cloned().unwrap_or_default()

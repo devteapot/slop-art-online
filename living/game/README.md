@@ -101,7 +101,7 @@ The file also holds folk ranges (`adult`, `giant`, `small`) and palettes for see
 | `LIVING_GAME_CROWD=N[:seed]` | the line-up gets N random characters in rows to its south: small folk in front, then adults, then giants. Photograph them with `LIVING_GAME_TOUR_SHOTS=0:10:36:40` |
 | `LIVING_GAME_PLAYER=<recipe>` | your character in look-dev: a recipe name or `<folk>:<seed>` (`beast:<kind>` for an animal). Connected, your character is drawn from your own row's look, as anyone's is (docs/LOOK.md) |
 | `LIVING_GAME_COMPOSE=0` | draw people with a person line from their whole files instead of composing them from shared type and style files (composing is the default) |
-| `LIVING_GAME_LOOK_SHIM=pool[;none=N][;missing=N][;generation=G][;grow=ID@S]` | test only, until the authority projects looks: made-up look columns for each person (`characters/seen.rs`) |
+| `LIVING_GAME_LOOK_SHIM=pool[;none=ID,…][;missing=ID,…][;generation=G][;grow=ID@S]` | test only, until the authority projects looks: made-up look columns for each person (`characters/seen.rs`) |
 | `LIVING_GAME_VIEW=recipe:<name>` or `recipe:<folk>:<seed>` | the asset view shows a recipe |
 | `LIVING_GAME_SPRINGS=0` | springs off |
 | `LIVING_GAME_SPRING_BUDGET` / `LIVING_GAME_SPRING_NEAR` | the most characters simulated in a frame (nearest first; default 48), and the distance limit in metres for a 1.75 m character (default 40, scaled by height) |
