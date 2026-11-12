@@ -220,6 +220,17 @@ The `earshot` law (docs/COMMUNICATION.md §17; MIND_RESEARCH_IDEAS #4), approved
 | guards: `false_min`, `rep_res`, `led_res` − placebo | within control's spread | — |
 | cost per run | within 20% of control (about 40 more prompt tokens a deliberation) | — |
 
+### Fake smoke `es1s` (2026-11-12, free)
+
+Main `b02661f9`, worktree `~/slop-trials2b` (branch `earshot-smoke`), the trial service, with the stage's own command: `--fake --fake-script living/trials/fake/strangers.json --replicates 1 --minutes 3`. Both arms ran their 3 minutes; 155 fake calls.
+
+- **The law:** only the earshot arm has `world_laws.json` (`{"earshot": true}`), set after the laws guard at 16:10:34. Control has no world laws.
+- **The prompts** (counted from each world's journal):
+  - control: 19 scene prompts, none with "who would hear you now";
+  - earshot: 18 scene prompts, 8 with it. For example: "Within earshot if you say it: Lumi Pontil (#3), Aldous Quill (#9), Mirren Quill (#10), Pim Hollin (#7), Edda Hollin (#6); a whisper would reach no one; a call would reach no one more."
+- **The 10 without it** are the start-up think requests, sent at 16:10:42–46. They answer deliberations requested while the world was made, before the law was set, and a deliberation keeps the scene from its request. Every person's scene prompt from 16:11:10 on has it, and the newcomer joins at 183 s. So in the paid run, the arm's first start-up thoughts are without the fact. That is before the join, outside every stage measure.
+- **Cleanup:** each run deleted its database at its end through `delete_db`, the world paused first; `trials.py clean --batch es1s` removed the two Neo4j minds. Evidence: `.local/living/trials/es1s`, journals under `.local/living/journal/verify-trial-es1s-*`.
+
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
 Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.

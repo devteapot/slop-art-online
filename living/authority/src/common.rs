@@ -99,6 +99,49 @@ pub fn span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
     PROFILE.with(|p| p.get()).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
 }
 
+// ---- a module updated under a running instance (docs/LOOK.md §7, "The update panic") ------
+
+thread_local! {
+    /// A fingerprint of the database's list of tables (`st_table`) as this instance first saw it,
+    /// at its first scheduled call (0: not yet), and whether it has said it was replaced.
+    static SCHEMA: std::cell::Cell<(u64, bool)> = const { std::cell::Cell::new((0, false)) };
+}
+
+/// Whether the database's tables have changed under this module instance since its first
+/// scheduled call: a module update with a schema change was published while this instance (the
+/// old module's) still runs. SpacetimeDB 2.14.1 lets the outgoing module fire one more scheduled
+/// reducer after the update has committed, and the bindings keep each table's and index's id in
+/// a `static` resolved once per instance, so a table the update rewrote (a column appended: a new
+/// table id and new index ids) makes that call's first lookup panic with "No such index". A
+/// scheduled reducer that sees this returns at once, touching no table; the new module's own
+/// instances (whose first call takes the fingerprint afresh) carry on. One scan of `st_table`
+/// (about 150 short rows) through the host's uncached calls.
+pub fn schema_moved(reducer: &str) -> bool {
+    let Ok(st_table) = spacetimedb::sys::table_id_from_name("st_table") else { return false };
+    let Ok(mut rows) = spacetimedb::sys::datastore_table_scan_bsatn(st_table) else { return false };
+    let mut buf = Vec::with_capacity(16 * 1024);
+    while !rows.is_exhausted() {
+        rows.read(&mut buf);
+    }
+    // FNV-1a over the rows' bytes (never 0, so 0 means "not yet taken").
+    let h = buf.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3)) | 1;
+    SCHEMA.with(|s| {
+        let (seen, told) = s.get();
+        if seen == 0 {
+            s.set((h, false));
+            return false;
+        }
+        if seen == h {
+            return false;
+        }
+        if !told {
+            log::warn!("{reducer}: the database's tables changed under this module instance (a module update was published); this call does nothing, and the new module carries on");
+            s.set((seen, true));
+        }
+        true
+    })
+}
+
 thread_local! {
     /// The transaction whose `now` was last asked for: its stamp, its `now`, a sequence number
     /// unique to it (the key of caches valid within one transaction), and the latest `now` any
@@ -1217,8 +1260,15 @@ pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String 
 }
 
 /// Whose a structure is, as `observer` is told it (owner-known): the owner's name when the
-/// world's `owner_shown` law says so (it knows the owner's name: their label; the structure shows
-/// its owner, a sign: their name), else `None`, and the structure is just its kind.
+/// world's `owner_shown` law says so (it knows the owner's name, `perception::knows_name`, the
+/// shared answer; or the structure shows its owner, its kind's `shows_owner`), else `None`, and
+/// the structure is just its kind.
+///
+/// Where the owner stands now never matters (house-owner-label, 2026-11-12): whether one can make
+/// someone out (`perceived_of`'s `far`, Cullet's `known_within`) is about the person in sight,
+/// never about their house. Before, a known neighbour's house read as "someone too far away to
+/// make out"'s (or "a stranger"'s) whenever its owner was away from it (docs/IDEAS_AUDITS.md §2).
+/// The client names owners the same way, from `my_known_names` (`living/game/src/looks.rs`).
 pub fn owner_label(ctx: &ReducerContext, observer: &Character, owner: u32, kind: &str) -> Option<String> {
     if owner == 0 {
         return None;
@@ -1230,7 +1280,7 @@ pub fn owner_label(ctx: &ReducerContext, observer: &Character, owner: u32, kind:
     if !sc.owner_shown(knows, shows, kind) {
         return None;
     }
-    Some(if knows { label_for(ctx, observer, owner) } else { t.name })
+    Some(t.name)
 }
 
 /// The same, to begin a sentence with.

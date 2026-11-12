@@ -32,14 +32,17 @@ What it reports (OUT/colour.json, and a summary on stdout):
    run, `eyes`, composed with every person's `colors.eyes` pure green: the pixels that change are
    the iris, exactly. Over them, the iris body (L* 20 to 85: the pupil and the highlights left
    out) in `composed` and in `whole`, each as CIE76 ΔE against the line's eye colour
-   (`colors.eyes_natural`, else `colors.eyes`). A person whose eyes are shut in the shot (the blink)
-   is left out.
+   (`colors.eyes_natural`, else `colors.eyes`), and the composed iris against the whole file's
+   (`composed_vs_whole`: what composing changes; the first two also carry the lighting and,
+   since char-4's iris lights, the glow drawn over the iris). A person whose eyes are shut in the
+   shot (the blink) is left out.
 
 It rewrites recipes.json for the runs and restores it after: never run it beside crowd.py or
 compose_check.py. SHOTS overrides the shots, SIZE the frame. PERSON_LINES=<file> takes each person's line
 from a file of person lines (`{"people": {name: line}}`, as char-4 hands them over) in place of
 their `<name>.params.json`'s; ARMS=whole,composed runs only those arms (the sharing check then
-reports nothing). Needs numpy and pillow.
+reports nothing). REUSE=1 measures an OUT already run, without running the client. Needs numpy and
+pillow.
 """
 import json
 import os
@@ -86,14 +89,15 @@ for n in people:
     green["name"] += "-green"
     green["person"]["colors"]["eyes"] = "#00ff00"
     book["recipes"] = [x for x in book["recipes"] if x["name"] not in (r["name"], green["name"])] + [r, green]
-try:
-    with open(RECIPES, "w") as f:
-        json.dump(book, f)
-    for arm, compose, perf in ARMS:
-        run(arm, compose, perf)
-finally:
-    with open(RECIPES, "w") as f:
-        f.write(original)
+if not os.environ.get("REUSE"):
+    try:
+        with open(RECIPES, "w") as f:
+            json.dump(book, f)
+        for arm, compose, perf in ARMS:
+            run(arm, compose, perf)
+    finally:
+        with open(RECIPES, "w") as f:
+            f.write(original)
 
 
 def load(arm, person, shot):
@@ -163,6 +167,22 @@ for p in people:
             deltas.append((de, p, s, k))
         report.append(row)
 
+def align(ref, img, mask, reach=60):
+    """The shift (dy, dx) that lays `img` onto `ref` around `mask`'s box (the eye close-up is
+    framed by each arm's own figure, so a whole file's eyes may sit a few pixels off a composed
+    person's): the least mean absolute difference in luminance, searched in steps of 2 and then 1."""
+    ys, xs = np.nonzero(mask)
+    y0, y1, x0, x1 = max(ys.min() - 20, reach), min(ys.max() + 20, ref.shape[0] - reach), max(xs.min() - 20, reach), min(xs.max() + 20, ref.shape[1] - reach)
+    if y1 <= y0 or x1 <= x0:
+        return 0, 0
+    a, b = ref.mean(axis=2), img.mean(axis=2)
+    win = a[y0:y1, x0:x1]
+    cost = lambda dy, dx: float(np.abs(win - b[y0 + dy:y1 + dy, x0 + dx:x1 + dx]).mean())
+    best = min(((cost(dy, dx), dy, dx) for dy in range(-reach, reach + 1, 2) for dx in range(-reach, reach + 1, 2)))
+    best = min(((cost(dy, dx), dy, dx) for dy in range(best[1] - 1, best[1] + 2) for dx in range(best[2] - 1, best[2] + 2) if abs(dy) <= reach and abs(dx) <= reach))
+    return best[1], best[2]
+
+
 # The eyes: the iris where the green-eyed run differs, its body against the line's eye colour.
 eye_rows = []
 for p in people:
@@ -185,17 +205,21 @@ for p in people:
     if body.sum() < 30:
         eye_rows.append(dict(person=p, iris_pixels=int(body.sum()), note="eyes shut or out of frame"))
         continue
+    dy, dx = align(c, w, mask)
+    w = np.roll(w, (-dy, -dx), axis=(0, 1))
     tgt = np.array([int(want[k:k + 2], 16) for k in (1, 3, 5)], dtype=np.float64)
     de_c = float(np.linalg.norm(lab(c[body].mean(axis=0)) - lab(tgt)))
     de_w = float(np.linalg.norm(lab(w[body].mean(axis=0)) - lab(tgt)))
-    eye_rows.append(dict(person=p, iris_pixels=int(body.sum()), eye_colour=want, composed="#%02x%02x%02x" % tuple(int(round(x)) for x in c[body].mean(axis=0)), whole="#%02x%02x%02x" % tuple(int(round(x)) for x in w[body].mean(axis=0)), composed_delta_e=round(de_c, 2), whole_delta_e=round(de_w, 2)))
+    de_cw = float(np.linalg.norm(lab(c[body].mean(axis=0)) - lab(w[body].mean(axis=0))))
+    eye_rows.append(dict(person=p, iris_pixels=int(body.sum()), eye_colour=want, composed="#%02x%02x%02x" % tuple(int(round(x)) for x in c[body].mean(axis=0)), whole="#%02x%02x%02x" % tuple(int(round(x)) for x in w[body].mean(axis=0)), composed_delta_e=round(de_c, 2), whole_delta_e=round(de_w, 2), composed_vs_whole_delta_e=round(de_cw, 2), whole_shift_px=[dy, dx]))
 
 summary = {}
 measured = [r for r in eye_rows if "composed_delta_e" in r]
 if measured:
     summary["eyes"] = dict(people=len(measured), left_out=len(eye_rows) - len(measured),
                            composed=dict(median=round(float(np.median([r["composed_delta_e"] for r in measured])), 2), most=max(r["composed_delta_e"] for r in measured)),
-                           whole=dict(median=round(float(np.median([r["whole_delta_e"] for r in measured])), 2), most=max(r["whole_delta_e"] for r in measured)))
+                           whole=dict(median=round(float(np.median([r["whole_delta_e"] for r in measured])), 2), most=max(r["whole_delta_e"] for r in measured)),
+                           composed_vs_whole=dict(median=round(float(np.median([r["composed_vs_whole_delta_e"] for r in measured])), 2), most=max(r["composed_vs_whole_delta_e"] for r in measured)))
 if same:
     summary["sharing"] = dict(
         composed_vs_perfile=dict(pixels_changed_median=float(np.median([x[0] for x in same])), pixels_changed_most=max(x[0] for x in same), largest=max(x[1] for x in same)),
