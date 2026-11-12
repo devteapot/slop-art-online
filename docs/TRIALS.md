@@ -210,7 +210,7 @@ Approved by the general coordinator at about $2.7. It runs after the earshot sta
   - recomputed for the earlier runs: C 2 = 2 heard + 0 unheard, fs1f 6 = 6 + 2, fs1h 10 = 5 + 6 (the halves overlap: one minute can hold both);
 - lines to the newcomer out of earshot (the authority's `silence` verdict), first sight → thought, false replies with group talk, tick time, spoken ids;
 - **held lines** (`fs1_held.py`), as in fs1h;
-- **the asks** (`fs1_asks.py`): each asker, with the reason its own thought gave, quoted and grouped: curiosity, its duty or role, being greeted first, others asking, something else. The tool's word grouping is a first pass; each quote is read and the group corrected by hand in the record.
+- **the asks** (`fs1_asks.py`): each asker, with the reason its own thought gave, quoted and grouped: curiosity, its duty or role, **manners** (a norm of the town: "a civil word costs nothing", "that's how the town is kept"; the general coordinator, 2026-11-12, because a norm in the prompt can pull minds toward asking), being greeted first, others asking, something else. A thought giving two reasons is listed under both. The tool's word grouping is a first pass; each quote is read and the group corrected by hand in the record.
 
 **Switches:** as fs1h, plus `earshot` on.
 
