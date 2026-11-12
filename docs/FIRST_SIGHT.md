@@ -1,6 +1,8 @@
-# First sight asks for a thought (design, 2026-11-12; not built)
+# First sight asks for a thought (design, 2026-11-12; approved, being built)
 
-Status: **design only, for the owner's decision.** Nothing is built and no paid call was made. Code is read from main `ef9c3ae5`. The cost figures come from recorded trial runs, counted read-only (§4).
+**The owner's answer (2026-11-12, relayed by the general coordinator): yes.** Build `first_sight_thinks` as designed below, off by default with `first_sight_gap_s` 300 s, then run one paid Cullet stage (C, C + first sight, and LS + cues + first sight if the budget allows; about $13 approved).
+
+Status: **approved design; the build is on branch `first-sight`.** Until it reaches main, nothing here is built. No paid call has been made for it. Code is read from main `ef9c3ae5`. The cost figures come from recorded trial runs, counted read-only (§4).
 
 **The gap.** In strangers stage 2 and 2b (docs/TRIALS.md), a resident's first sight of someone it cannot place arrives in its experiences as a first-sight line, but it never asks for a thought.
 - Ingrid Morrow saw the newcomer from 1.8–2.7 m on the Strand in all four st2b arms, each time with "For the first time you see a stranger, 7 tiles east, goto → (490,779)."
