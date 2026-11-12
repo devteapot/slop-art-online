@@ -550,6 +550,25 @@ This is `instinct:wolf_bold` with one weighted desire beside each hunt (`pack_ar
 - **Fleeing prey.** The wolves hold back at 3–5 m whenever crowded, so they bite and kill less: health lost 123 → 14 at 6v6.
 - **It meets decision 1's condition.** Without it nothing rings. But it is not shipped. It changes how dangerous wolves are, which is the owner's call. And deer flee too: on the island, under instincts, wolves have starved before (`la2`), and the reflex could slow their hunts. A free ecology check (as `stamina-1`'s: wolves and deer over two game days, with and without the reflex) should come before it goes into `instincts.json`.
 
+### The reflex's ecology check (island, 2026-11-12)
+
+The island as shipped (277 people, 24 deer, 9 wolves: the bold pack of 4 and the ordinary pack of 5), 48 game hours from 07:00, 3 worlds per arm, no minds. Driver `living/tools/pack_ecology.py` on `packs-2` (`7810dd1b`); sampled every 2 s by `living/tools/wolf_ecology.py`.
+- **On.** Every grown wolf alive at the start got its own instinct with the reflex beside each hunt: `wolf_bold` with the reflex for the 4 bold, `wolf` with the reflex for the 5 ordinary. Wolves born or grown up during the run lived by the shipped instincts.
+- **Off.** Nothing changed.
+- **Evidence.** `.local/living/pack-ecology/` (Spark, git-ignored): `report-off.json` and `report-on.json`. The worlds were deleted after pausing.
+
+| Arm | Deer killed per run | Deer killed per 100 wolf-hours | Hunting attempts on deer | Attacks on people | People killed | Wolves starved (or died) |
+|---|---|---|---|---|---|---|
+| reflex off | 1, 0, 1 | 0.23 (0–0.23) | 95, 301, 167 | 5, 4, 0 | 0 | 0 (0) |
+| reflex on | 1, 2, 4 | 0.47 (0.23–0.93) | 173, 116, 82 | 2, 2, 7 | 0 | 0 (0) |
+
+**Reading.**
+- **Hunts are not slowed.** Deer kills rose: 7 against 2 over three runs each. By §5.5's rule this differs: the median of 2 lies outside off's 0–1, as do 2 of the 3 runs. Counts this small are only a direction.
+- **No wolf starved or died in either arm.**
+- **People.** None were killed in either arm, and attacks on them stayed rare (0–7 in 48 hours among 277 people).
+- **The risk that prompted the check did not appear.** The reflex did not slow deer hunts or starve the wolves on the island.
+- **Not covered.** Two game days is not a life. The ecology over many days, and the hamlet with a bold pack beside its people, were not run. The shipping decision goes to the coordinator.
+
 ### Step 4: the hidden `pack` copying, retired
 
 Done (§5.7, decision 4). The mind ignores `pack` with a warning, and the choose prompt's "# Your pack" section is gone. The `animal-switches` variant and `animal_minds.py` drop it. verify-minds `animals` (`minds-packs-133930`) passes: three deer, three separate `choose` calls, no copied decision.
