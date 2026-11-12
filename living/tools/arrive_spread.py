@@ -86,8 +86,8 @@ sys.path.insert(0, str(HERE))
 import trials  # noqa: E402,F401  (prices, loaded once for every helper below)
 
 # The speaker's `silence` row for a line its addressee could not have heard: its words since
-# `speech_truth`, speech-2's, and the first ("No answer from …"). A planned line not said carries UNSAID.
-UNHEARD = re.compile(r"^No answer from|could not have heard you|is too far to hear you|within earshot")
+# `speech_truth` (and its room line no one heard, subject 0), speech-2's, and the first ("No answer from …"). A planned line not said carries UNSAID.
+UNHEARD = re.compile(r"^No answer from|could not have heard you|^Nobody was near enough to hear you|is too far to hear you|within earshot")
 UNSAID = "You did not say your planned line"
 
 EARSHOT_M = 12.0

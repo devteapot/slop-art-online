@@ -14,6 +14,26 @@ Branch `strangers-1` (`0dd19571`/`f67b0263`), the trial service `slop-trials-std
 - `doing` failed once on `core-strangers1-b` (a walk to a point ended between the scene and the read of activities: `goto → (10,10)` against `wait`). It passed on main and on a fresh run of this branch. The first attempt (`core-strangers1-a`) failed `stranger_filter` and `doing` because `crowd_sight` left its 11 people on the shared open line. The two new scenes now take a line clear of everyone, and move their actors off it at the end.
 - Not run: the other baseline scenes, speech, town, rhythm, lives.
 
+## 2026-11-12 speech-truth (Spark)
+
+Branch `speech-truth` (origin/main `a221a78e` merged). Trial service `slop-trials-stdb` (2.14.1). docs/COMMUNICATION.md §15.
+
+- `just living-check` passes (rules 249 lib tests among them, with `ways_of_speaking_are_read_from_the_script` updated for the reach in metres, and the `speech_truth` law test).
+- **Regression:** `speech.py regress` (`core-struth-regress`) against the base module (`core-struth-base`, a worktree at `a221a78e`, its own target dir). The diff (`speech-diff.json`) is identical over 75 rows except one, the intended outcome text. a's line to d (out of earshot, unseen) reads "A stranger is out of earshot: they could not have heard you." where the base read "No answer from a stranger; they don't seem to be within earshot." The `introduced` rows are as before.
+- **`speech.py channels`** (`core-struth-channels`): every check passes, the new ones among them:
+  - truthful silence to e (seen) and d (unseen);
+  - the player's line to d out of earshot: its row, and an `act_outcome` (act, reach);
+  - a graph's say to e out of earshot as it comes due: not said, and the speaker told "… You did not say your planned line: “Queued words for e.”.";
+  - `set_world_law speech_truth false`: speech-2's "No answer" and the queued line said into the air.
+- **`speech.py ways`** (`core-struth-ways`): passes.
+
+- **Coordinator's changes** (same branch, origin/main merged):
+  - the outcome states only the fact ("A stranger is too far away: they could not have heard you.", no "Call out or go closer.");
+  - a room line no one receives gives "Nobody was near enough to hear you." (subject 0).
+- Results:
+  - `regress` (`core-struth2-regress`) against `core-struth-base`: the same single intended difference over 75 rows;
+  - `channels` (`core-struth2-channels`) and `ways` (`core-struth2-ways`): every check passes. New: the room line from d with no person within 9 m gives the row; a's room line, heard by b, gives none; with the law off, d's room line gives no row.
+
 ## 2026-11-12 goods-3: building as recipes, tools on recipes, the carry count, the goods audit (laptop host)
 
 Branch `goods-3`, own container `goods3-stdb` (2.14.1, port 3333), `scoped`, no minds, private `CARGO_TARGET_DIR` under `.local/goods3/`.

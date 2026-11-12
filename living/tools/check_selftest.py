@@ -292,7 +292,23 @@ def alive_pid(pid):
     return bool(out) and not out.startswith("Z")
 
 
+def game_tests_case():
+    """The game client's unit tests run in release, after the game build in its lane (one release
+    tree), over the game's package closure (the rules included); a headless skip is named."""
+    sys.path.insert(0, TOOLS)
+    import check
+    names = [s["name"] for s in check.STEPS]
+    g, t = check.STEPS[names.index("game")], check.STEPS[names.index("game-tests")]
+    expect("game-tests: release lane, after the game build", t["lane"] == g["lane"] == "release" and names.index("game-tests") > names.index("game"), names)
+    expect("game-tests: cargo test --release -p living-game", t["cmd"][:3] == ["cargo", "test", "--release"] and "living-game" in t["cmd"]
+           and t["packages"] == ["living-game"], t["cmd"])
+    expect("game-tests: each GAME_TEST_SKIPS name is skipped exactly, with a reason",
+           all(r and ["--skip", n] == t["cmd"][t["cmd"].index(n) - 1:t["cmd"].index(n) + 1] for n, r in check.GAME_TEST_SKIPS.items())
+           and ("--exact" in t["cmd"]) == bool(check.GAME_TEST_SKIPS), t["cmd"])
+
+
 def main(argv):
+    game_tests_case()
     with tempfile.TemporaryDirectory(prefix="check-selftest-") as home:
         wrapper_cases(home)
         watchdog_case(home)

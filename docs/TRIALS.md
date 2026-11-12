@@ -1465,6 +1465,16 @@ The same person, played by the same model, did better in the old valley worlds. 
 - **Perception noise.** A newcomer's first percepts are eleven "You notice a gate" lines, one per gate tile (`l2/life-pressure-glm-flash-low-r1/experiences.jsonl`). A gate should be noticed once.
 - **Trial design.** Spawn scripted-trial subjects instead of repurposing residents (household relations leak through). Hold scripted packs out of town range.
 
+## Running in the hamlet after stamina-1 (2026-11-12)
+
+Main 12d96e66 (stamina-1: a person runs ×1.65, about 4.3 m/s, at a cost of breath; every controller may run), batch `st1ham`, `hamlet` × 4, 12 min each, fake model.
+
+- **How much residents run.** They ran in 0.0–0.2% of their moving samples: a moving body faster than 3.95 m/s or draining breath, sampled every 2 s (a sidecar reading `body` and `vitals`). One resident in one replicate ran, while storing.
+- **Speeds.** The median moving speed was 2.33–2.46 m/s.
+- **Before the merge** (at run ×1.85, `st1after`), the share was 0.0–0.3%; on main without running (`st1before`), 0.
+
+The shipped graphs and seeded ways never ask to run, so residents walk their errands. Only a mind's `run: true`, a flight or a fight runs; the fake minds asked for none. Details: docs/STAMINA.md "After the merge".
+
 ## Life runs (2026-11-09, l1–l3)
 
 Seven open-ended runs on 378b2c1 (main up to 8f6ac72: three model tiers; town life; the one damage rule), started 13:19–13:23. Each subject is `Arlen`, a newcomer made by `spawn_newcomer` at the arrival point, with background `{"origin": "newcomer"}`. **GLM effort:** `life-default-r1` sent GLM 5.3 Flash with the profile's default (unset) reasoning effort; the `glm-flash-low` runs sent `reasoning_effort: low` for every purpose, which main has used since 694821c. The DeepSeek run is unaffected.

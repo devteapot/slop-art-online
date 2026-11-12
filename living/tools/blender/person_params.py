@@ -395,13 +395,20 @@ def person_line(spec, recipe, male):
     proportions differ from the per-person file's recipe in one number: `build` also carries the
     girth the per-person file builds into its own meshes, because a shared piece is built at the
     standard build and the bones give it this person's (the mean of the torso's and the limbs'
-    girth, each against the standard for the person's form)."""
+    girth, each against the standard for the person's form), and `shoulders` is divided by the
+    same, so the girth does not also move the arms out."""
     hair, pieces, head = worn(spec)
     g = ((spec["girth"] / 1.02) * (spec["limb"] / (1.0 if male else 0.86))) ** 0.5
     props = dict(recipe["proportions"])
     props["build"] = round(props.get("build", 1.0) * g, 3)
+    # The client widens the upper chest by build x shoulders and hangs the arms from it. A person's
+    # own file put its girth on below the shoulders only, so the shoulders give the girth back.
+    props["shoulders"] = round(props.get("shoulders", 1.0) / g, 3)
     look = spec["look"]
-    colours = dict(skin=hexed(look["skin"]), hair=hexed(look["hair_natural"]))
+    # One colour for the hair: the natural colour gone as grey as this person's is (a per-person
+    # file greys lock by lock; a shared style takes one tint). The beard has its own.
+    grey = min(max(float(look.get("hair_grey", 0.0)), 0.0), 1.0)
+    colours = dict(skin=hexed(look["skin"]), hair=hexed(mix(look["hair_natural"], look["hair_silver"], grey)), beard=hexed(look["beard_colour"]))
     cloth_ = {}
     for name in pieces + head:
         base = name[:-2] if name[-2:] in ("-m", "-f") else name
@@ -409,8 +416,25 @@ def person_line(spec, recipe, male):
         if isinstance(tone, (tuple, list)) and len(tone) >= 3 and all(isinstance(x, (int, float)) for x in tone[:3]):
             cloth_[name] = hexed(tone)
     colours["outfit"] = cloth_
-    return dict(type=spec["type"], height=recipe["height"], proportions={k: v for k, v in props.items() if abs(v - 1) > 0.004}, identity={k: v for k, v in spec["identity"].items() if abs(v) > 1e-6}, colors=colours,
-                styles=dict(hair=hair, outfit=pieces + head, beard=spec["beard"]))
+    if isinstance(look.get("iris"), (tuple, list)):
+        colours["eyes"] = hexed(look["iris"])
+    # The details worn as overlay styles, by the same thresholds a glance would use.
+    over = []
+    if spec["beard"] in BEARD_FORMS:
+        over.append(f"beard_{spec['beard']}")
+    if spec["beard"] == "stubble" or look.get("stubble", 0.0) > 0.2:
+        over.append("stubble")
+    if look.get("lines", 0.0) > 0.2:
+        over.append("lines")
+    if look.get("freckles", 0.0) > 0.1:
+        over.append("freckles")
+    types = face_types.load()["types"]
+    over = [o for o in over if spec["type"] in overlay_types(o, types)]
+    line = dict(type=spec["type"], height=recipe["height"], proportions={k: v for k, v in props.items() if abs(v - 1) > 0.004}, identity={k: v for k, v in spec["identity"].items() if abs(v) > 1e-6}, colors=colours,
+                styles=dict(hair=hair, outfit=pieces + head, overlays=over))
+    if spec["belly"] > 0.02:
+        line["belly"] = round(spec["belly"], 3)
+    return line
 
 
 def from_type(tid):
@@ -450,8 +474,41 @@ def from_style(style):
 PIECES = dict(
     jersey=(dict(coat="none"), ("Jersey",)), jersey_coat=(dict(coat="coat"), ("Jersey",)), jersey_smock=(dict(coat="smock", hem=0.58), ("Jersey",)),
     coat=(dict(coat="coat"), ("Coat", "Buttons")), trousers=(dict(coat="none"), ("Trousers",)), boots=(dict(coat="none"), ("Boots",)),
-    **{f"smock_{round(h * 100)}{'_apron' if a else ''}": (dict(coat="smock", hem=h, apron=a), ("Smock",)) for h in (0.50, 0.58, 0.74) for a in (False, True)},
+    **{f"smock_{round(h * 100)}": (dict(coat="smock", hem=h, apron=False), ("Smock",)) for h in (0.50, 0.58, 0.74)},
+    **{f"apron_{round(h * 100)}": (dict(coat="smock", hem=h, apron=True), ("Apron",)) for h in (0.50, 0.58, 0.74)},
 )
+# Details a person has and a type does not, as overlay styles (gen_styles.sh): each is built on a
+# type's own face, for the types that can wear it.
+BEARD_FORMS = ("moustache", "goatee", "chinstrap", "short", "full")
+OVERLAYS = tuple(f"beard_{b}" for b in BEARD_FORMS) + ("stubble", "lines", "freckles")
+
+
+def overlay_types(name, types):
+    """The face types an overlay style is written for: beards and stubble for men past boyhood,
+    age lines for adults and elders, freckles for everyone."""
+    if name.startswith("beard") or name == "stubble":
+        return [t for t, v in types.items() if v["sex"] == "male" and v["band"] in ("adult", "elder")] + ([t for t, v in types.items() if v["sex"] == "male" and v["band"] == "youth"] if name == "stubble" else [])
+    if name == "lines":
+        return [t for t, v in types.items() if v["band"] in ("adult", "elder")]
+    return list(types)
+
+
+def from_overlay(spec):
+    """The figure an overlay style's file is built on (`overlay:<type>:<name>`): the type's own
+    figure with that one detail, at a set strength."""
+    tid, name = spec.split(":")
+    if name not in OVERLAYS:
+        raise SystemExit(f"overlay {name!r}: not one of {OVERLAYS}")
+    given = from_type(tid)
+    if name.startswith("beard"):
+        given["beard"] = dict(style=name[6:], stubble=0.0)
+    elif name == "stubble":
+        given["beard"] = dict(style="stubble", stubble=0.8)
+    elif name == "freckles":
+        given["skin"] = dict(given["skin"], freckles=0.7)
+    else:
+        given.update(age=max(given["age"], 66), skin=dict(given["skin"], weathered=0.6))
+    return given
 HEAD_PIECES = dict(cap=(dict(headwear="cap"), ("Cap", "CapPeak")), kerchief=(dict(headwear="kerchief"), ("Kerchief", "KerchiefKnot")))
 
 
@@ -479,7 +536,8 @@ def worn(spec):
     if coat == "coat":
         top = [f"coat-{form}", f"jersey_coat-{form}"]
     elif coat == "smock":
-        top = [f"smock_{int(round(max(spec['hem'], 0.50) * 100))}{'_apron' if spec['apron'] else ''}-{form}", f"jersey_smock-{form}"]
+        hem = int(round(max(spec["hem"], 0.50) * 100))
+        top = [f"smock_{hem}-{form}", f"jersey_smock-{form}"] + ([f"apron_{hem}-{form}"] if spec["apron"] else [])
     else:
         top = [f"jersey-{form}"]
     style = spec["hair"]["style"]
@@ -496,6 +554,8 @@ def from_variant(name):
         return from_style(name[6:])
     if name.startswith("piece:"):
         return from_piece(name[6:])
+    if name.startswith("overlay:"):
+        return from_overlay(name[8:])
     if ":" in name:
         seed, kind = name.split(":")
         sex, lo, hi = KINDS[kind]

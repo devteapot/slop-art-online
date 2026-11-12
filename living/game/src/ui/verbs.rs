@@ -147,9 +147,12 @@ pub fn fill(mut model: ResMut<HudModel>, v: Res<Verbs>, rules: NonSend<Rules>, n
                 r.2 = format!("food {food:.0}");
             }
         }
-        let carried = rows.iter().map(|r| r.1 as f32).sum();
+        // As the rules count a load (goods-3): each item by its `carry_of` (arrows and marks 0.1),
+        // the limit the body's `carry_limit` plus the largest `room` of what I carry (a basket).
+        let carried = rows.iter().map(|r| r.1 as f32 * sc.map_or(1.0, |s| s.num_of("carry_of", &r.0, 1.0)) as f32).sum::<f32>();
         let kind = conn.db.my_characters().id().find(&me).map_or("person".to_string(), |c| c.kind);
-        let limit = sc.map_or(0.0, |s| s.num_of("carry_limit", &kind, 0.0)) as f32;
+        let room = sc.map_or(0.0, |s| rows.iter().filter_map(|r| s.tables().number("items", &r.0, "room")).fold(0.0, f64::max)) as f32;
+        let limit = sc.map_or(0.0, |s| s.num_of("carry_limit", &kind, 0.0)) as f32 + room;
         InventoryView { rows, carried, limit }
     });
     model.verbs.know_how = ws.is_open(super::win::Win::Skills).then(|| {

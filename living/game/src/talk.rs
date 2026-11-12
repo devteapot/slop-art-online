@@ -20,7 +20,7 @@
 //!   Who heard it: the people perceived within earshot when it was said (until the authority's
 //!   `heard_by` lands, `heard.rs`).
 //! - **What the authority accepts:** any `to`. An addressee out of earshot hears nothing, and I
-//!   get "No answer from …" (a `silence` row). A line within 2 s of the last is refused
+//!   get "… could not have heard you." (a `silence` row; "No answer from …" where the world's `speech_truth` law is off). A line within 2 s of the last is refused
 //!   ("speaking too fast").
 
 use crate::net::Net;

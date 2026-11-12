@@ -280,7 +280,9 @@ fn fragment(
             color = wet_sheen(color, N, V);
         }
         let fr = fresnel(N, V);
-        let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part);
+        // Hair takes no general rim: its pale cream, added, is several times dark hair's own
+        // colour and washes it out. Its one rim is `hair_light`'s, in its own hue (toon.hair.w).
+        let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0));
         color = color + rim_light(fr, lit, rim_strength) * sun;
         if (is_kind(4.0)) {
             color = color + hair_light(albedo.rgb, N, V, L, lit, fr, in) * sun;
