@@ -145,7 +145,46 @@ At 40 worlds every tick but one stayed far inside the 16.7 ms budget, and memory
 | 7. wolf brains | `w3` `pack-life` × `default`, `instinct` | the shipped road pack of four as the subject in a `minds: true` island (models file's species map: glm-flash for think, remember and compile); `instinct`: no mind service at all |
 | 8. human, then AI | `w4` `life-takeover` × `default` | a 20-minute scripted player session through the player reducers, then takeover after `takeover_s` (30 s); proved in a dry run: the character became `ai`, controlled by the minds, 30 s after the last call |
 
-### Results of the wide batch (finished 22:58)
+### Strangers stages 0 and 1 (2026-11-12, st0, st1)
+
+docs/STRANGERS.md section 6 and its decisions. The trial files are `strangers` (main's Cullet seed with the two lives of dc2ecfc8) and `strangers-pre`. `strangers-pre` takes the six residents dc2ecfc8 redrafted (the Quill and Morrow households and Kenji Sato) from dc2ecfc8^ = 11e4fcb1 (`world.residents_from`); every other resident is byte-identical in both. `-aldous` variants think only for Aldous Quill. The variants are `strangers-control` and `strangers-filter` (`stranger_by_name` on, by `set_world_law` after the laws guard, read back from `world_law`).
+
+The script:
+- the world starts at 07:00 (no reducer sets the clock);
+- the newcomer "Arlen" joins at 09:30, at the arrival point (540.5, 766.5), which is the Counting House yard;
+- it stands silent 5 minutes there, walks to the densest group and stands silent 5 minutes more, then stays to the end (20 minutes).
+
+**Builds and switches.**
+- Stage 0 ran `0dd19571`; stage 1 ran `bc1e7c0a`. Both are main `dc2ecfc8` plus this branch.
+- Both are without speech-truth (the "No answer" wording; arrive_spread matches both wordings).
+- Main's mind defaults: `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`.
+- The meters() alarms are present. No skill timings or force_outcomes overrides; no arrival laws.
+
+**Stage 0** (`st0`, `--fake --fake-script living/trials/fake/strangers.json`, free): C, S, L and LS with all minds, plus C and S with Aldous only, 1 replicate each. All 6 stopped by duration. The measures compute (`arrive_spread.py --strangers --control strangers-pre:strangers-control`):
+- first-sight lines naming the newcomer reached every person within 12 m of it after the join: 8–21 of 8–21;
+- classes, tells, first heard line, crowding and spoken ids (0) are computed.
+- The fake's `goto {nearest person, relation: stranger}` routine:
+  - with the law off, it took residents to other people (13 and 18 of them in C and L) and 0–1 to the newcomer;
+  - with it on, 3 and 4 went to the newcomer and 1 elsewhere.
+- The minds' graph grammar followed the law: "no feelings about yet" in C, "whose name you do not know" in S.
+
+**Stage 1** (`st1`, real models: glm-5-3-flash 155 calls, deepseek-v4-1-flash 45). Aldous Quill only, on his pre-lives sheet, C against S, 4 replicates each. All 8 stopped by duration.
+- **Cost:** $0.31 ($0.036–0.043 a run), 1.6 M tokens.
+- **What Aldous did:** in no run did he speak to the newcomer or approach it. The 28 lines he said went to residents: debts, Lorcan Vane's nine drops, Mirren, Dolly's accounts.
+- **Control:** his first sight came at the join in all 4 runs, and he came within 6–11 m. He was in range during a stand in all 4 and classed *unaware* in all 4. The newcomer was in a think prompt in r4 only (5 thinks), and no thought named it.
+- **Filter:** he was never in range during a stand. His first sight came 275–307 s after the join in r1 and r2, and not at all in r3 and r4 (closest 24–29 m). In r1 he passed within 3 m after the stands and said nothing.
+- **Tells:** `tells` lists Aldous in control r2 for "strangers west of the Batch … Worth a watch". That line was about neighbours, said after he had seen the newcomer: a limit of the word measure. *Inward* counts stranger words only when the newcomer was in that prompt.
+- **Routines:** one compiled routine per arm used `relation: "stranger"` (control r3, filter r1). Both were about watching "strangers" who were in fact neighbours.
+- The filter alone shows no difference in what Aldous did. Without the lives his sheet gives no reason to ask, as the design expected.
+- **Spoken ids:** 0 of 35 lines. ar2 had 1 of 3,042 (Wenna Reed, arrive-answer/arrive-all r4: "And Lio — #12 — get you back to my elbow", said to a named resident).
+
+**Finding: "a stranger" in Cullet is not only the newcomer.** In Aldous's deliberation scenes, members of his own community beyond Cullet's naming distance (`perceived_of`: names within 24 m) are `"who": "a stranger"` with `"community": "yours"`; for example #27 at 46 m, #36 at 25 m and #8 at 46 m. His thoughts call them "the west strangers carrying fish into a store nobody wrote me". He told Neve Calloway "strangers west of the Batch … Worth a watch", and his mind wrote a relation "Tobiah Dunmore: stranger".
+- STRANGERS.md §1 assumed that a scene's "a stranger" in Cullet can only be the newcomer. That holds for `knows_name`, which the `stranger_by_name` filter uses, but not for the scene's word.
+- Before stage 2, the word in scenes and percepts for a known person too far to recognise ("someone", or "one of yours, too far to make out") is a decision for the general coordinator. It is not built here.
+
+**Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
+
+## Results of the wide batch (finished 22:58)
 
 36 runs, 7,556 model calls, 62.0M tokens, about **$10.57** (GLM 5.3 Flash and DeepSeek 4.1 Flash at the prices above). No runaway, no mind restart and no failed instance. Tick p99 per world stayed within 2.0–4.3 ms through the ramp to 39 worlds. The trial volume grew to 39 GB.
 

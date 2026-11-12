@@ -1,5 +1,15 @@
 # Core validation record
 
+## 2026-11-12 strangers-1: first sights in a crowd, a graph's "stranger" under a law (Spark)
+
+Branch `strangers-1` (`0dd19571`/`f67b0263`), the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Evidence copied to `~/slop-strangers-logs/verify/`.
+
+- `crowd_sight` (new; `core-strangers1-b`): 8 of 8 pass, twice. An observer among 8 strangers within 4.5 m (a crowd of 9): 2 first-sight lines, 336 characters, all 8 named, 8 `familiar` rows; 2 more brought in: 1 line, 94 characters, both by id, both familiar. The same scene with `--baseline` on main `dc2ecfc8` (`core-strangers1-base2`, its own worktree and target dir): **0 lines** for the 8 and **0** for the 2.
+- `stranger_filter` (new): 3 of 3. Law off: the wave goes to A (same community, no relation row). `set_world_law stranger_by_name true`: it goes to N (relation "wary", name unknown).
+- `sight` 6/6, `senses` 7/7, `fov` 18/18 (`core-strangers1-c`), `doing` 7/7 on a fresh run (`core-strangers1-c`; main 7/7).
+- `doing` failed once on `core-strangers1-b` (a walk to a point ended between the scene and the read of activities: `goto → (10,10)` against `wait`). It passed on main and on a fresh run of this branch. The first attempt (`core-strangers1-a`) failed `stranger_filter` and `doing` because `crowd_sight` left its 11 people on the shared open line. The two new scenes now take a line clear of everyone, and move their actors off it at the end.
+- Not run: the other baseline scenes, speech, town, rhythm, lives.
+
 ## 2026-11-11 who heard a line (exp-greet, Spark)
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`. New scene `audience` (`features/laws.md`), run `core-audience-150613`: all 8 checks pass. Law off: no row. Law on: one row, the two hearers within the shipped 9 m and not the one at 13 m, distances about 1 and 4 m, both ahead of the speaker. A line 61 s later deleted the first row. Only `speak` changed in the authority (`speech_audience`, off by default). The other scenes were not rerun.

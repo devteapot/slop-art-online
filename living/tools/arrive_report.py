@@ -5,7 +5,9 @@ Ported from branch `exp-arrive` (2026-11-12, strangers-1) without its arrival la
 rejected: the `marked` column ("new to you" in a scene) is gone. A newcomer who joins later
 (`newcomer` in the trial, cast role `newcomer`, event `newcomer_join`) is read as the newcomer
 and its join as its arrival; a run whose minds think only for some (`LIVING_ONLY` in
-`mind-env.json`) counts only those as residents.
+`mind-env.json`) counts only those as residents. Unheard lines (the speaker's silence row, in
+either wording: "No answer from …" before `speech_truth`, "… could not have heard you." since) and
+re-asks are counted by arrive_spread.py, not here.
 
   arrive_report.py BATCH [BATCH...] [--root DIR] [--examples N] [--json OUT]
   arrive_report.py --journal DIR --subject ID --from-ms MS --to-ms MS [--examples N]

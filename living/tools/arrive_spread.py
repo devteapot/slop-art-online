@@ -19,7 +19,7 @@ control is `<trial>:arrive-control`. Per run:
   (arrive_report's `first_contact_s` is from its first walk, 20 s after joining);
   `heard_join_s`: to the first line said to it that reached it: not out of earshot by the
   authority's own verdict (the speaker's "silence" experience at the line, "No answer from …; they
-  don't seem to be within earshot", in `experiences_all.jsonl`; without it, the speaker beyond
+  don't seem to be within earshot" or, since `speech_truth`, "… could not have heard you.", in `experiences_all.jsonl`; without it, the speaker beyond
   EARSHOT_M, 12 m, Cullet's speech, of the newcomer's position interpolated from `positions.jsonl`).
   `lines_to`: lines said to the newcomer; `far`: those out of earshot, which never reached it;
   `heard_res`: residents who said at least one line to it that reached it.
@@ -57,10 +57,11 @@ resident thought for and in range (within 12 m of the newcomer during a stand):
   `first`: whether a first-sight line named the newcomer (subject or object), or `-` when none did;
 - `class`, exclusive, in this order: `asks` (a line to the newcomer, heard or not); `approaches`
   (came within 4 m, or waved, nodded, faced or aimed an act at them, with no line); `inward` (a
-  thought after the join names them by id or calls them a stranger/newcomer, with no act toward
-  them); `unaware` (none of these);
+  thought after the join names them by id, or calls someone a stranger/newcomer while they are in
+  that prompt, with no act toward them; in Cullet a scene's "a stranger" is also a neighbour past
+  the naming distance); `unaware` (none of these);
 - per run: `tells`, residents thought for (in range or not) who said a line to someone else with
-  stranger words after the join, and how many of them were beyond 12 m of the newcomer when it
+  stranger words after the join, having perceived the newcomer before it (an experience naming it), and how many of them were beyond 12 m of the newcomer when it
   joined (`tells_out`); `first_heard` (seconds from the join and who); `fs_cover`, persons past
   infancy within 12 m of the newcomer at some sample after the join who got a first-sight line
   naming it, of all such persons (the crowd fix: everyone in sight is perceived); `routines`,
@@ -83,6 +84,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import trials  # noqa: E402,F401  (prices, loaded once for every helper below)
+
+# The speaker's `silence` row for a line its addressee could not have heard: its words since
+# `speech_truth`, speech-2's, and the first ("No answer from …"). A planned line not said carries UNSAID.
+UNHEARD = re.compile(r"^No answer from|could not have heard you|is too far to hear you|within earshot")
+UNSAID = "You did not say your planned line"
 
 EARSHOT_M = 12.0
 GIVE_KINDS = {"give", "teach", "host", "trade", "lodge", "offer"}
@@ -148,11 +154,14 @@ def extra(d, sid, names, minds):
     joined = next((e["newcomer_join"]["at_ms"] for e in jl(d / "events.jsonl") if "newcomer_join" in e), None)
     join_ms = joined or next((r["at_ms"] for r in jl(d / "chronicle.jsonl") if r.get("kind") == "arrival" and r.get("a") == sid), st["t0"] * 1000)
     to_new = [s for s in speech if s.get("b") == sid and s.get("a") != sid]
-    # The authority's own verdict, when recorded: a "silence" experience of the speaker, "No answer
-    # from …; they don't seem to be within earshot", at the line's time. It counts every line said,
-    # where speech.jsonl merges a line repeated word for word into its earlier row.
+    # The authority's own verdict, when recorded: a "silence" experience of the speaker at the
+    # line's time ("No answer from …; they don't seem to be within earshot" before `speech_truth`,
+    # "… could not have heard you." since; `UNHEARD`). It counts every line said, where
+    # speech.jsonl merges a line repeated word for word into its earlier row. A planned line the
+    # authority did not say (`speech_truth`: its addressee out of reach as it came due) is no line.
     earshot = {(r["observer"], r["at_ms"]) for r in jl(d / "experiences_all.jsonl")
-               if r.get("kind") == "silence" and r.get("subject") == sid and "earshot" in (r.get("text") or "")}
+               if r.get("kind") == "silence" and r.get("subject") == sid and UNHEARD.search(r.get("text") or "")
+               and UNSAID not in (r.get("text") or "")}
     heard, far = [], []
     for s in to_new:
         if (d / "experiences_all.jsonl").exists():
@@ -286,9 +295,12 @@ def strangers(d, r, sid, names, minds, x):
         for k, v in q["pos"].items():
             if int(k) != sid and stage.get(int(k), 2) >= 1 and ((v[0] - me[0]) ** 2 + (v[1] - me[1]) ** 2) ** 0.5 <= 12.0:
                 near_ever.add(int(k))
+    perceived = {}
     for e in jl(d / "experiences_all.jsonl"):
-        if "first time you see" in (e.get("text") or "") and sid in (e.get("subject"), e.get("object")):
-            cover.add(e["observer"])
+        if sid in (e.get("subject"), e.get("object")):
+            perceived.setdefault(e["observer"], e["at_ms"])
+            if "first time you see" in (e.get("text") or ""):
+                cover.add(e["observer"])
     # Thoughts after the join that name the newcomer or call someone a stranger.
     inward, routines = {}, 0
     for f in sorted((d / "journal").glob("*.jsonl")) if (d / "journal").exists() else []:
@@ -296,7 +308,9 @@ def strangers(d, r, sid, names, minds, x):
             if (e.get("at_ms") or 0) < join:
                 continue
             rep_ = AR.reply_text(e)
-            if e.get("purpose") == "think" and (AR.names_id(rep_, sid) or STRANGER_WORDS.search(rep_)):
+            # Stranger words count only when the newcomer was in that prompt: in Cullet "a stranger"
+            # in a scene is also a neighbour past the naming distance (docs/TRIALS.md, st1).
+            if e.get("purpose") == "think" and (AR.names_id(rep_, sid) or (STRANGER_WORDS.search(rep_) and AR.names_id(AR.user_text(e), sid))):
                 inward.setdefault(f.stem.replace("_", " "), (e["at_ms"], rep_[:240]))
             if e.get("purpose") == "deliberate" and re.search(r'"relation"\s*:\s*"stranger"', e.get("reply") or ""):
                 routines += 1
@@ -317,7 +331,7 @@ def strangers(d, r, sid, names, minds, x):
                      "thought": inward.get(name, (None, ""))[1] if cls == "inward" else ""})
     speech = jl(d / "speech.jsonl")
     tellers = sorted({s["a"] for s in speech if s["at_ms"] >= join and s.get("a") in minds and s.get("b") != sid and s.get("a") != sid
-                      and STRANGER_WORDS.search(quoted(s.get("text", "")))})
+                      and STRANGER_WORDS.search(quoted(s.get("text", ""))) and perceived.get(s["a"], 1 << 62) <= s["at_ms"]})
     me0 = pos_join.get(str(sid))
     out = [t for t in tellers if me0 and str(t) in pos_join and ((pos_join[str(t)][0] - me0[0]) ** 2 + (pos_join[str(t)][1] - me0[1]) ** 2) ** 0.5 > 12.0]
     heard_by = x.get("first_heard_by")
