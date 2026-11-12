@@ -17,7 +17,7 @@ base={
  "record":{"bodies":{"hz":5},"uses":True},
  "variants":["instinct"],
 }
-def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold", deer=False, about=None, minds=None):
+def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold", deer=False, about=None, minds=None, people_graph="instinct:person"):
     t=json.loads(json.dumps(base))
     if minds:
         # Both sides think (docs/PACK_MIND.md §6 steps 5-6): every person and wolf of the arena.
@@ -38,7 +38,7 @@ def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold
     if night: t["world"]={"seed":"island","start_hour":21}
     wolf_off = close if start=="close" else spread[wolves]
     steps+=[
-        {"do":"graph","who":"subject","graph":"instinct:person"},
+        {"do":"graph","who":"subject","graph":people_graph},
         {"do":"graph","who":"pack","graph":{"wait":5}},
         {"do":"background","who":"pack","background":{"pack":"the arena pack","bold":True}},
         {"do":"place","who":"subject","to":{"who":"pack","offset":[9,0],"spread":people_spread}},
@@ -57,6 +57,19 @@ C2={"first":[FLEE,
   {"if":{"cond":{"all":[{"near":{"target":{"nearest":"wolf"},"within":3}},{"near":{"target":{"nearest":"person"},"within":6}}]},"then":{"do":{"skill":"back_off","target":{"nearest":"wolf"},"distance":4}}}},
   BITE,
   {"do":{"skill":"keep_distance","target":{"nearest":"person"},"min":3,"max":5}}]}
+def running(g):
+    """The fixture with every movement intent at a run (the first fixtures walked, 3.4 m/s,
+    after people fleeing at a run: no ring could form; docs/PACK_MIND.md §7)."""
+    if isinstance(g, list):
+        return [running(x) for x in g]
+    if isinstance(g, dict):
+        out = {k: running(v) for k, v in g.items()}
+        if out.get("skill") in ("circle", "keep_distance", "back_off", "close_in"):
+            out["run"] = True
+        return out
+    return g
+C1R=running(C1)
+C2R=running(C2)
 CAL_ABOUT="Calibration fixture (docs/PACK_MIND.md §5.6): graphs written by us, kept in this trial file only, never shipped; they measure whether the world lets wolves ring a person, not whether wolves do."
 if __name__=="__main__":
     for start in ("close","spread"):
@@ -68,6 +81,11 @@ if __name__=="__main__":
             about="Both sides with minds (wolves LIVING_ANIMAL_MINDS=salient,choose; people the default mix), starting from their instinct graphs; nothing in any prompt names a tactic (docs/PACK_MIND.md §5.5 guards).")
     arm("pack-minds-mixed-6v6", 6, 6, "spread", deer=True, minds=["subject","pack"],
         about="Both sides with minds, the island's deer left where they live (the mixed arm).")
+    for name,gr in (("c1r",C1R),("c2r",C2R)):
+        for start,w,pp in (("close",3,3),("close",6,6)):
+            arm(f"pack-{name}-{start}-{w}v{pp}", w, pp, start, wolf_graph=gr, about=CAL_ABOUT)
+        arm(f"pack-{name}-stand-6v6", 6, 6, "close", wolf_graph=gr, people_graph={"wait":900},
+            about=CAL_ABOUT+" The people stand where they are (they hold their ground and do not strike): the plainest test of whether wolves can ring a target.")
     for name,g in (("c1",C1),("c2",C2)):
         for start,w,pp in (("close",3,3),("close",6,6),("spread",6,6)):
             arm(f"pack-{name}-{start}-{w}v{pp}", w, pp, start, wolf_graph=g, about=CAL_ABOUT)
