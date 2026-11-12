@@ -794,6 +794,16 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
     # Records the world starts with (a community's regard for another; docs/WORLD_RULES.md).
     if world.get("records"):
         seed["records"] = world["records"]
+    # The world's look data (`looks.json` beside the plan: the generator's, or the pool alone from
+    # living/tools/pool_looks.py; docs/LOOK.md §5): a resident it names wears that entry, everyone
+    # else a pool entry by pool_pick.
+    looks = world_looks(wd)
+    if looks is not None:
+        seed["looks"] = looks["looks"]
+        for t in seed.get("towns", []) + seed.get("villages", []):
+            for r in t.get("residents", []):
+                if r["name"] in looks.get("residents", {}):
+                    r["look"] = looks["residents"][r["name"]]
     seed_path.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n")
     n_rel = sum(len(s["relations"]) for s in sheets.values())
     print(f"wrote {seed_path.relative_to(ROOT)}: {len([s for s in world['settlements'] if s['name'] in casts])} settlements, {len(sheets)} residents; {n_rel} relations ({one} one-sided, {unshared} family/named/situation ties still one-sided), {sum(len(s['memories']) for s in sheets.values())} memories, {sum(len(s['stances']) for s in sheets.values())} stances, {sum(1 for s in sheets.values() if s.get('secret'))} secrets, {len(sits_all)} situations; {len(problems)} problems")

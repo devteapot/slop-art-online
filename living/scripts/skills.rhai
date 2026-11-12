@@ -2719,14 +2719,14 @@ fn rates_awake() {
 // `meters()`: the bars a body has, each naming fields of its `my_vitals` row: `value`, and `max`
 // a field or a number; `shown: false` keeps a meter off the screen while it still bounds its
 // value and feeds the statuses. A world that adds a vital adds its column and a row here.
-// Breath is a bar under health, always; focus a bar under the world's word for it, while it is
-// not full; tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
+// Breath is a bar under health, always; focus a bar under the world's word for it, always too
+// (the owner, play-test 6: "why not always visible ?"); tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
 fn meters() {
     let w = pool_word("focus");
     [
         #{ name: "health", value: "hp", max: "max_hp", order: 0 },
         #{ name: "stamina", value: "stamina", max: "stamina_max", order: 1 },
-        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1), while_short: true },
+        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1) },
         #{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },
         #{ name: "hunger", value: "hunger", max: 100.0, order: 4, shown: false },
     ]
