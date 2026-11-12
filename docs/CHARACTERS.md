@@ -1695,6 +1695,72 @@ look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part 
 
 **In the bundle:** the book at `living/game/assets/characters/looks.json`, and the world's data and its cases at `living/seeds/worlds/cullet/`, with `cullet-people.json` as before.
 
+### The look book
+
+look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part of it). The live game drew no generated people. The look book is what lets it: a person line and its words for every look band a person can reach, under opaque keys.
+
+**One command, two files** (`living/tools/characters/look_lines.py book --town living/seeds/cullet.json`, after `town.py` has built the town; 2 s):
+
+| File | What it holds | Who reads it |
+|---|---|---|
+| `living/game/assets/characters/looks.json` (git-ignored) | `generation`; `lines`: `{"lk_…": {person: the line as the composer reads it, words: LookWords}}`; `decor`: line keys for the island's background people; `files`: every shared file the lines name, with how many lines use it and an outfit piece's slot and layer | the client |
+| `living/seeds/worlds/cullet/looks.json` (tracked) | `looks`: `{generation, people: {lp: {band: lk}}, words: {lk: LookWords}, pool: [lp]}`; `residents`: `{the seed's name: lp}` | the authority's seed tools; never shipped to a client |
+
+- **The book does not say whose a line is.** No people, no pool, no names: a client cannot tell a resident's line from a newcomer's, or link one person's lines across ages. That is in the world's data only.
+- **Now:** generation `c4-…`, 887 lines: Cullet's 64 residents in 151 (1 infant, 11 child, 17 youth, 58 adult, 64 elder), 128 pool people in five bands each (640), 96 decor lines. The book is 1.8 MB, the world's data 0.2 MB.
+
+**Keys.**
+
+- **A line's key** is `lk_` and the first 16 hex digits of the SHA-256 of the line's canonical JSON, in UTF-8.
+- **Canonical JSON:** only the fields the client draws, those the line has: `type`, `height`, `proportions`, `identity`, `colors`, `styles`, `belly`, `grey`. Keys sorted at every depth, separators `,` and `:` with no spaces, each number in its shortest form that reads back the same (Python's `json.dumps(…, sort_keys=True, separators=(",", ":"))`; `serde_json` writes the same for a number read as `f64`). A name, a seed or an id is not among them and is not in the book's entry.
+- **A person's key** is `lp_` and the first 16 hex digits of the SHA-256 of their bands and line keys, `0:lk_…|1:lk_…` in band order. It is in the world's data only.
+- **No key comes from a name or from the cast's order.**
+- **A test vector:** the line `{"type": "adult-f-a", "height": 1.6, "name": "…", "seed": 7}` has the canonical JSON `{"height":1.6,"type":"adult-f-a"}` and the key in `look-cases.json`. That file (`look_lines.py cases`, beside the world's data) has two whole lines with their canonical JSON and keys as well.
+
+**Bands** ([look](LOOK.md) §4; `look_band` is the rules' own, and `band_of` here is the same rule for writing the book): 0 infant (the authority's stage 0), 1 child (stage 1 and under 12), 2 youth (12 to under 18, at either stage), 3 adult (stage 2 and 18 or over), 4 elder (stage 3). In Cullet infancy ends at 2.1 years, childhood at 15 (`life_years`) and old age starts at 59.5.
+
+- **A resident has a line for the band they are in and for every later one.** The band they are in is their line as the town's build made it, with outfit colours measured from the built file. A later band is the same person drawn at that band's age (8, 15, 30, 68): the same seed, sex, family and skin tone, so the same identity values, eye and hair colour. The type follows sex and band; grey, lines and build come as the generator ages people.
+- **Band cases from the cast** are in `look-cases.json`: from Dory Tarn (1, stage 0, infant; all five bands in the data) through Col Roon (15: stage 2 and still a youth) to Halvard Dunmore (70, elder; one band).
+- **An infant** is a child type at an infant's size: the generator's own height for a one-year-old held to 0.70 to 0.85 m, with the head 1.56 to 1.6 times larger for its body that the generator gives that height, hair cropped (`crop`), in a plain smock with no apron or headwear. There is no baby type yet.
+
+**The pool: 128 people,** 64 women and 64 men from seeds of their own (20000 on), each with all five bands, so a newcomer keeps their look as they grow.
+
+- **Why 128.** It keeps the authority's static `look_line` table under 1,000 rows with Cullet's (791 now) and the book under 2 MB. Every pool person has their own identity values, so no two have the same face; with 21 types, 59 hair files and nine cloth colours their words repeat far sooner than their faces do. Two newcomers picking the same person is the price of a pool: with 10 newcomers the chance that some two share one is about 30%, with 20 about 78%. A larger pool lowers that at the cost of rows and bytes; it is one number (`--pool`).
+- **The decor: 96 lines,** one each from 96 other people (seeds 40000 on), across child, youth, adult and elder as a town's ages run. None is a line a character can wear: the tool checks.
+
+**Words** (`words_of`: one function names everyone, from the person's parameters).
+
+| Field | Values |
+|---|---|
+| `form` | `baby`; `girl`, `boy`; `young woman`, `young man`; `woman`, `man`; `old woman`, `old man`: by band and sex |
+| `girth` | 0 slight, 1 medium, 2 heavy-set: the build's weight below -0.35, between, above 0.45 or a belly over 0.12 |
+| `height` | 0 short, 1 middling, 2 tall for the band: more than 0.6 of the generator's spread below or above what it expects at that age and sex |
+| `hair` | `dark-haired`, `brown-haired`, `red-haired`, `fair-haired`, `grey-haired` (more than half grey), `white-haired` (more than 0.85), `bald`, or nothing under a kerchief |
+| `top` | `a <colour> coat`, `smock` or `jersey`, the largest garment, and `with an apron` |
+| `bottom` | `dark trousers` |
+| `head` | `a cap`, `a kerchief`, or nothing |
+| `beard` | `a <tone> beard`, `moustache` or `goatee`, `stubble`, or nothing |
+
+- **Nine colour words for ten cloths:** yellow (oilskin), black (tarred), green (olive and green), tan (canvas), blue, red, cream, navy, purple (heather).
+
+**An unbuilt line's outfit colours.** A line's outfit colours are the colours as painted ("the line's colour is the painted colour" under [one shading mean a class](#one-shading-mean-a-class)), which a built file is measured for. A later band and a pool person have no built file. Their pieces' colours are their cloths' taken to what they would be painted: the value ratio, saturation ratio and turn of hue that the built residents' pieces of that kind have at the median (`paint_rule`). Against the built colours of Cullet's 293 pieces that is 0.5 CIE76 at the median, 3.2 at the 95th percentile and 3.7 at most.
+
+**Slot and layer.** Each outfit style file says where its piece is worn and how far out, in its scene's extras: `"outfit": {"piece": "smock_58-f", "slot": "upper", "layer": 1}` (`person_params.PIECE_WEAR`; `gen_styles.sh` writes it). The book's `files` carries the same.
+
+| Piece | Slot | Layer |
+|---|---|---|
+| `jersey`, `jersey_coat`, `jersey_smock` | `upper` | 0 |
+| `coat`, `smock_*` | `upper` | 1 |
+| `smock_bands` | `upper` | 2, with `"trim": true`: the smock's bands of other cloth, not a garment |
+| `apron_*` | `upper` | 3 |
+| `trousers` | `lower` | 0 |
+| `boots` | `feet` | 0 |
+| `cap`, `kerchief` | `head` | 0 |
+
+`feet` and `head` are two slots beyond the `upper` and `lower` asked for, so boots are not taken for the outermost lower piece.
+
+**In the bundle:** the book at `living/game/assets/characters/looks.json`, and the world's data and its cases at `living/seeds/worlds/cullet/`, with `cullet-people.json` as before.
+
 ### The neck
 
 Pass 3, 2026-11-12, from the owner on the cast's faces: "the neck is still off, seems too big? maybe the issue are the attachment point to the head". Measured against the reference with a new tool beside ref-1's (`living/tools/characters/reference/neck.py`): horizontal cuts of the skin from the jaw down, the pivots and the seam, on any character file.
