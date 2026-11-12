@@ -149,14 +149,22 @@ pub fn voice_m() -> f32 {
     compiled().and_then(|s| s.way("say").map(|w| w.carry_for(s.reach().hearing))).unwrap_or(9.0)
 }
 
-/// The ways of speaking for a talk turn's reply, when the world has more than `say`.
+/// Whether the world's rules tell a speaker the truth about a line no one addressed could hear
+/// (the `speech_truth` law; on in the bundled rules).
+pub fn speech_truth() -> bool {
+    compiled().map_or(true, |s| s.laws().speech_truth)
+}
+
+/// The ways of speaking for a talk turn's reply, when the world has more than `say`: each with
+/// its reach in metres, from its spec and the world's hearing (`WaySpec::reach_words`).
 fn ways_text() -> String {
     let Some(s) = compiled() else { return String::new() };
     if s.ways().len() < 2 {
         return String::new();
     }
     let names: Vec<String> = s.ways().iter().map(|w| format!("\"{}\"", w.name)).collect();
-    let about: Vec<String> = s.ways().iter().map(|w| format!("{} = {}", w.name, w.about.trim())).collect();
+    let hearing = s.reach().hearing;
+    let about: Vec<String> = s.ways().iter().map(|w| format!("{} ({}) = {}", w.name, w.reach_words(hearing), w.about.trim())).collect();
     format!("\"way\": how you say it, {} (default \"say\"; {}), ", names.join(" or "), about.join(" "))
 }
 
@@ -373,6 +381,12 @@ Deliberate one-off interactions (starting a family, trading, giving, teaching, w
     };
     // Only people's graphs read judgments for now (the first one is a person's fight).
     let judged = if speaks { judged_line() } else { String::new() };
+    // The world's `speech_truth`: what becomes of a planned line to someone.
+    let say_note = if speaks && speech_truth() {
+        " A line to someone is not said if, when it comes due, they are beyond what it carries (you are told instead) or the talk with them has moved on since you planned it (they spoke to you, or you answered them)."
+    } else {
+        ""
+    };
     let g = format!(
         "\
 BEHAVIOR GRAPH (JSON) — it runs continuously (~1 check per second, instantly on events) while you think slowly, so encode how to react, not just one action.
@@ -381,7 +395,7 @@ Nodes:
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
 - {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds, except that work already begun under it (sleep, rest, eat, gather, build, craft, cook, teach, write, read, plant...) is finished; walking, fleeing and fighting stop as soon as C no longer holds.
 - {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically. Add \"run\": true to run there instead (goto, follow, an attack's approach): it costs breath and is for hurry, flight and fights; out of breath you walk. A flight (flee) runs unless \"run\": false.{making}
-- {{\"say\": \"<the words>\", \"to\": T}} speak (each say node speaks at most once per 45 s).
+- {{\"say\": \"<the words>\", \"to\": T}} speak (each say node speaks at most once per 45 s).{say_note}
 - {{\"wait\": seconds}}
 - {{\"think\": \"reason\"}} ask yourself to reconsider (non-blocking; ignored within 45 s of a decision, then at most once per 90 s). Put it where your plan runs out (e.g. last in a seq or as the final fallback), not where it is reached on every check.
 Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"above\": 60}}, \"has\": {{\"item\": \"food\"}}}}, \"then\": {{\"do\": \"eat\", \"item\": \"food\"}}}}

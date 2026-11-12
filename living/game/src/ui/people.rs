@@ -46,7 +46,7 @@ pub struct Line {
     pub text: String,
     pub mine: bool,
     pub heard_by: Option<Vec<u32>>,
-    /// The one addressed was out of earshot ("No answer from …").
+    /// The one addressed was out of earshot ("… could not have heard you.").
     pub unheard: bool,
 }
 

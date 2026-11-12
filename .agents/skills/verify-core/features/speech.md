@@ -17,7 +17,7 @@ Design: [docs/COMMUNICATION.md](../../../../docs/COMMUNICATION.md). Source: `liv
   3. The chronicle line. A `say` line reads as before; another way names itself: "Ilsa (whisper) to Bram: …".
   4. The speaker's `said` row (0.5) and a `repeat` row (0.3) for nearly the same line within 90 s.
   5. One gather of creatures within the way's widest carry (`WaySpec::widest`). Animals hear the way's `animals` text: "You hear a person's voice, north." (0.25). People receive the words when within `carry_for(their hearing)`, and, for `only_to`, only the addressee.
-  6. `silence` for an addressee who did not receive the words. When the speaker sees them, it reads "<Who> is too far to hear you; call out or go closer." (the farthest-carrying public way's label); when it does not, "No answer from <who>; they don't seem to be within earshot." (since `speech-2`).
+  6. `silence` for an addressee who did not receive the words (`speech::unheard_text`; since `speech-truth`, the law `speech_truth`, on by default; docs/COMMUNICATION.md §15). The fact alone, no advice. When the speaker sees them: "<Who> is too far away: they could not have heard you." When it does not: "<Who> is out of earshot: they could not have heard you." A line to the room that reached no person: "Nobody was near enough to hear you." (subject 0). A played speaker also gets an `act_outcome` row keyed by that line (kind `act`, code `reach`, not ok, `why` the same words). With the law off, `speech-2`'s words: "<Who> is too far to hear you; call out or go closer." and "No answer from <who>; they don't seem to be within earshot."
   7. Each receiver gets a row of the way's `kind` (`speech` for `say`) with the way's templates. Salience is `addressed` (0.9: the addressee; or, for a room line, the only person within `address_m` 6 m, or someone named in the line) or `overheard` (0.45).
   8. Introductions: a line that holds the speaker's own name gives every receiver an `acquaintance`. When the name is news, the receiver also gets an `introduced` row (subject = the speaker, 0.55): "Walker1 told you their name." The salience is below the 0.6 wake threshold, so a name never re-runs the listener's graph.
   9. Overheard names (since `speech-2`, the way's `names`, off for words for one ear): a line to someone that mentions their name tells it to each receiver who sees them. That receiver gets an `introduced` row with the named person as subject and the caller as object: "You heard a stranger call Walker3 by name."
@@ -42,7 +42,8 @@ Design: [docs/COMMUNICATION.md](../../../../docs/COMMUNICATION.md). Source: `liv
   - `say`.
   - `whisper`: 1.5 m, words for the addressee only (kind `whisper`); onlookers within 6 m who see the speaker get `whispered`, "<a> whispers something to <b>." with no words; no animals, no names.
   - `call`: 2.5 times each listener's hearing (22.5 m on the island, 30 in Cullet); listeners read "… calls out from about {d} m" (the `{d}` placeholder, distance from the reader); animals hear "a person shouting"; 80 characters, 6 s apart.
-- **World text.** The `speech` topic (heading SPEAKING) lists each way as "<name> = <about>".
+- **World text.** The `speech` topic (heading SPEAKING) lists each way as "<name> (<reach>) = <about>", the reach in metres from the spec and the world's hearing (`WaySpec::reach_words`: "carries 9 m", "to someone within 1.5 m"; since `speech-truth`).
+- **Queued lines** (graph `say` nodes, `brain.rs`; since `speech-truth`, with `speech_truth` on): a say to someone beyond what the way carries as it comes due (`speech::within_reach`; not for a way with a reach, which its check refuses) is not said; the speaker's `silence` row reads the words above and "You did not say your planned line: “…”." (`speech::unsaid`), and the node counts as done. A mind plan's say (`brain.source = "mind"`) the conversation has overtaken (`line_overtaken`: since the install or the node's last line, the addressee spoke to the speaker, or the speaker answered them by a line not this plan's) is dropped with no row. The second is driven in `verify-minds` `queued`.
 
 ## Drive
 
@@ -73,7 +74,11 @@ python3 .agents/skills/verify-core/scripts/speech.py diff core-speech-base core-
   - whispers to c at 4 m and to no one are refused and write nothing;
   - a whispered self-introduction teaches only b;
   - a call: d and the deer hear it (as a shout), it is cut to 80 characters, and a second call within 6 s is refused;
-  - the truthful silence to e (by day), and the old text to d, who is unseen;
+  - the truthful silence (`speech_truth`): to e, seen by day, "too far away: they could not have heard you."; to d, unseen, "out of earshot: they could not have heard you.";
+  - a room line from d (no person within 9 m) gives d "Nobody was near enough to hear you." (subject 0); a room line from a (b at 1 m) gives no `silence` row;
+  - the player's line to d (13 m): its `silence` row and an `act_outcome` (act, reach, not ok, the same words);
+  - a graph's say to e, out of earshot as it comes due: not said (no chronicle line, nobody receives it), and the speaker is told "… You did not say your planned line: “Queued words for e.”.";
+  - with `set_world_law speech_truth false`: d's room line gives no row, d's silence is speech-2's "No answer from …", and the queued line to e is said into the air with speech-2's "too far to hear you" (the law is set back on after);
   - overheard names: b to c by name teaches c's name to those in earshot who see c; a name in a whisper teaches no one;
   - the two-word name "Mara Quill" is learned from "I'm Mara.".
 - **`crowd`** places N minded people in a square, says room lines in turn at a declared rate through `mind_say`, and reads the server's `/v1/metrics` for this database. It reports:

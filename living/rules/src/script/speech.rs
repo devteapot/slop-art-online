@@ -189,6 +189,30 @@ impl WaySpec {
         words.max(noticed)
     }
 
+    /// How far the way reaches, in metres, for a listener whose hearing is `hearing` (the
+    /// world's ordinary hearing: what `speech_card.carry_m` says): "carries 12 m", "to someone
+    /// within 1.5 m". Read from the spec, so a world that changes its hearing or a way's
+    /// distances is told its own.
+    pub fn reach_words(&self, hearing: f32) -> String {
+        let m = |x: f32| {
+            let r = (x * 10.0).round() / 10.0;
+            if r.fract() == 0.0 {
+                format!("{r:.0} m")
+            } else {
+                format!("{r:.1} m")
+            }
+        };
+        let carry = self.carry_for(hearing);
+        if self.only_to {
+            let within = if self.reach > 0.0 { self.reach.min(carry) } else { carry };
+            format!("to someone within {}", m(within))
+        } else if self.reach > 0.0 {
+            format!("carries {}, to someone within {}", m(carry), m(self.reach))
+        } else {
+            format!("carries {}", m(carry))
+        }
+    }
+
     /// Whether a listener who is not the addressee may receive the words.
     pub fn public(&self) -> bool {
         !self.only_to

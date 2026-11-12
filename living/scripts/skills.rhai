@@ -60,6 +60,13 @@ fn laws() {
         // (the private `audience` table, kept a minute), for the minds' conversation rules
         // (LIVING_GREET, `nearest` by default). Off: nothing is written.
         speech_audience: true,
+        // A line to someone who could not have heard it tells the speaker so ("Bram is too far
+        // away: they could not have heard you."), never a "No answer" that reads as a refusal.
+        // A plan's queued line to someone is not said into the air: dropped when the
+        // conversation has moved past it (they spoke to the speaker, or the speaker answered
+        // them, since the plan), and told to the speaker instead of said when they are beyond
+        // the way's reach as it comes due. Off: the old words, and queued lines said when due.
+        speech_truth: true,
         // A grown person longs for a child this many real minutes after its own birth or its
         // youngest child's (the most nurturing sooner, down to a sixth of it), and only while
         // carrying at least `longing_food` food (0: whatever it carries).
@@ -2846,6 +2853,7 @@ fn laws_about(l) {
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
         cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
         speech_audience: if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
+        speech_truth: if l.speech_truth { "a speaker learns when the one they spoke to could not have heard them, and a planned line is not said to someone out of earshot or after the talk has moved on" } else { "a speaker whose words did not reach the one they spoke to, unseen, gets no answer, and a planned line is said when it comes due" },
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
