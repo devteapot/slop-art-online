@@ -855,6 +855,26 @@ pub struct Slumber {
     pub arrived: String,
 }
 
+/// A line whose words reached a sleeping body that it did not wake for (perceive.rs,
+/// `heard_asleep`): told to it, whoever plays it, as heard while asleep once it wakes, and only
+/// then. At most `perceive::HEARD_ASLEEP_KEPT` per sleeper, the latest.
+#[spacetimedb::table(accessor = heard_asleep)]
+pub struct HeardAsleep {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub speaker: u32,
+    pub to: u32,
+    pub x: f32,
+    pub y: f32,
+    /// The line as the sleeper's body received it, in its own terms ("Femi says to you: “…”").
+    pub text: String,
+    pub salience: f32,
+    pub at_ms: u64,
+}
+
 /// A pending request for the mind to reconsider, with a perceived scene snapshot (JSON).
 #[spacetimedb::table(accessor = deliberation)]
 pub struct Deliberation {

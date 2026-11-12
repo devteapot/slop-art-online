@@ -449,6 +449,11 @@ pub struct Laws {
     pub join_window_s: f32,
     /// Speech to no one in particular is taken as addressed to the only listener within this many metres.
     pub address_m: f32,
+    /// A sound at least this loud (a line's way, a signal, a blow: their specs' `loudness`; a
+    /// voice is 1) wakes a sleeper within `wake_reach` metres who hears it, whoever plays it.
+    pub wake_loudness: f32,
+    /// How near a loud sound must be to wake a sleeper (metres).
+    pub wake_reach: f32,
     /// A creature already in a player's sight stays seen until this many metres beyond the player's sight.
     pub keep_seen_m: f32,
     /// A chased creature is lost from sight beyond this share of the chaser's sight (or its scent, if farther).
@@ -538,6 +543,8 @@ impl Default for Laws {
             trade_window_s: 180.0,
             join_window_s: 300.0,
             address_m: 6.0,
+            wake_loudness: 2.0,
+            wake_reach: 8.0,
             keep_seen_m: 1.0,
             chase_lost_share: 1.4,
             spawn_hunger: 25.0,
@@ -2491,6 +2498,8 @@ impl Scripts {
             trade_window_s: g("trade_window_s", l.trade_window_s).clamp(1.0, 3_600.0),
             join_window_s: g("join_window_s", l.join_window_s).clamp(1.0, 7_200.0),
             address_m: g("address_m", l.address_m).clamp(0.0, 64.0),
+            wake_loudness: g("wake_loudness", l.wake_loudness).clamp(0.0, 100.0),
+            wake_reach: g("wake_reach", l.wake_reach).clamp(0.0, 64.0),
             keep_seen_m: g("keep_seen_m", l.keep_seen_m).clamp(0.0, 8.0),
             chase_lost_share: g("chase_lost_share", l.chase_lost_share).clamp(1.0, 8.0),
             spawn_hunger: g("spawn_hunger", l.spawn_hunger).clamp(0.0, 100.0),
@@ -2760,7 +2769,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 /// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
@@ -2833,6 +2842,7 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         notable: flag("notable", false)?,
         moving: flag("moving", false)?,
         moment: flag("moment", false)?,
+        loudness: m.get("loudness").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `loudness` must be a number")))?.clamp(0.0, 100.0) as f32,
         reflex: flag("reflex", false)?,
         target_class,
     })

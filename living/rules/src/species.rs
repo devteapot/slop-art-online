@@ -17,6 +17,10 @@ pub struct Signal {
     /// about them) are prompted to think by it; everyone in range still hears it.
     #[serde(default)]
     pub kin_only: bool,
+    /// How loud it is (a voice is 1): loud enough, it wakes a sleeper near enough (the
+    /// `wake_loudness` and `wake_reach` laws). 0: as quiet as a voice would be ignored.
+    #[serde(default)]
+    pub loudness: f32,
 }
 
 #[derive(Clone, Debug, Deserialize)]

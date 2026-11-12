@@ -159,12 +159,34 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     }
     let address = laws.address_m;
     let close = hearers.iter().filter(|(_, d, _)| *d <= address).count();
+    // The words for listener `c` at `d` metres, in its terms.
+    let heard_text = |c: &Character, d: f32| {
+        let template = if to == c.id { &w.heard_to_you } else if to != 0 { &w.heard_to } else { &w.heard };
+        format!("{}: “{}”", fill(ctx, template, c, speaker, to, d), text)
+    };
+    // A sleeper the words reach wakes if the line is loud and near enough (the way's
+    // `loudness`, `perceive::wakes`), and hears it awake; any other keeps it for its waking
+    // (`perceive::heard_asleep`), whoever plays it: no conversation turn, no name learnt, not
+    // among the line's audience or those who heard it, until then.
+    let asleep: Vec<u32> = hearers
+        .iter()
+        .filter(|(c, _, _)| crate::perceive::asleep(ctx, c.id))
+        .filter_map(|(c, d, _)| {
+            if crate::perceive::wakes(ctx, *d, w.loudness) {
+                crate::perceive::request_waking(ctx, c.id, &heard_text(c, *d), now, crate::perceive::Wake::Sound);
+                None
+            } else {
+                Some(c.id)
+            }
+        })
+        .collect();
     // Who received the words and how they stood toward the speaker, for the minds' turn-taking
     // (`LIVING_GREET`): one `audience` row per line, where the world keeps it (`speech_audience`).
     if laws.speech_audience {
         let face = common::heading_at(&b, now);
         let people: Vec<Hearer> = hearers
             .iter()
+            .filter(|(c, _, _)| !asleep.contains(&c.id))
             .map(|(c, d, p)| Hearer { id: c.id, d: *d, off: if *d < 0.01 { 0.0 } else { living_rules::steer::wrap((p.1 - at.1).atan2(p.0 - at.0) - face).abs() } })
             .collect();
         for old in ctx.db.audience().at_ms().filter(..now.saturating_sub(AUDIENCE_KEEP_MS)).map(|a| a.id).collect::<Vec<_>>() {
@@ -185,10 +207,14 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
         ctx.db.body().id().find(id).is_some_and(|ob| crate::perception::in_sight(ctx, &map, id, eye, common::facing_at(&ob, now), target, p, common::dist(eye, p), &world, now, false))
     };
     for (c, d, p) in hearers.iter().copied() {
+        if asleep.contains(&c.id) {
+            let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || mentions(&text, &c.name)));
+            crate::perceive::heard_asleep(ctx, c, speaker, to, at, &heard_text(c, *d), if addressed { w.addressed } else { w.overheard }, now);
+            continue;
+        }
         let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
         let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || mentions(&text, &c.name)));
-        let template = if to == c.id { &w.heard_to_you } else if to != 0 { &w.heard_to } else { &w.heard };
-        let heard = format!("{}: “{}”", fill(ctx, template, c, speaker, to, *d), text);
+        let heard = heard_text(c, *d);
         percept(ctx, c, now, &w.kind, speaker, to, at, heard, if addressed { w.addressed } else { w.overheard });
         // A name that is news is a moment of its own (below the 0.6 that wakes a body's graph, so
         // learning a name never re-runs what the listener is doing).
@@ -225,6 +251,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     if let Some(line) = said_id {
         let mut seen: Vec<(f32, u32)> = hearers
             .iter()
+            .filter(|(c, _, _)| !asleep.contains(&c.id))
             .filter(|(c, d, p)| crate::perception::in_sight(ctx, &map, speaker, at, common::facing_at(&b, now), c.id, *p, *d, &world, now, false))
             .map(|(c, d, _)| (*d, c.id))
             .collect();

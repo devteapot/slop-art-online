@@ -170,8 +170,12 @@ fn hand_back(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     crate::perception::set_player(ctx, p.player, p.id);
     // What the minds had going stops: a pending thought, decided acts, the activity under way.
     ctx.db.deliberation().actor().delete(p.id);
-    // (with what waited for its sleeping mind)
+    // (with what waited for its sleeping mind; what its body heard asleep is told now, as
+    // its sleep stops below)
     ctx.db.slumber().actor().delete(p.id);
+    if let Some(c) = ctx.db.character().id().find(p.id) {
+        crate::perceive::heard_on_waking(ctx, &c, now);
+    }
     ctx.db.act_queue().actor().delete(p.id);
     if let Some(a) = ctx.db.activity().id().find(p.id) {
         crate::act::cancel(ctx, a, now, None);
