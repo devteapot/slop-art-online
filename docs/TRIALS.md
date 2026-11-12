@@ -188,6 +188,30 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## First sight fs1w (2026-11-12) — fs1n with earshot, now that minds can call; target, written before any paid call
+
+The general coordinator approved this run at about $2.5, with a stop at $3.50 spent. It is evidence for the owner's question: can residents greet without crowding when they can call? It runs only once the trial server is back from the disk cleanup, and only when the Spark coordinator says so.
+
+- **What it runs:** one arm, batch `fs1w`, `strangers-2b-c:strangers-first-sight-n2-earshot`.
+  - Laws on: `first_sight_thinks`, `think_framing` (N2) and `earshot`. They are set by `set_world_law` and read back from `world_law`.
+  - `first_sight_gap_s` is at its default, 300 s. `heard_first_rethinks` is off. The naming fix is on in every world.
+- **Code:** current main, which carries mind-say-way (`da3ff142`): a decision names its line's way (say, call, whisper). It is built from `trials-fs1` after merging main.
+- **The world and script:** as fs1n (Cullet, 63 minds, 20 minutes, the Strand walk). Ways stage 3 (ew1, on `ways-stage`) found that with earshot, 30 of 42 decisions with a call-only target called.
+- **A free fake smoke run first** (`fs1ws`). It checks that the three laws read back, that think prompts carry "# What just happened", and that scenes carry the earshot fact.
+- **Stop rule:** fs1's, unchanged: `converge_60s` 4 or more (the old definition), or `together_4m` 3 or more. The spend guard also stops the run at $3.50.
+- **Measures:**
+  - one table with fs1n against fs1w, the same rows as fs1n's;
+  - from `ways_report.py`: the lines to the newcomer by way (say, call, whisper), and for decisions whose scene put the newcomer within a call's reach but not a said line's, whether the speaker called, said, or walked over.
+- **What would answer yes:** most first lines to the newcomer called from where the speaker stood; fewer residents walked within 4 m than in fs1n (`converge_60s` 5); and the stop rule did not trip.
+
+**Switches:** as fs1n, plus `earshot` on. Otherwise:
+- far-handle on, `fov_on` off, `regard_cache` on;
+- `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`;
+- `LIVING_SKILL_TIMINGS` on and `force_outcomes` true;
+- no arrival laws;
+- `LIVING_CONCURRENCY` 64;
+- the people mix.
+
 ## First sight fs1n (2026-11-12) — first sight with the neutral think framing (N2); target, written before any paid call
 
 Approved by the general coordinator at about $2.7, after the ordinary-think replay (docs/FRAMING.md). It runs only once `think-framing` is on main and the trial server is free, and only when the general coordinator says so.

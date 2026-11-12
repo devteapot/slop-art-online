@@ -276,5 +276,15 @@
    "first_sight_thinks": true,
    "think_framing": true
   }
+ },
+ "strangers-first-sight-n2-earshot": {
+  "about": "fs1n with earshot (fs1w, docs/TRIALS.md): `first_sight_thinks`, `think_framing` and `earshot` on (set_world_law after the laws guard); the naming fix is on in every world; `heard_first_rethinks` off; first_sight_gap_s at its default (300 s). Minds decide a line's way (mind-say-way, on main since da3ff142).",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "think_framing": true,
+   "earshot": true
+  }
  }
 }
