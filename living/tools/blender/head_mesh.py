@@ -818,6 +818,7 @@ def brow_shape(hf, side, state=None, n=14, ts=None):
         arch = hf.brow_arch * (math.sin(math.pi * min(t / peak, 1.0) * 0.5) if t < peak else math.cos(math.pi * 0.5 * ((t - peak) / (1 - peak)) ** 1.15) ** 0.9)
         z = hf.eye_z + hf.eye_up + hf.brow_up + arch + hf.brow_tilt * (2 * t - 1) - 0.0012 * (t > peak) * ((t - peak) / (1 - peak))
         z += lerp(state.get("brow_in", 0.0), state.get("brow_out", 0.0), smooth(t * 1.2))
+        z += getattr(hf, "brow_lift", 0.0)  # a type's brow is drawn above the head's own brow line
         # Never quite nothing: the ends are slivers, not faces without area.
         w = max(hf.brow_w * BROW_STROKE * float(brow_width(t)), 0.00014)
         top.append((side * x, z + 0.55 * w))
