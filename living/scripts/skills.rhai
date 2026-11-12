@@ -84,6 +84,12 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        // The wolves' spacing reflex (docs/PACK_MIND.md): their starting instincts carry,
+        // beside each hunt, a weighted desire to keep apart from mates while closing on the
+        // prey (hold 3-5 m from it, 4 m from other wolves one sees). An instinct, so a wolf's
+        // own mind may change it. Read when a wolf's starting graph is installed; a world turns
+        // it off with false.
+        pack_reflex: true,
         // Who a behaviour graph's `relation: "stranger"` filter matches (docs/STRANGERS.md).
         // Off: anyone one has no relation row about (feelings the mind wrote), or a relation
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
@@ -3007,6 +3013,7 @@ fn laws_about(l) {
         fast_lane_stale_s: `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
+        pack_reflex: if l.pack_reflex { "wolves are born keeping apart from their pack mates as they close on prey" } else { "wolves close on prey with no thought for where their pack mates are" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,
         fov_side_share: `side vision reaches ${short(l.fov_side_share)} of one's sight`,
