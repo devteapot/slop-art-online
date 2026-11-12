@@ -986,6 +986,43 @@ fn projections(ctx: &ViewContext) -> impl Iterator<Item = Projected> + '_ {
 /// How the bodies in my scene move (the narrow stream): the others, as my last frame showed
 /// them (`motion_seen`, `frame.rs`). My own body is `my_body`, so my own moves and steering
 /// re-run one row, not my whole scene.
+/// Someone my character knows by name (`my_known_names`; owner-known, 2026-11-12).
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct KnownName {
+    pub id: u32,
+    pub name: String,
+}
+
+/// Whom my current character knows by name, with the name: itself, its parents, its children and
+/// their other parent, its community, and whoever told it their name (`acquaintance`, which also
+/// keeps the names of its community's dead). The same sources as `knows_name`, read by index. A
+/// client names a structure's owner from it under the world's `owner_shown` law ("Agnes
+/// Fenner's house" to one who knows her, else "a house"), as the authority tells minds.
+#[spacetimedb::view(accessor = my_known_names, public, primary_key = id)]
+pub fn my_known_names(ctx: &ViewContext) -> Vec<KnownName> {
+    let Some(me) = current(ctx) else { return Vec::new() };
+    let mut ids = std::collections::BTreeSet::new();
+    ids.insert(me.id);
+    for p in [me.parent_a, me.parent_b] {
+        if p != 0 {
+            ids.insert(p);
+        }
+    }
+    for child in ctx.db.character().parent_a().filter(me.id).chain(ctx.db.character().parent_b().filter(me.id)) {
+        ids.insert(child.id);
+        for other in [child.parent_a, child.parent_b] {
+            if other != 0 {
+                ids.insert(other);
+            }
+        }
+    }
+    ids.extend(ctx.db.acquaintance().observer().filter(me.id).map(|a| a.known));
+    if let Some(m) = ctx.db.membership().member().find(me.id) {
+        ids.extend(ctx.db.membership().community().filter(m.community).map(|x| x.member));
+    }
+    ids.into_iter().filter_map(|i| ctx.db.character().id().find(i).map(|c| KnownName { id: c.id, name: c.name })).collect()
+}
+
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
 pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
     ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving()).collect()

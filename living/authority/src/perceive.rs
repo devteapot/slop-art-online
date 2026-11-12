@@ -609,8 +609,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut structures = Vec::new();
     for (s, d) in common::structures_near(ctx, at, r) {
         let mut o = json!({"id": s.id, "kind": s.kind, "at": [round(s.x), round(s.y)], "dist": round(d), "dir": direction(at, (s.x, s.y))});
-        if s.owner != 0 {
-            o["by"] = json!(common::label_for(ctx, &me, s.owner));
+        if let Some(by) = common::owner_label(ctx, &me, s.owner, &s.kind) {
+            o["by"] = json!(by);
         }
         // A fire that needs no feeding burns; one that burns fuel burns while it has fuel (what
         // anyone near it sees: the flames, and roughly how much is left on it).
@@ -636,8 +636,10 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
                 }
             }
         }
-        if s.kind == "house" && s.owner != 0 {
-            o["home_of"] = json!(common::label_for(ctx, &me, s.owner));
+        if s.kind == "house" {
+            if let Some(whose) = common::owner_label(ctx, &me, s.owner, &s.kind) {
+                o["home_of"] = json!(whose);
+            }
         }
         if s.kind == "remains" || t.holds.is_some() {
             let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();
