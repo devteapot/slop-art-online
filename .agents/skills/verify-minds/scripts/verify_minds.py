@@ -39,10 +39,93 @@ class Run(shared.Run):
         # gate-*: the merge's scene gate (living/tools/scene_gate.py), databases verify-gate-*.
         super().__init__(name, prefix='gate' if name.startswith('gate-') else 'minds')
 
-    def request(self, actor, marker):
-        self.admin('set_behavior', actor, json.dumps({'think': 'I finished my plan. verify ' + marker}))
-        return self.wait(lambda: self.private(f'SELECT * FROM deliberation WHERE actor = {actor}',
-                                              'pending-' + marker), 'authority deliberation', 65)
+    def note(self, text):
+        with (self.directory / 'actions.log').open('a') as log:
+            log.write(f"{time.strftime('%H:%M:%S')} {text}\n")
+
+    def request(self, actor, marker, seconds=65, attempts=3):
+        """Make the authority ask `actor`'s mind to deliberate, for the reason 'I finished my plan.
+        verify <marker>': install a test graph whose think node asks it, and wait for the ask.
+
+        Relies only on what the rules promise. A think node asks once the deliberation clock
+        (`deliberated_ms`) has settled 45 s (brain.rs), and `think_min_s` (20 s for people) is shorter
+        than that. A mind's reply (`mind_install`) clears the request, replaces the graph and sets
+        the clock in one transaction, and with a new plan it drops 'I finished my plan' reasons that
+        arrived while it was thinking (reasons.rs PLAN_STATE). So, while the mind runs:
+        - first wait until the actor has no request pending: a reply still in flight would replace
+          the test graph and drop the test's reason (fix-request, 2026-11-12);
+        - the ask counts when the marker is in the reason of a newer thought row: the mind may answer
+          within a second, between two polls (the greet failure in minds-fixtake-full2);
+        - or when it is in a pending row that no read lacks: the mind is not running, or the marker's
+          line arrived when the row was made (`arrived` against `requested_ms`), or the row is one
+          the mind held through the quiet wait. A line merged into a request the mind has already
+          read does not count, since that reply drops it;
+        - when the graph is replaced without the marker reaching a thought, install it again.
+        Returns the pending rows carrying the marker, else the thought rows that record the answer."""
+        line = 'verify ' + marker
+        has = lambda text: re.search(re.escape(line) + r'(?![\w-])', text or '') is not None
+        pending_q = f'SELECT * FROM deliberation WHERE actor = {actor}'
+        running = lambda: self.mind is not None and self.mind.poll() is None
+
+        def reason(t):
+            try:
+                return json.loads(t.get('detail') or '{}').get('reason', '')
+            except (ValueError, AttributeError):
+                return ''
+
+        def answered(base):
+            return [t for t in self.sql(f'SELECT * FROM thought WHERE actor = {actor} AND id > {base}',
+                                        'answered-' + marker) if has(reason(t))]
+
+        def made_by_ask(d):
+            # The marker's line arrived when the request was made: no read of the row lacks it.
+            lines, times = d['reason'].split('\n'), d.get('arrived', '').split()
+            at = [i for i, l in enumerate(lines) if has(l)]
+            return bool(at) and at[0] < len(times) and int(times[at[0]]) <= d['requested_ms']
+
+        for attempt in range(1, attempts + 1):
+            held = False
+            if running():
+                # A request still pending is a deliberation in flight, or one the mind holds (LoD,
+                # the rethink gate). A held one may stay: after 40 s the test think merges into it.
+                quiet = time.monotonic() + 40
+                while self.private(pending_q, 'pending-before-' + marker):
+                    if time.monotonic() > quiet:
+                        held = True
+                        self.note(f'request {line!r}: a request still pending after 40 s is held; the ask merges into it')
+                        break
+                    time.sleep(0.5)
+            base = max((t['id'] for t in self.thoughts(actor, 'thoughts-before-' + marker)), default=0)
+            self.admin('set_behavior', actor, json.dumps({'think': 'I finished my plan. ' + line}))
+            deadline = time.monotonic() + seconds
+            replaced = False
+            while time.monotonic() < deadline:
+                if self.mind and self.mind.poll() is not None:
+                    raise RuntimeError(f'mind exited while waiting for authority deliberation {line!r}; see mind.log')
+                rows = [d for d in self.private(pending_q, 'pending-' + marker) if has(d['reason'])]
+                if rows and (held or not running() or made_by_ask(rows[0])):
+                    return rows
+                done = answered(base)
+                if done:
+                    self.note(f'request {line!r}: answered before a poll saw it pending (thought {done[0]["id"]})')
+                    return done
+                brain = self.private(f'SELECT * FROM brain WHERE id = {actor}', 'brain-' + marker)
+                if not brain or brain[0]['source'] != 'test' or line not in brain[0]['graph']:
+                    # The replacing reply wrote its thought in the same transaction: read once more.
+                    done = answered(base)
+                    if done:
+                        self.note(f'request {line!r}: answered before a poll saw it pending (thought {done[0]["id"]})')
+                        return done
+                    self.note(f'request {line!r}: attempt {attempt}: the test graph was replaced '
+                              f'(source {brain[0]["source"] if brain else None!r}, plan {brain[0]["plan"] if brain else None!r}) '
+                              'without its ask; installing it again')
+                    replaced = True
+                    break
+                time.sleep(0.25)
+            if not replaced:
+                break
+        raise RuntimeError(f'timed out waiting for authority deliberation {line!r}'
+                           + (f' after {attempts} installs' if replaced else f' ({seconds}s)'))
 
     def thoughts(self, actor, save='thoughts'):
         return self.sql(f'SELECT * FROM thought WHERE actor = {actor}', save)
