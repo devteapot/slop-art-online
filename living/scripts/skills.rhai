@@ -39,6 +39,9 @@ fn laws() {
         // How long one `follow` lasts before the follower looks again (seconds), and how far
         // `read` with nothing named looks for a sign (metres).
         follow_s: 12.0, read_sign_m: 8.0,
+        // A movement held to a creature (follow, keep_distance, circle, close_in, back_off) goes
+        // by where it was last seen while it is out of sight, and ends unseen this long (seconds).
+        lost_after_s: 2.0,
         // Others of one's kind within this many metres are kin near (`a.actor.kin_near`).
         kin_near_m: 4.0,
         // How long a trade offer can be accepted and a request to join stands (seconds).
@@ -2420,7 +2423,46 @@ fn tend_spec() {
        takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" }
 }
 
-fn follow_spec() { #{ moment: true, target: true, reach: 2.0, args: ["run"], about: "Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone (run: true to run with them). It does not make them follow you.", takes: "a creature in sight", gives: "you beside them as they go" } }
+fn follow_spec() {
+    let l = laws();
+    #{ moment: true, target: true, reach: 2.0, args: ["distance", "run", "qty"],
+       about: `Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone. distance: how near to keep, in metres (default 2); qty: seconds (default ${short(l.follow_s)}). ${intent_pace()} It does not make them follow you.`,
+       takes: intent_sight(), gives: "you beside them as they go" }
+}
+// Movement intents (keep_distance, close_in, circle, back_off, and follow above): ways to move
+// relative to a creature one perceives, re-aimed at it at every steering step, under the same
+// steering, speeds, breath and facing as a player's keys (`living_rules::steer`). They are moves,
+// not tactics: when to use one is the mover's own choice.
+fn intent_pace() {
+    let m = motion(#{ actor: #{ kind: "person", stage: "adult" }, night: false });
+    `It moves you at your walk (a grown person ${short(walk_of("person"))} m/s), or with run: true at ${short(m.run)} times your walk while your breath lasts, then at a walk until you have breath again: the speeds your own legs give anyone who walks or runs.`
+}
+fn intent_sight() {
+    let l = laws();
+    `a creature in sight (or smelled); out of sight, you go by where you last saw it, and stop (lost sight of them) once it has been out of sight for ${short(l.lost_after_s)} s`
+}
+fn keep_distance_spec() {
+    let l = laws();
+    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty"],
+       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
+       takes: intent_sight(), gives: "you between min and max metres from it, facing it" }
+}
+fn close_in_spec() {
+    #{ target: true, target_class: "creature", args: ["distance", "run"],
+       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
+       takes: intent_sight(), gives: "you within that distance of it" }
+}
+fn circle_spec() {
+    let l = laws();
+    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty"],
+       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
+       takes: intent_sight(), gives: "you going round it at that distance" }
+}
+fn back_off_spec() {
+    #{ target: true, args: ["distance", "run"],
+       about: `Step back from a creature or a place until you are distance metres from it (default 4), facing it as far as you can while you go, and stop facing it. From a creature that moves, it backs away from where it is now. ${intent_pace()} Not running away (flee): it ends at that distance. With nowhere to go, it ends: cornered.`,
+       takes: "something in sight to back away from; breath if you run", gives: "you that far from it, facing it" }
+}
 fn flee_spec() { #{ reflex: true, moment: true, target: true, args: ["run"], about: "Run away from a creature or place until you are clear of it. It runs while your breath lasts (run: false to slip away at a quick walk instead).", takes: "something to run from; breath while you run", gives: "distance between you and it" } }
 
 fn offer_spec() {
@@ -2862,6 +2904,7 @@ fn laws_about(l) {
         scent_hz: `a creature smells afresh ${short(l.scent_hz)} times a second at most (or when it has moved a few metres); in between it keeps what it last smelled`,
         takeover_s: `a played character with no connection of its person for ${short(l.takeover_s)} s lives on under the world's minds`,
         follow_s: `one follow lasts ${short(l.follow_s)} s before the follower looks again`,
+        lost_after_s: `a movement held to someone (follow, keep_distance, circle, close_in, back_off) goes by where they were last seen while they are out of sight, and ends once they have been out of sight for ${short(l.lost_after_s)} s`,
         read_sign_m: `reading with nothing named reads the nearest sign within ${short(l.read_sign_m)} m`,
         kin_near_m: `others of one's kind within ${short(l.kin_near_m)} m are kin near`,
         trade_window_s: `a trade offer can be accepted for ${short(l.trade_window_s)} s`,

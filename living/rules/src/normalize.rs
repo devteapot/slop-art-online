@@ -409,8 +409,11 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         },
         _ => {}
     }
+    if crate::steer::INTENTS.contains(&skill.as_str()) {
+        spacing(&mut out, &action, &skill, path)?;
+    }
     if skill == "rework" {
-        let name = out.get("item").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        let name =out.get("item").and_then(|i| i.as_str()).unwrap_or_default().to_string();
         let raw = action.get("item").or_else(|| action.get("what")).and_then(|i| i.as_str()).unwrap_or(&name);
         out.insert("item".into(), json!(routine_name(raw)));
         let text = if action.get("retire").and_then(|r| r.as_bool()) == Some(true) {
@@ -464,6 +467,62 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         }
     }
     Ok(json!({"do": out}))
+}
+
+/// Metres written as a number or as words a model writes for one ("4", "4 m", "4.5m").
+fn metres(v: &Value) -> Option<f64> {
+    v.as_f64().or_else(|| {
+        let s = v.as_str()?.trim().to_lowercase();
+        let s = s.trim_end_matches("metres").trim_end_matches("meters").trim_end_matches("tiles").trim_end_matches('m').trim();
+        s.parse::<f64>().ok()
+    })
+}
+
+/// A movement intent's distances (`steer::Spacing`): `keep_distance` a band (`min`, `max`, or
+/// `range: [min, max]`), `circle` a `radius` and a `side` (left or right as one faces it),
+/// `close_in`, `follow` and `back_off` a `distance`. Checked by the rules' own check, which says
+/// what to write instead.
+fn spacing(out: &mut Map<String, Value>, action: &Map<String, Value>, skill: &str, path: &str) -> Result<(), String> {
+    let get = |keys: &[&str]| keys.iter().find_map(|k| action.get(*k).filter(|v| !v.is_null()));
+    let num = |keys: &[&str], name: &str| -> Result<Option<f32>, String> {
+        match get(keys) {
+            None => Ok(None),
+            Some(v) => metres(v).map(|m| Some(m as f32)).ok_or_else(|| format!("{path}.do.{name}: metres, as a number")),
+        }
+    };
+    let mut s = crate::steer::Spacing::default();
+    match skill {
+        "keep_distance" => {
+            if let Some(Value::Array(r)) = get(&["range", "band", "between"]) {
+                if r.len() == 2 {
+                    s.min = metres(&r[0]).map(|m| m as f32);
+                    s.max = metres(&r[1]).map(|m| m as f32);
+                }
+            }
+            s.min = num(&["min", "min_m", "near", "at_least"], "min")?.or(s.min);
+            s.max = num(&["max", "max_m", "far", "at_most"], "max")?.or(s.max);
+        }
+        "circle" => {
+            s.radius = num(&["radius", "r", "distance", "dist"], "radius")?;
+            s.side = match get(&["side", "direction", "dir"]) {
+                None => None,
+                Some(Value::String(w)) => Some(crate::steer::side_of(w).ok_or_else(|| format!("{path}.do.side: \"left\" or \"right\" (as you face it), not {w:?}"))?),
+                Some(v) => match v.as_f64() {
+                    Some(n) if n != 0.0 => Some(n.signum() as f32),
+                    _ => return Err(format!("{path}.do.side: \"left\" or \"right\" (as you face it)")),
+                },
+            };
+        }
+        _ => s.distance = num(&["distance", "dist", "keep", "gap", "metres", "meters"], "distance")?,
+    }
+    s.check(skill).map_err(|e| format!("{path}.do: {e}"))?;
+    for (k, v) in [("min", s.min), ("max", s.max), ("radius", s.radius), ("side", s.side), ("distance", s.distance)] {
+        if let Some(v) = v {
+            // Kept to the centimetre, as written (an f32 widened as is reads 0.800000011920929).
+            out.insert(k.into(), json!((v as f64 * 100.0).round() / 100.0));
+        }
+    }
+    Ok(())
 }
 
 /// Whether a word says how hard a blow is meant to be ("hurt", "beat", "kill", "to kill"...).
@@ -991,5 +1050,48 @@ mod tests {
         // A graph's target given as a string id is the creature with that id.
         assert_eq!(target(json!("#12"), "t").unwrap(), json!({"id": 12}));
         assert_eq!(target(json!({"id": "12"}), "t").unwrap(), json!({"id": 12}));
+    }
+
+    /// The movement intents' forms: flat, with their distances, words for metres and sides, and
+    /// truthful refusals naming the fix.
+    #[test]
+    fn movement_intents_take_their_distances() {
+        let leaf = |v: serde_json::Value| -> Result<crate::graph::Action, String> {
+            match from_value(v)?.root {
+                crate::graph::Node::Do(a) => Ok(a),
+                n => Err(format!("not a leaf: {n:?}")),
+            }
+        };
+        let a = leaf(json!({"do": "keep_distance", "target": {"nearest": "wolf"}, "min": 3, "max": 6, "run": true})).unwrap();
+        assert_eq!((a.min, a.max, a.run), (Some(3.0), Some(6.0), Some(true)));
+        assert_eq!(crate::graph::describe(&crate::graph::Node::Do(a.clone())), "keep_distance 3–6 m → nearest wolf");
+        let a = leaf(json!({"do": "keep_distance", "target": "wolf", "range": ["2 m", 5.5]})).unwrap();
+        assert_eq!((a.min, a.max), (Some(2.0), Some(5.5)));
+        let a = leaf(json!({"do": "circle", "target": {"named": "Grim"}, "radius": 4, "direction": "clockwise", "seconds": 8})).unwrap();
+        assert_eq!((a.radius, a.side, a.qty), (Some(4.0), Some(-1.0), Some(8)));
+        let a = leaf(json!({"do": "circle", "target": "wolf"})).unwrap();
+        assert_eq!((a.radius, a.side), (None, None), "as far as one is, to the left");
+        let a = leaf(json!({"do": "back_off", "from": "wolf", "distance": "6m"})).unwrap();
+        assert_eq!(a.distance, Some(6.0));
+        assert!(a.target.is_some(), "`from` names what to back away from");
+        let a = leaf(json!({"do": "close_in", "target": "wolf", "distance": 1.5, "run": "yes"})).unwrap();
+        assert_eq!((a.distance, a.run), (Some(1.5), Some(true)));
+        let a = leaf(json!({"do": "follow", "target": "deer", "distance": 5})).unwrap();
+        assert_eq!(a.distance, Some(5.0));
+        // Canonical JSON round-trips through the typed parser (what an authority stores).
+        let canon = serde_json::to_string(&crate::graph::Node::Do(a.clone())).unwrap();
+        assert!(canon.contains("\"distance\":5.0"), "{canon}");
+        // Refusals say what to write instead.
+        let err = leaf(json!({"do": "keep_distance", "target": "wolf", "min": 6, "max": 3})).unwrap_err();
+        assert!(err.contains("`min` (6) is beyond `max` (3)"), "{err}");
+        let err = leaf(json!({"do": "circle", "target": "wolf", "side": "up"})).unwrap_err();
+        assert!(err.contains("\"left\" or \"right\""), "{err}");
+        let err = leaf(json!({"do": "circle", "target": "wolf", "radius": 0.2})).unwrap_err();
+        assert!(err.contains("at least 0.8"), "{err}");
+        let err = leaf(json!({"do": "back_off", "target": "wolf", "distance": "far"})).unwrap_err();
+        assert!(err.contains("metres, as a number"), "{err}");
+        let err = leaf(json!({"do": "keep_distance", "target": "wolf", "max": 90})).unwrap_err();
+        assert!(err.contains("metres from 0 to 40"), "{err}");
+        assert!(leaf(json!({"do": "keep_distance"})).unwrap_err().contains("needs a target"));
     }
 }

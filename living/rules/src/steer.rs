@@ -277,6 +277,135 @@ pub fn sweep(map: &Map, p: (f32, f32), seg: &Segment, clearance: f32) -> (f32, b
     (dur, false)
 }
 
+// ---- movement intents ---------------------------------------------------------------------
+//
+// Ways for any controller to move relative to a creature it perceives: hold a range band from
+// it (`keep_distance`), close in to a distance (`close_in`), go round it (`circle`), step back
+// to a distance (`back_off`), keep beside it (`follow`). They choose only the way to go; the
+// body goes there under the same steering, speeds, breath, terrain and facing as a player's
+// keys. They are moves, not tactics: nothing here decides when to use one.
+
+/// The intents and the arguments each reads.
+pub const INTENTS: [&str; 5] = ["keep_distance", "close_in", "circle", "back_off", "follow"];
+
+/// Longest distance an intent may name (metres): beyond anyone's sight.
+pub const INTENT_MAX_M: f32 = 40.0;
+/// Narrowest circle a body walks round something (metres).
+pub const CIRCLE_MIN_M: f32 = 0.8;
+
+/// The distances an intent names (`{"do": "keep_distance", "min": 3, "max": 6}`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Spacing {
+    /// `keep_distance`: the near edge of the band.
+    pub min: Option<f32>,
+    /// `keep_distance`: the far edge of the band.
+    pub max: Option<f32>,
+    /// `circle`: how far from it to go round (none: as far as one is when it starts).
+    pub radius: Option<f32>,
+    /// `circle`: +1 to one's left as one faces it, -1 to one's right.
+    pub side: Option<f32>,
+    /// `close_in`, `follow`: how near to come; `back_off`: how far to get.
+    pub distance: Option<f32>,
+}
+
+/// A side word: `left` (+1) or `right` (-1), as one faces what one circles.
+pub fn side_of(word: &str) -> Option<f32> {
+    match word.trim().to_lowercase().replace(['-', ' '], "_").as_str() {
+        "left" | "l" | "counterclockwise" | "anticlockwise" | "counter_clockwise" | "ccw" => Some(1.0),
+        "right" | "r" | "clockwise" | "cw" => Some(-1.0),
+        _ => None,
+    }
+}
+
+impl Spacing {
+    /// Whether `skill`'s distances make sense: each a number from 0 to [`INTENT_MAX_M`], a band
+    /// whose near edge is not beyond its far one, a circle no narrower than [`CIRCLE_MIN_M`]. The error says what to write instead.
+    pub fn check(&self, skill: &str) -> Result<(), String> {
+        for (k, v) in [("min", self.min), ("max", self.max), ("radius", self.radius), ("distance", self.distance)] {
+            if let Some(v) = v {
+                if !v.is_finite() || !(0.0..=INTENT_MAX_M).contains(&v) {
+                    return Err(format!("{skill}: `{k}` is metres from 0 to {INTENT_MAX_M}"));
+                }
+            }
+        }
+        match skill {
+            "keep_distance" => match (self.min, self.max) {
+                (Some(a), Some(b)) if a > b => Err(format!("keep_distance: `min` ({a}) is beyond `max` ({b})")),
+                _ => Ok(()),
+            },
+            "circle" if self.radius.is_some_and(|r| r < CIRCLE_MIN_M) => Err(format!("circle: `radius` is at least {CIRCLE_MIN_M} m")),
+            "back_off" if self.distance.is_some_and(|d| d <= 0.0) => Err("back_off: `distance` is how far from it to get, more than 0 m".into()),
+            _ => Ok(()),
+        }
+    }
+
+    /// The band `keep_distance` holds, `(near, far)`, starting `d` metres away: a missing edge
+    /// is 0 or [`INTENT_MAX_M`]; with neither, the distance it starts at, a metre either way.
+    pub fn band(&self, d: f32) -> (f32, f32) {
+        if self.min.is_none() && self.max.is_none() {
+            let d = d.clamp(0.0, INTENT_MAX_M);
+            return ((d - 1.0).max(0.0), (d + 1.0).min(INTENT_MAX_M));
+        }
+        let near = self.min.unwrap_or(0.0);
+        (near, self.max.unwrap_or(INTENT_MAX_M).max(near))
+    }
+}
+
+/// How far inside a band a body that had to move goes before it stands again (metres): a
+/// quarter of the band, at most half a metre, so a body at its edge does not stop and start.
+pub fn band_margin(near: f32, far: f32) -> f32 {
+    ((far - near) * 0.25).clamp(0.0, 0.5)
+}
+
+/// Where a body holding a band `[near, far]` from `at` goes: `None` to stand (it is in the
+/// band), `Some((way, closing))` otherwise. `going` is how it moves now relative to `at`
+/// (-1 backing off, +1 closing in, 0 standing): one that is moving carries on [`band_margin`]
+/// into the band before it stands.
+pub fn band_way(me: (f32, f32), at: (f32, f32), near: f32, far: f32, going: i8) -> Option<(f32, bool)> {
+    let d = (at.0 - me.0).hypot(at.1 - me.1);
+    let m = band_margin(near, far);
+    let toward = (at.1 - me.1).atan2(at.0 - me.0);
+    if d < near || (going < 0 && d < near + m) {
+        return Some((if d < 1e-3 { 0.0 } else { wrap(toward + PI) }, false));
+    }
+    if d > far || (going > 0 && d > far - m) {
+        return Some((toward, true));
+    }
+    None
+}
+
+/// The way round `at` at `radius` on `side` (+1 to one's left as one faces it): along the
+/// circle, bent in when outside it and out when inside, up to straight in or out when more than
+/// half the radius (at least a metre) off it.
+pub fn orbit_way(me: (f32, f32), at: (f32, f32), radius: f32, side: f32) -> f32 {
+    let (dx, dy) = (me.0 - at.0, me.1 - at.1);
+    let d = dx.hypot(dy);
+    let out = if d < 1e-3 { 0.0 } else { dy.atan2(dx) };
+    // A positive angle is a turn to the left (`walk_face`): facing it (out + π), one's left is
+    // out + π + π/2, the way round with the angle about it decreasing.
+    let s = if side < 0.0 { 1.0 } else { -1.0 };
+    let off = ((d - radius) / (radius * 0.5).max(1.0)).clamp(-1.0, 1.0) * (PI / 2.0);
+    wrap(out + s * (PI / 2.0 + off))
+}
+
+/// How a body moves relative to `at`: -1 away, +1 toward, 0 standing or going round.
+pub fn going(me: (f32, f32), v: (f32, f32), at: (f32, f32)) -> i8 {
+    let s = v.0.hypot(v.1);
+    if s < 1e-3 {
+        return 0;
+    }
+    let (dx, dy) = (at.0 - me.0, at.1 - me.1);
+    let d = dx.hypot(dy).max(1e-3);
+    let c = (v.0 * dx + v.1 * dy) / (s * d);
+    if c > 0.3 {
+        1
+    } else if c < -0.3 {
+        -1
+    } else {
+        0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -447,5 +576,90 @@ mod tests {
         // Faster than the top on its own (a deer's flight, 6.8): not slowed by a road.
         assert_eq!(road_pace(6.8, 1.0, &t), 6.8);
         assert_eq!(road_pace(4.5, 1.0, &Tuning::default()), 4.5 * 1.4, "no top: no cap");
+    }
+
+    /// A band holds: out of it the way is straight out or straight in; in it, standing; a body
+    /// already moving goes a margin into the band before it stands.
+    #[test]
+    fn a_band_backs_off_closes_in_and_holds() {
+        let at = (10.0, 10.0);
+        // 2 m away, band 3..6: straight away from it.
+        let (way, closing) = band_way((8.0, 10.0), at, 3.0, 6.0, 0).unwrap();
+        assert!(!closing && (wrap(way - PI)).abs() < 1e-5, "{way}");
+        // 9 m away: straight at it.
+        let (way, closing) = band_way((10.0, 1.0), at, 3.0, 6.0, 0).unwrap();
+        assert!(closing && (way - PI / 2.0).abs() < 1e-5, "{way}");
+        // In the band, standing: stay.
+        assert_eq!(band_way((14.0, 10.0), at, 3.0, 6.0, 0), None);
+        // Just inside the near edge while backing off: on to the margin (0.5 m), then stand.
+        assert!(band_way((13.2, 10.0), at, 3.0, 6.0, -1).is_some());
+        assert_eq!(band_way((13.6, 10.0), at, 3.0, 6.0, -1), None);
+        // Just inside the far edge while closing: on to the margin, then stand.
+        assert!(band_way((15.8, 10.0), at, 3.0, 6.0, 1).is_some());
+        assert_eq!(band_way((15.4, 10.0), at, 3.0, 6.0, 1), None);
+        // A band with no width holds at its edge: the margin is 0.
+        assert_eq!(band_margin(4.0, 4.0), 0.0);
+        assert_eq!(band_way((14.0, 10.0), at, 4.0, 4.0, 1), None);
+        assert_eq!(band_margin(3.0, 4.0), 0.25);
+    }
+
+    /// Walking the way `orbit_way` gives keeps a body on its circle, on the side asked for.
+    #[test]
+    fn a_circle_keeps_its_radius_on_its_side() {
+        let at = (0.0, 0.0);
+        // On the circle, facing it from the east: left is south (the angle about it decreasing).
+        assert!((orbit_way((4.0, 0.0), at, 4.0, 1.0) - (-PI / 2.0)).abs() < 1e-5);
+        assert!((orbit_way((4.0, 0.0), at, 4.0, -1.0) - (PI / 2.0)).abs() < 1e-5);
+        // Far outside: straight in; far inside: straight out.
+        assert!((wrap(orbit_way((12.0, 0.0), at, 4.0, 1.0) - PI)).abs() < 1e-5);
+        assert!(orbit_way((0.5, 0.0), at, 4.0, 1.0).abs() < 1e-5);
+        // Stepping along it from off the circle, at a walk with a look every 0.25 s, the
+        // distance comes to the radius and stays near it, going round the way asked.
+        for (side, start) in [(1.0f32, (6.0f32, 0.0f32)), (-1.0, (2.5, 0.0))] {
+            let mut p = start;
+            let mut swept = 0.0f32;
+            let mut last = p.1.atan2(p.0);
+            let mut worst = 0.0f32;
+            for k in 0..160 {
+                let way = orbit_way(p, at, 4.0, side);
+                p = (p.0 + way.cos() * 2.6 * 0.25, p.1 + way.sin() * 2.6 * 0.25);
+                let a = p.1.atan2(p.0);
+                swept += wrap(a - last);
+                last = a;
+                if k > 20 {
+                    worst = worst.max((p.0.hypot(p.1) - 4.0).abs());
+                }
+            }
+            assert!(worst < 0.6, "side {side}: off the circle by {worst}");
+            assert!(swept * -side > 2.0 * TAU, "side {side}: went round {swept} rad");
+        }
+    }
+
+    #[test]
+    fn going_reads_toward_away_and_round() {
+        assert_eq!(going((0.0, 0.0), (1.0, 0.0), (5.0, 0.0)), 1);
+        assert_eq!(going((0.0, 0.0), (-1.0, 0.1), (5.0, 0.0)), -1);
+        assert_eq!(going((0.0, 0.0), (0.0, 1.0), (5.0, 0.0)), 0);
+        assert_eq!(going((0.0, 0.0), (0.0, 0.0), (5.0, 0.0)), 0);
+    }
+
+    #[test]
+    fn spacing_is_checked_with_the_fix() {
+        let band = |min, max| Spacing { min, max, ..Default::default() };
+        assert!(band(Some(3.0), Some(6.0)).check("keep_distance").is_ok());
+        assert!(band(None, Some(6.0)).check("keep_distance").is_ok());
+        assert!(band(None, None).check("keep_distance").is_ok(), "the distance it starts at");
+        assert_eq!(band(None, None).band(5.0), (4.0, 6.0));
+        assert_eq!(band(None, None).band(0.5), (0.0, 1.5));
+        assert!(band(Some(6.0), Some(3.0)).check("keep_distance").unwrap_err().contains("beyond `max`"));
+        assert!(band(Some(-1.0), None).check("keep_distance").unwrap_err().contains("metres from 0 to 40"));
+        assert!(band(Some(f32::NAN), None).check("keep_distance").is_err());
+        assert_eq!(band(Some(3.0), None).band(9.0), (3.0, INTENT_MAX_M));
+        assert_eq!(band(None, Some(6.0)).band(9.0), (0.0, 6.0));
+        assert!(Spacing { radius: Some(0.3), ..Default::default() }.check("circle").unwrap_err().contains("at least 0.8"));
+        assert!(Spacing::default().check("circle").is_ok(), "a circle at the distance one is");
+        assert!(Spacing { distance: Some(0.0), ..Default::default() }.check("back_off").is_err());
+        assert!(Spacing { distance: Some(60.0), ..Default::default() }.check("follow").is_err());
+        assert_eq!((side_of("Left"), side_of("clockwise"), side_of("up")), (Some(1.0), Some(-1.0), None));
     }
 }
