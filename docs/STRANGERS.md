@@ -214,6 +214,8 @@ Bands for one run, in the arms with the lives (L, LS):
 
 ## Proposal: appearance as an authority fact (2026-11-12; not built)
 
+**Superseded by [look](LOOK.md)** (design, 2026-11-12): one private `look` row a person, perceived through the projection under the far label, with opaque keys into a shipped book of person lines.
+
 Status: proposal only. It needs dev-box, which owns the character generator, and comes after play-test 6.
 
 **The gap.** A player sees "a stranger in green and dark grey": the game names an unnamed person by the colours it draws (`living/game/src/looks.rs`). A resident sees the same person as "a stranger", and in its memory as "a stranger #77" (`fix-stranger-merge`). Two strangers in one scene are told apart by a player by their clothes, and by a mind only by an id it must never say aloud. The two controllers do not perceive the same thing.
