@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | A cached Jev judgment drives the graph: asked in the background, cached by `mind_judged`, read by `judged` | `jev` | [judgments.md](judgments.md) |
 | A deliberation consumes the reasons its prompt contained: plan-finished churn during model calls keeps no older reason pending, a reason arriving mid-call waits for the next deliberation only; each thought's `detail.reasons` with `carried_before` | `reasons` | [deliberation.md](deliberation.md) |
+| A dodge over before the blow came is told so to the mind, and a cooldown's refusals once per cooldown; the prompt carries them | `dodge-told` | [sight.md](sight.md#a-dodge-told-truthfully-fix-dodge-told) |
 | A fighting mind's prompts give its opponent's health as the band ("they look hurt"), exact ("they have 70 of 100 health") only inside its own appraisal's 20 s; never a percentage | `health-seen` | [sight.md](sight.md) |
 | A mind is told of drops and low things in words (`terrain_near`), and sees the one across them, on the island | `drop` | [drop.md](drop.md) |
 | A mind sees what its character sees: the scene the model is sent and the deaths it witnesses follow the sight line | `sight` | [sight.md](sight.md) |

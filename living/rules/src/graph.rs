@@ -325,7 +325,7 @@ pub struct CountCond {
     pub at_most: Option<u32>,
 }
 
-/// `{"doing": {"who": "person", "is": "strike", "phase": "winding up", "at_me": true, "within": 4}}`:
+/// `{"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": true, "within": 4}}`:
 /// holds while some creature in sight that fits `who` (a kind, or a kind and a relation;
 /// anyone by default) is visibly doing what `is` names (a skill's name, its label, or a kind
 /// word such as `hostile`, `melee`, `missile`, `guard`, `dash`, `gesture`, `work`), in `phase`
