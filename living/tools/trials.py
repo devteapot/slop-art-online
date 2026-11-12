@@ -1656,14 +1656,14 @@ class Instance:
         where = " OR ".join(f"id = {i}" for i in ids)
         (self.dir / "arena.json").write_text(json.dumps({"trial": self.trial["name"], "variant": self.variant, "replicate": self.rep,
                                                          "arena": self.trial.get("arena", {}), "roles": self.roles, "end": end}, indent=1))
-        pool = concurrent.futures.ThreadPoolExecutor(5)
+        pool = concurrent.futures.ThreadPoolExecutor(6)
         while not getattr(self, "_bodies_stop", False):
             tick = time.time()
             try:
                 # The five reads at once (2.14.1's SQL endpoint takes one statement a request), so
                 # a sample costs about one round trip.
-                chars, bodies, fighters, acts, vitals = pool.map(self.rows, [f"SELECT {cols} FROM {t} WHERE {where}" for t, cols in (
-                    ("character", "id, alive, cause"), ("body", "*"), ("fighter", "*"), ("activity", "*"), ("vitals", "*"))])
+                chars, bodies, fighters, acts, vitals, clock = pool.map(self.rows, [f"SELECT {cols} FROM {t} WHERE {where}" for t, cols in (
+                    ("character", "id, alive, cause"), ("body", "*"), ("fighter", "*"), ("activity", "*"), ("vitals", "*"))] + ["SELECT * FROM clock"])
                 now = self.now_ms()
                 alive = {c["id"]: c["alive"] for c in chars}
                 out = {}
@@ -1678,7 +1678,10 @@ class Instance:
                        for a in acts}
                 hp = {str(v["id"]): [round(v["hp"] + v.get("hp_rate", 0.0) * max(0.0, (now - v["at_ms"]) / 60000), 2), v["max_hp"], round(v["hunger"], 1)]
                       for v in vitals}
-                self.emit("bodies", {"t": self.t(), "ms": now, "b": out, "hp": hp, "dead": {str(c["id"]): c.get("cause", "") for c in chars if not c["alive"]}, "f": fighter, "act": act})
+                # The world's last tick against the wall clock (ms; includes the read's latency) and
+                # the longest gap between ticks it has seen: how far a loaded host slowed it.
+                lag = [now - clock[0]["last_ms"], clock[0].get("max_gap_ms")] if clock else None
+                self.emit("bodies", {"t": self.t(), "ms": now, "b": out, "hp": hp, "lag": lag, "dead": {str(c["id"]): c.get("cause", "") for c in chars if not c["alive"]}, "f": fighter, "act": act})
                 for r in down_roles:
                     if not any(alive.get(i) for i in self.roles.get(r, [])):
                         down_since.setdefault(r, time.time())

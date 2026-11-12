@@ -109,7 +109,7 @@ def load(d):
     samples = []
     for line in (d / "bodies.jsonl").read_text().splitlines():
         r = json.loads(line)
-        samples.append({"ms": r["ms"], "pos": {int(k): v for k, v in r["b"].items()}, "dead": {int(k): v for k, v in r.get("dead", {}).items()},
+        samples.append({"lag": r.get("lag"), "ms": r["ms"], "pos": {int(k): v for k, v in r["b"].items()}, "dead": {int(k): v for k, v in r.get("dead", {}).items()},
                         "hp": {int(k): v for k, v in r.get("hp", {}).items()}, "act": {int(k): v for k, v in r.get("act", {}).items()}})
     samples.sort(key=lambda s: s["ms"])
     uses = {}
@@ -154,6 +154,12 @@ def measure(run):
     out = {"dir": run["dir"], "arm": run["arm"], "stopped_by": run["summary"].get("stopped_by"), "samples": len(S)}
     if not S:
         return out
+    span = (S[-1]["ms"] - S[0]["ms"]) / 1000
+    out["sample_hz"] = round(len(S) / span, 2) if span > 0 else None
+    lags = sorted(s["lag"][0] for s in S if s.get("lag"))
+    if lags:
+        out["tick_lag_ms"] = {"p50": lags[len(lags) // 2], "p95": lags[int(len(lags) * 0.95)], "max": lags[-1],
+                              "max_gap_ms": max((s["lag"][1] or 0) for s in S if s.get("lag"))}
     t0 = S[0]["ms"]
     blows = [u for u in run["uses"] if u.get("accepted_ms")]
     wolf_blows = sorted([u for u in blows if u["actor"] in W and u["target"] in P and u["skill"] == "attack"], key=lambda u: u["accepted_ms"])
