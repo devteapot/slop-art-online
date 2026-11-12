@@ -158,7 +158,11 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     ev.alerts();
     let root = ev.g.clone();
     let played = !ev.me.ai;
-    let result = ev.run(&root.root, 0);
+    let result = {
+        let _span = common::span("brain.graph");
+        ev.run(&root.root, 0)
+    };
+    let _span = common::span("brain.after");
     ev.after(result, &root.root);
     // Fell asleep, or woke (and thinks on what waited): perceive::slept.
     if let Some(me) = ctx.db.character().id().find(id) {
@@ -1386,6 +1390,7 @@ impl<'a> Ev<'a> {
 
     /// Look up (and refresh) bodily familiarity; returns the previous record, if any.
     fn familiarity(&mut self, thing: u64) -> Option<Familiar> {
+        common::diag(|| "familiar:lookup".into(), 1);
         let prev = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, thing)).next();
         match prev.clone() {
             Some(mut f) => {
@@ -1396,12 +1401,14 @@ impl<'a> Ev<'a> {
                 }
             }
             None => {
+                common::diag(|| "familiar:insert".into(), 1);
                 let row = self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
                 if row.id % 16 == 0 {
                     let mut all: Vec<(u64, u64)> = self.ctx.db.familiar().actor().filter(self.me.id).map(|f| (f.last_ms, f.id)).collect();
                     if all.len() > FAMILIAR_LIMIT {
                         all.sort_unstable();
                         for (_, id) in &all[..all.len() - FAMILIAR_LIMIT] {
+                            common::diag(|| "familiar:evict".into(), 1);
                             self.ctx.db.familiar().id().delete(*id);
                         }
                     }
@@ -1424,6 +1431,7 @@ impl<'a> Ev<'a> {
 
     /// Recently checked (fast path that avoids familiarity lookups every second).
     fn recently_seen(&mut self, key: u32) -> bool {
+        common::diag(|| "seen:check".into(), 1);
         let now = self.now;
         if let Some(s) = self.st.seen.iter_mut().find(|s| s.id == key) {
             if now.saturating_sub(s.at_ms) < 90_000 {
@@ -1435,6 +1443,7 @@ impl<'a> Ev<'a> {
             s.at_ms = now;
             return false;
         }
+        common::diag(|| "seen:miss".into(), 1);
         self.st.seen.push(Seen { id: key, at_ms: now });
         if self.st.seen.len() > 96 {
             self.st.seen.remove(0);
@@ -1529,6 +1538,7 @@ impl<'a> Ev<'a> {
         if !self.me.ai {
             return;
         }
+        let _span = common::span("brain.noticed");
         self.cues();
         let now = self.now;
         let at = self.at;

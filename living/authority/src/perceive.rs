@@ -59,7 +59,9 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
             }
         }
     }
+    common::diag(|| format!("percept:{kind}"), 1);
     if salience >= 0.6 {
+        common::diag(|| format!("woke:{kind}"), 1);
         common::wake(ctx, observer.id);
     }
     Some(row.id)
@@ -107,7 +109,9 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);
+        common::diag(|| format!("onlookers:{kind}"), 1);
     }
+    common::diag(|| format!("witnessed:{kind}"), 1);
 }
 
 /// A missile striking `object` at `at`, shot by `subject`: everyone who sees where it struck
@@ -131,7 +135,9 @@ pub fn witnessed_shot(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str
         let text = rendered(template, &a, &b, object != 0 && c.id == object);
         let sal = if &*c.kind != "person" { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, if sees_shooter { subject } else { 0 }, object, at, text, sal);
+        common::diag(|| format!("onlookers:{kind}_shot"), 1);
     }
+    common::diag(|| format!("witnessed:{kind}_shot"), 1);
 }
 
 /// A witnessed event's words for one onlooker: `{a}` and `{b}` become `a` and `b` (the first
@@ -440,7 +446,16 @@ pub fn ask_to_think(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bo
     request(ctx, id, reason, now, false, None)
 }
 
+/// A reason's class for the diagnostic counts (`common::diag`): its fixed words, not its names.
+fn reason_class(reason: &str) -> &'static str {
+    const CLASSES: &[(&str, &str)] = &[("attacking you", "attacked"), ("The fight with", "fight_report"), ("threatening you", "threatened"), ("I finished my plan", "plan_done"),
+        ("Nothing in my current plan works", "plan_none"), ("My actions keep failing", "failing"), ("A quiet moment", "quiet"), ("You feel something", "feeling"), ("Your body", "body"),
+        ("A new day begins", "new_day"), ("you watch for this", "cue"), ("You hear", "heard"), ("asks", "asked"), ("offer", "offer"), ("You are taking in", "start")];
+    CLASSES.iter().find(|(k, _)| reason.contains(k)).map_or("other", |(_, v)| v)
+}
+
 fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool, wake: Option<Wake>) -> bool {
+    common::diag(|| format!("request:{}", reason_class(reason)), 1);
     let Some(c) = ctx.db.character().id().find(id) else { return false };
     if !c.alive {
         return false;
@@ -520,6 +535,8 @@ fn round(v: f32) -> f64 {
 
 /// What the character currently perceives, as compact JSON for the mind.
 pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
+    let _span = common::span("perceive.scene_json");
+    common::diag(|| "scene_json".into(), 1);
     let w = common::world(ctx);
     let Some(me) = ctx.db.character().id().find(id) else { return "{}".into() };
     let Some(b) = ctx.db.body().id().find(id) else { return "{}".into() };

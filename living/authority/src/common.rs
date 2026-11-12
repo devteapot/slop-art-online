@@ -82,6 +82,30 @@ pub fn note_scene(n: usize) {
 }
 
 /// While profiling, once a second: what graph scenes saw since the last report, one log line.
+thread_local! {
+    /// Diagnostic counts while profiling (docs/BATTLE_SCALE.md): percepts by kind and how many
+    /// woke their observer, onlookers per witnessed event, requests to think by reason, graph
+    /// evaluations by trigger, wakes. Logged once a second by `report_diag`, then cleared.
+    static DIAG: RefCell<std::collections::BTreeMap<String, u64>> = const { RefCell::new(std::collections::BTreeMap::new()) };
+}
+
+/// Count `n` under the key `key()` while profiling (no work otherwise).
+pub fn diag(key: impl FnOnce() -> String, n: u64) {
+    if PROFILE.with(|p| p.get()) {
+        DIAG.with(|d| *d.borrow_mut().entry(key()).or_default() += n);
+    }
+}
+
+/// One line a second while profiling: the counts since the last report.
+pub fn report_diag() {
+    if PROFILE.with(|p| p.get()) {
+        let m = DIAG.with(|d| std::mem::take(&mut *d.borrow_mut()));
+        if !m.is_empty() {
+            log::info!("diag: {}", serde_json::to_string(&m).unwrap_or_default());
+        }
+    }
+}
+
 pub fn report_scenes() {
     if PROFILE.with(|p| p.get()) {
         let (b, t, m) = SCENES.with(|s| s.replace((0, 0, 0)));
@@ -1311,6 +1335,7 @@ pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at:
 }
 
 pub fn wake(ctx: &ReducerContext, id: u32) {
+    diag(|| "wake".into(), 1);
     if ctx.db.wake().id().find(id).is_none() {
         ctx.db.wake().insert(Wake { id });
     }
