@@ -533,7 +533,7 @@ Whether they spread the cluster is for a re-run to show. `first_sight_thinks` st
 
 **Security check:** 9 fragments of the 3 API keys were searched for in the batch directories, the journals and the logs. Count: 0.
 
-## Earshot stage (planned, not run) — target, written before any paid call
+## Earshot stage (run as `es1`) — target, written before any paid call
 
 The `earshot` law (docs/COMMUNICATION.md §17; MIND_RESEARCH_IDEAS #4), approved by the general coordinator at about $8–10 at Cullet. It runs after fs1 finishes, so the two batches do not overlap. Nothing below has been run.
 
@@ -632,7 +632,7 @@ Control's 163 and 167 split the same way (deliberation 108 and 109, talk 36 and 
 
 **Evidence:** `.local/living/trials/es1` and `.local/living/journal/verify-trial-es1-*` in `~/slop-trials2b`.
 
-## Ways stage (planned, not run) — target, written before any paid call
+## Ways stage (run as `ew1`) — target, written before any paid call
 
 Approved by the general coordinator at about $2.5: one Cullet arm, once `mind-say-way` (a decision's line names its way, docs/COMMUNICATION.md §18) and the laptop's talk box on `human_speak` are both on main. The talk box does not enter the trial (the newcomer is scripted), so this measures the minds' side alone. Nothing below has been run.
 
@@ -662,6 +662,79 @@ Approved by the general coordinator at about $2.5: one Cullet arm, once `mind-sa
 | guards: `false_min`, `rep_res`, `led_res` − placebo | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | within es1's spread (both arms) | — |
 | animals startled by calls (`signal` "a person shouting" rows to animals) | reported | reported | — |
 | cost | $2.42 / $2.37 | within 20% | — |
+
+### Results (batch `ew1`, 2026-11-12 20:40–21:01 UTC)
+
+**Build and switches.**
+- Main `da3ff142` (mind-say-way), rebuilt for the run; bindings regenerated in `slop-trials-stdb`, identical to main's. Worktree `~/slop-trials2b`, branch `ways-stage`.
+- `earshot` on (`world_laws.json`). Laws otherwise as main ships them: `stranger_by_name`, `cues_on`, `first_sight_thinks`, `heard_first_rethinks`, `fov_on`, `fast_lane_on` and `think_framing` off; `speech_truth`, `speech_audience` and `force_outcomes` on.
+- `LIVING_GREET`, `LIVING_PARK` and `LIVING_SKILL_TIMINGS` unset (main's defaults). 63 minds, the people mix at the real provider.
+- Stopped by duration (20 minutes). The database was deleted at the end with its world paused first (`delete_db`); `trials.py clean` removed the Neo4j mind.
+- **The machine was loaded:** load average 50 on 20 cores at the start (other sessions' builds), the trial server at 200% CPU with others' worlds. es1 ran on a quieter machine, and the median gap from a decision's request to its line was 5.3 s here, against 7.6–8.1 s there.
+
+**Before it:** a fake smoke (`ew1s`, 3 minutes): it ran its time, `world_laws.json` had `earshot` true, the think format carried `"way": "say" or "whisper" or "call" (optional; default "say")`, and the fact reached the scene prompts.
+
+**Cost:** $2.55 (stop at $3.50). Key fragments in the evidence and journals, `ew1s` included: 0 matches (3 keys, 45 fragments, 328 files).
+
+**The lines that named a way** (`living/tools/ways_report.py`):
+
+| | es1 earshot r1 / r2 | ew1 |
+|---|---|---|
+| decisions' lines by way | say 350 / 305 (no way could be named) | say 272, **call 56**, whisper 13 |
+| talk replies' lines by way | say 247 / 235, call 26 / 13, whisper 10 / 12 | say 246, call 27, whisper 12 |
+| lines said in a call: decided / other | 0 / 25, 0 / 12 | **50** / 26 |
+| decided calls to someone that reached them | — | **32 of 47** |
+| talk or graph calls to someone that reached them | 24 of 25, 10 of 12 | 24 of 26 |
+| decided calls to the room that someone received | — | 3 of 3 |
+| decided lines refused and told (`unsaid` "You did not say …") | — (dropped without a word then) | 30: "speaking too fast" 21, "too far to whisper: step closer" 5 |
+
+**Called or walked over.** Each decision whose scene listed someone only under what a call reaches, and that acted toward them:
+
+| | es1 earshot r1 / r2 | ew1 |
+|---|---|---|
+| called | — | **19** |
+| called and walked | — | 11 |
+| walked over (no line) | 4 / 5 | 6 |
+| said a line (which cannot reach) and walked | 24 / 13 | 5 |
+| said a line only | 18 / 12 | 1 |
+
+Speakers who could call mostly did: 30 of the 42 decisions that acted toward someone a call alone could reach. Walking over without a word stayed where it was (6, against 4 and 5). "Said and walked" fell from 24 and 13 to 5: a decision that both speaks and moves now mostly calls first (11).
+
+Examples:
+- Ansel Tarn, to Nell Tarn, listed under a call: "Coming, Nell! Wait for me!" (call).
+- Aldous Quill, to Col Roon, with no one within a said line: "Col Roon! A word — where does one get a stick of wood in this town? …" (call).
+- Still walking: Anselm Faro went to Livia Faro without a word; Hobb Fenwick said "Nan! Leave the beds a minute — I'd have a word …" in `say` and walked to her.
+
+**`unheard_why` against the earshot stage:**
+
+| class | es1 earshot r1 / r2 | ew1 | target |
+|---|---|---|---|
+| deliberation: only a call | 33 / 22 | **13** | at most 10; 20 or more reads as no effect |
+| deliberation: in reach then (late) | 73 / 65 | 58 | unchanged expected |
+| talk turn | 42 / 34 | 42 | — |
+| deliberation: not listed | 15 / 16 | 12 | — |
+| room | 14 / 12 | 7 | — |
+| all unheard | 179 / 151 | 135 | — |
+| lag, request to line (median) | 8.1 / 7.6 s | 5.3 s | — |
+
+**Against the target spread:**
+
+| measure | es1 earshot r1 / r2 | ew1 | target | read |
+|---|---|---|---|---|
+| `deliberation: only a call` | 33 / 22 | 13 | at most 10 | close: well below the no-effect mark, above the target |
+| decided lines that call | 0 / 0 | 50 said (56 named) | some | met |
+| late lines | 73 / 65 | 58 | unchanged | about unchanged (a shorter lag on this run) |
+| `far_seen` | 90 / 75 | 77 | 15–25 fewer | **not met**: within es1's spread |
+| `far_all` ÷ `said_all` | 25.4% / 24.6% | **20.3%** (135 / 665) | down 2–4 points | met |
+| `said_all` | 705 / 614 | 665 | within 25% | met |
+| `converge_60s` / `together_4m` | 2, 0 / 2, 2 | 1, 1 | at most es1's + 2 | met |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | 0.56, 0.06, +0.23 | within es1's spread | `false_min` 0.56 just above 0.46 |
+| animals that heard a shout | — | 0 | reported | — |
+| cost | $2.42 / $2.37 | $2.55 | within 20% | met |
+
+Lines to the newcomer: 2, 1 out of earshot. First heard line at 463 s (Petra Tarn). No re-asks.
+
+**Read.** A decision now calls across a distance instead of walking over or saying a line that cannot reach. 19 called outright, and 11 called and walked, out of 42 decisions toward someone only a call could reach. Lines said where only a call would reach fell from 22–33 to 13, and the unheard share of all lines from about 25% to 20%. Lines to someone seen but too far (`far_seen`) did not fall: they include talk turns and late lines, which this change does not touch. One run on a loaded machine, so indicative only.
 
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
