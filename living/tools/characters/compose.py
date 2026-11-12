@@ -448,7 +448,8 @@ def main():
             (a.head_piece if name in ("cap", "kerchief") else a.piece).append(item)
         values.update(line.get("identity") or {})
         for name in line["styles"].get("overlays", []):
-            tone = (cols.get("beard") or cols.get("hair")) if name.startswith("beard") or name == "stubble" else cols.get("skin")
+            # A beard and stubble take the beard's colour; lines and freckles are a fixed colour, untinted.
+            tone = (cols.get("beard") or cols.get("hair")) if name.startswith("beard") or name == "stubble" else None
             a.overlay.append(os.path.join(a.styles, "overlay", line["type"], name + ".glb") + ("=" + tone if tone else ""))
         a.belly = a.belly or float(line.get("belly", 0.0))
         if cols.get("skin"):

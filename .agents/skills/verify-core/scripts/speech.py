@@ -403,13 +403,16 @@ def channels(s):
     time.sleep(1.5)
     def rows(who, since, kinds=None):
         return sorted((r for r in s.rows(f"SELECT * FROM experience WHERE observer = {who}") if r["at_ms"] >= since and (kinds is None or r["kind"] in kinds)), key=lambda r: r["id"])
+    def collect(r, t, label):
+        got = {who: rows(who, t) for who in at}
+        (s.out / f"{s.name}-{label}.json").write_text(json.dumps({"code": r.returncode, "error": (r.stderr or "")[-300:], "rows": {names.get(k, str(k)): v for k, v in got.items()}}, indent=2, ensure_ascii=False) + "\n")
+        return got
+
     def line_by(speaker, text, to, way, label):
         t = now(s)
         r = say_as(s, speaker, text, to, way)
         time.sleep(1.0)
-        got = {who: rows(who, t) for who in at}
-        (s.out / f"{s.name}-{label}.json").write_text(json.dumps({"code": r.returncode, "error": (r.stderr or "")[-300:], "rows": {names.get(k, str(k)): v for k, v in got.items()}}, indent=2, ensure_ascii=False) + "\n")
-        return r, got, t
+        return r, collect(r, t, label), t
     # Whisper to b beside a: b gets the words; c (4 m, sees a) notices without the words; the
     # player (7 m), e, d and the deer get nothing.
     r, got, t = line_by(a, "The tally is short tonight.", b, "whisper", "whisper")
@@ -440,14 +443,20 @@ def channels(s):
     # A call carries to d at 20 m and to animals as a shout; a second within 6 s is refused; a
     # long line is cut to 80 characters.
     long = "Hey, everyone, the cart from the coast is here with fish and salt and news from the south road!"
-    r, got, t = line_by(a, long, 0, "call", "call")
+    # The second call is said 2.1 s after the first (past the 2 s speaking limit, within the
+    # call's own 6 s), before either is read: reading every watcher's rows between them took
+    # more than 6 s on a loaded machine, and the second call was then rightly accepted.
+    t = now(s)
+    r = say_as(s, a, long, 0, "call")
+    time.sleep(2.1)
+    t2 = now(s)
+    r2 = say_as(s, a, "Again!", 0, "call")
+    time.sleep(1.0)
+    got, got2 = collect(r, t, "call"), collect(r2, t2, "call-again")
     cut = long[:80]
     s.expect("call: d, 20 m away, hears it, and how far", [x["text"] for x in got[d] if x["kind"] == "speech"] == [f"A stranger calls out from about 20 m: “{cut}”"], got[d], fatal=False)
     s.expect("call: the deer hears a person shouting", any(x["kind"] == "signal" and x["text"].startswith("You hear a person shouting,") for x in got[deer]), got[deer], fatal=False)
     s.expect("call: those near hear it too, cut to 80 characters", all(any(x["kind"] == "speech" and x["text"].endswith(f"“{cut}”") for x in got[w]) for w in (b, c, p.id, e)), None, fatal=False)
-    # Past the 2 s speaking limit, within the call's own 6 s.
-    time.sleep(1.5)
-    r2, got2, _ = line_by(a, "Again!", 0, "call", "call-again")
     s.expect("call: a second within 6 s is refused in call_check's words", r2.returncode != 0 and "too soon to call out again: wait a few seconds" in (r2.stderr + r2.stdout) and not any(got2[w] for w in at), (r2.stderr or "")[-200:], fatal=False)
     time.sleep(6.5)
     # Silence that tells the truth (`speech_truth`, on by default; docs/COMMUNICATION.md §15):

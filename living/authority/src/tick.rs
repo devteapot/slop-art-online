@@ -358,6 +358,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     common::set_profiling(k.profile);
     let _timer = common::span("housekeeping");
     common::report_scenes();
+    crate::perception::report_answers(ctx);
     crate::town::refresh_weather(ctx, now);
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);

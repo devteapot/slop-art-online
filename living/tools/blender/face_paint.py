@@ -135,6 +135,20 @@ def strands(shape, rng):
 
 # The lips' and the blush's own colours, laid over whatever skin is under them. Deeper than they
 # are to look: the client draws a face's parts unshaded, which comes out lighter than lit skin.
+# Age lines and freckles as an overlay: one deep colour each, laid over whatever skin is under it
+# with an alpha. PART_GAIN is how much lighter the client draws a face's unshaded parts than
+# lit skin; an overlay's alpha is set so that on a type's own skin it comes out as it was painted.
+LINE_PIGMENT = (0.26, 0.14, 0.12)
+FRECKLE_PIGMENT = (0.36, 0.21, 0.14)
+PART_GAIN = 1.3
+# How strong an overlay of lines or freckles is drawn, set for how the client shows it and not
+# for how the skin's paint drew it: (how many times the alpha the paint's own strength gives, the
+# most alpha, how many times the paint's own size). The client samples the picture bilinearly and
+# tone maps; a freckle one or two texels across at the paint's 0.3 came out 9% darker than the
+# skin at the median where about 40% was meant. A core has to be a few texels of nearly full
+# pigment to read as that on screen.
+FRECKLE_OVERLAY = (5.0, 0.92, 1.5)
+LINE_OVERLAY = (3.6, 0.90, 1.25)
 LIP_PIGMENT = (0.56, 0.16, 0.17)
 BLUSH_PIGMENT = (0.70, 0.26, 0.22)
 
@@ -250,20 +264,21 @@ def paint_skin(hf, look, rng, layer=None):
     # crow's feet, bags, lines down from the mouth's corners.
     if old > 0.02:
         k = min(old, 1.3)
+        ws = look.get("detail_size", 1.0)  # an overlay's lines are drawn wider, for the screen
         c.stroke([(0.0118 * wid, zs + 0.0065), (0.0160 * wid, zs + 0.0010), (0.0205, lerp(zs, zm, 0.55)), (mw + 0.0050, zm + 0.0010), (mw + 0.0062, zm - 0.0050)],
-                 0.00055 * k, line, 0.60 * min(k, 1), taper=(0.25, 0.35))
-        c.stroke([(ex - ew * 0.75, ez - hf.eye_lo - 0.0042), (ex, ez - hf.eye_lo - 0.0064), (ex + ew * 0.80, ez - hf.eye_lo - 0.0040)], 0.00042 * k, line, 0.50 * min(k, 1), taper=(0.4, 0.4))
+                 0.00055 * k * ws, line, 0.60 * min(k, 1), taper=(0.25, 0.35))
+        c.stroke([(ex - ew * 0.75, ez - hf.eye_lo - 0.0042), (ex, ez - hf.eye_lo - 0.0064), (ex + ew * 0.80, ez - hf.eye_lo - 0.0040)], 0.00042 * k * ws, line, 0.50 * min(k, 1), taper=(0.4, 0.4))
         if k > 0.35:
             for dz_, reach in ((0.0030, 0.0085), (-0.0012, 0.0100), (-0.0052, 0.0080)):
                 x0 = ex + ew + 0.0028
-                c.stroke([(x0, ez + dz_ * 0.6), (x0 + reach * 0.5, ez + dz_ * 1.15), (x0 + reach, ez + dz_ * 2.0)], 0.00030 * k, line, 0.50 * min(k, 1), taper=(0.2, 0.6))
+                c.stroke([(x0, ez + dz_ * 0.6), (x0 + reach * 0.5, ez + dz_ * 1.15), (x0 + reach, ez + dz_ * 2.0)], 0.00030 * k * ws, line, 0.50 * min(k, 1), taper=(0.2, 0.6))
             brow_z = ez + hf.eye_up + hf.brow_up
             for i_, (dz_, half) in enumerate(((0.0150, 0.036), (0.0235, 0.033), (0.0320, 0.026))):
                 wob = 0.0012 * math.sin(1.7 * i_ + look["seed"])
                 pts_ = [(half * t_, brow_z + dz_ + 0.0016 * math.cos(math.pi * t_) + wob * math.sin(3.1 * t_ + i_)) for t_ in np.linspace(-1, 1, 15)]
-                c.stroke(pts_, 0.00034 * k, line, 0.42 * min(k, 1), mirror=False, taper=(0.25, 0.25))
-            c.stroke([(0.0042, brow_z + 0.0005), (0.0050, brow_z + 0.0060), (0.0044, brow_z + 0.0105)], 0.00032 * k, line, 0.40 * min(k, 1), taper=(0.3, 0.4))
-            c.stroke([(mw + 0.0030, zm - 0.0030), (mw + 0.0048, zm - 0.0095), (mw + 0.0040, zm - 0.0160)], 0.00040 * k, line, 0.45 * min(k, 1), taper=(0.2, 0.5))
+                c.stroke(pts_, 0.00034 * k * ws, line, 0.42 * min(k, 1), mirror=False, taper=(0.25, 0.25))
+            c.stroke([(0.0042, brow_z + 0.0005), (0.0050, brow_z + 0.0060), (0.0044, brow_z + 0.0105)], 0.00032 * k * ws, line, 0.40 * min(k, 1), taper=(0.3, 0.4))
+            c.stroke([(mw + 0.0030, zm - 0.0030), (mw + 0.0048, zm - 0.0095), (mw + 0.0040, zm - 0.0160)], 0.00040 * k * ws, line, 0.45 * min(k, 1), taper=(0.2, 0.5))
             c.blob(0.036, lerp(zm, ez, 0.42), 0.012, 0.022, shade, 0.16 * min(k, 1))
     # Freckles over the nose and cheeks.
     fr = look["freckles"]
@@ -272,7 +287,7 @@ def paint_skin(hf, look, rng, layer=None):
         fx = rng.normal(0, 0.030, n)
         fz = ez - 0.022 * L + rng.normal(0, 0.011, n) - 0.006 * np.abs(fx) / 0.03
         fr_c = mix(skin, (0.52, 0.30, 0.18), 0.75)
-        for a_, b_, s_ in zip(fx, fz, rng.uniform(0.00045, 0.0010, n)):
+        for a_, b_, s_ in zip(fx, fz, rng.uniform(0.00045, 0.0010, n) * look.get("detail_size", 1.0)):
             c.blob(a_, b_, s_, s_, fr_c, 0.42, mirror=False, power=4.0)
     if layer is not None:
         # Where nothing was painted the layer holds the blush's pigment, so a filtered texel at a

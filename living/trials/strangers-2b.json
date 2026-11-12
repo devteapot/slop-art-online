@@ -43,6 +43,7 @@
  "variants": [
   "strangers-control",
   "strangers-filter",
-  "strangers-filter-cues"
+  "strangers-filter-cues",
+  "strangers-filter-cues-fs"
  ]
 }

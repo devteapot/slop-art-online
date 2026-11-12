@@ -48,6 +48,9 @@ pub struct Line {
     pub heard_by: Option<Vec<u32>>,
     /// The one addressed was out of earshot ("… could not have heard you.").
     pub unheard: bool,
+    /// How a line to the room was said (speech-address: "to the room, naming you and Ife"),
+    /// shown beside the speaker in the Log and their window; the bubble keeps the words only.
+    pub how: Option<String>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -109,11 +112,12 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
             if e.at_ms as f64 + 10_000.0 >= scene.now_ms {
                 hints.said = true;
             }
-            t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: me, to, text: heard::words(&e.text).to_string(), mine: true, heard_by: heard::heard_by(&e), unheard: false });
+            t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: me, to, text: heard::words(&e.text).to_string(), mine: true, heard_by: heard::heard_by(&e), unheard: false, how: None });
         } else if let Some((who, to)) = heard::heard(&e) {
             let text = heard::words(&e.text).to_string();
             t.met.entry(who).or_default().last_line = Some(text.clone());
-            t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: who, to, text, mine: false, heard_by: None, unheard: false });
+            let how = if to == 0 { heard::how(&e.text).map(String::from) } else { None };
+            t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: who, to, text, mine: false, heard_by: None, unheard: false, how });
         } else if let Some(to) = heard::unheard(&e) {
             // The authority's words show once, as a note (`talk.rs`); here only my line's mark
             // (after the loop: the silence row can come before my `said` row). A room line nobody
@@ -545,6 +549,8 @@ pub fn update(
             if let Some(l) = line_of(&m.0, m.1) {
                 let s = match (m.0, l.mine) {
                     (Win::Person(_), true) => "You, to them".to_string(),
+                    // A room line said with more ("to the room, naming you and Ife"): beside them.
+                    (_, false) if l.how.is_some() => format!("{} ({})", name(l.speaker), l.how.as_deref().unwrap_or_default()),
                     (Win::Person(_), false) => {
                         let to = if Some(l.to) == me { ", to you".to_string() } else if l.to != 0 { format!(", to {}", lower(l.to)) } else { String::new() };
                         format!("{}{to}", name(l.speaker))
@@ -872,7 +878,7 @@ mod tests {
     use super::{collapse, Line};
 
     fn line(speaker: u32, to: u32, text: &str) -> Line {
-        Line { at_ms: 0, speaker, to, text: text.into(), mine: false, heard_by: None, unheard: false }
+        Line { at_ms: 0, speaker, to, text: text.into(), mine: false, heard_by: None, unheard: false, how: None }
     }
 
     #[test]

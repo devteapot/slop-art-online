@@ -35,7 +35,26 @@ thread_local! {
     /// When each person last checked for, and last felt, knowing something alone (kept here:
     /// evaluator marks are reset when a new plan is installed).
     static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// First sights that ask for a thought (`first_sight_thinks`, docs/FIRST_SIGHT.md), per
+    /// character: when one last brought it to think (its gap), and what is still owed. Lost on
+    /// a module update: the first-sight lines themselves are durable.
+    static FIRST_SIGHT: std::cell::RefCell<std::collections::HashMap<u32, FirstSightAsk>> = std::cell::RefCell::new(std::collections::HashMap::new());
 }
+
+/// A character's first sights of people it cannot place that have yet to bring it to think.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct FirstSightAsk {
+    /// When a first sight last brought it to think (`first_sight_gap_s`), 0 never.
+    last_ms: u64,
+    /// The unplaced people of first sights not yet thought over, with their part of the line
+    /// ("a stranger, 7 tiles east, wait"), and since when the oldest is owed (0: none).
+    owed: Vec<(u32, String)>,
+    since_ms: u64,
+}
+
+/// A refused first-sight request is tried again at later looks for at most this long, while
+/// the person stays in sight and still cannot be placed.
+const FIRST_SIGHT_OWED_MS: u64 = 60_000;
 /// The body's alarms before the `status_of` law gave them (bits 1, 2, 4, 8 and 64): cleared.
 const OLD_BODY_ALARMS: u32 = 1 | 2 | 4 | 8 | 64;
 /// The `status_of` law's alarms, one bit each by its words (`alarm_bit`).
@@ -1207,7 +1226,7 @@ impl<'a> Ev<'a> {
 
     /// Attention cues (docs/ATTENTION.md): what this character's mind wrote should bring it to
     /// think, matched by type against what it perceives now (the scene this evaluation built),
-    /// at most once a second, while the `cues_on` law holds. A thing that begins to match a cue
+    /// at most once per `cue_check_s` (a second by default), while the `cues_on` law holds. A thing that begins to match a cue
     /// becomes one `noticed` experience quoting the mind's own reason, and a request to think;
     /// once per thing per `cue_cooldown_s`, and once per character per `cue_gap_s` (things that
     /// begin to match together are told in one line). A person too far away to make out matches
@@ -1218,7 +1237,8 @@ impl<'a> Ev<'a> {
             return;
         }
         let (me, now) = (self.me.id, self.now);
-        let due = CUE_HELD.with(|m| m.borrow().get(&me).map_or(true, |(t, _)| now.saturating_sub(*t) >= 1_000));
+        let every = (laws.cue_check_s * 1000.0) as u64;
+        let due = CUE_HELD.with(|m| m.borrow().get(&me).map_or(true, |(t, _)| now.saturating_sub(*t) >= every));
         if !due {
             return;
         }
@@ -1425,6 +1445,86 @@ impl<'a> Ev<'a> {
     /// Turn what is new to this character into experiences: unfamiliar regions, first
     /// encounters, long-absent faces, nearby danger and newly noticed structures. Routine
     /// re-perception only refreshes familiarity, so experience volume follows novelty.
+    /// A first sight of someone one cannot place asks for one thought (`first_sight_thinks`,
+    /// docs/FIRST_SIGHT.md). `fresh` holds this look's first sights of people it cannot place:
+    /// their label is not their name, by the shared answer `perception::regard` gives every
+    /// asker in the transaction (cue-cache), so never someone known by name, and far figures
+    /// never get a first sight. The reason is their part of the first-sight
+    /// line, word for word, through `ask_to_think` (the species' `think_min_s`, merged into a
+    /// pending request). A refused request is owed: tried again at later looks for at most
+    /// `FIRST_SIGHT_OWED_MS` while the person is in sight and still cannot be placed, and
+    /// settled by any thought made since. First sights bring one to think at most once per
+    /// `first_sight_gap_s`; within the gap they only merge into a request already pending. A
+    /// sleeper is asked nothing.
+    fn first_sight_asks(&mut self, fresh: Vec<(u32, String)>, cands: &[NearCreature], asleep: &mut Option<bool>) {
+        let (ctx, me, now) = (self.ctx, self.me.id, self.now);
+        let mut st = FIRST_SIGHT.with(|m| m.borrow().get(&me).cloned()).unwrap_or_default();
+        if fresh.is_empty() && st.owed.is_empty() {
+            return;
+        }
+        let before = st.clone();
+        let gap = (common::laws(ctx).first_sight_gap_s * 1000.0) as u64;
+        if *asleep.get_or_insert_with(|| crate::perceive::asleep(ctx, me)) {
+            st.owed.clear();
+        }
+        if !st.owed.is_empty() {
+            let thought_since = ctx.db.mind_state().id().find(me).is_some_and(|m| m.deliberated_ms > st.since_ms);
+            if thought_since || now.saturating_sub(st.since_ms) >= FIRST_SIGHT_OWED_MS {
+                st.owed.clear();
+            } else {
+                // Still in sight and still unplaced: the shared answer (`perception::regard`,
+                // once per observer and target per transaction, cue-cache) that names people in
+                // the look's labels: not named (unknown, or too far away to make out) and not far.
+                st.owed.retain(|(id, _)| {
+                    cands.iter().any(|c| c.id == *id)
+                        && ctx.db.character().id().find(*id).is_some_and(|t| {
+                            let r = crate::perception::regard(ctx, &self.me, &t, now);
+                            !r.name && !r.far
+                        })
+                });
+            }
+        }
+        let gap_ok = st.last_ms == 0 || now.saturating_sub(st.last_ms) >= gap;
+        if !fresh.is_empty() && !asleep.unwrap_or(false) {
+            if gap_ok {
+                for f in fresh {
+                    if !st.owed.iter().any(|o| o.0 == f.0) {
+                        st.owed.push(f);
+                    }
+                }
+            } else if ctx.db.deliberation().actor().find(me).is_some() {
+                // Within the gap: only joins a thought already asked for.
+                let parts: Vec<String> = fresh.into_iter().map(|f| f.1).collect();
+                crate::perceive::ask_to_think(ctx, me, &first_sight_text(&parts), now);
+            }
+        }
+        if st.owed.is_empty() {
+            st.since_ms = 0;
+        } else {
+            if st.since_ms == 0 {
+                st.since_ms = now;
+            }
+            if gap_ok {
+                let parts: Vec<String> = st.owed.iter().map(|o| o.1.clone()).collect();
+                if crate::perceive::ask_to_think(ctx, me, &first_sight_text(&parts), now) {
+                    st.last_ms = now;
+                    st.owed.clear();
+                    st.since_ms = 0;
+                }
+            }
+        }
+        if st != before {
+            FIRST_SIGHT.with(|m| {
+                let mut m = m.borrow_mut();
+                if st == FirstSightAsk::default() {
+                    m.remove(&me);
+                } else {
+                    m.insert(me, st);
+                }
+            });
+        }
+    }
+
     fn noticed(&mut self) {
         if !self.me.ai {
             return;
@@ -1464,6 +1564,8 @@ impl<'a> Ev<'a> {
         // again after a long time, danger close) stays at two lines a look.
         let mut announced = 0;
         let mut firsts: Vec<(u32, (f32, f32), String, bool)> = Vec::new();
+        // Whether this body sleeps, read only when a first sight needs it.
+        let mut asleep: Option<bool> = None;
         for c in &cands {
             let kin = &*c.kind == "person" || *c.kind == *me_kind;
             if announced >= 2 || (kin && firsts.len() >= FIRST_SIGHTS_PER_LINE) {
@@ -1501,8 +1603,25 @@ impl<'a> Ev<'a> {
                     continue;
                 }
             }
-            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let who = common::label_for(self.ctx, &self.me, c.id);
+            // Under `first_sight_thinks` a sleeper does not see someone it cannot place for the
+            // first time (a sleeping body is not watching, docs/FIRST_SIGHT.md): no line and no
+            // `familiar` row; it is looked at again in 5 s, as a far figure is, and the first
+            // look after waking is the first sight.
+            if laws.first_sight_thinks
+                && (ch.kind == "person" || ch.kind == self.me.kind)
+                && who != ch.name
+                && self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().is_none()
+                && *asleep.get_or_insert_with(|| crate::perceive::asleep(self.ctx, self.me.id))
+            {
+                self.st.seen.retain(|s| s.id != c.id);
+                self.st.seen.push(Seen { id: FAR_MARK | c.id, at_ms: now });
+                if self.st.seen.len() > 96 {
+                    self.st.seen.remove(0);
+                }
+                continue;
+            }
+            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let doing = crate::perception::doing_of(self.ctx, c.id, (self.me.id, &me_kind, at), &cands, now).map(|d| format!(", {d}")).unwrap_or_default();
             let place = format!("{:.0} tiles {}{doing}", c.dist, direction(at, c.pos));
             let (text, sal) = match prev {
@@ -1526,8 +1645,14 @@ impl<'a> Ev<'a> {
             firsts.sort_by_key(|f| f.3);
             let (subject, object) = (firsts[0].0, firsts.get(1).map_or(0, |f| f.0));
             let pos = firsts[0].1;
+            let unplaced: Vec<(u32, String)> = firsts.iter().filter(|f| !f.3).map(|f| (f.0, f.2.clone())).collect();
             let parts: Vec<String> = firsts.into_iter().map(|f| f.2).collect();
             percept(self.ctx, &self.me, now, "saw", subject, object, pos, first_sight_text(&parts), 0.45);
+            if laws.first_sight_thinks {
+                self.first_sight_asks(unplaced, &cands, &mut asleep);
+            }
+        } else if laws.first_sight_thinks {
+            self.first_sight_asks(Vec::new(), &cands, &mut asleep);
         }
 
         // Sounds out of sight (only while sight depends on facing): someone or something heard
@@ -1736,14 +1861,16 @@ const FAR_MARK: u32 = 0x2000_0000;
 /// First sights of one look that share one line (`noticed`).
 const FIRST_SIGHTS_PER_LINE: usize = 8;
 
-/// "For the first time you see Bram, 3 tiles north, wait." One line for several seen together:
-/// "For the first time you see a stranger, 9 tiles west, wait; Bram, 3 tiles north; and Edda,
-/// 5 tiles east." Its experience's subject and object are the first two named in it.
 /// "a" or "an" before a kind's words.
 fn article(kind: &str) -> &'static str {
     if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" }
 }
 
+/// "For the first time you see Bram, 3 tiles north, wait." One line for several seen together:
+/// "For the first time you see a stranger, 9 tiles west, wait; Bram, 3 tiles north; and Edda,
+/// 5 tiles east." Its experience's subject and object are the first two named in it. Under
+/// `first_sight_thinks` the same words over the unplaced parts alone are the reason a first
+/// sight asks for a thought (`first_sight_asks`).
 fn first_sight_text(parts: &[String]) -> String {
     match parts {
         [] => String::new(),
@@ -1820,6 +1947,23 @@ mod tests {
         assert_eq!(p(&["a stranger, 9 tiles west, wait"]), "For the first time you see a stranger, 9 tiles west, wait.");
         assert_eq!(p(&["a stranger, 9 tiles west", "Bram, 3 tiles north"]), "For the first time you see a stranger, 9 tiles west; and Bram, 3 tiles north.");
         assert_eq!(p(&["a", "b", "c"]), "For the first time you see a; b; and c.");
+    }
+
+    /// A first sight's reason for a thought (`first_sight_asks`) is the line's own words over
+    /// its unplaced parts: no advice, no role, no place (docs/FIRST_SIGHT.md, against the
+    /// rejected newcomer laws).
+    #[test]
+    fn a_first_sight_asks_in_the_line_s_own_words() {
+        let reason = super::first_sight_text(&["a stranger, 7 tiles east, goto → (490,779)".to_string()]);
+        assert_eq!(reason, "For the first time you see a stranger, 7 tiles east, goto → (490,779).");
+        let two = super::first_sight_text(&["a stranger, 9 tiles west, wait".to_string(), "a child, 3 tiles north".to_string()]);
+        assert_eq!(two, "For the first time you see a stranger, 9 tiles west, wait; and a child, 3 tiles north.");
+        for r in [&reason, &two] {
+            let low = r.to_lowercase();
+            for w in ["newcomer", "visitor", "arriv", "new to you", "near your home", "worth", "wonder", "should", "duty"] {
+                assert!(!low.contains(w), "{w} in {r}");
+            }
+        }
     }
 
     #[test]
