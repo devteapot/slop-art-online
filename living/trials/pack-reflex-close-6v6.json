@@ -1,0 +1,513 @@
+{
+ "title": "Pack arena: 6 wolves v 6 people, close start",
+ "about": "The spacing reflex as a candidate for the wolves' starting instinct (docs/PACK_MIND.md \u00a75.7, decision 1): instinct:wolf_bold with a weighted desire to keep apart from mates beside each hunt; kept in this trial file until the result is reported.",
+ "world": {
+  "seed": "island"
+ },
+ "minutes": 10,
+ "life": {
+  "stop_on_death": false
+ },
+ "end": {
+  "side_down": [
+   "subject",
+   "pack"
+  ],
+  "after_s": 20
+ },
+ "record": {
+  "bodies": {
+   "hz": 5
+  },
+  "uses": true
+ },
+ "variants": [
+  "instinct"
+ ],
+ "arena": {
+  "people": "subject",
+  "wolves": "pack",
+  "night": false,
+  "start": "close",
+  "deer": false
+ },
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "count": 6,
+   "bg": {
+    "town": "Brackenford"
+   }
+  },
+  "clear_items": true,
+  "clear_routines": true
+ },
+ "cast": {
+  "pack": {
+   "pick": {
+    "kind": "wolf",
+    "stage": 2,
+    "count": 6,
+    "nearest": {
+     "arrival": true
+    }
+   }
+  },
+  "spare_wolves": {
+   "pick": {
+    "kind": "wolf",
+    "count": "all"
+   }
+  },
+  "deer": {
+   "pick": {
+    "kind": "deer",
+    "count": "all"
+   }
+  }
+ },
+ "timeline": [
+  {
+   "at": "start",
+   "steps": [
+    {
+     "do": "graph",
+     "who": "spare_wolves",
+     "graph": {
+      "wait": 900
+     }
+    },
+    {
+     "do": "place",
+     "who": "spare_wolves",
+     "to": {
+      "farthest_town": {
+       "who": "pack"
+      }
+     }
+    },
+    {
+     "do": "graph",
+     "who": "deer",
+     "graph": {
+      "wait": 900
+     }
+    },
+    {
+     "do": "place",
+     "who": "deer",
+     "to": {
+      "farthest_town": {
+       "who": "pack"
+      },
+      "offset": [
+       0,
+       6
+      ]
+     }
+    },
+    {
+     "do": "graph",
+     "who": "subject",
+     "graph": "instinct:person"
+    },
+    {
+     "do": "graph",
+     "who": "pack",
+     "graph": {
+      "wait": 5
+     }
+    },
+    {
+     "do": "background",
+     "who": "pack",
+     "background": {
+      "pack": "the arena pack",
+      "bold": true
+     }
+    },
+    {
+     "do": "place",
+     "who": "subject",
+     "to": {
+      "who": "pack",
+      "offset": [
+       9,
+       0
+      ],
+      "spread": [
+       [
+        0,
+        0
+       ],
+       [
+        1.5,
+        0.8
+       ],
+       [
+        0,
+        1.6
+       ],
+       [
+        1.5,
+        -0.8
+       ],
+       [
+        0,
+        -1.6
+       ],
+       [
+        3,
+        0
+       ]
+      ]
+     }
+    },
+    {
+     "do": "place",
+     "who": "pack",
+     "to": {
+      "who": "subject",
+      "spread": [
+       [
+        -9,
+        0
+       ],
+       [
+        -9,
+        1.5
+       ],
+       [
+        -10.5,
+        0.8
+       ],
+       [
+        -9,
+        -1.5
+       ],
+       [
+        -10.5,
+        -0.8
+       ],
+       [
+        -12,
+        0
+       ]
+      ]
+     },
+     "after": 1
+    },
+    {
+     "do": "graph",
+     "who": "pack",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "all": [
+           {
+            "hurt_within": 8
+           },
+           {
+            "health": {
+             "below": 20
+            }
+           }
+          ]
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "attacker"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "has": {
+           "item": "meat"
+          }
+         },
+         "then": {
+          "if": {
+           "cond": {
+            "hunger": {
+             "above": 15
+            }
+           },
+           "then": {
+            "do": {
+             "skill": "eat",
+             "item": "meat"
+            }
+           }
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "all": [
+           {
+            "hunger": {
+             "above": 15
+            }
+           },
+           {
+            "sees": {
+             "nearest": {
+              "kind": "remains",
+              "holds": "meat"
+             }
+            }
+           }
+          ]
+         },
+         "then": {
+          "do": {
+           "skill": "take",
+           "target": {
+            "nearest": {
+             "kind": "remains",
+             "holds": "meat"
+            }
+           },
+           "item": "meat"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "hurt_within": 6
+         },
+         "then": {
+          "do": {
+           "skill": "attack",
+           "target": "attacker"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "near": {
+           "target": {
+            "nearest": "person"
+           },
+           "within": 10
+          }
+         },
+         "then": {
+          "desires": [
+           {
+            "want": "keep apart from mates",
+            "weight": {
+             "base": 1.2
+            },
+            "do": {
+             "if": {
+              "cond": {
+               "all": [
+                {
+                 "near": {
+                  "target": {
+                   "nearest": "wolf"
+                  },
+                  "within": 3
+                 }
+                },
+                {
+                 "near": {
+                  "target": {
+                   "nearest": "person"
+                  },
+                  "within": 6
+                 }
+                }
+               ]
+              },
+              "then": {
+               "do": {
+                "skill": "keep_distance",
+                "target": {
+                 "nearest": "person"
+                },
+                "min": 3,
+                "max": 5,
+                "run": true,
+                "apart": 4
+               }
+              }
+             }
+            }
+           },
+           {
+            "want": "hunt",
+            "weight": {
+             "base": 1.0
+            },
+            "do": {
+             "do": {
+              "skill": "attack",
+              "target": {
+               "nearest": "person"
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "hunger": {
+           "above": 50
+          }
+         },
+         "then": {
+          "desires": [
+           {
+            "want": "keep apart from mates",
+            "weight": {
+             "base": 1.2
+            },
+            "do": {
+             "if": {
+              "cond": {
+               "all": [
+                {
+                 "near": {
+                  "target": {
+                   "nearest": "wolf"
+                  },
+                  "within": 3
+                 }
+                },
+                {
+                 "near": {
+                  "target": {
+                   "nearest": "deer"
+                  },
+                  "within": 6
+                 }
+                }
+               ]
+              },
+              "then": {
+               "do": {
+                "skill": "keep_distance",
+                "target": {
+                 "nearest": "deer"
+                },
+                "min": 3,
+                "max": 5,
+                "run": true,
+                "apart": 4
+               }
+              }
+             }
+            }
+           },
+           {
+            "want": "hunt",
+            "weight": {
+             "base": 1.0
+            },
+            "do": {
+             "do": {
+              "skill": "attack",
+              "target": {
+               "nearest": "deer"
+              }
+             }
+            }
+           }
+          ]
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "all": [
+           {
+            "hunger": {
+             "below": 50
+            }
+           },
+           {
+            "not": {
+             "near": {
+              "target": "home",
+              "within": 25
+             }
+            }
+           }
+          ]
+         },
+         "then": {
+          "do": {
+           "skill": "goto",
+           "target": "home"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "energy": {
+           "below": 25
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "sleep"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "hunger": {
+           "above": 50
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "wander"
+          }
+         }
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "wander"
+          }
+         },
+         {
+          "wait": 6
+         }
+        ]
+       }
+      ]
+     },
+     "after": 1
+    }
+   ]
+  }
+ ]
+}

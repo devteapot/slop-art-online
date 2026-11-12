@@ -130,18 +130,24 @@ pub struct Goal {
     pub pace: f32,
     /// A band's far edge or a circle's side (`GOAL_BAND`, `GOAL_ORBIT`).
     pub far: f32,
+    /// How far to keep from seen others of one's own kind while holding it (0: no matter).
+    pub apart: f32,
 }
 
 impl Goal {
     pub fn point(at: (f32, f32), speed: f32, flags: u8) -> Self {
-        Self { kind: GOAL_POINT, target: 0, at, keep: 0.0, speed, flags, pace: speed, far: 0.0 }
+        Self { kind: GOAL_POINT, target: 0, at, keep: 0.0, speed, flags, pace: speed, far: 0.0, apart: 0.0 }
     }
     pub fn creature(id: u32, keep: f32, speed: f32, flags: u8) -> Self {
-        Self { kind: GOAL_CREATURE, target: id, at: (0.0, 0.0), keep, speed, flags, pace: speed, far: 0.0 }
+        Self { kind: GOAL_CREATURE, target: id, at: (0.0, 0.0), keep, speed, flags, pace: speed, far: 0.0, apart: 0.0 }
     }
     /// A movement intent held to creature `id`, seen at `at` (`FLAG_SIGHT`).
     pub fn held(kind: u8, id: u32, at: (f32, f32), keep: f32, far: f32, speed: f32, flags: u8) -> Self {
-        Self { kind, target: id, at, keep, speed, flags: flags | FLAG_SIGHT, pace: speed, far }
+        Self { kind, target: id, at, keep, speed, flags: flags | FLAG_SIGHT, pace: speed, far, apart: 0.0 }
+    }
+    /// The same goal keeping `m` from seen others of one's own kind (`Spacing::apart`).
+    pub fn apart(self, m: f32) -> Self {
+        Self { apart: m.max(0.0), ..self }
     }
     /// The same goal at a run of `speed`: without breath it goes at its own speed.
     pub fn run(self, speed: f32) -> Self {
@@ -237,7 +243,7 @@ pub fn speed_of(b: &Body) -> f32 {
 }
 
 fn fresh_steer(id: u32) -> Steer {
-    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0, look_on: false, look: 0.0, pace: 0.0, run_pace: 0.0, far: 0.0, unseen_ms: 0 }
+    Steer { id, goal: GOAL_NONE, target: 0, gx: 0.0, gy: 0.0, keep: 0.0, flags: 0, reported: false, plan_ms: 0, tokens: 0.0, input_ms: 0, look_on: false, look: 0.0, pace: 0.0, run_pace: 0.0, far: 0.0, unseen_ms: 0, apart: 0.0 }
 }
 
 fn load_steer(ctx: &ReducerContext, id: u32) -> (Steer, bool) {
@@ -477,6 +483,25 @@ fn separate(ctx: &ReducerContext, id: u32, p: (f32, f32), dir: f32, exclude: u32
     }
     let w = moves.separation_weight;
     ((uy + w * sy).atan2(ux + w * sx), true)
+}
+
+/// The push away from others of the body's own kind that it sees within its goal's `apart`
+/// (docs/PACK_MIND.md, A5): the same sight rule as any target (`perception::in_sight`), never
+/// the one it holds the intent to. Zero when the goal has no `apart`.
+fn apart_push(ctx: &ReducerContext, b: &Body, st: &Steer, p: (f32, f32), now: u64) -> (f32, f32) {
+    if st.apart <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let map = common::map(ctx);
+    let w = common::world(ctx);
+    let facing = common::facing_at(b, now);
+    let mates: Vec<(f32, f32)> = common::creatures_near(ctx, p, st.apart, now)
+        .into_iter()
+        .filter(|c| c.id != b.id && c.id != st.target && *c.kind == *b.kind)
+        .filter(|c| crate::perception::in_sight(ctx, &map, b.id, p, facing, c.id, c.pos, c.dist, &w, now, true))
+        .map(|c| c.pos)
+        .collect();
+    living_rules::steer::apart_push(p, &mates, st.apart)
 }
 
 fn angle(from: (f32, f32), to: (f32, f32)) -> f32 {
@@ -769,13 +794,28 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                     if h.seen && d <= st.keep + 0.3 && st.flags & FLAG_EACH != 0 {
                         ev = Some(Event::Arrived);
                     }
+                    let push = apart_push(ctx, b, st, p, now);
                     if d <= st.keep {
-                        b.heading = angle(p, tp);
-                        b.path.clear();
-                        stand = Some(due(t0, if target_moving { look } else { 1.0 }, MIN_STEP_MS));
+                        match geo::apart_way(p, tp, None, push) {
+                            // Close in, and a mate is near: round it, away from the mate.
+                            Some(dir) => {
+                                b.path.clear();
+                                want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt: look });
+                            }
+                            None => {
+                                b.heading = angle(p, tp);
+                                b.path.clear();
+                                stand = Some(due(t0, if target_moving { look } else { 1.0 }, MIN_STEP_MS));
+                            }
+                        }
                     } else {
                         match toward(ctx, b, st, &map, p, tp, h.vel, st.keep, max_dt, &laws, &moves, agile, now, &mut dirty) {
-                            Ok(w) => want = Some(w),
+                            Ok(mut w) => {
+                                if let Some(dir) = geo::apart_way(p, tp, Some(w.dir), push) {
+                                    w.dir = dir;
+                                }
+                                want = Some(w)
+                            }
                             Err(why) => ev = Some(Event::Lost(why)),
                         }
                     }
@@ -790,7 +830,14 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                 let fast = ctx.db.mind_state().id().find(b.id).map_or(false, |m| m.fast_until > now);
                 let look = if fast { 1.0 / laws.combat_hz } else { 1.0 / laws.chase_hz };
                 let go = geo::going(p, (b.vx, b.vy), h.at);
+                let push = apart_push(ctx, b, st, p, now);
                 match geo::band_way(p, h.at, st.keep, st.far, go) {
+                    // In the band, a mate within `apart`: along the band, away from the mate.
+                    None if geo::apart_way(p, h.at, None, push).is_some() => {
+                        b.path.clear();
+                        let dir = geo::apart_way(p, h.at, None, push).unwrap_or(b.heading);
+                        want = Some(Want { dir, speed: b.speed.max(0.1), agile, max_dt: look });
+                    }
                     // In the band: stand facing it, looking again at chase cadence while it moves.
                     None => {
                         b.path.clear();
@@ -805,6 +852,7 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                         // Backing off takes open ground as a flight does.
                         let sight = common::sight_for(ctx, b.id, &common::world(ctx), now);
                         let way = geo::flee_way(&map, p, h.at, b.heading, (edge - dist(p, h.at)).min(sight), sight, tune.clearance).unwrap_or(way);
+                        let way = geo::apart_way(p, h.at, Some(way), push).unwrap_or(way);
                         let (dir, _) = separate(ctx, b.id, p, way, st.target, &moves, now);
                         b.path.clear();
                         want = Some(Want { dir, speed: cruise, agile, max_dt });
@@ -814,7 +862,12 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                         closing = Some(true);
                         let keep = (st.far - geo::band_margin(st.keep, st.far)).max(st.keep);
                         match toward(ctx, b, st, &map, p, h.at, h.vel, keep, look, &laws, &moves, agile, now, &mut dirty) {
-                            Ok(w) => want = Some(w),
+                            Ok(mut w) => {
+                                if let Some(dir) = geo::apart_way(p, h.at, Some(w.dir), push) {
+                                    w.dir = dir;
+                                }
+                                want = Some(w)
+                            }
                             Err(why) => ev = Some(Event::Lost(why)),
                         }
                     }
@@ -829,6 +882,7 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                 let look = if fast { 1.0 / laws.combat_hz } else { 1.0 / laws.chase_hz };
                 let cruise = b.speed.max(0.1);
                 let way = geo::orbit_way(p, h.at, st.keep, st.far);
+                let way = geo::apart_way(p, h.at, Some(way), apart_push(ctx, b, st, p, now)).unwrap_or(way);
                 // Round a circle in steps of about 0.3 rad of it, at chase cadence at most.
                 let max_dt = look.min((0.3 * st.keep / cruise).max(0.1));
                 let (dir, _) = separate(ctx, b.id, p, way, st.target, &moves, now);
@@ -1031,6 +1085,7 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
     st.gy = at.1;
     st.keep = goal.keep;
     st.far = goal.far;
+    st.apart = goal.apart;
     // Held by sight: it starts in sight (the act's check).
     st.unseen_ms = 0;
     // A run already under way keeps its drain (and needs no breath to start again).
@@ -1177,7 +1232,7 @@ pub fn intent(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, run: bool,
                     (walk * if run { common::moves_of(ctx, id, now).run } else { 1.0 }, walk)
                 }
             };
-            start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: u, keep: 0.0, speed, flags: run_flag, pace, far: 0.0 }, now).map(|_| ())
+            start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: u, keep: 0.0, speed, flags: run_flag, pace, far: 0.0, apart: 0.0 }, now).map(|_| ())
         }
     }
 }
@@ -1219,7 +1274,7 @@ pub fn look(ctx: &ReducerContext, id: u32, dir: Option<(f32, f32)>, now: u64) ->
     save_steer(ctx, st, exists);
     if walking && moving {
         // Steer again now: the facing toward the look or back to the way (the travel is unchanged).
-        start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: (gx, gy), keep: 0.0, speed, flags, pace, far: 0.0 }, now).map(|_| ())
+        start(ctx, id, Goal { kind: GOAL_DIRECTION, target: 0, at: (gx, gy), keep: 0.0, speed, flags, pace, far: 0.0, apart: 0.0 }, now).map(|_| ())
     } else if let (Some(w), false) = (want, moving) {
         let p = common::pos(&b, now);
         face(ctx, id, (p.0 + w.cos(), p.1 + w.sin()), now);

@@ -96,10 +96,10 @@
   }
  },
  "animal-switches": {
-  "about": "Default with LIVING_ANIMAL_MINDS=pack,salient,choose: one mind per pack, think on salient change, one-call choice from a menu (docs/MIND_HARNESS.md item 3).",
+  "about": "Default with LIVING_ANIMAL_MINDS=salient,choose: think on salient change, one-call choice from a menu (docs/MIND_HARNESS.md item 3). Until 2026-11-12 also `pack` (one animal's decision copied to the others it saw), retired as shared hidden state (docs/PACK_MIND.md).",
   "models": {},
   "env": {
-   "LIVING_ANIMAL_MINDS": "pack,salient,choose"
+   "LIVING_ANIMAL_MINDS": "salient,choose"
   }
  },
  "greet-control": {
@@ -259,6 +259,13 @@
    "first_sight_thinks": true,
    "heard_first_rethinks": true,
    "earshot": true
+  }
+ },
+ "pack-minds": {
+  "about": "Pack arena with minds on both sides (docs/PACK_MIND.md): people on the models file's default, wolves routed by its species map, LIVING_ANIMAL_MINDS=salient,choose (no pack: retired). fast_lane_on stays off (the world law's default).",
+  "models": {},
+  "env": {
+   "LIVING_ANIMAL_MINDS": "salient,choose"
   }
  }
 }
