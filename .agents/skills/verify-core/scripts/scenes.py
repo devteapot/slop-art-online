@@ -591,6 +591,12 @@ def infant(s):
     for actor in (b, witness):
         s.call("place_near", actor, a)
     s.call("place_near", baby["id"], a)
+    # The warm anchor stands well beyond the cry's hearing (12 m), placed there: where
+    # spawn_crowd puts it is anywhere from 25 m (seen 26.98 and 28.68 against the 30 m check).
+    pa = s.rows(f"SELECT x, y FROM body WHERE id = {a}")[0]
+    for dx, dy in ((40, 0), (-40, 0), (0, 40), (0, -40), (32, 32), (-32, -32), (32, -32), (-32, 32)):
+        if s.call("place_at", warm_anchor, pa["x"] + dx, pa["y"] + dy, check=False).returncode == 0:
+            break
     s.call("place_structure", warm_anchor, "shelter")
     s.rows("SELECT * FROM relation", "relations")
     positions = {r["id"]: r for r in s.rows("SELECT * FROM body", "positions-before")}
