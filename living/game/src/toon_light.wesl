@@ -45,6 +45,18 @@ struct Toon {
     face: vec4<f32>,
     // Hair: x angel-ring strength, y ring width, z ring position (tangent shift), w rim.
     hair: vec4<f32>,
+    // Hair's ring, its shape: x edge softness (0 hard, 1 fading from the middle), y comb teeth
+    // (0 none, 1 full), z break-up by the strand picture (0 none, 1 full), w the teeth's scale
+    // across the strands (uv.x times it).
+    hair_sheen: vec4<f32>,
+    // Where on the head the ring may lie: x how far up a surface must face (N·up where it starts,
+    // full 0.25 above), y from how far it faces the character's forward it fades (2 never); z how
+    // many bins of a lock's `_GREY` make one lock (toon.wesl `hair_light`); w the view-placed
+    // ring's width on hair without char-4's lock data, when the ring is placed at a height.
+    hair_place: vec4<f32>,
+    // The ring by height and lock: x the share of locks without it, y how far it moves up or down
+    // a lock (in N·up), z 0 placed by the view, 1 at a height (where N·up is w).
+    hair_lock: vec4<f32>,
     // Painted detail (toon.wesl `detail`): x 1 where the vertex colours' alpha names surfaces
     // (generated scenery), z full detail until (m), w none from (m).
     detail: vec4<f32>,

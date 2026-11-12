@@ -144,7 +144,8 @@
       "follow",
       "signal",
       "dodge",
-      "conceive", "give", "take"
+      "conceive", "give", "take",
+      "keep_distance", "close_in", "circle", "back_off"
     ],
     "speaks": false,
     "signals": {

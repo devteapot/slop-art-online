@@ -174,6 +174,18 @@ fn ways_text() -> String {
     format!("\"way\": how you say it, {} (default \"say\"; {}), ", names.join(" or "), about.join(" "))
 }
 
+/// A decision's line may name its way (mind-say-way): the field in the think reply's `say`,
+/// naming the world's ways (the world text's SPEAKING section says what each is and how far it
+/// carries), when it has more than `say`. Nothing about when to use one.
+fn say_way_field() -> String {
+    let names = ways();
+    if names.len() < 2 {
+        return String::new();
+    }
+    let quoted: Vec<String> = names.iter().map(|w| format!("\"{w}\"")).collect();
+    format!(", \"way\": {} (optional; default \"say\")", quoted.join(" or "))
+}
+
 /// The ways of speaking the world's rules have (`<way>_speech()`), in their order.
 pub fn ways() -> Vec<String> {
     compiled().map(|s| s.ways().iter().map(|w| w.name.clone()).collect()).unwrap_or_else(|| vec!["say".into()])
@@ -586,7 +598,35 @@ pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2],
 /// the choices of a life: in replays of real moments, 2 in 12 minds acted on a longing for a
 /// child with the grammar in view, 11 in 12 without it).
 pub fn think_system() -> String {
-    think_system_in(frame(), crate::mind::projects::enabled())
+    framed_system(think_system_in(frame(), crate::mind::projects::enabled()), think_framing())
+}
+
+/// Whether the world's `think_framing` law holds (docs/FRAMING.md): the think prompt's neutral
+/// framing (N2 in the replay). Off in the bundled rules.
+pub fn think_framing() -> bool {
+    compiled().is_some_and(|s| s.laws().think_framing)
+}
+
+/// Today's framing sentence in the think system prompt, and the neutral one (N2) that replaces it
+/// under `think_framing`, word for word as replayed (docs/FRAMING.md).
+const TODAY_FRAMING: &str = "Start from why you are thinking now: that is what this moment of thought is about. Think about it as that person: what you make of it, and what you mean to do.";
+const NEUTRAL_FRAMING: &str = "What just happened is shown beside what you perceive. Think as that person about whatever matters to you now, which may or may not be what just happened, and decide what you mean to do.";
+/// How a mind is told to use the `#<id>` handles it is shown people by, the same sentence in every
+/// speaking mind's system prompt (think, deliberate, fast, talk): handles for acts and memory, never
+/// spoken (fix-spoken-ids; the speech primitive also says any that slip through as words).
+pub const IDS_NOT_SPOKEN: &str = "Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them.";
+/// The think prompt's reason section, and its name under `think_framing` (in the same place).
+const WHY_SECTION: &str = "\n# Why you are thinking now\n";
+const JUST_SECTION: &str = "\n# What just happened\n";
+
+/// The think system prompt with the neutral framing when `neutral`; today's, untouched, otherwise.
+fn framed_system(text: String, neutral: bool) -> String {
+    if neutral { text.replacen(TODAY_FRAMING, NEUTRAL_FRAMING, 1) } else { text }
+}
+
+/// The think user prompt with the reason's section renamed when `neutral`; untouched otherwise.
+fn framed_user(text: String, neutral: bool) -> String {
+    if neutral { text.replacen(WHY_SECTION, JUST_SECTION, 1) } else { text }
 }
 
 /// The think system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
@@ -598,15 +638,16 @@ Think about it as that person: what you make of it, and what you mean to do. You
 staying safe, your work) unless you decide otherwise, so decide what this moment calls for, not everything. \
 When one of your habits keeps failing you (see how each has gone), you may decide to sit down and rework it. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, as well as practical matters; you may also stay silent. \
-Refer to people by the ids you see. Do not assume facts you have not perceived.\n\n{}\n\n\
+Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Do not assume facts you have not perceived.\n\n{}\n\n\
 Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
 \"intend\": [\"each thing you mean to do, in plain words, in order (e.g. ask Borno (#5) to start a family with me; give Galy (#8) 2 berries; \
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
-\"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
+\"say\": {{\"text\": \"...\", \"to\": id or null{}}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
 \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}{}}}",
         opening(frame, THINK_OPENING),
         world_rules(),
+        say_way_field(),
         if projects { THINK_PROJECTS } else { "" },
         notice_field()
     ))
@@ -711,7 +752,7 @@ pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, 
     }
     out.push(Stability::Dynamic, format!("\n# What you perceive right now\n{scene}\n"));
     out.push(Stability::Dynamic, format!("\n# What you were doing\n{plan}\n"));
-    out.render()
+    framed_user(out.render(), think_framing())
 }
 
 /// Compiling: the body's expression of a decision already made (acts now, an intent over time).
@@ -731,7 +772,7 @@ and they may change through what you live. That person has already decided what 
 A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
 Your top level and your routines are all your body does: they began as your habits and they are yours; nothing eats, sleeps or keeps you warm unless they do. \
 To change one, rework it as an act, when what you decided says so. \
-Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
+Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"acts\": [ACTS to carry out now, in order] (optional), \
 \"plan\": \"one-line intention\", \"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what you mean to do...}}}} (becomes your routine \"current plan\", \
 weighed among your desires as \"the plan\": your top level shows each desire's weight; a plan weighed above your safety desire outweighs staying safe while it lasts, and needs keep their own pull, e.g. strong hunger ≈ 1.0, so a plan of 0.6 yields to it and resumes after), \
@@ -1020,7 +1061,7 @@ fn fast_system_in(frame: Frame) -> String {
 Something has just happened to you (see Why now). Your body goes on doing what your top level and your routines say while you think; \
 what you answer changes them from the next moment on, not the moment that is passing. \
 You may rewrite your `combat` branch, rewrite one of the routines listed under Your routines, switch your `combat` branch to one of them, or keep everything as it is. \
-Use only what you have perceived and what you know how to do. Refer to people by the ids you see. Reply with ONE JSON object, one of:\n\
+Use only what you have perceived and what you know how to do. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object, one of:\n\
 {{\"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}}, \"thought\": \"one sentence, in your words\"}}\n\
 {{\"routine\": {{\"name\": \"one of your routines\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
 {{\"switch\": \"one of your routines\", \"thought\": \"...\"}}\n\
@@ -1120,16 +1161,10 @@ Answer with ONE JSON object: {{\"feeling\": \"what you sense and feel, in plain 
     ))
 }
 
-/// What an animal choosing is told: what it would be told to feel an impulse, its pack when
-/// it decides for them, and the options.
-pub fn animal_choose_user(think_user: String, pack: &[String], options: &[String]) -> String {
+/// What an animal choosing is told: what it would be told to feel an impulse, and the
+/// options. It decides for itself alone (docs/PACK_MIND.md: the `pack` switch is retired).
+pub fn animal_choose_user(think_user: String, options: &[String]) -> String {
     let mut out = think_user;
-    if !pack.is_empty() {
-        out.push_str("\n# Your pack (what you pick, they do too, each in its own way)\n");
-        for p in pack {
-            out.push_str(&format!("- {p}\n"));
-        }
-    }
     out.push_str("\n# What you can do now\n");
     for (i, o) in options.iter().enumerate() {
         out.push_str(&format!("{i}. {o}\n"));
@@ -1216,7 +1251,7 @@ or say what you actually want to say — what you think or feel, something you r
 Real conversations are short and have a point. As soon as something is settled between you (you agreed on something, \
 one of you declined, someone will think it over, or there is simply nothing more to say), say so in \"settled\": that line closes \
 the conversation for now; don't restate what was already agreed or keep saying goodbye. You don't have to answer everything: \
-silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
+silence (say null) is fine. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
 \"say\": \"your words\" or null, \"to\": id of who you speak to, {}\
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
 {{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to take a trade they offered (\"record\": id of their proposal, for terms), \
@@ -1302,6 +1337,16 @@ pub fn talk_user(t: &TalkUser) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// Every speaking mind is told, in the same words, that the `#<id>` handles are for acts and
+    /// memory and never spoken (fix-spoken-ids: r2e's minds said three lines with them).
+    #[test]
+    fn every_speaking_mind_is_told_ids_are_never_spoken() {
+        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("talk", talk_system())] {
+            assert_eq!(text.matches(IDS_NOT_SPOKEN).count(), 1, "{purpose}");
+        }
+        assert!(!IDS_NOT_SPOKEN.contains('#'), "one general sentence, no example");
+    }
 
     /// The grammar's `doing` example names no skill a reader may never face (a mind copied
     /// "strike" against a foe whose blow is `attack`; r2c): a kind word, and `is` is said to take
@@ -1595,6 +1640,32 @@ mod tests {
         assert_eq!(Frame::parse(Some("character")), Ok(Frame::Character));
         assert_eq!(Frame::parse(Some("player")), Ok(Frame::Player));
         assert!(Frame::parse(Some("Player")).is_err() && Frame::parse(Some("npc")).is_err());
+    }
+
+    /// The `think_framing` law (docs/FRAMING.md): off, the think prompts are today's, byte for
+    /// byte; on, the neutral sentence replaces today's once, and the reason's section is renamed
+    /// once, in the same place.
+    #[test]
+    fn think_framing_is_n2_on_and_today_off() {
+        for frame in [Frame::Character, Frame::Player] {
+            for projects in [false, true] {
+                let today = think_system_in(frame, projects);
+                assert_eq!(today.matches(TODAY_FRAMING).count(), 1, "{frame:?} {projects}");
+                assert_eq!(framed_system(today.clone(), false), today);
+                let on = framed_system(today.clone(), true);
+                assert_eq!(on.matches(NEUTRAL_FRAMING).count(), 1);
+                assert!(!on.contains(TODAY_FRAMING));
+                assert_eq!(on.replacen(NEUTRAL_FRAMING, TODAY_FRAMING, 1), today);
+            }
+        }
+        let c = context("Ivo");
+        let user = think_user(&c, "{\"creatures\": []}", "wait", "For the first time you see a stranger, 9 tiles west, wait.", "habit", "");
+        assert_eq!(user.matches(WHY_SECTION).count(), 1);
+        assert_eq!(framed_user(user.clone(), false), user);
+        let on = framed_user(user.clone(), true);
+        assert!(!on.contains("# Why you are thinking now") && on.matches(JUST_SECTION).count() == 1);
+        assert_eq!(on.find(JUST_SECTION), user.find(WHY_SECTION), "renamed where it stands");
+        assert_eq!(on.replacen(JUST_SECTION, WHY_SECTION, 1), user);
     }
 
     /// Without `LIVING_FRAME` the service runs the character frame, and the character frame is

@@ -84,6 +84,10 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        // A body struck this many seconds ago cannot fall asleep; nor while the one who last
+        // struck it, in a fight still on, is within `wake_reach` (`sleep_check`, every
+        // controller alike).
+        alert_after_hit_s: 15.0, alert_while_attacker_near: true,
         // Who a behaviour graph's `relation: "stranger"` filter matches (docs/STRANGERS.md).
         // Off: anyone one has no relation row about (feelings the mind wrote), or a relation
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
@@ -100,6 +104,10 @@ fn laws() {
         // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
         // compares every shared answer with a fresh one and logs any difference.
         regard_cache: true, regard_cache_check: false,
+        // A bystander (one who sees an event it is not party to) is woken by what it sees at most
+        // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
+        // in full. 0: woken by each sight, as before.
+        witness_wake_ms: 500.0,
         // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
         // on a blow taken or when the same creature is seen to start the same move at it
         // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
@@ -114,6 +122,10 @@ fn laws() {
         // address them since one decided, is not said yet: one is told and thinks again with
         // that line in front of one (docs/FIRST_SIGHT.md, "Crowds"). Off: it is said.
         heard_first_rethinks: false,
+        // The think prompt's framing (docs/FRAMING.md): off, a mind starts from why it is
+        // thinking now; on, what just happened is shown beside what it perceives, and it thinks
+        // about whatever matters to it now (the neutral framing, replayed as N2).
+        think_framing: false,
         // Earshot (docs/COMMUNICATION.md §17): a person's scene says whom a line said now would
         // reach, at each way, among the people they perceive. Off: it is not told.
         earshot: false,
@@ -2338,6 +2350,14 @@ fn smoke_spec() {
 }
 fn clear_spec() { #{ about: "Turn the forest where you stand into open ground. For making room to build; gathering at a tree is the quicker way to get wood.", takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" } }
 fn graze_spec() { #{ moment: true, listed: false, about: "Eat grass where you stand (grazing animals).", takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" } }
+// A body does not fall asleep in a fight: struck moments ago (`alert_after_hit_s`), or with the
+// one who struck it close while the fight is on (`alert_while_attacker_near`; the fact
+// `hurt_by_near`). The words are the body fact alone.
+fn sleep_check(a) {
+    if within(a.actor.hurt_ago, law("alert_after_hit_s") * 1000.0) { return "you cannot sleep: you were struck moments ago"; }
+    if law("alert_while_attacker_near") && a.actor.hurt_by_near { return "you cannot sleep: someone who struck you is close"; }
+    ""
+}
 fn sleep_spec() { #{ latch: true, moment: true, about: "Sleep until rested. Night is the time for it; beside a shelter or house it is much faster and the night cold can't hurt you. A short break is rest.", takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" } }
 fn rest_spec() { #{ latch: true, moment: true, about: "Sit a few seconds and recover a little energy. Sleep restores far more.", takes: "8 seconds", gives: "a little energy" } }
 fn wait_spec() { #{ moving: true, moment: true, args: ["qty"], about: "Pause where you are (qty: seconds, at most 120).", takes: "time", gives: "nothing: time passes" } }
@@ -2479,19 +2499,19 @@ fn intent_sight() {
 }
 fn keep_distance_spec() {
     let l = laws();
-    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty"],
-       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
+    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty", "apart"],
+       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
        takes: intent_sight(), gives: "you between min and max metres from it, facing it" }
 }
 fn close_in_spec() {
-    #{ target: true, target_class: "creature", args: ["distance", "run"],
-       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
+    #{ target: true, target_class: "creature", args: ["distance", "run", "apart"],
+       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
        takes: intent_sight(), gives: "you within that distance of it" }
 }
 fn circle_spec() {
     let l = laws();
-    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty"],
-       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
+    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty", "apart"],
+       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
        takes: intent_sight(), gives: "you going round it at that distance" }
 }
 fn back_off_spec() {
@@ -2699,14 +2719,14 @@ fn rates_awake() {
 // `meters()`: the bars a body has, each naming fields of its `my_vitals` row: `value`, and `max`
 // a field or a number; `shown: false` keeps a meter off the screen while it still bounds its
 // value and feeds the statuses. A world that adds a vital adds its column and a row here.
-// Breath is a bar under health, always; focus a bar under the world's word for it, while it is
-// not full; tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
+// Breath is a bar under health, always; focus a bar under the world's word for it, always too
+// (the owner, play-test 6: "why not always visible ?"); tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
 fn meters() {
     let w = pool_word("focus");
     [
         #{ name: "health", value: "hp", max: "max_hp", order: 0 },
         #{ name: "stamina", value: "stamina", max: "stamina_max", order: 1 },
-        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1), while_short: true },
+        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1) },
         #{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },
         #{ name: "hunger", value: "hunger", max: 100.0, order: 4, shown: false },
     ]
@@ -2904,6 +2924,26 @@ fn perceived_of_law() {
        about: "You cannot read minds; what others say may be false. You only know what you perceived or were told. You know someone's name once they say it, or you are family, of one community, or close; until then they are a stranger to you." }
 }
 
+// ---- a person's look (docs/LOOK.md) ---------------------------------------------------------
+// Which of their lines a person wears: an infant's, a child's until `youth` years, a youth's until
+// `adult` years (a child or a grown person), an adult's, an elder's (life stages 0 and 3). Read
+// when a look is written (at a birth, a stage change, a band's due time); a world whose people
+// look grown sooner or later changes the ages.
+fn look_bands() { #{ youth: 12.0, adult: 18.0 } }
+fn look_bands_law() {
+    let b = look_bands();
+    #{ cadence: "event", topic: "",
+       about: `People look like children until ${short(b.youth)} years old, like youths until ${short(b.adult)}, then like adults until they grow old.` }
+}
+
+// Whom a mind's scene describes by look: "unnamed" (strangers and figures too far away to make
+// out), "all" (everyone in the scene) or "none".
+fn appearance_in_scene() { "unnamed" }
+fn appearance_in_scene_law() {
+    #{ cadence: "event", topic: "",
+       about: "You see how people look: their build, their clothes and, close enough, their hair; at a distance only a figure's height, build and clothes." }
+}
+
 fn dealings_law() {
     #{ cadence: "event", covers: ["record_text", "on_give", "on_store", "on_host", "on_expire", "due_by_dark"],
        about: "Agreements and demands are kept by the world: it counts what each side hands over, stores or hosts for the other, and tells both sides when an agreement is kept, broken or lapses at its dusk, and when a demand is met or goes unpaid." }
@@ -2965,8 +3005,10 @@ fn laws_about(l) {
         first_sight_thinks: if l.first_sight_thinks { "seeing someone you cannot place for the first time brings you to think" } else { "one thinks when something happens to one; a first sight is noticed, not thought over" },
         earshot: if l.earshot { "one knows whom one's words would reach if one spoke now, among the people one sees" } else { "one judges for oneself whom one's words would reach" },
         first_sight_gap_s: `a first sight brings one to think at most once in ${short(l.first_sight_gap_s)} s`,
+        think_framing: if l.think_framing { "a mind is shown what just happened and thinks about whatever matters to it now" } else { "a mind starts from why one is thinking now" },
         heard_first_rethinks: if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
+        witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
@@ -2976,6 +3018,8 @@ fn laws_about(l) {
         fast_lane_gap_s: `one's quick revisions begin at least ${short(l.fast_lane_gap_s)} s apart`,
         fast_lane_stale_s: `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
+        alert_after_hit_s: `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
+        alert_while_attacker_near: if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,

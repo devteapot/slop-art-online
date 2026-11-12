@@ -115,7 +115,7 @@ pub fn validate_traced(s: &Scripts, limits: super::Limits) -> Result<(Report, Ve
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 16] = ["owner_shown", "perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
+pub const ENGINE_LAWS: [&str; 18] = ["look_bands", "appearance_in_scene", "owner_shown", "perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `laws_about`.
@@ -134,6 +134,9 @@ fn described(s: &Scripts) -> Result<(), String> {
     }
     if let Some(f) = asked.iter().find(|f| !declared.contains(f.as_str())) {
         return Err(format!("install refused: the law `{f}` has no description (declare `{f}_law()` with `about`, or list it in another law's `covers`)"));
+    }
+    if let Some(e) = s.laws_about_error() {
+        return Err(format!("install refused: the world constants' words could not be read ({e})"));
     }
     if s.has("laws") {
         let about = s.laws_about();
@@ -183,6 +186,8 @@ fn validate_scoped(s: &Scripts, limits: super::Limits, trace: Option<Vec<String>
     regard(&mut p)?;
     daylight(&mut p)?;
     life_years(s)?;
+    s.look_bands_law().map_err(|e| format!("install refused: {e}"))?;
+    s.appearance_in_scene_law().map_err(|e| format!("install refused: {e}"))?;
     ways(&mut p)?;
     body(&mut p)?;
     if s.has("seasons_text") {

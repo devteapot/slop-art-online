@@ -3002,6 +3002,21 @@ def say(s):
     s.expect("a sequence of two lines speaks the second", heard(two, t0, 10), lines(t0, "two-lines")[:3], fatal=False)
     time.sleep(2.5)
 
+    # Ids are not words: a line naming people by the `#<id>` a mind is shown them by is heard as
+    # the speaker refers to them (`normalize::spoken_without_ids`, applied by `speech::speak`).
+    # r2e's minds said three such lines (docs/TRIALS.md).
+    idline = f"Watch out, #{b} is here, and the archer #{far} too."
+    t0 = now()
+    install("mind_install", {"seq": [{"say": {"text": idline, "to": {"id": b}}}, hold]})
+    got = heard("Watch out,", t0)
+    said_text = got[0]["text"] if got else ""
+    s.expect("a line naming people by id is spoken without the ids", bool(got) and f"#{b}" not in said_text and f"#{far}" not in said_text and "and the archer too." in said_text, got[:1], fatal=False)
+    told_b = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {b}", "id-line-heard") if r["at_ms"] >= t0 and "Watch out," in r["text"]]
+    s.expect("the listener hears it without the ids", len(told_b) >= 1 and all(f"#{b}" not in r["text"] and f"#{far}" not in r["text"] for r in told_b), told_b[:2], fatal=False)
+    kept = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}", "id-line-kept") if r["at_ms"] >= t0 and r["kind"] == "spoken_as"]
+    s.expect("the speaker keeps what it wrote beside what was said (spoken_as)", len(kept) == 1 and idline in kept[0]["text"] and "and the archer too." in kept[0]["text"], kept, fatal=False)
+    time.sleep(2.5)
+
     # Out of sight: not spoken, and the speaker is told why.
     lost = "Can you hear me over there?"
     t0 = now()
@@ -3401,6 +3416,9 @@ def crowd_sight(s):
 
 def crowd_sight_on(s, line, obs, crowd):
     spots = [(dx, dy) for dx in (1, 2, 3, 4) for dy in (-1.0, 1.0)]
+    # Counted from before the placing: since novelty is looked for once a second (BATTLE_SCALE
+    # fix 2), the first look often falls while the crowd is still being placed.
+    t_place = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
     s.call("place_at", obs, *line[0])
     for a, (dx, dy) in zip(crowd, spots):
         s.call("place_at", a, line[dx][0], line[dx][1] + dy)
@@ -3409,7 +3427,7 @@ def crowd_sight_on(s, line, obs, crowd):
     fam = lambda ids: {r["thing"] & 0xFFFFFFFF for r in s.rows(f"SELECT thing FROM familiar WHERE actor = {obs}") if r["thing"] >> 40 == 2} & set(ids)
     firsts = lambda since: [r for r in s.rows(f"SELECT id, at_ms, kind, subject, object, text, salience FROM experience WHERE observer = {obs}") if r["at_ms"] >= since and "first time you see" in r["text"]]
     exps = s.rows(f"SELECT id, at_ms, kind, subject, object, text FROM experience WHERE observer = {obs}", "experiences-crowd")
-    lines1 = firsts(t1 - 2000)
+    lines1 = firsts(t_place)
     parts1 = sum(len(r["text"].split("; ")) for r in lines1)
     m1 = {"lines": len(lines1), "chars": sum(len(r["text"]) for r in lines1), "people_named": parts1, "crowd_line": any("among a crowd" in r["text"] for r in exps), "texts": [r["text"] for r in lines1]}
     print("MEASURE crowd of 9 (8 new to O):", json.dumps(m1), flush=True)
@@ -4396,6 +4414,66 @@ def owners_away(s, house, owner, owner_name, fellow, newcomer):
         s.call("install_script", base, check=False)
 
 
+
+def apart_intent(s):
+    """`apart` on the movement intents (docs/PACK_MIND.md, A5): bodies holding `keep_distance`
+    3-5 m from one standing person, bunched on one side at the start, spread round it when each
+    also keeps `apart` m from others of its own kind it sees, and stay bunched without it. The
+    same for four people and for four wolves (any kind; a wolf's `keep_distance` is no attack,
+    so no dare applies). Also: `apart` is refused on an intent that does not take it and out of
+    its range, and with no one of its kind near a body holds its band as before."""
+    c = open_patch(s, 16)
+    centre, *ring = s.people(5)
+    s.graph(centre, {"wait": 300})
+    s.call("place_at", centre, *c)
+    # Awake ones: a sleeper (a `slumber` row or a sleep under way) keeps lying where it is,
+    # whatever graph it is given, until something wakes it.
+    sleeping = {r["actor"] for r in s.rows("SELECT actor FROM slumber")} | {r["id"] for r in s.rows("SELECT id, skill FROM activity") if r["skill"] == "sleep"}
+    wolves = [w["id"] for w in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if w["stage"] >= 2 and w["id"] not in sleeping][:4]
+    s.expect("four grown wolves, awake, to use", len(wolves) == 4, {"awake": wolves, "asleep": sorted(sleeping)})
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    starts = [(-4.0, 0.0), (-4.0, 0.8), (-4.3, -0.7), (-3.7, 0.4)]
+
+    def coverage(ids):
+        t = now()
+        cx, cy = body_at(s, centre, t)
+        b = sorted(math.atan2(body_at(s, i, t)[1] - cy, body_at(s, i, t)[0] - cx) % (2 * math.pi) for i in ids)
+        gaps = [b[k + 1] - b[k] for k in range(len(b) - 1)] + [b[0] + 2 * math.pi - b[-1]]
+        dists = [math.dist(body_at(s, i, t), (cx, cy)) for i in ids]
+        near = min(math.dist(body_at(s, i, t), body_at(s, j, t)) for i in ids for j in ids if i < j)
+        return {"coverage": round(math.degrees(2 * math.pi - max(gaps)), 1), "dists": [round(d, 2) for d in dists], "nearest_pair": round(near, 2)}
+
+    out = {}
+    for kind, ids in (("people", ring), ("wolves", wolves)):
+        for arm, extra in (("without", {}), ("apart4", {"apart": 4}), ("apart6", {"apart": 6})):
+            for i, (dx, dy) in zip(ids, starts):
+                s.graph(i, {"wait": 300})
+                s.call("place_at", i, c[0] + dx, c[1] + dy)
+            time.sleep(1.5)
+            for i in ids:
+                s.graph(i, {"do": {"skill": "keep_distance", "target": {"id": centre}, "min": 3, "max": 5, "qty": 60, **extra}})
+            time.sleep(14)
+            out[f"{kind}-{arm}"] = coverage(ids)
+            for i in ids:
+                s.graph(i, {"wait": 300})
+            for i in ids:
+                s.call("place_at", i, c[0] + 12, c[1] + 12 + ids.index(i))
+            time.sleep(0.5)
+    (s.out / f"{s.name}-apart.json").write_text(json.dumps(out, indent=1) + "\n")
+    for kind in ("people", "wolves"):
+        w0, w4, w6 = out[f"{kind}-without"], out[f"{kind}-apart4"], out[f"{kind}-apart6"]
+        s.expect(f"{kind}: without apart they stay bunched on one side (coverage under 90°)", w0["coverage"] < 90, w0)
+        s.expect(f"{kind}: apart 4 spreads them round it (coverage at least 150°, nearest pair at least 3 m)", w4["coverage"] >= 150 and w4["nearest_pair"] >= 3.0, w4)
+        s.expect(f"{kind}: apart 6 spreads them wider than apart 4", w6["coverage"] > w4["coverage"], {"apart4": w4["coverage"], "apart6": w6["coverage"]})
+        s.expect(f"{kind}: with apart each still holds its band (2.5-5.5 m)", all(2.5 <= d <= 5.5 for d in w4["dists"] + w6["dists"]), {"apart4": w4["dists"], "apart6": w6["dists"]})
+    # Refusals: apart on an intent that does not take it, and out of its range.
+    a = ring[0]
+    for node, words in (({"do": {"skill": "back_off", "target": {"id": centre}, "apart": 4}}, "`apart` is for"),
+                        ({"do": {"skill": "circle", "target": {"id": centre}, "apart": 0.5}}, "from 1 to 12")):
+        r = s.call("set_behavior", a, json.dumps(node), check=False)
+        said = (r.stdout or "") + (r.stderr or "")
+        s.expect(f"refused: {words}", r.returncode != 0 and words in said, (r.returncode, said[-300:]))
+
 SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
 
 
@@ -4908,8 +4986,86 @@ SCENES["committed"] = committed
 SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners
 SCENES["intents"] = intents
+SCENES["apart"] = apart_intent
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
+
+
+
+def alert_after_hit(s):
+    """A body does not fall asleep in a fight (the script's `sleep_check`, the same for every
+    controller): struck within the `alert_after_hit_s` law (15 s) it is refused, "you cannot sleep:
+    you were struck moments ago", and sleeps once that has passed; with the one who struck it within
+    `wake_reach` and the fight on (struck within 30 s, the fact `hurt_by_near`, law
+    `alert_while_attacker_near`) it is refused, "you cannot sleep: someone who struck you is close",
+    until they go. A refused sleep fails its routine. And every blow wakes a sleeping victim, not only
+    a fight's first (`perceive::wake_struck`): with both laws off a struck body sleeps again at once,
+    and the fight's second blow wakes it. The laws are restored at the end."""
+    line = clear_line(s)
+    a, b = s.people(2)
+    struck = lambda: s.rows(f"SELECT hurt_ms, hurt_by FROM vitals WHERE id = {a}")[0]
+    sleeping = lambda: [x for x in s.rows(f"SELECT skill, phase FROM activity WHERE id = {a}") if x["skill"] == "sleep"]
+    told = lambda words, since=0: [e for e in s.rows(f"SELECT text, at_ms, kind FROM experience WHERE observer = {a}") if words in e["text"] and e["at_ms"] >= since]
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    def blow(seconds=20):
+        """b, beside a, strikes it once; returns the blow's time."""
+        before = struck()["hurt_ms"]
+        s.call("place_at", b, line[1][0], line[1][1])
+        s.graph(b, {"seq": [{"do": "attack", "target": {"nearest": "person"}}, {"wait": 300}]})
+        s.wait(lambda: struck()["hurt_ms"] > before, seconds=seconds, every=0.3)
+        s.graph(b, {"wait": 300})
+        return struck()["hurt_ms"]
+    try:
+        s.call("place_at", a, *line[0])
+        s.graph(a, {"wait": 300})
+        # 1. Struck: sleep refused for 15 s, then allowed (b walks off at once).
+        t = blow()
+        s.call("place_at", b, line[0][0] + 30, line[0][1])
+        s.graph(a, {"seq": [{"do": "sleep"}]})
+        refused = s.wait(lambda: told("you cannot sleep: you were struck moments ago", t), seconds=10)
+        time.sleep(max(0.0, (t + 12_000 - now()) / 1000))
+        s.expect("struck: a sleep is refused, in the body fact's words", bool(refused) and not sleeping(), refused)
+        s.expect("and not slept for the law's 15 s", not sleeping() and not s.rows(f"SELECT * FROM slumber WHERE actor = {a}"), now() - t)
+        s.wait(lambda: sleeping(), seconds=15, every=0.5)
+        began = now()
+        s.expect("once 15 s have passed it sleeps", 15_000 <= began - t < 25_000, began - t)
+        s.graph(a, {"wait": 300})
+        s.wait(lambda: not sleeping(), seconds=10)
+        # 2. The one who struck stays close: refused past 15 s, while the fight is on; allowed once they go.
+        t = blow()
+        s.call("place_at", b, line[2][0], line[2][1])
+        s.graph(a, {"seq": [{"do": "sleep"}]})
+        time.sleep(max(0.0, (t + 18_000 - now()) / 1000))
+        near = told("you cannot sleep: someone who struck you is close", t)
+        s.expect("past 15 s, with the one who struck within reach: refused, in the body fact's words", bool(near) and not sleeping(), near)
+        s.call("place_at", b, line[0][0] + 30, line[0][1])
+        s.wait(lambda: sleeping(), seconds=12, every=0.5)
+        s.expect("they go beyond reach: it sleeps, the fight still within 30 s", now() - t < 30_000, now() - t)
+        s.graph(a, {"wait": 300})
+        s.wait(lambda: not sleeping(), seconds=10)
+        # 3. Every blow wakes a sleeper: both laws off, so a struck body sleeps again at once.
+        set_law(s, "alert_after_hit_s", 0)
+        set_law(s, "alert_while_attacker_near", False)
+        time.sleep(31)  # the last fight is over: the next blow is a new fight's first
+        s.graph(a, {"seq": [{"do": "sleep"}]})
+        s.wait(lambda: sleeping(), seconds=15)
+        t1 = blow()
+        s.wait(lambda: told("You woke up: ", t1), seconds=10)
+        s.call("place_at", b, line[0][0] + 30, line[0][1])
+        s.wait(lambda: sleeping(), seconds=15)
+        t2 = blow()
+        s.expect("the fight's second blow is not its first (within 30 s)", t2 - t1 < 30_000, t2 - t1)
+        woke = s.wait(lambda: told("You woke up: ", t2), seconds=10)
+        s.expect("and wakes the sleeper, told why", bool(woke) and woke[0]["kind"] == "body" and "attacking you" in woke[0]["text"], woke)
+    finally:
+        set_law(s, "alert_after_hit_s", 15, check=False)
+        set_law(s, "alert_while_attacker_near", True, check=False)
+        for who in (a, b):
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, [a, b], dy=56)
+
+
+SCENES["alert_after_hit"] = alert_after_hit
 
 
 def main():
@@ -5270,7 +5426,165 @@ def first_sight(s):
         off_the_line(s, line, [o, *others], dy=58)
 
 
+
+def profile_diag(s, seconds):
+    """The authority's diagnostic counts per second over a profiled window (`common::diag`)."""
+    t0 = time.time()
+    s.call("set_profile", True)
+    time.sleep(seconds)
+    s.call("set_profile", False)
+    logs = s.command("logs", "-s", "local", s.db, "-n", "200000").stdout
+    total, n = {}, 0
+    for m in re.finditer(r"^(\S+)Z?\s.*diag: (\{.*\})\s*$", logs, re.M):
+        stamp = m.group(1).rstrip("Z")[:26]
+        try:
+            at = time.mktime(time.strptime(stamp.split(".")[0], "%Y-%m-%dT%H:%M:%S")) - time.timezone
+        except ValueError:
+            continue
+        if at + 1 < t0:
+            continue
+        n += 1
+        for k, v in json.loads(m.group(2)).items():
+            total[k] = total.get(k, 0) + v
+    return {k: round(v / max(n, 1), 1) for k, v in total.items()}, n
+
+
+def familiar_dense(s):
+    """Familiarity forgets by age only, never what is in view (docs/BATTLE_SCALE.md, fix 1;
+    `brain.rs` `prune_familiar`, `FAMILIAR_LIMIT` 2,048). O stands among about 360 people (well
+    over the old cap of 256), placed round it within 8 m and standing still, for 150 s: past the
+    rows' 30 s touch and 60 s keep. Each of them O can see is told once and has one familiarity
+    row (none forgotten and made again: under the old cap the rows past 256 were evicted while in
+    view, and those people were told again). The rows are made over a minute or two: a look tells
+    a crowd's first sights a few at a time, once a second."""
+    line = clear_line(s)
+    o = s.people(1)[0]
+    s.call("place_at", o, *line[4])
+    before = {c["id"] for c in s.rows("SELECT id FROM character")}
+    s.call("spawn_crowd", 360, False)
+    crowd = [c["id"] for c in s.rows("SELECT id FROM character") if c["id"] not in before]
+    cx, cy = line[4]
+    for k, who in enumerate(crowd):
+        ring, step = 1.2 + (k // 30) * 0.55, (k % 30) / 30 * 2 * math.pi
+        s.call("place_at", who, cx + ring * math.cos(step), cy + ring * math.sin(step), check=False)
+        s.call("set_behavior", who, json.dumps({"wait": 600}), check=False)
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    time.sleep(150)
+    fam = [r for r in s.rows(f"SELECT thing, first_ms, last_ms, times FROM familiar WHERE actor = {o}") if r["thing"] >> 40 == 2 and (r["thing"] & 0xFFFFFFFF) in set(crowd)]
+    distinct = len({r["thing"] for r in fam})
+    firsts = [r for r in s.rows(f"SELECT at_ms, text FROM experience WHERE observer = {o}") if "first time you see" in r["text"]]
+    told = sum(len(r["text"].split("; ")) for r in firsts)
+    spread = (max(r["first_ms"] for r in fam) - min(r["first_ms"] for r in fam)) if fam else None
+    m = {"crowd": len(crowd), "familiar_rows": len(fam), "distinct": distinct, "told": told, "first_ms_spread_ms": spread, "t_place": t0}
+    (s.out / f"{s.name}-familiar-dense.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("O knows more of them than the old cap (256), each by one row", len(fam) > 256, m)
+        # A look tells a crowd's first sights a few at a time (FIRST_SIGHTS_PER_LINE), once a
+        # second, so the rows are made over a minute or two; one forgotten and made again would be
+        # a second row or a second telling.
+        s.expect("one row per person: none forgotten and made again", distinct == len(fam), m)
+        s.expect("each is told as a first sight exactly once (as many tellings as rows)", told == len(fam), m)
+    finally:
+        off_the_line(s, line, [o] + crowd[:40], dy=64)
+        for who in crowd:
+            s.call("kill", who, "verify familiar_dense done", check=False)
+
+
+def notice_rate(s):
+    """What is new is looked for at most once a second per character (fix 2; `brain.rs` `after`,
+    `NOTICE_MS`): with a fight among minded people waking and fast-evaluating them, the noticing
+    passes a second stay at most one per 0.9 s for each minded character (`NOTICE_MS`, a little under
+    the 1 Hz slot), while evaluations run far above them."""
+    line = clear_line(s)
+    people = s.people(10)
+    fighters, watchers = people[:4], people[4:]
+    for k, who in enumerate(people):
+        s.call("place_at", who, line[2 + k % 5][0], line[2 + k % 5][1] + (1.0 if k >= 5 else -1.0))
+    for a, b in ((fighters[0], fighters[1]), (fighters[2], fighters[3])):
+        s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}}}, {"wait": 1}]})
+        s.graph(b, {"first": [{"do": {"skill": "attack", "target": {"id": a}}}, {"wait": 1}]})
+    time.sleep(2)
+    try:
+        d, secs = profile_diag(s, 12)
+        minded = sum(1 for c in s.rows("SELECT id, ai, alive, stage FROM character") if c["ai"] and c["alive"] and c["stage"] >= 1)
+        evals = d.get("eval:wake", 0) + d.get("eval:combat", 0) + d.get("eval:slot", 0)
+        m = {"seconds": secs, "noticed_per_s": d.get("noticed", 0), "evals_per_s": evals, "minded": minded, "diag": {k: v for k, v in d.items() if k.startswith(("eval:", "noticed", "familiar"))}}
+        (s.out / f"{s.name}-notice-rate.json").write_text(json.dumps(m, indent=1) + "\n")
+        print("MEASURE", json.dumps(m), flush=True)
+        s.expect("the counts were read (a profiled window)", secs >= 8, m)
+        # At most one look per 0.9 s per character (NOTICE_MS, a little under the 1 Hz slot): 1.11 a second.
+        s.expect("noticing about once a second per minded character, never more than once per 0.9 s", d.get("noticed", 0) <= minded / 0.9 + 2, m)
+        s.expect("evaluations run well above the noticing passes", evals >= 1.3 * max(d.get("noticed", 0), 1), m)
+    finally:
+        for who in people:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, people, dy=66)
+
+
+def witness_wake(s):
+    """A bystander is woken by what it sees at most once per `witness_wake_ms` (fix 3;
+    `common::wake_bystander`), and still reacts within that bound; a party is woken at once. B
+    stands beside V and has appraised V (exact health); B's graph waves at V once V is hurt. Five
+    decoy fights start in B's sight one after another, so B's wakes are held back; then A
+    strikes V. Every percept is written at once (B's line about A and V comes with V's own). B
+    waves within `witness_wake_ms` (plus 100 ms) of the blow; V, struck (a party), within 100 ms
+    of its hurt; and wakes were held back meanwhile (`wake:deferred`)."""
+    line = clear_line(s)
+    ppl = s.people(13)
+    a, v, b = ppl[0], ppl[1], ppl[2]
+    decoys = [(ppl[3 + 2 * k], ppl[4 + 2 * k]) for k in range(5)]
+    ms = law_value(s, "witness_wake_ms")
+    s.call("place_at", v, *line[3])
+    s.call("place_at", b, line[3][0], line[3][1] + 1.2)
+    s.call("place_at", a, line[2][0], line[2][1] - 0.5)
+    for k, (c, d) in enumerate(decoys):
+        s.call("place_at", c, line[6 + k][0], line[6 + k][1] + 2.5)
+        s.call("place_at", d, line[6 + k][0] + 0.8, line[6 + k][1] + 2.5)
+    for who in ppl:
+        s.graph(who, {"wait": 300})
+    s.act(b, {"do": "appraise", "target": {"id": v}})
+    s.wait(lambda: s.told(b, "over:", "appraise"), seconds=20)
+    s.graph(b, {"first": [{"if": {"cond": {"health_of": {"target": {"id": v}, "below": 99}}, "then": {"do": {"skill": "wave", "target": {"id": v}}}}}, {"wait": 60}]})
+    s.graph(v, {"first": [{"if": {"cond": {"hurt_within": 3}, "then": {"do": {"skill": "wave", "target": {"id": a}}}}}, {"wait": 60}]})
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.call("set_profile", True)
+    try:
+        for c, d in decoys:
+            s.graph(c, {"first": [{"do": {"skill": "attack", "target": {"id": d}}}, {"wait": 60}]})
+        s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": v}}}, {"wait": 60}]})
+        hurt = s.wait(lambda: [r for r in s.rows(f"SELECT at_ms, kind, subject, text FROM experience WHERE observer = {v}") if r["kind"] == "attacked" and r["at_ms"] >= t0], seconds=20)
+        time.sleep(3)
+    finally:
+        s.call("set_profile", False)
+    seen = [r for r in s.rows(f"SELECT at_ms, kind, subject, object, text FROM experience WHERE observer = {b}") if r["kind"] == "fight" and r["at_ms"] >= t0]
+    about_v = [r for r in seen if r["object"] == v]
+    uses = s.rows("SELECT actor, skill, at_ms FROM skill_use")
+    wave_b = sorted(u["at_ms"] for u in uses if u["actor"] == b and u["skill"] == "wave" and u["at_ms"] >= t0)
+    wave_v = sorted(u["at_ms"] for u in uses if u["actor"] == v and u["skill"] == "wave" and u["at_ms"] >= t0)
+    t_hurt = hurt[0]["at_ms"]
+    logs = s.command("logs", "-s", "local", s.db, "-n", "100000").stdout
+    deferred = sum(int(x) for x in re.findall(r'"wake:deferred":(\d+)', logs))
+    m = {"witness_wake_ms": ms, "t_hurt": t_hurt, "b_fight_lines": len(seen), "b_line_about_v": about_v[:1], "b_wave_after_ms": (wave_b[0] - t_hurt) if wave_b else None,
+         "v_wave_after_ms": (wave_v[0] - t_hurt) if wave_v else None, "wakes_held_back": deferred}
+    (s.out / f"{s.name}-witness-wake.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("B saw the decoy fights and A's blow on V, each told at once", len(seen) >= 3 and about_v and about_v[0]["at_ms"] == t_hurt, m)
+        s.expect("wakes were held back meanwhile (bystanders coalesced)", deferred > 0, m)
+        s.expect(f"B, a bystander, reacts within witness_wake_ms ({ms} ms) of the blow on its neighbour", wave_b and 0 <= wave_b[0] - t_hurt <= ms + 100, m)
+        s.expect("V, struck (a party), reacts at once (within 100 ms)", wave_v and 0 <= wave_v[0] - t_hurt <= 100, m)
+    finally:
+        for who in ppl:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, ppl, dy=68)
+
 SCENES["first_sight"] = first_sight
+
+
+SCENES["familiar_dense"] = familiar_dense
+SCENES["notice_rate"] = notice_rate
+SCENES["witness_wake"] = witness_wake
 
 
 HF_TALK = {"kind": "talk", "summary": "verify-core heard_first: L speaks", "detail": "", "latency_ms": 0, "tokens": 0, "model": "fake", "reference": ""}
@@ -5386,4 +5700,3 @@ SCENES["heard_first"] = heard_first
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

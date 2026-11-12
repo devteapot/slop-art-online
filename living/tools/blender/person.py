@@ -2098,9 +2098,11 @@ class Stance:
     def maps(self):
         """Each bone's place and scale as the client poses it, for the bones that carry the clothes
         over the belly and the hips: {bone: (scale, where it stands, where it is at rest)}, each
-        (across, forward, up). `J_Fit_Belly` has no scale of its own in the client (it hangs from
-        the spine, whose scale moves it), so its vertices keep their size where the spine's are
-        scaled."""
+        (across, forward, up). `J_Fit_Belly` takes the spine's own scale (the client's half of
+        the body pass: `bone_scale` gives it the vector it gives `J_Bip_C_Spine`), so what the
+        belly's bone carries is scaled with a person's build, torso and hips as the cloth round
+        it is. Until then it had none, and a jersey's front kept its size where the trousers'
+        waist was scaled."""
         if getattr(self, "_maps", None):
             return self._maps
         out = {}
@@ -2112,7 +2114,7 @@ class Stance:
             sc = self.scale[b]
             out[b] = ((sc[0], sc[2], sc[1]), (0.0, fwd[b], self.at[b]), JOINTS[b])
         sp, r = self.scale["J_Bip_C_Spine"], JOINTS["J_Fit_Belly"]
-        out["J_Fit_Belly"] = ((1.0, 1.0, 1.0), (0.0, fwd["J_Bip_C_Spine"] + (r[1] - JOINTS["J_Bip_C_Spine"][1]) * sp[2], self.at["J_Bip_C_Spine"] + (r[2] - JOINTS["J_Bip_C_Spine"][2]) * sp[1]), r)
+        out["J_Fit_Belly"] = ((sp[0], sp[2], sp[1]), (0.0, fwd["J_Bip_C_Spine"] + (r[1] - JOINTS["J_Bip_C_Spine"][1]) * sp[2], self.at["J_Bip_C_Spine"] + (r[2] - JOINTS["J_Bip_C_Spine"][2]) * sp[1]), r)
         hips, leg = self.scale["J_Bip_C_Hips"], JOINTS["J_Bip_L_UpperLeg"]
         for side, name in ((1.0, "J_Bip_L_UpperLeg"), (-1.0, "J_Bip_R_UpperLeg")):
             out[name] = ((1.0, 1.0, self.legs), (side * leg[0] * hips[0], leg[1] * hips[2], self.hip_joint), (side * leg[0], leg[1], leg[2]))
@@ -2465,9 +2467,9 @@ def belly_weights(obs):
             if w < 0.01:
                 continue
             # On a woman's form the piece was written for the scales of the bones that carried
-            # it. The belly's bone has none, so a vertex it now shares is written again for the
-            # weights it ends with: it stands where it was meant to (a jersey's front otherwise
-            # came through the trousers it is tucked into, by 3 to 5 mm).
+            # it. The belly's bone is scaled about its own place, not the spine's, so a vertex
+            # it now shares is written again for the weights it ends with: it stands where it
+            # was meant to.
             before = {names[x.group]: x.weight for x in v.groups if x.weight > 0} if STANCE else None
             stand = STANCE.stands(before, tuple(v.co)) if before else None
             for x in v.groups:

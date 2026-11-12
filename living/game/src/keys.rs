@@ -52,6 +52,8 @@ pub enum Act {
     Interact,
     Talk,
     Address,
+    /// Change the way of speaking in the open box (the world's ways, `speech_card`).
+    Way,
     Wave,
     Nod,
     LookOver,
@@ -68,7 +70,7 @@ impl Act {
     pub fn all() -> Vec<Act> {
         let mut v = vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Weapon, Act::Primary, Act::Secondary, Act::Skill1, Act::Skill2, Act::Skill3];
         v.extend((0..EXTRA).map(Act::Extra));
-        v.extend([Act::Interact, Act::Talk, Act::Address, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log, Act::Glance]);
+        v.extend([Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log, Act::Glance]);
         v
     }
 
@@ -159,6 +161,7 @@ impl Binds {
         set(Act::Interact, vec![K(KeyF)]);
         set(Act::Talk, vec![K(Enter)]);
         set(Act::Address, vec![K(Tab)]);
+        set(Act::Way, vec![K(ArrowUp)]);
         set(Act::Wave, vec![K(KeyG)]);
         set(Act::Nod, vec![K(KeyB)]);
         set(Act::LookOver, vec![K(KeyV)]);
@@ -373,11 +376,14 @@ pub struct Prefs {
     /// The film (`post::Film`: soft, screen, off), once chosen in Settings; none follows the
     /// client's default (soft since film-1).
     pub film: Option<String>,
+    /// The hair shine (`style::HAIR_SHINES`: crown, soft, today), once chosen in Settings; none
+    /// follows the default (crown since hair-ring-2).
+    pub hair_shine: Option<String>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None }
+        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
     }
 }
 
@@ -424,6 +430,7 @@ pub fn load() -> (Binds, Prefs) {
         look_walk: v["look_walk"].as_str().map(String::from),
         sight_look: v["sight_look"].as_str().map(String::from),
         film: v["film"].as_str().map(String::from),
+        hair_shine: v["hair_shine"].as_str().map(String::from),
     };
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
     (binds, prefs)
@@ -443,6 +450,7 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "look_walk": prefs.look_walk,
         "sight_look": prefs.sight_look,
         "film": prefs.film,
+        "hair_shine": prefs.hair_shine,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);

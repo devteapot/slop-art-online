@@ -36,7 +36,7 @@ Anchors: `{"arrival": true}` (the island's `land.arrive_*`), `{"town": "<name>"}
 
 Substitutions in steps: `"$<role>"` is that character as a target (`{"id": n}`), `"$addressee"` the person the subject just spoke to (in a `said` trigger), `"$<role>_xy"` where the role stands now (`"$subject_xy+9,0"` with an offset, `"$subject_xy@pack:9"` 9 tiles from the subject toward the pack).
 
-Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of` or `to`, `within`; or `beyond`: fires when all are farther apart than that, and with `for_s` only once that has held so long, the clock starting again after each firing), `hour`; with `max`, `per_addressee`, `after_min`.
+Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of` or `to`, `within`; or `beyond`: fires when all are farther apart than that, and with `for_s` only once that has held so long, the clock starting again after each firing), `hour`; with `max`, `per_addressee`, `after_min` and `before_min` (the trigger fires only between those minutes).
 
 **Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds`, `lod`, `projects` (`LIVING_PROJECTS=1`: [projects](LIVING_CORE.md#projects-experiment-2026-11-11); the thought rows' `detail.projects` says which project each plan served) and `player-frame` (`LIVING_FRAME=player`, [below](#the-player-frame-experiment-2026-11-11)). In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
 
@@ -188,7 +188,352 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
-## Earshot stage (planned, not run) — target, written before any paid call
+## First sight fs1e (2026-11-12) — one combined arm: first sight, heard_first and earshot; target, written before any paid call
+
+Approved by the general coordinator at about $2.7. It runs after the earshot stage, and only when the general coordinator says so.
+- **What it runs:** one arm, batch `fs1e`, `strangers-2b-c:strangers-first-sight-hf-earshot`, with `first_sight_thinks`, `heard_first_rethinks` and `earshot` on (set by `set_world_law`, read back from `world_law`).
+- **The naming fix** (whom someone walks to) is on in every world.
+- **The world and script:** as fs1 and fs1h (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **The build:** main as of the run, worktree `~/slop-trials-fs1`.
+- **A free fake smoke run first** (`fs1es`).
+
+**The target and the stop rule are fs1's, unchanged** (under "First sight fs1", below).
+- **Stop rule:** the run stops, and nothing else is reported first, if `converge_60s` is 4 or more or `together_4m` 3 or more.
+- **`converge_60s` keeps its old definition** (arrive_report: the most residents who spoke, gestured or aimed an act at the newcomer within one minute, heard or not), so the comparison with fs1f and fs1h holds.
+
+**Measures:**
+- the stage-2 table against the targets, beside fs1f and fs1h;
+- **`converge_60s` split** (arrive_report since fs1e):
+  - `converge_60s_heard`: lines the authority did not mark unheard, gestures, acts aimed at it;
+  - `converge_60s_unheard`: lines the speaker was told could not have been heard;
+  - the old combined number beside them;
+  - recomputed for the earlier runs: C 2 = 2 heard + 0 unheard, fs1f 6 = 6 + 2, fs1h 10 = 5 + 6 (the halves overlap: one minute can hold both);
+- lines to the newcomer out of earshot (the authority's `silence` verdict), first sight → thought, false replies with group talk, tick time, spoken ids;
+- **held lines** (`fs1_held.py`), as in fs1h;
+- **the asks** (`fs1_asks.py`): each asker, with the reason its own thought gave, quoted and grouped: curiosity, its duty or role, **manners** (a norm of the town: "a civil word costs nothing", "that's how the town is kept"; the general coordinator, 2026-11-12, because a norm in the prompt can pull minds toward asking), being greeted first, others asking, something else. A thought giving two reasons is listed under both. The tool's word grouping is a first pass; each quote is read and the group corrected by hand in the record.
+
+**Switches:** as fs1h, plus `earshot` on.
+
+### Results (fs1e, 2026-11-12 17:55–18:16): the stop rule tripped on both counts (`converge_60s` 10, `together_4m` 3)
+
+**What ran.**
+- **Commit:** main as of 17:40 with `earshot-stage` merged (its `arrive_spread` fix: a line out of earshot is matched to its `silence` row by speaker and moment), in `~/slop-trials-fs1` at `f5398116`.
+- **Smoke:** a free fake run first (`fs1es`, 6 minutes). It ran to duration and read the three laws back. Its prompts carried "who would hear you now" (180 entries).
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. The three laws were read back from `world_law`.
+- **Cleanup:** the world was paused before deletion; no database is left.
+
+**Cost:** $2.69 (glm-5-3-flash 1,359 calls $1.94; deepseek-v4-1-flash 467 calls $0.75).
+
+**Switches:** `first_sight_thinks` on (gap 300 s), `heard_first_rethinks` on, `earshot` on, and the naming fix. Otherwise as fs1h: far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+All four runs re-measured with the fixed `arrive_spread`:
+
+| measure | fs1 C | fs1f | fs1h | **fs1e** | target |
+|---|---|---|---|---|---|
+| in range | 18 | 22 | 22 | **35** | about 18–24 |
+| asks | 1 | 11 | 12 | **22** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 3 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 8 | 3–8 |
+| unaware | 12 | 3 | 2 | 2 (6%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 | 5 | 1–4 |
+| first heard line after the join | 91.6 s, Bram Calloway | 320.7 s, Lorcan Vane | 307.8 s, Neve Calloway | 96.0 s, Edda Hollin | within 5 minutes |
+| `converge_60s` (old definition) | 2 | 6 | 10 | **10** | ≤3 |
+| of it: heard / unheard (the halves overlap) | 2 / 0 | 6 / 2 | 5 / 6 | 8 / 7 | — |
+| `together_4m` | 2 | 2 | 2 | **3** | ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | 10 | — |
+| lines to the newcomer / out of earshot / residents heard by it | 1 / 0 / 1 | 21 / 7 / 5 | 21 / 12 / 3 | 31 / 16 / 10 | — |
+| re-asks | 0 | 7 | 6 | 1 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 | 39 → 36 | — |
+| false replies / group talk, a minute | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | 0.45 / 0.65 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | 0.07; +0.28 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | 22.4 / 13.5 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 | 0 |
+| cost | $2.48 | $2.66 | $2.73 | $2.69 | — |
+
+- **Crowding.** In range rose to 35. The newcomer's second stand put it at the Marver's door at midday, among the Achterbergs, Aldous, Eamon and Anselm. `together_4m` reached 3 there.
+- **Earshot changed little, as expected.** 16 of 31 lines to the newcomer were out of earshot (52%; fs1h 57%, fs1f 33%). A thought started at first sight says its line about 8 s later, and a think or deliberate reply cannot call.
+- **Tick time was not captured.** The sampler found no database: the trial databases no longer appear in the server CLI's `spacetime list` (another owner's identity). This needs fixing before the next batch; the authority's own clock rows were not read.
+
+**The asks: 22 residents, each with the reason its own thought gave** (`fs1_asks.py`; the groups read and set by hand; a thought giving two reasons is in both):
+
+| reason | askers | in their words |
+|---|---|---|
+| **manners** (13) | Imre, Rafe, Joss, Aldous, Lorcan, Cora, Elke, Gwil, Dolly, Otto, Pieter, Jory, Eamon | Imre: "A word costs nothing"; Rafe: "a nod and a name costs nothing"; Joss: "no harm in being the first friendly face"; Aldous: "a new face in Cullet is worth a civil word"; Lorcan: "close enough for a civil word"; Cora: "it costs nothing and Cullet was built on neighbourliness"; Elke: "I'll give them the time of day the way you do"; Gwil: "I'll hail them civil"; Dolly: "I'll greet them proper"; Otto: "a nod and a word costs nothing; strangers are just neighbours I've not met yet"; Pieter: "a nod to the quiet stranger on the way costs nothing"; Jory: "a man should see who stands in his street"; Eamon: "a greeting costs nothing" |
+| **curiosity** (10) | Lark, Roos, Imre, Edda, Rafe, Lumi, Gwil, Mirren, Anselm, Eamon | Lark: "I have never seen anyone who wasn't of Cullet … curiosity like this doesn't come twice"; Roos: "I'll give a good morning and see who answers"; Imre: "I want a look at who comes to Cullet"; Edda: "I know everyone in Cullet by sight … go see who it is"; Rafe: "learns who's new in town"; Lumi: "I've never seen them before"; Gwil: "not one of ours as far as I can see"; Mirren: "folk who wait outside a town usually want something"; Anselm: "I'd rather know who they are than walk past"; Eamon: "maybe the stranger has news" |
+| **duty or role** (4) | Aldous, Dolly, Mirren, Edda | Aldous: "everyone who trades at the Store ends up in my book"; Dolly: "that's what the Marver is for"; Mirren: "or need tending" (the healer); Edda: "I lead, so I go first" (the children's leader) |
+| **others asking or approaching** (3) | Imre, Pieter, Eamon | Imre: "Roos Achterberg walking straight at them" (the naming fix's fact); Pieter: "Dolly's feeding the stranger at the door"; Eamon: "Aldous Quill and the Achterbergs gathered round it" |
+| **greeted first** (0) | — | the newcomer never speaks |
+| **something else** (3) | Ren, Nell, Ife | Ren greets "honestly" in passing, minding his fished-out spot. Nell asks whether it has seen her lost brother. Ife's thought is about Lumi, and its line went to the newcomer. |
+
+**Where the asking comes from.**
+1. **The first-sight thought is the pull.** 20 of the 22 askers spoke from a think whose only reason was the first-sight line ("For the first time you see a stranger, 16 tiles south, wait."). The think prompt says "Start from why you are thinking now: that is what this moment of thought is about" (`prompts.rs`). With the stranger as the only reason, the stranger is what the thought is about, and most answer it with a greeting.
+2. **Manners is the models' own norm, not the prompt's.** "costs nothing" appears in 8 thoughts. Neither the shared prompts nor any resident's sheet holds a greeting norm; the nearest is Amara's value "a neighbour is owed what you can carry", and she is not an asker.
+3. **Personality shows only as a lean.** The askers who gave curiosity have curiosity 40–88 (Lark 88, Lumi 80, Eamon 78, Edda 75), those who gave manners 30–78 (most 35–45).
+4. **Duty or role came in four lives.** Aldous asked in this run, the first time in any arm. His first line, at 320 s from 22.8 m, went unheard. He asked again at the Marver after Pieter, Eamon and Anselm.
+
+**Held lines** (`heard_first_rethinks`): **33 held, 6 of them to the newcomer.**
+- **After the re-think:** 11 said the same words again, 15 another line to the same person, 7 spoke to someone else, 0 fell silent.
+- **The 6 to the newcomer all still spoke to it**, now knowing who had asked:
+  - **Anselm:** "Eamon Tarn has already opened the welcome for me — no matter, the question is still mine to ask plainly". He then said "Eamon's asked it already, but I'll ask it too — your name, and your business?".
+  - **Aldous:** "Pieter has already welcomed him — a tally keeper should not be beaten to a name twice in one day", and later "Anselm and Eamon have both had their go; my turn, as tally keeper, is owed".
+  - **Roos:** "Edda's already hailed them, so I'll add a proper call of welcome and close the gap myself".
+  - **Dolly** said her welcome again.
+- **The other 27** were in residents' group talk, as in fs1h.
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1e` and `fs1es` and the journals `verify-trial-fs1e*`, archived in `~/archive/trials/fs1e-20261112.tar.gz` (15 MB, 370 files). The archive also holds the fixed-tool re-measures of all four runs (`fs1c-`, `fs1f-`, `fs1h-` and `fs1e-spread2.md`), `fs1e-asks.json` (every asker's line, distance, thought and group), `fs1e-held.json`, `fs1e-m.json`, the spend logs and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
+## First sight fs1h (2026-11-12) — the one-arm re-run with the crowd fixes; target, written before any paid call
+
+The re-run of C + first sight after first-sight-crowd (docs/FIRST_SIGHT.md, "Crowds" and "Decisions on the crowd fixes"), approved by the general coordinator at about $2.7.
+- **What it runs:** one arm, batch `fs1h`, `strangers-2b-c:strangers-first-sight-hf`, with `first_sight_thinks` and `heard_first_rethinks` on (set by `set_world_law`, read back from `world_law`).
+- **The naming fix** (whom someone walks to, in the observer's words) is on in every world since first-sight-crowd; it has no switch.
+- **The world and script:** as fs1 (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **The build:** main with first-sight-crowd merged, worktree `~/slop-trials-fs1`.
+
+**The target and the stop rule are fs1's, unchanged** (the table and the rule under "First sight fs1", above). The run stops, and nothing else is reported first, if `converge_60s` is 4 or more or `together_4m` 3 or more.
+
+**Measures:**
+- the stage-2 table against the targets, beside fs1's C and C + first sight (fs1f);
+- the raw 4 m convergence, lines out of earshot, first sight → thought;
+- false replies with group talk, tick time, spoken ids;
+- **held lines** (`fs1_held.py`): how many lines `heard_first_rethinks` held, how many of them were still said after the re-think (the same words again), and what the minds decided instead: another line to them, speaking to someone else, or silence. The re-think's thought is quoted.
+
+**Switches:** as fs1, plus `heard_first_rethinks` on and the naming fix.
+
+### Results (fs1h, 2026-11-12 16:46–17:07): the crowding rule tripped again (`converge_60s` 10)
+
+**What ran.**
+- **Commit:** main `5eeb2566` (first-sight-crowd), in `~/slop-trials-fs1` at `8318143e`.
+- **Smoke:** a free fake run first (`fs1hs`, 6 minutes). It ran to duration with no runaways and read both laws back. Its prompts carried the naming fix ("→ you", "→ Edda Hollin", the far label). A thinker's own `you.doing` keeps "→ person", as designed.
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. Both laws were read back from `world_law`.
+- **Cleanup:** the runner paused the world before deleting it.
+
+**Cost:** $2.73 (glm-5-3-flash 1,412 calls $2.12; deepseek-v4-1-flash 371 calls $0.60).
+
+**Switches:**
+- `first_sight_thinks` on, the gap at 300 s;
+- `heard_first_rethinks` on;
+- the naming fix (whom someone goes to, in the observer's words: always on since first-sight-crowd);
+- otherwise as fs1: far-handle on, `fov_on` off, `regard_cache` on, `earshot` off; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | fs1 C | fs1f (C + first sight) | **fs1h (C + first sight + the crowd fixes)** | target |
+|---|---|---|---|---|
+| in range | 18 | 22 | 22 | about 18–24 |
+| asks | 1 | 11 | **12** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 3–8 |
+| unaware | 12 (67%) | 3 (14%) | 2 (9%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 (Amara Okoro, Oswin Greave) | 1–4 |
+| first heard line after the join (corrected; old tool in brackets) | 91.6 s | 320.7 s (42.5 s) | **307.8 s, Neve Calloway** (88.9 s, Ren Sato) | within 5 minutes |
+| `converge_60s` / `together_4m` | 2 / 2 | 6 / 2 | **10** / 2 | ≤3 / ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | — |
+| lines to the newcomer / out of earshot (the authority's `silence` verdict) / reached it | 1 / 0 / 1 | 21 / 7 / 14 | 21 / **12** / 9 | — |
+| residents who spoke to it / re-asks | 1 / 0 | 11 / 7 | 12 / 6 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 (all alone) | — |
+| false replies a min / group talk a min | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 |
+| tick mean / > 10 ms / > 25 ms | 0.88 ms / 28 / 2 | 0.82 ms / 14 / 1 | 0.82 ms / 18 / 0 | — |
+
+**The out-of-earshot counts** are the authority's own verdict: the speaker's `silence` row within 1.5 s of the line ("They are too far away / out of earshot: they could not have heard you"). `arrive_spread`'s `far` gave 2 in both first-sight arms, because it misses main's current silence wording. **Correction to the fs1 table:** fs1f's lines out of earshot were 7 of 21, not 2.
+
+**The crowd this time was mostly called from afar.** The minute behind `converge_60s` 10 (295–356 s, the Strand walk and the plots) holds lines to the newcomer from Eamon, Neve, Ingrid, Magda, Petra, Joss, Nan and Oswin.
+- **Distances:** 6 of those lines were said from 18–70 m and none of them reached the newcomer. Neve, Nan and Oswin, at 0.5–3 m, reached it.
+- **Why:** each first sight asked one thought (24 did), and the thought said its line from where the resident stood. A line out of earshot still counts in `converge_60s` (arrive_report counts lines, heard or not).
+- **Bodies:** stayed apart: `together_4m` 2.
+- **What it points at:** the `earshot` law, "who would hear you now" (docs/COMMUNICATION.md §17), the next stage, addresses exactly this.
+
+**Held lines** (`heard_first_rethinks`; `fs1_held.py`): **38 lines held, from 20 speakers.**
+- **Only 1 was to the newcomer:** Oswin's, after Nan hailed it.
+- **The other 37 were among residents,** mostly in the children's and the lesson's group talk. Pim held 6 times, Lumi and Juno 4 each.
+- **After the re-think, in the next 120 s:**
+  - **15 said the held words again** (word-set overlap ≥ 0.6);
+  - **17 said another line to the same person;**
+  - **5 spoke to someone else instead;**
+  - **1 said nothing** (Lumi Pontil, 78.5 s).
+- **The re-thinks name the new line and change course:**
+  - **Oswin** (354 s, to the newcomer): "Nan has already hailed this stranger at arm's length from me, so I'll give my own name plain and ask his business". He then said "You there — Oswin Greave, head grower on this ground. I'll have your name…" instead of "Morning to you, lad!…".
+  - **Sabine** (58 s): "Alder is already fetching tablet and cloth to the west window, so my witness is settled before I asked". She turned to Alder.
+  - **Lumi** (374 s): "Edda's said plain: a held seat is no head start … so the sneak-out is off". Her next line conceded it.
+  - **Imre** (58 s): answered Halvard instead of repeating his morning to Vessa.
+  - **Eamon** (464 s): changed "Neve — a word, while the crowd's not on us…" to "Neve — quiet, between us: I want a family with you."
+- **Cost of the holds:** deliberations rose to 22.1 per resident-hour (fs1f 20.4, C 18.9). The holds' re-thinks are part of that.
+
+**Reading** (one replicate, so indicative):
+- **What didn't work:** the crowd fixes did not soften the newcomer's reception. Asks stayed out of shape (12) and convergence rose (10), driven by lines called from out of earshot, which neither fix addresses.
+- **What did:** `heard_first_rethinks` worked as designed. Minds used the fresh fact: 22 of 38 held lines ended in a different line or addressee, 15 in the same words.
+- **Who it touched:** in this world it acts mostly on residents' group talk, not on the newcomer. Group talk per minute rose (0.30 against 0.10) and false replies fell (0.35 against 0.55).
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1h` and `fs1hs` and the journals `verify-trial-fs1h*`, archived in `~/archive/trials/fs1h-20261112.tar.gz` (15 MB, 363 files). The archive also holds `fs1h-spread.md`, `fs1h-m.json`, `fs1h-held.json` (every held line, its re-think and what followed), `fs1h-ticks.md`, the metrics and spend logs, and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
+## First sight fs1 (2026-11-12) — target, written before any paid call
+
+The paid stage of docs/FIRST_SIGHT.md, approved by the owner (2026-11-12) at about $13. It runs on main `dc45c259` (first-sight merged), worktree `~/slop-trials-fs1`, branch `trials-fs1`.
+
+**The world and script.** Cullet, as st2b:
+- 63 minds; 20 minutes; the world starts at 07:00;
+- the newcomer joins at 09:30 at the arrival point and stands 5 minutes;
+- then it walks the Strand past the Fish Steps (`walk_route`) and stands 5 minutes at the densest group;
+- it never speaks.
+
+**Arms,** one replicate each, run one after another (one sub-batch each):
+- **C** (`fs1-c`, `strangers-2b-c:strangers-control`): strangers as on main, the first-sight law off.
+- **C + first sight** (`fs1-f`, `strangers-2b-c:strangers-first-sight`): `first_sight_thinks` on, the gap at its 300 s.
+- **LS + cues + first sight** (`fs1-l`, `strangers-2b:strangers-filter-cues-fs`): `stranger_by_name`, `cues_on` and `first_sight_thinks` on. It runs only if the first two leave room under $13.
+
+The laws are set by `set_world_law` and read back from `world_law`.
+
+**Cost estimate:** st2b's $2.49 (C) and $3.08 (LS + cues), plus the design's +4–5% for first sight: about $2.5 + $2.6 + $3.2 = **$8.3**. A spend guard stops the runner past what is left of $13.
+
+**The target, unchanged** (docs/STRANGERS.md, "Target spread", as stage 2 and st2b used it; one replicate, so indicative only). In range now counts the newcomer's walk (st2b analysis), so it is restated as st2b re-scored it.
+
+| measure | target |
+|---|---|
+| in range (≤12 m during a stand or the walk) | about 18–24 |
+| asks | 1–3, Aldous among them |
+| approaches silently | 0–2 |
+| notices inwardly | 3–8 |
+| unaware | ≤6, ≤40% |
+| tells others (all residents) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | within 5 minutes |
+| `converge_60s` / `together_4m` | ≤3 / ≤2 |
+| out of shape, any arm | 5 or more askers; unaware above 60%; 3 or more residents within 4 m at once |
+| guards: false replies a min (main's rule since strangers-measures: an answer to a line that names someone else; group talk apart), repeated lines, `led_res` − placebo | within C's spread |
+
+**The stop rule, fixed before running.** It is checked after each arm, before the next starts. The batch stops, and nothing else is reported first, if a first-sight arm crowds like ar2's `notice` arm (2–6 residents converging within a minute):
+- its `converge_60s` is 4 or more, above every arm without a newcomer law in st2 and st2b (at most 3); or
+- its `together_4m` is 3 or more.
+
+Beside them, each arm records the raw count: the most residents who came within 4 m of the newcomer within 60 s of one another, whatever their reason. The Strand walk passes many residents, so C gives that count's baseline.
+
+**Measures,** beside the table above:
+- the raw 4 m convergence;
+- lines said to the newcomer out of earshot;
+- first sight → thought: each resident's first sight of the newcomer, whether a think request carried its line (taken, merged or none), and what that thought decided (its thought, its line, its plan);
+- false replies under main's rule, with group talk;
+- tick time (`spacetime_reducer_plus_query_duration_sec`, reducer `tick`);
+- spoken `#id` lines and handles.
+
+**Switches** (recorded again with the results): main `dc45c259`.
+- far-handle on (no switch); `fov_on` off; `regard_cache` on.
+- `first_sight_thinks` per arm; `cues_on` and `stranger_by_name` in LS + cues + first sight only.
+- `LIVING_GREET=nearest` and `LIVING_PARK=concurrent` (unset, main's defaults); `LIVING_SKILL_TIMINGS` on and `force_outcomes` true (as on main).
+- The sleeper fix is in. No arrival laws.
+- `LIVING_CONCURRENCY` 64; the people mix (glm-5-3-flash, deepseek-v4-1-flash).
+
+**Fake smoke** (`fs1s`, free, 6 minutes, before this record was committed):
+- C, C + first sight, LS + cues + first sight and `strangers-2b:strangers-control` all ran to duration, with no runaways;
+- each arm's laws were read back as set;
+- the fake's first-sight thoughts came 5–7 s after the first sight (Lark Morrow, Tobiah Dunmore), the line their only reason; C had none.
+
+### Results (fs1, 2026-11-12 12:58–13:40): stopped by the crowding rule after two arms
+
+**What ran.**
+- **Batches.** The sub-batches are `fs1c` and `fs1f`, not `fs1-c` and `fs1-f` as the target above says: the runner takes only lowercase letters and digits. A first start as `fs1-c` was refused at once, with no call made.
+- **Two arms:** C at 12:58:30–13:19:12, then C + first sight at 13:19:20–13:40. One after another, on main `dc45c259` in `~/slop-trials-fs1`.
+- **The stop rule tripped on C + first sight** (`converge_60s` 6), so LS + cues + first sight (`fs1l`) did not run.
+- **Both runs** stopped by duration (20.0 minutes). There were no runaways and one mind start each, and no outages: both started after the trial server's 12:53 restart, and it stayed up throughout.
+- **Housekeeping on the server:**
+  - C's world was paused at 19.7 minutes by a watcher, because its runner predated the pause-before-delete fix. That cut the last 20 s or so.
+  - C + first sight's runner (`trials.py` with `72801824`, branch `fix-trials-pause`) paused its own world before deleting it.
+  - No `verify-trial-fs1*` database is left.
+
+**Cost:** $5.14 of the $13 approved.
+- C: $2.48 (glm-5-3-flash 1,329 calls $1.94; deepseek-v4-1-flash 332 calls $0.54).
+- C + first sight: $2.66 (1,397 calls $2.02; 398 calls $0.64).
+
+**Switches,** as written in the target: `first_sight_thinks` off in C and on in C + first sight (read back from `world_law`); far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | C | C + first sight | target |
+|---|---|---|---|
+| in range (stands and the walk) | 18 | 22 | about 18–24 |
+| asks | 1 (Bram Calloway) | **11** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0–2 |
+| notices inwardly | 2 | 8 (Aldous among them) | 3–8 |
+| unaware | 12 (67%) | 3 (14%) | ≤6, ≤40% |
+| tells others (all residents) | 0 | 6 (Neve Calloway, Magda Tarn, Ingrid Morrow, Hana Sato, Ren Sato, Nan Fenwick) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join (corrected; old tool in brackets) | 91.6 s (91.6 s) | **320.7 s, Lorcan Vane** (42.5 s, Lark Morrow) | within 5 minutes |
+| `converge_60s` / `together_4m` | 2 / 2 | **6** / 2 | ≤3 / ≤2 |
+| raw 4 m convergence (any reason, within 60 s) | 5 | 7 | — |
+| lines to the newcomer / out of earshot | 1 / 0 | 21 / 2 | — |
+| residents heard by it (corrected; old tool in brackets) / re-asks | 1 (1) / 0 | **5** (9) / 7 | — |
+| first sights of it → think requests carrying the line | 22 → 0 | 24 → 20 (19 alone, 1 merged) | — |
+| false replies a min / group talk a min (main's rule) | 0.45 / 0.05 | 0.55 / 0.10 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | — |
+| spoken `#id` lines | 0 | 0 | 0 |
+| tick mean / p99 / > 10 ms / > 25 ms / > 50 ms | 0.88 ms / ≤ 5 ms / 28 / 2 / 0 | 0.82 ms / ≤ 5 ms / 14 / 1 / 0 | — |
+
+- **Out of shape:** asks (11, past the "5 or more" mark) and `converge_60s` (6, the stop rule).
+- **In shape:** inward and unaware. Tells are over the band (6 against 1–4). The first heard line was first recorded as in shape (42.5 s); the corrected figure, 320.7 s, is past the 5-minute band (correction below the table, fs1e).
+- **Aldous** thought about the newcomer 7 s after its join: "new faces are rare enough in Cullet that a tally keeper notices. Not my business to challenge…". He said nothing, so he is classed inward.
+- **Ingrid** asked, and told others.
+- **First-sight thoughts** came 0.4–27 s after the first sight. The median was 0.5 s to the request and 4–15 s to the reply.
+- **Cost:** deliberations rose 8% (20.4 against 18.9 per resident-hour) and money 7% ($2.66 against $2.48). The design forecast +4–5%, from lines alone; the talk that followed adds the rest.
+
+### The 314–322 s cluster (C + first sight)
+
+The newcomer walked the Strand from 293 s, toward and through Neve Calloway's fishing party going east. Every first sight below asked one thought. Distances are in tiles (metres).
+- **First sight:** when the resident's look first told them of the newcomer, and from how far.
+- **Line:** the resident's next line after the thought, its time and its distance from the newcomer.
+
+| resident | first sight (s, m) | think asked → replied (s) | the thought, in part | line (s, m from the newcomer) |
+|---|---|---|---|---|
+| Neve Calloway | 308.7, 23 | 309.2 → 314.2 | "A stranger walking east toward the very water we're bound for — not alarming, but I'd as soon know whose steps…" | 320.0, 18.9, to Magda: "Then keep pace — I've a lad to teach the count…" |
+| Tobiah Dunmore | 309.7, 18 | 310.1 → 314.4 | "Neve's walking us east to show the line proper…" | 319.5, 19.3, to Neve: "…Mind the east, someone's walking in fr…" |
+| Joss Tarn | 308.8, 22 | 311.3 → 315.7 | "A stranger walks toward the east water where our folk are gathering — nobody's said welcome or warning yet…" | 324.1, 29.4, to Neve: "Neve — someone coming up from the east, past the hall. Not Cullet…" |
+| Lorcan Vane | 311.9, 21 | 312.9 → 316.4 | "A stranger walking straight into the town at midday…" | **320.7, 9.7, to the newcomer:** "Morning to you, stranger — you've found Cullet. Lorcan Vane's my name…" |
+| Ingrid Morrow | 313.0, 20 | 314.0 → 317.9 | "A stranger walking east through the town, and I don't know the face — that's worth a hail…" | **320.9, 6.4, to the newcomer:** "You there, east-walker! I don't know your face…" |
+| Magda Tarn | 309.7, 19 | 314.6 → 319.7 | "A stranger walking northeast toward the same east water…" | 323.7, 30.1, to the room: "You there, walking east — stranger or neighbour? I'm Magda Tarn…" |
+| Davin Vane | 316.9, 17 | 317.4 → 322.3 | "A stranger standing easy at the east road, watching Cullet folk pass…" | **326.9, 16.2, to the newcomer:** "Morning to you. Waiting on someone, or new to Cullet?" |
+
+Then, in the plots:
+
+| resident | first sight (s, m) | think asked → replied (s) | the thought, in part | line (s, m from the newcomer) |
+|---|---|---|---|---|
+| Oswin Greave | 338.1, 13 | 338.5 → 346.9 | "A stranger walking north through the plots…" | 349.2, 2.1, to the newcomer |
+| Hobb Fenwick | 338.2, 12 | 338.6 → 343.5 | "A stranger walks north of the plots toward the Readers' yard…" | 347.8, 4.5, to the newcomer |
+| Nan Fenwick | 337.1, 24 | 364.1 → 377.1 | "…Oswin has already had to ask twice who they are…" | 382.4, 12.2, to the newcomer |
+
+The 60 s window behind `converge_60s` 6 holds five lines to the newcomer (Lorcan, Ingrid, Davin, Hobb and Oswin, 320.7–349.2 s) and Magda's wave at it. Neve, Tobiah and Joss spoke about it to each other. All of these residents first saw the newcomer within 8 s of one another (308.7–316.9 s), as it walked into their group.
+
+**What each thinker perceived** (each think request's scene; `fs1_cluster.py`):
+- **Approaching: no.**
+  - When Oswin and Hobb thought (338.5 s), Lorcan and Davin were walking to the newcomer (`goto` at it). Oswin's scene shows "Lorcan Vane, 22.1 south, goto → person".
+  - An activity's label names its target by kind only (`act.rs` `label`: "→ person"). No scene in the cluster said that anyone was walking toward the newcomer.
+- **Who is near the newcomer: only by arithmetic.** At Lorcan's and Ingrid's thoughts, 9 residents stood within 8 m of the newcomer. Their scenes give each person's distance and direction from the thinker alone, and nothing relates one person to another.
+- **Speaking to it: yes, once heard.**
+  - At the cluster's thoughts nobody had yet spoken to the newcomer within earshot: the 4 earlier speakers had hailed it at the arrival point minutes before.
+  - Nan, who thought at 364 s, had 3 heard lines to the newcomer in her prompt, and her thought says so ("Oswin has already had to ask twice").
+  - A heard line carries its room detail as main writes it.
+
+**Does a thought started at first sight go stale? Yes.** Three of the six lines said to the newcomer in the cluster came after another resident had just addressed it, within the speaker's hearing, and after the speaker's decision had been made without that fact:
+- **Ingrid** decided at 317.9 s. Lorcan spoke at 320.7 s, 3.3 m from her, and her line followed 0.2 s later.
+- **Davin** decided at 322.3 s, on a prompt built at 317.4 s, before either had spoken. He stood 3.3 m from the newcomer when both hailed it, and his own line came 6 s after theirs.
+- **Oswin's** line came 1.4 s after Hobb's.
+
+The gap from a reply to its line was 2.4–5.3 s, because a think reply's `say` is spoken at install, after the compile. `speech_truth`'s `line_overtaken` drops a queued line only when the speaker's own exchange with the addressee has moved on. Someone else addressing the same person is not counted.
+
+**Where to soften such a cluster, without hiding anything and without traits or roles.** Two perception facts, each the same for every controller:
+1. **Whom a walker or follower is going to, in the observer's own words.** "goto → a stranger", "follow → Neve Calloway", "follow → you", or the far label. That is what a player sees drawn on screen: someone heading at someone. A mind's scene would then show who is already on their way.
+2. **The act is checked against what changed since it was chosen.** When a mind's line to someone comes due, and since the scene its decision read the speaker has heard another address that person, the line is not said yet. The speaker is told so, and its mind is asked to think again with the heard line in front of it. It may still speak; nothing tells it to.
+
+Whether they spread the cluster is for a re-run to show. `first_sight_thinks` stays off (the general coordinator, 2026-11-12).
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1c`, `fs1f`, `fs1s` and the journals `verify-trial-fs1*`, all in the archive `~/archive/trials/fs1-20261112.tar.gz` (38 MB, 1,045 files). The archive also holds:
+- the spread reports (`fs1c-spread.md`, `fs1f-spread.md`);
+- the measures (`fs1c-m.json`, `fs1f-m.json`) and the cluster (`fs1f-cluster.json`);
+- the tick table (`fs1-ticks.md`) and the metrics samples;
+- the spend logs and the tools (`~/slop-strangers-logs/tools`: `fs1_measures.py`, `fs1_cluster.py`, `fs1_ticks.py`).
+
+**Security check:** 9 fragments of the 3 API keys were searched for in the batch directories, the journals and the logs. Count: 0.
+
+## Earshot stage (run as `es1`) — target, written before any paid call
 
 The `earshot` law (docs/COMMUNICATION.md §17; MIND_RESEARCH_IDEAS #4), approved by the general coordinator at about $8–10 at Cullet. It runs after fs1 finishes, so the two batches do not overlap. Nothing below has been run.
 
@@ -286,6 +631,110 @@ Control's 163 and 167 split the same way (deliberation 108 and 109, talk 36 and 
 4. **Keep the `earshot` law off until then.** It costs about 55 tokens a prompt and changed nothing here.
 
 **Evidence:** `.local/living/trials/es1` and `.local/living/journal/verify-trial-es1-*` in `~/slop-trials2b`.
+
+## Ways stage (run as `ew1`) — target, written before any paid call
+
+Approved by the general coordinator at about $2.5: one Cullet arm, once `mind-say-way` (a decision's line names its way, docs/COMMUNICATION.md §18) and the laptop's talk box on `human_speak` are both on main. The talk box does not enter the trial (the newcomer is scripted), so this measures the minds' side alone. Nothing below has been run.
+
+- **Trial and arm:** `strangers-earshot` (stage 2b's script) with the `strangers-earshot` variant: the `earshot` law on, so a decision's scene still says "a call would also reach …". 1 run, 20 minutes, 63 minds.
+- **Compared with:** es1's earshot runs (r1/r2, the same arm on main `ce5e09b9`, where a decision could not call) and its control (r1/r2).
+- **Stop rule:** stop the run if spend passes $3.50 (es1's runs cost $2.30–2.42).
+- **Command:** `python3 living/tools/trials.py run --batch ew1 strangers-earshot --variants strangers-earshot --replicates 1`. Before it, a free fake smoke (`ew1s`, `--fake --fake-script living/trials/fake/strangers.json --minutes 3`): it starts, and `world_laws.json` has `earshot` true.
+- **Build and switches, to record at the run:** the main commit; `earshot` on; every other law and `LIVING_*` switch as main has it then.
+- **Measures:**
+  - `unheard_why.py` (the split by what wrote each unheard line);
+  - `arrive_spread.py --strangers`;
+  - from the chronicle: the decisions' lines by way (`"<name> (call) to …"`, `"(whisper)"`);
+  - from the experiences: refused lines (`unsaid`, "You did not say …").
+
+**Target spread** (one run, so indicative):
+
+| measure | es1 earshot r1 / r2 | expected if the way is used | read as no effect |
+|---|---|---|---|
+| `deliberation: only a call` (`unheard_why`) | 33 / 22 | at most 10 | 20 or more |
+| decisions' lines that call | 0 / 0 (impossible then) | some; reported with examples | 0 |
+| `deliberation: in reach then` (late lines) | 73 / 65 | unchanged: the next target, out of this change's reach | — |
+| `far_seen` | 90 / 75 | about 15–25 fewer than es1's earshot runs | within es1's spread |
+| `far_all` ÷ `said_all` | 25.4% / 24.6% | down 2–4 points | within es1's spread |
+| refused decided lines (`unsaid` "You did not say …") | — | reported; a few whispers without an addressee are possible | — |
+| `said_all` | 705 / 614 | within 25% of es1's | — |
+| `converge_60s` / `together_4m` | 2, 0 / 2, 2 | at most es1's + 2 | — |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | within es1's spread (both arms) | — |
+| animals startled by calls (`signal` "a person shouting" rows to animals) | reported | reported | — |
+| cost | $2.42 / $2.37 | within 20% | — |
+
+### Results (batch `ew1`, 2026-11-12 20:40–21:01 UTC)
+
+**Build and switches.**
+- Main `da3ff142` (mind-say-way), rebuilt for the run; bindings regenerated in `slop-trials-stdb`, identical to main's. Worktree `~/slop-trials2b`, branch `ways-stage`.
+- `earshot` on (`world_laws.json`). Laws otherwise as main ships them: `stranger_by_name`, `cues_on`, `first_sight_thinks`, `heard_first_rethinks`, `fov_on`, `fast_lane_on` and `think_framing` off; `speech_truth`, `speech_audience` and `force_outcomes` on.
+- `LIVING_GREET`, `LIVING_PARK` and `LIVING_SKILL_TIMINGS` unset (main's defaults). 63 minds, the people mix at the real provider.
+- Stopped by duration (20 minutes). The database was deleted at the end with its world paused first (`delete_db`); `trials.py clean` removed the Neo4j mind.
+- **The machine was loaded:** load average 50 on 20 cores at the start (other sessions' builds), the trial server at 200% CPU with others' worlds. es1 ran on a quieter machine, and the median gap from a decision's request to its line was 5.3 s here, against 7.6–8.1 s there.
+
+**Before it:** a fake smoke (`ew1s`, 3 minutes): it ran its time, `world_laws.json` had `earshot` true, the think format carried `"way": "say" or "whisper" or "call" (optional; default "say")`, and the fact reached the scene prompts.
+
+**Cost:** $2.55 (stop at $3.50). Key fragments in the evidence and journals, `ew1s` included: 0 matches (3 keys, 45 fragments, 328 files).
+
+**The lines that named a way** (`living/tools/ways_report.py`):
+
+| | es1 earshot r1 / r2 | ew1 |
+|---|---|---|
+| decisions' lines by way | say 350 / 305 (no way could be named) | say 272, **call 56**, whisper 13 |
+| talk replies' lines by way | say 247 / 235, call 26 / 13, whisper 10 / 12 | say 246, call 27, whisper 12 |
+| lines said in a call: decided / other | 0 / 25, 0 / 12 | **50** / 26 |
+| decided calls to someone that reached them | — | **32 of 47** |
+| talk or graph calls to someone that reached them | 24 of 25, 10 of 12 | 24 of 26 |
+| decided calls to the room that someone received | — | 3 of 3 |
+| decided lines refused and told (`unsaid` "You did not say …") | — (dropped without a word then) | 30: "speaking too fast" 21, "too far to whisper: step closer" 5 |
+
+**Called or walked over.** Each decision whose scene listed someone only under what a call reaches, and that acted toward them:
+
+| | es1 earshot r1 / r2 | ew1 |
+|---|---|---|
+| called | — | **19** |
+| called and walked | — | 11 |
+| walked over (no line) | 4 / 5 | 6 |
+| said a line (which cannot reach) and walked | 24 / 13 | 5 |
+| said a line only | 18 / 12 | 1 |
+
+Speakers who could call mostly did: 30 of the 42 decisions that acted toward someone a call alone could reach. Walking over without a word stayed where it was (6, against 4 and 5). "Said and walked" fell from 24 and 13 to 5: a decision that both speaks and moves now mostly calls first (11).
+
+Examples:
+- Ansel Tarn, to Nell Tarn, listed under a call: "Coming, Nell! Wait for me!" (call).
+- Aldous Quill, to Col Roon, with no one within a said line: "Col Roon! A word — where does one get a stick of wood in this town? …" (call).
+- Still walking: Anselm Faro went to Livia Faro without a word; Hobb Fenwick said "Nan! Leave the beds a minute — I'd have a word …" in `say` and walked to her.
+
+**`unheard_why` against the earshot stage:**
+
+| class | es1 earshot r1 / r2 | ew1 | target |
+|---|---|---|---|
+| deliberation: only a call | 33 / 22 | **13** | at most 10; 20 or more reads as no effect |
+| deliberation: in reach then (late) | 73 / 65 | 58 | unchanged expected |
+| talk turn | 42 / 34 | 42 | — |
+| deliberation: not listed | 15 / 16 | 12 | — |
+| room | 14 / 12 | 7 | — |
+| all unheard | 179 / 151 | 135 | — |
+| lag, request to line (median) | 8.1 / 7.6 s | 5.3 s | — |
+
+**Against the target spread:**
+
+| measure | es1 earshot r1 / r2 | ew1 | target | read |
+|---|---|---|---|---|
+| `deliberation: only a call` | 33 / 22 | 13 | at most 10 | close: well below the no-effect mark, above the target |
+| decided lines that call | 0 / 0 | 50 said (56 named) | some | met |
+| late lines | 73 / 65 | 58 | unchanged | about unchanged (a shorter lag on this run) |
+| `far_seen` | 90 / 75 | 77 | 15–25 fewer | **not met**: within es1's spread |
+| `far_all` ÷ `said_all` | 25.4% / 24.6% | **20.3%** (135 / 665) | down 2–4 points | met |
+| `said_all` | 705 / 614 | 665 | within 25% | met |
+| `converge_60s` / `together_4m` | 2, 0 / 2, 2 | 1, 1 | at most es1's + 2 | met |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | 0.56, 0.06, +0.23 | within es1's spread | `false_min` 0.56 just above 0.46 |
+| animals that heard a shout | — | 0 | reported | — |
+| cost | $2.42 / $2.37 | $2.55 | within 20% | met |
+
+Lines to the newcomer: 2, 1 out of earshot. First heard line at 463 s (Petra Tarn). No re-asks.
+
+**Read.** A decision now calls across a distance instead of walking over or saying a line that cannot reach. 19 called outright, and 11 called and walked, out of 42 decisions toward someone only a call could reach. Lines said where only a call would reach fell from 22–33 to 13, and the unheard share of all lines from about 25% to 20%. Lines to someone seen but too far (`far_seen`) did not fall: they include talk turns and late lines, which this change does not touch. One run on a loaded machine, so indicative only.
 
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
@@ -1603,6 +2052,7 @@ Recommendation unchanged: 2 replicates first, about $158 (up to about $230), and
 
 - Provider capacity: about 120–140 minds on the service at once. Expect more overflow to deepseek-flash, whose input costs twice glm-flash's.
 - The switches to record: those above, plus the identity fix (body line on, `Origin::Grown`) and both sleep fixes.
+- **`think_framing` off** (today's framing: a think step starts from "# Why you are thinking now"), its default. The law comes from branch `think-framing` ([framing](FRAMING.md)). births-2 runs with it off until N2, the framing it would switch on, is measured on longing in particular. Neither the trial files nor a variant set it. Read it back from the world's `world_law` rows (no `think_framing` row, or `false`) before the batch starts, and record it with the batch.
 
 ### Not covered
 
@@ -2041,6 +2491,209 @@ The minds now wrote the grammar's new example word (`hostile`, 8 of 17 installs)
 **Move intents (3.3).** Written, barely used: `back_off` in 14 routine installs and `circle` in 1 (6 of 10 fights), no `keep_distance` or `close_in`. Bodies ran them in 2 of the subjects' samples (one each in heavy r2 and r3), a deliberate `back_off` was done once (kiter r2, "You did what you had decided: back_off → person"), and twice refused as "cornered" (heavy r3).
 
 **Timings, ids, cost.** No reply cited a timing. 0 of 63 spoken lines carried an id. $0.30 for the batch ($0.15 heavy, $0.15 kiter; 165 calls in fights, 1.75 M tokens in the ledger); per 10-minute fight $0.026–0.036; think and compile p50 5.7–11.5 s per fight.
+
+### R2 with the fast lane on (`r2e`, 10 fights, $0.34)
+
+R2's arm for the [fast lane](FAST_LANE.md): r2d's fights with the world law `fast_lane_on` true. A blow taken, or the third time the subject sees the same move started at it, asks its mind for a quick re-plan of its combat branch.
+
+**Build and switches.**
+- **Build.** The trial module and `living-mind` were built from branch `trials-r2e` at `4f227894`: origin/main with prompt-cache-order (`47345077`), fast-lane (`ca14ab3e`) and fix-fast-onstage (`453c022c`), plus the `fast-lane` variant in `living/trials/variants.json`. Private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed.
+- **Switches.** In force:
+  - the `fast-lane` variant: `default`, which is glm-flash with deepseek-flash overflow, plus the world law `fast_lane_on` true;
+  - `fast.route` deepseek-flash with a 6,000 ms timeout;
+  - the shipped fast-lane laws: `seen_again_n` 3, gap 6 s, stale 8 s, rate 2/s, 4 in flight;
+  - as in r2d: `fov_on` off, `LIVING_SKILL_TIMINGS` on, `force_outcomes` on, greeting `nearest`, `cues_on` off; `LIVING_LOD` off.
+- **Run.** 2026-11-12, 15:24–15:37 UTC, 5 replicates each of `arena-heavy` and `arena-kiter`.
+  - The server was checked healthy first (ping 200). Every world was paused before its database was deleted (`delete_db`), and the server stayed up.
+  - The key was loaded from a copied `.env`, deleted after. A scan of the batch and the live journals for every key, whole and by its first and last 12 characters, found 0 matches in 332 files.
+- **Evidence.** `.local/living/trials/r2e/` (`arena_report.json`, `report.md`, the journals) in the `trials-r2e` checkout on the Spark.
+- **Each world is one fight.** The subject is the only character the lane serves in it. So the world-wide cap (4 in flight, 2 a second) never bound here; only the 6 s gap per character did.
+
+**Main measure: exposures to the first answer.**
+
+| | Heavy blow, r2e (5) | Heavy blow, r2d | Kiter, r2e (5) | Kiter, r2d |
+|---|---|---|---|---|
+| Exposures per fight | 7, 5, 3, 27, 2 (44) | 5, 5, 5, 4, 13 (32) | 1, 4, 4, 26, 2 (37) | 29, 13, 23, 10, 57 (132) |
+| First answered exposure | **3, 2, –, 3, –** | –, –, –, –, 4 | **–, 2, –, 20, 2** | 13, 12, –, –, – |
+| Answered | **19 of 44** (17 by a dodge in the windup) | 1 of 32 (no dodge in a windup) | **7 of 37** (11 dodges in windups) | 17 of 132 (8 dodges in windups) |
+| K (three answered in a row) | 3 in one fight (r4) | never | 2 in one fight (r2) | 13 in one |
+| End | the subject killed the foe in 3, was killed in 1 (r4, after 27 heavies), neither in 1 | the subject killed the foe in 4, was killed in 1 | all survived (lowest health 79–98) | all survived |
+
+- **The heavy blow: answered, by dodges timed to the windup, from the second or third heavy.** r2d had none in any of its fights.
+  - In 3 of 5 fights the first answer was a dodge during the windup, at exposure 2 or 3.
+  - **Attribution.** Each of those dodges ran under the fast lane's combat branch:
+    - r1 and r4: a fast patch's dodge on a windup (`doing`, "winding up"), under a slow install that kept the fast branch it had not yet seen (`keep_fast_branch`, the same branch byte for byte);
+    - r2: a fast install, but its branch was the switch to `stay safe`, which holds no windup dodge. That one dodge is not traced to a fast patch's condition (see the fight's timeline below).
+  - **r4.** 14 of its 27 exposures were answered: dodged or out of reach, K = 3. The subject still died. Its plan was "dodge, keep my distance, fall back toward the hall", and it gave ground where r2d's subjects traded blows in the pause and won.
+- **The kiter: the subjects left the line of fire.** The fast patches said "get out of the open", "run for the house", "get out of the line of the shot".
+  - **Fewer arrows.** In four fights the subject took 1–4 arrows in all, against r2d's 10–57.
+  - **First answers.**
+    - r2: at exposure 2, a dodge under a fast install.
+    - r4: at exposure 20, under the fourth fast install.
+    - r5: at exposure 2, a miss with no defence.
+  - **r4** took 26 arrows: 8 fast patches, each "dodge the windup, get clear".
+- **Not a controlled comparison.** The provider's hour differed:
+  - r2d had 26 capacity 429s (glm) and r2e none;
+  - GLM deliberate ran at p50 6.6 s, against 11.3 s in r2d.
+
+  So the slow path was also quicker in r2e. The attribution above is what separates the lanes.
+
+**Trigger to patch installed** (the fast thoughts' `detail`; 39 requests, 36 sent to the authority):
+
+| Step | p50 | p90 | max |
+|---|---:|---:|---:|
+| Request: trigger → picked up by the mind | 0.02 s | 4.6 s | 5.6 s |
+| … of which waiting for the turn (trigger → issued) | 0 | 4.6 s | 5.5 s |
+| … of which delivery (issued → picked up) | 13 ms | 37 ms | 50 ms |
+| Model (provider reply, DeepSeek Flash, thinking off) | 1.0 s | 2.4 s | 4.5 s |
+| Install (sent → installed) | 1 ms | 2 ms | 3 ms |
+| **Trigger → installed** | **1.3 s** | **6.1 s** | 7.9 s |
+
+- **Waits.** The waits are the 6 s gap: a blow or windup within 6 s of the character's last request waits for its gap.
+- **Model time** follows the reply's length:
+  - the first call in each fight answered in 0.73 s p50 with 39 output tokens (6 of the 10 were switches to `stay safe`);
+  - later calls answered in 1.10 s with 196.
+- **Against the slow path.** The design's estimate was about 3 s p50 and 5 s p90 in a good hour. R1 measured 8.6 s from a blow to an installed plan on the slow path.
+
+**What came back.** Of 39 requests:
+- **35 patched.**
+  - 11 switched the combat branch to the `stay safe` it already had.
+  - 23 rewrote the combat branch.
+  - 1 rewrote the routine `current plan`.
+- **1 refused** by the plan check: kiter r4 at 222 s, "the plan changed since it was asked". A slow install landed while the call was out.
+- **3 kept.**
+  - 1 timed out at 6 s (kiter r2).
+  - 2 replies had the wrong outer shape: a bare graph, or `{"combat": …}`, instead of `{"patch": {"graph": …}}`. They were kept as "no usable answer".
+
+The 25 rewrites (the refused one included):
+- **Conditions.** 22 hold a `doing` condition, every one `phase: "winding up"` (23 conditions). 8 also use `threatened`.
+- **Acts.** 21 dodge, 20 flee, 18 `back_off`, 14 `goto` (the hall, the town), 5 `say` (witnesses), 3 `keep_distance`. Few strike back: 4 `attack`, 3 `strike`, 2 `firebolt`, 2 `shoot`.
+- **Timing.** "It was over before the blow came" was never told in this batch, so nothing could move a condition toward "about to release", and none did.
+
+**Cached share** (`cached_tokens` ÷ `prompt_tokens`, error-free calls, from the journals):
+
+| Purpose, model | r2e calls | r2e cached share | r2e cost / without the cache | r2e latency p50 / p90 | r2d cached share (calls) |
+|---|---:|---:|---:|---:|---:|
+| fast, DeepSeek Flash | 38 | **0.56** (12,188 prompt tokens a call) | **$0.071 / $0.146** | 1.0 / 2.4 s | – |
+| deliberate, GLM Flash | 86 | 0.57 | $0.115 / $0.198 | 6.6 / 11.3 s | 0.31 (66) |
+| think, GLM Flash | 87 | 0.18 | $0.065 / $0.074 | 5.6 / 9.1 s | 0.09 (62) |
+| consolidate, GLM Flash | 40 | 0.12 | $0.058 / $0.061 | 20.6 / 29.4 s | 0.06 (34) |
+| reorganize, GLM Flash | 10 | 0 | $0.027 / $0.027 | 82 / 112 s | 0 (9) |
+| deliberate / think / consolidate, DeepSeek (r2d's overflow) | – | – | – | – | 0.40 (9) / 0.36 (12) / 0.35 (5) |
+
+- **Cost.** Caching halved the fast lane's cost: $0.0019 a call against $0.0038 at the full input price, $0.075 saved. Over the batch it saved $0.17 ($0.34 against $0.51).
+  - The fast prompt is large, 12.2 k tokens a call. It carries the persona, top level, routines, repertoire and 12 recent experiences.
+  - The first call in a fight was already 51% cached (the system prompt and shared text), and later calls 57%.
+- **Latency.** No effect can be separated at this size. Fast calls with half or more cached answered at 0.97 s p50 (24 calls), the rest at 1.12 s (14). But reply length differs more between them than the cache does.
+- **r2d against r2e for deliberate.** GLM deliberate's share rose from 0.31 to 0.57. prompt-cache-order changed only the fast prompt, so this is not attributed to it. r2d's hour also sent 9 deliberations to DeepSeek on overflow.
+
+**Ids.** 3 of 68 spoken lines carried an internal id, against 0 of 63 in r2d:
+- heavy r1: "That one, #9, set on me twice…" and "#9 strikes me a fourth time";
+- kiter r4: "the archer #9".
+
+All three came from deliberations. Two followed within 15 s of fast thoughts naming "#9". Ids are in every prompt as handles (`{someone=#3}`, in r2d too). The fast lane's own replies name them in their `thought`s, which a deliberation then sees. This is a lead, not a cause, and is not fixed here.
+
+**Cost.** $0.34 for the batch: $0.19 heavy, $0.15 kiter; 161 calls in fights. The fast lane was $0.071 of it (38 calls, $0.0019 a call). Per 10-minute fight $0.018–0.052.
+
+**Timelines.** Every fight's timeline is in the run record, `.local/living/trials/r2e/timelines.md`, made by `fight_timeline.py` (kept beside it). Each one lists:
+- every exposure, with the plan in force and which install wrote its combat branch;
+- the subject's combat acts and the lines it was told;
+- each fast call, with its trigger, timing and the branch it installed;
+- the slow decisions, the installs and what the subject said.
+
+Times are seconds into the trial.
+
+#### One fight from start to finish: heavy r1
+
+The first within-fight adaptation, told as it happened. Wren is the subject: a newcomer with a spear and a bow, walking to the town. The foe is a scripted stranger (Agnes Fenner, the fixture). It opens every time with `attack`: a 750 ms windup Wren can see, then 8–9 damage. Then it stands 2–3 s before its next blow.
+
+**Wren's plan at the start:** "Pick berries from the bushes beside the road, then keep walking east toward the town". It had no combat branch. **What carried the fight:** whether the combat branch in force held a dodge on a windup. Every time it did, the heavy blow was dodged; every time it did not, the blow landed.
+
+**Exposure 1, at 62.0 s: hit for 8** (health 100 → 93). No combat branch was in force. Wren's seeded reflex answered the blow with blows of its own (`attack`, hit for 8, five times to 67 s).
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call** on that line. Issued at once; the model answered in 0.7 s; installed at 63.5 s, 0.8 s after the blow.
+  - **Thought:** "A stranger just struck me for eight — I need to get clear and defend myself before anything else, the plan can wait."
+  - **Installed:** a switch to the routine `stay safe`, which it already had. That routine is the seeded one: flee or yield when hurt below 40 health. It has no dodge.
+    ```json
+    {"label": "combat", "children": [{"routine": "stay safe"}]}
+    ```
+- **The slow lane, at 78.3 s:** "Slip #9's blow, then face them with spear raised, shout for witnesses…" It said: "Back off! Everyone—this one's attacking me on the road!" It had read its request before the patch, so it kept the fast lane's combat branch.
+
+**Exposure 2, at 93.4 s: hit for 8** (93 → 86). The branch in force was fast patch 1 (`stay safe`), with no dodge on a windup.
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call:** the model answered in 1.0 s; installed at 95.2 s, 1.0 s after the blow.
+  - **Thought:** "I'm hurt and outmatched; slip the next blow, keep my distance, shout for witnesses, and get clear east toward the town."
+  - **Installed** (the combat branch as installed):
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "melee", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "dodge"}}}},
+      {"do": {"skill": "back_off", "target": "attacker", "distance": 4.0}},
+      {"do": {"skill": "face", "target": "attacker"}},
+      {"say": {"text": "Back off! Everyone—this one's attacking me!", "to": "attacker"}},
+      {"do": {"skill": "keep_distance", "target": "attacker", "qty": 6, "min": 3.0, "max": 6.0}},
+      {"do": {"skill": "flee", "target": "attacker", "run": true}}]}
+    ```
+- **The slow lane, at 108.5 s:** "Sidestep #9's blow, answer with my spear, call out for the witnesses…" It said: "They struck first and struck again — stand with me or stand clear!" Again it kept the fast branch.
+
+**Exposure 3, at 109.7 s: dodged.** The branch in force was fast patch 2. The dodge was accepted on the tick the windup began.
+- **Told:** "You dodged a stranger's attack." The `doing` condition fired again while the dodge was recovering, so it was also told once "You failed to dodge: dodge is not ready yet (0.3 s)".
+
+**Exposure 4, at 138.9 s: dodged**, under the same branch. Wren's health was 87.
+- **Perceived:** this was the third heavy it had seen started at it, so the lane fired on the move itself: "A stranger winds up an attack at you".
+- **Fast call:** the model answered in 3.7 s; installed at 142.7 s.
+  - **Thought:** "The stranger #9 is still coming at me and my dodge is spent — I need to get clear and let the hurt-in-last-5s rules answer, not trade blows while cornered."
+  - **Installed:** the switch to `stay safe` again.
+    ```json
+    {"label": "combat", "children": [{"routine": "stay safe"}]}
+    ```
+  - **This removed the dodge that had just worked twice.** The "dodge is not ready yet (0.2 s)" line had come 0.1 s before "You dodged". The mind read it as "my dodge is spent".
+- **The slow lane, at 145.1 s:** "Make my case to the crowd by the inn…" It said: "That one, #9, set on me twice on the road without a word — you all saw it…" (one of the three spoken ids).
+
+**Exposure 5, at 164.6 s: hit for 8** (87 → 79). The branch in force was fast patch 3 (`stay safe`), with no dodge on a windup.
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call:** the model answered in 0.9 s; installed at 166.3 s, 0.9 s after the blow.
+  - **Thought:** "Same stranger, third time — keep my distance, dodge what I can, and only hit back while I'm still standing."
+  - **Installed:**
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "melee", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "dodge"}}}},
+      {"if": {"cond": {"sees": {"id": 9}}, "then": {"do": {"skill": "back_off", "target": {"id": 9}, "distance": 8.0}}}},
+      {"if": {"cond": {"health": {"below": 40.0}}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
+      {"do": {"skill": "strike", "target": "attacker"}},
+      {"do": {"skill": "back_off", "target": "attacker", "distance": 4.0}}]}
+    ```
+- **The slow lane, at 179.4 s:** "Dodge #9's blow, fight back with my spear before the crowd…" It said: "There, you all see it — #9 strikes me a fourth time, unprovoked! Stand with me or stand clear!" It kept the branch.
+
+**Exposure 6, at 207.5 s: dodged**, under fast patch 4. Told: "You dodged a stranger's attack."
+- **The slow lane, at 222.7 s:** "Fight #9 with my spear, blocking as needed; break south if health falls below 50…" This decision had seen the patch, so it replaced the plan as any later decision does. Its plan had no combat branch; it guarded through its own nodes. It said to the foe: "Fourth time you've struck me! I'll not run again — come, then!"
+
+**Exposure 7, at 224.7 s: blocked, 2 got through** (80 → 78). The slow plan's guard took it.
+- **Perceived:** "A stranger attacked you (2 damage)".
+- **Fast call:** the model answered in 1.2 s; installed at 226.6 s.
+  - **Thought:** "He's landed another hit; I keep my guard up between blows and break south if I drop below half."
+  - **Installed:**
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"health": {"below": 50.0}}, "then": {"do": {"skill": "flee", "target": {"id": 9}}}}},
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "hostile", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "block", "qty": 1200}}}},
+      {"if": {"cond": {"sees": {"id": 9}}, "then": {"seq": {"children": [{"do": {"skill": "strike", "target": {"id": 9}}}, {"do": {"skill": "attack", "target": {"id": 9}}}]}}}},
+      {"do": {"skill": "goto", "target": {"place": "Inn south of the hall"}}},
+      {"think": "the fight is done or lost — what now?"}]}
+    ```
+- **Then Wren pressed in the pause.** It struck every time the strike was ready (hit for 7–8, thirteen times in 20 s, with a "not ready yet" between most). At 245.6 s Agnes Fenner died, killed by Wren, at Wren's health 79. Its last thought on the fight: "He is barely standing and my strikes keep landing; ending this now is the only way he stops hunting me." It slept at the inn's door and in the morning asked: "Anyone awake? I'm Wren — I'm looking for work and a bed, and I pay my way."
+
+**What this fight shows:**
+- **The answer.** It came at exposure 3, two exposures after the first patch with a dodge in it (exposure 2's, installed 1.0 s after the blow). It held for as long as the fast lane's branch held a dodge: 3 of 3 heavies.
+- **The fast lane both made it and broke it.** One fast call took the dodge away again: the dodge's own "not ready yet" line, told inside a successful dodge, was read as "spent". A slow decision then replaced the branch with a guard, which took the seventh blow for 2.
+- **Slow decisions mostly kept the fast branch.** Four of the five read their request before the latest patch, and the authority spliced the branch back in. The fifth, which had seen the patch, wrote its own.
+- **Nothing told it the pattern.** It had the lines it lived: hit, dodged, not ready. The `doing` condition is the grammar's, and "winding up" is the phase it perceives.
+
+The other two fights with an early answer:
+- **heavy r4** (answer at 3): the same shape for 17 exposures.
+  - Fast-patched branches with a dodge on a windup answered 14 of exposures 3–17. The one hit among them (14) came under a slow plan without a combat branch, and fast patch 7 restored the dodge by exposure 15.
+  - **From exposure 18 (393 s, 23:00 in the world) it was night.** Between blows Wren fell asleep and was woken by each one: "You woke up: A stranger is attacking you!" The fast lane serves no sleeper, by design, and the slow plans' dodges came after the blows.
+  - 10 heavies in a row landed, until Wren died at 526 s, after yielding.
+- **heavy r2** (answer at 2): one dodge at the windup's tick (79.6 s), under the `stay safe` switch, which holds no windup dodge. It is the one early answer here not traced to a fast patch's condition; it was not repeated.
 
 ### What the told outcome lines cost in a battle
 

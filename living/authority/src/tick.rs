@@ -68,6 +68,8 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
+    // Bystanders' wakes held back by `witness_wake_ms` whose window has ended.
+    common::due_bystander_wakes(ctx, now);
     let mut done = HashSet::new();
     for _ in 0..3 {
         let wakes: Vec<u32> = ctx.db.wake().iter().map(|w| w.id).collect();
@@ -77,6 +79,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         for id in wakes {
             ctx.db.wake().id().delete(id);
             if done.insert(id) {
+                common::diag(|| "eval:wake".into(), 1);
                 brain::evaluate(ctx, id, now);
             }
         }
@@ -88,6 +91,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
     for id in fighting {
         if done.insert(id) {
+            common::diag(|| "eval:combat".into(), 1);
             brain::evaluate(ctx, id, now);
         }
     }
@@ -104,6 +108,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
     for id in slot_ids {
         if done.insert(id) {
+            common::diag(|| "eval:slot".into(), 1);
             brain::evaluate(ctx, id, now);
         }
     }
@@ -263,6 +268,8 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     let Some(mut row) = ctx.db.character().id().find(c.id) else { return };
     row.stage = stage;
     ctx.db.character().id().update(row);
+    // The look follows in the same transaction (a new band at a stage change: docs/LOOK.md §4).
+    crate::look::refresh(ctx, c.id, now, "grew");
     if stage != 0 {
         ctx.db.infant_cry().infant().delete(c.id);
     }
@@ -367,6 +374,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     let _timer = common::span("housekeeping");
     common::report_scenes();
     crate::perception::report_answers(ctx);
+    common::report_diag();
     crate::town::refresh_weather(ctx, now);
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);
@@ -432,6 +440,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             grew(ctx, &c, stage, now);
         }
     }
+    // Looks whose band changes now by age alone (12 and 18 years): an index range of the due
+    // rows only, after the stage changes above have rewritten theirs.
+    crate::look::due(ctx, now);
 
     // Births.
     let due: Vec<Expecting> = ctx.db.expecting().due_ms().filter(..=now).collect();

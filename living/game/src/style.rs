@@ -224,6 +224,16 @@ pub struct ToonParams {
     /// Hair: x angel-ring strength, y ring width, z ring position (tangent shift), w rim
     /// strength.
     pub hair: Vec4,
+    /// Hair's ring, its shape: x edge softness (0 a hard edge, 1 fading from the band's middle),
+    /// y comb teeth (0 none, 1 full), z break-up by the strand picture (0 none, 1 full).
+    pub hair_sheen: Vec4,
+    /// Where on the head the ring may lie: x how far up a surface must face (N·up where it
+    /// starts, full 0.25 above), y from how far it faces the character's forward it fades (gone
+    /// 0.3 beyond; 2 never).
+    pub hair_place: Vec4,
+    /// The ring by height and lock: x the share of locks without it, y how far it moves up or
+    /// down a lock (in N·up), z 0 placed by the view, 1 at a height (where N·up is w).
+    pub hair_lock: Vec4,
     /// Painted detail: x 1 on scenery whose vertex colours name surfaces ([`with_detail`]), z
     /// full detail until (m), w none from (m). The style sets z and w; x is the material's own.
     pub detail: Vec4,
@@ -315,6 +325,34 @@ pub struct Style {
     pub hair_ring_width: f32,
     pub hair_ring_shift: f32,
     pub hair_rim: f32,
+    /// The ring's shape: its edge's softness (0 hard, 1 fading from the middle), the comb teeth
+    /// that break its edge (0 none, 1 full) and how far the strand picture breaks it (0 none, 1
+    /// full: light strands carry it, dark ones lose it).
+    pub hair_ring_soft: f32,
+    pub hair_ring_teeth: f32,
+    pub hair_ring_strands: f32,
+    /// How far up a surface must face to carry the ring (N·up where it starts, full 0.25
+    /// above): 0.2 lets it onto a fringe, which faces forward; about 0.55 keeps it to the crown.
+    pub hair_ring_up: f32,
+    /// From how far a surface faces the character's forward (N·forward) the ring fades, gone 0.3
+    /// beyond: about 0.25 keeps it off a fringe, which faces forward, and on the crown, sides and
+    /// back; 2 never fades it.
+    pub hair_ring_front: f32,
+    /// How fine the comb teeth are across the strands (`uv.x` times this; the strand picture
+    /// repeats every 22 cm round a head, so 90 is about 2.4 mm, 30 about 7 mm).
+    pub hair_ring_teeth_scale: f32,
+    /// Where the ring lies: 0 where the view meets the strands (it slides with the camera), 1 at
+    /// a height on the head, where N·up is `hair_ring_at` (char-4's normals lean up with height,
+    /// `hair.py` RING_TILT, RING_FROM, so that is one height all round).
+    pub hair_ring_level: f32,
+    pub hair_ring_at: f32,
+    /// Where locks part (each lock's own `_GREY`, a number per lock): the share of locks without
+    /// the ring, and how far it moves up or down a lock (in N·up).
+    pub hair_lock_drop: f32,
+    pub hair_lock_shift: f32,
+    /// Placed at a height, the ring needs char-4's hair (its normals lean up with height and its
+    /// locks carry `_GREY`); other hair (VRoid bases) keeps the view-placed ring at this width.
+    pub hair_ring_width_other: f32,
     /// Painted detail on scenery: strength (0 off), how far its relief (the painted height) moves
     /// the sun's band edge, and the distances (m) from which it fades and by which it is gone.
     pub detail: f32,
@@ -367,14 +405,125 @@ impl Default for Style {
             face_shadow: 1.25,
             face_parts: 0.25,
             face_rim: 0.15,
-            hair_ring: 0.7,
-            hair_ring_width: 0.05,
-            hair_ring_shift: 0.35,
+            hair_ring: 0.0,
+            hair_ring_width: 0.0,
+            hair_ring_shift: 0.0,
             hair_rim: 0.2,
+            hair_ring_soft: 0.0,
+            hair_ring_teeth: 0.0,
+            hair_ring_strands: 0.0,
+            hair_ring_up: 0.0,
+            hair_ring_front: 0.0,
+            hair_ring_teeth_scale: 0.0,
+            hair_ring_level: 0.0,
+            hair_ring_at: 0.0,
+            hair_lock_drop: 0.0,
+            hair_lock_shift: 0.0,
+            hair_ring_width_other: 0.0,
             detail: 1.0,
             detail_relief: 0.0,
             detail_fade: [20.0, 55.0],
         }
+        .with_shine(HairShine::default())
+    }
+}
+
+/// A hair shine: the hair ring's style values under a name (Settings › Play › Hair shine).
+pub struct Shine {
+    pub name: &'static str,
+    pub label: &'static str,
+    /// The ring's values in [`RING_KEYS`] order (`Style::hair_ring*`, `hair_lock*`).
+    pub ring: [f32; RING_N],
+}
+
+/// A lock is the bin its `_GREY` falls in, this many bins a unit: char-4's numbers run 1.1 to 6.7
+/// over a head's 50 to 100 sheet columns and change smoothly round it, so a bin is about two
+/// columns (16, one column, broke the ring into streaks on the back's narrow columns).
+const LOCK_BINS: f32 = 8.0;
+
+/// The ring's values, in the order of a shine's `ring` and `LIVING_GAME_HAIR_RING`.
+pub const RING_KEYS: [&str; RING_N] = ["strength", "width", "soft", "teeth", "strands", "shift", "up", "front", "teeth_scale", "level", "at", "lock_drop", "lock_shift", "width_other"];
+pub const RING_N: usize = 14;
+
+/// Crown (hair-ring-3, char-4's intended ring): at one height over the crown (N·up 0.52, about a
+/// fifth of the head's height below its top on char-4's normals), hard-edged and about 1.6 cm
+/// wide, teeth about 7 mm, one lock in four without it and each a little up or down.
+const CROWN: [f32; RING_N] = [0.7, 0.15, 0.0, 1.0, 0.2, 0.35, 0.3, 0.25, 30.0, 1.0, 0.52, 0.25, 0.03, 0.05];
+
+/// The hair shines, the default first (hair-ring-1, approved 2026-11-12).
+pub const HAIR_SHINES: [Shine; 3] = [
+    // A hard band over the crown, broken where locks part, never across the fringe.
+    Shine { name: "crown", label: "Crown", ring: CROWN },
+    // A softer, wider band broken by the strands.
+    Shine { name: "soft", label: "Soft", ring: [0.45, 0.16, 1.0, 0.0, 1.0, 0.35, 0.2, 2.0, 90.0, 0.0, 0.6, 0.0, 0.0, 0.16] },
+    // The ring before hair-ring-1: one hard band, which crosses a smooth fringe.
+    Shine { name: "today", label: "Today", ring: [0.7, 0.05, 0.0, 1.0, 0.0, 0.35, 0.2, 2.0, 90.0, 0.0, 0.6, 0.0, 0.0, 0.05] },
+];
+
+/// The chosen hair shine: an index into [`HAIR_SHINES`]. Kept in the settings file only once
+/// chosen, so a viewer who never chose follows the default. `LIVING_GAME_HAIR_SHINE=<name>` starts
+/// in one; `LIVING_GAME_HAIR_RING` overrides single values over any (captures).
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct HairShine(pub usize);
+
+impl HairShine {
+    pub fn parse(s: &str) -> Option<HairShine> {
+        HAIR_SHINES.iter().position(|x| x.name == s).map(HairShine)
+    }
+    pub fn name(self) -> &'static str {
+        HAIR_SHINES[self.0.min(HAIR_SHINES.len() - 1)].name
+    }
+    pub fn from_env() -> Option<HairShine> {
+        std::env::var("LIVING_GAME_HAIR_SHINE").ok().and_then(|v| HairShine::parse(v.trim()))
+    }
+    /// Settings' choices: (label, name).
+    pub fn choices() -> [(&'static str, &'static str); 3] {
+        HAIR_SHINES.each_ref().map(|s| (s.label, s.name))
+    }
+}
+
+/// Keep the style profile's hair ring on the chosen shine (an environment's switch rebuilds the
+/// profile from its defaults); written only when it differs, so materials are not touched each
+/// frame.
+fn apply_shine(shine: Res<HairShine>, mut style: ResMut<Style>) {
+    let want = style.with_shine(*shine);
+    if *style != want {
+        *style = want;
+    }
+}
+
+/// `LIVING_GAME_HAIR_RING=strength,width,…` in [`RING_KEYS`] order (look-dev captures and A/B):
+/// the hair ring's style values over the shine's; a value left empty keeps the shine's.
+fn hair_ring_env() -> Option<[Option<f32>; RING_N]> {
+    static V: std::sync::OnceLock<Option<[Option<f32>; RING_N]>> = std::sync::OnceLock::new();
+    *V.get_or_init(|| {
+        let v = std::env::var("LIVING_GAME_HAIR_RING").ok().filter(|v| !v.trim().is_empty())?;
+        let mut out = [None; RING_N];
+        for (i, x) in v.split(',').take(RING_N).enumerate() {
+            out[i] = x.trim().parse().ok();
+        }
+        let set: Vec<String> = RING_KEYS.iter().zip(out).filter_map(|(k, x)| x.map(|x| format!("{k} {x}"))).collect();
+        info!("hair ring from LIVING_GAME_HAIR_RING: {}", set.join(", "));
+        Some(out)
+    })
+}
+
+impl Style {
+    /// The profile with a shine's ring values, then `LIVING_GAME_HAIR_RING`'s over them.
+    pub fn with_shine(mut self, shine: HairShine) -> Self {
+        let mut r = HAIR_SHINES[shine.0.min(HAIR_SHINES.len() - 1)].ring;
+        if let Some(env) = hair_ring_env() {
+            for (v, e) in r.iter_mut().zip(env) {
+                *v = e.unwrap_or(*v);
+            }
+        }
+        let [x, w, soft, teeth, strands, shift, up, front, teeth_scale, level, at, drop, lock_shift, width_other] = r;
+        self.hair_ring_width_other = width_other;
+        (self.hair_ring, self.hair_ring_width, self.hair_ring_soft, self.hair_ring_teeth) = (x, w, soft, teeth);
+        (self.hair_ring_strands, self.hair_ring_shift, self.hair_ring_up, self.hair_ring_front) = (strands, shift, up, front);
+        (self.hair_ring_teeth_scale, self.hair_ring_level, self.hair_ring_at) = (teeth_scale, level, at);
+        (self.hair_lock_drop, self.hair_lock_shift) = (drop, lock_shift);
+        self
     }
 }
 
@@ -393,6 +542,9 @@ impl Style {
             atmo: Vec4::new(self.wind, self.wet, if crate::perf::has("nodetail") { 0.0 } else { self.detail }, self.detail_relief),
             face: Vec4::new(self.face_softness.max(0.001), self.face_shadow, self.face_parts, self.face_rim),
             hair: Vec4::new(self.hair_ring, self.hair_ring_width.max(0.01), self.hair_ring_shift, self.hair_rim),
+            hair_sheen: Vec4::new(self.hair_ring_soft.clamp(0.0, 1.0), self.hair_ring_teeth.clamp(0.0, 1.0), self.hair_ring_strands.clamp(0.0, 1.0), self.hair_ring_teeth_scale.max(1.0)),
+            hair_place: Vec4::new(self.hair_ring_up, self.hair_ring_front, LOCK_BINS, self.hair_ring_width_other.max(0.01)),
+            hair_lock: Vec4::new(self.hair_lock_drop.clamp(0.0, 1.0), self.hair_lock_shift, self.hair_ring_level.clamp(0.0, 1.0), self.hair_ring_at),
             detail: Vec4::new(0.0, 0.0, self.detail_fade[0], self.detail_fade[1].max(self.detail_fade[0] + 1.0)),
             layers: surface_layers(),
         }
@@ -455,8 +607,9 @@ impl Plugin for StylePlugin {
         app.add_plugins(MaterialPlugin::<Toon>::default())
             .add_plugins(bevy_mod_outline::OutlinePlugin::EXTRUDE_VERTEX)
             .init_resource::<Style>()
+            .insert_resource(HairShine::from_env().unwrap_or_default())
             .add_systems(Startup, load_detail)
-            .add_systems(Update, (apply, fog_outlines).chain());
+            .add_systems(Update, (apply_shine, apply, fog_outlines).chain());
     }
 }
 

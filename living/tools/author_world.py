@@ -794,6 +794,16 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
     # Records the world starts with (a community's regard for another; docs/WORLD_RULES.md).
     if world.get("records"):
         seed["records"] = world["records"]
+    # The world's look data (`looks.json` beside the plan: the generator's, or the pool alone from
+    # living/tools/pool_looks.py; docs/LOOK.md §5): a resident it names wears that entry, everyone
+    # else a pool entry by pool_pick.
+    looks = world_looks(wd)
+    if looks is not None:
+        seed["looks"] = looks["looks"]
+        for t in seed.get("towns", []) + seed.get("villages", []):
+            for r in t.get("residents", []):
+                if r["name"] in looks.get("residents", {}):
+                    r["look"] = looks["residents"][r["name"]]
     seed_path.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n")
     n_rel = sum(len(s["relations"]) for s in sheets.values())
     print(f"wrote {seed_path.relative_to(ROOT)}: {len([s for s in world['settlements'] if s['name'] in casts])} settlements, {len(sheets)} residents; {n_rel} relations ({one} one-sided, {unshared} family/named/situation ties still one-sided), {sum(len(s['memories']) for s in sheets.values())} memories, {sum(len(s['stances']) for s in sheets.values())} stances, {sum(1 for s in sheets.values() if s.get('secret'))} secrets, {len(sits_all)} situations; {len(problems)} problems")
@@ -1010,10 +1020,19 @@ def resident_places(r, lots):
     return out
 
 
+def world_looks(wd):
+    """The world's look data (`looks.json`, written by living/tools/characters/look_lines.py;
+    docs/LOOK.md §5): `looks` for the seed and each resident's person key, or None without one."""
+    f = wd / "looks.json"
+    return json.loads(f.read_text()) if f.exists() else None
+
+
 def compile_residents(wd, cast, sheets, notes):
-    """The seed's residents and homes from the cast (sheets by name; None leaves them out)."""
+    """The seed's residents and homes from the cast (sheets by name; None leaves them out). With
+    the world's look data, each resident wears its person key (`look`)."""
     plan = plan_of(wd, cast)
     lots = {l["id"]: l for l in plan["lots"]} if plan else {}
+    looks = world_looks(wd)
     towns = []
     for s in cast["settlements"]:
         residents, homes = [], {}
@@ -1028,6 +1047,10 @@ def compile_residents(wd, cast, sheets, notes):
                     r["places"] = resident_places(m["rhythm"], lots)
                 if sheets is not None:
                     r["sheet"] = sheets[m["name"]]
+                if looks is not None:
+                    if m["name"] not in looks["residents"]:
+                        sys.exit(f"{wd / 'looks.json'} has no look for {m['name']}: write it again with look_lines.py")
+                    r["look"] = looks["residents"][m["name"]]
                 residents.append(r)
         towns.append({"name": s["name"], "residents": residents, "homes": homes})
     return towns
@@ -1439,6 +1462,10 @@ def main():
             if town is None:
                 sys.exit(f"{out.name} has no settlement {t['name']}")
             town["residents"], town["homes"] = t["residents"], t["homes"]
+        # The world's look data goes with its residents (docs/LOOK.md §5): authority only.
+        looks = world_looks(wd)
+        if looks is not None:
+            seed["looks"] = looks["looks"]
         out.write_text(json.dumps(seed, indent=1, ensure_ascii=False) + "\n")
         print(f"wrote {out.relative_to(ROOT)}: {len(sheets)} residents")
         for n in notes[:30]:

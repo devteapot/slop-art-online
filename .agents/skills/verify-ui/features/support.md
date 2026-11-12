@@ -1,6 +1,6 @@
 # What you stand on
 
-The camera's fade (`living/game/src/envs.rs` `cutaway`) turns what stands between the camera and you see-through. What holds you up or what you are stepping onto never fades (`envs::supports`: probes at, under and half a metre round your feet inside a thing's box), whatever the eye does; landmarks (`envs::Landmark`) and anything more than 30 m from the eye are not faded for being in the way either. The owner's Cullet walk (2026-11-11) found a flight of stairs dithering away while it was climbed: the line from the eye to the feet ended inside the flight's box.
+The camera's fade (`living/game/src/envs.rs` `cutaway`) turns what stands between the camera and you see-through. What holds you up or what you are stepping onto never fades (`envs::supports` over `support_probes`: probes at, 0.4 m and 0.8 m under, and half a metre round your feet inside a thing's box), whatever the eye does; landmarks (`envs::Landmark`) and anything more than 30 m from the eye are not faded for being in the way either. The owner's Cullet walk (2026-11-11) found a flight of stairs dithering away while it was climbed: the line from the eye to the feet ended inside the flight's box.
 
 ## Sub-features
 
@@ -18,7 +18,8 @@ Preconditions: a Cullet world (`$V launch --run ui-<…> --seed cullet`), not th
 
 - The player is moved by an admin `place_at` at each `sync:` step (scene setup), first to the arrival point (`sync:away`: the character keeps its place between drives, and the log names a support only as you come onto it), then to each spot, and the camera settles behind for 6 s: `ready;sync:away;wait:3;sync:stairs;wait:6;shot:stairs;dump:stairs;…`.
 - The client log says `cutaway: <file> holds me up; not faded` once each time you come onto something, and `cutaway: <file> fades to 0.8 (it is in the way …)` or `(the eye is inside it …)` when something fades.
-- The check splits the log at each `live script: sync:<spot>` line: at the stairs it wants the flight held and no other `stairs/` file held; at every spot no file it held fades, nor what you walk on there (the flight, the terrace, the quay). The wall beside you at the wall spot may fade when it is in the way.
+- The check splits the log at each `live script: sync:<spot>` line: at the stairs it wants the flight held and no other `stairs/` file held; at every spot no file it held fades, nor what you walk on there (the flight, the terrace, the quay). The wall beside you at the wall spot may fade when it is in the way. A photograph of each spot (`<spot>.png`) is also required.
+- `LIVING_GAME_PERF=nocutaway` skips the cutaway (`envs::cutaway` returns at once), for comparison.
 - A pre-fix client for comparison: `drive.py --client <binary> --name support-before …`.
 - Scenario: `check.py --run $R support` (not part of the default set, which needs the island).
 

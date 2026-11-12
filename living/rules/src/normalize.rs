@@ -23,6 +23,87 @@ pub fn placeholder_words(text: &str) -> bool {
     t.is_empty() || matches!(t.to_lowercase().as_str(), "text" | "words" | "the words" | "your words" | "what you say" | "your words here" | "message")
 }
 
+/// A line as it is heard: the `#<id>` handles a mind is shown people by (`{someone=#3}`) are not
+/// words anyone hears. `refer(id)` is how the speaker refers to that one (`common::label_for`:
+/// a name it knows, else "a stranger", "a wolf"), or `None` when the id names no one, and the
+/// text is then left as written.
+///
+/// - `Maud (#3)`: the aside goes (`Maud`);
+/// - `the archer #9`: the noun already refers, and the id goes (`the archer`);
+/// - otherwise the id is said as the speaker refers to them, pointing: `#9 strikes me` →
+///   `that stranger strikes me` (`That stranger` to begin a sentence), `#3` → `Maud Marrow`.
+///
+/// r2e (docs/TRIALS.md): 3 of 68 lines carried an id, said by deliberations whose prompts name
+/// everyone by one. Players, minds and graphs all speak through `speech::speak`, which applies it.
+pub fn spoken_without_ids(text: &str, refer: impl Fn(u32) -> Option<String>) -> String {
+    const DETERMINERS: [&str; 5] = ["the", "that", "this", "these", "those"];
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let starts_id = c == '#' && chars.get(i + 1).is_some_and(|d| d.is_ascii_digit()) && !(i > 0 && chars[i - 1].is_alphanumeric());
+        if !starts_id {
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        while j < chars.len() && chars[j].is_ascii_digit() {
+            j += 1;
+        }
+        let digits: String = chars[i + 1..j].iter().collect();
+        let followed_by_word = chars.get(j).is_some_and(|c| c.is_alphanumeric() || *c == '_');
+        let Some(label) = digits.parse::<u32>().ok().filter(|_| !followed_by_word).and_then(&refer) else {
+            out.extend(&chars[i..j]);
+            i = j;
+            continue;
+        };
+        // `(#3)`: an aside repeating whom the words already name.
+        if out.ends_with('(') && chars.get(j) == Some(&')') {
+            out.pop();
+            while out.ends_with(' ') {
+                out.pop();
+            }
+            i = j + 1;
+            continue;
+        }
+        let before = out.trim_end_matches(' ');
+        let words: Vec<&str> = before.rsplit(|c: char| c.is_whitespace()).take(2).collect();
+        let is_det = |w: &str| DETERMINERS.contains(&w.to_lowercase().as_str());
+        let is_noun = |w: &str| !w.is_empty() && w.chars().all(|c| c.is_alphabetic() || c == '\'' || c == '-');
+        if out.ends_with(' ') && words.len() == 2 && is_noun(words[0]) && !is_det(words[0]) && is_det(words[1]) {
+            // `the archer #9`: the id goes with the space before it.
+            let keep = before.len();
+            out.truncate(keep);
+            i = j;
+            continue;
+        }
+        // `the #9`: the determiner gives way to the speaker's own words for them.
+        if out.ends_with(' ') && words.first().is_some_and(|w| is_det(w)) {
+            let keep = before.len() - words[0].len();
+            out.truncate(keep);
+        }
+        let pointing = if let Some(rest) = label.strip_prefix("a ").or_else(|| label.strip_prefix("an ")) {
+            format!("that {rest}")
+        } else if label.starts_with("someone") {
+            "that one".to_string()
+        } else {
+            label
+        };
+        let opening = out.trim_end_matches(|c: char| c.is_whitespace() || matches!(c, '“' | '"' | '\'' | '‘' | '(' | '—' | '–'));
+        let sentence_start = opening.is_empty() || opening.ends_with(['.', '!', '?']);
+        out.push_str(&if sentence_start { capitalize(&pointing) } else { pointing });
+        i = j;
+    }
+    out
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+}
+
 /// A say node must carry words; a format placeholder is pruned with the reason, like any other
 /// invalid branch, so the next deliberation is told instead of the body speaking it.
 fn spoken(text: &str, path: &str) -> Result<(), String> {
@@ -515,8 +596,9 @@ fn spacing(out: &mut Map<String, Value>, action: &Map<String, Value>, skill: &st
         }
         _ => s.distance = num(&["distance", "dist", "keep", "gap", "metres", "meters"], "distance")?,
     }
+    s.apart = num(&["apart", "apart_m", "spread", "keep_apart"], "apart")?;
     s.check(skill).map_err(|e| format!("{path}.do: {e}"))?;
-    for (k, v) in [("min", s.min), ("max", s.max), ("radius", s.radius), ("side", s.side), ("distance", s.distance)] {
+    for (k, v) in [("min", s.min), ("max", s.max), ("radius", s.radius), ("side", s.side), ("distance", s.distance), ("apart", s.apart)] {
         if let Some(v) = v {
             // Kept to the centimetre, as written (an f32 widened as is reads 0.800000011920929).
             out.insert(k.into(), json!((v as f64 * 100.0).round() / 100.0));
@@ -1093,5 +1175,52 @@ mod tests {
         let err = leaf(json!({"do": "keep_distance", "target": "wolf", "max": 90})).unwrap_err();
         assert!(err.contains("metres from 0 to 40"), "{err}");
         assert!(leaf(json!({"do": "keep_distance"})).unwrap_err().contains("needs a target"));
+    }
+
+    /// The 0-spoken-ids guard (`arena_report.py`'s `spoken_with_id`): the three lines r2e's minds
+    /// said with an id (docs/TRIALS.md, r2e "Ids"), and the forms around them.
+    #[test]
+    fn spoken_lines_carry_no_ids() {
+        use super::spoken_without_ids;
+        let refer = |id: u32| match id {
+            9 | 3 => Some("a stranger".to_string()),
+            75 => Some("an old stranger".to_string()),
+            12 => Some("Maud Marrow".to_string()),
+            40 => Some("someone too far away to make out".to_string()),
+            _ => None,
+        };
+        let cases = [
+            // r2e heavy r1, 145 s and 179 s; kiter r4.
+            (
+                "That one, #9, set on me twice on the road without a word — you all saw it. I gave back blow for blow and no more. I'm Wren, new off the water: is there work at this inn, and a roof for the night for someone who pays their way?",
+                "That one, that stranger, set on me twice on the road without a word — you all saw it. I gave back blow for blow and no more. I'm Wren, new off the water: is there work at this inn, and a roof for the night for someone who pays their way?",
+            ),
+            (
+                "There, you all see it — #9 strikes me a fourth time, unprovoked! Stand with me or stand clear!",
+                "There, you all see it — that stranger strikes me a fourth time, unprovoked! Stand with me or stand clear!",
+            ),
+            (
+                "If anyone hears me — I'm Wren, wounded at your gate by the archer #9. I'm taking my bow from the hall and coming inside the walls. Watch the road.",
+                "If anyone hears me — I'm Wren, wounded at your gate by the archer. I'm taking my bow from the hall and coming inside the walls. Watch the road.",
+            ),
+            ("#3 hit me! Stop him!", "That stranger hit me! Stop him!"),
+            ("Help! #75 is down.", "Help! That old stranger is down."),
+            ("Maud Marrow (#12), wait for me.", "Maud Marrow, wait for me."),
+            ("Tell #12 I came.", "Tell Maud Marrow I came."),
+            ("Watch the #3, he bites.", "Watch that stranger, he bites."),
+            ("Who is #40 over there?", "Who is that one over there?"),
+            // Not a person's id, or not an id: left as written.
+            ("You're my #1 customer and room #7b is yours.", "You're my #1 customer and room #7b is yours."),
+            ("Bring berries#9 now", "Bring berries#9 now"),
+        ];
+        for (said, heard) in cases {
+            let out = spoken_without_ids(said, refer);
+            assert_eq!(out, heard, "{said}");
+        }
+        // Whatever the line, no handle of someone the speaker can refer to is left in it.
+        for (said, _) in &cases[..9] {
+            let out = spoken_without_ids(said, refer);
+            assert!(!out.contains("#9") && !out.contains("#3") && !out.contains("#75") && !out.contains("#12") && !out.contains("#40"), "{out}");
+        }
     }
 }

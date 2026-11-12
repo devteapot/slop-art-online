@@ -157,6 +157,20 @@ pub fn fire_state(ctx: &ReducerContext, s: &Structure, now: u64) -> (bool, f32) 
     t.fire_state(s.lit_until_ms, now, day_ms)
 }
 
+/// A fight is on while its blows come within this long of each other: a blow after a longer
+/// gap is a new fight's first (`damage`), and the one who struck is no longer a fight's party
+/// for `hurt_by_near`.
+pub const FIGHT_MS: u64 = 30_000;
+
+/// Whether the one who last hurt `id` is alive and within the `wake_reach` law of it, with the
+/// fight still on (struck within `FIGHT_MS`): the fact `hurt_by_near` of the actor.
+fn hurt_by_near(ctx: &ReducerContext, at: (f32, f32), hurt_by: u32, hurt_ago: Option<f32>, now: u64) -> bool {
+    hurt_by != 0
+        && hurt_ago.is_some_and(|ago| (ago as u64) <= FIGHT_MS)
+        && ctx.db.character().id().find(hurt_by).is_some_and(|c| c.alive)
+        && ctx.db.body().id().find(hurt_by).is_some_and(|b| dist(pos(&b, now), at) <= common::laws(ctx).wake_reach)
+}
+
 pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
     let w = common::world(ctx);
     let ch = ctx.db.character().id().find(id);
@@ -189,6 +203,7 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         pasture: 0.0,
         hurt_by,
         hurt_ago,
+        hurt_by_near: hurt_by_near(ctx, at, hurt_by, hurt_ago, now),
         yielded_ago: None,
         sensed: Vec::new(),
         bold: false,
@@ -220,7 +235,7 @@ pub fn law_ctx(ctx: &ReducerContext, id: u32, w: &World, now: u64, plan: &living
     if !top("actor") {
         return c;
     }
-    let reads = |f: &str| plan.actor & (1 << ACTOR.iter().position(|t| *t == f).expect("an actor field")) != 0;
+    let reads = |f: &str| plan.actor & (1u64 << ACTOR.iter().position(|t| *t == f).expect("an actor field")) != 0;
     // Fields only `facts` (or a skill's context) works out: take them all.
     const CHEAP: [&str; 12] = ["id", "kind", "inv", "knows", "stage", "age", "life", "speed", "strength", "endurance", "vitality", "lit"];
     if ACTOR.iter().any(|f| !CHEAP.contains(f) && reads(f)) {
@@ -901,20 +916,21 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 flags: 0,
                 pace: sp * common::moves_of(ctx, id, now).flee,
                 far: 0.0,
+                apart: 0.0,
             },
             // Movement intents: held to the creature by perception (`motion::FLAG_SIGHT`).
             "follow" if creature => Goal::held(motion::GOAL_CREATURE, target.id as u32, target.at, spacing.distance.unwrap_or(r), 0.0, sp, 0),
-            "close_in" => Goal::held(motion::GOAL_CREATURE, target.id as u32, target.at, spacing.distance.unwrap_or(CLOSE_IN_M), 0.0, sp, motion::FLAG_EARLY),
+            "close_in" => Goal::held(motion::GOAL_CREATURE, target.id as u32, target.at, spacing.distance.unwrap_or(CLOSE_IN_M), 0.0, sp, motion::FLAG_EARLY).apart(spacing.apart.unwrap_or(0.0)),
             "keep_distance" => {
                 let (near, far) = spacing.band(dist(here, target.at));
-                Goal::held(motion::GOAL_BAND, target.id as u32, target.at, near, far, sp, 0)
+                Goal::held(motion::GOAL_BAND, target.id as u32, target.at, near, far, sp, 0).apart(spacing.apart.unwrap_or(0.0))
             }
             "circle" => {
                 let radius = spacing.radius.unwrap_or(dist(here, target.at)).clamp(living_rules::steer::CIRCLE_MIN_M, living_rules::steer::INTENT_MAX_M);
-                Goal::held(motion::GOAL_ORBIT, target.id as u32, target.at, radius, spacing.side.unwrap_or(1.0), sp, 0)
+                Goal::held(motion::GOAL_ORBIT, target.id as u32, target.at, radius, spacing.side.unwrap_or(1.0), sp, 0).apart(spacing.apart.unwrap_or(0.0))
             }
             "back_off" if creature => Goal::held(motion::GOAL_FLEE, target.id as u32, target.at, spacing.distance.unwrap_or(BACK_OFF_M), 0.0, sp, 0),
-            "back_off" => Goal { kind: motion::GOAL_FLEE, target: 0, at: target.at, keep: spacing.distance.unwrap_or(BACK_OFF_M), speed: sp, flags: 0, pace: sp, far: 0.0 },
+            "back_off" => Goal { kind: motion::GOAL_FLEE, target: 0, at: target.at, keep: spacing.distance.unwrap_or(BACK_OFF_M), speed: sp, flags: 0, pace: sp, far: 0.0, apart: 0.0 },
             "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
             _ if aside => Goal::point(target.at, sp * common::moves_of(ctx, id, now).aside, 0),
@@ -2376,7 +2392,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     // `Attacker` target, a yield's addressee), like the told line and the combat feed.
     let hurt_by = if seen_shooter { attacker } else { 0 };
     let struck_since_yield = yielded && yielded_ago(ctx, victim, now).is_some_and(|ago| v.hurt_ms >= now.saturating_sub(ago as u64) && v.hurt_by == hurt_by);
-    let first_blow = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != hurt_by;
+    let first_blow = now.saturating_sub(v.hurt_ms) > FIGHT_MS || v.hurt_by != hurt_by;
     common::settle(ctx, &mut v, now);
     v.hp = (v.hp - amount).max(0.0);
     v.hurt_ms = now;
@@ -2438,6 +2454,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         // Wakes a sleeping victim whoever plays it; a mind thinks on it.
         perceive::request_waking(ctx, victim, &format!("{pleading}!"), now, perceive::Wake::Attack);
     } else if !dead {
+        // Every blow wakes a sleeping victim, whoever plays it (not only a fight's first).
+        perceive::wake_struck(ctx, victim, &format!("{pleading}!"), now);
         fight_report(ctx, victim, hurt_by, now);
         fight_report(ctx, attacker, victim, now);
     }

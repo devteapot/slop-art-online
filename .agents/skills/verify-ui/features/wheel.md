@@ -6,11 +6,13 @@ Hold F on a target whose place the world's `menus()` gives a wheel (docs/INTERFA
 
 - `person`: the shipped person wheel: Talk n, Give ne, Offer e, Teach se, More s, Their window sw, Look over w, Wave nw (`skills.rhai` `menus()`).
 - `held`: hold F (0.28 s), move, let go; the hub cancels; Esc closes it without sending.
+- `sticky`: a tap of F with nothing likely to do on the target opens the wheel sticky (the log's `(sticky)`): it stays open after F is up, and a click, Enter or F chooses the selected section.
+- `gone`: when its target leaves sight (or dies) it closes with a note "<them> is out of sight" (log `ui: wheel closed (its target left sight)`).
 - `flick`: F and a quick move (30 px, after 80 ms) before it would draw: it opens with that direction chosen.
 - `keys`: digits 1–8 choose at once (clockwise from north); the arrows point it; another bar key closes it.
 - `sub`: a section with a further choice (Give ›, Offer ›, Teach ›) opens its sub-list; More opens every act.
 - `grey`: a pinned act the rules refuse greys with their reason in the hub, and is sent all the same (with a real item when it takes one).
-- `workplace`: Cullet's fuel fires (furnace, oven, hearth, smokehouse): Make n, Feed e (Cullet's laws, over `base_menus()`).
+- `workplace`: Cullet's fuel fires (furnace, oven, hearth, smokehouse): Make n, Feed e (Cullet's laws, over `base_menus()`). F held where only pinned acts exist and none is allowed now (a cold hearth) still opens the wheel, all greyed, to say what belongs there and why not now.
 - `cursor`: the drawn cursor hides while held, and is back to the pixel after.
 
 ## How to get to it (user POV)
@@ -29,7 +31,7 @@ Preconditions: baseline; a resident beside the player (`--place`); for `workplac
 - **The cursor.** `extra.cursor` in the dump before opening and after closing: within 1 px.
 - **A thing.** `pointat:X,Y[:H]` keeps the cursor on a world point (a fuel fire with no one by it: a creature under the cursor is aimed before a thing).
 - **Scripts:** `wheel:DIR` points an open wheel as the arrows do.
-- Scenarios: `check.py --run $R wheel` (island, 15 checks); `check.py --run $R wheel-workplace` (Cullet, 6 checks).
+- Scenarios: `check.py --run $R wheel` (island, 16 checks); `check.py --run $R wheel-workplace` (Cullet, 8 checks: a fuel fire with no one by it, the client joined, `notes_clear`, Make north and Feed east, Make greyed with the rules' reason, choosing it opens Make's recipe grid with its cells greyed, a greyed cell is still sent, and the authority's words noted).
 
 ## Gotchas
 
