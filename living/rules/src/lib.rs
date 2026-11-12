@@ -7,6 +7,7 @@ pub mod combat;
 pub mod det;
 pub mod doing;
 pub mod fire;
+pub mod fold;
 pub mod graph;
 pub mod height;
 pub mod host;

@@ -1224,7 +1224,8 @@ def fov(s):
             last_blow[0] = time.monotonic()
             # Short waits from now on, so the next round's graph is taken at once.
             s.graph(behind, {"wait": 1.0 + 0.01 * next(rounds)})
-            time.sleep(1)
+            # Onlookers' lines are folded (`witness_fold_ms`): told when each one's window ends.
+            time.sleep(1 + law_value(s, "witness_fold_ms") / 1000)
             uses = [x for x in s.rows("SELECT * FROM skill_use", f"duel-uses-{label}") if x["at_ms"] >= t0]
             guards = [x for x in uses if x["actor"] == eye and x["skill"] in ("block", "dodge")]
             seen = {w: [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {w}", f"duel-exp-{label}-{w}") if r["kind"] == "fight" and r["at_ms"] >= t0] for w in (w_toward, w_away)}
@@ -4005,6 +4006,8 @@ def outcomes(s):
     it (told "hit for N"), the archer looses at an empty point past its sight (told it came to
     nothing), and with the law off a hit is not told."""
     a, b, c = s.people(3)
+    # Earlier scenes on the same world (a duel's strikes in `fov`) leave outcome lines of their own.
+    t_scene = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
     here = body_at(s, a)
     # 4.5 m: within sight by night too (6 m), so the archer sees its target at any hour.
     s.call("place_at", b, here[0] + 4.5, here[1])
@@ -4038,8 +4041,8 @@ def outcomes(s):
 
     # Bounded to the maker: every outcome line in the world for these moves is the archer's or
     # the striker's own, never a bystander's or the target's.
-    lines = [r for r in s.rows("SELECT observer, kind, text FROM experience", "outcome-lines")
-             if r["kind"] == "own" and any(r["text"].startswith(p) for p in ("You finished: bowshot", "You failed to bowshot", "You finished: strike", "You failed to strike"))]
+    lines = [r for r in s.rows("SELECT observer, kind, text, at_ms FROM experience", "outcome-lines")
+             if r["kind"] == "own" and r["at_ms"] >= t_scene and any(r["text"].startswith(p) for p in ("You finished: bowshot", "You failed to bowshot", "You finished: strike", "You failed to strike"))]
     s.expect("outcome lines reach the one who made the move only",
              lines and all((r["observer"] == a) == ("bowshot" in r["text"]) and r["observer"] in (a, c) for r in lines),
              sorted({(r["observer"], r["text"][:40]) for r in lines}))
@@ -5134,8 +5137,11 @@ def familiar_dense(s):
     distinct = len({r["thing"] for r in fam})
     firsts = [r for r in s.rows(f"SELECT at_ms, text FROM experience WHERE observer = {o}") if "first time you see" in r["text"]]
     told = sum(len(r["text"].split("; ")) for r in firsts)
+    # Tellings name everyone O sees for the first time, a scene's actors parked within sight
+    # included: they are counted against all of O's rows of people, not the crowd's alone.
+    people_rows = [r for r in s.rows(f"SELECT thing, first_ms FROM familiar WHERE actor = {o}") if r["thing"] >> 40 == 2]
     spread = (max(r["first_ms"] for r in fam) - min(r["first_ms"] for r in fam)) if fam else None
-    m = {"crowd": len(crowd), "familiar_rows": len(fam), "distinct": distinct, "told": told, "first_ms_spread_ms": spread, "t_place": t0}
+    m = {"crowd": len(crowd), "familiar_rows": len(fam), "distinct": distinct, "told": told, "people_rows": len(people_rows), "first_ms_spread_ms": spread, "t_place": t0}
     (s.out / f"{s.name}-familiar-dense.json").write_text(json.dumps(m, indent=1) + "\n")
     print("MEASURE", json.dumps(m), flush=True)
     try:
@@ -5144,7 +5150,7 @@ def familiar_dense(s):
         # second, so the rows are made over a minute or two; one forgotten and made again would be
         # a second row or a second telling.
         s.expect("one row per person: none forgotten and made again", distinct == len(fam), m)
-        s.expect("each is told as a first sight exactly once (as many tellings as rows)", told == len(fam), m)
+        s.expect("each is told as a first sight exactly once (as many tellings as rows)", told == len(people_rows), m)
     finally:
         off_the_line(s, line, [o] + crowd[:40], dy=64)
         for who in crowd:
@@ -5187,9 +5193,11 @@ def witness_wake(s):
     `common::wake_bystander`), and still reacts within that bound; a party is woken at once. B
     stands beside V and has appraised V (exact health); B's graph waves at V once V is hurt. Five
     decoy fights start in B's sight one after another, so B's wakes are held back; then A
-    strikes V. Every percept is written at once (B's line about A and V comes with V's own). B
+    strikes V. Unfolded, every percept is written at once (B's line about A and V comes with V's own). B
     waves within `witness_wake_ms` (plus 100 ms) of the blow; V, struck (a party), within 100 ms
-    of its hurt; and wakes were held back meanwhile (`wake:deferred`)."""
+    of its hurt; and wakes were held back meanwhile (`wake:deferred`). With fights folded
+    (`witness_fold_ms`, fix 4) B's line holding the blow comes within its fold window, the wake
+    still at the blow."""
     line = clear_line(s)
     ppl = s.people(13)
     a, v, b = ppl[0], ppl[1], ppl[2]
@@ -5218,19 +5226,25 @@ def witness_wake(s):
     finally:
         s.call("set_profile", False)
     seen = [r for r in s.rows(f"SELECT at_ms, kind, subject, object, text FROM experience WHERE observer = {b}") if r["kind"] == "fight" and r["at_ms"] >= t0]
-    about_v = [r for r in seen if r["object"] == v]
+    # Folded (`witness_fold_ms`, fix 4): B's line holding the blow on V comes when B's window ends
+    # and names V by B's anchor for them; unfolded, its own line comes with V's hurt.
+    fold = law_value(s, "witness_fold_ms")
+    about_v = [r for r in seen if ((f"#{v})" in r["text"] and r["at_ms"] >= hurt[0]["at_ms"]) if fold > 0 else r["object"] == v)]
     uses = s.rows("SELECT actor, skill, at_ms FROM skill_use")
     wave_b = sorted(u["at_ms"] for u in uses if u["actor"] == b and u["skill"] == "wave" and u["at_ms"] >= t0)
     wave_v = sorted(u["at_ms"] for u in uses if u["actor"] == v and u["skill"] == "wave" and u["at_ms"] >= t0)
     t_hurt = hurt[0]["at_ms"]
     logs = s.command("logs", "-s", "local", s.db, "-n", "100000").stdout
     deferred = sum(int(x) for x in re.findall(r'"wake:deferred":(\d+)', logs))
-    m = {"witness_wake_ms": ms, "t_hurt": t_hurt, "b_fight_lines": len(seen), "b_line_about_v": about_v[:1], "b_wave_after_ms": (wave_b[0] - t_hurt) if wave_b else None,
+    m = {"witness_wake_ms": ms, "witness_fold_ms": fold, "t_hurt": t_hurt, "b_fight_lines": len(seen), "b_line_about_v": about_v[:1], "b_wave_after_ms": (wave_b[0] - t_hurt) if wave_b else None,
          "v_wave_after_ms": (wave_v[0] - t_hurt) if wave_v else None, "wakes_held_back": deferred}
     (s.out / f"{s.name}-witness-wake.json").write_text(json.dumps(m, indent=1) + "\n")
     print("MEASURE", json.dumps(m), flush=True)
     try:
-        s.expect("B saw the decoy fights and A's blow on V, each told at once", len(seen) >= 3 and about_v and about_v[0]["at_ms"] == t_hurt, m)
+        if fold > 0:
+            s.expect(f"B saw the decoy fights and A's blow on V, folded: told within witness_fold_ms ({fold:.0f} ms)", len(seen) >= 1 and about_v and 0 < about_v[0]["at_ms"] - t_hurt <= fold + 100, m)
+        else:
+            s.expect("B saw the decoy fights and A's blow on V, each told at once", len(seen) >= 3 and about_v and about_v[0]["at_ms"] == t_hurt, m)
         s.expect("wakes were held back meanwhile (bystanders coalesced)", deferred > 0, m)
         s.expect(f"B, a bystander, reacts within witness_wake_ms ({ms} ms) of the blow on its neighbour", wave_b and 0 <= wave_b[0] - t_hurt <= ms + 100, m)
         s.expect("V, struck (a party), reacts at once (within 100 ms)", wave_v and 0 <= wave_v[0] - t_hurt <= 100, m)
@@ -5239,12 +5253,111 @@ def witness_wake(s):
             s.graph(who, {"wait": 300})
         off_the_line(s, line, ppl, dy=68)
 
+
+BLOWS = re.compile(r"(\d+) (?:blow|shot)s? \(([^)]*)\)")
+
+
+def folded_blows(text):
+    """The blows a folded line counts (`living_rules::fold::line`): (blows, landed, blocked,
+    dodged, missed, fell) summed over its sentences."""
+    total = {"blows": 0, "landed": 0, "blocked": 0, "dodged": 0, "missed": 0}
+    for n, parts in BLOWS.findall(text):
+        total["blows"] += int(n)
+        for part in parts.split(", "):
+            k, word = part.split(" ", 1)
+            total[word] += int(k)
+    total["fell"] = text.count(" fell.")
+    return total
+
+
+def witness_fold(s):
+    """What an onlooker sees of fights it is not party to is told as one folded line per
+    `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4; `fold.rs`). On an open line O stands between
+    two fights: A strikes V, who stands still, until V falls; C strikes D, who blocks when
+    threatened. Every blow O could see is in its lines: the blows its lines count, landed and
+    blocked, equal the strikes the rules resolved (`skill_use` outcomes), and V's fall is told. O gets at most one fight line per window, the first within the window of
+    the first blow. Neither of the two in a blow is among its onlookers (`fight_seen`), and
+    D's own lines come at each blow. With `witness_fold_ms` 0, a fight's first blow is told to O
+    at once on its own line, as before."""
+    line = clear_line(s)
+    ppl = s.people(6)
+    a, v, o, c, d, e = ppl
+    fold = law_value(s, "witness_fold_ms")
+    s.call("place_at", o, *line[3])
+    s.call("place_at", a, line[2][0], line[2][1] + 1.0)
+    s.call("place_at", v, line[2][0] + 0.8, line[2][1] + 1.0)
+    s.call("place_at", c, line[4][0], line[4][1] + 1.0)
+    s.call("place_at", d, line[4][0] + 0.8, line[4][1] + 1.0)
+    s.call("place_at", e, line[5][0], line[5][1] + 3.0)
+    for who in ppl:
+        s.graph(who, {"wait": 300})
+    s.call("grant_items", a, "spear", 1)
+    s.graph(d, {"first": [{"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "block"}}}}, {"wait": 60}]})
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(c, {"first": [{"do": {"skill": "attack", "target": {"id": d}}}, {"wait": 60}]})
+    s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": v}}}, {"wait": 60}]})
+    # The pending blows, read while the fights go on: who could see each.
+    rows, start = [], time.time()
+    while time.time() - start < 90:
+        rows += [r for r in s.rows("SELECT * FROM fight_seen") if r["id"] not in {x["id"] for x in rows}]
+        if not s.rows(f"SELECT alive FROM character WHERE id = {v}")[0]["alive"]:
+            break
+        time.sleep(0.3)
+    s.graph(c, {"wait": 300})
+    time.sleep(fold / 1000 + 2)
+    t1 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    exp = lambda who: [r for r in s.rows(f"SELECT at_ms, kind, subject, object, text FROM experience WHERE observer = {who}") if t0 <= r["at_ms"] <= t1]
+    o_lines = [r for r in exp(o) if r["kind"] == "fight"]
+    # The blows struck, as the rules resolved them (each strike's `skill_use` outcome: "hit for 9",
+    # "blocked, 1 got through", "killed …", "dodged", "missed"); V's own lines go with V's death.
+    struck = [u for u in s.rows("SELECT * FROM skill_use") if (u["actor"], u["target"]) in ((a, v), (c, d)) and t0 <= u["outcome_ms"] <= t1
+              and re.match(r"(hit for|blocked|killed|dodged|missed)", u["outcome"] or "")]
+    d_own = [r for r in exp(d) if r["subject"] == c and r["kind"] in ("attacked", "combat")]
+    o_sum = folded_blows(" ".join(r["text"] for r in o_lines))
+    first_blow = min([u["outcome_ms"] for u in struck], default=None)
+    rows = [r for r in rows if (r["attacker"], r["victim"]) in ((a, v), (c, d))]
+    onlookers = [x & 0x7FFFFFFF for r in rows for x in r["onlookers"]]
+    m = {"witness_fold_ms": fold, "o_lines": [r["text"] for r in o_lines][:6], "o_line_count": len(o_lines), "o_counted": o_sum,
+         "struck": len(struck), "struck_landed": sum(1 for u in struck if u["outcome"].startswith(("hit", "killed"))), "struck_blocked": sum(1 for u in struck if u["outcome"].startswith("blocked")),
+         "d_told": len(d_own), "v_dead": not s.rows(f"SELECT alive FROM character WHERE id = {v}")[0]["alive"],
+         "rows_read": len(rows), "first_line_after_ms": (o_lines[0]["at_ms"] - first_blow) if o_lines and first_blow else None,
+         "seconds": round((t1 - t0) / 1000, 1)}
+    (s.out / f"{s.name}-witness-fold.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("the fights happened: V fell, and D blocked", m["v_dead"] and any("You blocked" in r["text"] for r in d_own), m)
+        s.expect("every blow O could see is in its folded lines, each with its outcome (as the rules resolved them)", o_sum["blows"] == m["struck"] and o_sum["landed"] == m["struck_landed"] and o_sum["blocked"] == m["struck_blocked"] and o_sum["blocked"] >= 1, m)
+        s.expect("O's lines say V fell, once", o_sum["fell"] == 1 and any("fell" in r["text"] and ("attacked" in r["text"] or "kept on at" in r["text"]) for r in o_lines), m)
+        s.expect("folded: fewer lines than blows, at most one a window", 0 < len(o_lines) < o_sum["blows"] and len(o_lines) <= (t1 - t0) / fold + 2, m)
+        s.expect(f"O's first line comes within witness_fold_ms ({fold:.0f} ms) of the first blow", m["first_line_after_ms"] is not None and 0 < m["first_line_after_ms"] <= fold + 100, m)
+        s.expect("O is among each blow's onlookers, and neither of the two in a blow is (the other fight's pair may be)",
+                 rows and all(o in [x & 0x7FFFFFFF for x in r["onlookers"]] and not ({r["attacker"], r["victim"]} & {x & 0x7FFFFFFF for x in r["onlookers"]}) for r in rows),
+                 {"rows": len(rows), "onlookers": sorted(set(onlookers))})
+        s.expect("D was told of each blow at it at once (its own lines, not folded)", len([r for r in d_own if r["kind"] == "attacked"]) == m["struck_blocked"] and not any("blow" in r["text"] and f"#{d})" in r["text"] for r in exp(d) if r["kind"] == "fight"), m)
+        # As before, with the law at 0: a fight's first blow is told to O at once, on its own line.
+        s.call("set_world_law", "witness_fold_ms", "0")
+        try:
+            t2 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+            s.graph(e, {"first": [{"do": {"skill": "attack", "target": {"id": c}}}, {"wait": 60}]})
+            hit = s.wait(lambda: [r for r in s.rows(f"SELECT at_ms, kind, subject FROM experience WHERE observer = {c}") if r["at_ms"] >= t2 and r["subject"] == e and r["kind"] in ("attacked", "combat")], seconds=20)
+            time.sleep(1)
+            unfolded = [r for r in s.rows(f"SELECT at_ms, kind, text FROM experience WHERE observer = {o}") if r["at_ms"] >= t2 and r["kind"] == "fight"]
+            s.expect("with witness_fold_ms 0, O is told the first blow at once on its own line", unfolded and unfolded[0]["at_ms"] == hit[0]["at_ms"] and "attacked" in unfolded[0]["text"] and "blow" not in unfolded[0]["text"], unfolded[:2])
+        finally:
+            s.call("set_world_law", "witness_fold_ms", str(int(fold)))
+    finally:
+        for who in ppl:
+            if who != v:
+                s.graph(who, {"wait": 300})
+        off_the_line(s, line, [x for x in ppl if x != v], dy=72)
+
 SCENES["first_sight"] = first_sight
 
 
 SCENES["familiar_dense"] = familiar_dense
 SCENES["notice_rate"] = notice_rate
 SCENES["witness_wake"] = witness_wake
+SCENES["witness_fold"] = witness_fold
 
 
 if __name__ == "__main__":

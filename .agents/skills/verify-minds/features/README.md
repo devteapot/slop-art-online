@@ -30,6 +30,7 @@
 | How a line to the room was said: whom it names and whom its speaker talks with, in the hearer's own labels (a known name, "a stranger"), in the row and the prompt | `room-address` | [conversations.md](conversations.md#how-a-line-to-the-room-was-said) |
 | Someone too far away to make out, in a mind's scene: a figure under a handle (≥ 1000000000) with no id, name or community; a wave at the handle reaches the person; once made out (`made_out`) the next prompt names them | `far-figure` | [sight.md](sight.md) |
 | Speech through a mind: a talk reply's `way` reaches `mind_say` (one the world lacks is said aloud), an `introduced` row reaches consolidation tagged with the person, the mind's own line reads as heard by those it saw (`heard`) | `speech` | [conversations.md](conversations.md#ways-and-who-heard) |
+| A mind watching others fight can tell who is winning and who fell from its folded lines (`witness_fold_ms`): every blow it saw counted with outcomes, each stranger anchored by its scene id, the fall, all in the next think prompt | `watch-fight` | [sight.md](sight.md) |
 | The dead keep their names for those who knew them: a community member killed in view is named in the mind's death experience and in its next prompt (what happened, relations), not "a stranger"; the killer reads "killed by you" | `death-names` | [sight.md](sight.md) |
 | The fast lane: a blow or a repeated move issues one quick re-plan (the `combat` branch or the character's own routine), merged by the gap, refused by the plan check when the plan changed, never for a sleeper or with the law off; a person's return drops it, and a late reply is refused | `fast-lane`, `fast-takeover` | [fast-lane.md](fast-lane.md) |
 | The prompt frame: `LIVING_FRAME=player` opens think, compile, talk and consolidation with the player frame (sent and journaled), never an identity; the default leaves prompts unchanged; a bad value stops the service | `frame`, `roundtrip`; `prompts::` tests | [frame.md](frame.md) |
@@ -45,7 +46,7 @@ Most cases ask a mind to deliberate through the shared `Run.request(actor, marke
 - It counts the ask by the marker in a newer `thought` row's `detail.reason`, or in a pending row the marker's line made (`arrived` against `requested_ms`). A fake reply answers within a second, between two polls.
 - When a reply replaces the test graph without the marker reaching a thought, it installs the graph again, up to three times. The think node asks only once the deliberation clock has settled 45 s, so each install waits up to 65 s.
 
-Cases with their own asks (`drop`, `death-names`, `reasons`, `rethink`, `takeover`, `dealings`, `answers`) do not use it.
+Cases with their own asks (`drop`, `death-names`, `watch-fight`, `reasons`, `rethink`, `takeover`, `dealings`, `answers`) do not use it.
 
 Each free case launches its own database through `verify.py` and passes doctor before driving the real mind binary. Admin calls arrange scenes only. Requests go through the production HTTP model boundary, and replies return through production mind reducers. Public snapshots use shared SQL; private deliberations use shared `sql --as-admin` with the token held in memory. Store-backed projections belong to `verify-knowledge`.
 

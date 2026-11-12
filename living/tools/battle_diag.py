@@ -3,13 +3,15 @@
 Free: the fake model; scratch `verify-minds-*` databases on the trial stack.
 
   battle_diag.py --run minds-bd-<stamp> [--battle 100] [--walkers 116] [--minutes 30]
-                 [--window 30] [--period 60] [--no-mind]
+                 [--window 30] [--period 60] [--no-mind] [--no-refill] [--law NAME=VALUE ...]
 
 Seed `island` (its residents and animals on their own rules). `--battle` minded people
 (`spawn_crowd`) packed within 7 m of the battle site (where `spawn_battle` stages one) fight the
 nearest person: strike; dodge or block when threatened; heal below half (knowing
 wound_tending). `--walkers` more walk as foragers. A fighter who dies is replaced at the site
-(the load generator's respawn, counted). The mind service thinks for all of them on the fake
+(the load generator's respawn, counted), unless `--no-refill`: deaths are then permanent, as in
+the game, and the battle runs down. `--law` sets a world law after launch (`witness_fold_ms=0`
+for the unfolded lines, `profile_detail=true` to time the parts of each evaluation). The mind service thinks for all of them on the fake
 model (think 5 s, compile 4 s, consolidation 4 s, talk 2 s), its compile keeping the fight graph,
 unless `--no-mind` (requests to think then stay pending, refreshed with their scene).
 
@@ -117,6 +119,9 @@ def main():
     ap.add_argument("--window", type=int, default=30)
     ap.add_argument("--period", type=int, default=60)
     ap.add_argument("--no-mind", action="store_true")
+    ap.add_argument("--no-refill", action="store_true", help="deaths are permanent: the dead are not replaced, and the battle runs down")
+    ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE",
+                    help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
     a = ap.parse_args()
     run = vm.Run(a.run)
     state = {"respawns": 0, "stop": False, "fighters": []}
@@ -124,6 +129,9 @@ def main():
     try:
         run.harness("launch", "--seed", "island")
         run.harness("doctor")
+        for law in a.law:
+            name, value = law.split("=", 1)
+            run.admin("set_world_law", name, value)
         listing = subprocess.run([STDB, "list", "-s", "local"], capture_output=True, text=True).stdout
         ident = next((l.split("|")[1].strip() for l in listing.splitlines() if l.split("|")[0].strip() == run.db), "")
         before = {c["id"] for c in run.sql("SELECT id FROM character", "chars-0")}
@@ -185,7 +193,8 @@ def main():
                     dead = [f for f in state["fighters"] if f not in alive]
                     for f in dead:
                         state["fighters"].remove(f)
-                    if dead:
+                    state["deaths"] = state.get("deaths", 0) + len(dead)
+                    if dead and not a.no_refill:
                         for id in spawn(len(dead)):
                             fighter(id)
                             state["fighters"].append(id)
@@ -196,7 +205,7 @@ def main():
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
         keeper.start()
-        head = {"battle": a.battle, "walkers": a.walkers, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind,
+        head = {"battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind,
                 "nproc": os.cpu_count(), "db_identity": ident}
         (run.directory / "diag-head.json").write_text(json.dumps(head, indent=1))
         print(json.dumps(head), flush=True)
@@ -211,10 +220,20 @@ def main():
             sample = {"k": k, "t_min": round((t0 - t_start) / 60, 1), "ticks_per_s": b["ticks_per_s"], "tick_p50": t["p50"], "tick_p99": t["p99"], "tick_max": t["max"],
                       "over_16_7": t["over_16_7ms"], "tick_samples": t["samples"], "spans_ms_s": {n: v["ms_per_s"] for n, v in sp.items() if v["ms_per_s"] >= 1.0},
                       "spans_n": {n: v["n"] for n, v in sp.items() if n.startswith(("perceive.", "brain."))}, "stats": {x: b.get(x) for x in ("evals_per_s", "experiences_per_s", "deliberation_requests_per_s", "motions_per_s")},
-                      "diag_per_s": d, "diag_seconds": secs, "load_1m": [round(load0, 1), round(os.getloadavg()[0], 1)], "respawns": state["respawns"]}
+                      "diag_per_s": d, "diag_seconds": secs, "load_1m": [round(load0, 1), round(os.getloadavg()[0], 1)], "respawns": state["respawns"], "fighters_alive": len(state["fighters"]), "fighter_deaths": state.get("deaths", 0)}
             sample["rows"] = {tb: count(run, tb) for tb in TABLES}
             sample["alive"] = sum(1 for c in run.sql("SELECT id, alive FROM character", "census") if c["alive"])
             sample["metrics"] = metrics(ident) if ident else {}
+            # How long remains lie (`rot` rows: when each is due, against when it was made) and how
+            # many are left at the site; a death is permanent with --no-refill.
+            try:
+                built = {s_["id"]: s_ for s_ in run.private("SELECT id, kind, x, y, built_ms FROM structure", "structures") if s_["kind"] == "remains"}
+                rot = run.private("SELECT structure, due_ms FROM rot", "rot")
+                lasts = sorted(r["due_ms"] - built[r["structure"]]["built_ms"] for r in rot if r["structure"] in built)
+                sample["remains"] = {"rows": len(built), "rot_rows": len(rot), "at_site": sum(1 for s_ in built.values() if (s_["x"] - site[0]) ** 2 + (s_["y"] - site[1]) ** 2 <= 30 ** 2),
+                                     "lasts_ms_min": lasts[0] if lasts else None, "lasts_ms_max": lasts[-1] if lasts else None}
+            except Exception as e:
+                sample["remains"] = {"error": str(e)[:200]}
             with (run.directory / "diag.jsonl").open("a") as f:
                 f.write(json.dumps(sample) + "\n")
             print(json.dumps({x: sample[x] for x in ("k", "t_min", "ticks_per_s", "tick_p50", "over_16_7", "alive", "respawns", "load_1m")} | {"exp_s": sample["stats"]["experiences_per_s"], "experience_rows": sample["rows"]["experience"]}), flush=True)

@@ -100,10 +100,17 @@ fn laws() {
         // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
         // compares every shared answer with a fresh one and logs any difference.
         regard_cache: true, regard_cache_check: false,
+        // A diagnostic: while profiling, also time the parts of a graph's evaluation.
+        profile_detail: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // What an onlooker sees of fights it is not party to is told as one line per
+        // `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4): every blow it could see, by who struck
+        // whom, with counts and outcomes, and who fell. A blow at it or by it is told at once.
+        // 0: each fight's first blow told at once on its own line, as before.
+        witness_fold_ms: 2000.0,
         // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
         // on a blow taken or when the same creature is seen to start the same move at it
         // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
@@ -2962,8 +2969,10 @@ fn laws_about(l) {
         first_sight_thinks: if l.first_sight_thinks { "seeing someone you cannot place for the first time brings you to think" } else { "one thinks when something happens to one; a first sight is noticed, not thought over" },
         first_sight_gap_s: `a first sight brings one to think at most once in ${short(l.first_sight_gap_s)} s`,
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
+        witness_fold_ms: if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
         witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
+        profile_detail: if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
         seen_again_n: `seeing the same move started at one ${short(l.seen_again_n)} times in a fight is reason for a quick revision`,

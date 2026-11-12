@@ -26,6 +26,7 @@ mod tick;
 mod town;
 mod common;
 mod far;
+mod fold;
 mod fast;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
