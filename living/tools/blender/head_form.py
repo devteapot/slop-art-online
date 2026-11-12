@@ -21,6 +21,16 @@ import numpy as np
 ORIGIN = np.array([0.0, 0.0, -0.012])  # rays leave from here (it is inside every head)
 
 
+def neck_radius(masc=0.0, child=0.0):
+    """The neck's radius under the jaw, in metres on a head of the standard size. The reference's
+    neck is 0.30 of its head's greatest width across and as deep (both its files: 0.29 to 0.31),
+    with its middle half a head's height behind the face's front; ours was 0.60 across and 0.74
+    deep, a funnel from the whole jaw. A woman's and a child's is 0.31 of a 20.4 cm head, a
+    man's 0.36 of a 19.7 cm one (the reference has no man; a grown man's neck is drawn
+    thicker)."""
+    return 0.0316 + 0.0040 * masc - 0.0012 * child
+
+
 def smooth(x):
     x = np.clip(x, 0.0, 1.0)
     return x * x * (3 - 2 * x)

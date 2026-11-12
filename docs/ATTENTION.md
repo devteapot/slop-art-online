@@ -81,6 +81,8 @@ Every field present must hold for the same perceived thing.
 | `regard_cache` | `true` | What each observer makes of each target (name known, the `perceived_of` answer) is worked out once per transaction and shared by everyone who asks ([Shared answers](#shared-answers)). Off: each asker works it out afresh. The answers are the same either way; the switch exists to measure the cache. |
 | `regard_cache_check` | `false` | Diagnostic: every shared answer is also worked out afresh and compared; a difference is logged and counted. It costs both, and is for verification only. |
 
+The first-sight laws (`first_sight_thinks`, `first_sight_gap_s`) are a separate attention law: a first sight of someone one cannot place asks one thought ([First sight](FIRST_SIGHT.md)). A cue and a first sight of the same person in one look are one request.
+
 All are script laws (`skills.rhai`, `script.rs` `Laws`), switched at runtime by `set_world_law`, and described by `laws_about`.
 
 ## What the prompt says

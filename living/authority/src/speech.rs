@@ -186,19 +186,19 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     let sees = |id: u32, eye: (f32, f32), target: u32, p: (f32, f32)| {
         ctx.db.body().id().find(id).is_some_and(|ob| crate::perception::in_sight(ctx, &map, id, eye, common::facing_at(&ob, now), target, p, common::dist(eye, p), &world, now, false))
     };
-    // How a line to the room was said (speech-address): whom it calls by name, and whom its
+    // How a line to the room was said (speech-address): whom it names, and whom its
     // speaker was talking with (the conversation state the 60 s rule reads: a line between the
     // speaker and another within the last minute). The same fact for every hearer, in each
     // hearer's own labels (`room_address`); none for a line to someone.
-    let (called, partner) = if to == 0 {
-        let mut called: Vec<(usize, u32)> = near
+    let (naming, partner) = if to == 0 {
+        let mut naming: Vec<(usize, u32)> = near
             .iter()
             .filter(|(c, _, _)| &*c.kind == "person" && c.id != speaker)
             .filter_map(|(c, _, _)| mention_at(&text, &c.name).map(|i| (i, c.id)))
             .collect();
-        called.sort_unstable();
-        let called: Vec<u32> = called.into_iter().map(|(_, id)| id).collect();
-        (called.clone(), talking_with(ctx, &sc, speaker, now).filter(|p| !called.contains(p)))
+        naming.sort_unstable();
+        let naming: Vec<u32> = naming.into_iter().map(|(_, id)| id).collect();
+        (naming.clone(), talking_with(ctx, &sc, speaker, now).filter(|p| !naming.contains(p)))
     } else {
         (Vec::new(), None)
     };
@@ -206,7 +206,7 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
         let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
         let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || mentions(&text, &c.name)));
         let template = if to == c.id { &w.heard_to_you } else if to != 0 { &w.heard_to } else { &w.heard };
-        let how = if to == 0 { room_address(ctx, c, &called, partner) } else { String::new() };
+        let how = if to == 0 { room_address(ctx, c, &naming, partner) } else { String::new() };
         let heard = format!("{}: “{}”", place_how(&fill(ctx, template, c, speaker, to, *d), &how), text);
         percept(ctx, c, now, &w.kind, speaker, to, at, heard, if addressed { w.addressed } else { w.overheard });
         // A name that is news is a moment of its own (below the 0.6 that wakes a body's graph, so
@@ -400,19 +400,19 @@ fn place_how(filled: &str, how: &str) -> String {
     }
 }
 
-/// How `hearer` heard a line to the room: "to the room, calling Edda and a stranger", "to the
+/// How `hearer` heard a line to the room: "to the room, naming Edda and a stranger", "to the
 /// room while talking with Lorcan", both, or nothing. Everyone is named as `hearer` knows them
 /// (`label_for`: a name only where known and near enough to make out; "you" for the hearer).
-fn room_address(ctx: &ReducerContext, hearer: &Character, called: &[u32], partner: Option<u32>) -> String {
+fn room_address(ctx: &ReducerContext, hearer: &Character, naming: &[u32], partner: Option<u32>) -> String {
     let label = |id: u32| if id == hearer.id { "you".to_string() } else { common::label_for(ctx, hearer, id) };
-    address_words(&called.iter().map(|id| label(*id)).collect::<Vec<_>>(), partner.map(label).as_deref())
+    address_words(&naming.iter().map(|id| label(*id)).collect::<Vec<_>>(), partner.map(label).as_deref())
 }
 
 /// The words of [`room_address`] from labels: a label said twice reads "another" the second time
 /// ("a stranger and another stranger").
-fn address_words(called: &[String], partner: Option<&str>) -> String {
+fn address_words(naming: &[String], partner: Option<&str>) -> String {
     let mut seen: Vec<&str> = Vec::new();
-    let named: Vec<String> = called
+    let named: Vec<String> = naming
         .iter()
         .map(|l| {
             let again = seen.contains(&l.as_str());
@@ -431,8 +431,8 @@ fn address_words(called: &[String], partner: Option<&str>) -> String {
     match (list.is_empty(), partner) {
         (true, None) => String::new(),
         (true, Some(p)) => format!("to the room while talking with {p}"),
-        (false, None) => format!("to the room, calling {list}"),
-        (false, Some(p)) => format!("to the room, calling {list}, while talking with {p}"),
+        (false, None) => format!("to the room, naming {list}"),
+        (false, Some(p)) => format!("to the room, naming {list}, while talking with {p}"),
     }
 }
 
@@ -456,13 +456,13 @@ mod tests {
     #[test]
     fn a_line_to_the_room_says_whom_it_calls_and_whom_its_speaker_talks_with() {
         let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-        assert_eq!(super::address_words(&s(&["Edda Hollin", "Ife Okoro"]), None), "to the room, calling Edda Hollin and Ife Okoro");
-        assert_eq!(super::address_words(&s(&["a stranger", "Ife Okoro"]), None), "to the room, calling a stranger and Ife Okoro");
-        assert_eq!(super::address_words(&s(&["a stranger", "a stranger"]), None), "to the room, calling a stranger and another stranger");
+        assert_eq!(super::address_words(&s(&["Edda Hollin", "Ife Okoro"]), None), "to the room, naming Edda Hollin and Ife Okoro");
+        assert_eq!(super::address_words(&s(&["a stranger", "Ife Okoro"]), None), "to the room, naming a stranger and Ife Okoro");
+        assert_eq!(super::address_words(&s(&["a stranger", "a stranger"]), None), "to the room, naming a stranger and another stranger");
         assert_eq!(super::address_words(&[], Some("Lorcan Vane")), "to the room while talking with Lorcan Vane");
-        assert_eq!(super::address_words(&s(&["you"]), Some("someone too far away to make out")), "to the room, calling you, while talking with someone too far away to make out");
+        assert_eq!(super::address_words(&s(&["you"]), Some("someone too far away to make out")), "to the room, naming you, while talking with someone too far away to make out");
         assert_eq!(super::address_words(&[], None), "");
-        assert_eq!(super::place_how("A stranger said", "to the room, calling Ife Okoro"), "A stranger said to the room, calling Ife Okoro");
+        assert_eq!(super::place_how("A stranger said", "to the room, naming Ife Okoro"), "A stranger said to the room, naming Ife Okoro");
         assert_eq!(super::place_how("A stranger calls out{how} from about 20 m", "to the room while talking with you"), "A stranger calls out to the room while talking with you, from about 20 m");
         assert_eq!(super::place_how("A stranger calls out{how} from about 20 m", ""), "A stranger calls out from about 20 m");
         assert_eq!(super::chronicle_way("Ilsa (whisper) to Bram: “a (b) c”"), Some("whisper"));

@@ -184,12 +184,30 @@
   }
  },
  "strangers-filter-cues": {
-  "about": "Stage 2b's fourth arm, LS + cues: `stranger_by_name` on and the attention-cue law `cues_on` on (docs/ATTENTION.md, branch attention-cues; set by set_world_law). A STUB until attention-cues is on main: before then the world has no `cues_on` law, set_world_law refuses it, and the instance does not start.",
+  "about": "Stage 2b's fourth arm, LS + cues: `stranger_by_name` on and the attention-cue law `cues_on` on (docs/ATTENTION.md; set by set_world_law).",
   "models": {},
   "env": {},
   "world_laws": {
    "stranger_by_name": true,
    "cues_on": true
+  }
+ },
+ "strangers-first-sight": {
+  "about": "Strangers C + first sight (docs/FIRST_SIGHT.md): the `first_sight_thinks` law on (set_world_law after the laws guard), its gap as shipped (300 s): a first sight of someone one cannot place asks one thought. Everything else as `strangers-control`.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true
+  }
+ },
+ "strangers-filter-cues-fs": {
+  "about": "LS + cues + first sight (docs/FIRST_SIGHT.md): `stranger_by_name`, `cues_on` and `first_sight_thinks` on (set_world_law after the laws guard).",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "stranger_by_name": true,
+   "cues_on": true,
+   "first_sight_thinks": true
   }
  }
 }

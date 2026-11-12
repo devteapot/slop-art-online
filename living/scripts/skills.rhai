@@ -103,6 +103,10 @@ fn laws() {
         // world at most `fast_lane_rate` are issued a second and `fast_lane_inflight` at once;
         // a character's start `fast_lane_gap_s` apart; a trigger waiting `fast_lane_stale_s` is dropped.
         fast_lane_on: false, seen_again_n: 3.0, fast_lane_rate: 2.0, fast_lane_inflight: 4.0, fast_lane_gap_s: 6.0, fast_lane_stale_s: 8.0,
+        // First sights (docs/FIRST_SIGHT.md): seeing someone one cannot place (whose name one
+        // does not know, and who is near enough to make out) for the first time asks one's mind
+        // for a thought, at most once within `first_sight_gap_s`. Off: it is only noticed.
+        first_sight_thinks: false, first_sight_gap_s: 300.0,
         fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
         fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
         // What is heard but not seen (only while the field is on) is told by its distance:
@@ -2943,6 +2947,8 @@ fn laws_about(l) {
         cues_on: if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         cue_cooldown_s: `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
         cue_gap_s: `what one watches for brings one to think at most once in ${short(l.cue_gap_s)} s`,
+        first_sight_thinks: if l.first_sight_thinks { "seeing someone you cannot place for the first time brings you to think" } else { "one thinks when something happens to one; a first sight is noticed, not thought over" },
+        first_sight_gap_s: `a first sight brings one to think at most once in ${short(l.first_sight_gap_s)} s`,
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },

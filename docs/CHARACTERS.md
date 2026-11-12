@@ -78,6 +78,7 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Short hair is one sheet** from the whorl to the hairline, where it was rings of tiles.
   - **The highlight is one hard ring and the shadow one edge:** both are the client's, and every sheet's normals now come from one smooth shape so they are not broken into patches. The client needs nothing new.
 - **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris stays a type's own: shared, the client's recolouring gave some types another eye colour.
+- **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
 - **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the brows' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
@@ -172,6 +173,8 @@ A pass is also published through the asset board, the record of which version th
 - Long hair, short hair and the hair's shading are `character:face-types` `20261112-33584a11-…` (`hair-short` and `hair-long`: every style before and after from five sides and at the game camera; `hair-people`: four whole people before and after from four sides and at the game camera; `hair-close`: four people close up; `hair-motion`: long hair on idle and walk frames; `hair-grey`: a greying man's own file beside the same man composed with the grey mix and with one tint; each with the reference's row), the six preset families' `20261112-33584a11-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-33584a11-…` (the 64 built again whole, with `faces-before-after`). The `20261112-c68bbe63-…` versions of the same families are this step before the back's spheres (on them long hair passes into the back on an idle frame), and the `20261112-bc4317ce-…` versions before greying by the mask. These sheets are photographed under the client's own hair light; the type sheets before them turned hair normals to the camera.
 
 - The types' pictures on shared pages are `character:face-types` `20261112-3f0805f7-…` (`types-pages`: four residents composed from the type files and coloured by the client, the full head close and at the game camera and the far head at the game camera, before and after).
+
+- The neck is `character:face-types` `20261112-4c89b344-…` (`neck-types`: four bare type heads before and after from the front, the side and at the game camera, with their measures; `neck-people`: four whole people before and after; `neck-motion`: the same four on moving frames; each with the reference's row), the six preset families' `20261112-4c89b344-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-4c89b344-…` (the 64 built again whole, with `faces-before-after` and `neck-named`, the four faces named on the sheet before).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -708,7 +711,7 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
   2. the far side plane, from the silhouette in to the cheek's corner line (60° to 72°, `SIDE_ON`, `SIDE_FULL`);
   3. the edge crossing the front as the corner line scaled toward the middle, so it follows the cheek's own contour; it reaches the middle at 96° (`MIDDLE`, `CROSS`);
   4. between the brow and the nose's base the edge runs a third of the way ahead toward the bridge (72° to 86°, `SOCKET_ON`, `SOCKET`): the socket's shade, fading out over the 5 cm below the nose's base;
-  5. below the nose the far half waits, by nothing at the nose's base and 8° at the chin (`WAIT`), so the edge leans as it comes down and is not one line down the middle of the face;
+  5. below the nose the far half no longer waits (`WAIT` 0, since [the neck step](#the-neck)): at 8° the far cheek was in shade while the jaw under it kept its light, a lighter patch on the lower face with an edge. The edge is one contour from the temple to the chin;
   6. a band along the far jaw from 60° (`JAW_ON`), and the near jaw's later.
 - **Nothing holds its light inside the shade:** no cheek triangle, no bright near side of the nose.
 - **Interpolated** between each pair of drawings by their distance fields, then blurred by 1.4 mm (`SOFT_MM`), so every edge is a pixel or two soft at close range.
@@ -1015,7 +1018,7 @@ Pass 3, after outfits (2026-11-12). A composed person lost what a type does not 
 
 - **A thin layer over the type's own face:** the faces of the face's skin the detail touches, 0.3 mm off it, as one mesh, `Overlay`, with the face's own weights and its two expressions, so it rides the identity bones, the blink and the open mouth. Under a beard the layer stands off the skin by the beard's thickness, as the skin itself did in a per-person file.
 - **Its picture is what the face's paint adds for that detail,** as grey with an alpha (512 × 512). The client tints a grey picture by the tag in place of moving its mean colour, so the layer takes the person's colour and blends over the type's face.
-- **Two materials:** `M00_000_00_Overlay_00_HAIR` (a beard, stubble), which the hair's tag reaches, and `M00_000_00_FaceOverlay_00_SKIN` (lines, freckles), which the skin's tag reaches and which is lit as a face is: its file has the type's shadow map beside it. Both are `alphaMode: BLEND`; today's client blends them as they are.
+- **Two materials.** `M00_000_00_Overlay_00_HAIR` (a beard, stubble) is a grey picture the hair's tag tints. `M00_000_00_FaceOverlay_00_FACE` (lines, freckles) is one fixed colour with an alpha, which the client draws as it draws lips and blush: unshaded and untinted. Until the paired change with the client (`char-4-lines` and `overlay-fixed-1`) lines and freckles were `M00_000_00_FaceOverlay_00_SKIN`, grey, tinted by the skin's tag and lit with their type's shadow map; see [lines and freckles as a fixed colour](#lines-and-freckles-as-a-fixed-colour).
 - **One file a type, and no `hair_fit`.** That fit lays one skull onto another. A beard lies on the jaw, which differs between types by more than a fit of six numbers carries, and its picture is drawn in the type's own skin layout. So an overlay is built on each type that can wear it, and attaches with the type's own inverse bind matrices, as a body piece does.
 
 | Overlay | For | Triangles (on `elder-m-b`) | File |
@@ -1229,7 +1232,7 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **Hair's mean is its picture's, and the client should take the whole picture's.** Measured at each mesh's own vertices, as the client measures a mean today, it runs from 0.49 (`crop`) to 0.57 (`kerchief`) in linear light: short hair uses more of the picture's dark root and tip. A shared hair material that held the first cut's mean would make everyone's hair up to 8% lighter or darker by which cut came first. The whole picture's mean is 0.55 (linear grey), the same for all, since the picture is one file.
 - **Overlays stay a material a file.** Each has a picture of its own, and lines and freckles are lit with their type's shadow map. The 64 wear 28 of them. One material a class would need the pictures laid on shared pages, and lines and freckles drawn as lips and blush now are (a fixed colour with an alpha, no shadow map). That is not done here.
 
-**Lines and freckles come out fainter in the client than they were drawn** (found here, not fixed). The client moves an overlay picture's mean to the tag's colour. A beard's mean becoming the beard's colour is right. Lines and freckles are tagged with the skin's colour, so their mean becomes the skin's own colour, and only what is darker than their mean shows: a freckle's core comes out 11% darker than the skin where it was drawn about 40% darker, a line's core 26% darker, and their soft edges a little lighter than the skin. `compose.py` multiplied the picture by the colour, which is why the overlay step's pictures looked right; it now tints as the client does. The remedy is the one lips and blush have: lines and freckles as a fixed colour with an alpha in a `…_FACE` material, which the client must then leave untinted (today it tags those two overlays by name). That would also free them from their type's shadow map, which is what sharing their material needs. It wants both sides at once, so it is not done here.
+**Lines and freckles came out fainter in the client than they were drawn** (found here; mended in [lines and freckles as a fixed colour](#lines-and-freckles-as-a-fixed-colour)). The client moves an overlay picture's mean to the tag's colour. A beard's mean becoming the beard's colour is right. Lines and freckles are tagged with the skin's colour, so their mean becomes the skin's own colour, and only what is darker than their mean shows: a freckle's core comes out 11% darker than the skin where it was drawn about 40% darker, a line's core 26% darker, and their soft edges a little lighter than the skin. `compose.py` multiplied the picture by the colour, which is why the overlay step's pictures looked right; it now tints as the client does. The remedy is the one lips and blush have: lines and freckles as a fixed colour with an alpha in a `…_FACE` material, which the client must then leave untinted (today it tags those two overlays by name). That would also free them from their type's shadow map, which is what sharing their material needs. It wants both sides at once, so it is not done here.
 
 **What a piece's colour is now.** A piece is grey, so its colour is only the person's. What was another hue inside a piece (a coat's patches, its lining, the hem's weathering) is a lighter or darker tone of the piece's colour, as the client's recolouring already made it.
 
@@ -1244,6 +1247,35 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **A line with painted colours needs the person built.** `person_params.py` alone still prints the cloth each piece is cut from. The lines of Cullet's 64 are in the pass page's `cullet-people.json`.
 
 **Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
+
+### Lines and freckles as a fixed colour
+
+Pass 3 (2026-11-12), on branch `char-4-lines`, paired with the client's `overlay-fixed-1`. The two halves merge together: with this half alone, a client that still tags lines and freckles with the skin's colour would turn the fixed colour into skin.
+
+**Why.** The client moves a tinted picture's mean to the tag's colour. Lines and freckles were tagged with the skin's colour, so their mean became the skin's own colour: a freckle's core came out 11% darker than the skin where it was drawn about 40% darker.
+
+**What changed** (`person.py` `make_overlay`, `face_paint.py`):
+
+- **One fixed colour each, with an alpha.** Lines are `LINE_PIGMENT` (0.26, 0.14, 0.12) and freckles `FRECKLE_PIGMENT` (0.36, 0.21, 0.14), sRGB. The picture's colour is that pigment everywhere; its alpha is how much of it takes a type's own skin to what the face's paint drew, allowing for the client drawing unshaded parts about 1.3 times lighter than lit skin (`PART_GAIN`). So on the skin a type is painted in they look as they were drawn, and on any other skin the same pigment lies over it.
+- **Drawn for the screen, not as the skin's paint drew them** (`face_paint.FRECKLE_OVERLAY`, `LINE_OVERLAY`; 2026-11-12, after the laptop's check). At the paint's own strength a freckle was one or two texels at an alpha of 0.3, and through the client's bilinear sampling and tone mapping its core came out 9% darker than the skin at the median, where about 40% was meant. An overlay's marks are now drawn one and a half times the paint's size for freckles and one and a quarter for lines, and at up to 0.92 and 0.90 of the pigment (five and 3.6 times the alpha the paint's strength gives, so a mark's whole core is at the most). The pigments are unchanged. Measured through the client (the asset view, a type's bare head, unshaded, untinted and alpha blended as the client draws a face part; each mark's darkest point against the skin round it, on three types each): a freckle's core is 27% to 39% darker at the median close up and 30% to 37% at half that size on screen, and 40% at full strength; a line's is 26% to 40% at the median close up, 23% to 39% at half size, and 45% at full strength. On darker skin the same pigment is less dark against it.
+- **No shadow map.** A `lines` or `freckles` file has no `.face.png` beside it, and `gen_styles.sh` removes one that is there.
+- **Each overlay is built from its one detail.** An old type's own figure has age lines whatever is asked for, and the overlay was painted from the whole look: an elder's freckles and beards carried the age lines too, and a person wearing both wore the lines twice. An elder's `freckles` goes from about 1,070 triangles to about 300.
+- **Every face with paint on it is taken.** A freckle or a fine line is smaller than the skin's mesh; the paint is spread a few millimetres before it is sampled at the vertices. Sampled as painted, a freckle between two vertices was left out.
+
+**What the client must recognise.** In `lookdev/styles/overlay/<type>/lines.glb` and `…/freckles.glb`:
+
+| | Name |
+|---|---|
+| Mesh node | `Overlay` (as before) |
+| Material | `M00_000_00_FaceOverlay_00_FACE` (was `M00_000_00_FaceOverlay_00_SKIN`), `alphaMode` `BLEND`, a picture of its own |
+| Morph targets | `Fcl_EYE_Close`, `Fcl_MTH_A` (as before) |
+| Shadow map | none (was `<name>.face.png`) |
+
+The client draws it as it draws `M00_000_00_FaceTint_00_FACE`: a face part, unshaded, in the file's own colours, with no tag. It must not give these two overlays the skin's tag by their names. Beards and stubble are unchanged (`M00_000_00_Overlay_00_HAIR`, grey, tagged with `colors.beard`; a beard's `FarOverlay` as before).
+
+**Checked** in the asset view on `elder-f-a` with lines and freckles and on `youth-m-a` with freckles, at Cullet's light, middle and darkest skin tones: both show at all three, fainter on the darkest, as a fixed pigment over dark skin does.
+
+**Not done:** their materials are still one a file, because each has a picture of its own. With no shadow map and no tag, the pictures could now go on shared pages and every `lines` and `freckles` file share one material.
 
 ### Long hair, short hair and the hair's shading
 
@@ -1372,6 +1404,43 @@ Pass 3, 2026-11-12, from the laptop's cost table: with people composed from shar
 - **Nothing for the colour.** Every far tile has the one mean, so whichever type's mesh teaches the material its mean, it is right for all.
 - **UVs stay inside a tile,** half a texel in from its edge. Nothing wraps.
 
+### The neck
+
+Pass 3, 2026-11-12, from the owner on the cast's faces: "the neck is still off, seems too big? maybe the issue are the attachment point to the head". Measured against the reference with a new tool beside ref-1's (`living/tools/characters/reference/neck.py`): horizontal cuts of the skin from the jaw down, the pivots and the seam, on any character file.
+
+**What the measure found.** Shares of the head's greatest width; "under the jaw" is 0.06 of the head's height below the chin.
+
+| | Neck's width under the jaw | Its depth | Its middle behind the face's front | `J_Bip_C_Head` above the chin, behind the front | `J_Bip_C_Neck` below the chin, behind the front |
+|---|---|---|---|---|---|
+| The reference (both files) | 0.29 to 0.31 | 0.29 to 0.31 | 0.54 to 0.55 | 0.14 to 0.15, 0.53 to 0.54 | 0.18 to 0.19, 0.57 to 0.58 |
+| Ours before (five types) | 0.56 to 0.60 | 0.65 to 0.69 | 0.52 to 0.57 | 0.12 to 0.13, 0.53 to 0.59 | 0.28 to 0.30, 0.58 to 0.64 |
+| Ours after | 0.29 to 0.31, a man 0.36 | 0.29 to 0.32, a man 0.37 | 0.53 to 0.59 | as before | as before |
+
+- **The neck was twice the reference's, across and deep.** The head's skin ran from the whole jaw line down a funnel to a ring 11 cm across, 4.5 cm below the chin; half way in and half way down. From the front the neck was as wide as the lower face; from the side it began behind the chin and ended at the back of the skull.
+- **With clothes it was wider still.** A garment's neck hole lay 6.6 cm from the axis whatever the neck, and collars rose from there: just under the jaw a woman in a smock measured 0.69 of her head's width and a man in a coat 0.97.
+- **The attachment.** The reference's neck is a column that meets the head just under the jaw, with the jaw's underside nearly level over it. Ours met the head 0.175 of its height below the chin, by way of the funnel. That, and not the pivots, is what read as a wrong attachment: the pivots are within 0.03 of a head's width of the reference's in height for the head and 0.10 lower for the neck, and are unchanged.
+
+**What changed** (`head_form.neck_radius`, `cage_head.py`, `person.py`):
+
+- **One radius for the neck,** 3.16 cm for a woman, 3.56 for a man, 3.04 for a child, 3.4 for a boy of 16: 0.31 and 0.36 of the head's width. The reference has no man; a grown man's neck is drawn thicker. The head's neck ring, the neck's tube and the garments' neck holes all take it.
+- **The head's ring is just under the jaw** (`NECK_RING_Z`, 1.519 m with the chin at 1.535: 0.06 of the head's height, where it was 0.175), and the row under the jaw runs three quarters of the way in to the column while dropping a third of the way: a nearly level underside that overhangs the neck.
+- **The neck's axis is a centimetre further forward** (`NECK_Y`).
+- **Garments close round the neck.** A neck hole is the neck's radius plus 4 mm and the garment's own distance off the body, which a smock and a coat now reduce at the neck (`neck_d`). The jersey's roll collar is 2.6 cm high where it was 5.8 and ended above the chin; the coat's stands 4.2 cm and flares 0.9 where it stood 6 and flared 2.6. The yoke rises from the shoulders to the smaller hole, which is the slope of the shoulders into the neck.
+- **Hair is combed over the new collars** (`make_hair`: `cone`, `back`, measured again on the rebuilt pieces), and the neck's collider for hair chains is the neck's radius.
+- **Still 21 of 21 types within 0.03 H** of what they were built to (`cage_accept.py`).
+
+**The grey patches at the neck** on the cast sheet were the jersey's collar: its upper rings stood inside the old funnel under the jaw, and where a pose brought them outside the skin they showed as flat shapes in the jersey's colour (cream on one girl, olive on another). With a column for a neck and collars that end below the chin there is nothing inside the skin to show.
+
+**The faint lighter region on the lower face** was the last of the pale band: the shadow map let the far half below the nose fill 8° later than the cheek above it (`WAIT` in `face_shadow.py`, 20° at first), so at the cast's light the far cheek was in shade and the jaw under it lit. It is 0 now, and the far side's shade is one contour from the temple to the chin.
+
+**What the client needs:** nothing in `living/game`. Every file that has a neck or lies against one changed and must be taken together: the 21 types, the 28 outfit pieces and the 59 hair files (a piece's neck hole and a hair file's fall are made for the new neck; old pieces on new types leave a gap round the neck). The 72 overlays must be built again on the new heads, since a beard lies on the jaw's underside.
+
+**What is left:**
+
+- **The pivots are where they were.** `J_Bip_C_Neck` is 0.10 of a head's width lower against the chin than the reference's (about 2 cm), and both joints up to 0.06 further back. Moving them changes the rest pose every clip plays on, so it was left for a step of its own with the clips rebaked.
+- **An adult's neck axis is 0.03 to 0.04 of a head's width further back than the reference's** (a child's matches).
+- **On a person whose chin is longer than the type's** (an identity value), the ring is at the chin's own height and the underside has no drop.
+
 ### What the client needs for types
 
 Nothing in `living/game` was edited in step 3, and every file loads in today's client. For the laptop coordinator, in the order they unlock things. 1 to 3 are done in the client since types-1 ([below](#the-client-since-types-1-2026-11-12)); 4 since compose-1, behind `LIVING_GAME_COMPOSE=1` ([below](#the-client-since-compose-1-2026-11-12)).
@@ -1457,6 +1526,10 @@ Nothing in `living/game` was edited in step 3, and every file loads in today's c
 - **Materials by what they draw.** A person's colours are not in a material: each mesh carries its own in its tag, and the shader moves the material's source colour to it. So a style toon is shared by what the material itself brings: its content (the glTF material, its picture, its kind of shading, a face's shadow map) and its source colour (`characters::source_mean`: the picture's whole mean, which is the same for every hair cut since they share the one strand picture; else the mean of the file's own vertex colours, near meshes first), set on the toon when it is made and kept by `recolor`. A file's material takes a toon already made with the same content whose source colour is within 0.004 of its own in each linear channel (`SAME_SOURCE`, under one 8-bit step), else it makes its own. `LIVING_GAME_PERF=filestyles` keys one a file and material name, as before, to compare; it replaces the measurement-only `sharestyles`, which shared by content alone (colours wrong).
   - **On char-4's [one shading mean a class](#one-shading-mean-a-class)** (`RUST_LOG=living_game::characters::compose=debug`, `compose: material … takes toon …`): Cullet's 22 worn outfit pieces take **1** toon, the 30 worn hair cuts **1**, the 7 far beards 1, the 28 overlays one each (17 lines and freckles, 11 beards and stubble, each its own picture), and the 5 hair ties their own (untagged, their own colours): 36 style toons where there were 96 materials. `shade_mean.py --check` passes on all 150 style files.
 - **Step 6:** a type's seventh `Face` primitive, `…FaceTint_00_FACE` (lips and blush), is drawn by `lookdev::convert` as a face part (unshaded, no shadow) and `recolor` gives no `…_FACE` material a tag, so it keeps its file's colours. The new person-line pieces (apron, trousers and boots colours; `smock_bands-m`/`-f`) are pieces like any other, coloured by their own names. Nothing in the client changed for either.
+- **Lines and freckles as a fixed-colour layer** (`overlay-fixed-1`, with char-4's `char-4-lines`; the two merge together). Their material becomes `…FaceOverlay_00_FACE`, and the client draws it as it draws lips and blush: a face part (unshaded), in the picture's own colours, no tag, no shadow map, no shadow (`compose::kind_of`, `characters::slot`; `compose::tests::lines_and_freckles_are_drawn_in_their_own_colours`). Nothing else changes: beards and stubble stay `…Overlay_00_HAIR`, tinted by `colors.beard`.
+  - **Checked** on char-4-lines' files (355e1e18) in this worktree's assets: freckles and lines now show (Roos Achterberg's freckles, the foreheads of Tamsin Hollin, Corvin Hollin and Ode Pontil), where main's files left them at a few pixels. Layers stack as drawn: beards over stubble, lines and lips uncovered; two runs give the same front shots to 0.000%.
+  - **How dark:** a freckle's core on screen is 9% darker than the bare cheek at the median, 13% at the 95th percentile and 21% at the darkest (Roos Achterberg, a close-up against the same face without overlays). The file predicts 13%, 26% and 39% over that skin: its freckles are dots of one or two texels, alpha 0.44 at most and 0.30 at the 99th percentile, so the 40% is one texel, and bilinear sampling and the display's tone mapping halve the peaks. A freckle that reads about 40% darker in the game needs more pigment alpha or larger cores, as lips and blush were set for how they render (generator).
+  - **Materials:** each `lines.glb` and `freckles.glb` has its own picture (12 and 21 distinct, each in its type's skin layout), so they share a toon within a type and not across types: Cullet's 17 worn stay 17. Sharing across types needs the pictures in one layout or on shared pages.
 - **A second generator fix:** step 6's `.tint` picture (lips and blush, its own) was taken for an atlas by `share.py pages` as `.iris` was; pages now leave both out.
 
 **Colours** (`colour_check.py`, all 64 people, front, back and face, four arms):

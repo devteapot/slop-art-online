@@ -67,6 +67,8 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            'cue',
            # Handles for figures too far away to make out (far-handle, docs/STRANGERS.md §1): the authority's only.
            'far_handle',
+           # A sleeper's waiting reasons (fix-sleep-thinking): the authority's only.
+           'slumber',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
            'record', 'record_party', 'record_clock',
            # A world's own law values (its seed's `rules`; docs/WORLD_RULES.md, since laws-2).
