@@ -212,13 +212,22 @@ def earshot(run, c):
     talk box takes whom Tab goes to, and their order, from `my_earshot`'s `say` list, and shows its
     sentence (in my own labels) in the box's hint line; someone who steps out of a say's reach
     drops from it while a call still reaches them. With it off: no row, the client's own reckoning,
-    as before. Residents A and B held 2 m and 6 m off a fresh player; B then 12 m off. The box
-    cannot switch to whisper or call (they have no place in it yet): their lists are only read."""
+    as before. At noon on open grass, cleared (the authority lists only people one sees: 11 m by
+    day, 6 by night), residents A and B held 2 m and 6 m off a fresh player; B then 10 m off,
+    beyond a say's 9 m and within a call's reach and sight. The box cannot switch to whisper or call
+    (they have no place in it yet): their lists are only read."""
     s = "earshot"
     a, b = residents(run)
+    # Anyone within 25 m of the spot (offline player characters of earlier drives among them) is
+    # put 40 m east first: they would stand in every list.
+    people = {r["id"] for r in sql(run, "SELECT id, kind FROM character WHERE kind = 'person'")}
+    ax, ay = UNHEARD_SPOT
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] not in (a, b) and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 25):
+        call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
     tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"earshot-{int(time.time())}.token")
-    syncs = ['on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx-12.0)|(my)", 'off=set_world_law|"earshot"|"false"']
-    plan = ("ready;sync:on;sync:scene;wait:3;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}",
+             'on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx-10.0)|(my)", 'off=set_world_law|"earshot"|"false"']
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:on;sync:scene;wait:3;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
             "key:Escape:tap;wait:0.3;sync:away;wait:2;key:Enter:tap;wait:1.2;shot:02_away;dump:e2;tab;wait:0.4;dump:t4;tab;wait:0.4;dump:t5;key:Escape:tap;wait:0.3;"
             "sync:off;wait:2;key:Enter:tap;wait:1.2;shot:03_off;dump:e3;tab;wait:0.4;dump:t6;key:Escape:tap;wait:0.3;quit")
     try:
@@ -256,7 +265,7 @@ def earshot(run, c):
     st = steps(("t1", "t2", "t3"))
     c.check(s, "law on: each Tab goes by the authority's say list, in its order", all(x[0] and x[1] for x in st), str(st))
     say2, call2 = ways("e2").get("say"), ways("e2").get("call")
-    c.check(s, "B steps 12 m off: out of the say list, still in the call's; the box follows", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
+    c.check(s, "B steps 10 m off: out of the say list, still in the call's (in sight); the box follows", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
     st2 = steps(("t4", "t5"))
     c.check(s, "Tab then goes by the new say list and never to B", all(x[0] and x[1] for x in st2) and all(b not in (x[4] or []) and x[3] != b for x in st2), str(st2))
     c.check(s, "law off: no row, the client's own reckoning (A within it)", not ty("e3").get("told") and a in (ty("e3").get("earshot") or []), f"told {ty('e3').get('told')}; earshot {ty('e3').get('earshot')}")
