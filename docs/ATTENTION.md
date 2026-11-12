@@ -77,8 +77,11 @@ Every field present must hold for the same perceived thing.
 | `cues_on` | `false` | Cues are matched, and minds are offered the `notice` field and `# What you watch for`. Off: nothing is matched, the prompt says nothing of cues, a reply's `notice` is not kept, and stored cues stay inert. Independent of `stranger_by_name`. |
 | `cue_cooldown_s` | `600` (0–86,400) | A cue fires at most once per thing it matched within this many seconds. |
 | `cue_gap_s` | `60` (0–3,600) | A character's cues bring it to think at most once in this many seconds. Things that begin to match together go in one line. |
+| `cue_check_s` | `1.0` (0.1–60) | How often a character's cues are checked against what it perceives. A world may trade freshness for cost: a thing that begins to match is noticed up to this late. |
+| `regard_cache` | `true` | What each observer makes of each target (name known, the `perceived_of` answer) is worked out once per transaction and shared by everyone who asks ([Shared answers](#shared-answers)). Off: each asker works it out afresh. The answers are the same either way; the switch exists to measure the cache. |
+| `regard_cache_check` | `false` | Diagnostic: every shared answer is also worked out afresh and compared; a difference is logged and counted. It costs both, and is for verification only. |
 
-All three are script laws (`skills.rhai`, `script.rs` `Laws`), switched at runtime by `set_world_law`, and described by `laws_about`.
+All are script laws (`skills.rhai`, `script.rs` `Laws`), switched at runtime by `set_world_law`, and described by `laws_about`.
 
 ## What the prompt says
 
@@ -91,6 +94,15 @@ With the law on (`prompts.rs`, `notice_field`):
 
 - **3.2 (built, on main).** `doing` and `phase` read `perception::visibly`, the row the graph's `doing` condition reads, under the same sight. A thought takes 5–40 s, so cues are not for timing a windup: timing stays with graph conditions. A cue makes the slow mind (or the §3.4 fast lane, once built) notice what it chose to look for, for example "the one who throws fire, winding up", and then prepare a routine.
 - **3.3.** Movement intents consume no cues. A cue-driven thought may choose them, and `at` ties a watch to a place.
+
+## Shared answers
+
+Cues, scene labels and the far label, far handles, first sights, graph filters and told lines all ask the same two questions about an observer and a target: does the observer know the target's name, and what does the `perceived_of` law let it make of them (its name, health, whether they are too far away to make out)? Since `cue-cache` each transaction answers each question once per observer and target and shares the answer (`perception.rs`, `with_answers`):
+
+- **What is shared:** `knows_name` per pair; the observer's know-how as the law reads it; the law's answer per pair, distance in whole metres (when the law reads distance) and time. The distance is still read fresh each time (two body lookups), so a body that moved within a transaction gets the answer for where it is.
+- **What empties it:** every write that can change an answer bumps a generation (`answers_changed`): an acquaintance, membership, know-how or reveal written or removed, a new character, new parents. A new transaction starts empty.
+- **Exactness:** under `regard_cache_check` every shared answer is compared with a fresh one. `scenes.py regard_check` drives first sights in a crowd, the stranger filter and the far label, cues, told lines and an introduction during a fight, and requires at least 1,000 comparisons with none differing.
+- **Not shared:** the far handle rows themselves (`far::handle_for` writes them); the handles take the shared "can I make them out" answer.
 
 ## Cost (2026-11-12, all of Cullet's minds)
 
