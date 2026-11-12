@@ -318,7 +318,24 @@ Batch `cm0`: `wolves`, 4 replicates, `--fake` (every model call answered at once
 - `act_outcome` rows are written only for a character a person plays (`outcomes::write`): none here. A played character gets one per told line, kept with its newest 64 lines (`frame::LINES_SHOWN`).
 - Not measured: the contract's 200-character battle of minds, where the same rate would be about ten times this (a row per blow).
 
-R2 and R3 need the trial files written (fixtures only); this turn is docs-only, so they are described, not added. R2 before any of §3 is built: if minds already prepare and use routines for a pattern, §3.5 is not needed yet, and §3.2–3.4 are judged by how much they add.
+### 5.3 R2: within one fight, against scripted opponents (2026-11-12)
+
+Runs `r2b` (10 fights, origin/main `ec5561f1`, $0.40) and `r2c` (the two heavy fights r2b lost to fixture faults, re-run with the fixed fixture on origin/main `49dfc2cd`, which also carries doing-percept (3.2); $0.11). Details, build and switch states: [TRIALS.md](TRIALS.md#r2-results-r2b-10-fights-040) and [the re-run](TRIALS.md#r2-heavy-blow-re-run-r2c-2-fights-011). Against §2.3:
+
+| Wanted (§2.3) | What R2 showed |
+|---|---|
+| **Notice the opponent's skills, ranges and timings within a fight** | Yes in words, late: the heavy blow by the third or fourth exposure in 3 of 4 r2b fights and both r2c fights ("he winds up again"), the kiter in 5 of 5 ("keep my distance, ready my bow"). An arrow told as "attacked you" was read as a swing once (fixed since: fix-missile-told). Timings in ms: never cited. |
+| **Change approach while the fight is on** | In one heavy fight of five (r2c r2): after seven exposures a plan to dodge and then to break away answered 6 of the next 7 blows (K = 8). In the other four the fight ended (2–5 heavies) before a plan arrived. Kiter: 5 of 48 arrows answered, never three in a row. Overall the heavy blow was answered 7 of 36 times, 0 of 15 in the first three exposures. In r2c r2 the plan that answered came 13 s after the exposure before it (think and compile p50 5.5–6.0 s each). |
+| **Prepared schemes that apply on their own conditions** | Barely. Plans held `dodge` and `threatened` conditions (3 of 5 heavy, 4 of 5 kiter in r2b; r2c r2's desires weighted `threatened` 3.0), but as a rewrite after the blows, not an alternative prepared before. The one change that fit was a dodge rhythm (3 of 77 dodges inside a windup), not a reply timed to the windup. |
+| **Beliefs steer behaviour without a re-plan** | Not seen: every change came through a new plan. |
+| **A decision model times what the mind prepared** | Not tested (off). |
+| **Lessons carry to the next encounter** | Not in R2's scope (R3). |
+| **Know one's own skills well enough to plan** | The own timing lines (3.7) and outcome lines (3.1) were told; outcomes were used in words ("come off better each time", "still recovering"), timings not at all. |
+| **React inside a windup** | Only by reflex and by a dodge rhythm. No subject's graph read 3.2's `doing` condition in r2c (0 graphs), although its scene showed what the foe was doing. |
+
+What it means for §3: the minds see the pattern and write plans that answer it, but the answers are coarse and late, and 3.2's perception went unused by the plans the minds wrote. The next run is R2 again with the same fixtures once 3.3 (movement intents) is in, to see whether a routine a mind writes, reading `doing` and its own timings, answers the windup with no model in the loop.
+
+R3 needs its trial files written (fixtures only). R2 was planned before any of §3 was built: if minds already prepare and use routines for a pattern, §3.5 is not needed yet, and §3.2–3.4 are judged by how much they add.
 
 ## 6. What stays the same for players and AI, and what must never become a guard
 
