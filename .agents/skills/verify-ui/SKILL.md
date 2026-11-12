@@ -92,6 +92,10 @@ It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. 
 
 [features/README.md](features/README.md) lists the UI features and their recipes. [references/validation.md](references/validation.md) records the last real run.
 
+## The client's unit tests
+
+`just living-check` runs `cargo test --release -p living-game` (its `game-tests` step), headless: no display, GPU or generated assets. A test that needs any of them goes in `GAME_TEST_SKIPS` in `living/tools/check.py`, with its reason, and in this list, so it is run here by hand on the laptop (`cargo test --release -p living-game -- --exact NAME`). The list is empty: all 96 ran headless on the Spark without assets (2026-11-12). `ik::spots::uneven_ground_spots` is `#[ignore]`d in the source: a tool that lists photo spots (`-- --ignored uneven_ground_spots --nocapture`), not a check.
+
 ## What this skill does not prove
 
 - A real window, trackpad or system cursor: runs are headless, so the cursor is the script's. The capture, Esc giving the system cursor back and how winit reports a real two-finger pan or pinch need hardware (a play-test); `turns` drives what the pointer does with them.

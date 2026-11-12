@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """`just living-check` with step stamps and a shared compile cache (docs/TOOLING.md).
 
-The check is the Justfile's six steps: the authority (wasm), the mind and the native
-viewer, the game in release, the browser viewer (wasm), the rules tests and the script fuel
-gate (living/tools/script_bench, its own cargo workspace and target folder). Each step's
+The check is the Justfile's steps: the authority (wasm), the mind and the native viewer,
+the game in release and its unit tests (release too, on the same tree), the browser viewer
+(wasm), the rules tests, the seed-laws test and the script fuel (living/tools/script_bench, its own cargo workspace and target folder). Each step's
 inputs are the files of the packages it builds (its path-dependency closure, from `cargo
 metadata`), the shared inputs below and its own, the toolchain, the step's command and the
 build environment. After a step passes, its stamp is written under that digest in a store shared
@@ -80,6 +80,14 @@ STEPS = [
     # The game in release only: the build that is run, without a second ~10 GB debug tree.
     {"name": "game", "lane": "release", "packages": ["living-game"], "dirs": ["release"],
      "cmd": ["cargo", "build", "--release", "--manifest-path", "living/Cargo.toml", "-p", "living-game"]},
+    # The game client's unit tests, in release so they reuse the game step's tree (no second
+    # debug Bevy tree). The client reads the rules (verbs.rs's offered(), the checks), so a rules
+    # change can break it: verbs::tests::make_is_offered_at_a_furnace_only_while_it_burns_with_fuel
+    # went red on main (f0061a07) while the check only built the game. They run headless, without
+    # a display, a GPU or the generated (git-ignored) assets; a test that cannot is skipped here by
+    # name in GAME_TEST_SKIPS, with its reason, and listed in the verify-ui skill to run by hand.
+    {"name": "game-tests", "lane": "release", "packages": ["living-game"], "dirs": ["release"],
+     "cmd": ["cargo", "test", "--release", "--manifest-path", "living/Cargo.toml", "-p", "living-game", "--", "--color", "never"]},
     {"name": "viewer-wasm", "lane": "wasm-dev", "packages": ["living-viewer"], "dirs": ["wasm32-unknown-unknown/wasm-dev", "debug"],
      "cmd": ["cargo", "build", "--manifest-path", "living/viewer/Cargo.toml", "--target", "wasm32-unknown-unknown", "--profile", "wasm-dev", "--bin", "living-viewer"]},
     # `inputs`: the rules' ratchet `ui::tests::the_game_client_names_no_new_skills` reads the
@@ -108,6 +116,16 @@ STEPS = [
               "--no-default-features"]],
      "gate": {"script": "living/tools/script_bench/gate.py", "host": "release/sb-host", "module": "wasm32-unknown-unknown/release/sb_module.wasm"}},
 ]
+
+# Game tests that need a display, a GPU or the generated assets: skipped by game-tests only (name ->
+# reason), run by hand on the laptop (`cargo test --release -p living-game -- --exact NAME`), and
+# listed in .agents/skills/verify-ui/SKILL.md. None today: all 96 run headless (2026-11-12, the
+# Spark, no assets). `ik::spots::uneven_ground_spots` is #[ignore]d in the source: a tool that
+# lists photo spots (`-- --ignored uneven_ground_spots --nocapture`), not a check.
+GAME_TEST_SKIPS = {}
+for _s in STEPS:
+    if _s["name"] == "game-tests":
+        _s["cmd"] = _s["cmd"] + (["--exact"] if GAME_TEST_SKIPS else []) + [x for name in sorted(GAME_TEST_SKIPS) for x in ("--skip", name)]
 
 # The cargo workspaces whose packages the steps build: the living core's, and the script
 # bench's (standalone, not a member of living/Cargo.toml).
