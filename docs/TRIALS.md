@@ -188,6 +188,38 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## Earshot stage (planned, not run) — target, written before any paid call
+
+The `earshot` law (docs/COMMUNICATION.md §17; MIND_RESEARCH_IDEAS #4), approved by the general coordinator at about $8–10 at Cullet. It runs after fs1 finishes, so the two batches do not overlap. Nothing below has been run.
+
+- **Trial:** `strangers-earshot` (living/trials/strangers-earshot.json), stage 2b's script: the newcomer joins at 09:30 at the arrival point and stands 5 minutes, walks the Strand past the Fish Steps (`walk_route`), then stands 5 minutes at the densest group. Cullet, 63 minds, 20 minutes a run.
+- **Arms:** control (`strangers-control`, main's defaults) and earshot (`strangers-earshot`: the same, with `set_world_law earshot true` after the laws guard). 2 replicates each, 4 runs. st2b cost $2.48–3.08 a run, so about $10; stop the batch if spend passes $12.
+- **Command:** `python3 living/tools/trials.py run --batch es1 strangers-earshot --variants strangers-control,strangers-earshot --replicates 2`. Before it, a fake smoke of both arms (`es1s`, `--fake --fake-script living/trials/fake/strangers.json --replicates 1 --minutes 3`, free): each starts, and the earshot arm's `world_laws.json` shows `earshot` true. Run the smoke after fs1 too.
+- **Build and switches, to record at the run:** the main commit; `earshot` on in the earshot arm only; `stranger_by_name`, `cues_on`, `first_sight_thinks` and `fov_on` as main has them then, in both arms alike. If fs1 has changed a default by then, both arms carry it and the record says so. `LIVING_GREET`, `LIVING_PARK`, `LIVING_SKILL_TIMINGS`, `force_outcomes` and `speech_truth` as on main.
+- **Measures:** `arrive_spread.py --strangers`, with the columns added on this branch:
+  - `said_all`: every resident's lines;
+  - `far_all`: those the authority's `silence` row says reached no one they were for;
+  - `far_all` split three ways: `far_seen` (the addressee in sight but too far), `far_unseen` (out of sight) and `far_room` (a room line no one received).
+
+  Also reported: the stage 2 measures, the lines to the newcomer (`lines_to`, `far`, `reasks`, `heard_join_s`), and the guards. "Silence means trouble" readings are counted in the residents' thoughts with the regex `\b(silent|silence|won't answer|doesn't answer|not answering|ignor\w*|no answer)\b`, with examples quoted.
+
+**Baseline** (st2b's control-like arms, C and L, one replicate each, re-read with the new columns): `said_all` 569 and 570. `far_all` 128 and 140 (22% and 25%). `far_seen` 62 and 76, `far_unseen` 54 and 53, `far_room` 12 and 11. Lines to the newcomer 3 and 4, of which out of earshot 1 and 0. The other two st2b arms (LS, LS + cues) had `far_seen` 67 and 102.
+
+**Target spread** (earshot against control in the same batch; 2 replicates, so indicative):
+
+| measure | expected if the fact works | read as no effect |
+|---|---|---|
+| `far_seen` per run | at most half of control's (control about 60–80) | within 25% of control |
+| `far_room` per run | at most control's | — |
+| `far_all` ÷ `said_all` | down by 5 points or more (control about 22–25%) | within 2 points |
+| `far_unseen` per run | within 30% of control: the fact names no one unseen, so a large change here means something else moved | — |
+| `said_all` per run | within 25% of control: the fact should not make people talk much more or less | — |
+| lines to the newcomer, re-asks, first heard line | reported; too few at Cullet (0–4 a run in st2b) to judge | — |
+| "silence means trouble" readings | reported with examples; fewer is the hoped direction | — |
+| `converge_60s` / `together_4m` | at most control's + 2: walking closer to be heard is allowed, crowding is not | — |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | within control's spread | — |
+| cost per run | within 20% of control (about 40 more prompt tokens a deliberation) | — |
+
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
 Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.

@@ -1528,6 +1528,115 @@ def room_address_case(run):
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
 
+def open_line(run, length, clear=30.0):
+    """A row of `length` open tiles (west to east), five tiles wide, that nothing blocks the sight
+    along, with no body within `clear` m of it (verify-core's `quiet_line`)."""
+    w = run.sql('SELECT width, height FROM world', 'world-size')[0]
+    W, H = w['width'], w['height']
+    tiles = bytearray(W * H)
+    for row in run.sql('SELECT * FROM terrain_chunk', 'terrain'):
+        data = row['tiles']
+        data = bytes.fromhex(data.removeprefix('0x')) if isinstance(data, str) else bytes(data)
+        cx, cy = row['id'] & 0xFFFF, row['id'] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    bodies = [(b['x'], b['y']) for b in run.private('SELECT x, y FROM body', 'bodies')]
+    walk = lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7, 8, 9)
+    for y in range(8, H - 8, 3):
+        for x in range(8, W - length - 8, 2):
+            if not all(walk(x + i, y + d) for i in range(length) for d in (-2, -1, 0, 1, 2)):
+                continue
+            mid = (x + length / 2, y + .5)
+            if all(math.dist(mid, b) > clear + length / 2 for b in bodies):
+                return [(x + i + .5, y + .5) for i in range(length)]
+    raise RuntimeError('no quiet open line on this map')
+
+
+@case('earshot')
+def earshot_case(run):
+    """Who would hear you now, as a perception fact (earshot, `earshot::reach`,
+    docs/COMMUNICATION.md §17). On a quiet open line by day (sight 11 m, a said line carries 9 m,
+    a call 22.5 m): H (thought for) stands with A 3 m east (seen, within a said line), B 10 m east
+    (seen, beyond a said line, within a call) and C 15 m west (beyond sight, within a call). A and
+    C first tell H their names from beside H. H's think prompt then carries "who would hear you
+    now" once the `earshot` law is on (off as shipped, its prompt has no such key): A by name at
+    say, B as a stranger added by a call, C nowhere (not perceived, so never named). H then says a line to the room and calls one: the people who receive each, among the
+    ones H sees, are exactly the scene's list at that way, and C, unseen, receives the call."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 4, True)
+    h, a, b, c = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    names = {x['id']: x['name'] for x in run.sql('SELECT id, name FROM character', 'names')}
+    for who in (h, a, b, c):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 28)
+    at = lambda i: line[i]
+    run.admin('place_at', h, *at(15))
+    for who, i in ((a, 16), (c, 14), (b, 17)):
+        run.admin('place_at', who, *at(i))
+    time.sleep(1.5)
+    say = lambda who, text, to, way='say': run.admin('mind_say', who, text, to, way, 0, TALK_THOUGHT)
+    say(a, f"I'm {names[a]}.", 0)
+    say(c, f"I'm {names[c]}.", 0)
+    time.sleep(1.0)
+    known = {x['known'] for x in run.private(f'SELECT * FROM acquaintance WHERE observer = {h}', 'h-knows')}
+    for who, i in ((a, 18), (b, 25), (c, 0)):
+        run.admin('place_at', who, *at(i))
+    time.sleep(1.5)
+    bodies = {x['id']: (x['x'], x['y']) for x in run.private('SELECT id, x, y FROM body', 'bodies-placed') if x['id'] in (h, a, b, c)}
+    dist = {who: round(math.dist(bodies[h], bodies[who]), 1) for who in (a, b, c)}
+    script = {'replies': {'think': {'thought': 'I listen.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}}}
+    run.start(model(run, script), [h])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    # Off as shipped (the `earshot` law): the scene does not say it.
+    run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify earshot-off'}))
+    off = run.wait(lambda: [sent_text(e) for e in requests() if 'verify earshot-off' in sent_text(e)], 'prompt with the law off', 60)[0]
+    (run.directory / 'prompt-earshot-off.txt').write_text(off)
+    run.admin('set_world_law', 'earshot', 'true')
+    run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify earshot-on'}))
+    prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify earshot-on' in sent_text(e)], 'prompt with the earshot', 60)[0]
+    (run.directory / 'prompt-earshot.txt').write_text(prompt)
+    m = re.search(r'"who would hear you now":"((?:[^"\\]|\\.)*)"', prompt)
+    earshot = json.loads(f'"{m.group(1)}"') if m else ''
+    parts = {p.strip().split(' would')[0].split(' if')[0]: p for p in earshot.rstrip('.').split(';')}
+    ids_in = lambda part: {int(x) for x in re.findall(r'#(\d+)', part)}
+    said_part = next((p for p in parts.values() if p.startswith('Within earshot if you say it')), '')
+    call_part = next((p for p in parts.values() if 'a call would' in p), '')
+    ours = {a, b, c}
+    # The lines: a said one, then a call (the call's own 6 s gap does not apply to a first call).
+    say(h, 'Is anyone near enough to hear me?', 0)
+    time.sleep(2.6)
+    say(h, 'Hello out there!', 0, 'call')
+    time.sleep(1.5)
+    rows = run.private(f'SELECT * FROM experience WHERE subject = {h}', 'heard-h')
+    got = lambda words: {r['observer'] for r in rows if r['kind'] == 'speech' and words in r['text']} & ours
+    heard_say, heard_call = got('near enough to hear me'), got('Hello out there')
+    seen_ids = ids_in(said_part) | ids_in(call_part)
+    # By night (sight 6 m) B at 10 m is out of sight too: a call then adds no one H sees.
+    night = '"night":true' in prompt
+    unseen = {c} | ({b} if night else set())
+    checks = {
+        'placed_as_planned': dist[a] <= 6.0 and 9.0 < dist[b] <= 11.0 and 11.0 < dist[c] <= 22.5,
+        'a_and_c_are_known_by_name': {a, c} <= known,
+        'off_as_shipped_the_scene_does_not_say_it': 'who would hear you now' not in off,
+        'scene_carries_earshot': bool(earshot),
+        'said_lists_a_by_name': ids_in(said_part) & ours == {a} and names[a] in said_part,
+        'call_adds_b_as_a_stranger_by_day': ('a call would reach no one more' in call_part) if night else ('also reach' in call_part and ids_in(call_part) & ours == {b} and 'a stranger' in call_part),
+        'unseen_are_never_named': not (unseen & seen_ids) and names[c] not in earshot,
+        'said_line_reaches_exactly_the_said_list': heard_say == ids_in(said_part) & ours,
+        'call_reaches_the_listed_and_the_unseen': heard_call - unseen == seen_ids & ours and unseen <= heard_call,
+    }
+    result = {'h': h, 'a': a, 'b': b, 'c': c, 'night': night, 'dist': dist, 'earshot': earshot, 'heard_say': sorted(heard_say), 'heard_call': sorted(heard_call), 'checks': checks}
+    (run.directory / 'earshot.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('health-seen')
 def health_seen_case(run):
     """A mind in a fight is told its opponent's health as the band everyone sees, never as a
