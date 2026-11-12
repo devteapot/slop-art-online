@@ -52,6 +52,10 @@ On a launched and doctored `client-*` run (any seed), `scripts/house_label.py --
 
 On a launched and doctored `client-*` run (any seed), `scripts/far_label.py --run "$R"` joins a player, installs an overlay that makes everyone past 4 m `far` (as Cullet's law does past 24 m), places two strangers at 2 m and 6 m, and reads the player's `seen_characters` through the SDK probe: `a stranger` near, `someone too far away to make out` far, then `a stranger` once the far one is brought close ([features/perception.md](features/perception.md)). Admin calls set the scene. It installs the shipped script again at the end; run cleanup after it.
 
+## Looks
+
+On a launched and doctored `client-*` run whose seed has looks (`--seed plan-test` or `--seed cullet`), `scripts/look_rows.py --run "$R"` checks the look key a real client receives: `look` and `look_line` refused, an `lk_` key on every seen person row, far rows included, none for the unseen, the same after a reconnect ([features/looks.md](features/looks.md)).
+
 ## Check one query during triage
 
 Build the probe with the command above. On a scratch run launched and checked through the harness, subscribe to the row missing from the UI (the chronicle is private developer truth, so as the owner):

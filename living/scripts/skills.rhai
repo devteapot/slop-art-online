@@ -2912,6 +2912,26 @@ fn perceived_of_law() {
        about: "You cannot read minds; what others say may be false. You only know what you perceived or were told. You know someone's name once they say it, or you are family, of one community, or close; until then they are a stranger to you." }
 }
 
+// ---- a person's look (docs/LOOK.md) ---------------------------------------------------------
+// Which of their lines a person wears: an infant's, a child's until `youth` years, a youth's until
+// `adult` years (a child or a grown person), an adult's, an elder's (life stages 0 and 3). Read
+// when a look is written (at a birth, a stage change, a band's due time); a world whose people
+// look grown sooner or later changes the ages.
+fn look_bands() { #{ youth: 12.0, adult: 18.0 } }
+fn look_bands_law() {
+    let b = look_bands();
+    #{ cadence: "event", topic: "",
+       about: `People look like children until ${short(b.youth)} years old, like youths until ${short(b.adult)}, then like adults until they grow old.` }
+}
+
+// Whom a mind's scene describes by look: "unnamed" (strangers and figures too far away to make
+// out), "all" (everyone in the scene) or "none".
+fn appearance_in_scene() { "unnamed" }
+fn appearance_in_scene_law() {
+    #{ cadence: "event", topic: "",
+       about: "You see how people look: their build, their clothes and, close enough, their hair; at a distance only a figure's height, build and clothes." }
+}
+
 fn dealings_law() {
     #{ cadence: "event", covers: ["record_text", "on_give", "on_store", "on_host", "on_expire", "due_by_dark"],
        about: "Agreements and demands are kept by the world: it counts what each side hands over, stores or hosts for the other, and tells both sides when an agreement is kept, broken or lapses at its dusk, and when a demand is met or goes unpaid." }
