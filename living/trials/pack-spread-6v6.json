@@ -1,6 +1,6 @@
 {
  "title": "Pack arena: 6 wolves v 6 people, spread start",
- "about": "A wolf pack and a group of people set down near each other in open country on the island, each living by its graph; the island's other wolves (and, outside the mixed arm, its deer) are moved to the far side of the map. Measured by living/tools/pack_arena.py. Nothing learned here is kept: the world is deleted after the evidence is taken.",
+ "about": "A wolf pack and a group of people set down near each other in open country on the island, each living by its graph; the island's other wolves (and, outside the mixed arm, its deer) are moved to the settlement farthest from the arena and kept still. Measured by living/tools/pack_arena.py. Nothing learned here is kept: the world is deleted after the evidence is taken.",
  "world": {
   "seed": "island"
  },
@@ -82,7 +82,7 @@
      "do": "place",
      "who": "spare_wolves",
      "to": {
-      "far_from": {
+      "farthest_town": {
        "who": "pack"
       }
      }
@@ -98,7 +98,7 @@
      "do": "place",
      "who": "deer",
      "to": {
-      "far_from": {
+      "farthest_town": {
        "who": "pack"
       },
       "offset": [

@@ -329,8 +329,11 @@ def measure(run):
     sight = SIGHT[run["night"]]
     seen = next((s["ms"] for s in S if any(dist(c, q) <= sight for c in living(s, P).values() for q in living(s, W).values())), None)
     dG = None
-    if seen is not None:
+    if seen is not None and G:
         before = [g for ms, g in G if seen - 30000 <= ms < seen]
+        if not before and seen - G[0][0] <= 2000:
+            # In sight from the start (close starts, §5.6): "before" is G at the first sample.
+            before = [G[0][1]]
         after = [g for ms, g in G if seen < ms <= seen + 30000]
         if before and after:
             dG = round(statistics.median(after) - statistics.median(before), 3)
@@ -355,16 +358,32 @@ def measure(run):
     last = S[-1]
     dead_people = {i: c for i, c in last["dead"].items() if i in P}
     dead_wolves = {i: c for i, c in last["dead"].items() if i in W}
+    # Health lost to blows, from the blows' own outcomes ("hit for 8"); and to every cause, from
+    # the sampled health (clamped to the body's range: the rate projection can overshoot full).
     lost = {"people": 0.0, "wolves": 0.0}
+    for u in blows:
+        o = u.get("outcome") or ""
+        if o.startswith("hit for "):
+            try:
+                n = float(o.split()[2].rstrip(".,;:"))
+            except (IndexError, ValueError):
+                continue
+            if u["target"] in P:
+                lost["people"] += n
+            elif u["target"] in W:
+                lost["wolves"] += n
+    lost_all = {"people": 0.0, "wolves": 0.0}
     prev = {}
     for s in S:
         for i, v in s["hp"].items():
-            if i in prev and v[0] < prev[i]:
-                lost["people" if i in P else "wolves"] += prev[i] - v[0]
-            prev[i] = v[0]
+            hp = max(0.0, min(v[0], v[1]))
+            if i in prev and hp < prev[i]:
+                lost_all["people" if i in P else "wolves"] += prev[i] - hp
+            prev[i] = hp
     routed = {w for s in S for w, a in s["act"].items() if w in W and a[0] == "flee" and w in s["hp"] and s["hp"][w][0] < 0.25 * s["hp"][w][1]}
     out["M5"] = {"people_killed_by_wolves": sum("wolf" in (c or "") for c in dead_people.values()), "people_dead": len(dead_people),
                  "wolves_dead": len(dead_wolves), "people_health_lost": round(lost["people"], 1), "wolf_health_lost": round(lost["wolves"], 1),
+                 "people_health_lost_all_causes": round(lost_all["people"], 1), "wolf_health_lost_all_causes": round(lost_all["wolves"], 1),
                  "wolves_routed": len(routed)}
 
     # M6: duration.

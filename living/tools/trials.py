@@ -1225,6 +1225,12 @@ class Instance:
         elif "home_of" in a:
             c = self.rows(f"SELECT * FROM character WHERE id = {self.roles[a['home_of']][0]}")[0]
             p = (c["home_x"], c["home_y"])
+        elif "farthest_town" in a:
+            # The centre of the settlement farthest from another anchor: always walkable ground
+            # (a map corner can be sea), used to clear an arena of animals (docs/PACK_MIND.md).
+            ref = self.anchor(a["farthest_town"])
+            groups = self.census_cache[-1]
+            p = max((self.anchor({"town": g}) for g in groups), key=lambda c: dist(c, ref))
         elif "far_from" in a:
             ref = self.anchor(a["far_from"])
             corners = [(8, 8), (w - 8, 8), (8, h - 8), (w - 8, h - 8)]

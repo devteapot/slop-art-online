@@ -9,7 +9,7 @@ def polar(rt): return [[round(r*math.cos(math.radians(t)),1), round(r*math.sin(m
 spread={3: polar([(15,180),(25,155),(35,205)]), 6: polar([(15,180),(20,150),(25,210),(30,170),(35,195),(28,138)])}
 base={
  "title":"Pack arena (docs/PACK_MIND.md §5)",
- "about":"A wolf pack and a group of people set down near each other in open country on the island, each living by its graph; the island's other wolves (and, outside the mixed arm, its deer) are moved to the far side of the map. Measured by living/tools/pack_arena.py. Nothing learned here is kept: the world is deleted after the evidence is taken.",
+ "about":"A wolf pack and a group of people set down near each other in open country on the island, each living by its graph; the island's other wolves (and, outside the mixed arm, its deer) are moved to the settlement farthest from the arena and kept still. Measured by living/tools/pack_arena.py. Nothing learned here is kept: the world is deleted after the evidence is taken.",
  "world":{"seed":"island"},
  "minutes":10,
  "life":{"stop_on_death":False},
@@ -24,11 +24,11 @@ def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold
     t["cast"]={"pack":{"pick":{"kind":"wolf","stage":2,"count":wolves,"nearest":{"arrival":True}}},
                "spare_wolves":{"pick":{"kind":"wolf","count":"all"}}}
     steps=[{"do":"graph","who":"spare_wolves","graph":{"wait":900}},
-           {"do":"place","who":"spare_wolves","to":{"far_from":{"who":"pack"}}}]
+           {"do":"place","who":"spare_wolves","to":{"farthest_town":{"who":"pack"}}}]
     if not deer:
         t["cast"]["deer"]={"pick":{"kind":"deer","count":"all"}}
         steps+=[{"do":"graph","who":"deer","graph":{"wait":900}},
-                {"do":"place","who":"deer","to":{"far_from":{"who":"pack"},"offset":[0,6]}}]
+                {"do":"place","who":"deer","to":{"farthest_town":{"who":"pack"},"offset":[0,6]}}]
     if night: t["world"]={"seed":"island","start_hour":21}
     wolf_off = close if start=="close" else spread[wolves]
     steps+=[

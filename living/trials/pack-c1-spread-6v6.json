@@ -82,7 +82,7 @@
      "do": "place",
      "who": "spare_wolves",
      "to": {
-      "far_from": {
+      "farthest_town": {
        "who": "pack"
       }
      }
@@ -98,7 +98,7 @@
      "do": "place",
      "who": "deer",
      "to": {
-      "far_from": {
+      "farthest_town": {
        "who": "pack"
       },
       "offset": [
