@@ -33,7 +33,7 @@ pub struct Typing {
 /// Enter opens the box; typing edits it; Tab speaks to someone else; Enter says it to whom it
 /// addresses (`talk.rs`). Esc is `win.rs`'s.
 #[allow(clippy::too_many_arguments)]
-pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Res<crate::keys::Binds>, mut events: MessageReader<KeyboardInput>, mut out: ResMut<Outbox>, wants: Option<Res<crate::hud::UiWants>>, model: Res<HudModel>, mut talk: Option<ResMut<crate::talk::Talk>>, (ws, pick): (Res<Windows>, Res<crate::pick::Pick>)) {
+pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Res<crate::keys::Binds>, mut events: MessageReader<KeyboardInput>, mut out: ResMut<Outbox>, wants: Option<Res<crate::hud::UiWants>>, model: Res<HudModel>, mut talk: Option<ResMut<crate::talk::Talk>>, (ws, pick, time): (Res<Windows>, Res<crate::pick::Pick>, Res<Time>)) {
     if model.death.is_some() {
         events.clear();
         return;
@@ -62,6 +62,14 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Re
         events.clear();
         return;
     }
+    // Changing how (the Way key; a key that types would also type).
+    if binds.keys(crate::keys::Act::Way).any(|k| keys.just_pressed(k) && !crate::keys::types(k)) {
+        if let Some(t) = talk.as_mut() {
+            t.next_way = true;
+        }
+    }
+    // The longest line the way takes (`max_chars`), within the box's own.
+    let max_chars = talk.as_ref().and_then(|t| t.card.as_ref()).map_or(MAX_CHARS, |c| if c.max_chars > 0 { (c.max_chars as usize).min(MAX_CHARS) } else { MAX_CHARS });
     // Changing whom: its binding if not Tab (a letter would also type).
     if binds.keys(crate::keys::Act::Address).any(|k| k != KeyCode::Tab && keys.just_pressed(k) && !crate::keys::types(k)) {
         if let Some(t) = talk.as_mut() {
@@ -80,6 +88,12 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Re
                     input.composed = Some(line.trim().to_string());
                 } else if !line.trim().is_empty() {
                     out.say.push((line.trim().to_string(), talk.as_ref().and_then(|t| t.to).unwrap_or(0)));
+                    // When this way was used (its gap greys the chip; the authority refuses within it).
+                    if let Some(t) = talk.as_mut() {
+                        if let Some(w) = t.card.as_ref().map(|c| c.name.clone()) {
+                            t.used_at.insert(w, time.elapsed_secs_f64());
+                        }
+                    }
                 }
                 input.chat_open = false;
                 return;
@@ -93,13 +107,13 @@ pub fn keys(mut input: ResMut<Input>, keys: Res<ButtonInput<KeyCode>>, binds: Re
                 }
             }
             LogicalKey::Space => {
-                if input.chat.chars().count() < MAX_CHARS {
+                if input.chat.chars().count() < max_chars {
                     input.chat.push(' ');
                 }
             }
             LogicalKey::Character(s) => {
                 for c in s.chars().filter(|c| !c.is_control()) {
-                    if input.chat.chars().count() < MAX_CHARS {
+                    if input.chat.chars().count() < max_chars {
                         input.chat.push(c);
                     }
                 }
