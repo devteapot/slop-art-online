@@ -601,7 +601,7 @@ impl Store {
                      OPTIONAL MATCH (c)-[r {open: true}]-()
                      WITH c, count(r) AS degree
                      RETURN c.key AS key, coalesce(c.name, '') AS name, [l IN labels(c) WHERE NOT l IN $fixed] AS labels, degree,
-                            [k IN keys(c) WHERE NOT k IN ['run', 'actor', 'key', 'name', 'created_t', 'updated_t', 'thought', 'narrative', 'values', 'goals', 'traits', 'mood', 'identity_version'] | k + ': ' + toString(c[k])] AS props
+                            [k IN keys(c) WHERE NOT k IN ['run', 'actor', 'key', 'name', 'created_t', 'updated_t', 'thought', 'narrative', 'values', 'goals', 'traits', 'mood', 'identity_version', 'notice'] | k + ': ' + toString(c[k])] AS props
                      ORDER BY degree DESC LIMIT $limit",
                     actor,
                 )
@@ -730,6 +730,10 @@ pub struct Projection {
     pub feelings: Vec<(u32, f64, f64, String, String)>,
     pub judgments: Vec<(String, f64, String)>,
     pub places: Vec<(String, f64, f64)>,
+    /// Attention cues (docs/ATTENTION.md): `(the concept they serve, the cue, the thought that
+    /// wrote it)`, newest first, for stances still held, projects still pursued and goal
+    /// concepts (which the caller keeps only while the persona still has that goal).
+    pub cues: Vec<(String, Value, String)>,
 }
 
 impl Store {
@@ -788,6 +792,35 @@ impl Store {
         while let Some(r) = rows.next().await? {
             out.places.push((r.get("name").unwrap_or_default(), r.get("x").unwrap_or(0.0), r.get("y").unwrap_or(0.0)));
         }
+        // Cues live on the concept they serve: a stance while it is held (projected above), a
+        // project while it is pursued, a goal concept (kept by the caller while the persona has it).
+        let mut rows = self
+            .g
+            .execute(self.q(
+                "MATCH (c:Concept {run: $run, actor: $actor}) WHERE c.notice IS NOT NULL AND c.notice <> '[]' AND NOT c:Merged
+                 OPTIONAL MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[p:PURSUES {open: true}]->(c)
+                 RETURN c.key AS key, c.notice AS notice, coalesce(c.thought, '') AS thought, p IS NOT NULL AS pursued
+                 ORDER BY coalesce(c.updated_t, 0) DESC LIMIT 32",
+                actor,
+            ))
+            .await?;
+        while let Some(r) = rows.next().await? {
+            let key: String = r.get("key").unwrap_or_default();
+            let held = match key.split_once(':') {
+                Some(("stance", k)) => out.judgments.iter().any(|j| j.0 == k),
+                Some(("project", _)) => r.get::<bool>("pursued").unwrap_or(false),
+                Some(("goal", _)) => true,
+                _ => false,
+            };
+            let notice: String = r.get("notice").unwrap_or_default();
+            let thought: String = r.get("thought").unwrap_or_default();
+            if held {
+                for c in serde_json::from_str::<Vec<Value>>(&notice).unwrap_or_default() {
+                    out.cues.push((key.clone(), c, thought.clone()));
+                }
+            }
+        }
+        out.cues.truncate(CUES);
         Ok(out)
     }
 }
@@ -1440,6 +1473,78 @@ fn cited(entry: &Value, known: &[u64]) -> Vec<u64> {
     out
 }
 
+/// Attention cues a character keeps (the authority's `CUES_PER_ACTOR`).
+pub const CUES: usize = 8;
+
+/// The concept an attention cue serves, from a reply's `for`: `project:<key>`, `goal:<words>`,
+/// or a stance key (`stance:` optional).
+pub fn cue_for(v: &Value) -> Option<String> {
+    let f = v.as_str()?.trim();
+    let lower = f.to_lowercase();
+    for kind in ["project:", "goal:"] {
+        if let Some(rest) = lower.strip_prefix(kind) {
+            return key(&rest.trim().chars().take(80).collect::<String>()).map(|k| format!("{kind}{}", k.replace(':', "_")));
+        }
+    }
+    key(lower.trim_start_matches("stance:")).map(|k| format!("stance:{}", k.replace(':', "_")))
+}
+
+/// One attention cue of a reply, in the stored form (docs/ATTENTION.md): what to watch for, by
+/// type, and why in the mind's own words. `None` when it names nothing to watch for.
+pub fn cue_entry(v: &Value) -> Option<Value> {
+    let text = |k: &str, n: usize| v[k].as_str().map(|s| s.trim().chars().take(n).collect::<String>()).filter(|s| !s.is_empty());
+    let mut o = serde_json::Map::new();
+    match &v["who"] {
+        Value::Number(n) => {
+            o.insert("who_id".into(), json!(n.as_u64().filter(|n| *n > 0 && *n <= u32::MAX as u64)?));
+        }
+        Value::String(w) if !w.trim().is_empty() => match reply_id(&json!(w.trim())) {
+            Some(id) => {
+                o.insert("who_id".into(), json!(id));
+            }
+            None => {
+                o.insert("who".into(), json!(w.trim().to_lowercase().chars().take(40).collect::<String>()));
+            }
+        },
+        _ => {}
+    }
+    for (k, n) in [("doing", 40), ("phase", 40), ("thing", 40), ("at", 48)] {
+        if let Some(t) = text(k, n) {
+            o.insert(k.into(), json!(t));
+        }
+    }
+    for k in ["within", "near_me"] {
+        if let Some(x) = v[k].as_f64().filter(|x| *x > 0.0) {
+            o.insert(k.into(), json!(x.min(256.0)));
+        }
+    }
+    if o.is_empty() {
+        return None;
+    }
+    if let Some(w) = text("why", 160) {
+        o.insert("why".into(), json!(w));
+    }
+    Some(Value::Object(o))
+}
+
+/// A reply without its attention cues unless `keep` (the `cues_on` law: with it off, cues a
+/// reply names anyway are not kept).
+pub fn without_notice(v: &Value, keep: bool) -> Value {
+    let mut v = v.clone();
+    if !keep {
+        if let Some(o) = v.as_object_mut() {
+            o.remove("notice");
+        }
+    }
+    v
+}
+
+/// Whether a cue's goal key names one of the persona's goals (its key): the same words, or one
+/// the start of the other (a model shortens a long goal).
+pub fn same_goal(goal: &str, cue: &str) -> bool {
+    goal == cue || (cue.len() >= 12 && goal.starts_with(cue)) || (goal.len() >= 12 && cue.starts_with(goal))
+}
+
 /// Convenience arrays a reply may carry (`relations`, `judgments`, `places`) become ordinary
 /// mind edits: FEELS edges, JUDGES edges to `stance:` concepts and `place:` concepts. A relation
 /// or stance cites the experiences it names in its own `because` (those among `known`), not
@@ -1463,6 +1568,27 @@ pub fn sugar_into(v: &Value, patch: &mut Patch, known: &[u64]) {
         let k = k.replace(':', "_");
         patch.nodes.push(NodeOp { key: format!("stance:{k}"), labels: vec!["Stance".into()], name: Some(k.clone()), props: Default::default() });
         patch.edges.push(EdgeOp { from: "self".into(), rel: "JUDGES".into(), to: format!("stance:{k}"), confidence: 1.0, because: cited(&j, known), props, firsthand: false, sources: Vec::new() });
+    }
+    // Attention cues (`notice`, docs/ATTENTION.md) are kept on the concept each serves, as its
+    // `notice` property: the cues a reply names for a concept replace that concept's, and one
+    // naming only what it serves clears them. They live, merge and fade with that concept.
+    let mut notice: Vec<(String, Vec<Value>)> = Vec::new();
+    for c in v["notice"].as_array().cloned().unwrap_or_default().into_iter().take(CUES) {
+        let Some(f) = cue_for(&c["for"]) else { continue };
+        let entry = cue_entry(&c);
+        match notice.iter_mut().find(|n| n.0 == f) {
+            Some(n) => n.1.extend(entry),
+            None => notice.push((f, entry.into_iter().collect())),
+        }
+    }
+    for (f, list) in notice {
+        let mut props = serde_json::Map::new();
+        props.insert("notice".into(), json!(Value::Array(list).to_string()));
+        let (labels, name) = match f.split_once(':') {
+            Some(("goal", k)) => (vec!["Goal".to_string()], Some(k.replace('_', " "))),
+            _ => (Vec::new(), None),
+        };
+        patch.nodes.push(NodeOp { key: f, labels, name, props });
     }
     for p in v["places"].as_array().cloned().unwrap_or_default().into_iter().take(8) {
         let (Some(name), Some(x), Some(y)) = (p["name"].as_str(), p["x"].as_f64(), p["y"].as_f64()) else { continue };
@@ -1826,6 +1952,30 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
 
 #[cfg(test)]
 mod tests {
+    /// Attention cues (docs/ATTENTION.md): a reply's `notice` entries are kept on the concept
+    /// each serves, typed; one naming only what it serves clears that concept's cues.
+    #[test]
+    fn notice_is_kept_on_what_it_serves() {
+        assert_eq!(cue_for(&json!("stance:Wolves_Take_Lambs")).as_deref(), Some("stance:wolves_take_lambs"));
+        assert_eq!(cue_for(&json!("wolves take lambs")).as_deref(), Some("stance:wolves_take_lambs"));
+        assert_eq!(cue_for(&json!("project:mend roof")).as_deref(), Some("project:mend_roof"));
+        assert_eq!(cue_for(&json!("Goal: Pay back what I owe")).as_deref(), Some("goal:pay_back_what_i_owe"));
+        assert_eq!(cue_for(&json!(null)), None);
+        assert_eq!(cue_entry(&json!({"for": "x", "who": "#12", "doing": "strike", "why": " mine "})), Some(json!({"who_id": 12, "doing": "strike", "why": "mine"})));
+        assert_eq!(cue_entry(&json!({"for": "x", "who": "Unknown", "at": "the yard", "within": 15})), Some(json!({"who": "unknown", "at": "the yard", "within": 15.0})));
+        assert_eq!(cue_entry(&json!({"for": "x", "why": "only words"})), None, "nothing to watch for");
+        let mut p = Patch::default();
+        sugar_into(&json!({"notice": [{"for": "a", "who": "wolf"}, {"for": "a", "thing": "storage"}, {"for": "goal:keep warm", "thing": "hearth"}, {"for": "b"}]}), &mut p, &[]);
+        let node = |k: &str| p.nodes.iter().find(|n| n.key == k).unwrap().clone();
+        let a: Vec<Value> = serde_json::from_str(node("stance:a").props["notice"].as_str().unwrap()).unwrap();
+        assert_eq!(a, vec![json!({"who": "wolf"}), json!({"thing": "storage"})]);
+        assert!(node("stance:a").labels.is_empty(), "a stance's labels are left as they are");
+        assert_eq!(node("goal:keep_warm").labels, vec!["Goal".to_string()]);
+        assert_eq!(node("stance:b").props["notice"], json!("[]"), "naming only what it serves clears it");
+        assert!(without_notice(&json!({"notice": [1], "judgments": []}), false).get("notice").is_none());
+        assert!(same_goal("pay_back_what_i_owe_to_my_neighbour", "pay_back_what_i_owe") && !same_goal("keep_warm", "keep"));
+    }
+
     #[test]
     fn failures_at_remembered_things_are_read_from_feedback() {
         use super::failed_at_thing;
@@ -2164,6 +2314,40 @@ mod tests {
     /// deeds: what cues one (its id, "a stranger" in the words) never brings back the other's
     /// deeds, a memory is shown with who it involves, and when one is named its node takes
     /// the name.
+    #[tokio::test]
+    #[ignore]
+    async fn a_far_figure_joins_the_person() {
+        // far-handle: what a mind remembered of a figure too far away to make out (person:<handle>)
+        // becomes the person's once made out (the made-out merge), and the handle's node is gone.
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-farhandle-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Lark").await.unwrap();
+        let now = crate::llm::now_ms();
+        let h = living_rules::script::FAR_HANDLE_BASE + 7;
+        let v = json!({
+            "nodes": [{"key": format!("person:{h}"), "labels": ["Person"], "name": format!("{FAR_NAME_KEPT} #{h}")}, {"key": "person:15", "labels": ["Person"], "name": "Thessaly Marl"}],
+            "edges": [{"from": format!("person:{h}"), "rel": "WALKS", "to": "place:the_strand", "confidence": 0.8, "because": [20]}],
+            "remember": [{"exp": 20, "gist": "Someone too far away to make out walked the strand at dawn."}]
+        });
+        let (p, _) = patch_from(&v, &[20], &|_| Some((now - 1000, 0.8, vec![format!("person:{h}")])));
+        s.apply(1, &p, "t1", now).await.unwrap();
+        let join = Patch { merges: vec![(format!("person:{h}"), "person:15".into())], ..Default::default() };
+        s.apply(1, &join, "t2", now + 1000).await.unwrap();
+        let mut cues = Cues::default();
+        cues.key("person:15", 1.0);
+        let r = s.recall(1, &cues.bounded(), 12, 3).await.unwrap();
+        let facts: Vec<String> = r.facts.iter().map(|f| render(f, &|_| String::new())).collect();
+        assert!(facts.iter().any(|f| f.contains("person:15") && f.contains("WALKS")), "the figure's deed is the person's: {facts:?}");
+        let mut q = s.g.execute(query("MATCH (c:Concept {run: $run, actor: 1}) WHERE c.key STARTS WITH 'person:' RETURN c.key AS key, c.name AS name, c:Merged AS merged ORDER BY key").param("run", run.clone())).await.unwrap();
+        let mut people = Vec::new();
+        while let Some(row) = q.next().await.unwrap() {
+            people.push(format!("{}={} merged={}", row.get::<String>("key").unwrap(), row.get::<String>("name").unwrap_or_default(), row.get::<bool>("merged").unwrap_or(false)));
+        }
+        assert_eq!(people, vec![format!("person:{h}={FAR_NAME_KEPT} #{h} merged=true"), "person:15=Thessaly Marl merged=false".to_string()], "{people:?}");
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
     #[tokio::test]
     #[ignore]
     async fn strangers_stay_apart() {

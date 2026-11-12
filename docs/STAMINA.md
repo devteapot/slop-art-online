@@ -1,6 +1,6 @@
 # Breath, tiredness and focus (stamina-1)
 
-Built 2026-11-11 on the Spark (branch `stamina-1`) from the approved [proposal](STAMINA_PROPOSAL.md) and the general coordinator's decisions. This note says what the rules and the authority do now, where the numbers live, the data path, and where the build departs from the proposal. Evidence is in the branch's verification records (`.agents/skills/verify-*/references/validation.md`).
+Built 2026-11-11 on the Spark (branch `stamina-1`) from the approved [proposal](STAMINA_PROPOSAL.md) and the general coordinator's decisions. This note says what the rules and the authority do now, where the numbers live, the data path, and where the build departs from the proposal. Evidence is in the branch's verification records (`.agents/skills/verify-*/references/validation/history.md`).
 
 ## What changed
 
@@ -127,6 +127,17 @@ How the fights ended:
 | Walking | 4.7 s (2.1–8.0), 4/4 | 0.9 s (0.3–1.5), 4/4 | 1.35 s (0.6–1.9), 4/4 |
 
 The arithmetic above gives 2.2 s at 1.65 and 6.2 s at 1.85. The measured chases are slower: a pursuer slows within its slow radius of the target, and genes spread the speeds.
+
+**The bite, after `fix-pursuit-speed` (2026-11-12).** Closing to 3.2 m was not the bite. The approach to strike slowed within its slow radius (1.2 m) of its keep (1.15 m, the attack's reach 1.4 less 0.25) down to the target's own speed, so a wolf held about 1.6–1.8 m behind a walker it had caught up with and never came within the 1.45 m at which a blow starts. It bit only when the prey slowed to stop at the end of its walk. Now a pursuit, for every controller, keeps at least the speed its target draws away at, plus 0.3 m/s (`motion.rs` `toward`). `scenes.py chase` with a fresh wolf each chase (unhurt, full breath) and prey going 55 m straight away; the first blow's start, from the pursuer's `skill_use` (Spark, trial service, default seed, `run_share` 1.65):
+
+| Pursuer against | Before: first blow | After: first blow |
+|---|---|---|
+| Wolf, walker | 2 of 9 within 55 m, 19.0–19.4 s, both as the prey slowed at its end | 11 of 11, median 1.9 s (1.3–2.6) |
+| Wolf, runner (1.65, while breath lasts, then walking) | 3 of 5, median 13.4 s (13.2–14.2), all as the prey slowed at its end | 5 of 5, median 4.4 s (4.1–4.6) |
+| Person (`attack`, `run: true`), walker | 1 of 5, 24.2 s, at the end | 5 of 5, median 2.9 s (2.7–3.6) |
+| Person (`attack`, `run: true`), runner | 2 of 5, 14.1 and 14.4 s, at the end | 2 of 5, 7.2 and 10.8 s; 3 never caught, slower than their runner |
+
+The time to close to 3.2 m did not change: a wolf there in 0.2–1.3 s, a walker or a runner alike, before and after. So a wolf that has caught up with a walker now bites within about 2 s instead of trailing it, and a runner within about 4.5 s. A person who attacks catches a walker in about 3 s, while a runner with breath stays ahead of an equal runner. Fight-length tuning (`scenes.py fights`) was measured with the old approach; fights from a standing start are not affected, chases are.
 
 - **At 1.65.** A running person lasts about 5 s from a 5 m start, five times longer than a walker (0.9 s) and close to the proposal's 6 s. The coordinator kept the wolf at 5.1 m/s: no one outruns a wolf, even on a road. So no wolf change is proposed.
 - **Pairing.** `wolf_run` 1.35 at 1.65 was also measured: 2 of 4 caught, 8.3 s median. It is there if the owner wants it.

@@ -5,7 +5,9 @@
 # bones at rest; the type's head (skin, eyes, lines, skin under the jaw) with the two expressions
 # the game drives; its neck and hands; the far head, neck and hands as the FarSkin mesh on the
 # same skeleton; the designed face normals and shadow map (face_normals.py) and the outline
-# normals (outline_normals.py). It holds no hair, no clothes and no clips: clips live once in
+# normals (outline_normals.py). Its far head's picture and its lip layer are tiles of two pages
+# every type shares (lookdev/pages/types-far.png, types-tint.png; share.py types). It holds no
+# hair, no clothes and no clips: clips live once in
 # lookdev/anim/own-clips.glb (share.py clips), and a person is this file with its identity bones
 # moved (compose.py shows the rule).
 # Usage: living/tools/blender/gen_types.sh [TYPE ...]     (default: every type)
@@ -39,3 +41,8 @@ one() {
 export -f one
 printf '%s\n' "${types[@]}" | xargs -P "${JOBS:-6}" -I{} bash -c 'one "$@"' _ {} "$out" "$blender"
 rm -f "$out/strands.png"
+# The far heads' pictures and the lip layers go on two pages every type shares (share.py types),
+# beside the types' folder; a type built again goes back into its own tile.
+files=()
+for t in "${types[@]}"; do files+=("$out/$t.glb"); done
+python3 living/tools/characters/share.py types --dir "$(dirname "$out")/pages" "${files[@]}"

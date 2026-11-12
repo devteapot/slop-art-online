@@ -1369,13 +1369,24 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     # The locks.
     hs = dict(spec["hair"], colour=look["hair_natural"], tip=look["hair_natural_tip"], silver=look["hair_silver"], grey=look["hair_grey"], seed=seed)
     hd = lambda z: (z - HEAD.z) / HEAD_SCALE
-    collar = dict(coat=0.090, smock=0.068).get(spec["coat"], 0.064)
-    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(-0.018 - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if spec["coat"] else 0.014)),
-                half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE)
+    # What long hair lies on below the head: the garment's collar and back, measured on the
+    # pieces themselves at the standard build (their radius about the neck's axis and their depth
+    # behind the body's, by height, plus 4 mm). A person's own hair is combed over what they wear;
+    # a shared style's figure wears a smock, or a coat for the style's `.collar` file.
+    wears = spec["coat"]  # a shared style's figure wears a smock, or a coat for its `.collar` file
+    collar = dict(coat=0.090, smock=0.068).get(wears, 0.064)
+    cone = dict(coat=((1.47, 1.50, 1.54, 1.570), (0.104, 0.106, 0.118, 0.124)), smock=((1.47, 1.50, 1.530), (0.094, 0.096, 0.096))).get(wears, ((1.47, 1.50, 1.565), (0.081, 0.081, 0.079)))
+    back = ((0.95, 1.10, 1.20, 1.30, 1.35, 1.40, 1.44, 1.47, 1.50, 1.53), (0.123, 0.110, 0.110, 0.120, 0.125, 0.126, 0.119, 0.115, 0.103, 0.085))
+    thick = dict(coat=0.015, smock=0.014).get(wears, 0.0)
+    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(-0.018 - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
+                half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE,
+                collar=(np.array([hd(z) for z in cone[0]]), np.array(cone[1]) / HEAD_SCALE), back=(np.array([hd(z) for z in back[0]]), (np.array(back[1]) + thick) * GIRTH / HEAD_SCALE))
     h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body, detail=0.4 if FAR else 1.0)
     base = len(verts)
     # The far model's hair follows the bones the full model's hair added, when both are built.
     names = add_spring_bones(arm, h.chains) if bones is None else {i: bones.get(i) for i, c in enumerate(h.chains) if bones.get(i)}
+    if bones is None:
+        back_spheres(h, back, thick, names)
     for p_, c_, uv_, ch, al in zip(h.v, h.col, h.uv, h.chain, h.along):
         verts.append(hw(p_))
         cols.append(tuple(c_))
@@ -1384,6 +1395,10 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     lock_faces = [tuple(base + i for i in f) for f in h.f]
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
     orient_islands(ob, skip=len(faces))
+    # How soon each vertex's lock goes grey (`_GREY`, person_params.grey_mask): the client mixes a
+    # shared style's tint toward the person's silver by it. The scalp's cap is a middling lock.
+    mask = ob.data.attributes.new("_GREY", "FLOAT", "POINT")
+    mask.data.foreach_set("value", np.concatenate([np.full(base, person_params.grey_mask(0.5)), np.asarray(h.grey, float)]).astype(np.float32))
     # Shading normals: the cap's are the head's, the locks' their own (hair.py).
     normals = [tuple(head_normal(np.array(p_)[None, :])[0]) for p_ in cp] + [None] * len(extra)
     for i, k in extra.items():
@@ -1459,6 +1474,55 @@ def orient_islands(ob, skip=0):
             bmesh.ops.reverse_faces(bm, faces=island)
     bm.to_mesh(me)
     bm.free()
+
+
+BACK_SPHERES = []  # (bone, centre, radius): the back that hair lying on it must not sink into, for the file's spring block
+HIT = 0.002  # a hair joint's own radius against the spheres: less than the hair's own distance off the cloth it was combed over
+
+
+BACK_ROOTS = set()  # the first bones of the chains that lie on the back
+OFF_CLOTH = 0.007  # how far behind the cloth the spheres' backs stand: a joint is the hair's core, and held at the cloth itself the sheet round it is half in the cloth
+
+
+def back_spheres(h, back, thick, names):
+    """Spheres on the chest's bones whose backs are the garment's back, for hair that lies on
+    it (`Hair.hang_chains`). Combed close to the back, such hair is a few millimetres off the
+    cloth at rest; it hangs from the head, so when the head tips or the chest leans the hair
+    would pass into the back. The game holds each hair joint out of these spheres. Each is
+    made no larger than leaves every joint clear of it at rest, so they do not move the hair
+    as it was combed."""
+    BACK_SPHERES.clear()
+    BACK_ROOTS.clear()
+    pts = []
+    for ci in sorted(h.hang_chains):
+        js = [np.array(hw(p)) for p in (h.chains[ci].get("joints") or [])]
+        # Only the chains behind the body: one beside the neck hangs in front of the back's
+        # plane, inside any sphere large enough to be the back, and keeps the spheres it had.
+        if len(js) >= 2 and names.get(ci) and float(np.mean([p[1] for p in js])) < -0.06:
+            BACK_ROOTS.add(names[ci][0])
+            pts += js + [js[-1] + (js[-1] - js[-2]) / max(np.linalg.norm(js[-1] - js[-2]), 1e-9) * 0.07]  # a leaf's tail, as the game places it
+    if not pts:
+        return
+    pts = np.array(pts)
+    half_w, R = 0.182 * GIRTH + 0.035, 0.25
+    for z in (1.50, 1.44, 1.37, 1.29, 1.21, 1.13):
+        bone = "J_Bip_C_UpperChest" if z >= 1.31 else ("J_Bip_C_Chest" if z >= 1.18 else "J_Bip_C_Spine")
+        deep = (float(np.interp(z, back[0], back[1])) + thick) * GIRTH
+        for x in (-0.11, -0.04, 0.04, 0.11):
+            # The sphere's back point is OFF_CLOTH behind the cloth. Its radius is the largest that leaves every
+            # joint clear at rest: a smaller sphere through the same point clears a joint above
+            # or beside it (at the nape, the hair is nearer than the back below is).
+            b = np.array([x, -deep * math.sqrt(1 - (x / half_w) ** 2) - OFF_CLOTH, z])
+            clear = lambda r: float(np.linalg.norm(pts - (b + np.array([0.0, r, 0.0])), axis=1).min()) - r - HIT - 0.0005
+            lo, hi = 0.0, R
+            if clear(hi) < 0:
+                for _ in range(24):
+                    mid = 0.5 * (lo + hi)
+                    lo, hi = (mid, hi) if clear(mid) >= 0 else (lo, mid)
+                hi = lo
+            if hi > 0.03:
+                BACK_SPHERES.append((bone, tuple(b + np.array([0.0, hi, 0.0])), hi))
+    print(f"PERSON hair: {len(BACK_SPHERES)} spheres on the back for {len(h.hang_chains)} chains, radius {min(s[2] for s in BACK_SPHERES):.3f} to {max(s[2] for s in BACK_SPHERES):.3f} of {R}: " + " ".join(f"{s[2]:.3f}" for s in BACK_SPHERES) if BACK_SPHERES else "PERSON hair: no back spheres")
 
 
 def add_spring_bones(arm, chains):
@@ -1944,6 +2008,37 @@ AO_FLAT = ("Face", "FarHead")  # the face shades others (the neck under the jaw)
 AO_SOFT = {"Neck": 0.7, "Hands": 0.6}
 
 
+def painted_pieces(parts, line):
+    """Give each outfit piece in a person's line the colour it is painted in this file: the mean
+    of the piece's vertex colours as built and shaded, by area, in linear light. The client
+    moves a shared piece's mean to the line's colour, so the line must carry the colour as it
+    appears. The cloth a piece is cut from is more saturated than its paint (the weave, the
+    wear and the painted shade pale and darken it), and tinted with that, a composed person's
+    clothes came out stronger than their own file's."""
+    by = {}
+    for ob in parts:
+        me = ob.data
+        attr = me.color_attributes.get("Color")
+        if attr is None or not len(me.polygons):
+            continue
+        data = np.empty(len(me.loops) * 4, np.float32)
+        attr.data.foreach_get("color", data)
+        data = data.reshape(-1, 4)[:, :3].astype(float)
+        tot, area = np.zeros(3), 0.0
+        for p in me.polygons:
+            tot += data[list(p.loop_indices)].mean(axis=0) * p.area
+            area += p.area
+        by.setdefault(ob.name.split(".")[0], []).append((tot, area))
+    outfit = line["colors"].get("outfit", {})
+    for piece in list(outfit):
+        tot, area = np.zeros(3), 0.0
+        for part in person_params.piece_parts(piece):
+            for t, a_ in by.get(part, []):
+                tot, area = tot + t, area + a_
+        if area > 0:
+            outfit[piece] = person_params.hexed([1.055 * x ** (1 / 2.4) - 0.055 if x > 0.0031308 else 12.92 * x for x in tot / area])
+
+
 def bake_shade(obs, strength=0.50, reach=0.11):
     """Darken each vertex's colour by how much of the sky its neighbours hide in the rest pose
     (under the collar and the coat's skirt, inside cuffs, between the legs, under the fringe).
@@ -2167,16 +2262,24 @@ def secondary(nodes, springs):
     # Smaller than the head, neck and shoulders themselves: the hair at rest lies on those, and
     # a sphere that reached it would push it off them.
     hc = HEAD + Vector((0, -0.010, 0.012)) * HEAD_SCALE
+    k = 0.010 - HIT  # these were sized for a joint radius of 10 mm, and reach as far with the smaller one
     colliders = [
-        {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.074 * HEAD_SCALE), sphere("J_Bip_C_Head", hc + Vector((0, 0.014, -0.070)) * HEAD_SCALE, 0.046 * HEAD_SCALE)]},
-        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.040)]},
-        {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055),
-                                                             sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055)]},
+        {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.074 * HEAD_SCALE + k), sphere("J_Bip_C_Head", hc + Vector((0, 0.014, -0.070)) * HEAD_SCALE, 0.046 * HEAD_SCALE + k)]},
+        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.040 + k)]},
+        {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH + k), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055 + k),
+                                                             sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055 + k)]},
     ]
     # Stiff enough to settle within half a second of a jump in pose (the asset view photographs
     # 0.6 s after posing), loose enough to swing in a walk.
-    groups = [{"comment": "Hair", "stiffiness": 2.0, "gravityPower": 0.10, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.5, "center": -1, "hitRadius": 0.010,
-               "bones": [nodes[chain[0]] for chain in springs], "colliderGroups": [0, 1, 2]}]
+    by_bone = {}
+    for bone, at, r in BACK_SPHERES:
+        by_bone.setdefault(bone, []).append(sphere(bone, at, r))
+    colliders += [{"node": nodes[bone], "colliders": spheres} for bone, spheres in by_bone.items() if bone in nodes]
+    group = lambda comment, chains, n: {"comment": comment, "stiffiness": 2.0, "gravityPower": 0.10, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.5, "center": -1, "hitRadius": HIT,
+                                        "bones": [nodes[chain[0]] for chain in chains], "colliderGroups": list(range(n))}
+    on_back = [c for c in springs if c[0] in BACK_ROOTS]
+    groups = [group("Hair", [c for c in springs if c[0] not in BACK_ROOTS], 3)] + ([group("HairBack", on_back, len(colliders))] if on_back else [])
+    groups = [g for g in groups if g["bones"]]
     return {"boneGroups": groups, "colliderGroups": colliders}
 
 
@@ -2289,8 +2392,11 @@ def main():
     stem = os.path.splitext(out)[0]
     # Beside the model: the person's full parameters (edit and pass back with --params) and the
     # game recipe's height and proportions.
-    with open(stem + ".params.json", "w") as f:
-        json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"], "person": spec.get("person")} if spec.get("type") else {})), f, indent=1)
+    def write_params():
+        with open(stem + ".params.json", "w") as f:
+            json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"], "person": spec.get("person")} if spec.get("type") else {})), f, indent=1)
+
+    write_params()
     g = globals()
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
     g["WHOLE_HEAD"] = a.parts in ("head", "face", "overlay")
@@ -2321,6 +2427,8 @@ def main():
                 bake_identity(parts, spec["identity"])
         if not a.no_shade:
             bake_shade(parts)
+        if not far and a.parts == "all" and spec.get("person"):
+            painted_pieces(parts, spec["person"])
         for ob in parts:
             ob.data.calc_loop_triangles()
             tris[("Far" if far and not ob.name.startswith("Far") else "") + ob.name] = len(ob.data.loop_triangles)
@@ -2328,11 +2436,13 @@ def main():
     g["FAR"] = False
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
+    write_params()  # again: the line's piece colours are now the painted ones
     bpy.ops.export_scene.gltf(
         filepath=out, export_format="GLB", export_yup=True, export_skins=True, export_animations=False, export_vertex_color="ACTIVE",
         export_all_vertex_colors=False, export_normals=True, export_materials="EXPORT", export_def_bones=False, export_leaf_bone=False,
         export_rest_position_armature=True, use_selection=False, export_morph=True, export_morph_normal=False,
         export_try_sparse_sk=False,  # Bevy's loader rejects sparse morph accessors
+        export_attributes=True,  # the hair's `_GREY`
     )
     # The far model alone hangs rigid: it lists no spring bones, so the game simulates none.
     j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})", spec.get("springs") if a.lod != "far" else None)

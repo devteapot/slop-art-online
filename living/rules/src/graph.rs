@@ -204,6 +204,26 @@ pub struct Action {
     /// breath, while it lasts (`pools(a)`). A flight runs unless this says false.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<bool>,
+    /// The distances of a movement intent (`steer::Spacing`): a band (`keep_distance`), a
+    /// circle's radius and side (`circle`, +1 left as one faces it), how near or how far
+    /// (`close_in`, `follow`, `back_off`), in metres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radius: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<f32>,
+}
+
+impl Action {
+    /// The distances a movement intent names.
+    pub fn spacing(&self) -> crate::steer::Spacing {
+        crate::steer::Spacing { min: self.min, max: self.max, radius: self.radius, side: self.side, distance: self.distance }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -305,7 +325,7 @@ pub struct CountCond {
     pub at_most: Option<u32>,
 }
 
-/// `{"doing": {"who": "person", "is": "strike", "phase": "winding up", "at_me": true, "within": 4}}`:
+/// `{"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": true, "within": 4}}`:
 /// holds while some creature in sight that fits `who` (a kind, or a kind and a relation;
 /// anyone by default) is visibly doing what `is` names (a skill's name, its label, or a kind
 /// word such as `hostile`, `melee`, `missile`, `guard`, `dash`, `gesture`, `work`), in `phase`
@@ -813,6 +833,21 @@ pub fn describe(n: &Node) -> String {
             }
             if let Some(q) = a.qty {
                 s.push_str(&format!(" x{q}"));
+            }
+            match (a.min, a.max) {
+                (Some(n), Some(f)) => s.push_str(&format!(" {n}–{f} m")),
+                (Some(n), None) => s.push_str(&format!(" at least {n} m")),
+                (None, Some(f)) => s.push_str(&format!(" within {f} m")),
+                _ => {}
+            }
+            if let Some(r) = a.radius {
+                s.push_str(&format!(" at {r} m"));
+            }
+            if let Some(side) = a.side {
+                s.push_str(if side < 0.0 { " to the right" } else { " to the left" });
+            }
+            if let Some(d) = a.distance {
+                s.push_str(&format!(" {d} m"));
             }
             if let Some(t) = &a.target {
                 s.push_str(" → ");

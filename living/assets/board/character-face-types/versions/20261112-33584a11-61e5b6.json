@@ -1,0 +1,76 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-33584a11-61e5b6",
+ "published": "2026-11-12T08:32:50+01:00",
+ "imported": "2026-11-12T08:32:50+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3: long hair falls close to the back and is held on it in motion by spheres in the file's spring block; short hair is one sheet from the whorl to the hairline; hair is shaded as one smooth shape, so the client's highlight is one hard ring and its shadow one edge; hair files carry _GREY, the order in which their locks go grey. 59 hair files, 16.9 MB.",
+ "source": {
+  "commit": "33584a114d7bf03eee3bd129c5ed4aa8f7a3ab9e",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/hair.py",
+  "generator_sha256": "d2b78a5a67bcf06361c3fa99cb5d77b9e3f149e01b3f9fd5d0d486b379d60144",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "hair-short and hair-long: every hair style on a type's head before and after, from the front, 40 degrees, the side, 140 degrees and the back and at the game camera (each screen pixel enlarged), with the reference's head from the same five sides in the last row; hair-people: four whole people before and after on a frame of the idle clip from the front, three-quarter, side and back and at the game camera, the reference at the same views in the last row; hair-close: four people close up after, the reference in the last row; hair-motion: the woman's long hair on idle and walk frames, the reference below; hair-grey: a greying man's own file, the same man composed from shared files with the mix by _GREY and his grey (compose.py standing in for the client), and composed with one tint. All under the client's own hair light: the earlier sheets' stand-in that turned hair normals to the camera is not used, so the before columns show the ring and shadow edge as the client drew them on the old files. Eyes are held open by the photo tool. The vroid member is the reference at the same views; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-33584a11-61e5b6",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "422e7c50a32dae889360352d183e3345666fddc3cb3f591949eab63023195416",
+   "shots": [
+    "hair-close",
+    "hair-grey",
+    "hair-long",
+    "hair-motion",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "f96d08dc37c6d894d03dd8c79e94c5ec6382a0d413a065ee98fa9e542c9b79fb",
+   "shots": [
+    "hair-close",
+    "hair-grey",
+    "hair-long",
+    "hair-motion",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "b1b7f5cb34491ac716644e18faae52069ec6c42d15c31ba5490b06138a0523b1",
+   "shots": [
+    "hair-close",
+    "hair-grey",
+    "hair-long",
+    "hair-motion",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

@@ -82,7 +82,7 @@ BEHAVIOUR = ("living/authority/", "living/rules/", "living/scripts/", "living/mi
              ".agents/skills/verify-llm/scripts/")
 
 # Each case: its surface skill and the world group it runs in. Known flakes are from the skills'
-# validation records (references/validation.md); they get the same one retry, never a pass.
+# validation records (each skill's references/validation/); they get the same one retry, never a pass.
 CASES = {
     "tick":         {"skill": "verify-core", "group": "core",
                      "flaky": "the pause landed after the giver's 3 s wait once: verify-core validation, rates-2"},

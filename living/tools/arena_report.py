@@ -20,7 +20,9 @@ Per instance it reports the answered share by exposure index, the first exposure
 three in a row were answered (K), the subject's responses before and after its first exposure,
 the mind's revisions and words between exposures (thoughts naming the pattern, own timings and
 outcome lines used), lines it spoke that carry an internal id (`#123`), and model calls, latency
-and estimated cost per fight. The word lists are shown with their matches; they are a reader's
+and estimated cost per fight; and, per routine install (`mind_rows.jsonl`'s `routine` rows; not
+`graphs.jsonl`, which holds only the desires wrapper), each `doing` condition that leads to a
+dodge, with its `is`, `phase`, `at_me` and `within`, the install time and the exposure index then. The word lists are shown with their matches; they are a reader's
 aid, not a classifier the mind depends on.
 """
 import argparse
@@ -61,13 +63,79 @@ def classify(o):
         return "guarded"
     if "dodged" in o:
         return "dodged"
-    if "missed" in o or "out of reach" in o or "hit nothing" in o or "struck a wall" in o:
+    # Out of reach: missed at the release, or refused at it because the target had moved away.
+    if "missed" in o or "out of reach" in o or "moved away" in o or "hit nothing" in o or "struck a wall" in o:
         return "evaded"
     if "broken off" in o:
         return "broken"
     if o.startswith("struck "):
         return "struck_other"
     return o[:30] or "pending"
+
+
+def dodges_in(node):
+    """Whether a graph (sub)tree makes a dodge: a `do` of `dodge`, short or long form."""
+    if isinstance(node, dict):
+        d = node.get("do")
+        if d == "dodge" or (isinstance(d, dict) and d.get("skill") == "dodge"):
+            return True
+        return any(dodges_in(v) for v in node.values())
+    if isinstance(node, list):
+        return any(dodges_in(v) for v in node)
+    return False
+
+
+def doing_conds(cond):
+    """The `doing` conditions in a condition (through `all`, `any`, `not`)."""
+    if isinstance(cond, dict):
+        if "doing" in cond:
+            return [cond["doing"]]
+        return [c for v in cond.values() for c in doing_conds(v)]
+    if isinstance(cond, list):
+        return [c for v in cond for c in doing_conds(v)]
+    return []
+
+
+def doing_to_dodge(graph):
+    """Each `doing` condition of an `if` whose `then` makes a dodge, anywhere in the graph."""
+    out = []
+    def walk(n):
+        if isinstance(n, dict):
+            i = n.get("if")
+            if isinstance(i, dict) and dodges_in(i.get("then")):
+                out.extend(doing_conds(i.get("cond")))
+            for v in n.values():
+                walk(v)
+        elif isinstance(n, list):
+            for v in n:
+                walk(v)
+    walk(graph)
+    return out
+
+
+def dodge_conditions(d, k_at, t0_ms):
+    """The installed routines (`mind_rows.jsonl`, `routine` rows; `graphs.jsonl` holds only the
+    desires wrapper) whose `doing` conditions lead to a dodge: per install, its time, the
+    exposure index then, the routine and each condition's `is`, `phase`, `at_me`, `within`.
+    Shows whether a mind's conditions move (from "winding up" toward "about to release", say)."""
+    out, prev = [], {}
+    for x in rows(d / "mind_rows.jsonl"):
+        if x.get("table") != "routine":
+            continue
+        for r in x.get("rows") or []:
+            g = r.get("graph") or ""
+            if prev.get(r.get("id")) == g:
+                continue
+            prev[r.get("id")] = g
+            try:
+                conds = doing_to_dodge(json.loads(g))
+            except (ValueError, TypeError):
+                continue
+            if conds:
+                ms = t0_ms + x["t"] * 1000 if t0_ms else None
+                out.append({"t": x["t"], "k": k_at(ms) if ms else None, "routine": r.get("name"),
+                            "conds": [{k: c.get(k) for k in ("is", "phase", "at_me", "within") if c.get(k) is not None} for c in conds]})
+    return out
 
 
 def k_of(answered, run=3):
@@ -161,6 +229,7 @@ def instance(d: Path):
         "spoken": len(spoken), "spoken_with_id": said_ids,
         "calls": len(calls), "latency_s_p50": round(statistics.median(lat), 1) if lat else None, "latency_s_max": round(max(lat), 1) if lat else None,
         "cost_usd": round(cost, 4),
+        "dodge_conditions": dodge_conditions(d, k_at, t0_ms),
     }
 
 
@@ -177,6 +246,8 @@ def main():
         print(f"{r['run']}: survived {r['survived']} hp_min {r['hp_min']} exposures {r['exposures']} answered {r['answered']} (first3 {r['answered_first3']}, after {r['answered_after3']}) K {r['K']} "
               f"delib {r['deliberations_in_fight']} revs {r['revision_ks']} noticed {len(r['noticed'])} timing {r['timing_words_in_replies'][:6]} own_lines {r['own_outcome_lines']} "
               f"ret_fire {r['return_fire']}/{r['return_fire_hits']} closing {r['closing_within_6m']} ids {len(r['spoken_with_id'])}/{r['spoken']} calls {r['calls']} lat {r['latency_s_p50']} ${r['cost_usd']}")
+        for c in r["dodge_conditions"]:
+            print(f"  doing -> dodge at {c['t']:.0f} s (exposure {c['k']}), {c['routine']}: " + "; ".join(", ".join(f"{k} {v}" for k, v in x.items()) for x in c["conds"]))
 
 
 if __name__ == "__main__":

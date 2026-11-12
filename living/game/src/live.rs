@@ -1145,6 +1145,22 @@ pub struct Script {
     /// `pointat:X,Y[:H]`: keep the cursor on a point of the world (sim m, H m above the ground).
     pointing_at: Option<(Vec2, f32)>,
     started: Option<u32>,
+    /// The process that launched this scripted client (its parent at start, unix), and when it
+    /// was last looked at (s): a script nobody drives any more ends itself.
+    parent: Option<u32>,
+    parent_check: f32,
+}
+
+/// This process's parent (unix; none elsewhere).
+fn parent_pid() -> Option<u32> {
+    #[cfg(unix)]
+    {
+        Some(std::os::unix::process::parent_id())
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
 }
 
 impl Script {
@@ -1152,7 +1168,7 @@ impl Script {
         let dir = std::env::var("LIVING_GAME_LIVE").ok().filter(|d| !d.is_empty())?;
         std::fs::create_dir_all(&dir).ok()?;
         let plan = std::env::var("LIVING_GAME_LIVE_PLAN").unwrap_or_else(|_| "ready;wait:3;shot:join;walk:0:6;shot:street;say:Good morning!;wait:1;shot:say;wait:20;shot:later;quit".into());
-        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, frames: 0, held: 0.0, pts: None, pointing: None, pointing_at: None, started: None })
+        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, frames: 0, held: 0.0, pts: None, pointing: None, pointing_at: None, started: None, parent: parent_pid(), parent_check: 0.0 })
     }
 }
 
@@ -1188,6 +1204,19 @@ fn script(
         None => v.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))),
     };
     let dt = time.delta_secs();
+    // The driver that launched me is gone (a crashed or killed drive.py: I would wait on its
+    // `sync:` files for ever): quit (verify-ui drive-reap-1).
+    s.parent_check += dt;
+    if s.parent_check >= 1.0 {
+        s.parent_check = 0.0;
+        if let (Some(was), Some(now)) = (s.parent, parent_pid()) {
+            if was != now {
+                warn!("live script: my launcher (pid {was}) is gone (parent now {now}); quitting");
+                exit.write(AppExit::error());
+                return;
+            }
+        }
+    }
     if let Some((id, lift)) = s.pointing {
         let at = hud.actors.iter().find(|a| a.id == id).and_then(|a| {
             let ground = island.as_ref().map_or(a.head - Vec3::Y * (2.2 - lift), |i| Vec3::new(a.head.x, i.height(a.head.x, a.head.z) + lift, a.head.z));

@@ -617,7 +617,9 @@ pub struct Rig {
     bones: HashMap<&'static str, Entity>,
     /// Which way each arm points at rest (+1 or −1 along X), to lower it out of the T-pose.
     arm_side: [f32; 2],
-    face: Option<(Entity, usize, usize)>,
+    /// Every mesh that carries the face's blink and open mouth: the face itself, and a composed
+    /// person's overlays (a beard, stubble, lines), which must open and shut with it.
+    faces: Vec<(Entity, usize, usize)>,
     seed: f32,
     /// The file carries animation clips: the body plays them (`clips`), and only the face is
     /// moved here.
@@ -630,14 +632,24 @@ const BONES: [&str; 13] = [
     "J_Bip_L_UpperLeg", "J_Bip_R_UpperLeg", "J_Bip_L_LowerLeg", "J_Bip_R_LowerLeg",
 ];
 
+/// On a mesh a composed person's style file brought with the face's two expressions (an
+/// overlay): their indices among its morph targets, read from its own file
+/// (`characters::compose`), since [`rig`] would look for them in the person's type file.
+#[derive(Component, Clone, Copy)]
+pub struct FaceMorphs {
+    pub blink: usize,
+    pub mouth: usize,
+}
+
 /// Find the rig of each fitted VRoid model.
+#[allow(clippy::type_complexity)]
 pub fn rig(
     mut commands: Commands,
     models: Query<(Entity, &Model), (With<Fitted>, Without<Rig>)>,
     children: Query<&Children>,
     names: Query<&Name>,
     transforms: Query<&Transform>,
-    morphs: Query<&MorphWeights>,
+    morphs: Query<(&MorphWeights, Option<&FaceMorphs>)>,
     meshes: Res<Assets<Mesh>>,
 ) {
     for (e, model) in &models {
@@ -645,14 +657,16 @@ pub fn rig(
             continue;
         }
         let mut bones = HashMap::new();
-        let mut face = None;
+        let mut faces = Vec::new();
         for d in children.iter_descendants(e) {
             if let Ok(n) = names.get(d) {
                 if let Some(b) = BONES.iter().find(|b| n.as_str() == **b) {
                     bones.insert(*b, d);
                 }
             }
-            if let Ok(w) = morphs.get(d) {
+            if let Ok((_, Some(f))) = morphs.get(d) {
+                faces.push((d, f.blink, f.mouth));
+            } else if let Ok((w, None)) = morphs.get(d) {
                 // Bevy reads target names from mesh extras; VRoid stores them on the primitive, so
                 // fall back to reading the file's glTF JSON.
                 let node = names.get(d).map(|n| n.as_str().to_string()).unwrap_or_default();
@@ -665,7 +679,7 @@ pub fn rig(
                 if let Some(t) = targets {
                     let find = |suffix: &str| t.iter().position(|n| n.ends_with(suffix));
                     if let (Some(blink), Some(mouth)) = (find("Fcl_EYE_Close"), find("Fcl_MTH_A")) {
-                        face = Some((d, blink, mouth));
+                        faces.push((d, blink, mouth));
                     }
                 }
             }
@@ -675,21 +689,30 @@ pub fn rig(
         }
         let side = |lower: &str| bones.get(lower).and_then(|b| transforms.get(*b).ok()).map_or(1.0, |t| t.translation.x.signum());
         let arm_side = [side("J_Bip_L_LowerArm"), side("J_Bip_R_LowerArm")];
-        info!("look-dev: rigged a VRoid model ({} bones, face {})", bones.len(), if face.is_some() { "found" } else { "missing" });
+        info!("look-dev: rigged a VRoid model ({} bones, face {}{})", bones.len(), if faces.is_empty() { "missing" } else { "found" }, if faces.len() > 1 { format!(", with {} more meshes on its expressions", faces.len() - 1) } else { String::new() });
         let clips = crate::anim::has_clips(&model.file);
-        commands.entity(e).insert(Rig { bones, arm_side, face, seed: (e.index_u32() % 97) as f32 * 0.37, clips });
+        commands.entity(e).insert(Rig { bones, arm_side, faces, seed: (e.index_u32() % 97) as f32 * 0.37, clips });
     }
 }
 
-/// A character file's figure height (file units, cached): the vertical span of its meshes'
-/// bounds at rest (glTF accessor `min`/`max` through the node transforms), the far model's
-/// (`Far*` nodes) left out. What `animate.py` measures the figure by; None without meshes.
+/// A character file's figure height (file units): the vertical span of its meshes' bounds at
+/// rest (glTF accessor `min`/`max` through the node transforms), the far model's (`Far*` nodes)
+/// left out. What `animate.py` measures the figure by; None without meshes.
 pub fn figure_height(file: &str) -> Option<f32> {
-    use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<HashMap<String, Option<f32>>>> = OnceLock::new();
+    let corners = figure_corners(file);
+    let (lo, hi) = corners.iter().fold((f32::MAX, f32::MIN), |(lo, hi), c| (lo.min(c.y), hi.max(c.y)));
+    (hi > lo).then_some(hi - lo)
+}
+
+/// The corners of each near mesh's bounds at rest in a character file (file units, cached):
+/// what [`figure_height`] spans, and what a composed person's figure is put together from
+/// (`characters::compose::figure_height`, a style file's through its type's `hair_fit`).
+pub fn figure_corners(file: &str) -> std::sync::Arc<Vec<Vec3>> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Arc<Vec<Vec3>>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
     if let Some(v) = cache.lock().unwrap().get(file) {
-        return *v;
+        return v.clone();
     }
     let v = (|| {
         let j = glb_json(file)?;
@@ -705,7 +728,7 @@ pub fn figure_height(file: &str) -> Option<f32> {
                 parent.insert(c as usize, i);
             }
         }
-        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        let mut out = Vec::new();
         for (i, n) in nodes.iter().enumerate() {
             let Some(mesh) = n["mesh"].as_u64() else { continue };
             if n["name"].as_str().is_some_and(|s| s.starts_with("Far")) {
@@ -722,15 +745,15 @@ pub fn figure_height(file: &str) -> Option<f32> {
                 let (amin, amax) = (&a["min"], &a["max"]);
                 for k in 0..8 {
                     let pick = |axis: usize| if k >> axis & 1 == 0 { f(amin, axis, 0.0) } else { f(amax, axis, 0.0) };
-                    let y = m.transform_point3(Vec3::new(pick(0), pick(1), pick(2))).y;
-                    lo = lo.min(y);
-                    hi = hi.max(y);
+                    out.push(m.transform_point3(Vec3::new(pick(0), pick(1), pick(2))));
                 }
             }
         }
-        (hi > lo).then_some(hi - lo)
-    })();
-    cache.lock().unwrap().insert(file.to_string(), v);
+        Some(out)
+    })()
+    .unwrap_or_default();
+    let v = Arc::new(v);
+    cache.lock().unwrap().insert(file.to_string(), v.clone());
     v
 }
 
@@ -781,17 +804,19 @@ fn target_names(file: &str, node: &str) -> Option<Vec<String>> {
 /// Blink every few seconds; the mouth moves while talking: look-dev's Talk act, or the line
 /// this body is speaking in a world (`mouth.rs`, `speaking`).
 fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32, speaking: Option<f32>) {
-    let Some((face, blink, mouth)) = rig.face else { return };
-    let Ok(mut w) = morphs.get_mut(face) else { return };
     let cycle = (t % 3.7) / 3.7;
     let close = if cycle > 0.96 { ((cycle - 0.96) / 0.04 * std::f32::consts::PI).sin() } else { 0.0 };
     let talk = if look.act == Act::Talk { ((t * 11.0).sin() * 0.5 + 0.5) * ((t * 2.3).sin() * 0.3 + 0.7) } else { 0.0 };
-    let ws = w.weights_mut();
-    if blink < ws.len() {
-        ws[blink] = close;
-    }
-    if mouth < ws.len() {
-        ws[mouth] = speaking.unwrap_or(talk * 0.8);
+    // The face and every layer on it take the same weights.
+    for &(face, blink, mouth) in &rig.faces {
+        let Ok(mut w) = morphs.get_mut(face) else { continue };
+        let ws = w.weights_mut();
+        if blink < ws.len() {
+            ws[blink] = close;
+        }
+        if mouth < ws.len() {
+            ws[mouth] = speaking.unwrap_or(talk * 0.8);
+        }
     }
 }
 

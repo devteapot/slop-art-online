@@ -63,6 +63,8 @@ PRIVATE = ['land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar
            'expecting', 'genome', 'practice', 'activity', 'artifact', 'perceived',
            'projected', 'reveal', 'acquaintance', 'connection', 'presence',
            'guest', 'judged', 'rhythm',
+           # Attention cues a mind wrote (docs/ATTENTION.md): read only by reducers and the owner.
+           'cue',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
            'record', 'record_party', 'record_clock',
            # A world's own law values (its seed's `rules`; docs/WORLD_RULES.md, since laws-2).
@@ -144,7 +146,9 @@ def mind_args(name, actor, marker):
         'mind_update': [actor, {'persona': {'some': {'narrative': marker, 'values': [],
                          'goals': [], 'traits': '{}', 'mood': 'probe', 'pastimes': [], 'calling': ''}},
                          'relations': [], 'beliefs': {'none': []}, 'judgments': [],
-                         'places': [], 'thought': {'some': t}, 'replace': False}],
+                         'places': [], 'thought': {'some': t}, 'replace': False,
+                         'cues': {'some': [{'for_key': 'stance:client_probe', 'why': marker, 'who_id': 0, 'who': 'wolf', 'doing': '',
+                                            'phase': '', 'thing': '', 'at': '', 'within': 0.0, 'near_me': 0.0, 'source': marker}]}}],
     }[name]
 
 
@@ -443,6 +447,12 @@ class Run:
         self.call('anonymous-http-no-token', None, 'join', ['AnonHttp'])
         self.check('reducer permission matrix', all(row['pass'] for row in self.matrix), 'reducers.json',
                    f'{len(self.matrix)} calls, {sum(not row["pass"] for row in self.matrix)} mismatches')
+        # Attention cues (docs/ATTENTION.md): `mind_update` with cues was refused above for every
+        # character not one's own; for one's own (a played character) it succeeds and keeps no cue.
+        cues = self.probe('cues-owner', ['SELECT * FROM cue'], admin_token)['final']
+        played_cues = [c for c in cues.get('cues', []) if c['actor'] in {own for _, _, own in identities}]
+        self.check('a played character keeps no attention cues (mind_update from its player)', not played_cues and 'cues' in cues,
+                   'cues-owner.json', f'{len(played_cues)} cue rows on played characters')
         effects = self.probe('reducer-effects', BASE_QUERIES + ['SELECT * FROM routine'], admin_token)['final']
         self.check('own mind and player effects', all(
             any(t['actor'] == own and t['reference'].startswith(label) for t in effects['thoughts']) and

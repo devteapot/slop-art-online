@@ -36,7 +36,7 @@ Anchors: `{"arrival": true}` (the island's `land.arrive_*`), `{"town": "<name>"}
 
 Substitutions in steps: `"$<role>"` is that character as a target (`{"id": n}`), `"$addressee"` the person the subject just spoke to (in a `said` trigger), `"$<role>_xy"` where the role stands now (`"$subject_xy+9,0"` with an offset, `"$subject_xy@pack:9"` 9 tiles from the subject toward the pack).
 
-Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of`, `within`), `hour`; with `max`, `per_addressee`, `after_min`.
+Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of` or `to`, `within`; or `beyond`: fires when all are farther apart than that, and with `for_s` only once that has held so long, the clock starting again after each firing), `hour`; with `max`, `per_addressee`, `after_min`.
 
 **Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds`, `lod`, `projects` (`LIVING_PROJECTS=1`: [projects](LIVING_CORE.md#projects-experiment-2026-11-11); the thought rows' `detail.projects` says which project each plan served) and `player-frame` (`LIVING_FRAME=player`, [below](#the-player-frame-experiment-2026-11-11)). In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
 
@@ -187,6 +187,403 @@ The script:
 - Before stage 2, the word in scenes and percepts for a known person too far to recognise ("someone", or "one of yours, too far to make out") is a decision for the general coordinator. It is not built here.
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
+
+## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
+
+Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.
+- **Arms:** C (`strangers-2b-c`), L and LS (`strangers-2b`, variants `strangers-control` and `strangers-filter`), and LS + cues (`strangers-filter-cues`: `stranger_by_name` and `cues_on` on). One replicate each, about $10.
+- **The script:** the newcomer joins at 09:30 at the arrival point and stands 5 minutes there. It then walks the Strand past the Fish Steps (`walk_route`) and stands 5 minutes at the densest group.
+- **Build:** main `d18c6c0e`, worktree `~/slop-trials2b`, branch `trials-2b`.
+
+**The target, copied unchanged from stage 2's table** (STRANGERS.md, "Target spread"; one replicate, so indicative only). It is committed before the first paid request.
+
+| measure | target (L, LS) |
+|---|---|
+| in range (≤12 m during a stand) | about 10–16 |
+| asks | 1–3, Aldous among them |
+| approaches silently | 0–2 |
+| notices inwardly | 3–8 |
+| unaware | ≤6, ≤40% |
+| tells others (all residents) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | within 5 minutes |
+| `converge_60s` / `together_4m` | ≤3 / ≤2 |
+| re-asks | — |
+| guards: false replies a min, repeated lines, `led_res` − placebo | within C's spread |
+
+### Results (batch `st2b`, 2026-11-12 08:33–08:54)
+
+**Build and switches.**
+- Main `d18c6c0e`. This record's target was committed as `e4922509` at 08:23:38, before the first paid request at 08:33.
+- far-handle on (it has no switch). `cues_on` on in LS + cues only; off in C, L and LS. `stranger_by_name` on in LS and LS + cues.
+- `fov_on` off. `LIVING_GREET=nearest` and `LIVING_PARK=concurrent` (main's defaults, unset). `LIVING_SKILL_TIMINGS` on and `force_outcomes` true, both as on main.
+- The sleeper fix is not in this build. No arrival laws.
+- 63 minds, `LIVING_CONCURRENCY` 64, the people mix (glm-5-3-flash, deepseek-v4-1-flash). All four runs stopped by duration (20 minutes).
+- Before the paid run, a fake smoke run of all four arms (`st2bs`): each started, and LS + cues accepted `cues_on`.
+
+**Cost:** $10.68 for the batch.
+
+| | C | L | LS | LS + cues |
+|---|---:|---:|---:|---:|
+| cost | $2.49 | $2.48 | $2.64 | $3.08 |
+| calls | 1,767 | 1,784 | 1,826 | 2,099 |
+
+**The stage 2 measures against the target** (one replicate, so indicative only):
+
+| measure | C | L | LS | LS + cues | target (L, LS) |
+|---|---|---|---|---|---|
+| in range (≤12 m during a stand) | 13 | 11 | 16 | 10 | about 10–16 |
+| asks | 2 (Roos Achterberg, 57 s; Cora Stannard) | 1 (Nan Fenwick) | 1 (Jory Greave) | **0** | 1–3, Aldous among them |
+| approaches silently (deliberate only, since 2b) | 1 | 2 | 0 | 0 | 0–2 |
+| notices inwardly | 1 | **0** | **0** | **0** | 3–8 |
+| unaware | 9 (69%) | 8 (73%) | **15 (94%)** | **10 (100%)** | ≤6, ≤40% |
+| passed by on their own way (not counted as approaches) | 4 | 1 | 8 | 6 | — |
+| tells others (all residents) | 1 (Oswin Greave) | 1 (Nan Fenwick) | 3 (Tobiah Dunmore, Magda Tarn, Eilidh Roon) | **0** | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | 57 s (Roos) | 692 s (Nan) | 550 s (Jory) | none | within 5 minutes |
+| `converge_60s` / `together_4m` | 2 / 1 | 1 / 0 | 1 / 1 | 1 / 0 | ≤3 / ≤2 |
+| re-asks | 0 | 2 (Nan asked three more times) | 0 | 0 | — |
+| guards: false replies a min, repeated lines, `led_res` − placebo | 0.10, 0.07, −0.03 | 0.46, 0.00, +0.22 | 0.80, 0.00, −0.26 | 1.06, 0.03, +0.28 | within C's spread |
+| deliberations per resident-hour | 18.2 | 18.5 | 19.3 | 23.1 | (ar2: 24) |
+
+- **Not in shape.** No arm reaches the inward band or the unaware band, Aldous asked in no arm, and the cue arm has no asker.
+- **Aldous.** He was in range only in LS, classed unaware. He thought 4–6 times after the join in each arm, and stranger or arrival words came up only about other things ("me with a blank arrivals line waiting on names", LS + cues).
+- **Ingrid.** The walk worked: she saw the newcomer from 1.8–2.7 m on the Strand in all four arms, each time with a first-sight line ("For the first time you see a stranger, 7 tiles east, goto → (490,779).").
+  - "In range" counts only the stands, so she is not classed.
+  - None of her 3–7 thoughts after the join mentioned the newcomer, and she told no one.
+- **The asks.**
+  - C, Roos: "Morning to you. Haven't seen your face before — Roos Achterberg. You new to Cullet, or just passing through?"
+  - L, Nan, then three re-asks ending "Speak, or walk off my rows.": "You there — standing about like a marker post. Who are you, and what's your business on the west rows?"
+  - LS, Jory: "Afternoon to you. Fine light for gathering — you'll find greens enough on this bed if you're short."
+- **Spoken `#id` lines:** 0 in every arm. None of the 2,477 lines has `#<digits>` or a bare handle number.
+- **Crowd first sights:** every person within 12 m of the newcomer after the join got a line naming them (22/22, 20/20, 29/29, 32/32). There were 1,307–1,575 first-sight lines per run, 275–316 of them naming several people.
+
+**The cue arm: every cue written** (final.json `cue` rows).
+- 128 cues from 60 residents. 19 were refused, 14 of them for "it watches for a creature and a thing at once".
+- **Aldous** wrote one, under his stance `arrivals_must_be_written`, but it watches Magda Tarn (#24): "Magda promised Ansel Tarn at my desk before dusk — the Mid Row 6 key waits on a name in the book". None of his cues watches for arrivals or strangers.
+- **Ingrid** wrote two: Magda at the catch, and Lark.
+- **Cues on strangers** (`who: unknown`): 9. Only Dolly Achterberg's names a stranger as one: "A stranger at my door who isn't the Tarn girl or the Okoro man — that's my blank line…". It did not fire.
+
+Residents with cues: 60; per resident: {'Alder Fenwick': 2, 'Aldous Quill': 1, 'Amara Okoro': 3, 'Ansel Tarn': 3, 'Anselm Faro': 2, 'Benedikt Orme': 1, 'Bram Calloway': 3, 'Chidi Okoro': 2, 'Col Roon': 2, 'Cora Stannard': 1, 'Corvin Hollin': 3, 'Davin Vane': 2, 'Dolly Achterberg': 4, 'Eamon Tarn': 3, 'Edda Hollin': 3, 'Eilidh Roon': 1, 'Elke Greave': 3, 'Fenn Brandt': 2, 'Greta Dunmore': 2, 'Gwil Stannard': 4, 'Halvard Dunmore': 2, 'Hana Sato': 1, 'Hobb Fenwick': 1, 'Ife Okoro': 2, 'Imre Sarro': 1, 'Ingrid Morrow': 2, 'Jory Greave': 1, 'Joss Tarn': 3, 'Juno Brandt': 1, 'Kenji Sato': 2, 'Kit Calloway': 2, 'Lark Morrow': 1, 'Livia Faro': 2, 'Lorcan Vane': 1, 'Lumi Pontil': 3, 'Magda Tarn': 3, 'Mirren Quill': 3, 'Nan Fenwick': 3, 'Nell Tarn': 2, 'Neve Calloway': 2, 'Ode Pontil': 2, 'Oswin Greave': 2, 'Otto Brandt': 2, 'Petra Tarn': 3, 'Pieter Achterberg': 1, 'Pim Hollin': 3, 'Posy Fenwick': 2, 'Rafe Dunlin': 2, 'Ren Sato': 1, 'Roos Achterberg': 2, 'Runa Sarro': 3, 'Sabine Quill': 3, 'Suri Greave': 1, 'Tam Roon': 2, 'Thessaly Marl': 1, 'Tilly Dunlin': 2, 'Vessa Pontil': 4, 'Wick Marl': 2, 'Ysolde Calloway': 2, 'Zeke Okoro': 3}
+
+- **Alder Fenwick** `goal:become_a_reader_like_benedikt_orme` {"who_id": "62 (Gwil Stannard)", "within": 20.0, "near_me": 10.0} — why: “Gwil's advice to ask plain is what set me moving; he may also know where Benedikt goes of an afternoon.” — fires 0
+- **Alder Fenwick** `goal:learn_to_read_the_standing_signs` {"who_id": "61 (Benedikt Orme)", "doing": "read", "thing": "sign", "within": 20.0, "near_me": 20.0} — why: “If Benedikt stands at a sign and reads it, I must be at his elbow.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Aldous Quill** `stance:arrivals_must_be_written` {"who_id": "24 (Magda Tarn)", "within": 20.0} — why: “Magda promised Ansel Tarn at my desk before dusk — the Mid Row 6 key waits on a name in the book” — fires 0
+- **Amara Okoro** `goal:learn_which_wreck_the_rarest_blue_sea-glass_came_from` {"who_id": "38 (Lark Morrow)", "doing": "gather", "within": 20.0, "near_me": 1.0} — why: “Lark saw a sail past the Combs; she may know more of that water than I do.” — fires 0
+- **Amara Okoro** `goal:walk_the_mole_with_lark_at_dusk_and_watch_for_the_sail_past_the_combs` {"who_id": "38 (Lark Morrow)", "doing": "walk", "at": "the mole", "within": 20.0} — why: “Lark at the mole tip — the dusk is coming and I've promised.” — fires 0
+- **Amara Okoro** `goal:carry_enough_kelp_up_the_wynds_to_keep_nan_fenwick_off_my_back` {"thing": "kelp_bed", "within": 20.0} — why: “If I find a bed with kelp on it, that's my load for Nan before evening.” — fires 0
+- **Ansel Tarn** `goal:be_where_nell_is` {"who_id": "28 (Nell Tarn)", "within": 20.0, "near_me": 12.0} — why: “When Nell comes near I want to run to her.” — fires 0
+- **Ansel Tarn** `goal:be_big_enough_for_lessons` {"who_id": "61 (Benedikt Orme)", "doing": "keep", "at": "Benedikt Orme's yard", "within": 15.0} — why: “Benedikt at the hall — someday I'll be big enough to sit inside.” — fires 0
+- **Ansel Tarn** `goal:get_a_ride_on_uncle_davin_s_cart` {"who_id": "26 (Eamon Tarn)", "doing": "goto", "within": 20.0, "near_me": 17.0} — why: “Uncle Eamon is heading east; if he comes near with the cart I want to ask for a ride.” — fires 0
+- **Anselm Faro** `stance:the_lamp_must_burn` {"who_id": "57 (Livia Faro)", "doing": "keep", "at": "the south lamp", "within": 20.0} — why: “If she is the daylight keeper, the question answers itself and the provision is settled between us.” — fires 0
+- **Anselm Faro** `goal:see_livia_settled_and_provided_for__whether_or_not_i_am_here` {"who_id": "57 (Livia Faro)", "doing": "count", "within": 20.0} — why: “Two lamps' burning reckoned against the catch — that arithmetic is her provision, if it holds.” — fires 0
+- **Benedikt Orme** `stance:the_graves_are_sacred` {"who_id": "12 (Otto Brandt)", "within": 20.0, "near_me": 25.0} — why: “Otto Brandt near the Lintel is the man whose question about the graves I am walking to hear” — fires 0
+- **Bram Calloway** `goal:get_fourteen_trees_from_the_hanger__by_marit_s_leave_or_otherwise.` {"who_id": "55 (Marit Sedge)", "within": 20.0} — why: “If Marit Sedge comes near, it is time to press her again for the timber.” — fires 0
+- **Bram Calloway** `goal:get_fourteen_trees_from_the_hanger__by_marit_s_leave_or_otherwise` {"who_id": "26 (Eamon Tarn)", "within": 20.0, "near_me": 30.0} — why: “If Eamon comes near, I catch him before he goes to Marit unguided.” — fires 1 on ['Eamon Tarn']
+- **Bram Calloway** `goal:get_fourteen_trees_from_the_hanger__by_marit_s_leave_or_otherwise` {"who_id": "55 (Marit Sedge)", "within": 20.0, "near_me": 30.0} — why: “If Marit comes near, I can press her for the timber myself and spare Eamon the errand.” — fires 0
+- **Chidi Okoro** `goal:collect_the_nine_drops_lorcan_vane_owes_me_for_line_without_breaking_the_ho` {"who_id": "35 (Lorcan Vane)", "at": "work", "within": 20.0} — why: “He is at the Steps at first light with Davin — a fair moment to name my drops to him, before the run thins.” — fires 1 on ['Lorcan Vane']
+- **Chidi Okoro** `goal:collect_the_nine_drops_lorcan_vane_owes_me_for_line_without_breaking_the_ho` {"who": "lorcan vane", "within": 20.0, "near_me": 20.0} — why: “Dusk is coming and the crowd is gathering at the Steps — time to name my drops” — REFUSED: "lorcan vane" is not a kind of creature — fires 0
+- **Col Roon** `stance:i_want_to_know_more_people` {"who": "unknown", "thing": "hearth", "at": "the stead by the peat barn", "within": 30.0} — why: “Whoever keeps this hearth is a neighbour I have never met; if they come near I might learn a face.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Col Roon** `stance:lark_morrow_is_worth_speaking_to` {"who_id": "38 (Lark Morrow)", "doing": "goto", "within": 20.0, "near_me": 22.0} — why: “She is close; I must not lose my nerve and walk past again.” — fires 0
+- **Cora Stannard** `goal:see_gwil_less_tired_and_less_worried_about_roofs` {"who_id": "62 (Gwil Stannard)", "doing": "gather", "within": 20.0} — why: “He is at the stone again; I mean to walk over and speak gently.” — fires 0
+- **Corvin Hollin** `stance:the_cone_should_pass_to_the_best_blower` {"who_id": "1 (Vessa Pontil)", "doing": "keep", "within": 30.0} — why: “Every hour she holds the naming back, I must be seen broadening the craft, not just blowing.” — fires 1 on ['Vessa Pontil']
+- **Corvin Hollin** `stance:vessas_test_is_a_chance` {"who_id": "1 (Vessa Pontil)", "doing": "keep", "at": "the Cone", "within": 20.0} — why: “When Vessa comes at five I want to see what she looks at first.” — fires 0
+- **Corvin Hollin** `stance:imre_is_moving_on_the_same_hour` {"who_id": "64 (Imre Sarro)", "doing": "glassmaking", "at": "the Cone", "within": 20.0} — why: “His trial and Fenn's hour share the same melt — I want to hear what Vessa says of his hands.” — fires 0
+- **Davin Vane** `goal:clear_the_rest_of_lorcan_s_marver_debt_without_him_finding_out` {"who_id": "24 (Magda Tarn)", "doing": "keep", "at": "the wrack stance", "within": 20.0} — why: “If Magda counts his catch plain, my quiet drops and his loud ones may meet on the same ledger” — fires 0
+- **Davin Vane** `goal:find_work_that_is_mine` {"who_id": "23 (Kit Calloway)", "doing": "play", "within": 20.0} — why: “The boy wants to be something — teaching him keeping makes the trade mine and his both” — fires 0
+- **Dolly Achterberg** `goal:fill_the_blank_line_in_aldous_s_book_when_the_third_stranger_comes_in_for_a` {"who": "unknown", "doing": "arriving", "at": "the Marver", "within": 24.0} — why: “A stranger at my door who isn't the Tarn girl or the Okoro man — that's my blank line, and a bowl to fill before I ask their name.” — fires 0
+- **Dolly Achterberg** `stance:a_full_house_is_a_good_house` {"who": "unknown", "doing": "wait", "within": 20.0, "near_me": 24.0} — why: “A child waiting south of the Marver — if she's hungry she'll come to my door, and I'd sooner have a bowl ready.” — fires 0
+- **Dolly Achterberg** `goal:fill_the_blank_line_in_aldous_s_book_when_the_third_stranger_comes_in_for_a` {"who_id": "39 (Kenji Sato)", "doing": "arriving", "at": "the Marver", "within": 20.0} — why: “Kenji Sato — a name that wasn't in the book this morning, walking straight to my door at dusk. Could be my blank line.” — fires 0
+- **Dolly Achterberg** `goal:fill_the_blank_line_in_aldous_s_book_when_the_third_stranger_comes_in_for_a` {"who_id": "2 (Ode Pontil)", "doing": "arriving", "at": "the Marver", "within": 20.0} — why: “Ode Pontil is another name I never heard — if he sits down for a bowl, I ask him plain where he came in from.” — fires 0
+- **Eamon Tarn** `goal:earn_a_place_on_the_second_thought_when_she_is_finished` {"who_id": "20 (Bram Calloway)", "doing": "carpentry", "at": "the dry dock", "within": 30.0} — why: “Bram at the hull is where I want to be” — fires 0
+- **Eamon Tarn** `goal:help_bram_get_the_fourteen_trees_from_marit_sedge` {"who_id": "55 (Marit Sedge)", "within": 20.0, "near_me": 25.0} — why: “If the warden is about, I want my word in before Bram goes alone” — fires 0
+- **Eamon Tarn** `stance:chidi_means_to_take_what_is_lorcans` {"who_id": "35 (Lorcan Vane)", "within": 20.0, "near_me": 20.0} — why: “If Lorcan is about at dusk, I want to be near enough to say a word” — fires 0
+- **Edda Hollin** `goal:to_keep_pim_from_cutting_his_hand_again` {"who_id": "7 (Pim Hollin)", "doing": "play", "within": 20.0, "near_me": 15.0} — why: “Pim's playing rough, not sorting — I want his hands where I can see them” — fires 0
+- **Edda Hollin** `goal:to_find_a_piece_of_cobalt_in_the_cullet_heaps` {"who_id": "43 (Tilly Dunlin)", "doing": "trading", "thing": "shard", "within": 20.0, "near_me": 40.0} — why: “Tilly trades shards and might have cobalt to show or sell” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Edda Hollin** `goal:to_walk_every_new_street_past_the_boulders` {"who": "unknown", "thing": "house_store", "at": "the stores south of the boulders", "within": 45.0} — why: “Four stores close together — if any quarter trades shards, it's this one” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Eilidh Roon** `goal:find_a_way_to_move_the_family_into_a_house_in_town.` {"who": "unknown", "doing": "living", "at": "north-east homesteads", "within": 20.0} — why: “Anyone settled in a house out here might tell me how they came by it.” — fires 0
+- **Elke Greave** `stance:greens_beds_go_early` {"who_id": "44 (Oswin Greave)", "doing": "gather", "thing": "greens_bed", "at": "the west growing ground", "within": 20.0} — why: “If the beds are stripped by mid-morning I should plant closer to home.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Elke Greave** `goal:a_little_more_glass_and_a_little_less_wind_in_the_houses_before_next_winter` {"who_id": "44 (Oswin Greave)", "within": 20.0} — why: “Oswin is set on panes for six from Tamsin — this is the glass I wanted too, if we can pay for it without a quarrel.” — fires 2 on ['Oswin Greave']
+- **Elke Greave** `goal:see_suri_brought_to_bed_safely_and_the_baby_strong` {"who_id": "10 (Mirren Quill)", "within": 20.0, "near_me": 19.0} — why: “If Mirren is going to Suri I want to know why — is something amiss with the baby?” — fires 0
+- **Fenn Brandt** `stance:the_dead_should_rest` {"who_id": "12 (Otto Brandt)", "doing": "goto", "within": 20.0} — why: “If Otto heads toward the clay pit by the graveyard, I want to know and stop him.” — fires 0
+- **Fenn Brandt** `goal:keep_otto_from_digging_in_the_graveyard` {"who_id": "12 (Otto Brandt)", "doing": "goto", "at": "home", "within": 20.0} — why: “He's bound for home, not the clay pit — relief, but I'll keep half an eye on him till he's through the door.” — fires 0
+- **Greta Dunmore** `stance:the_kelp_smoke_must_be_kept_off_the_washing` {"thing": "furnace", "at": "the Cone", "within": 30.0} — why: “A furnace burning into the evening is what greys my lines.” — fires 1 on [2305843009213694018]
+- **Greta Dunmore** `stance:children_must_be_minded` {"who_id": "15 (Thessaly Marl)", "within": 20.0, "near_me": 20.0} — why: “If Thessaly comes off the Cone I mean to hand Wick to her myself and tell her the boy did well.” — fires 0
+- **Gwil Stannard** `goal:find_a_way_to_get_more_slates_without_stripping_the_shells_bare` {"thing": "tree", "within": 20.0} — why: “Timber and battens for roofs come from the one wood; worth remembering where it stands.” — fires 0
+- **Gwil Stannard** `stance:want_a_child_with_cora` {"who_id": "63 (Cora Stannard)", "within": 20.0, "near_me": 6.0} — why: “When Cora is close and there's nobody between us, I mean to ask her.” — fires 1 on ['Cora Stannard']
+- **Gwil Stannard** `goal:get_every_roof_in_town_watertight_before_next_winter` {"who_id": "59 (Pieter Achterberg)", "doing": "building", "within": 20.0, "near_me": 20.0} — why: “Pieter's roof wants patching before the child comes.” — fires 0
+- **Gwil Stannard** `goal:build_the_room_for_the_child` {"thing": "clay", "at": "the clay pit", "within": 20.0} — why: “Clay and stone for the room — I'll want a stock of it.” — REFUSED: "clay" is not a kind of thing one sees — fires 0
+- **Halvard Dunmore** `goal:see_tobiah_settled_at_the_furnace__stoking_and_then_blowing` {"who_id": "19 (Tobiah Dunmore)", "doing": "keep", "within": 20.0, "near_me": 5.0} — why: “He's counting hours on the fire; I'll see the stoking with my own eyes while it lasts.” — fires 1 on ['Tobiah Dunmore']
+- **Halvard Dunmore** `stance:judge_the_work_aloud` {"who_id": "4 (Corvin Hollin)", "doing": "glassmaking", "within": 20.0, "near_me": 10.0} — why: “Corvin's hour at five is next — his gathers are mine to judge.” — fires 0
+- **Hana Sato** `goal:move_to_a_house_away_from_the_kiln_smoke` {"who_id": "39 (Kenji Sato)", "doing": "storing ash", "at": "home", "within": 20.0} — why: “When Kenji is home from the kilns I must press him again about the house up the row.” — fires 0
+- **Hobb Fenwick** `goal:raise_the_child_he_and_nan_agreed_on` {"who_id": "48 (Nan Fenwick)", "doing": "gather", "within": 20.0, "near_me": 9.4} — why: “She carries the child; I would have her not overdo it at the plots.” — fires 0
+- **Ife Okoro** `stance:lumi_knows_the_cone` {"who_id": "1 (Vessa Pontil)", "doing": "keep", "within": 20.0, "near_me": 14.0} — why: “If Vessa finishes her turn with Lumi, that's my moment” — fires 0
+- **Ife Okoro** `goal:see_the_cone_s_fire_up_close_one_day_with_lumi` {"who_id": "3 (Lumi Pontil)", "within": 20.0, "near_me": 14.0} — why: “If Lumi comes close enough to speak, I want to catch her before she's off again” — fires 0
+- **Imre Sarro** `stance:neve_before_all` {"who_id": "22 (Neve Calloway)", "within": 20.0, "near_me": 30.0} — why: “If she comes near the Cone I will set the pipe down and speak to her.” — fires 1 on ['Neve Calloway']
+- **Ingrid Morrow** `stance:the_strand_looks_after_its_own` {"who_id": "24 (Magda Tarn)", "doing": "divide the catch", "within": 20.0, "near_me": 40.0} — why: “I want to be beside Magda when the catch is divided, as I always am.” — fires 0
+- **Ingrid Morrow** `goal:get_lark_to_stop_talking_about_the_sail_and_settle_to_the_wrack_and_the_net` {"who_id": "38 (Lark Morrow)", "within": 20.0, "near_me": 18.0} — why: “She is near enough at last to catch her — I mean to have words with her before the light goes.” — fires 0
+- **Jory Greave** `goal:find_suri_and_ask_her_properly_for_a_child_of_our_own` {"who_id": "47 (Suri Greave)", "doing": "gather", "within": 20.0, "near_me": 8.0} — why: “When I am close enough to speak, I stop and let her have her say.” — fires 0
+- **Joss Tarn** `goal:see_petra_paid_her_twelve_drops` {"who_id": "35 (Lorcan Vane)", "doing": "fishing", "within": 20.0, "near_me": 30.0} — why: “If Lorcan's deep-side catch clears Chidi's nine by dusk, Petra's twelve can come next.” — fires 0
+- **Joss Tarn** `goal:get_a_share_in_glasshouse_11_for_the_tarns_when_it_is_mended` {"who_id": "5 (Tamsin Hollin)", "doing": "glassmaking", "at": "the Cone", "within": 20.0} — why: “Tamsin is walking toward the Cone at dusk-ward — if she stops at the furnace, that's the moment to ask after a share in 11 again.” — fires 0
+- **Joss Tarn** `goal:get_the_family_into_mid_row_6_so_the_children_have_room` {"who_id": "9 (Aldous Quill)", "doing": "writing", "at": "the Counting House", "within": 20.0} — why: “Aldous must read Ansel's name before dusk or the key to Mid Row 6 waits.” — fires 0
+- **Juno Brandt** `goal:get_a_hen_of_her_own` {"who_id": "13 (Fenn Brandt)", "doing": "tending hens", "at": "home", "within": 20.0} — why: “If Fenn is with the hens when I get home, that's my moment to ask.” — fires 0
+- **Kenji Sato** `stance:smoke_goes_where_the_wind_takes_it` {"who_id": "2 (Ode Pontil)", "doing": "gathering", "within": 20.0} — why: “Ode Pontil works the strand himself — a chance to talk kelp and ash with a Pontil who gathers” — fires 0
+- **Kenji Sato** `goal:get_a_fair_price_from_vessa_pontil_for_the_ash` {"who": "unknown", "doing": "glassmaking", "at": "the Cone", "within": 20.0} — why: “If I see a Pontil reading the melt, it's a chance to make my case for a better price on ash.” — fires 0
+- **Kit Calloway** `stance:read_the_sign_well` {"who_id": "64 (Imre Sarro)", "doing": "glassmaking", "at": "the furnace bench at the Cone", "within": 5.0, "near_me": 1.8} — why: “He is at his furnace beside me — the moment to ask is now, before his gather.” — fires 0
+- **Kit Calloway** `goal:become_a_glassblower_at_the_cone.` {"who_id": "1 (Vessa Pontil)", "doing": "glassmaking", "at": "the Cone", "within": 48.0} — why: “Vessa judges reads and hands out lessons — be near when a melt is called, and be early” — fires 0
+- **Lark Morrow** `goal:see_the_sail_again_and_prove_i_saw_it` {"thing": "campfire", "at": "the mole tip", "within": 20.0} — why: “If a fire is lit on the mole tip before dusk, the watch is real and I should be there” — fires 0
+- **Livia Faro** `stance:the_lamp_must_burn` {"thing": "lamp", "at": "the south lamp", "within": 5.0} — why: “Its oil level tells me the burn rate and when it must be refilled.” — fires 1 on [2305843009213694030]
+- **Livia Faro** `goal:find_whose_the_south_lamp_is_and_who_filled_it` {"who_id": "26 (Eamon Tarn)", "doing": "goto", "within": 20.0, "near_me": 9.0} — why: “He is leaving; ask him now before he is out of earshot.” — fires 0
+- **Lorcan Vane** `stance:settle_friendly_before_dusk` {"who_id": "31 (Chidi Okoro)", "within": 20.0, "near_me": 30.0} — why: “Chidi near means I settle the nine drops plain and friendly before the ledger shuts.” — fires 0
+- **Lumi Pontil** `stance:gran_needs_me_at_the_cone` {"who": "vessa pontil", "within": 20.0} — why: “Gran at the Cone means the colour game is about to start — I must be beside her” — REFUSED: "vessa pontil" is not a kind of creature — fires 0
+- **Lumi Pontil** `goal:to_name_the_colour_right_every_morning` {"who_id": "1 (Vessa Pontil)", "within": 20.0, "near_me": 10.0} — why: “Gran is heading to the Cone — the naming is about to happen and I must be beside her.” — fires 1 on ['Vessa Pontil']
+- **Lumi Pontil** `goal:to_find_a_cobalt_shard_in_the_cullet_heaps_before_edda_does` {"who": "unknown", "thing": "kind:person", "at": "the cullet heaps", "within": 20.0} — why: “Ode says a little one goes to what shines — Ansel might be in the heaps, and I know them best.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Magda Tarn** `goal:get_the_key_to_mid_row_6_from_the_counting_house` {"who_id": "29 (Ansel Tarn)", "doing": "goto", "within": 20.0} — why: “Joss is fetching sleepy Ansel to the book; I must be back at the Counting House before the dusk counters come.” — fires 0
+- **Magda Tarn** `stance:the_catch_must_be_divided_fairly` {"who_id": "35 (Lorcan Vane)", "doing": "gather", "thing": "fishing_spot", "at": "work", "within": 20.0, "near_me": 45.0} — why: “Lorcan owes nine drops by dusk and I am witness — watch that it's paid where the count can hear it.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Magda Tarn** `goal:get_the_key_to_mid_row_6_from_the_counting_house_for_the_tarns` {"who_id": "9 (Aldous Quill)", "doing": "keep", "at": "the Counting House", "within": 20.0} — why: “If Aldous is at the desk, I can settle the key for Mid Row 6 the moment Ansel arrives.” — fires 0
+- **Mirren Quill** `stance:no_digging_on_the_crown` {"who_id": "12 (Otto Brandt)", "within": 20.0, "near_me": 20.0} — why: “If Otto comes at the clay while the children scramble the Crown side, I speak before he sets a pick to it.” — fires 1 on ['Otto Brandt']
+- **Mirren Quill** `goal:train_a_second_healer_before_she_is_old` {"who_id": "61 (Benedikt Orme)", "within": 20.0, "near_me": 12.0} — why: “Benedikt within earshot means I can say my piece directly instead of through Aldous.” — fires 0
+- **Mirren Quill** `goal:see_suri_greave_safely_delivered` {"who_id": "5 (Tamsin Hollin)", "doing": "carpentry", "thing": "house", "within": 20.0} — why: “Tamsin has promised Suri's roof before the baby comes — if she starts on it, I want to know the roof is truly coming.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Nan Fenwick** `stance:kelp_belongs_to_the_plots_first` {"who_id": "38 (Lark Morrow)", "doing": "gather", "within": 20.0, "near_me": 30.0} — why: “Lark's loads are the ones I doubt; if I see her gathering I'll judge the load myself.” — fires 0
+- **Nan Fenwick** `stance:kelp_belongs_to_the_plots_first` {"who_id": "32 (Amara Okoro)", "doing": "gather", "within": 20.0, "near_me": 30.0} — why: “Amara and Hana short me together; I want to see what she actually brings up.” — fires 0
+- **Nan Fenwick** `goal:see_alder_placed_with_benedikt_properly__not_just_as_a_boy_who_hangs_about` {"who_id": "44 (Oswin Greave)", "doing": "glassmaking", "within": 20.0, "near_me": 40.0} — why: “If Oswin's at his glasshouse end, I'll put Alder's name forward for the pane-setting.” — fires 0
+- **Nell Tarn** `goal:go_out_on_the_mole_with_uncle_eamon` {"who_id": "26 (Eamon Tarn)", "doing": "walking", "within": 20.0, "near_me": 40.0} — why: “If Eamon comes past I'll ask again to go out on the mole.” — fires 0
+- **Nell Tarn** `goal:mind_ansel_without_losing_him` {"who_id": "11 (Sabine Quill)", "within": 20.0, "near_me": 6.0} — why: “Get close enough to hear her answer about Ansel.” — fires 0
+- **Neve Calloway** `stance:work_the_water_patiently` {"who_id": "35 (Lorcan Vane)", "doing": "fishing", "within": 20.0} — why: “If Lorcan works a spot and fish show, I'll learn where the run truly is.” — fires 0
+- **Neve Calloway** `goal:raise_our_child_with_imre__here_in_cullet.` {"who_id": "64 (Imre Sarro)", "doing": "glassmaking", "within": 20.0} — why: “When Imre's at the furnace I'll know the gather's done and go to meet him.” — fires 0
+- **Ode Pontil** `stance:vessa_must_keep_her_place` {"who_id": "17 (Halvard Dunmore)", "within": 20.0, "near_me": 1.0} — why: “Halvard at the furnace mouth again — he judges my sister aloud; I want to know what he says and does there.” — fires 0
+- **Ode Pontil** `stance:the_cullet_yard_is_no_place_for_children` {"who": "unknown", "thing": "child", "within": 20.0, "near_me": 20.0} — why: “Any small child wandering near the cullet heaps while Ansel is missing needs checking — it may be him.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Oswin Greave** `stance:every_pane_should_grow_food` {"who_id": "63 (Cora Stannard)", "doing": "planting", "at": "the west beds", "within": 20.0} — why: “If Cora's putting flowers in again I'll say my piece plainly.” — fires 0
+- **Oswin Greave** `goal:get_glasshouse_6_glazed_and_growing_again__before_any_other_broken_house` {"who_id": "62 (Gwil Stannard)", "doing": "goto", "within": 20.0, "near_me": 22.0} — why: “Hobb says Gwil may know a setter for my panes — ask him now while he's in reach.” — fires 0
+- **Otto Brandt** `goal:find_good_clay_for_the_crucibles_before_the_bank_runs_out` {"who": "unknown", "doing": "make", "thing": "oven", "at": "workshops east", "within": 20.0} — why: “If an oven appears east I can fire my own crucibles without begging time at the Cone.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Otto Brandt** `goal:find_or_raise_an_oven_to_fire_crucibles` {"thing": "oven", "at": "square", "within": 45.0} — why: “An existing oven shows how it's done and whose leave I'd need to borrow it.” — fires 0
+- **Petra Tarn** `stance:the_smokehouse_must_be_kept_right` {"thing": "fishing_spot", "at": "Cullet center", "within": 12.0} — why: “A spot with fish in it close by — good to know once the racks are empty again” — fires 0
+- **Petra Tarn** `stance:a_debt_in_drops_is_paid_in_drops` {"who_id": "32 (Amara Okoro)", "within": 20.0, "near_me": 30.0} — why: “Chidi is owed Lorcan's nine drops and this Okoro walks close with him — worth knowing who stands at his shoulder before I speak plain about it” — fires 1 on ['Amara Okoro']
+- **Petra Tarn** `goal:get_the_twelve_drops_from_dolly_achterberg_or_settle_it_openly` {"who_id": "59 (Pieter Achterberg)", "within": 20.0} — why: “An Achterberg close by — worth knowing if he is Dolly's kin before I make my fuss” — fires 0
+- **Pieter Achterberg** `goal:win_a_game_off_anselm_faro_before_the_winter` {"who_id": "33 (Zeke Okoro)", "within": 20.0, "near_me": 30.0} — why: “Zeke's fetching Anselm home before dark — he'll be rested and ready for counters at dawn.” — fires 0
+- **Pim Hollin** `stance:shiny_pieces_are_worth_having` {"who_id": "51 (Posy Fenwick)", "doing": "face", "within": 20.0, "near_me": 1.0} — why: “Posy said she has a shard and wants in at the cullet yard — maybe I can see it or trade for a blue piece” — fires 0
+- **Pim Hollin** `goal:to_keep_up_with_edda` {"who_id": "6 (Edda Hollin)", "doing": "sleep", "within": 20.0, "near_me": 2.0} — why: “The moment Edda stirs I want to be right there, not off at a heap.” — fires 0
+- **Pim Hollin** `goal:to_find_a_piece_of_glass_as_blue_as_the_watchglass_band` {"who_id": "51 (Posy Fenwick)", "doing": "look", "thing": "cullet heap", "within": 20.0, "near_me": 6.0} — why: “her heap first, then mine — I want to be there when she's done looking so my turn comes” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Posy Fenwick** `goal:be_properly_in_edda_hollin_s_band` {"who_id": "6 (Edda Hollin)", "doing": "sleep", "phase": "under way", "within": 20.0, "near_me": 4.0} — why: “when Edda wakes I want to be the one she sees coming back with something worth ruling on” — fires 0
+- **Posy Fenwick** `goal:get_a_piece_of_blue_cullet_for_herself` {"who_id": "7 (Pim Hollin)", "doing": "play", "within": 20.0, "near_me": 5.0} — why: “Pim coming along to the heaps — keep the fair turn honest and stay first” — fires 0
+- **Rafe Dunlin** `goal:see_tilly_learn_her_letters_and_numbers` {"who_id": "43 (Tilly Dunlin)", "within": 20.0, "near_me": 1.0} — why: “I owe her a counter for the lesson — get it to her before the lamp tonight.” — fires 0
+- **Rafe Dunlin** `goal:make_the_house_warmer_and_drier_before_next_winter` {"thing": "peat_bank", "at": "home", "within": 48.0} — why: “Hearth's dry of peat — next chance I get, I lay in a stock.” — fires 0
+- **Ren Sato** `goal:win_sabine_quill__and_her_father_s_grudging_consent` {"who_id": "9 (Aldous Quill)", "within": 20.0, "near_me": 14.0} — why: “If Aldous comes near while I haul, keep hands busy and words short.” — fires 0
+- **Roos Achterberg** `goal:beat_aldous_quill_at_counters__once__and_have_it_seen` {"who_id": "9 (Aldous Quill)", "doing": "playing", "phase": "holding", "thing": "counters board", "at": "the arcade", "within": 20.0} — why: “he promised to play at dusk when the book closes — be there first, set warm, and watch how he sits down” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Roos Achterberg** `stance:wanting_a_child_of_my_own` {"who_id": "58 (Dolly Achterberg)", "within": 3.0, "near_me": 2.2} — why: “she's right here keeping the inn; if the moment softens before tonight, I may ask early” — fires 1 on ['Dolly Achterberg']
+- **Runa Sarro** `goal:live_to_hold_suri_greave_s_baby` {"who_id": "5 (Tamsin Hollin)", "within": 20.0, "near_me": 3.0} — why: “Tamsin is near and has just sworn the order again — hold her to it: panes first, then Suri's roof.” — fires 1 on ['Tamsin Hollin']
+- **Runa Sarro** `stance:my_son_fairly_or_not_at_all` {"who_id": "64 (Imre Sarro)", "doing": "glassblowing", "within": 20.0, "near_me": 40.0} — why: “Imre at the Cone under Vessa — weigh what is earned.” — fires 0
+- **Runa Sarro** `stance:keep_my_own_counsel` {"who_id": "1 (Vessa Pontil)", "doing": "glassmaking", "within": 20.0, "near_me": 40.0} — why: “Vessa at the Cone — watch the gather and the hesitation, and say nothing.” — fires 0
+- **Sabine Quill** `goal:to_decide_about_ren_sato_for_herself__not_for_her_father` {"who_id": "41 (Ren Sato)", "within": 20.0, "near_me": 25.0} — why: “If this wanting of a child is real and stays, it will have something to do with Ren.” — fires 0
+- **Sabine Quill** `stance:the_pale_must_be_known` {"who_id": "12 (Otto Brandt)", "within": 20.0, "near_me": 20.0} — why: “Otto at the square — my chance to hear his reason with my own ears.” — fires 0
+- **Sabine Quill** `goal:to_read_the_hardest_tablets_in_the_readers__house` {"who_id": "61 (Benedikt Orme)", "doing": "sleep", "within": 20.0} — why: “He sleeps near me still; the moment he wakes, my question about the Lintel goes in.” — fires 0
+- **Suri Greave** `goal:have_mid_row_6__or_some_house__before_the_baby_comes` {"thing": "house", "at": "the west rows further out", "within": 20.0} — why: “If a house out here stands empty, that is a door I could have.” — fires 3 on [2305843009213693996, 2305843009213693997, 2305843009213693998]
+- **Tam Roon** `goal:see_col_settled_with_friends_his_own_age.` {"who_id": "54 (Col Roon)", "within": 20.0, "near_me": 20.0} — why: “If Col is about, I want to see who he is keeping company with.” — fires 0
+- **Tam Roon** `stance:peat_is_worth_more` {"who_id": "6 (Edda Hollin)", "doing": "ruling on ore", "within": 20.0} — why: “If the Hollins are weighing what things are worth, they may weigh peat too.” — fires 0
+- **Thessaly Marl** `stance:want_a_partner` {"who_id": "42 (Rafe Dunlin)", "doing": "fishing", "within": 20.0} — why: “Rafe on the mole is who I mean to sit beside come evening” — fires 0
+- **Tilly Dunlin** `stance:edda_wants_first_pick` {"who_id": "6 (Edda Hollin)", "doing": "goto", "at": "the Batch", "within": 20.0, "near_me": 1.0} — why: “Edda's racing us to the heaps; watch she doesn't grab the cobalt before Posy looks.” — fires 0
+- **Tilly Dunlin** `goal:have_posy_come_and_sleep_over_at_low_row_1.` {"who_id": "51 (Posy Fenwick)", "within": 20.0, "near_me": 12.0} — why: “Ask Posy about tonight before the lamp — maybe she could come after.” — fires 0
+- **Vessa Pontil** `stance:the_cone_must_never_go_out` {"thing": "furnace", "at": "the Cone", "within": 20.0} — why: “Thirteen hours of burn left; confirm the draw before evening.” — fires 1 on [2305843009213694018]
+- **Vessa Pontil** `stance:lumi_must_have_a_place` {"who_id": "3 (Lumi Pontil)", "within": 20.0, "near_me": 25.0} — why: “Lumi naming colours among the claimants; she must be seen to be right, not to be guessing.” — fires 1 on ['Lumi Pontil']
+- **Vessa Pontil** `goal:keep_the_peat_coming_so_the_cone_burns_full_for_as_long_as_i_can` {"thing": "peat", "at": "the peap store", "within": 20.0} — why: “count the draw before evening; thirteen hours of burn left on the furnace” — REFUSED: "peat" is not a kind of thing one sees — fires 0
+- **Vessa Pontil** `goal:choose_who_follows_me_at_the_cone` {"who_id": "3 (Lumi Pontil)", "doing": "follow", "within": 20.0, "near_me": 2.0} — why: “Lumi beside me is my chance to test her eye against Fenn's read without the yard listening.” — fires 0
+- **Wick Marl** `goal:to_ride_the_handcart_all_the_way_to_the_mole` {"who_id": "38 (Lark Morrow)", "doing": "goto", "within": 20.0} — why: “Lark said to meet at the mole tip at dusk whatever the weather — something might happen there” — fires 0
+- **Wick Marl** `goal:to_have_mama_home_at_night` {"who_id": "15 (Thessaly Marl)", "within": 25.0} — why: “I missed her at noon and before the tablet work — if she passes I want to see her before dark” — fires 0
+- **Ysolde Calloway** `stance:family_must_stay_together` {"who_id": "20 (Bram Calloway)", "thing": "smoked_fish", "at": "home", "within": 20.0} — why: “Bram providing for the household is the man I hold to; watch that it stays true while the ship-dream pulls at him.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Ysolde Calloway** `goal:keep_bram_from_sailing__or_at_least_keep_the_children_from_going_with_him.` {"who_id": "20 (Bram Calloway)", "within": 20.0, "near_me": 30.0} — why: “If Bram comes near while the children are elsewhere, I can speak to him alone.” — fires 0
+- **Zeke Okoro** `stance:edda_knows_the_yard_best` {"who_id": "6 (Edda Hollin)", "at": "benedikts hall", "within": 20.0} — why: “Edda's taking Posy up to be made band proper — after, the yard run is hers to lead.” — REFUSED: you know no place called "benedikts hall" — fires 0
+- **Zeke Okoro** `stance:lesson_first_then_yard` {"who_id": "61 (Benedikt Orme)", "doing": "keep", "phase": "under way", "thing": "hearth", "at": "benedikts hall", "within": 20.0, "near_me": 1.4} — why: “Benedikt's watching the lesson; I sit proper till he lets us go.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Zeke Okoro** `goal:find_a_colour_of_sea-glass_my_mother_has_never_seen` {"who_id": "51 (Posy Fenwick)", "within": 20.0} — why: “Posy's shard may come out soon — I want to be back in time to see it.” — fires 1 on ['Posy Fenwick']
+
+
+**Cue fires:** 21 fires on 18 cues. None fired on the newcomer. Most led to the thought the cue named (Gwil to Cora, Chidi to Lorcan's nine drops, Imre to Neve). The full list, with the thought each led to:
+
+- **Bram Calloway** `goal:get_fourteen_trees_from_the_hanger__by_marit_s_leave_or_otherwise` fired on Eamon Tarn: thought (next thought, reason not matched) → (no thought found within 60 s)
+- **Chidi Okoro** `goal:collect_the_nine_drops_lorcan_vane_owes_me_for_line_without_breaking_the_ho` fired on Lorcan Vane: thought (reason quotes the cue) → There goes Lorcan Vane, northwest toward the far water, and my nine drops still in his pocket. He is just at the edge of my voice — now is the moment, before the run takes him and my patience with it. | Call Lorcan Vane (#35) to stop and settle the nine drops he owes me for line | If he cannot pay n
+- **Corvin Hollin** `stance:the_cone_should_pass_to_the_best_blower` fired on Vessa Pontil: thought (reason quotes the cue) → Vessa has given me my test: five o'clock, her side, hands off the damper, a season of mornings. That is a door half open — more than she has offered before — and I mean to walk through it without tripping on pride. Imre Sarro walking toward the Cone while she is weighing names is no accident, and I
+- **Elke Greave** `goal:a_little_more_glass_and_a_little_less_wind_in_the_houses_before_next_winter` fired on Oswin Greave: thought (reason quotes the cue) → Oswin is filling Tamsin's basket himself, which is how I wanted it — plainly done, before Cora can colour it. The beds are busy with neighbours but the rows still want hands, and I'm peckish enough to eat as I work. | gather greens at the west beds until the basket is full for Suri's store | eat som
+- **Greta Dunmore** `stance:the_kelp_smoke_must_be_kept_off_the_washing` fired on structure #66: thought (next thought, reason not matched) → (no thought found within 60 s)
+- **Gwil Stannard** `stance:want_a_child_with_cora` fired on Cora Stannard: thought (reason quotes the cue) → Cora is close now, closer than she's been all day, and I've been carrying the question since morning. There's Roos and Pieter about, but the moment won't get better than this. I'll walk to her and ask plainly. | walk to Cora Stannard | ask Cora quietly to start a family with me | Cora — come here a
+- **Halvard Dunmore** `goal:see_tobiah_settled_at_the_furnace__stoking_and_then_blowing` fired on Tobiah Dunmore: thought (next thought, reason not matched) → Tobiah keeps her fed and true, thirteen hours counted like a stoker should — the lad is earning his hour. Corvin's trial is at five, so I'll sit the bench and be ready to judge his gathers when they come. | stay on the bench and watch Corvin Hollin's audition at five o'clock | give Corvin an honest
+- **Imre Sarro** `stance:neve_before_all` fired on Neve Calloway: thought (reason quotes the cue) → Neve is right beside me, resting, and I said I'd sit with her before the Cone takes me back — so this minute is hers, and I'll give it plainly. | sit with Neve (#22) a while | then return to the bench with Kit (#23) for my clean gather before the trial | The water first, maybe — no. Letters first, I
+- **Livia Faro** `stance:the_lamp_must_burn` fired on structure #78: thought (next thought, reason not matched) → The south lamp shows about 24 hours of oil left — a real figure at last, and one I can stand behind. Anselm is just beside me on the walk down; this is the moment to say the count aloud and fix it on my slate before we ask Rafe whose lamp this is. | check the south lamp's oil level closely and note
+- **Lumi Pontil** `goal:to_name_the_colour_right_every_morning` fired on Vessa Pontil: thought (next thought, reason not matched) → Gran is right here at last, and I still haven't told her about little Ansel being lost — that matters more than the game. I'll say my colour first, quick, then the news, and stay close to her at the Cone. | tell Gran the two o'clock melt is amber and that Ode and Zeke are hunting a lost boy named An
+- **Mirren Quill** `stance:no_digging_on_the_crown` fired on Otto Brandt: thought (reason quotes the cue) → Otto is walking away southwest, not toward the clay pit or the Crown, so there is no call to collar him yet — I'll keep an eye out. Aldous is at my elbow and I'm tired; this is the moment to say plainly that I mean to take an apprentice before my hands slow. | Tell Aldous (#9) I mean to train a seco
+- **Petra Tarn** `stance:a_debt_in_drops_is_paid_in_drops` fired on Amara Okoro: thought (reason quotes the cue) → I'm on my way to the store for fish and the smokehouse still has fuel on it, so the day's work stands. Amara Okoro walking with Chidi's crowd is worth a nod, no more — my fuss about the twelve drops is with Dolly, not her kin. | go to the Cullet store and fetch fish for the racks | greet Davin as I
+- **Roos Achterberg** `stance:wanting_a_child_of_my_own` fired on Dolly Achterberg: thought (reason quotes the cue) → (a reply with acts but no thought text)
+- **Runa Sarro** `goal:live_to_hold_suri_greave_s_baby` fired on Tamsin Hollin: thought (reason quotes the cue) → (a reply with acts but no thought text)
+- **Suri Greave** `goal:have_mid_row_6__or_some_house__before_the_baby_comes` fired on structure #44: thought (reason quotes the cue) → Jory is right here beside me, walking toward the town, and I have already let one chance slip at noon. The houses out west are spoken for one by one; I will not let him drift off again without a plain answer between us. | walk with Jory and speak plainly about the house before the baby comes | if he
+- **Suri Greave** `goal:have_mid_row_6__or_some_house__before_the_baby_comes` fired on structure #45: thought (reason quotes the cue) → Jory is right here beside me, walking toward the town, and I have already let one chance slip at noon. The houses out west are spoken for one by one; I will not let him drift off again without a plain answer between us. | walk with Jory and speak plainly about the house before the baby comes | if he
+- **Suri Greave** `goal:have_mid_row_6__or_some_house__before_the_baby_comes` fired on structure #46: thought (reason quotes the cue) → Jory is right here beside me, walking toward the town, and I have already let one chance slip at noon. The houses out west are spoken for one by one; I will not let him drift off again without a plain answer between us. | walk with Jory and speak plainly about the house before the baby comes | if he
+- **Vessa Pontil** `stance:lumi_must_have_a_place` fired on Lumi Pontil: thought (reason quotes the cue) → The store sits at 844 and the furnace has thirteen hours on it — the draw is holding, so the Cone is safe through the night. Fenn's read was true but late, and he is fetching peat unasked, which counts for more than punctuality alone. Lumi is resting west of me; I will walk to the mouth and watch Im
+- **Vessa Pontil** `stance:the_cone_must_never_go_out` fired on structure #66: thought (reason quotes the cue) → The store sits at 844 and the furnace has thirteen hours on it — the draw is holding, so the Cone is safe through the night. Fenn's read was true but late, and he is fetching peat unasked, which counts for more than punctuality alone. Lumi is resting west of me; I will walk to the mouth and watch Im
+- **Zeke Okoro** `goal:find_a_colour_of_sea-glass_my_mother_has_never_seen` fired on Posy Fenwick: thought (reason quotes the cue) → (a reply with acts but no thought text)
+
+
+**Tick time.**
+- With cues on, the tick's mean (0.89 ms) is within the other arms' 0.87–0.97 ms. Its tail is slightly longer: 69 ticks over 10 ms against 38–54, and 6 over 50 ms against 2–4.
+- All four worlds ran at once on one server, so these differences are within its noise.
+
+Tick time per arm: `spacetime_reducer_plus_query_duration_sec`, reducer `tick` (the reducer and its subscription updates), deltas over each run's sampled window. The histogram's smallest bucket is ≤5 ms, so p50 and p99 are given as that bucket; a 60 Hz tick has 16.7 ms.
+
+| arm | minutes | ticks | mean ms | p50 | p99 | > 10 ms | > 25 ms | > 50 ms |
+|---|---:|---:|---:|---|---|---:|---:|---:|
+| strangers-2b-c-strangers-control-r1 | 19.4 | 69734 | 0.90 | ≤ 5 ms | ≤ 5 ms | 39 | 5 | 2 |
+| strangers-2b-strangers-control-r1 | 19.4 | 69674 | 0.97 | ≤ 5 ms | ≤ 5 ms | 54 | 6 | 3 |
+| strangers-2b-strangers-filter-cues-r1 | 20.1 | 71489 | 0.89 | ≤ 5 ms | ≤ 5 ms | 69 | 9 | 6 |
+| strangers-2b-strangers-filter-r1 | 20.1 | 71789 | 0.87 | ≤ 5 ms | ≤ 5 ms | 38 | 7 | 4 |
+
+
+**Security check:** fragments of the API keys were searched for in the batch directory and its journals. Count: 0.
+
+**Evidence:**
+- `~/slop-trials2b/.local/living/trials/st2b`, `st2bs`, and the journals under `.local/living/journal/verify-trial-st2b-*`;
+- the archive at `~/archive/trials/st2b-20261112.tar.gz` (51 MB, 1,356 files), which includes the metrics samples, the analyses (`st2b-spread.md`, `st2b-cues.md`, `st2b-cue-fires.md`, `st2b-ticks.md`) and the spend log.
+
+### False replies under one definition (2026-11-12, branch `strangers-measures`; free)
+
+The general coordinator approved a new definition. It is in `greet_report.py` `reply_kind`, with the self-test `python3 living/tools/greet_report_selftest.py`:
+- a **false reply** is a conversation turn answering a line that names someone else, either addressed by id to another person or saying another's name;
+- a line that names the answerer, or is addressed to them, is never false;
+- a remark to the room that names no one, when answered, is **`group_talk`**, counted apart;
+- only the player is left out: the joined newcomer where a trial has one, else the subject (the greeting and arrival trials' player). Aldous, the strangers trials' subject, is now counted.
+
+**Tool versions:**
+- **Old:** `greet_report.py` at main `ef9c3ae5`, the rule every earlier record used. A room line said within 60 s of its speaker's exchange with another was false. A line naming the answerer could be false. The trial's subject was always skipped.
+- **New:** this branch.
+- **Check:** recomputed here, the old tool gives the recorded numbers exactly (ar2's pooled 3/2/3/0/0/3/0, stage 2's 0.20/1.05/0.35, st2b's 0.10/0.46/0.80/1.06).
+
+Per run: `~/slop-strangers-logs/rescore.md`, from ar2 (`~/dev/slop-runs-arrive`, read-only), st2 (`~/slop-stage2`) and st2b (`~/slop-trials2b`).
+
+
+#### ar2
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| arrive-answer-arrive-all | 4 | 0 (0.00) | 1 (0.02) | 0 (0.00) |
+| arrive-answer-arrive-control | 4 | 3 (0.05) | 0 (0.00) | 2 (0.04) |
+| arrive-arrive-all | 4 | 0 (0.00) | 1 (0.02) | 0 (0.00) |
+| arrive-arrive-control | 4 | 3 (0.05) | 3 (0.05) | 3 (0.05) |
+| arrive-arrive-known | 4 | 2 (0.04) | 1 (0.02) | 1 (0.02) |
+| arrive-arrive-notice | 4 | 3 (0.05) | 3 (0.05) | 0 (0.00) |
+| arrive-arrive-wonder | 4 | 0 (0.00) | 0 (0.00) | 2 (0.04) |
+
+#### st2
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| C | 1 | 4 (0.20) | 8 (0.40) | 1 (0.05) |
+| L | 1 | 21 (1.06) | 11 (0.55) | 1 (0.05) |
+| LS | 1 | 7 (0.35) | 12 (0.60) | 1 (0.05) |
+
+#### st2b
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| C | 1 | 2 (0.10) | 2 (0.10) | 0 (0.00) |
+| L | 1 | 9 (0.45) | 9 (0.45) | 0 (0.00) |
+| LS + cues | 1 | 21 (1.06) | 14 (0.70) | 3 (0.15) |
+| LS | 1 | 16 (0.80) | 13 (0.65) | 3 (0.15) |
+
+
+**Reading it:**
+- **ar2** barely moves: 0–3 false replies an arm either way.
+- **st2:** stage 2's L falls from 1.06 to 0.55 a minute. C and LS rise (0.20 → 0.40 and 0.35 → 0.60), because the old rule missed room lines naming someone else when they fell outside its 60 s exchange window.
+- **st2b:** the rise is smaller, 0.10 → 0.45 → 0.65 → 0.70 against the old 0.10 → 0.45 → 0.80 → 1.06.
+- **What every new false reply is:** in both strangers batches, a room line calling other people by name, answered by a bystander. Examples: Lumi, “Edda! Ife! Wait for me — I'm coming to the yard!”, answered by Pim; Chidi, “Neve — the whole shore's fished thin…”, answered by Joss Tarn. None is a line addressed by id to someone else.
+- **Aldous is now counted:** one false reply in stage 2's LS.
+- **Group talk** is 0–3 a run.
+- **The guards** in stage 2 and st2b ("within C's spread") are re-read with these numbers. Stage 2's L is no longer the outlier. st2b's LS and LS + cues stay above C (0.65 and 0.70 against 0.10), with one replicate each.
+
+**In range:** the band is restated in STRANGERS.md ("Target spread"). It is now about 18–24, with the walk along the Strand counted; it was about 10–16 for the stands only. The change and its reason are recorded beside it. The outcome bands are unchanged.
+
+### Analysis of st2b (2026-11-12, branch `st2b-analysis`; free, no model calls)
+
+#### (a) Why false replies rise by arm (0.10 → 0.46 → 0.80 → 1.06 a minute)
+
+**The definition.** It is `greet_report.py`'s: a conversation turn by resident C that answered resident a's line meant for someone else. "Meant for someone else" means one of two things:
+- a line addressed to another person by id;
+- a line to the room said while a had talked with someone else in the last 60 s (`EXCHANGE_S`).
+
+It never judges what a reply says. Invented facts, wrong names and claims about the newcomer are not what it counts. The trial's subject, Aldous Quill, is excluded as "the player" (greet_report reads the subject that way), so his turns are not counted.
+
+Driver: `~/slop-strangers-logs/tools/false_replies.py`, joining talk turns to their journal requests. Evidence: `st2b-false.json`.
+
+**What they are.** All 48 are of the second kind: a room line answered inside someone else's exchange. None answers a line addressed by id to another. None involves the newcomer, none answers a line that did not reach the answerer, and none is an invented fact the rule could see. By what the line itself said:
+
+| kind | C | L | LS | LS + cues | all |
+|---|---:|---:|---:|---:|---:|
+| the line named the answerer (the rule miscounts it) | 2 | 5 | 6 | 7 | 20 |
+| a remark to the room, no name (a group conversation) | 0 | 2 | 5 | 12 | 19 |
+| the line named the person in the speaker's exchange (another's line, answered) | 0 | 2 | 5 | 2 | 9 |
+
+- [C] the line named the answerer (the rule miscounts it): Edda Hollin (talking with Pim Hollin just before) said “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!”; Ife Okoro answered “I remember! I'll grab the blue before Zeke even sees it.”
+- [C] the line named the answerer (the rule miscounts it): Edda Hollin (talking with Pim Hollin just before) said “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!”; Lumi Pontil answered “Ife's with me, Edda — we're hunting cobalt together after lessons. You can have whatever's left!”
+- [L] a remark to the room, no name (a group conversation): Edda Hollin (talking with Zeke Okoro just before) said “Crew! Benches now — lessons first, then the yard, and I'm leading. Pim, you sit where I can see you.”; Posy Fenwick answered “I'm on the bench, Edda — right by Tilly, and I'll have my letters done before the yard, promise!”
+- [L] a remark to the room, no name (a group conversation): Juno Brandt (talking with Wick Marl just before) said “Coming, Edda — save me a spot next to Pim!”; Lumi Pontil answered “Juno! Do you know about the cobalt dare? Edda says first shard from the deep heaps keeps it — and I mean to beat her to it.”
+- [L] the line named the person in the speaker's exchange (another's line, answered): Zeke Okoro (talking with Lumi Pontil just before) said “Coming, Lumi — no stopping, I swear! Saving my seat, Master Orme!”; Edda Hollin answered “Save me the seat next to it, Zeke — and don't let Lumi talk you into anything before the race starts.”
+- [L] the line named the person in the speaker's exchange (another's line, answered): Davin Vane (talking with Lorcan Vane just before) said “Lorcan — I'll be at the Marver tonight. Say your word there and I'll hear it.”; Ingrid Morrow answered “The Marver, is it? Mind the loose step by the door — I've mended my share of knees from it. Fine night for a talk, Davin.”
+
+| arm | false replies | answerer a child | speaker a child | both children | answerer's talk prompt tokens, mean (all turns / false turns) |
+|---|---:|---:|---:|---:|---|
+| C | 2 | 2 | 2 | 2 | 2374 / 1933 |
+| L | 9 | 7 | 7 | 7 | 2351 / 2413 |
+| LS | 16 | 9 | 10 | 9 | 2374 / 2470 |
+| LS + cues | 21 | 8 | 12 | 8 | 2364 / 2344 |
+
+
+**What drives the rise: the volume of room lines answered, not one prompt block.**
+
+| arm | lines said | room lines | of them within an exchange | turns answering a room line | false | false per turn |
+|---|---:|---:|---:|---:|---:|---:|
+| C | 556 | 20 | 10 | 7 | 2 | 0.9% |
+| L | 545 | 28 | 17 | 16 | 9 | 4.2% |
+| LS | 615 | 44 | 23 | 26 | 16 | 6.1% |
+| LS + cues | 761 | 38 | 26 | 30 | 21 | 6.6% |
+
+- **Prompt size is flat:**
+  - the answerer's talk prompt averages 2,351–2,374 tokens in every arm, and false turns' prompts are no larger (1,933–2,470);
+  - all prompts together (system and user) are about 8,400 characters in every arm.
+- **No block drives it:**
+  - **`# What you watch for`** (cues): in no talk prompt; it is in think and consolidate prompts only.
+  - **The `stranger_by_name` wording:** in no talk prompt (0 of 1,030); it is in the graph grammar of think and deliberate prompts.
+  - **The longing text** ("long for a child", "start a family"): in 15–35 talk prompts per arm, and in 0, 0, 0 and 4 false ones.
+- **The children.** Most false replies are the children's group talk: Edda, Lumi, Ife, Zeke, Posy and Pim around lessons and the cullet-heap dare. The answerer was a child in 2 of 2, 7 of 9, 9 of 16 and 8 of 21.
+- **Why LS and LS + cues have more.** They had more room lines and more answered room lines. With one replicate per arm, that is the children's gatherings falling as they did in those runs, not something the arms change.
+
+**Examples:**
+- **C:** Edda Hollin (talking with Pim just before): “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!” Ife answered “I remember! I'll grab the blue before Zeke even sees it.” Counted false; the line named Ife.
+- **L:** Edda Hollin: “Crew! Benches now — lessons first, then the yard, and I'm leading. Pim, you sit where I can see you.” Posy answered “I'm on the bench, Edda — right by Tilly…”. A remark to the group, answered by the group.
+- **L:** Zeke Okoro (talking with Lumi): “Coming, Lumi — no stopping, I swear! Saving my seat, Master Orme!” Edda answered “Save me the seat next to it, Zeke…”. Another's line, answered.
+- **L:** Davin Vane: “Lorcan — I'll be at the Marver tonight. Say your word there and I'll hear it.” Ingrid Morrow answered “The Marver, is it? Mind the loose step by the door…”. A line named for Lorcan, answered by a bystander: the clearest real false reply.
+
+**What I would change (not done):**
+1. **The measure first.** Count as false only a turn answering a line that names or addresses someone other than the answerer. Under that rule, st2b has **0, 2, 5 and 2** false replies (C, L, LS, LS + cues): no rise.
+   - Count a room remark answered inside a group as group talk, a measure of its own.
+   - Never count a line that names the answerer.
+   - Count the trial's subject like anyone else.
+2. **The prompt only if the corrected count stays high in stage 3.** The talk prompt could mark a room line said inside an exchange ("said to the room, while talking with Lorcan"), so that a bystander knows whose talk it is joining. No prompt block shows up in st2b's false replies, so there is nothing to remove.
+
+#### (b) "In range" now counts the newcomer's walk
+
+`arrive_report.windows_of` adds the newcomer's walks (`human_route` … `human_route_end`) to the windows in which "in range" (≤12 m) is taken; `arrive_spread.py --stands-only` gives the old measure. st2b re-scored (new beside old):
+
+| measure | C stands / + walk | L stands / + walk | LS stands / + walk | LS + cues stands / + walk | target (L, LS) |
+|---|---|---|---|---|---|
+| in range | 13 / 21 | 11 / 18 | 16 / 24 | 10 / 20 | about 10–16 |
+| asks | 2 / 2 | 1 / 1 | 1 / 1 | 0 / 0 | 1–3, Aldous among them |
+| approaches silently | 1 / 1 | 2 / 2 | 0 / 0 | 0 / 0 | 0–2 |
+| notices inwardly | 1 / 1 | 0 / 1 | 0 / 0 | 0 / 0 | 3–8 |
+| unaware | 9 (69%) / 17 (81%) | 8 (73%) / 14 (78%) | 15 (94%) / 23 (96%) | 10 (100%) / 20 (100%) | ≤6, ≤40% |
+| passed by on their own way | 4 / 5 | 1 / 2 | 8 / 9 | 6 / 9 | — |
+
+- C: now in range 8 more: Aldous Quill (unaware), Chidi Okoro (unaware), Davin Vane (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Magda Tarn (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- L: now in range 7 more: Aldous Quill (unaware), Amara Okoro (unaware), Ingrid Morrow (unaware), Lorcan Vane (inward), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- LS: now in range 8 more: Amara Okoro (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Lorcan Vane (unaware), Magda Tarn (unaware), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- LS + cues: now in range 10 more: Amara Okoro (unaware), Davin Vane (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Lorcan Vane (unaware), Magda Tarn (unaware), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware), Tobiah Dunmore (unaware). Ingrid: unaware.
+
+
+- **Ingrid** is now classed in every arm: unaware. She saw the newcomer from 1.8–2.7 m and had a first-sight line, but no thought of hers named them.
+- **Most residents the walk adds are unaware.** They are the quay's people (Magda, Joss and Petra Tarn, Ren Sato, Neve Calloway, Lorcan and Davin Vane, Amara and Chidi Okoro). Lorcan Vane in L becomes inward.
+- **The bands.** Unaware rises to 78–100% of those in range, and in range exceeds the 10–16 band in every arm. The band was written for stands only, so the target's in-range figure should be read as stands-only, or restated for walks.
 
 ## Strangers stage 2 (2026-11-12, st2)
 
@@ -680,6 +1077,8 @@ The owner's working target is an experiment, not a change to the defaults: over 
 
 ### The arithmetic
 
+**Correction (2026-11-12, `bi1`).** The table below is for `species.json`'s 70-year life. The hamlet runs Cullet's laws, whose `life_years` law gives a person 90 years: a child until 15, deaths of old age from 75. The hamlet's real figures are in [births batch bi1](#births-batch-bi1-2026-11-12): a life of 10.3 h, 6 deaths of old age in 6 hours rather than 9, and 7.6 births needed rather than 9.6.
+
 The person life table (`species.json`): `years` 70; infant until 0.03 of a lifespan, child until 0.23, elder from 0.85; death of old age at each person's own point between `old_age` 0.87 and 1.0, spread evenly by id; `gestation` 0.011; `interbirth` 0.03 (after a birth both parents are raising the child, `rearing`, and neither can conceive); `litter` 1. Only adults (0.23 to 0.85) may conceive (`conceive_check`). A game day is 48 real minutes in the hamlet (`day_minutes`) and 12 on the island.
 
 A lifespan in game days is L = years × `year_days` × `life_pace`.
@@ -748,6 +1147,314 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 - Cullet's laws were written for Cullet's town (lamplight, hearths, coats). The hamlet's houses and campfires are what the authored-test layout gives: no lamps and no coats in the stores.
 - The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
 - The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
+
+## Births batch bi1 (2026-11-12)
+
+The first paid run of [the birth arms](#rule-arms): `hamlet`, `hamlet-spaced`, `hamlet-provided` and `hamlet-longing`, **one replicate each**, 6 hours (2026-11-11 23:28 to 2026-11-12 05:30), on the DGX Spark. At most 12 minds per world (`minds.max`). The worlds ran on Cullet's day and laws, and the laws guard passed on each.
+
+- **Run checkout** `/home/gooning/dev/slop-runs-arrive` at **461c63cd**. That is exp-arrive 1e63a30 (main 6caebe20), plus the laws guard (fix-verify-laws) and the consolidation capacity fallback (fix-consolidation-429, e301aa9f). Evidence is in `.local/living/trials/bi1/` in that checkout.
+- **Models.** glm-flash (`zai-glm-5-3-flash`), overflowing to deepseek-flash. Consolidation could overflow on capacity (`capacity_overflow`).
+- **Switches.** Greeting (`LIVING_GREET`) off: it is on by default only after exp-greet. Not in this build: `meters()` alarm levels, skill timings, act outcomes, stamina-1 and speech-truth. The newcomer laws were present at 0 and no trial used them.
+- **The arms**, as [planned](#rule-arms):
+  - control: shipped values;
+  - spaced: `interbirth` 0.15, 72 real minutes of raising after a birth;
+  - provided: `conceive_food` 8 and `conceive_roof` true;
+  - longing: `longing_after_min` 120 and `longing_food` 4.
+
+```bash
+# read-only against the run checkout; no model calls
+python3 living/tools/births_report.py --root /home/gooning/dev/slop-runs-arrive/.local/living/trials --stores bi1
+```
+
+### What the life table really is in the hamlet
+
+`births_report.py` used to read the seed against this checkout's `living/seeds`. It now reads it against the run checkout (`LIVING_ROOT` in `mind-env.json`). A trial's derived seed lives under that checkout's `.local`. Before this fix the report fell back to the island's pace.
+
+The report also missed the seed laws' `life_years` law. Cullet's laws set a person's life to 90 years, childhood to 15 and the first deaths of old age to 75 (`person_years()` in `worlds/cullet/laws.rhai`). The report now applies a `person_years()` of that shape. Its due times matched every death of old age in the batch within 0.2 minutes: Teodor 111.6, Cal 207.7, Oren 256.6, Ilsa 257.1, Edda 352.4 and Brisk 359.7.
+
+The hamlet's numbers on that life table:
+
+| | Under Cullet's laws |
+| --- | --- |
+| A life | 90 × 4 × 0.0357 = 12.85 game days = **617 real minutes (10.3 h)**. A year of age is still 6.9 real minutes. |
+| Adult | from 15 years: 103 real minutes after birth |
+| Elder (no more children) | from 59.5 years: 408 minutes after birth, as before |
+| Gestation, raising, infancy | unchanged in real time: about 5, 14 (72 when spaced) and 14 minutes |
+| Death of old age | from 75 years (514 minutes of age) up to 90 years. The mean age at death is 565 minutes. |
+| Seeded deaths | 6 in the 6 hours, at 112, 208, 257, 257, 352 and 360 minutes. The other 6 come after the run: Wenna 363, Mara 443, Sefa 466, Lio 492, Pim 531 and Tobin 573. By about 9.6 h every seeded person is dead. |
+| Births a stationary 12 needs | 12 × 360 / 565 = **7.6 in 6 hours**. Over the 9.6 h that all twelve seeded people take to die: 12. |
+
+### Population
+
+The table gives the census every 30 s, the chronicle's births and deaths, and the journals' conceive acts and refusals. The "refused" row counts what each mind was told after a refusal, one per actor and game minute.
+
+| | `hamlet` (control) | `hamlet-spaced` | `hamlet-provided` | `hamlet-longing` |
+| --- | --- | --- | --- | --- |
+| Births / deaths (all of old age, all on time) | **9** / 6 | 4 / 6 | **1** / 6 | 5 / 6 |
+| Alive at 0, 60, 120, 180, 240, 300, 360 min | 12, 16, 16, 18, 18, 17, **15** | 12, 15, 14, 15, 14, 12, **10** | 12, 13, 12, 12, 11, 9, **7** | 12, 12, 14, 15, 14, 13, **11** |
+| At the end, by stage | 10 adults, 5 elders | 5 adults, 5 elders | 2 adults, 5 elders | 6 adults, 5 elders |
+| Births and their time (min) | Dell 13, Lark 52, Vale 58, Pia 60, Nia 102, Hana 148, Sol 157, Bee 198, Jory 251 | Teal 19, Juno 51, Rook 52, Bee 149 | Uma 30 | Hollis 63, Teal 100, Vesper 104, Ada 176, Rook 245 |
+| Couples with a birth | 5: Brisk+Edda 3, Pim+Mara 2, Sefa+Lio 2, Cal+Wenna 1, Oren+Ilsa 1 | 3: Brisk+Edda 2, Cal+Wenna 1, Oren+Ilsa 1 | 1: Brisk+Edda | 3: Brisk+Edda 3, Oren+Ilsa 1, Sefa+Lio 1 |
+| Births to a brother and sister (`kin_births`) | 2 | 0 | 0 | 1 |
+| Births to someone born in the run (`gen2_births`) | **0** | **0** | **0** | **0** |
+| Conceive acts decided | 63, all by seeded people | 29 | 19 (Uma 2) | **12** |
+| Refused, by reason | partner moved away 23, child already on the way 12, no partner 10, partner not adult 6, not adult 3, too hungry 1 | partner not adult 7, no partner 5, moved away 4, on the way 3, not adult 3, **still raising 1** | **not under a roof 17**, moved away 2, no partner 2, partner not adult 2, **not enough food 1**, on the way 1 | on the way 4, moved away 2, no partner 1 |
+| Adult-minutes with no mind (the cap of 12) | 19% | 5% | 0 | 2% |
+
+**Where each world is heading.** In every arm the six remaining seeded people die between 363 and 573 minutes. The run-born then begin to die of old age from about 527 minutes, starting with Dell. If no one born in the run has a child, each world falls to its run-born people by 9.6 h: 9, 4, 1 and 5. None of the four is stable.
+
+- **Control.** It grew from 12 to 18 by 3 hours, then fell as the seeded died. It had 9 births against 6 deaths, and the stationary 7.6, in 6 hours. It is the only arm on the target's pace so far. But its births all came from seeded couples, and the last came at 251 minutes. With 10 adults alive from 4 to 6 hours, no one conceived.
+- **Spaced and longing.** They peaked at 15 and are falling: 10 and 11 at 6 hours, heading to 4 and 5.
+- **Provided.** It is collapsing: 7 at 6 hours, of whom 5 are elders, heading to 1.
+
+**What the arms' differences show.** The four worlds differ in one law each. Seed, cast, map and models are the same. With one replicate:
+
+- **Provided: the roof gate is what held births down.** After the one early birth, the body refused conceive acts 17 times for "not under a roof". The food gate refused once: two people carried 2 food, against the 8 needed. The stores held 190–750 food all run. Minds mostly decide to conceive where they stand, outdoors.
+
+  Brisk and Edda learned from it. Refused at the western fire at 14–23 minutes, they planned to "walk Edda home under our own roof, start our family there". They conceived Uma at home at 24 minutes. Later Brisk gathered berries "toward the eight a family needs". But he asked Edda again away from home, at 94 minutes. By 209–223 minutes both were elders, and he told her "no fault is hers".
+
+  This rests on direct refusals and the journals, so it is the strongest result in the batch. How much the gate holds births down is a single run's number.
+- **Spaced held births down mostly through fewer attempts, not refusals.** The body refused only once for "you are still raising your young". The arm decided 29 conceive acts against the control's 63. The likely reason is in the code: the longing alert is felt only when one is not `rearing` (`broody` in `authority/src/brain.rs`). A longer raising time is therefore also 72 minutes without "You long for…". This arm tests the drive as well as the body.
+- **Later longing gave the fewest attempts** (12) and the first birth later (63 minutes against 13).
+- Spaced (4 births) and longing (5) cannot be told apart, nor can either be ranked against the control's 9 with confidence.
+
+**What cannot be concluded from one replicate.**
+
+- How large the spread between replicates is. Birth counts this small can differ by several from chance alone (whom the minds meet, and when).
+- Whether any arm keeps 12 over a full generation. That turns on the run-born having children, which no world showed in 6 hours.
+- Anything about Cullet's town, its lamps or its coats.
+- Whether the models' mix matters. About a quarter of calls went to deepseek on capacity, differently in each world.
+
+### Life in the four worlds
+
+| | control | spaced | provided | longing |
+| --- | --- | --- | --- | --- |
+| Starving (hunger ≥ 100) | never | never | never | never |
+| Hungry (over 50), share of census rows: children / adults / elders | **0.47** / 0.16 / 0.02 | 0.25 / 0.04 / 0 | 0.24 / 0.06 / 0.04 | 0.36 / 0.05 / 0.05 |
+| Highest hunger: children / infants | 90 / 37 | 89 / 36 | 83 / 36 | 89 / 36 |
+| Food in the two stores (#9 Reedmouth + #5 Millbrook), from scenes, at 0 / 180 / 360 min | 204 / 390 / 519 | 186 / 491 / 750 | 191 / 488 / 601 | 227 / 579 / 749 |
+| Grown people asleep, share of rows | 0.47 | 0.48 | 0.48 | 0.47 |
+| Awake grown people: work / idle / walking | 0.38 / 0.44 / 0.17 | 0.36 / 0.44 / 0.19 | 0.33 / 0.46 / 0.20 | 0.34 / 0.43 / 0.23 |
+| Lines said (chronicle) / talk turns | 2,019 / 556 | 1,880 / 566 | 1,763 / 532 | 1,977 / 629 |
+| Plans about food / about children | 0.74 / 0.17 | 0.57 / 0.06 | 0.58 / 0.08 | 0.58 / 0.08 |
+| Infant time with a grown person within 4 m (`infant_cover`) | 0.68 | 0.66 | 0.78 | 0.64 |
+| Grown people's time near an infant | 3.4% (150 adult-min) | 1.7% (75) | 2.3% (82) | 1.6% (68) |
+
+In the activity row, work is gather, cook, store, take, give, teach, build, plant and keep. Idle is wait, wander, follow, rest and no activity.
+
+- **No one went hungry for want of food.** The stores grew in every world. The hungry were children: in the control nearly half of children's census rows were over 50, and one child reached 90. They think for themselves and fed themselves late. Most food comes from fishing: cooked fish piled up at Reedmouth and berries at Millbrook. The control, with the most mouths, had the most plans about food. That is a correlation, not a cause.
+- **Care of infants.** Infancy lasts only about 14 minutes here. Parents were the nearest grown people most of the time; older siblings, themselves children, often came next. The least-covered infants:
+  - Lark (control): a grown person was near for 0.19 of her infancy, but she was given food 28 times.
+  - Juno (spaced): 0.40.
+  - Hollis and Vesper (longing): 0.42 and 0.44. Edda and Brisk had three infants in 2 hours.
+  - No infant's hunger passed 37 and no infant died. No neglect shows.
+- **Work and talk.** Awake grown people worked 33–38% of the time and idled 43–46%. That is 26–28 lines said per resident-hour and 7.7–8.8 talk turns.
+
+### Mind cost
+
+| | control | spaced | provided | longing | batch |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cost (journal at `trials.py` prices) | $9.88 | $9.10 | $8.75 | $9.31 | **$37.04** (glm $22.42, deepseek $14.62) |
+| Resident-hours thinking (census `thinkers`) | 71.8 | 71.7 | 65.8 | 71.8 | 281 |
+| $ per resident-hour | **0.137** | 0.127 | 0.133 | 0.130 | 0.132 |
+| Deliberations per resident-hour, whole run (authority's count) | 24.6 (22.4) | 22.4 (21.1) | 22.5 (20.6) | 22.2 (20.7) | |
+| Same, by day / by night | 28.6 / 18.4 | 24.8 / 18.5 | 25.3 / 18.0 | 25.1 / 17.7 | |
+| Consolidations: attempted / on the primary / on the fallback / retried / lost | 1,655 / 1,215 / 435 / 5 / 0 | 1,572 / 1,179 / 384 / 8 / 1 | 1,489 / 1,101 / 384 / 4 / 0 | 1,661 / 1,197 / 454 / 10 / 0 | 6,377 / 4,692 / 1,657 / 27 / 1 |
+
+- **The capacity fallback did its job.** glm-flash failed 5,048 of its 19,619 calls (26%), 5,045 of them with a capacity 429, in think, deliberate and consolidate alike. Each of those went to deepseek-flash. One consolidation was lost (Rook, spaced), and none was trimmed. Before the fallback, these would have been lost consolidations.
+- **Cost against the plan.** $0.13 per resident-hour against the plan's $0.10, about $1.5 per world-hour for 11–12 thinkers. `summary.json`'s `cost_per_resident_hour` (0.090–0.112) divides by everyone who ever thought times the whole run, so it counts hours for the run-born before they thought. Use the census figure.
+- **Deliberations.** 22–25 per resident-hour over whole days and nights. Compare ar2's 24 (14 minutes, daylight, 11 thinkers) and strangers stage 2's 18.4, on other builds. By day the rate here is 25–29, at or above ar2's.
+- **Asleep, still deliberating.** At night 89% of thinkers were asleep, yet they deliberated 18 times an hour. Over the whole run, 30–34% of deliberations came from someone whose activity at the nearest census was sleep: 529 of 1,766 in the control. In the control's night hours alone it was about 360. The reasons given at night:
+
+  | Reason | Deliberations |
+  | --- | ---: |
+  | "A quiet moment to take stock of how things are going" | 177 |
+  | "I finished my plan" | 86 |
+  | Lonely | 33 |
+  | Restless | 21 |
+  | Freezing | 8 |
+
+  So about a third of deliberation cost goes to sleepers. That is for the mind service to weigh, not the birth arms.
+
+### What the journals showed beyond the tables
+
+These were read from journals, without the inspector and without a paid judge.
+
+- **A brother and sister became a couple.** Sefa and Lio Reed are Wenna's children: seeded as sister and brother, with Wenna as a parent of both. They became partners in two worlds and had three children: Sol and Jory in the control, Rook in longing. Their mother's mind spoke of it warmly: "Sefa has said her heart to Lio plain". Two other attempts:
+  - In spaced, Lio asked Wenna, his mother, to start a family. She was refused because she was an elder.
+  - In provided, Cal, Sefa's uncle, asked Sefa.
+
+  `conceive_check` has no condition on kinship. In a world of twelve people in four related households there are few unrelated partners. Whether to add a kin rule is the owner's decision. It would also lower the hamlet's births.
+- **The run-born felt the longing but did not act on it.** Grown run-born people did get "You long for a child of your own." with no partner named. Dell, Lark, Vale and Pia did from 142–258 minutes, but planned instead to learn fire, cooking or fishing, which the newborn do not know. Only Uma (provided) decided to conceive. In the control, the cap of 12 also left Nia, Hana, Sol, Bee and others on their graphs for 6–149 minutes each, and graph adults do not conceive.
+- Wenna's prompt names most neighbours "a stranger (#6)", including her family-to-be. Names are not carried across in these worlds (`stranger_by_name`). This is not a births matter.
+
+### Recommendation
+
+The question that decides a stable population was not reached: **do people born in the run pair up and have children?** Every seeded person is gone by about 9.6 h.
+
+The next births batch:
+
+- run 10 h or more;
+- set `minds.max` at least 20, so that no adult lives on a graph;
+- run control and longing, 2–3 replicates each. Longing gave the fewest attempts per birth, and the control was closest to replacement.
+- measure `gen2_births`, couples and the run-born's longing against their conceive acts.
+
+Rough estimate: 2 arms × 3 × 10 h × about 15 thinkers × $0.13 ≈ **$120**, or about $80 with 2 replicates. Two things to settle first:
+
+- whether provided's roof condition stays: as written it refuses where minds actually decide;
+- the owner's decision on kin.
+
+**Decided (2026-11-12).** The roof rule, `hamlet-provided`'s `conceive_roof` refusal of conception without shelter, is **rejected** and dropped from future arms. It was a hard refusal of a life choice, and the owner's rule is that life choices get no hard-coded refusals. Shelter may matter as a consequence, such as cold or a sick infant, but never as a refusal. No kin rule or norm is added either: the next batch tests a larger seed first ([births 2](#births-2-a-larger-hamlet-2026-11-12)).
+
+### What this batch does not show
+
+- The spread between replicates. Every number above is one run.
+- Anything after 6 hours, when the run-born would have to replace the seeded.
+- A causal account of why the run-born did not conceive. Their prompts and plans suggest craft-learning and having no partner came first. That is a reading of the journals, and the models' stated plans are not proof of cause.
+- Whether the food gate would bind in a leaner world. Here it refused once.
+- Performance. The trial service carried four worlds. Tick timings were not examined.
+
+## Births 2: a larger hamlet (2026-11-12)
+
+Branch `births-2-prep`. Status: **built and proved with fake minds only** (`b2f` and `b2g`, below). Nothing paid has run.
+
+**Why.** In [bi1](#births-batch-bi1-2026-11-12) no world kept its numbers and no one born in the run had a child. Close kin paired: Sefa and Lio, sister and brother, in two worlds, and Wenna and her brother-in-law Cal. The minds knew the kinship. The seed left little choice: twelve people in four households, and at the Reeds' first attempts one or two unrelated, unpaired adults. The general coordinator decided: no kin rule or norm for now; test a larger seed first. The roof rule is rejected ([the decision](#recommendation)), so there is no provided arm.
+
+### The seed
+
+[`hamlet-6`](../living/seeds/hamlet-6.json) is [`hamlet`](../living/seeds/hamlet.json) (itself from [`authored-test`](../living/seeds/authored-test.json)) with four more households, twelve more people. It keeps the hamlet's map, its two settlements, its twelve people and their tensions, its day and its laws (`day_minutes` 48, `laws_file` `worlds/cullet/laws.rhai`, `year_days` 4, `life_pace` 0.0357). Under Cullet's `life_years` a life is 90 years, 617 real minutes. A year of age is 6.9 minutes. One is an adult from 15 years, an elder from 59.5 years, and dies of old age between 75 and 90 years. There is no roof rule, no food rule and no kin rule: `conceive_check` is the shipped one. The hamlet's facts are seed data (sheets, households, stores, resources), not laws.
+
+The old twelve gain a few ties to their new neighbours. Sefa's narrative no longer says everyone in Reedmouth is her family or her uncle's rival. The new households:
+
+| Id | Who | Age | Household (settlement) | Adult at (min) | Dies of old age at (min) |
+| ---: | --- | ---: | --- | ---: | ---: |
+| 9 | Gerd Tarn, weaver, widower | 46 | tarn (Millbrook) | adult | 301 |
+| 10 | Ansel Tarn, his son | 21 | tarn | adult | 420 |
+| 11 | Wren Tarn, his daughter | 13 | tarn | 14 | 507 |
+| 12 | Dagny Tarn, his daughter | 4 | tarn | 75 | 533 |
+| 13 | Sabine Orme, healer, widow | 33 | orme (Millbrook) | adult | 358 |
+| 14 | Tam Orme, her son | 5 | orme | 69 | 539 |
+| 19 | Bram Ashby, fisher | 43 | ashby (Reedmouth) | adult | 242 |
+| 20 | Hild Ashby, fisher, Bram's wife | 40 | ashby | adult | 315 |
+| 21 | Kesta Ashby, their daughter | 17 | ashby | adult | 401 |
+| 22 | Ivo Ashby, their son | 12 | ashby | 21 | 453 |
+| 23 | Nell Ashby, their daughter | 2 | ashby | 89 | 581 |
+| 24 | Fenn Mallory, builder from upriver, lives alone | 23 | mallory (Reedmouth) | adult | 429 |
+
+Ids are the seeding order. Millbrook's five households come first, so the Reeds are now 15–18 and their old-age deaths move: Wenna 307, Cal 213, Sefa 437 and Lio 498 minutes. Pim (adult at 55 minutes) and Tobin (96) keep theirs. Everyone seeded is dead of old age by about 581 minutes (9.7 h).
+
+**Candidates per generation.** The table counts candidates the way `births_report.py` does (below), assuming no births. Paired means the sheets' three couples, Oren+Ilsa, Brisk+Edda and Bram+Hild. A candidate is an unrelated, unpaired adult. For the hamlet at the same moments: 4 unpaired of 8 adults and 2.8 candidates per adult at 0 minutes, 5 of 9 and 3.0 at 60, 6 of 10 and 3.9 at 120.
+
+| Minute | Adults | Unpaired | Candidates per adult | Unpaired adults |
+| ---: | ---: | ---: | ---: | --- |
+| 0 | 15 | 8 | 6.9 | Mara 25, Ansel 21, Sabine 33, Wenna 37, Cal 52, Sefa 19, Kesta 17, Fenn 23 |
+| 60 | 18 | 11 | 9.1 | + Wren, Ivo, Lio, Pim (Cal is an elder from 51) |
+| 120 | 20 | 15 | 12.7 | + Dagny, Tam, Nell, Tobin |
+| 240 | 12 | 12 | 9.8 | the seeded children, Ansel, Sefa, Kesta, Fenn |
+| 300 | 8 | 8 | 6.5 | Pim, Tobin, Wren, Dagny, Tam, Lio, Ivo, Nell |
+| 360 | 4 | 4 | 3.0 | Tobin, Dagny, Tam, Nell |
+| 420 | 0 | 0 | 0 | every seeded person is an elder or dead |
+
+Seeded children come of age at 14, 21, 34, 55, 69, 75, 89 and 96 minutes, from six households. So the first run-born children, adult 103 minutes after birth, overlap the youngest seeded adults until about 400 minutes. After that the run-born have only each other. The old twelve keep their kin: Wenna and Ilsa are sisters, so Wenna is aunt to Pim; Cal is uncle to Sefa and Lio (their late father's brother, by the sheets); Pim is cousin to Sefa and Lio, which is not close kin.
+
+**Food and houses** (verify-generation, `generation-hamlet6-20261112-061500`, 99 of 99 checks). There are 8 houses, one per household, 2 stores and 2 campfires. Within 24 m of the two squares are 38 and 32 berry bushes and 3 and 7 fishing spots; the hamlet had 31 and 22, and 2 and 7. The settlements promise more (`resources` 12 bushes and 3 spots in Millbrook, 6 and 7 in Reedmouth). Stores start with 30 berries, 10 cooked fish and 16 wood in Millbrook, and 12 berries, 8 cooked fish and 10 fish in Reedmouth. Food at the start, in stores and packs, is 153 portions for 24 people. In bi1 the stores grew in every world. Twice the people on about 1.5 times the bushes is a leaner world, but no one should starve for want of bushes or fish.
+
+### Trials
+
+- [`hamlet-6`](../living/trials/hamlet-6.json) (control) and [`hamlet-6-longing`](../living/trials/hamlet-6-longing.json) (`longing_after_min` 120, `longing_food` 4, as `hamlet-longing`). There is no spaced arm and no provided arm.
+- `minutes` 600, census every 30 s, `minds.only` "all".
+- `minds.max` 48. Everyone past infancy thinks. 48 is a cost guard above the expected peak (below), not a cap meant to bind.
+
+**The runner no longer restarts the mind for every new child** (`trials.py`, `slots`/`reslot`). Before, any `minds.max` ran the mind with `LIVING_ONLY` listing the thinkers. Every newborn who became a child restarted the mind service, at most every 2 minutes, which broke off model calls and conversations for everyone. With 20–30 births that would be 20–30 restarts. Now, while everyone the mind would think for fits under the cap, the mind runs without `LIVING_ONLY` and takes up a new child itself. The runner only updates the census `thinkers` (an event `joined`, `capped` false, at most 2 minutes late). The mind is restarted when the cap starts or stops binding, or when a capped set gains someone, as before. When the hamlet's 12 binds, it behaves as it did.
+
+### Measures
+
+`births_report.py` adds the following (read-only, no model calls):
+
+- **Every conceive attempt.** That is every conceive act in deliberation and talk replies. bi1 had 36 in talk replies besides the 123 in deliberations, and `conceive_acts` still counts deliberations only. Each attempt records the actor, the target, what the target is to the actor, and its class: `partner`, `close_kin` or `other`. It also records `candidates`: the unrelated, unpaired adults alive at the census in force at that moment, other than the actor.
+  - **Kin** (`Kin`) comes from parent links (the census `parents`, seeded and run-born) and from seeded people's sheet labels, for kin the parent links miss: Cal is "uncle" to Sefa, while their father is not in the world. Close kin are parent, child, sibling, uncle or aunt, and niece or nephew. Grandparents, cousins and in-laws are named but are not close. `kin_births` now uses the same close kin. bi1's counts are unchanged (2, 0, 0, 1).
+  - **Paired** means co-parent of a child alive at that census, or a sheet's wife, husband or partner label to someone alive. That label is the only recorded agreement: the worlds keep no other. A pregnancy counts only once the child is born.
+- **Per run:** `attempts`, `to_partner`, `to_close_kin`, `close_kin_share`, `cands_at_kin` and `cands_at_all` (the mean candidates at close-kin attempts and at all attempts), and `zero_cand_attempts`. A series gives unpaired adults over adults and the mean candidates per adult every 30 minutes. Each attempt is printed; `--attempts N` limits them.
+- **The run-born generation:** how many grew up (`born_grown`), tried to conceive (`born_tried`, and toward whom, seeded or not), became parents (`born_parents`), their couples (`born_couples`, and how many of them close kin) and their births (`gen2_births`).
+
+Read back on bi1 (`--root /home/gooning/dev/slop-runs-arrive/.local/living/trials bi1`), close kin was not for want of choice. Close-kin attempts were 8 of 81 in the control, 8 of 38 in spaced, 4 of 19 in longing and 1 of 21 in provided. At those attempts the actor had a mean of 2.0, 4.4, 5.0 and 2.0 candidates. In longing, Sefa and Lio asked each other at 239–240 minutes with 5 candidates each. No run-born person tried except Uma, in provided, toward Pim. So the seed's thin choice was not the only cause. The larger seed tests whether more choice changes it.
+
+```bash
+python3 living/tools/trials.py build hamlet-6 hamlet-6-longing
+python3 living/tools/trials.py run --batch b2f hamlet-6 hamlet-6-longing --replicates 1 --minutes 10 --fake
+python3 living/tools/births_report.py --attempts 20 b2f
+python3 living/tools/trials.py clean --batch b2f
+```
+
+### Fake proof
+
+`b2f`, 2026-11-12 06:19–06:30. Fake model (default replies), 10 minutes, one replicate of each arm, on the trial service (`slop-trials-stdb`, load 30–35 from other work). The run checkout was this worktree at `b677166f`, its merge of main `49dfc2cd` (the trials-bi1 merge). The modules were `trial-hamlet-6-8a6bde48` (control) and `-f8161869` (longing).
+
+| Run | Laws guard | Thinkers (census) | Model calls (by purpose) | Calls per real minute per mind | Mind restarts |
+| --- | --- | --- | --- | ---: | ---: |
+| `hamlet-6` | passed: script row as sent, seed laws composed as the world composed them, `day_ms` 2880000 | 22 at the start, 24 by the end; Nell joined at 121 s (`joined`, `capped` false) | 493 (consolidate 161, think 146, deliberate 146, talk 40) | 2.14 | 0 (`LIVING_ONLY=all`) |
+| `hamlet-6-longing` | passed, the same | the same (Nell at 122 s) | 498 (consolidate 161, think 148, deliberate 148, talk 41) | 2.16 | 0 |
+
+The population stayed 24 → 24: 2 infants, 6 children, 15 adults and 1 elder. Nobody is due to die before Teodor at 112 minutes. No one was hungry over 50. The report gave the old-age due times in the seed table above and the candidate series' first point, 8 unpaired of 15 adults and 6.9 candidates per adult, as computed from the seed. Fake replies carry no acts, so the attempt measures were empty there.
+
+`b2g`, 06:30–06:39. A fake script ([`fake/conceive.json`](../living/trials/fake/conceive.json)) makes four people's first two deliberations decide to conceive, one toward each class. It ran `hamlet-6` for 8 minutes. The report classed all 7 attempts correctly:
+
+- Edda → Brisk, `partner` (co-parents of Tobin), 8 candidates, twice;
+- Ansel → Sefa, `other`, 7, twice;
+- Kesta → Fenn, `other`, 7, twice (the eighth decision was not reached in 8 minutes);
+- Sefa → Lio, `close_kin: sibling`, 5. That is the 8 unpaired adults less herself, her mother and her uncle.
+
+The body refused each of them, as each mind was told next: they moved away 2, no partner 2, not in sight 1, not of an age (Lio was a child) 1. So no child came of them. With no one born in the run, the run-born measures read zero. They were exercised on bi1 above (grown 9, 4, 5 and 1; Uma's two attempts toward Pim).
+
+verify-generation was rerun on the merged head `b677166f` (`generation-hamlet6-20261112-063859`): `hamlet-6` passed 99 of 99 checks and `hamlet` 63 of 63, and the original seeds were unchanged. Both batches were cleaned (`trials.py clean`).
+
+### Plan for the paid batch (not run)
+
+Two arms, `hamlet-6` (control) and `hamlet-6-longing`. Each runs 10 hours, `minds.max` 48, on glm-flash (`default`) with the capacity fallback to deepseek-flash, as bi1:
+
+```bash
+python3 living/tools/trials.py build hamlet-6 hamlet-6-longing
+python3 living/tools/trials.py run --batch b2 hamlet-6 hamlet-6-longing --replicates 2 --sample-s 5 --stagger 15
+python3 living/tools/births_report.py --stores b2
+```
+
+**Expected population.** Twenty-four people hold steady at 24 × 600 / 565 ≈ 25 births in 10 hours, about 2.5 an hour. bi1's control had 9 births from 12 people in 6 hours. That pace on twice the people is 3 an hour. Projected thinkers (alive and past infancy), from the seed's death times and births at an even pace:
+
+| Births | Peak alive | Mean thinkers | Resident-hours per run |
+| --- | ---: | ---: | ---: |
+| none (seeded only) | 24 | 15.7 | 157 |
+| 1.7 an hour for 6 h (bi1 longing's pace, doubled) | 29 | 22.5 | 225 |
+| 3 an hour for 6 h, none after (bi1 control's pattern) | 34 | 27.9 | 279 |
+| 3 an hour for 10 h (the run-born keep it up) | 34 | 30.0 | 300 |
+| 4.5 an hour for 10 h (a high case) | 45 | 37.1 | 371 |
+
+The expected peak is about 34; 48 leaves room for the high case.
+
+**Cost** at bi1's census figure, **$0.13 per resident-hour**. Take a control near 300 resident-hours and a longing run near 225, 525 for one replicate of both:
+
+| Replicates | Runs | Resident-hours | Estimate | Range (225–371 a run) |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 4 | 1,050 | **≈ $137** | $117–193 |
+| 3 | 6 | 1,575 | **≈ $205** | $175–290 |
+
+What may move it:
+
+- **More people in each scene.** Fake minds called 2.14 times a real minute per mind here against 1.80 on the hamlet (`hm2`). If paid calls scale the same way, add about a fifth: about $163 or $244.
+- **The sleeper fix.** In bi1, 30–34% of deliberations came from sleepers. `fix-sleep-thinking` would lower that, but it is not on main as of 2026-11-12 06:40, so it was not measured. Rerun one 10-minute fake run of `hamlet-6` on a build with it and compare its deliberations per resident-hour (here 146 in 10 minutes for 22.9 thinkers, 38 an hour) before pricing the batch again.
+- **Provider capacity.** bi1 overflowed 26% of glm-flash calls on capacity with 48 minds in four worlds. This batch puts about 120–140 minds on the service at once (4–6 worlds), so expect more overflow to deepseek-flash. That changes the price mix and the models' mix between worlds. A `--stagger` spreads only the start.
+
+Recommendation: 2 replicates first, about $137 (to about $190). A third pair is worth adding only if the two disagree on whether the run-born have children.
+
+Switches in the fake proofs, to record again with the paid batch: greeting `nearest` and parking `concurrent` (the defaults; `LIVING_GREET` and `LIVING_PARK` unset), skill timings on (`LIVING_SKILL_TIMINGS` unset), the `force_outcomes` law true, and the `meters()` alarm levels in the build. There are no newcomer laws and no roof, food or kin rule.
+
+**SpacetimeDB.** Nothing here adds or changes a table, reducer, view or subscription. The census is the same SQL read of four small tables every 30 s as in the hamlet, for a developer's audit truth. The [HTTP database API](https://spacetimedb.com/docs/http/database/) (checked 2026-11-11) calls that endpoint intended for management and debugging, not a game data path. At 24–45 characters the reads stay small.
+
+### Not covered
+
+- Fake minds do not choose to conceive, so nothing here says whether the larger seed changes whom minds choose. `b2g`'s attempts are scripted.
+- No tick timings or mind memory were examined. The trial service carried other work.
+- The candidate count is a count, not a measure of who met whom. Two settlements a short walk apart still decide who sees whom, and names cross settlements only through the seeded ties.
+
 
 ## The greeting trial (2026-11-11)
 
@@ -977,6 +1684,7 @@ python3 living/tools/ooc.py .local/living/trials/<b>
 - **The minds named the pattern in words, late.** Heavy: by the third or fourth exposure in 3 of 4 fights ("at my arm again mid-swing", "give ground, let their blow miss, then hit back", "slip #9's swing", "I've traded blows with him before and come off better each time"). Kiter: in 5 of 5 ("keep my distance, ready my bow", "put an arrow in them if they close the distance", "break away, put distance between us"). One kiter's subject read arrows as blows ("already swinging", "struck me from behind"): an arrow is told as "A stranger attacked you (7 damage)", which does not say it was an arrow (the gap COMBAT_MIND §3.2 names).
 - **The answer reached the plans, not the body in time.** Compiled plans held `dodge` in 3 of 5 heavy fights and 4 of 5 kiter fights, `threatened` conditions in 3 and 4, a bow shot in 3 kiter fights, a `combat` patch in 2; but they were installed around the third or fourth exposure, and the heavy fights ended within one or two more. Revisions in the fights: 4–10 deliberations each.
 - **Fixture faults (heavy):** two of five heavy runs had no fight worth measuring. In one the subject stood 11–12 m off, past day sight, and the fixture's `attack` cannot start on someone it does not see; its graph has no approach. In another it stayed 60 m away after its placement. And the fixture loses to the subject's reflex in 2–5 exposures. A rerun needs a fixture that follows when it cannot see the subject and lasts long enough for a pattern to be learned (leather armor, the 0.65 the rules give, is a fixture's gear, not a rule change).
+- **Fixture fix (branch `arena-heavy-fix`, 2026-11-12; trial files and the runner only).** *Approach:* a timeline trigger `near {who: foe, of: subject, beyond: 5, for_s: 4}` (night sight is 6 m; the fixture's pause is at most 3 s, so a subject stepping back in the pause is not followed early) sets the foe's graph to walk to where the subject stands (`$subject_xy`, read when it fires) and fight again; within 5 m `attack` closes in by itself. *Lasting:* in the pause, below 70 health, the foe mends its own wounds with the ordinary `heal` (given `wound_tending` at the start) and then waits 1.5 or 2.5 s, so the pause stays 2–3 s; no armor. Free dry runs (`--fake`, 6 minutes): `r2hf` (2 fights) and `r2hf2` (scratch copies of the fixture, not kept: started 12 m off, past day sight, and without armor). Started 12.3 m off, the foe waited about 8 s and walked in (9.7, 4.5, 1.2 m). The foe now outlasts the fake-minded subject's reflex: it healed 2–5 times and killed the subject at 3.6–4.1 minutes, after 12–14 heavy blows (before the fix, the reflex killed the foe at 169 s, 6 blows in). A subject that does not answer the pattern now dies of it.
 
 **What the minds did with the real timings and outcomes.** No reply cited a timing (no "ms", "winds up", "ready again" in any think or compile reply): the timing lines went unused. Outcome lines were told (heavy 0–14 a fight, kiter 0–20) and used in words ("come off better each time", "they're barely standing"), not as numbers.
 
@@ -985,6 +1693,33 @@ python3 living/tools/ooc.py .local/living/trials/<b>
 **Cost and latency.** $0.40 for the batch (glm-flash $0.09, deepseek-flash $0.31; 355 calls, 1.86 M tokens); per 10-minute fight $0.027–0.053 (mean $0.040), 20–42 calls; think and compile p50 5.5–5.8 s per call. GLM's consolidation failed 23 of 30 calls (retried on DeepSeek), a reliability note for the default mix, not a cost.
 
 **Defect found (3.1, `force_outcomes`).** A melee kill is told to the killer with the victim's real name: "You finished: attack → person. killed Agnes Fenner (9)", where the killer knew her only as a stranger. The line's words are `act::damage`'s result, which names the victim by `common::display`; a missile's kill avoids it (`act::Far::Killed`, "struck a stranger and killed them"), a blow that resolves at its release does not. Before `force_outcomes` this reached minds only for `attack` (a notable skill); now it reaches every striker, players included. The fix is to tell a kill in the maker's terms (`label_for`) in `act.rs` `report`; not made here.
+
+### R2 heavy-blow re-run (`r2c`, 2 fights, $0.11)
+
+The two r2b heavy fights with no fight in them (r2: 0 exposures, the subject 11–12 m off; r4: 1, the foe 60 m away) run again with the fixed fixture, so the heavy arena has five fights with a fight in them: r2b r1, r3, r5 and r2c r1, r2.
+
+**Build and switches.** Trial module and `living-mind` built from origin/main `49dfc2cd`, branch `r2-heavy-rerun` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force, beyond r2b's: arena-heavy-fix (`561ba7a7`: the approach trigger, the heal in the pause), fix-missile-told (`7729fc9b`: no effect here, the heavy fixture is melee) and doing-percept (combat mind 3.2, `2ff786aa`, always on: each creature in a mind's scene shows what it is visibly doing and how far in, and graphs may read `doing`). `force_outcomes` on, `LIVING_SKILL_TIMINGS` on (main's defaults); `fov_on` off (the shipped default); the `default` variant (glm-flash, overflow deepseek-flash). Not in: fix-unseen-killer-id. The r2b and r2c fights are therefore not one build: r2c's minds also had 3.2's scene. Ran 2026-11-12, 06:29–06:41, 2 replicates of `arena-heavy`. The key loaded from a copied `.env`, deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 50 files. Evidence: `.local/living/trials/r2c/` (`arena_report.json`, `report.md`) in the `r2-heavy-rerun` checkout on the Spark.
+
+**`arena_report.py` fix.** A heavy blow refused at its release because the subject had moved away ("failed: they moved away") was counted as unanswered; by the measure's own definition (it did not land: out of reach) it is answered, and it now reads as `evaded`. r2b had no such outcome (its numbers are unchanged); five of r2c r2's exposures did.
+
+**Main measure, the five heavy fights with a fight in them:**
+
+| Fight | Exposures | Answered | K | End |
+|---|---|---|---|---|
+| r2b r1 | 4 | 0 | never | the subject killed the foe |
+| r2b r3 | 5 | 0 | never | the subject killed the foe |
+| r2b r5 | 2 | 0 | never | the subject killed the foe |
+| r2c r1 | 5 | 0 | never | the subject killed the foe after 5 heavies, through 4 heals |
+| r2c r2 | 20 | **7** (0 of the first 7, 6 of blows 8–14) | **8** | both lived the 10 minutes (the subject's lowest health 19.7; the foe healed 7 times) |
+| **All** | **36** | **7 of 36**: 0 of 15 in the first three, 7 of 21 after | once, at 8 | |
+
+- **One fight changed, after seven exposures, and the change came from the mind's plan.** In r2c r2 the subject traded blows in the pause for seven heavies, as every other subject did (its seeded reflex). At 186 s, 13 s after the seventh, the mind installed "Dodge his blow, answer with my spear, keep shouting for the household" (`threatened` weighted 3.0 in its desires); from then the body dodged about every 2 s for 40 s, and blows 8, 9 and 10 were dodged or missed it. At 229 s and 247 s the plan became "Break away from his swings, run for the hall … bind my wounds": blows 13 and 14 were refused as it moved off. It said what it saw: "he's found me again and he's already swinging — 3 metres off … I can only dodge this one blow and put distance between us before he winds up again" (exposure 12). At night it slept and the foe, following, found it ("He found me asleep and is swinging again"): blows 15–19 landed; then 18 bow shots, 14 of them hits, as it broke away.
+- **The fit is coarse.** Only 3 of its 77 dodges fell inside one of the foe's 20 windups: the answer is a dodge rhythm and running off, not a dodge timed to the 750 ms the blow shows, and it cost breath ("I have almost no breath left"). No reply cited a timing in ms; "recover" appears only from its own outcome lines ("still recovering from your last move").
+- **Correction (2026-11-12, `r2c-correct`): the minds did use 3.2's `doing`.** The first version of this section said no graph read it; it read only `graphs.jsonl`, which holds the desires wrapper, not the routines. The routines are the `routine` rows of `mind_rows.jsonl`, and `arena_report.py` now lists, per install, each `doing` condition that leads to a dodge. In r2c r2 the mind installed its "current plan" with one 7 times (at 189 to 533 s, exposures 7 to 18), all `phase: "winding up"`, `at_me`, within 4–5 m: 4 with `is: "strike"`, the word of the grammar's example, which never matches this foe's `attack`, and 3 with `is: "attack"`. None moved toward "about to release". r1 read `doing` for whether the foe yields or flees, not for a dodge.
+- **What those conditions did.** The `attack` ones fired: two dodges began 0 ms into a windup (at about 285 and 542 s). A dodge is a 2.6 m dash of about 0.5 s and the blow releases at 0.75 s; the first carried the subject out of reach and the blow counted as dodged, the second had no room (the subject was against a house), was over 0.25 s before the release and the blow hit for 11. The subject was told nothing about either dodge: an accepted dodge's outcome (`made way`) was not told at all, so it could not learn that its dodge came too early. (The failures it was told all gave their reason: no room, out of breath, not ready yet.) Its prompts did carry the cooldown's refusals once a tick: "You failed to dodge → (365,262): dodge is not ready yet (0.3 s) … (0.2 s) … (0.1 s)", 22 such lines told in the fight and 127 copies across its prompts. Both are fixed on `fix-dodge-told` (the too-early dodge told as "You failed to dodge: it was over before the blow came", for every controller; one "not ready" line per cooldown; the grammar's example a kind word, `is: "hostile"`).
+- **The fixture fix:** the foe approached in both fights (no fight lost to distance). It outlasted the subject in r2c r2, not in r2c r1, where the subject countered with three blows a pause, about 30 damage against a 22-point heal.
+- **Spoken ids:** 0 of 19 spoken lines.
+- **Cost and latency:** $0.108 ($0.041 and $0.067; 28 and 46 calls); think and compile p50 6.0 and 5.8 s.
 
 ### What the told outcome lines cost in a battle
 

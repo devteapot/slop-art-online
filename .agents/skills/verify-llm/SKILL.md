@@ -1,6 +1,6 @@
 ---
 name: verify-llm
-description: Verify the living core mind service's OpenAI-compatible requests, model routing, overflow, retries, outage recovery, JSON repair, provider batch jobs and journals. Use after changes to living/mind/src/llm.rs, model configuration or model reply parsing.
+description: "Verify the mind service's model integration with a local fake provider: OpenAI-compatible requests, the model-config format (profiles, mixes, routing, keys), pacing, overflow, retries, outage recovery, JSON repair, provider batch jobs and journals. Use after changes to living/mind/src/llm.rs, model configuration or model reply parsing."
 ---
 
 # Verify model integration
@@ -71,7 +71,7 @@ After authorization:
 
 This checks provider access and response shape through Python HTTP. The local tier proves the Rust client. A live success does not establish full model-workload access or model judgment.
 
-[references/validation.md](references/validation.md) records the actual local run. Use `maintain-verification-skill` after this interface changes.
+[references/validation/](references/validation/README.md) holds one record per actual run; the newest files are the last validated runs. Use `maintain-verification-skill` after this interface changes.
 
 Both paid commands share [models_config.py](scripts/models_config.py). An explicit `--models` wins, then `LIVING_MODELS` from the environment or non-overriding `.env`, then `living/configs/models.json`. This matches the active mind configuration. Inspect the selected config before authorizing the paid tier; an explicit reviewed Mistral-only file avoids probing a legacy model chosen alphabetically at the same endpoint. The free tier supplies its own loopback fake config.
 

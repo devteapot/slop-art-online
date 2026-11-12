@@ -17,6 +17,19 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
     if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
         return None;
     }
+    // A mind's character names a person it cannot make out by the sighting's handle, not their
+    // id (far-handle); a player's client draws by id and keeps it.
+    let (subject, object) = if crate::combat::human(ctx, observer.id).is_none() {
+        let map = |id: u32| match (id, ctx.db.character().id().find(id)) {
+            (0, _) => 0,
+            (id, _) if id == observer.id || crate::far::is_handle(id) => id,
+            (_, Some(t)) => crate::far::id_for(ctx, observer, &t, now),
+            (id, None) => id,
+        };
+        (map(subject), map(object))
+    } else {
+        (subject, object)
+    };
     let row = ctx.db.experience().insert(Experience {
         id: 0,
         observer: observer.id,
@@ -94,6 +107,30 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
         percept(ctx, &c, now, kind, subject, object, at, text, sal);
+    }
+}
+
+/// A missile striking `object` at `at`, shot by `subject`: everyone who sees where it struck
+/// is told, by `seen` when it also sees the shooter ("{a} shot {b} with an arrow"), else by
+/// `unseen`, which names only the one struck ("An arrow struck {b}"; the percept's subject 0).
+/// The sight rule and the labels are `witnessed`'s.
+#[allow(clippy::too_many_arguments)]
+pub fn witnessed_shot(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subject: u32, object: u32, seen: &str, unseen: &str, salience: f32, exclude: &[u32]) {
+    let w = common::world(ctx);
+    let map = common::map(ctx);
+    let r = crate::perception::widest_sight(ctx, &w, now);
+    for (c, d) in minds_near(ctx, at, r, now, exclude) {
+        let Some((eye, heading)) = ctx.db.body().id().find(c.id).map(|b| (pos(&b, now), common::facing_at(&b, now))) else { continue };
+        if !crate::perception::in_sight(ctx, &map, c.id, eye, heading, object, at, d, &w, now, false) {
+            continue;
+        }
+        let sees_shooter = crate::perception::sees_creature(ctx, c.id, subject, now);
+        let (template, ids) = if sees_shooter { (seen, vec![subject, object]) } else { (unseen, vec![object]) };
+        let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
+        let (a, b) = if sees_shooter { (named.next().unwrap_or_default(), named.next().unwrap_or_default()) } else { (String::new(), named.next().unwrap_or_default()) };
+        let text = rendered(template, &a, &b, object != 0 && c.id == object);
+        let sal = if &*c.kind != "person" { salience * 0.5 } else { salience };
+        percept(ctx, &c, now, kind, if sees_shooter { subject } else { 0 }, object, at, text, sal);
     }
 }
 
@@ -307,6 +344,12 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
     request(ctx, id, reason, now, false);
 }
 
+/// As `request_deliberation`, saying whether the request was taken (false: no mind, or a mind
+/// asked again within its species' `think_min_s` of its last thought with nothing pending).
+pub fn ask_to_think(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bool {
+    request(ctx, id, reason, now, false)
+}
+
 fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool) -> bool {
     let Some(c) = ctx.db.character().id().find(id) else { return false };
     // Infants run on their instincts; they get a mind when they become children.
@@ -478,7 +521,15 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         // Too far away to make out: neither who they are nor whose community (far-label).
         let far = ch.kind == "person" && seen.name.is_empty() && seen.label == living_rules::script::FAR_PERSON;
         let mut o = JMap::new();
-        o.insert("id".into(), json!(c.id));
+        // A figure too far away to make out is named by its sighting's handle, never its id
+        // (far-handle); a person made out joins any handle the mind had for them.
+        let shown = if far { crate::far::handle_for(ctx, me.id, c.id, now) } else {
+            if ch.kind == "person" && ch.id != me.id {
+                crate::far::made_out(ctx, &me, c.id, now);
+            }
+            c.id
+        };
+        o.insert("id".into(), json!(shown));
         if !seen.name.is_empty() {
             o.insert("name".into(), json!(seen.name));
         } else if ch.kind == "person" {

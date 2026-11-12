@@ -175,13 +175,13 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False, node=No
     skin = dict(joints=order, inverseBindMatrices=append_accessor(j, binary, array("f", ibm.transpose(0, 2, 1).astype(np.float32).ravel().tolist()), 5126, "MAT4", False))
     j["skins"].append(skin)
     # The mesh: every accessor copied across; the material and its picture with it.
-    def copy(acc, scale=None):
+    def copy(acc, scale=None, each=None):
         values, (ct, typ, norm) = read_accessor(h, hbin, acc)
         if scale is not None:
             v = np.array(values, dtype=np.float64).reshape(-1, 4)
             unit = {5126: 1.0, 5123: 65535.0, 5121: 255.0}[ct]
             mean = np.maximum(v[:, :3].mean(axis=0) / unit, 1e-4)
-            v[:, :3] = np.clip(v[:, :3] * (np.array(scale) / mean), 0.0, unit)
+            v[:, :3] = np.clip(v[:, :3] * (np.array(scale) / mean) * (1.0 if each is None else each), 0.0, unit)
             values = array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()])
         return append_accessor(j, binary, values, ct, typ, norm, None)
 
@@ -201,7 +201,16 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False, node=No
                 g = pic[..., :3].mean(axis=2)
                 g = np.where(g > 0.04045, ((g + 0.055) / 1.055) ** 2.4, g / 12.92)
                 tone = np.array(colour) / max(float((g * pic[..., 3]).sum() / max(pic[..., 3].sum(), 1e-9)), 1e-3)
-        q = dict(attributes={k: copy(a, scale=tone if k == "COLOR_0" and colour is not None else None) for k, a in p["attributes"].items()}, mode=p.get("mode", 4))
+        # Greying, as the client mixes it: each vertex's tint is the natural colour mixed toward
+        # the silver by clamp(grey x _GREY, 0, 1), in the colours' own (sRGB) values.
+        each = None
+        if GREYING and colour is not None and "_GREY" in p["attributes"]:
+            amount, natural, silver = GREYING
+            t = np.clip(amount * np.array(read_accessor(h, hbin, p["attributes"]["_GREY"])[0], float), 0.0, 1.0)[:, None]
+            mixed = np.array(natural)[None, :] * (1 - t) + np.array(silver)[None, :] * t
+            mixed = np.where(mixed > 0.04045, ((mixed + 0.055) / 1.055) ** 2.4, mixed / 12.92)
+            each = mixed / np.maximum(np.array(colour)[None, :], 1e-4)
+        q = dict(attributes={k: copy(a, scale=tone if k == "COLOR_0" and colour is not None else None, each=each) for k, a in p["attributes"].items()}, mode=p.get("mode", 4))
         if "indices" in p:
             q["indices"] = copy(p["indices"])
         mi = p.get("material")
@@ -341,7 +350,7 @@ def tint_skin(j, binary, hexc):
                 p["attributes"]["COLOR_0"] = append_accessor(j, binary, array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()]), ct, typ, norm, None)
 
 
-def tint_eyes(j, binary, hexc):
+def tint_eyes(j, binary, hexc, at=None):
     """Stand in for the client's tag colour on the iris: the iris material's own picture, redrawn
     in shades of this person's eye colour (each pixel's lightness against the picture's mean,
     times the colour), as the client moves a picture's mean colour to the recipe's."""
@@ -361,8 +370,14 @@ def tint_eyes(j, binary, hexc):
             if id(image) in done:
                 continue
             done.add(id(image))
-            bv = j["bufferViews"][image["bufferView"]]
-            pic = np.array(Image.open(io.BytesIO(bytes(binary[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]]))).convert("RGB"), float) / 255
+            if "bufferView" in image:
+                bv = j["bufferViews"][image["bufferView"]]
+                pic = np.array(Image.open(io.BytesIO(bytes(binary[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]]))).convert("RGB"), float) / 255
+            else:
+                # The types' shared iris page (share.py types): the whole page is redrawn and kept
+                # in this file, since a page cannot be one person's colour.
+                pic = np.array(Image.open(os.path.join(os.path.dirname(os.path.abspath(at)), image.pop("uri"))).convert("RGB"), float) / 255
+                image["mimeType"] = "image/png"
             lum = pic @ np.array([0.3, 0.59, 0.11])
             out = np.clip(target[None, None, :] * (lum / max(float(lum.mean()), 1e-3))[..., None], 0.0, 1.0)
             # Keep what is nearly white or black as it is (the light in the eye, the pupil).
@@ -375,6 +390,9 @@ def tint_eyes(j, binary, hexc):
             j["bufferViews"].append(dict(buffer=0, byteOffset=len(binary), byteLength=len(data.getvalue())))
             binary.extend(data.getvalue())
             image["bufferView"] = len(j["bufferViews"]) - 1
+
+
+GREYING = None  # (grey, natural, silver): a person's greying, the two colours as sRGB values 0..1
 
 
 def linear(hexc):
@@ -413,11 +431,18 @@ def main():
     if a.identity:
         values.update(json.loads(a.identity) if a.identity.strip().startswith("{") else {k: float(v) for k, v in (x.split("=") for x in a.identity.split(",") if x)})
     j, binary = read_glb(a.inp)
+    for img in j.get("images", []):
+        if "uri" in img and not img["uri"].startswith("data:"):
+            there = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(a.inp)), img["uri"]))
+            img["uri"] = os.path.relpath(there, os.path.dirname(os.path.abspath(a.out))).replace(os.sep, "/")
     if a.person:
         line = json.load(open(a.person))["person"]
         cols = line.get("colors", {})
         a.hair = a.hair or os.path.join(a.styles, "hair", line["styles"]["hair"] + ".glb")
         a.hair_colour = a.hair_colour or cols.get("hair")
+        if line.get("grey") and cols.get("hair_natural") and cols.get("hair_silver"):
+            srgb = lambda hx: [int(hx.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)]
+            globals()["GREYING"] = (float(line["grey"]), srgb(cols["hair_natural"]), srgb(cols["hair_silver"]))
         for name in line["styles"]["outfit"]:
             item = os.path.join(a.styles, "outfit", name + ".glb") + ("=" + cols["outfit"][name] if name in cols.get("outfit", {}) else "")
             (a.head_piece if name in ("cap", "kerchief") else a.piece).append(item)
@@ -430,7 +455,7 @@ def main():
         if cols.get("skin"):
             tint_skin(j, binary, cols["skin"])
         if cols.get("eyes"):
-            tint_eyes(j, binary, cols["eyes"])
+            tint_eyes(j, binary, cols["eyes"], a.out)
     if a.hair:
         colour = linear(a.hair_colour) if a.hair_colour else None
         added = attach(j, binary, a.hair, a.out, colour)

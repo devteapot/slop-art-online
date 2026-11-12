@@ -10,6 +10,7 @@ use living_rules::catalog;
 use living_rules::combat::{Aim, Shape};
 use living_rules::map::chunk_of;
 use living_rules::script::{ActorFacts, Effect, SkillCtx, TargetFacts};
+use living_rules::steer::Spacing;
 use spacetimedb::rand::Rng;
 use spacetimedb::{ReducerContext, Table};
 
@@ -527,6 +528,54 @@ fn speed(ctx: &ReducerContext, id: u32, now: u64) -> f32 {
     sc.move_speed(&c).unwrap_or(2.5)
 }
 
+/// How near `close_in` comes when it names no distance (metres).
+const CLOSE_IN_M: f32 = 1.0;
+/// How far `back_off` gets when it names no distance (metres).
+const BACK_OFF_M: f32 = 4.0;
+
+/// Whether a movement intent may start: its distances make sense (`Spacing::check`, for a
+/// player's node too, which no lenient front end has read), it is held to a creature (`back_off`
+/// may be from a place), not to oneself, and the creature is perceived now by the one sight rule
+/// or by scent, as its steering will keep testing it (`motion::FLAG_SIGHT`). `back_off` needs
+/// room behind it.
+#[allow(clippy::too_many_arguments)]
+fn intent_check(ctx: &ReducerContext, id: u32, skill: &str, target: &Resolved, spacing: &Spacing, here: (f32, f32), me: &Body, node: u16, now: u64) -> Result<(), String> {
+    spacing.check(skill)?;
+    let creature = target.class == 3;
+    if creature && target.id as u32 == id {
+        return Err(format!("{skill} is movement relative to someone else, not yourself"));
+    }
+    if !creature && skill != "back_off" {
+        return Err(format!("{skill} is held to a creature; to be at a place, goto"));
+    }
+    if creature {
+        let tb = ctx.db.body().id().find(target.id as u32).ok_or("they are gone")?;
+        let tp = pos(&tb, now);
+        let d = dist(here, tp);
+        let w = common::world(ctx);
+        // Already in sight (resolved from what the body perceives, or a player's view): the keep
+        // margins hold. A player's own check is its perceived set's.
+        let kept = node != PLAYER || ctx.db.perceived().viewer().filter(ctx.sender()).any(|p| p.body == tb.id);
+        let seen = crate::perception::in_sight(ctx, &common::map(ctx), id, here, common::facing_at(me, now), tb.id, tp, d, &w, now, kept) || common::scent_of(&me.kind).is_some_and(|s| s.reaches(&tb.kind, d));
+        if !seen {
+            refuse(living_rules::outcome::act::UNSEEN);
+            return Err("you cannot see them".into());
+        }
+    }
+    if skill == "back_off" {
+        let map = common::map(ctx);
+        let from = target.at;
+        let open = [0.0f32, 0.6, -0.6, 1.2, -1.2].into_iter().any(|spread| {
+            let base = (here.1 - from.1).atan2(here.0 - from.0) + spread;
+            map.free(here.0 + base.cos() * 1.5, here.1 + base.sin() * 1.5)
+        });
+        if !open && dist(here, from) < spacing.distance.unwrap_or(BACK_OFF_M) {
+            return Err("cornered".into());
+        }
+    }
+    Ok(())
+}
+
 /// Start an action for behavior node `node`. `cur` is the current activity, if any.
 #[allow(clippy::too_many_arguments)]
 /// Whether the rules would let a skill go ahead now (the `can` condition): the check an action
@@ -578,7 +627,9 @@ pub fn refusal() -> &'static str {
 
 /// `answers` is what an answer (accept, decline) names: a trade offer's id and a record's id
 /// (0: none).
-pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, now: u64) -> Result<(), String> {
+/// `spacing` is a movement intent's distances (`living_rules::steer::INTENTS`).
+#[allow(clippy::too_many_arguments)]
+pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64) -> Result<(), String> {
     refuse(living_rules::outcome::act::REFUSED);
     let sc = common::scripts(ctx);
     let shape = shape_of(&sc, skill);
@@ -593,7 +644,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         // too: a 4 s wait does not carry on a 30 s one).
         // A run asked for (or a walk) that the body is not doing is a new start.
         let same_pace = run.map_or(true, |r| r == motion::runs(ctx, id));
-        if a.node == ORPHAN && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item && a.qty == qty && same_pace {
+        // A movement intent starts afresh: its distances are its steering's, not the activity's.
+        let intent = living_rules::steer::INTENTS.contains(&skill) && skill != "follow";
+        if a.node == ORPHAN && !intent && a.skill == skill && a.target.class == target.class && a.target.id == target.id && a.item == item && a.qty == qty && same_pace {
             let mut a = a.clone();
             a.node = node;
             a.revision = revision;
@@ -741,6 +794,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
         _ => {}
     }
+    if living_rules::steer::INTENTS.contains(&skill) {
+        intent_check(ctx, id, skill, &target, &spacing, here, &me, node, now)?;
+    }
     // A turn and nothing else: already facing its target, there is nothing to do.
     if sc.shows().get(skill).is_some_and(|s| s.turn) && target.class != 0 && !(target.class == 3 && target.id as u32 == id) {
         if living_rules::social::bearing(here, common::facing_at(&me, now), target.at) < common::laws(ctx).face_slack {
@@ -748,7 +804,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
     }
     let r = reach(ctx, skill);
-    let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow") || aim == Aim::Dash || aside;
+    let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow" | "keep_distance" | "close_in" | "circle" | "back_off") || aim == Aim::Dash || aside;
     // A skillshot at a point and a guard turn toward their point; they never walk to it.
     let in_place = target.class == 4 && matches!(aim, Aim::Point | Aim::Facing);
     let mut needs_approach = !in_place && target.class != 0 && target.class != 5 && (moving_skill || dist(here, target.at) > r);
@@ -844,8 +900,21 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 speed: sp * common::moves_of(ctx, id, now).flee,
                 flags: 0,
                 pace: sp * common::moves_of(ctx, id, now).flee,
+                far: 0.0,
             },
-            "follow" if creature => Goal::creature(target.id as u32, r, sp, 0),
+            // Movement intents: held to the creature by perception (`motion::FLAG_SIGHT`).
+            "follow" if creature => Goal::held(motion::GOAL_CREATURE, target.id as u32, target.at, spacing.distance.unwrap_or(r), 0.0, sp, 0),
+            "close_in" => Goal::held(motion::GOAL_CREATURE, target.id as u32, target.at, spacing.distance.unwrap_or(CLOSE_IN_M), 0.0, sp, motion::FLAG_EARLY),
+            "keep_distance" => {
+                let (near, far) = spacing.band(dist(here, target.at));
+                Goal::held(motion::GOAL_BAND, target.id as u32, target.at, near, far, sp, 0)
+            }
+            "circle" => {
+                let radius = spacing.radius.unwrap_or(dist(here, target.at)).clamp(living_rules::steer::CIRCLE_MIN_M, living_rules::steer::INTENT_MAX_M);
+                Goal::held(motion::GOAL_ORBIT, target.id as u32, target.at, radius, spacing.side.unwrap_or(1.0), sp, 0)
+            }
+            "back_off" if creature => Goal::held(motion::GOAL_FLEE, target.id as u32, target.at, spacing.distance.unwrap_or(BACK_OFF_M), 0.0, sp, 0),
+            "back_off" => Goal { kind: motion::GOAL_FLEE, target: 0, at: target.at, keep: spacing.distance.unwrap_or(BACK_OFF_M), speed: sp, flags: 0, pace: sp, far: 0.0 },
             "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
             _ if aside => Goal::point(target.at, sp * common::moves_of(ctx, id, now).aside, 0),
@@ -878,8 +947,10 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             _ => run.unwrap_or(false),
         };
         let goal = if runs { goal.run(sp * moves.run) } else { goal };
-        if skill == "follow" {
-            act.ends_ms = now + (common::laws(ctx).follow_s * 1000.0) as u64;
+        if matches!(skill, "follow" | "keep_distance" | "circle") {
+            // Held for its own seconds, else as long as one follow lasts; then it is done.
+            let secs = if qty > 0 { qty as f32 } else { common::laws(ctx).follow_s };
+            act.ends_ms = now + (secs * 1000.0) as u64;
         }
         if let Some(first) = motion::start(ctx, id, goal, now)? {
             if aim == Aim::Dash {
@@ -995,9 +1066,9 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
     }
     if timed {
         crate::combat::act_until(ctx, id, now);
-        if a.node == PLAYER {
-            crate::combat::resume_move(ctx, id, now);
-        }
+        // A movement a player asked for while the move held the body (whoever started it:
+        // a committed move holds a player's keys too, `combat::rooted_now`).
+        crate::combat::resume_move(ctx, id, now);
     }
     if a.phase == 1 && aim_of(&sc, &a.skill) == Aim::Facing {
         crate::breath::ease(ctx, id, now);
@@ -1149,12 +1220,43 @@ fn news(ctx: &ReducerContext, id: u32, what: &str, why: &str, now: u64) -> bool 
 /// choice refused on every look while a fallback runs counts once a window, not every look.
 /// Returns whether it was news (the evaluator then counts it in `fails`).
 pub fn refused(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, what: &str, why: &str, now: u64) -> bool {
+    // A move refused while its cooldown runs ("dodge is not ready yet (0.3 s)", a countdown
+    // that differs every tick) is told once per cooldown: the first refusal of this act until the
+    // skill is ready again (a streak), not one line a tick. Each refusal is still recorded (its
+    // routine's stat), for audit.
+    let waiting = format!("{skill} is not ready yet");
+    if why.starts_with(&waiting) {
+        let until = ctx.db.readiness().id().find(id).and_then(|r| r.ready.iter().find(|t| t.skill == skill).map(|t| t.at_ms)).unwrap_or(now);
+        let told = cooldown_news(ctx, id, what, &waiting, until, now);
+        routine_outcome(ctx, id, revision, node, false, why, now);
+        if told {
+            tell(ctx, id, false, skill, what, why, now, refusal(), false);
+        }
+        return told;
+    }
     if !news(ctx, id, what, why, now) {
         return false;
     }
     routine_outcome(ctx, id, revision, node, false, why, now);
     let code = refusal();
     tell(ctx, id, false, skill, what, why, now, code, false);
+    true
+}
+
+/// A cooldown refusal of `what` is news unless one was told during the same cooldown (its mark
+/// holds the time the skill is ready, `until`); news is marked so.
+fn cooldown_news(ctx: &ReducerContext, id: u32, what: &str, waiting: &str, until: u64, now: u64) -> bool {
+    let Some(mut st) = ctx.db.mind_state().id().find(id) else { return false };
+    let key = failure_mark(what, waiting);
+    if st.marks.iter().any(|m| m.node == key && now < m.at_ms) {
+        return false;
+    }
+    st.marks.retain(|m| m.node != key);
+    st.marks.push(Mark { node: key, at_ms: until.max(now + 1) });
+    if st.marks.len() > 24 {
+        st.marks.remove(0);
+    }
+    ctx.db.mind_state().id().update(st);
     true
 }
 
@@ -1208,9 +1310,9 @@ fn finish_as(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64, c
             let until = crate::combat::recovering(ctx, a.id, &a.skill, now);
             crate::combat::act_until(ctx, a.id, until);
         }
-        if a.node == PLAYER {
-            crate::combat::resume_move(ctx, a.id, now);
-        }
+        // A movement a player asked for while the move held the body (whoever started it:
+        // a committed move holds a player's keys too, `combat::rooted_now`).
+        crate::combat::resume_move(ctx, a.id, now);
     }
     if ok {
         common::practise(ctx, a.id, &a.skill);
@@ -1236,12 +1338,12 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
         return complete(ctx, a, now);
     }
     match a.skill.as_str() {
-        "follow" => {
+        "follow" | "keep_distance" | "circle" => {
             motion::brake(ctx, a.id, now);
             finish(ctx, a, true, "", now);
         }
         // A movement that found itself already there.
-        "goto" | "wander" | "flee" => finish(ctx, a, true, "", now),
+        "goto" | "wander" | "flee" | "close_in" | "back_off" => finish(ctx, a, true, "", now),
         s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, "", now),
         // Approaches are driven by steering events.
         _ => {
@@ -1295,6 +1397,31 @@ fn dodged(ctx: &ReducerContext, attacker: u32, vc: &Character, skill: &str, from
     "dodged".into()
 }
 
+/// How a dash that evades ends when nothing reached it while it lasted (`finish`).
+const MADE_WAY: &str = "made way";
+
+/// A blow or a missile reaches `vc` after a dodge of its own had ended: a dodge made while that
+/// blow was already coming (it ended after the blow began: the windup's start, or the shot's).
+/// What the dodger perceives is its own dodge ending and then the blow landing, so it is told
+/// that, as the dodge's outcome and once (that use's `skill_use` outcome says it): "You failed to
+/// dodge: it was over before the blow came". No timing it could not know; a person playing the
+/// character is told the same (`tell`, its `act_outcome` row).
+fn dodge_too_early(ctx: &ReducerContext, vc: &Character, attacker: u32, skill: &str, missile: Option<&str>, now: u64) {
+    let sc = common::scripts(ctx);
+    let Some(began) = ctx.db.skill_use().actor().filter(attacker).filter(|u| u.skill == skill && u.accepted_ms != 0 && u.accepted_ms <= now).map(|u| u.accepted_ms).max() else { return };
+    let dash = |s: &str| sc.combat(s).is_some_and(|c| c.aim == Aim::Dash && c.evades);
+    let Some(mut u) = ctx.db.skill_use().actor().filter(vc.id).filter(|u| u.outcome == MADE_WAY && (began..=now).contains(&u.outcome_ms) && dash(&u.skill)).max_by_key(|u| u.outcome_ms) else { return };
+    let came = match missile {
+        Some(m) => format!("the {}", m.strip_prefix("an ").or_else(|| m.strip_prefix("a ")).unwrap_or(m)),
+        None => "the blow".to_string(),
+    };
+    let why = format!("it was over before {came} came");
+    u.outcome = format!("{MADE_WAY}: {why}");
+    let skill = u.skill.clone();
+    ctx.db.skill_use().id().update(u);
+    tell(ctx, vc.id, false, &skill, &skill, &why, now, living_rules::outcome::act::FAILED, true);
+}
+
 /// Steering reports on the movement of an activity that is still on its way.
 pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
     let Some(a) = ctx.db.activity().id().find(id) else { return };
@@ -1315,9 +1442,9 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
             finish(ctx, a, false, &why, now)
         }
         Event::Arrived => match a.skill.as_str() {
-            "goto" | "wander" | "flee" => finish(ctx, a, true, "", now),
-            s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, "made way", now),
-            "follow" => {}
+            "goto" | "wander" | "flee" | "close_in" | "back_off" => finish(ctx, a, true, "", now),
+            s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, MADE_WAY, now),
+            "follow" | "keep_distance" | "circle" => {}
             _ => {
                 let here = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
                 let Some(tp) = target_pos(ctx, &a.target, now) else {
@@ -1470,7 +1597,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                         }
                     }
                 }
-                notes.push(damage(ctx, me, victim, amount, &a.skill, at, now));
+                notes.push(damage(ctx, me, victim, amount, &a.skill, None, at, now));
             }
             Effect::Give { item, qty } => {
                 let to = a.target.id as u32;
@@ -2039,7 +2166,7 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
             dodged += 1;
         } else if t.contains("missed: you were out of reach") {
             evaded += 1;
-        } else if t.contains("blocked your blow") {
+        } else if t.contains("blocked your blow") || t.contains("blocked your shot") {
             they_blocked += 1;
         } else if t.contains("dodged your attack") {
             they_dodged += 1;
@@ -2070,7 +2197,8 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
     if what.is_empty() && !long {
         return;
     }
-    let label = common::label_for(ctx, &c, other);
+    // A shooter it did not see is 0: unnamed, its health unknown.
+    let label = if other == 0 { "someone you cannot see".to_string() } else { common::label_for(ctx, &c, other) };
     // Their health as this fighter perceives it: the band everyone sees, exact only while an
     // appraisal of them is in force (never their `vitals`).
     let theirs = ctx.db.character().id().find(other).and_then(|o| crate::perception::health_seen(ctx, &c, &o, now));
@@ -2117,6 +2245,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.line_heard().speaker().delete(id);
     ctx.db.place().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
+    ctx.db.cue().actor().delete(id);
     ctx.db.judged().actor().delete(id);
     ctx.db.mind_cursor().actor().delete(id);
     ctx.db.act_queue().actor().delete(id);
@@ -2157,9 +2286,14 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
 }
 
 /// A blow lands, from `from` (the attacker, or behind a missile), and does its damage: at 0
-/// health the victim dies. `skill` is the move that dealt it. Returns what came of it, in
+/// health the victim dies. `skill` is the move that dealt it; `missile` is what a missile is
+/// called (`Scripts::missile_called`: "an arrow"), None for a blow. A missile is told as a
+/// shot, never as an attack: by the shooter as the victim (or a witness) perceives them when it
+/// sees them ("A stranger shot you with an arrow: hit for 7"), else by the missile alone ("An
+/// arrow struck you from somewhere you could not see: hit for 7"). Returns what came of it, in
 /// words.
-pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, skill: &str, from: (f32, f32), now: u64) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, skill: &str, missile: Option<&str>, from: (f32, f32), now: u64) -> String {
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return "they are gone".into() };
     let Some(vc) = ctx.db.character().id().find(victim) else { return "they are gone".into() };
     if !vc.alive {
@@ -2190,7 +2324,12 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         }
     }
     let code = sc.shapes().code(skill);
-    let shown = |kind: u8, amount: f32| crate::combat::show(ctx, now, crate::combat::Seen { kind, actor: attacker, target: victim, skill: code, at: at_v, dir: living_rules::combat::unit(at_v.0 - from.0, at_v.1 - from.1).unwrap_or((0.0, 0.0)), amount, ..Default::default() });
+    // A missile's shooter is told to the victim only when the victim sees them (`seen_shooter`);
+    // the combat feed hides it from whoever does not (`Seen::far_actor`).
+    let seen_shooter = missile.is_none() || crate::perception::sees_creature(ctx, victim, attacker, now);
+    let shown = |kind: u8, amount: f32| crate::combat::show(ctx, now, crate::combat::Seen { kind, actor: attacker, target: victim, skill: code, at: at_v, dir: living_rules::combat::unit(at_v.0 - from.0, at_v.1 - from.1).unwrap_or((0.0, 0.0)), amount, far_actor: missile.is_some(), ..Default::default() });
+    // The victim's words for whoever dealt it, and for the blow or the missile.
+    let who = |cap: bool| if cap { common::label_cap(ctx, &vc, attacker) } else { common::label_for(ctx, &vc, attacker) };
     common::count(|k| match defense {
         Aim::Dash => k.dodged += 1,
         Aim::Facing => k.blocked += 1,
@@ -2199,26 +2338,41 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     if defense == Aim::Dash {
         return dodged(ctx, attacker, &vc, skill, from, at_v, now);
     }
+    dodge_too_early(ctx, &vc, attacker, skill, missile, now);
+    let subject = if seen_shooter { attacker } else { 0 };
     if turned {
-        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("Your guard faced the wrong way: {}'s blow came from the side.", common::label_for(ctx, &vc, attacker)), 0.5);
+        let text = match missile {
+            Some(m) => format!("Your guard faced the wrong way: {m} came from the side."),
+            None => format!("Your guard faced the wrong way: {}'s blow came from the side.", who(false)),
+        };
+        percept(ctx, &vc, now, "combat", subject, victim, at_v, text, 0.5);
     }
     let amount = if defense == Aim::Facing {
         if let Some(ac) = ctx.db.character().id().find(attacker) {
-            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} blocked your blow.", common::label_cap(ctx, &ac, victim)), 0.5);
+            let what = if missile.is_some() { "shot" } else { "blow" };
+            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} blocked your {what}.", common::label_cap(ctx, &ac, victim)), 0.5);
         }
-        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("You blocked {}'s blow.", common::label_for(ctx, &vc, attacker)), 0.5);
+        let text = match missile {
+            Some(m) if seen_shooter => format!("You blocked {m} {} shot at you.", who(false)),
+            Some(m) => format!("You blocked {m} from somewhere you could not see."),
+            None => format!("You blocked {}'s blow.", who(false)),
+        };
+        percept(ctx, &vc, now, "combat", subject, victim, at_v, text, 0.5);
         amount * takes
     } else {
         amount
     };
     // Striking someone who has given in: the first such blow is news to everyone.
     let yielded = vc.kind == "person" && yielding(ctx, victim, &vc.kind, now);
-    let struck_since_yield = yielded && yielded_ago(ctx, victim, now).is_some_and(|ago| v.hurt_ms >= now.saturating_sub(ago as u64) && v.hurt_by == attacker);
-    let first_blow = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != attacker;
+    // Whoever hurt it, as the victim knows: a shooter it did not see is 0 (its `my_vitals`, the
+    // `Attacker` target, a yield's addressee), like the told line and the combat feed.
+    let hurt_by = if seen_shooter { attacker } else { 0 };
+    let struck_since_yield = yielded && yielded_ago(ctx, victim, now).is_some_and(|ago| v.hurt_ms >= now.saturating_sub(ago as u64) && v.hurt_by == hurt_by);
+    let first_blow = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != hurt_by;
     common::settle(ctx, &mut v, now);
     v.hp = (v.hp - amount).max(0.0);
     v.hurt_ms = now;
-    v.hurt_by = attacker;
+    v.hurt_by = hurt_by;
     v.rate_key = 0;
     let dead = v.hp <= 0.0;
     ctx.db.vitals().id().update(v);
@@ -2229,25 +2383,50 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     let vn = common::display(ctx, victim);
     let by_person = ctx.db.character().id().find(attacker).map_or(false, |c| c.kind == "person");
     common::wake(ctx, victim);
-    let label = common::label_cap(ctx, &vc, attacker);
-    let felt = if yielded { format!("{label} struck you though you had yielded ({amount:.0} damage)") } else { format!("{label} attacked you ({amount:.0} damage)") };
-    percept(ctx, &vc, now, "attacked", attacker, victim, at, felt, 1.0);
+    let label = who(true);
+    let got = if defense == Aim::Facing { format!("blocked, {amount:.0} got through") } else { format!("hit for {amount:.0}") };
+    let though = if yielded { " though you had yielded" } else { "" };
+    let felt = match missile {
+        Some(m) if seen_shooter => format!("{label} shot you with {m}{though}: {got}"),
+        Some(m) => format!("{} struck you from somewhere you could not see{though}: {got}", common::capitalized(m)),
+        None if yielded => format!("{label} struck you though you had yielded ({amount:.0} damage)"),
+        None => format!("{label} attacked you ({amount:.0} damage)"),
+    };
+    percept(ctx, &vc, now, "attacked", subject, victim, at, felt, 1.0);
+    // What a witness is told: a missile as a shot by the shooter it sees, or by the missile alone.
+    let shot = |seen: &str, unseen: &str| missile.map(|m| (seen.replace("{m}", m), unseen.replace("{M}", &common::capitalized(m)).replace("{m}", m)));
+    let pleading = match missile {
+        Some(_) if seen_shooter => format!("{label} is shooting at you"),
+        Some(_) => "Someone you cannot see is shooting at you".to_string(),
+        None => format!("{label} is attacking you"),
+    };
     if yielded && !struck_since_yield {
-        common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} struck {vn}, though {vn} had yielded"));
-        witnessed(ctx, now, at, "fight", attacker, victim, "{a} struck {b}, though {b} had yielded", 0.95, &[attacker, victim]);
+        let verb = if missile.is_some() { "shot" } else { "struck" };
+        common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} {verb} {vn}, though {vn} had yielded"));
+        match shot("{a} shot {b} with {m}, though {b} had yielded", "{M} struck {b}, though {b} had yielded") {
+            Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.95, &[attacker, victim]),
+            None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} struck {b}, though {b} had yielded", 0.95, &[attacker, victim]),
+        }
         if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you, though you yielded!"), now);
+            perceive::request_deliberation(ctx, victim, &format!("{pleading}, though you yielded!"), now);
         }
     } else if first_blow {
         if vc.kind == "person" || by_person {
-            common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} attacked {vn}"));
+            let line = match missile {
+                Some(m) => format!("{an} shot {vn} with {m}"),
+                None => format!("{an} attacked {vn}"),
+            };
+            common::chronicle(ctx, now, "attack", attacker, victim, at, line);
         }
-        witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]);
+        match shot("{a} shot {b} with {m}", "{M} struck {b}") {
+            Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.7, &[attacker, victim]),
+            None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]),
+        }
         if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you!"), now);
+            perceive::request_deliberation(ctx, victim, &format!("{pleading}!"), now);
         }
     } else if !dead {
-        fight_report(ctx, victim, attacker, now);
+        fight_report(ctx, victim, hurt_by, now);
         fight_report(ctx, attacker, victim, now);
     }
     if dead {
@@ -2258,12 +2437,13 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         }
         // The death record names the killer as the victim knew them (`perceived_of`): "killed
         // by a stranger" unless the name was known. The chronicle above keeps the real names.
-        let by = common::label_for(ctx, &vc, attacker);
+        let unseen = missile.filter(|_| !seen_shooter).map(|m| format!("{m} from someone unseen"));
+        let by = unseen.clone().unwrap_or_else(|| common::label_for(ctx, &vc, attacker));
         // The killer is told whom it killed as it perceives them (a name it knows, "a stranger",
         // or the far label), read while the body is still there: the same rule as every told line.
         let seen = ctx.db.character().id().find(attacker).map(|ac| common::label_for(ctx, &ac, victim)).unwrap_or_else(|| "them".into());
         let code = if yielded { living_rules::outcome::death::KILLED_YIELDING } else { living_rules::outcome::death::KILLED };
-        die(ctx, victim, &if yielded { format!("killed by {by}, after yielding") } else { format!("killed by {by}") }, now, attacker, code);
+        die_unseen(ctx, victim, &if yielded { format!("killed by {by}, after yielding") } else { format!("killed by {by}") }, now, attacker, code, unseen.as_deref());
         return format!("killed {seen} ({amount:.0})");
     }
     if defense == Aim::Facing {
@@ -2383,6 +2563,14 @@ fn give_in(ctx: &ReducerContext, me: u32, a: &Activity, at: (f32, f32), now: u64
 /// A character dies of `cause` (the record's words), `code` saying how
 /// (`living_rules::outcome::death`), killed by `killer` (0: no one).
 pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, code: &'static str) {
+    die_unseen(ctx, id, cause, now, killer, code, None);
+}
+
+/// [`die`], by a killer the dead did not see (a shooter out of its sight): `unseen` is how it
+/// was killed in its words ("an arrow from someone unseen"), and the dead's own rows (its death
+/// line, its outcome row's `other`, its combat feed's death) carry no killer, 0. Records (the
+/// chronicle) keep the real killer.
+pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, code: &'static str, unseen: Option<&str>) {
     let Some(mut c) = ctx.db.character().id().find(id) else { return };
     if !c.alive {
         return;
@@ -2394,9 +2582,14 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, co
     // with the killer as they knew them, and its outcome row says so in codes.
     let human = crate::combat::human(ctx, id).is_some();
     if human || crate::presence::played(ctx, id) {
-        let by = if killer != 0 { common::label_for(ctx, &c, killer) } else { String::new() };
-        if let Some(line) = percept(ctx, &c, now, "death", id, killer, at, living_rules::outcome::death_words(code, &by, cause), 1.0) {
-            let told = crate::outcomes::Told { kind: living_rules::outcome::kind::DEATH, ok: false, skill: "", code, what: "", why: "", other: killer };
+        let known = if unseen.is_some() { 0 } else { killer };
+        let by = match unseen {
+            Some(u) => u.to_string(),
+            None if killer != 0 => common::label_for(ctx, &c, killer),
+            None => String::new(),
+        };
+        if let Some(line) = percept(ctx, &c, now, "death", id, known, at, living_rules::outcome::death_words(code, &by, cause), 1.0) {
+            let told = crate::outcomes::Told { kind: living_rules::outcome::kind::DEATH, ok: false, skill: "", code, what: "", why: "", other: known };
             crate::outcomes::write(ctx, id, line, now, &told, true);
             // Under the minds its line was not staged for the person's client; it is now, and
             // released with the rest of its lines below.
@@ -2481,5 +2674,5 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, co
     ctx.db.deliberation().actor().delete(id);
     forget_dead(ctx, id);
     retire(ctx, id);
-    crate::combat::died(ctx, id, killer, at, now);
+    crate::combat::died(ctx, id, killer, at, now, unseen.is_some());
 }

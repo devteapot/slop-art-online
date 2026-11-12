@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, building as recipes, tools on recipes, the carry count, the goods audit, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing, and the breath and focus they cost), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), what someone is visibly doing (the `doing` condition and the scene's `visibly`), first sights in a crowd, what a graph's "stranger" means (the stranger_by_name law), steering (and running, for every controller), breath, tiredness and focus (`pools`, `walk_base`), fight length (`fights`, `chase`), deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: "Verify the living core authority's rules and its scheduled 60 Hz loop with offline Cargo checks and scripted scenes on verify-core-* scratch databases. Use when changing the tick, behavior graphs, deliberate acts, steering and movement, Rhai skills and specs, or a world law of any family: sight, senses and perception, speech, pools and breath, fights and combat, needs and the body, life and life stages, goods and recipes, wildlife and remains, attention and first sights, town life, a world's day, records and dealings. Also the viewer's display sync. features/README.md maps each law and feature to its scene."
 ---
 
 # Verify the core rules and loop
@@ -42,18 +42,27 @@ python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 # What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
 # and far label (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
+# Committed moves end early only by a wall or death (features/combat.md, about 30 s).
+python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
+# A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).
+python3 "$C/scenes.py" dodge_told --run "$R" > "$E/dodge_told.txt" 2>&1
 # First sights in a crowd: everyone in sight is told, several in one line (features/sight.md, about 30 s).
 python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 # A graph's "stranger" under the stranger_by_name law, off and on (features/graphs.md, about 30 s).
 python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&1
+# Attention cues under the cues_on law: once per thing, the cooldown and the gap, never a far figure, nothing off (features/cues.md, about 1.5 min).
+python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
 # Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run
-# with set_world_law first to measure another pairing).
+# with set_world_law first to measure another pairing; PURSUERS=wolf,person adds a person pursuer).
 python3 "$C/scenes.py" fights --run "$R" > "$E/fights.txt" 2>&1
 python3 "$C/scenes.py" chase --run "$R" > "$E/chase.txt" 2>&1
 python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
+# Movement intents: band, close in, circle, back off, follow, out of sight, refusals (features/steering.md, about 3 min), and their cost on the tick.
+python3 "$C/scenes.py" intents --run "$R" > "$E/intents.txt" 2>&1
+python3 "$C/scenes.py" intents_cost --run "$R" > "$E/intents_cost.txt" 2>&1
 # Another's health in fight reports and health_of: the band, exact only while appraised (features/combat.md).
 python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
@@ -281,7 +290,7 @@ Start lifecycle promptly after doctor while the seeded infant is still an infant
 
 ## Keep the evidence
 
-[features/README.md](features/README.md) maps the checks. [references/validation.md](references/validation.md) records the real runs and defects. Keep this map current with `maintain-verification-skill` when behavior changes.
+[features/README.md](features/README.md) maps the checks. [references/validation/](references/validation/README.md) holds one record per real run, with its defects; the newest files are the last validated runs. Keep this map current with `maintain-verification-skill` when behavior changes.
 
 `scenes.py` saves named snapshots, `<scene>-actions.jsonl` and `<scene>-results.json`. The recorder saves `stdb-actions.jsonl`, including the original drivers' before and after SQL. Cargo saves transcripts and `cargo-results.json`. `scenes.py` reads back the installed `brain` row after every graph replacement. The recorder captures complete `brain` rows after `set_behavior` and complete `routine` rows whenever the drivers probe an actor's routines. Compare those rows to the requested scene before interpreting results when normalization can change a graph or routine. Outputs belong under `.local/living/verify/`, never in this skill tree.
 
