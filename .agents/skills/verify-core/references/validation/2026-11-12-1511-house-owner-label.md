@@ -1,0 +1,11 @@
+# verify-core: house-owner-label
+
+Scoped maintain-verification-skill pass for `house-owner-label` (Spark, trial server `slop-trials-stdb` 2.14.1, private `CARGO_TARGET_DIR`; branch head `c367e043` = origin/main `e704ec0d` merged). Scope: the features this change touches, read from source by the coordinator (no subagent wave); every other feature of the skill is out of scope and unchanged. `just living-check` passed on the merged tree (all steps, 1702 s). Every scratch world was paused before deletion by `verify.py cleanup`.
+
+The change: `common::owner_label` names a structure's owner whenever the `owner_shown` law shows it (the viewer knows them, or the kind `shows_owner`), whatever the owner's distance (before: `label_for`, which read the owner's distance, so a known neighbour's house read "someone too far away to make out"'s when they were away). Lines about something owned (a notice line, a witnessed theft) carry the owner as subject or object only when they name them, by id, never by a far handle (`perceive::percept_owned`, `witnessed_owned`). docs/PERCEPTION.md "Whose a thing is".
+
+- `scenes.py owners` on plan-test, extended (`owners_away`, features/sight.md#owners): `core-hol6-155758` 22/22 PASS on the merged build (and `core-hol5-140549` before the merge). The away checks: the fellow's scene names the house's owner with the owner 50 m off under a 4 m "make out" overlay; no structure by a far figure; the campfire noticed "built by <owner>" with the owner's id as subject; the newcomer notices it with no owner and subject 0; a storage with `shows_owner` named to the newcomer in scene and line; the theft seen "from <owner>'s storage", object the owner's id.
+- Negative control: the same scene on the old `owner_label` (temporarily restored in this checkout) fails at the first away check with `home_of: "someone too far away to make out"` (`core-holbefore-135400`).
+- Drift fixed in the map: features/sight.md "Owners" gains the away checks; the scene's docstring says what it proves. No drift found in the other owner-known claims.
+
+Not covered: performance (no tick timings were read; the change adds no per-tick work: one `owner_label` per structure line as before), paid model runs, and the other features of this skill.

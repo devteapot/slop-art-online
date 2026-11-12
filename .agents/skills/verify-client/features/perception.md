@@ -50,3 +50,9 @@ Since 2026-11-11 (`fov-1`; docs/PERCEPTION.md, "The field of view (seventh chang
 - Off again (`set_world_law fov_on false`, then the 2 s linger): seen all round, nothing heard.
 
 `heard`, `hear_salt` and `law_change` are in the private inventory (`PRIVATE`; `heard` and `law_change` also refused to a player), `heard_sounds` in `VIEWS`, and `set_world_law` in `ADMIN` (refused to players and anonymous callers with "admin only"). The probe reports `heard_sounds` in its `perception` map (`key` as a string).
+
+## Whose a house is, with its owner away (house-owner-label)
+
+Since 2026-11-12 (docs/PERCEPTION.md "Whose a thing is"). A client names a structure's owner from the public `structure` row's `owner` and `my_known_names` (`living/game/src/looks.rs` `structure_name`), neither of which reads where anyone stands, so a client's house labels never depended on the owner's position. A player's character is told no "You notice …" lines (`brain.rs` `noticed` returns for a character that is not `ai`), so the owner-labelled text a player does receive from the authority is a witnessed deed such as a theft ("A stranger took 1 berries from <F>'s storage", `my_experience`), which did read the owner's distance: "… from someone too far away to make out's storage" when the owner was away under a far rule. `scripts/house_label.py` drives both: `house-known.jsonl`, `house-structures.jsonl`, `house-lines.jsonl`, `house_label.json` (checks, the lines, and how the client's rule reads the storage).
+
+- Known gap, for the client (not fixed here): the client ignores `shows_owner` (no shipped kind sets it) and a world's own `owner_shown` law; `house_label.json`'s `client_reads_storage_as` is "storage" where the player's line says "built by <X>". Showing it needs the kind's trait from the compiled script and the owner's name for an owner not in `my_known_names`, which no player row carries today.

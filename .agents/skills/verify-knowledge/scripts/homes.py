@@ -78,7 +78,15 @@ def scene(run, args):
         for text in (f"I'm {fname}. verify homes.", 'verify homes: the house by the open ground is mine.', 'verify homes: good day to you.'):
             run.admin('mind_say', f, text, m, 'say', 0, thought)
             time.sleep(2.6)
-        run.admin('place_at', f, x0, y0 + 80)
+        # F goes 40 m or more off, wherever the map has room.
+        for dx, dy in ((0, 80), (40, 40), (-40, 40), (40, 0), (0, 60), (60, 0)):
+            try:
+                run.admin('place_at', f, x0 + dx, y0 + dy)
+                break
+            except RuntimeError:
+                continue
+        else:
+            raise RuntimeError('no walkable spot 40 m off for F')
         # 2. M beside the house, F 40 m off.
         t1 = clock('clock-1')
         run.admin('place_at', m, hx + 1.5, hy + 1.0)
@@ -88,7 +96,8 @@ def scene(run, args):
         run.wait(lambda: any(t['kind'] == 'consolidate' and t['at_ms'] >= t1 - 20000 for t in run.private(f'SELECT * FROM thought WHERE actor = {m}', 'thoughts-m')), 'M consolidates', args.wait)
         time.sleep(3)
         places = [p for p in run.private(f'SELECT * FROM place WHERE actor = {m}', 'places-m') if p['name'] == f"{fname}'s house"]
-        edge = pv.cypher(run, container, f"MATCH (a {{run: '{run.db}', actor: {m}, key: 'person:{f}'}})-[r:LIVES_AT]->(b {{key: 'place:verify_home_f'}}) RETURN b.name AS name, b.x AS x, b.y AS y;", 'neo4j-lives-at')
+        # An edge's verb is its `rel` (the stored type may differ: memory.rs `stored_type`).
+        edge = pv.cypher(run, container, f"MATCH (a:Concept {{run: '{run.db}', actor: {m}, key: 'person:{f}'}})-[r {{open: true}}]->(b:Concept {{run: '{run.db}', actor: {m}, key: 'place:verify_home_f'}}) WHERE r.rel = 'LIVES_AT' RETURN b.name AS name, type(r) AS stored, r.rel AS rel;", 'neo4j-lives-at')
         # 4. F comes by; M thinks; recall brings the home back.
         run.admin('place_at', f, hx + 3.0, hy + 1.0)
         time.sleep(2)
