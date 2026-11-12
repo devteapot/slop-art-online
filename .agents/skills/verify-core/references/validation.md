@@ -6,6 +6,10 @@ Branch `fix-dodge-told` (merged with origin/main `c67bb6e1`), the trial service 
 
 ## 2026-11-12 move-intents: movement intents (Spark)
 
+## 2026-11-12 fix-far-silence (Spark)
+
+Branch `fix-far-silence` (`b9413029`), the trial service `slop-trials-stdb`, default seed. `core-fixfar-ch`: speech `channels` 31/31, with two new checks under an overlay making everyone past 8 m `far`. A line to e (seen, beyond the voice) reads "They are too far away: they could not have heard you." The player's line to d reads "They are out of earshot: they could not have heard you.", in its silence row and its `act_outcome` `why`. Unit test `speech::tests::a_far_figure_is_they_not_the_label_twice`. `just living-check` passed.
+
 Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-intents-053759` (evidence `.local/living/verify/core-intents-053759/`).
 
 - `intents` (new): 24 of 24, three times running on the final module (`intents.txt`, `intents-3.txt`, `intents-4.txt`). Earlier attempts found and fixed, in order: a holder slower than its walker cannot hold a band at a walk (the scene now picks the faster of two); a `close_in` from 10 m at night refused truthfully ("no #N in sight", started at 5 m now); a sight-held approach trailing a walker forever just beyond its distance (it now keeps at least the speed the target draws away at); `back_off` overshooting 7 m to 11 m (a still threat was looked at every 2 s; it now looks again when due at its distance); a `seq` stuck after a `back_off` that left its target out of sight (`brain.rs` now reads a finished leaf first); a graph cancelling an intent at its next evaluation when the target left sight (it now stays under steering's last-seen rule); the lost-sight grace starting from a throttled sighting (now `steer.unseen_ms`, when steering first found it out of sight).
@@ -16,6 +20,10 @@ Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trial
 
 
 ## 2026-11-12 doing-percept: what someone is visibly doing (Spark)
+
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle`, `core-farhandle`. Results: `stranger_filter` 9/9 (the far check now expects a handle ≥ 1000000000 and no entry with F's id), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7; speech `channels` 29/29 (`core-farhandle-ch`).
 
 Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-doing-052655`.
 

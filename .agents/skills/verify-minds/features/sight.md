@@ -34,6 +34,12 @@ Since `doing-percept` (2026-11-12; docs/PERCEPTION.md, "What someone is visibly 
 - The geometry search reads `terrain_chunk` (public) for a thin rock or wall run with open ground on the eye's side; a map without one fails with "no wall geometry", a fixture failure.
 - Players' side of the same rule is `verify-client`'s perception checks; the combat feed's is covered there and in `verify-core`.
 - Someone too far away to make out (far-label, 2026-11-12, docs/STRANGERS.md §1): where the world's `perceived_of` law marks a person `far` (Cullet past 24 m), the scene a mind is sent lists them as `"who": "someone too far away to make out"` with their `id`, no `name` and no `community`, and no first sight of them is told until they can be made out. Driven in verify-core `stranger_filter` (the scene the authority writes for a mind) and verify-client `far_label.py` (the same label to a player); the mind service changes only how memory names them (verify-knowledge [strangers](../../verify-knowledge/features/strangers.md)). `roundtrip` and `conversation` were rerun on far-label (2026-11-12) and pass.
+- `far-figure` (far-handle, 2026-11-12, docs/STRANGERS.md "Far handles"): two spawned people. M (thought for) founds a community and welcomes F, and an authored relation puts F in M's relations ("F (#id): neighbour"). An overlay of `perceived_of` makes everyone past 4 m `far` (`install_script.py`). F stands 5 m off and says a line (`mind_say`, admin). M's next prompt (`prompt-far.txt`) is checked:
+  - the scene lists a figure too far away to make out under a handle (≥ 1000000000), and no entry with F's id;
+  - the relations list names F;
+  - F's line is tagged with the handle, not F's id or name;
+  - no prompt line holds both the handle and F's name or id.
+  M's `mind_act` wave at the handle reaches F (`skill_use.target`). F is placed 2 m off: a `made_out` experience joins the handle to F's id, and the next prompt names F. The shipped script is installed again at the end. Evidence: `far-figure.json`, `prompt-far.txt`, `prompt-near.txt`.
 
 ## A dodge told truthfully (fix-dodge-told)
 

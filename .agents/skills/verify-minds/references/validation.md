@@ -3,6 +3,16 @@
 ## 2026-11-12 fix-dodge-told (Spark)
 
 Branch `fix-dodge-told` (merged with origin/main `c67bb6e1`), the trial service `slop-trials-stdb`. `dodge-told` on `minds-dodge3-074610`: pass. The eye was told "You failed to dodge: it was over before the blow came"; 4 "not ready yet" lines for 5 dodges; the asked thought's prompt carried the line, and 5 "not ready yet" lines (no more than dodges + 1). `doing`: pass on `minds-doing4-074902` (the grammar's example now `"is": "hostile"`). In `minds-dodge3-074610` it failed once in its setup ("the eye turned to the other" not within 20 s, before any `doing`). Mind unit tests 106 pass, `the_doing_example_uses_a_kind_word` among them.
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle` (from main `b657a344`), the trial service `slop-trials-stdb`, the fake model. New case `far-figure` (`minds-farhandle2-*`): 8/8. F, in M's relations as "Walker2 (#266)", stood 5 m off under an overlay making everyone past 4 m far:
+- the scene showed `{"id": 1000000059, "who": "someone too far away to make out"}`;
+- F's line read "Someone too far away to make out said: “Fine weather on the strand today.” {someone too far away to make out=#1000000059}";
+- no line tied the handle to Walker2 or #266;
+- a wave at the handle reached #266;
+- at 2 m the `made_out` row joined the handle to #266 and the scene named Walker2.
+
+The first attempt failed only because F's graph room line was never said; F now speaks by admin `mind_say`. The release mind's tests: 106 pass.
 
 ## 2026-11-12 move-intents (Spark)
 
