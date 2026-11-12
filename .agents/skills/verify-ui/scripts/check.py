@@ -273,6 +273,65 @@ def earshot(run, c):
     c.check(s, "law off: Tab as before, by the client's own reckoning", t6.get("authority") is False and t6.get("chose") == nxt(t6.get("prev"), t6.get("earshot") or []), str(t6))
 
 
+@scenario("ways")
+def ways(run, c):
+    """The world's ways of speaking in the talk box (`speech_card`; `human_speak`): the chip shows
+    the box's way, the Way key (Up) moves to the next in the cards' order; a line goes in that
+    way; Tab follows its reach; its `max_chars` cuts the box; what the rules refuse comes back in
+    their words, once. At noon on open grass, cleared, a fresh player with residents A 2 m off, C
+    10 m off (beyond a say's 9 m, within sight: 11 m by day) and B 20 m off (beyond sight, within a
+    call's reach): a say reaches A (Tab: A, not C); a whisper with no one within its reach is
+    refused ("a whisper needs someone to whisper to"); a call's Tab holds A and C, and B, unseen,
+    hears it. Then Settings › Controls offers the Way key."""
+    s = "ways"
+    cards = sorted(sql(run, "SELECT * FROM speech_card"), key=lambda r: (r.get("order", 0), r.get("name", "")))
+    names = [r["name"] for r in cards]
+    by = {r["name"]: r for r in cards}
+    # The rules' whisper and call, by what they are (a way that needs someone within a reach; the
+    # one that carries farthest), not by name.
+    near = next((r for r in cards if r.get("needs_to") and r.get("reach_m", 0) > 0), None)
+    far = max(cards, key=lambda r: r.get("carry_m", 0)) if cards else None
+    c.check(s, "the world has ways of speaking: a close one that needs someone, and a far one", len(cards) >= 3 and near is not None and far is not None and far is not cards[0], str([(r["name"], r.get("order"), r.get("needs_to"), r.get("reach_m"), r.get("carry_m"), r.get("max_chars")) for r in cards]))
+    if not (near and far):
+        return
+    a, b, cc = residents(run, 3)
+    people = {r["id"] for r in sql(run, "SELECT id, kind FROM character WHERE kind = 'person'")}
+    ax, ay = UNHEARD_SPOT
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] not in (a, b, cc) and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 30):
+        call_admin(run, "place_at", [r["id"], ax - 45, ay + 3 * i])
+    up = lambda n: "".join("key:ArrowUp:tap;wait:0.3;" for _ in range(n))
+    to_near = names.index(near["name"])
+    to_far = (names.index(far["name"]) - to_near) % len(names)
+    long = ("Over here! " + "x" * 120)
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:scene;wait:3;"
+            "key:Enter:tap;wait:0.8;dump:s0;tab;wait:0.4;dump:s1;type:Good day to you.;enter;wait:2.5;"
+            f"key:Enter:tap;wait:0.5;{up(to_near)}wait:0.6;shot:01_near;dump:w0;tab;wait:0.4;dump:w1;type:Psst.;enter;wait:2.5;dump:w2;"
+            f"key:Enter:tap;wait:0.5;{up(to_far)}wait:0.6;dump:c0;type:{long};wait:0.4;shot:02_far;dump:c1;enter;wait:3;dump:c2;"
+            "click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;click:@settings:page:controls;wait:0.6;dump:k0;key:Escape:tap;wait:0.3;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"ways-{int(time.time())}.token")
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}"]
+    out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{cc}:0:10", f"{b}:20:0"], syncs=syncs, extra=["--token", tok, "--player", "Speaker"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("s0", "s1", "w0", "w1", "w2", "c0", "c1", "c2", "k0")}
+    ty = lambda k: d[k].get("typing") or {}
+    way = lambda k: (ty(k).get("way") or {}).get("name")
+    ear = lambda k: ty(k).get("earshot") or []
+    c.check(s, "the box opens in the world's first way; its reach holds A, not C 10 m off nor B 20 m off", way("s0") == names[0] and a in ear("s0") and cc not in ear("s0") and b not in ear("s0"), f"way {way('s0')}; earshot {ear('s0')}")
+    c.check(s, "Tab goes by that way's list", (ty("s1").get("tab") or {}).get("earshot") == ear("s1") and ty("s1").get("to") in ear("s1"), str(ty("s1").get("tab")))
+    heard = lambda who, words: [r for r in sql(run, f"SELECT id, kind, text FROM experience WHERE observer = {who} AND kind = 'speech'") if words in r.get("text", "")]
+    c.check(s, "the say reaches A as before", bool(heard(a, "Good day to you.")), "A's speech rows")
+    c.check(s, "the Way key moves to the close way: no one within its reach, Tab has no one", way("w0") == near["name"] and ear("w0") == [] and ear("w1") == [], f"way {way('w0')}; earshot {ear('w0')}, {ear('w1')}")
+    refusal = [n for n in d["w2"].get("notes") or [] if "whisper" in n.lower() or "needs someone" in n.lower()]
+    c.check(s, "the close way to no one: refused in the rules' words, once", len(refusal) == 1, str(d["w2"].get("notes")))
+    c.check(s, "the far way's Tab holds A and C 10 m off (seen, beyond a say), not B unseen at 20 m", way("c0") == far["name"] and a in ear("c0") and cc in ear("c0") and b not in ear("c0"), f"way {way('c0')}; earshot {ear('c0')}")
+    mx = far.get("max_chars") or 0
+    c.check(s, "the box takes no more than the far way's max_chars", mx > 0 and len(ty("c1").get("words") or "") == mx, f"{len(ty('c1').get('words') or '')} of {mx}")
+    c.check(s, "B 20 m off, unseen, hears the call", bool(heard(b, "Over here!")), "B's speech rows")
+    L = log(out)
+    c.check(s, "lines went by human_speak in their ways", f"({far['name']})" in L and f"({names[0]})" in L, "client.log say lines")
+    c.check(s, "Settings › Controls offers the Way key", any(t.startswith("bind:Way:") for t in (d["k0"].get("tags") or {})), str([t for t in (d["k0"].get("tags") or {}) if t.startswith("bind:")][:20]))
+
+
 @scenario("talk")
 def talk(run, c):
     s = "talk"
