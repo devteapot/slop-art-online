@@ -1729,6 +1729,58 @@ def earshot_case(run):
     return {'status': 'pass', **result}
 
 
+@case('think-framing')
+def think_framing_case(run):
+    """The think prompt's framing is the world's `think_framing` law (docs/FRAMING.md). With the
+    law off, the think request the model is sent carries today's framing sentence and the section
+    "# Why you are thinking now". With it on (`set_world_law`), the system prompt is the same text
+    with that sentence replaced by the neutral one, word for word as replayed (N2), and the user
+    prompt has the same sections in the same order, the reason's renamed "# What just happened".
+    The law is restored at the end."""
+    today = ("Start from why you are thinking now: that is what this moment of thought is about. "
+             "Think about it as that person: what you make of it, and what you mean to do.")
+    neutral = ("What just happened is shown beside what you perceive. Think as that person about whatever "
+               "matters to you now, which may or may not be what just happened, and decide what you mean to do.")
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 1, True)
+    m = next(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    run.admin('set_behavior', m, json.dumps({'wait': 300}))
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    run.start(model(run, script), [m])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+    msgs = lambda e: {x.get('role'): str(x.get('content', '')) for x in e['body'].get('messages', [])}
+    heads = lambda u: [l for l in u.split('\n') if l.startswith('# ')]
+    asked = lambda marker: [msgs(e) for e in requests() if f'verify {marker}' in msgs(e).get('user', '')]
+    try:
+        run.admin('set_world_law', 'think_framing', 'false')
+        run.request(m, 'framing off')
+        off = run.wait(lambda: asked('framing off'), 'the think request with the law off', 90)[0]
+        run.admin('set_world_law', 'think_framing', 'true')
+        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        assert laws.get('think_framing') == 'true', laws
+        time.sleep(3.0)
+        run.request(m, 'framing on')
+        on = run.wait(lambda: asked('framing on'), 'the think request with the law on', 90)[0]
+    finally:
+        run.admin('set_world_law', 'think_framing', 'false')
+    (run.directory / 'prompt-off.json').write_text(json.dumps(off, indent=1))
+    (run.directory / 'prompt-on.json').write_text(json.dumps(on, indent=1))
+    renamed = [h.replace('# Why you are thinking now', '# What just happened') for h in heads(off['user'])]
+    checks = {
+        'off_system_has_today_once': off['system'].count(today) == 1 and neutral not in off['system'],
+        'off_user_has_why_section': '\n# Why you are thinking now\n' in off['user'] and '# What just happened' not in off['user'],
+        'on_system_is_off_with_the_sentence_replaced': on['system'] == off['system'].replace(today, neutral, 1),
+        'on_user_has_just_happened_not_why': '\n# What just happened\n' in on['user'] and '# Why you are thinking now' not in on['user'],
+        'on_user_sections_same_order_renamed': heads(on['user']) == renamed,
+    }
+    result = {'m': m, 'off_heads': heads(off['user']), 'on_heads': heads(on['user']), 'checks': checks}
+    (run.directory / 'think-framing.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('health-seen')
 def health_seen_case(run):
     """A mind in a fight is told its opponent's health as the band everyone sees, never as a
