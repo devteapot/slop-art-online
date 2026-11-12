@@ -251,10 +251,13 @@ def run_client(a, db, out, client, env, places, syncs, free_places=()):
                             x = sub(x)
                             if x in ("true", "false"):
                                 return x == "true"
-                            try:
-                                return float(x)
-                            except ValueError:
-                                return x
+                            # An id stays a whole number (a u32 argument takes no 311.0).
+                            for kind in (int, float):
+                                try:
+                                    return kind(x)
+                                except ValueError:
+                                    pass
+                            return x
                         args = json.dumps([val(x) for x in c[2:]])
                         r = subprocess.run([sys.executable, V, "call", "--run", a.run, c[1], args, "--as-player"], capture_output=True, text=True)
                         scene["calls"].append({"reducer": c[1], "as": "player", "args": args, "code": r.returncode, "out": (r.stdout + r.stderr)[-300:]})

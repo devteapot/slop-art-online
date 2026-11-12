@@ -28,6 +28,20 @@ def sql(run, q):
     return json.loads(t[i:]) if i >= 0 else []
 
 
+def sql_as_player(run, q):
+    """SQL as verify.py's player identity (`$V player join`), through its views."""
+    r = subprocess.run([sys.executable, V, "sql", "--run", run, q, "--as-player"], capture_output=True, text=True)
+    t = r.stdout
+    i = t.find("[")
+    return json.loads(t[i:]) if i >= 0 else []
+
+
+def call_admin(run, reducer, args):
+    """An admin reducer call (scene setup or restore), its output for evidence."""
+    r = subprocess.run([sys.executable, V, "call", "--run", run, reducer, json.dumps(args), "--as-admin"], capture_output=True, text=True)
+    return r.stdout + r.stderr
+
+
 def residents(run, n=2):
     """Adults the scene can place beside the player: alive people with a mind, not players."""
     rows = sql(run, "SELECT id, name, stage, alive, kind FROM character WHERE kind = 'person'")
@@ -1600,7 +1614,144 @@ def far(run, c):
     notes_clear(c, s, out)
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far}
+def seed_names(run):
+    """The proper names the seed this world was made from gives people and places (residents,
+    their first names, buildings, plan lots and spots), from `living/seeds/<seed>.json`."""
+    st = json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json")))
+    path = os.path.join(ROOT, "living/seeds", f"{st.get('seed', 'island')}.json")
+    if not os.path.exists(path):
+        return []
+    seed = json.load(open(path))
+    names = set()
+    for t in seed.get("towns") or []:
+        names.add(t.get("name") or "")
+        for r in t.get("residents") or []:
+            n = (r.get("name") or "").strip()
+            names.add(n)
+            first = n.split(" ")[0]
+            if len(first) >= 3 and first[:1].isupper():
+                names.add(first)
+        for b in t.get("buildings") or []:
+            names.add(b.get("name") or "")
+    for plan in ((seed.get("map") or {}).get("params") or {}).get("plans") or []:
+        for lot in plan.get("lots") or []:
+            names.add(lot.get("name") or "")
+            for sp in lot.get("spots") or []:
+                names.add(sp.get("name") or "")
+    # Proper names only (a capital letter): spots such as "bench by the door" or "gate" describe
+    # a thing anyone sees, and would match a thing's kind.
+    out = set()
+    for n in names:
+        n = n.strip()
+        n = n[4:] if n.lower().startswith("the ") else n
+        if len(n) >= 3 and any(ch.isupper() for ch in n):
+            out.add(n)
+    return sorted(out)
+
+
+def leaked(texts, names, given):
+    """Seed names found in the shown texts, but those the authority gave me (a known name, a
+    place of mine). A name with a capital matches as written; a lower-case one as a phrase."""
+    allowed = set()
+    for g in given:
+        allowed.add(g)
+        allowed.update(w for w in g.split(" ") if len(w) >= 3)
+    hits = []
+    for where, t in texts:
+        for n in names:
+            if n in allowed:
+                continue
+            found = (n in t) if any(ch.isupper() for ch in n) else re.search(rf"\b{re.escape(n)}\b", t, re.I) is not None
+            if found:
+                hits.append((where, n, t[:80]))
+    return hits
+
+
+def naming_of(out):
+    """Every dump's `naming` texts, and what the authority gave me to name."""
+    texts, given = [], set()
+    for f in sorted(glob.glob(os.path.join(out, "*.json"))):
+        try:
+            d = json.load(open(f)) or {}
+        except (ValueError, OSError):
+            continue
+        if not isinstance(d, dict):
+            continue
+        texts.extend((f"{os.path.basename(f)}:{k}", t) for k, t in d.get("naming") or [])
+        given.update(d.get("known_names") or [])
+        given.update(d.get("given_places") or [])
+    return texts, given
+
+
+def names(run, c):
+    """perceived-names-1's guard: a fresh player on a world from a named seed (Cullet) points at
+    residents, opens their wheel, the talk box, the Log and its People, and a person's window. No
+    text that names a person or a place on screen (the dump's `naming`) holds a seed resident's
+    name, a first name, a building's or a plan lot's or spot's name the player was not given (the
+    dump's `known_names`, `given_places`)."""
+    s = "names"
+    seeded = seed_names(run)
+    c.check(s, "the seed names people and places", len(seeded) > 0, f"{len(seeded)} names")
+    st = json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json")))
+    people = {r["id"] for r in sql(run, "SELECT id, kind, alive FROM character WHERE kind = 'person'") if r.get("alive")}
+    bodies = [r for r in sql(run, "SELECT id, x, y FROM body") if r["id"] in people]
+    arrive = (sql(run, "SELECT arrive_x, arrive_y FROM land") or [{}])[0]
+    ax, ay = arrive.get("arrive_x", 0.0), arrive.get("arrive_y", 0.0)
+    near = sorted(bodies, key=lambda r: (r["x"] - ax) ** 2 + (r["y"] - ay) ** 2)[:4]
+    steps = "".join(f"point:{r['id']};wait:0.7;dump:p{i};key:KeyF:down;wait:0.7;dump:w{i};key:KeyF:up;wait:0.2;key:Escape:tap;wait:0.3;"
+                    f"point:{r['id']};wait:0.4;key:Enter:tap;wait:0.6;dump:t{i};key:Escape:tap;wait:0.3;" for i, r in enumerate(near))
+    plan = ("ready;wait:5;dump:00;" + steps + "key:KeyL:tap;wait:0.6;dump:log;click:@log:tab:1;wait:0.6;dump:people;click:@log:person:0;wait:0.8;dump:window;"
+            "click:@log:tab:2;wait:0.5;dump:events;quit")
+    token = os.path.join(ROOT, ".local/living/verify", run, "ui", f"names-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, extra=["--token", token, "--player", "Newcomer"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    texts, given = naming_of(out)
+    kinds = {w.split(":")[1] for w, _ in texts}
+    c.check(s, "names were on screen: plates, the talk box, the Log", {"plate", "talk"} <= kinds, f"{sorted(kinds)}; {len(texts)} texts; residents pointed at {[r['id'] for r in near]}")
+    hits = leaked(texts, seeded, given)
+    c.check(s, "no person or place is named by a seed name the player was not given", not hits, f"{hits[:6]}; given {sorted(given)[:8]}")
+
+
+def death(run, c):
+    """The death screen names no one it should not (perceived-names-1). An admin's `kill` whose
+    cause names a resident (code `other`) says "You died", not the cause; killed by a stranger
+    (verify.py's player identity, striking with the scene's sharper, free strike) says "Killed by"
+    the stranger as perceived ("a stranger in …"), never their name. Each drive is a fresh player."""
+    s = "death"
+    rid = residents(run, 1)[0]
+    real = (sql(run, f"SELECT id, name FROM character WHERE id = {rid}") or [{}])[0].get("name", "")
+    d = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    os.makedirs(d, exist_ok=True)
+    tok = lambda k: os.path.join(d, f"death-{k}-{int(time.time())}.token")
+    # 1. An admin's cause that names someone.
+    plan = "ready;wait:3;dump:00;sync:kill;wait:3;shot:01_died;dump:01;quit"
+    out, code, text = drive(run, "death-other", plan, syncs=[f'kill=kill|{{me}}|"killed by {real}"'], extra=["--token", tok("other"), "--player", "Fallen"])
+    c.check(s, "client ran and joined (killed by the admin)", code == 0, text[-300:])
+    dt = (dump(out, "01") or {})
+    words = [t for k, t in dt.get("naming") or [] if k == "death"]
+    c.check(s, "a cause that names someone: the screen says only You died", words[:1] == ["You died"] and not any(real and real in t for _, t in dt.get("naming") or []), f"{words}; resident {real!r}")
+    # 2. Killed by a stranger.
+    subprocess.run([sys.executable, V, "player", "--run", run, "join", "Striker"], capture_output=True, text=True)
+    me2 = (sql_as_player(run, "SELECT * FROM my_characters") or [{}])
+    striker = next((r["id"] for r in me2 if r.get("alive")), None)
+    sname = next((r.get("name") for r in me2 if r.get("id") == striker), "Striker")
+    c.check(s, "the stranger who strikes is a living player character", striker is not None, str(me2)[:200])
+    hits = "".join("sync:hit;wait:0.9;" for _ in range(8))
+    plan = "ready;wait:3;sync:sharp;sync:near;wait:1.5;dump:00;" + hits + "wait:2;shot:02_killed;dump:02;sync:blunt;quit"
+    syncs = ['sharp=set_world_law|"dmg_strike"|"40";set_world_law|"cost_strike"|"0"', f"near=place_at|{striker}|(mx+0.9)|(my)",
+             f'hit=player|use_skill|strike|{{me}}|(mx)|(my)', 'blunt=set_world_law|"dmg_strike"|"5";set_world_law|"cost_strike"|"20"']
+    try:
+        out, code, text = drive(run, "death-struck", plan, syncs=syncs, extra=["--token", tok("struck"), "--player", "Struck"])
+    finally:
+        call_admin(run, "set_world_law", ["dmg_strike", "5"])
+        call_admin(run, "set_world_law", ["cost_strike", "20"])
+    c.check(s, "client ran and joined (struck)", code == 0, text[-300:])
+    dt = (dump(out, "02") or {})
+    words = [t for k, t in dt.get("naming") or [] if k == "death"]
+    c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and words[0].startswith("Killed by a stranger") and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}")
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death}
 
 
 def main():
@@ -1612,7 +1763,7 @@ def main():
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
     # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
-    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace", "grid")]:
+    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace", "grid", "names")]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)

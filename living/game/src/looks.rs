@@ -57,6 +57,19 @@ impl Looks {
     }
 }
 
+/// The names the authority has given me to show (for the UI dump's guard): everyone I perceive
+/// by name, and my own characters.
+pub fn known_names(net: &Net) -> Vec<String> {
+    let Some(c) = net.conn.as_ref() else { return Vec::new() };
+    c.db.seen_characters().iter().map(|x| x.name).chain(c.db.my_characters().iter().map(|x| x.name)).filter(|n| !n.trim().is_empty()).collect()
+}
+
+/// The places the rules say my character knows (`my_places`), by name.
+pub fn given_places(net: &Net) -> Vec<String> {
+    let Some(c) = net.conn.as_ref() else { return Vec::new() };
+    c.db.my_places().iter().map(|p| p.name).filter(|n| !n.trim().is_empty()).collect()
+}
+
 /// A colour's name, from its hue, saturation and value (a few plain words).
 pub fn colour_name(hex: &str) -> Option<&'static str> {
     let h = hex.trim_start_matches('#');
