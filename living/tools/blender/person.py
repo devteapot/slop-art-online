@@ -999,7 +999,8 @@ def make_face(arm, spec, atlas_path):
     # and the tag for the eyes' colour goes to materials named so.
     # The brows are a material of their own too (VRoid's `FaceBrow`): plain colour as the lines
     # are, and the one the client gives the person's hair colour.
-    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint", brow="brow").get(k, "line") for k in m.fm]
+    # The iris's lights ride in the lips' and blush's layer: a fixed colour the client leaves be.
+    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint", lights="tint", brow="brow").get(k, "line") for k in m.fm]
     order = [k for k in ("face", "eye", "iris", "line", "brow", "skin", "tint") if k in set(fm)]
     A, C0, PXI = head_mesh.ATLAS, head_mesh.IRIS_COL0, head_mesh.IRIS_PX
     iris_verts = {v for f, k in zip(m.f, m.fm) if k == "iris" for v in f}
@@ -1042,13 +1043,15 @@ def make_face(arm, spec, atlas_path):
             tex.image = img
             bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
             mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-    if tint_src:
-        # The layer's picture: the skin's layout at half its size, pigment with an alpha.
+    if layer is not None:
+        # The layer's picture: the atlas's layout at half its size, pigment with an alpha. Lips
+        # and blush where the skin is, the iris's lights where the iris is.
         A2 = head_mesh.ATLAS
         pic = np.zeros((A2, A2, 4))
         pic[..., :3] = face_paint.BLUSH_PIGMENT
         pic[head_mesh.EYE_ROWS :, :, :3] = layer["rgb"]
         pic[head_mesh.EYE_ROWS :, :, 3] = layer["alpha"]
+        pic[:PXI, C0 : C0 + PXI] = layer["lights"]
         # Averaged with the alpha as weight, so a half-covered texel keeps the pigment's colour.
         blocks = pic.reshape(A2 // 2, 2, A2 // 2, 2, 4)
         a_ = blocks[..., 3:4]
