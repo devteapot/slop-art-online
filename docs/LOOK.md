@@ -361,12 +361,12 @@ What this shows:
 
 | Chain (each step published over the last with its data kept) | Updates | Panics | Guard lines |
 |---|---|---|---|
-| main → look-1-auth | 1 | **1** (main's module) | 0 |
+| main → look-1-auth | 1 | **1–2** (main's `tick`, and its `housekeeping` when its once-a-second call falls in the window) | 0 |
 | main → main + guard → look-1-auth, three times | 6 | **0** | 1 each, on the step to look-1-auth |
 | main + guard → look-1-auth → look-1-auth + a column on `world` | 2 | **0** | 1 each |
 | look-1-auth → look-1-auth + a column on `world` | 1 | **0** | 1 |
 
-After every step the world ticked, kept its `world` row, its 9 characters and both timers. After each chain, `relook("fixture-1")` gave the 5 residents their looks with no panic.
+After every step the world ticked, kept its `world` row, its 9 characters and both timers. The chains ran twice: `core-updates-1112-164613` on look-1-auth `53aa7d02` and main `9d62be70`, and `core-updates-1112-170308` on look-1-auth `68f585e8` (main merged) and main `7a2633b1`, with the same counts (the second unguarded control panicked in `tick` and `housekeeping`). After each chain, `relook("fixture-1")` gave the 5 residents their looks with no panic.
 
 **The safe update path.** The guard must be in the module being *replaced*. A world running main's module today will log the one harmless panic when it is updated straight to look-1-auth. To have none:
 1. Update it first to main plus the guard alone (commit "update guard", three files, no schema change). That update rewrites no table, so main's module never trips.
