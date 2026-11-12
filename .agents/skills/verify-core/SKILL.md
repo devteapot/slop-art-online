@@ -56,6 +56,9 @@ python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&
 python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
 # First sights that ask for a thought under first_sight_thinks: refused then owed, the gap, never far or named, sleepers, with a cue (features/first-sight.md, about 4 min).
 python3 "$C/scenes.py" first_sight --run "$R" > "$E/first_sight.txt" 2>&1
+# The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
+# on an island run it also drives the told lines of `outcomes`).
+python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1

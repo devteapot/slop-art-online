@@ -1226,7 +1226,7 @@ impl<'a> Ev<'a> {
 
     /// Attention cues (docs/ATTENTION.md): what this character's mind wrote should bring it to
     /// think, matched by type against what it perceives now (the scene this evaluation built),
-    /// at most once a second, while the `cues_on` law holds. A thing that begins to match a cue
+    /// at most once per `cue_check_s` (a second by default), while the `cues_on` law holds. A thing that begins to match a cue
     /// becomes one `noticed` experience quoting the mind's own reason, and a request to think;
     /// once per thing per `cue_cooldown_s`, and once per character per `cue_gap_s` (things that
     /// begin to match together are told in one line). A person too far away to make out matches
@@ -1237,7 +1237,8 @@ impl<'a> Ev<'a> {
             return;
         }
         let (me, now) = (self.me.id, self.now);
-        let due = CUE_HELD.with(|m| m.borrow().get(&me).map_or(true, |(t, _)| now.saturating_sub(*t) >= 1_000));
+        let every = (laws.cue_check_s * 1000.0) as u64;
+        let due = CUE_HELD.with(|m| m.borrow().get(&me).map_or(true, |(t, _)| now.saturating_sub(*t) >= every));
         if !due {
             return;
         }
@@ -1445,8 +1446,10 @@ impl<'a> Ev<'a> {
     /// encounters, long-absent faces, nearby danger and newly noticed structures. Routine
     /// re-perception only refreshes familiarity, so experience volume follows novelty.
     /// A first sight of someone one cannot place asks for one thought (`first_sight_thinks`,
-    /// docs/FIRST_SIGHT.md). `fresh` holds this look's first sights of people not known by
-    /// name (far figures never get a first sight). The reason is their part of the first-sight
+    /// docs/FIRST_SIGHT.md). `fresh` holds this look's first sights of people it cannot place:
+    /// their label is not their name, by the shared answer `perception::regard` gives every
+    /// asker in the transaction (cue-cache), so never someone known by name, and far figures
+    /// never get a first sight. The reason is their part of the first-sight
     /// line, word for word, through `ask_to_think` (the species' `think_min_s`, merged into a
     /// pending request). A refused request is owed: tried again at later looks for at most
     /// `FIRST_SIGHT_OWED_MS` while the person is in sight and still cannot be placed, and
@@ -1469,9 +1472,15 @@ impl<'a> Ev<'a> {
             if thought_since || now.saturating_sub(st.since_ms) >= FIRST_SIGHT_OWED_MS {
                 st.owed.clear();
             } else {
+                // Still in sight and still unplaced: the shared answer (`perception::regard`,
+                // once per observer and target per transaction, cue-cache) that names people in
+                // the look's labels: not named (unknown, or too far away to make out) and not far.
                 st.owed.retain(|(id, _)| {
                     cands.iter().any(|c| c.id == *id)
-                        && ctx.db.character().id().find(*id).is_some_and(|t| !crate::perception::knows_name(ctx, &self.me, &t) && !crate::perception::regard(ctx, &self.me, &t, now).far)
+                        && ctx.db.character().id().find(*id).is_some_and(|t| {
+                            let r = crate::perception::regard(ctx, &self.me, &t, now);
+                            !r.name && !r.far
+                        })
                 });
             }
         }

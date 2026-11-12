@@ -251,7 +251,13 @@ verify-client needs nothing: no table, view or reducer changes.
 
 ## As built (first-sight, 2026-11-12)
 
-Built as designed, on main `d80a1373` with fix-sleep-thinking merged. cue-cache's regard cache is not on main, so "can't place" is the test `noticed` already makes for each first-sight part (`named`, from `label_for`).
+Built as designed, on main `d80a1373` with fix-sleep-thinking merged, then brought up to main `a2fcf052` (cue-cache).
+
+**"Can't place" is the shared answer.** Since cue-cache, `perception::regard` and `knows_name` are computed once per observer and target per transaction and shared by every asker: cues, labels and first sights, graph filters and told lines (`regard_cache`, docs/ATTENTION.md "Shared answers"). The test reads that answer in two places:
+- a look's first-sight part is unplaced when its label (`perception::label`, from `regard`) is not the person's name;
+- an owed request keeps a person while `regard`'s answer is still neither `name` nor `far`.
+
+So a first sight and a cue on someone unknown in the same look read one answer.
 
 **Where it lives:**
 - the laws `first_sight_thinks` (false) and `first_sight_gap_s` (300, clamped 0–3,600) in `skills.rhai` `laws()` and `laws_about`, and `script.rs` `Laws`;
