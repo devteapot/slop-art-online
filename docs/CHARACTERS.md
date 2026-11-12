@@ -1884,7 +1884,7 @@ Lengths in percent of the figure's height unless a row says H:
 
 **How a woman's form is built.** Every file keeps the one rest skeleton, so clips, pieces and types still share it. A woman's form is two things that are one design:
 
-- **The standard woman's proportions** (`person_params.WOMAN`): `legs` 1.075, `torso` 0.84, `arms` 0.90, `shoulders` 0.60, `hips` 0.92, `hands` 0.75, `feet` 0.90. They are scales on bones, which the client already applies from a person's line. With them her joints stand where the reference's do: the hip joint at 55.4% of her height, the neck's at 83.1, 13.4 between the shoulder joints, the arm 26.8 from shoulder to wrist, the hand 0.65 of a head, and she is 6.93 heads tall.
+- **The standard woman's proportions** (`person_params.WOMAN`): `legs` 1.075, `torso` 0.84, `arms` 0.90, `shoulders` 0.60, `hips` 0.92, `hands` 0.84 (0.75 until [the hands part](#the-body-hands) made a man's hand smaller), `feet` 0.90. They are scales on bones, which the client already applies from a person's line. With them her joints stand where the reference's do: the hip joint at 55.4% of her height, the neck's at 83.1, 13.4 between the shoulder joints, the arm 26.8 from shoulder to wrist, the hand 0.65 of a head, and she is 6.93 heads tall.
 - **Her pieces are written for those scales** (`person.py`, `Stance` and `WOMAN_FORM`). The form is given as she stands in the game: at each height, as a percent of her height, the torso's half width, half depth and how far its middle stands before the hips' joint, 24 rows read from the reference's cuts. A ring of a garment is looked up at the height it will stand at and written wider by what the bones will take off it. So a jersey's waist is 12.5 cm from the axis in the file and 10.9 on her, and its chest at the armholes 20 cm in the file and 12 on her.
 - **Only proportions are taken from the reference,** as for the face's anchors: numbers measured on its cuts, nothing of its mesh.
 - **The neck hole stays round.** The upper chest's bone is scaled 0.60 across and the neck's is not, so the yoke's last rings, the collars and the neck's foot are written wider by their own weights' scale (`across`). Women's type files change for this: the neck's foot, 14 mm at most.
@@ -1974,6 +1974,65 @@ The body pass, second part (2026-11-12, branch `char-4-body`): how the jersey, s
 2. **The cut.** A smock is still one bell from the waist and a coat a fitted tube; there is no seam, pleat, pocket or lapel that is modelled, only painted bands and patches.
 3. **Sleeves** are smooth tubes with no fold at the elbow, and on a woman's form the sleeve's head stands a little proud of the narrow shoulder.
 4. **Boots** are a man's sea boots made narrower.
+
+### The body: hands
+
+The body pass, third part (2026-11-12, branch `char-4-body`). Measured first (`living/tools/characters/reference/hand.py`), then built again from the measured shares.
+
+```bash
+python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/vroid-Sendagaya_Shino.glb --json shino.json --mask shino.png
+python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/types/adult-f-b.glb --params NAME.params.json --head 0.2564
+```
+
+- The left hand at rest, ours posed by its proportions as the client poses it, in its own frame: along (the wrist's joint to the middle finger's first joint), across (toward the thumb) and up.
+- Lengths are between joints, a finger's tip being the furthest of its last bone's own vertices; a thickness is twice the middle distance of a bone's own vertices from its line. Everything is a share of the hand's own length (wrist to the middle finger's tip), so a man's and the reference's compare.
+
+**What it found.** Our hand was a paddle with four pegs, ordered by how much it shows:
+
+1. **The fingers lay parallel and flat.** The reference's fan 9° from index to little finger and slope 9° below the palm at rest.
+2. **They did not taper:** 0.088 of the hand thick at the first bone and 0.075 at the last, where the reference's go from 0.118 to 0.048.
+3. **The palm was half the hand** (0.51) and the fingers short: the middle 0.50 for 0.57, the little finger 0.37 for 0.46.
+4. **The thumb was short and set high:** 0.50 of the hand from a first joint 0.13 up the palm; the reference's is 0.65 from beside the wrist (0.02), with its first bone inside the ball of the thumb.
+5. **The palm was thin and narrow:** 0.13 thick and 0.41 across for 0.20 and 0.47.
+6. **A man's hand was 0.87 of a head** ("large working hands"). The reference's is a woman's, 0.64; a living man's is about 0.75.
+
+| Shares of the hand's own length, unless said | Shino | Vivi | woman before | woman | man before | man |
+|---|---|---|---|---|---|---|
+| The hand, in heads | 0.64 | 0.57 | 0.65 | 0.66 | 0.87 | 0.79 |
+| The hand, mm | 150 | 121 | 167 | 170 | 222 | 203 |
+| Palm (wrist to the middle finger's first joint) | 0.45 | 0.45 | 0.51 | 0.44 | 0.51 | 0.44 |
+| Across the knuckles | 0.47 | 0.50 | 0.41 | 0.45 | 0.41 | 0.45 |
+| Thick at the knuckles | 0.20 | 0.21 | 0.13 | 0.18 | 0.13 | 0.18 |
+| Index finger | 0.52 | 0.52 | 0.46 | 0.51 | 0.46 | 0.51 |
+| Middle finger | 0.57 | 0.57 | 0.50 | 0.56 | 0.50 | 0.56 |
+| Ring finger | 0.50 | 0.50 | 0.46 | 0.50 | 0.46 | 0.50 |
+| Little finger | 0.46 | 0.46 | 0.37 | 0.45 | 0.37 | 0.45 |
+| Thumb, its three bones | 0.65 | 0.67 | 0.50 | 0.64 | 0.50 | 0.64 |
+| Thumb's first joint, along the hand from the wrist | 0.02 | 0.02 | 0.13 | 0.03 | 0.13 | 0.03 |
+| Middle finger thick: first bone, second, last | 0.118, 0.109, 0.048 | 0.125, 0.115, 0.051 | 0.088, 0.083, 0.075 | 0.110, 0.099, 0.072 | 0.088, 0.083, 0.075 | 0.110, 0.099, 0.072 |
+| Thumb thick at its first bone | 0.179 | 0.186 | 0.102 | 0.140 | 0.102 | 0.140 |
+| Fingers' fan: index to little, degrees | 9.0 | 9.5 | 0.0 | 11.0 | 0.0 | 11.0 |
+| Fingers' slope below the palm, degrees | 9.3 | 9.7 | 0.0 | 7.0 | 0.0 | 7.0 |
+| Thumb: splay, slope, degrees | 43, 9 | 44, 9 | 51, 5 | 42, 9 | 51, 5 | 42, 9 |
+
+**What changed** (`person.py`: `HAND_LEN`, `HAND_FINGERS`, `HAND_THUMB`, `HAND_PALM`, `FINGER_TAPER`, `FINGER_DROP`):
+
+- **The hand is a table of shares of its own length,** read from the reference: each finger's first joint, its three bones, its radius and its splay; the thumb's root, bones, splay and slope; the palm's stations. `make_hand` and `finger_joints` build from it. The far model's mitten follows the same lengths.
+- **A man's hand is 20 cm, 0.78 of a head** (it was 22.2). A woman's is the line's `hands`, 0.84 of that (`WOMAN`): 0.66 of a head, as before.
+- **Pose.** At rest the fingers fan and slope as the reference's do. The clips already curl the fingers (`animate.py`: 18° in the relaxed poses, more on a grip) and are not changed; on the new rest they give the reference's relaxed hand, where on flat parallel pegs they gave a bent paddle.
+- **This changes the rest skeleton:** the 30 finger joints of the two hands, and nothing else. So every file is built again on it (the 21 types, 74 hair files, 28 outfit pieces, 72 overlays), and the clips are baked again. `skeleton_check.py` passes on the set.
+
+**What the client needs:** nothing in code. Two things in the files:
+
+1. Take the bundle whole: a file from before has the old finger joints.
+2. **Bake `lookdev/anim/own-clips.glb` again** from this generator with the full clip library, as after [the neck's and the head's joints](#the-necks-and-the-heads-joints): `ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man`, then `skeleton_check.py living/game/assets/lookdev` must print 0. A finger's curl is turned about an axis worked out from the rest skeleton, so the keys change a little with the fan; an old clip file would still play, on fingers a few degrees off.
+
+**What still separates our hands from the reference's,** ordered by how much it shows:
+
+1. **No nails and no knuckles.** The reference draws nails and a line at each joint; ours are smooth, with a warmer tip.
+2. **Fingers are six-sided tubes** before smoothing; close up their sides show as soft edges, and the web between the fingers is a flat cap.
+3. **The palm is 0.18 thick and 0.45 across** for 0.20 and 0.47, and the ball of the thumb is the thumb's own tube through the palm's edge, not a modelled pad.
+4. **The far model's hand** is still a mitten with a stub of a thumb.
 
 ### The neck
 

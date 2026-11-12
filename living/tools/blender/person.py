@@ -182,32 +182,54 @@ PARENT = {
     "J_Bip_L_Hand": "J_Bip_L_LowerArm", "J_Bip_L_UpperLeg": "J_Bip_C_Hips", "J_Bip_L_LowerLeg": "J_Bip_L_UpperLeg",
     "J_Bip_L_Foot": "J_Bip_L_LowerLeg", "J_Bip_L_ToeBase": "J_Bip_L_Foot",
 }
-# Fingers of the left hand (it points along -X, palm down, thumb forward): the knuckle relative to
-# the wrist (x along the arm, y forward), the three bone lengths and the radius.
-FINGERS = {
-    "Index": ((-0.096, 0.030), (0.041, 0.026, 0.023), 0.0100),
-    "Middle": ((-0.100, 0.010), (0.045, 0.029, 0.024), 0.0102),
-    "Ring": ((-0.096, -0.010), (0.041, 0.027, 0.023), 0.0096),
-    "Little": ((-0.088, -0.029), (0.032, 0.020, 0.020), 0.0086),
+# The left hand (it points along -X, palm down, thumb forward), in shares of its own length from
+# the wrist's joint to the middle finger's tip: measured on the reference with
+# reference/hand.py (docs/CHARACTERS.md, "The body: hands"). Each finger: its first joint (along
+# the hand from the wrist, across toward the thumb, up), its three bones' lengths, its radius at
+# the first bone, and how far it splays toward the thumb at rest (degrees). Until the hands part
+# the palm was half the hand (the reference's is 0.45), the four fingers lay parallel and as
+# thick at the tip as at the root, the little finger was 0.37 of the hand (0.46) and the thumb
+# half of it from a root well up the palm (0.65, from beside the wrist).
+HAND_LEN = 0.200  # a man's hand, metres: 0.78 of a head (it was 0.222, "large working hands": 0.87)
+HAND_K = 1.0  # a hand against that; a woman's is the line's `hands`
+HAND_FINGERS = {
+    "Index": ((0.440, 0.110, 0.000), (0.221, 0.137, 0.159), 0.0700, 5.0),
+    "Middle": ((0.450, 0.000, 0.000), (0.247, 0.152, 0.167), 0.0710, 0.0),
+    "Ring": ((0.440, -0.110, 0.000), (0.229, 0.132, 0.141), 0.0680, -4.0),
+    "Little": ((0.410, -0.210, -0.020), (0.209, 0.121, 0.127), 0.0600, -6.0),
 }
-HAND_K = 1.12  # large working hands
-FINGERS = {n: ((kx * HAND_K, ky * HAND_K), tuple(x * HAND_K for x in lens), r * HAND_K * 1.05) for n, ((kx, ky), lens, r) in FINGERS.items()}
-THUMB_ROOT = Vector((WRIST_X - 0.024 * HAND_K, ARM_Y + 0.026 * HAND_K, ARM_Z - 0.007))
-THUMB_DIR = Vector((-0.62, 0.78, -0.10)).normalized()
-THUMB_LEN = tuple(x * HAND_K for x in (0.040, 0.031, 0.027))
-THUMB_R = 0.0118 * HAND_K * 1.05
+FINGER_DROP = 7.0  # degrees the four fingers slope below the palm's plane at rest, as the reference's do (7 to 9)
+# The thumb: its first joint beside the wrist, its bones (the first lies in the ball of the
+# thumb), its radius there, its splay from the hand's line and its drop below the palm's plane.
+HAND_THUMB = ((0.030, 0.120, -0.040), (0.310, 0.191, 0.148), 0.0950, 42.0, 9.0)
+# The palm's stations: along the hand, its middle across, half its breadth, half its thickness.
+HAND_PALM = [(0.14, -0.005, 0.205, 0.108), (0.30, -0.030, 0.245, 0.112), (0.42, -0.045, 0.248, 0.098), (0.475, -0.047, 0.230, 0.072)]
+PALM_LOW = 0.022  # the palm's middle below the fingers' joints: the heel of the hand hangs under them
+# How a finger's radius runs along it (at the root inside the palm, just out of it, each side of
+# its two joints, near the tip, the tip's shoulder): it tapers to the tip. A thumb's likewise.
+FINGER_TAPER = (1.00, 1.00, 0.93, 0.92, 0.82, 0.80, 0.64, 0.42)
+THUMB_TAPER = (1.00, 1.00, 0.84, 0.80, 0.68, 0.66, 0.58, 0.42)
+_L = HAND_LEN * HAND_K
+_fd = math.radians(FINGER_DROP)
+FINGERS = {n: ((kx * _L, ky * _L, kz * _L), tuple(x * _L for x in lens), r * _L, Vector((-math.cos(math.radians(sp)) * math.cos(_fd), math.sin(math.radians(sp)) * math.cos(_fd), -math.sin(_fd))))
+           for n, ((kx, ky, kz), lens, r, sp) in HAND_FINGERS.items()}
+(_tx, _ty, _tz), _tl, _tr, _ts, _td = HAND_THUMB
+THUMB_ROOT = Vector((WRIST_X - _tx * _L, ARM_Y + _ty * _L, ARM_Z + _tz * _L))
+THUMB_DIR = Vector((-math.cos(math.radians(_ts)) * math.cos(math.radians(_td)), math.sin(math.radians(_ts)) * math.cos(math.radians(_td)), -math.sin(math.radians(_td)))).normalized()
+THUMB_LEN = tuple(x * _L for x in _tl)
+THUMB_R = _tr * _L
 
 
 def finger_joints():
-    for name, ((kx, ky), lens, _) in FINGERS.items():
-        p = Vector((WRIST_X + kx, ARM_Y + ky, ARM_Z - 0.001))
+    for name, ((kx, ky, kz), lens, _, axis) in FINGERS.items():
+        p = Vector((WRIST_X - kx, ARM_Y + ky, ARM_Z + kz))
         parent = "J_Bip_L_Hand"
         for i, ln in enumerate(lens):
             b = f"J_Bip_L_{name}{i + 1}"
             JOINTS[b] = tuple(p)
             PARENT[b] = parent
             parent = b
-            p = p + Vector((-ln, 0, 0))
+            p = p + axis * ln
     p = THUMB_ROOT.copy()
     parent = "J_Bip_L_Hand"
     for i, ln in enumerate(THUMB_LEN):
@@ -1843,56 +1865,58 @@ def make_buttons(arm):
 
 
 def make_hand(part):
-    """The left hand's cage: palm, four fingers and thumb. Finger tubes start inside the palm."""
+    """The left hand's cage: palm, four fingers and thumb, from the hand's measured shares
+    (HAND_PALM, HAND_FINGERS, HAND_THUMB). Finger tubes start inside the palm; the thumb's first
+    bone lies in the palm's edge and makes the ball of the thumb."""
     hand = {"J_Bip_L_Hand": 1.0}
     y0, z0 = ARM_Y, ARM_Z
+    L = HAND_LEN * HAND_K
     stations = [
         (0.045, 0.000, 0.0265, 0.0215, {"J_Bip_L_LowerArm": 1.0}),
-        (0.000, 0.000, 0.0280, 0.0195, blend(("J_Bip_L_LowerArm", 0.5), ("J_Bip_L_Hand", 0.5))),
-        (-0.028, 0.003, 0.0370, 0.0170, hand),
-        (-0.062, 0.003, 0.0440, 0.0155, hand),
-        (-0.092, 0.001, 0.0440, 0.0135, hand),
-        (-0.101, 0.001, 0.0400, 0.0100, hand),
-    ]
-    stations = stations[:2] + [(dx * HAND_K, dy * HAND_K, hy * HAND_K, hz * HAND_K * 1.08, w) for dx, dy, hy, hz, w in stations[2:]]
+        (0.000, 0.000, 0.0290, 0.0190, blend(("J_Bip_L_LowerArm", 0.5), ("J_Bip_L_Hand", 0.5))),
+    ] + [(-a * L, c * L, hy * L, hz * L, hand) for a, c, hy, hz in HAND_PALM]
     prev = None
     for i, (dx, dy, hy, hz, w) in enumerate(stations):
-        cur = ring(part, (WRIST_X + dx, y0 + dy, z0), (0, 1, 0), (0, 0, 1), hy, hz, 8, w, p=0.62)
+        low = PALM_LOW * L * smooth(-dx / (0.14 * L)) if i >= 2 else 0.0
+        cur = ring(part, (WRIST_X + dx, y0 + dy, z0 - low), (0, 1, 0), (0, 0, 1), hy, hz, 8, w, p=0.62)
         if prev:
             part.band(prev, cur, i - 1, i)
         prev = cur
-    cap = part.v((WRIST_X - 0.104 * HAND_K, y0, z0), hand)
+    cap = part.v((WRIST_X - 0.50 * L, y0 + HAND_PALM[-1][1] * L, z0 - PALM_LOW * L), hand)
     part.fan(prev, cap, len(stations))
 
-    def tube(root, axis, e1, e2, lens, r, names, base_w):
+    def tube(root, axis, e1, e2, lens, r, names, base_w, taper):
         total = sum(lens)
         j1, j2 = lens[0], lens[0] + lens[1]
         b1, b2, b3 = names
+        k = L / 0.200  # the margins below were set on a hand of 20 cm
         st = [
-            (-0.016, 1.00, blend((base_w, 0.7), (b1, 0.3))),
-            (0.004, 1.02, {b1: 1.0}),
-            (j1 - 0.006, 0.98, blend((b1, 0.8), (b2, 0.2))),
-            (j1 + 0.006, 0.97, blend((b1, 0.2), (b2, 0.8))),
-            (j2 - 0.005, 0.93, blend((b2, 0.8), (b3, 0.2))),
-            (j2 + 0.005, 0.92, blend((b2, 0.2), (b3, 0.8))),
-            (total - 0.010, 0.90, {b3: 1.0}),
-            (total - 0.002, 0.60, {b3: 1.0}),
+            (-0.016 * k, blend((base_w, 0.7), (b1, 0.3))),
+            (0.004 * k, {b1: 1.0}),
+            (j1 - 0.006 * k, blend((b1, 0.8), (b2, 0.2))),
+            (j1 + 0.006 * k, blend((b1, 0.2), (b2, 0.8))),
+            (j2 - 0.005 * k, blend((b2, 0.8), (b3, 0.2))),
+            (j2 + 0.005 * k, blend((b2, 0.2), (b3, 0.8))),
+            (total - 0.010 * k, {b3: 1.0}),
+            (total - 0.002 * k, {b3: 1.0}),
         ]
         prev = None
-        for i, (s, k, w) in enumerate(st):
-            cur = ring(part, root + axis * s, e1, e2, r * k, r * k * 0.92, 6, w)
+        for i, ((s, w), f) in enumerate(zip(st, taper)):
+            cur = ring(part, root + axis * s, e1, e2, r * f, r * f * 0.92, 6, w)
             if prev:
                 part.band(prev, cur, i - 1, i, tag=1 if i == len(st) - 1 else 0)
             prev = cur
-        tip = part.v(root + axis * (total + 0.0025), {b3: 1.0})
+        tip = part.v(root + axis * (total + 0.0025 * k), {b3: 1.0})
         part.fan(prev, tip, len(st), tag=1)
 
-    for name, ((kx, ky), lens, r) in FINGERS.items():
-        root = Vector((WRIST_X + kx, y0 + ky, z0 - 0.001))
-        tube(root, Vector((-1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)), lens, r, [f"J_Bip_L_{name}{i}" for i in (1, 2, 3)], "J_Bip_L_Hand")
-    e1 = THUMB_DIR.cross(Vector((0, 0, 1))).normalized()
+    up = Vector((0, 0, 1))
+    for name, ((kx, ky, kz), lens, r, axis) in FINGERS.items():
+        root = Vector((WRIST_X - kx, y0 + ky, z0 + kz))
+        e1 = up.cross(axis).normalized()
+        tube(root, axis, e1, axis.cross(e1).normalized(), lens, r, [f"J_Bip_L_{name}{i}" for i in (1, 2, 3)], "J_Bip_L_Hand", FINGER_TAPER)
+    e1 = THUMB_DIR.cross(up).normalized()
     e2 = e1.cross(THUMB_DIR).normalized()
-    tube(THUMB_ROOT, THUMB_DIR, e1, e2, THUMB_LEN, THUMB_R, [f"J_Bip_L_Thumb{i}" for i in (1, 2, 3)], "J_Bip_L_Hand")
+    tube(THUMB_ROOT, THUMB_DIR, e1, e2, THUMB_LEN, THUMB_R, [f"J_Bip_L_Thumb{i}" for i in (1, 2, 3)], "J_Bip_L_Hand", THUMB_TAPER)
     return part
 
 
@@ -1901,15 +1925,15 @@ def make_mitt(part):
     middle finger's bones, and a stub of a thumb."""
     hand = {"J_Bip_L_Hand": 1.0}
     y0, z0 = ARM_Y, ARM_Z
-    k = HAND_K
     mid = "J_Bip_L_Middle"
+    k = HAND_LEN * HAND_K  # the hand's length: the stations below are shares of it
     stations = [
         (0.045, 0.000, 0.0265, 0.0215, {"J_Bip_L_LowerArm": 1.0}),
-        (0.000, 0.000, 0.0280, 0.0195, blend(("J_Bip_L_LowerArm", 0.5), ("J_Bip_L_Hand", 0.5))),
-        (-0.045 * k, 0.003 * k, 0.0420 * k, 0.0170 * k, hand),
-        (-0.098 * k, 0.001 * k, 0.0440 * k, 0.0140 * k, blend(("J_Bip_L_Hand", 0.6), (mid + "1", 0.4))),
-        (-0.142 * k, 0.001 * k, 0.0400 * k, 0.0115 * k, blend((mid + "1", 0.5), (mid + "2", 0.5))),
-        (-0.185 * k, 0.001 * k, 0.0330 * k, 0.0095 * k, {mid + "3": 1.0}),
+        (0.000, 0.000, 0.0290, 0.0190, blend(("J_Bip_L_LowerArm", 0.5), ("J_Bip_L_Hand", 0.5))),
+        (-0.22 * k, -0.015 * k, 0.220 * k, 0.085 * k, hand),
+        (-0.45 * k, -0.045 * k, 0.232 * k, 0.075 * k, blend(("J_Bip_L_Hand", 0.6), (mid + "1", 0.4))),
+        (-0.70 * k, -0.045 * k, 0.215 * k, 0.058 * k, blend((mid + "1", 0.5), (mid + "2", 0.5))),
+        (-0.93 * k, -0.045 * k, 0.170 * k, 0.045 * k, {mid + "3": 1.0}),
     ]
     prev = None
     for i, (dx, dy, hy, hz, w) in enumerate(stations):
@@ -1917,12 +1941,12 @@ def make_mitt(part):
         if prev:
             part.band(prev, cur, i - 1, i, tag=1 if i == len(stations) - 1 else 0)
         prev = cur
-    part.fan(prev, part.v((WRIST_X - 0.196 * k, y0, z0), {mid + "3": 1.0}), len(stations), tag=1)
+    part.fan(prev, part.v((WRIST_X - 1.0 * k, y0 - 0.045 * k, z0), {mid + "3": 1.0}), len(stations), tag=1)
     e1 = THUMB_DIR.cross(Vector((0, 0, 1))).normalized()
     e2 = e1.cross(THUMB_DIR).normalized()
     prev = None
     for i, (s_, r, w) in enumerate(((-0.014, 1.0, hand), (sum(THUMB_LEN) * 0.55, 0.95, {"J_Bip_L_Thumb2": 1.0}))):
-        cur = ring(part, THUMB_ROOT + THUMB_DIR * s_, e1, e2, THUMB_R * r, THUMB_R * r * 0.92, 4, w)
+        cur = ring(part, THUMB_ROOT + THUMB_DIR * s_, e1, e2, THUMB_R * r * 0.8, THUMB_R * r * 0.74, 4, w)
         if prev:
             part.band(prev, cur, i - 1, i)
         prev = cur
