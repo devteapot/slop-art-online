@@ -1199,7 +1199,7 @@ impl<'a> Ev<'a> {
 
     /// Attention cues (docs/ATTENTION.md): what this character's mind wrote should bring it to
     /// think, matched by type against what it perceives now (the scene this evaluation built),
-    /// at most once a second, while the `cues_on` law holds. A thing that begins to match a cue
+    /// at most once per `cue_check_s` (a second by default), while the `cues_on` law holds. A thing that begins to match a cue
     /// becomes one `noticed` experience quoting the mind's own reason, and a request to think;
     /// once per thing per `cue_cooldown_s`, and once per character per `cue_gap_s` (things that
     /// begin to match together are told in one line). A person too far away to make out matches
@@ -1210,7 +1210,8 @@ impl<'a> Ev<'a> {
             return;
         }
         let (me, now) = (self.me.id, self.now);
-        let due = CUE_HELD.with(|m| m.borrow().get(&me).map_or(true, |(t, _)| now.saturating_sub(*t) >= 1_000));
+        let every = (laws.cue_check_s * 1000.0) as u64;
+        let due = CUE_HELD.with(|m| m.borrow().get(&me).map_or(true, |(t, _)| now.saturating_sub(*t) >= every));
         if !due {
             return;
         }
