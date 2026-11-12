@@ -290,7 +290,8 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
             let reason = if visible { cry_seen(known.as_deref(), &looks) } else { format!("{}.", cry_unseen(known.as_deref())) };
             if pending.as_ref().is_some_and(|d| d.reason.contains(&reason)) { continue; }
             let urgent = state.cold || state.starving || state.wound != living_rules::script::Wound::None;
-            if request(ctx, carer, &reason, now, urgent) {
+            // A cry of distress wakes a sleeping carer; any other waits until it wakes.
+            if request(ctx, carer, &reason, now, urgent, urgent.then_some(Wake::Cry)) {
                 record_cry_prompt(&mut cry, carer, now);
             }
         }
@@ -302,19 +303,146 @@ fn infant_cry(ctx: &ReducerContext, baby: &Character, at: (f32, f32), range: f32
     Ok("made a baby crying".into())
 }
 
-/// Ask the mind to reconsider. Reasons merge while a request is pending.
+/// Ask the mind to reconsider. Reasons merge while a request is pending. A sleeper's reason
+/// waits until it wakes (`Slumber`); being attacked wakes it (`Wake::Attack`).
 pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u64) {
-    request(ctx, id, reason, now, false);
+    request(ctx, id, reason, now, false, None);
 }
 
-fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool) -> bool {
+/// What wakes a sleeping body (whoever plays it), so that its mind thinks on it at once. Every
+/// other reason to think waits in the sleeper's `Slumber` row until it wakes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Wake {
+    /// Being attacked (also told by the reason's words, "… is attacking you", "The fight with").
+    Attack,
+    /// An alarm of one's own body that asks for a thought (brain.rs, `alerts`).
+    Body,
+    /// One's infant crying in distress (cold, starving or hurt) where its carer can hear it.
+    Cry,
+    /// An attention cue the mind wrote for itself, firing while the world's `cues_on` law is on
+    /// (docs/ATTENTION.md, on the `attention-cues` branch). The cue matcher asks for its thought
+    /// with `request_waking(ctx, id, line, now, Wake::Cue)`; nothing on main fires one yet.
+    #[allow(dead_code)]
+    Cue,
+}
+
+/// Ask the mind to reconsider for a reason that wakes a sleeping body (`Wake`): a sleeper wakes,
+/// is told why, and thinks on it with the reasons that waited while it slept.
+pub fn request_waking(ctx: &ReducerContext, id: u32, reason: &str, now: u64, wake: Wake) {
+    request(ctx, id, reason, now, false, Some(wake));
+}
+
+/// Whether `id` sleeps: in a sleep act, or between two sleeps of one rest (`Slumber`).
+pub fn asleep(ctx: &ReducerContext, id: u32) -> bool {
+    ctx.db.slumber().actor().find(id).is_some() || ctx.db.activity().id().find(id).is_some_and(|a| a.skill == "sleep")
+}
+
+/// Wake `c` if it sleeps, whoever plays it: its sleep stops and it is told why ("You woke up:
+/// …"). Returns the reasons that waited while it slept, `None` if it was awake.
+fn wake_body(ctx: &ReducerContext, c: &Character, why: &str, now: u64) -> Option<(String, String)> {
+    let row = ctx.db.slumber().actor().find(c.id);
+    let act = ctx.db.activity().id().find(c.id).filter(|a| a.skill == "sleep");
+    if row.is_none() && act.is_none() {
+        return None;
+    }
+    ctx.db.slumber().actor().delete(c.id);
+    if let Some(a) = act {
+        crate::act::cancel(ctx, a, now, None);
+    }
+    common::wake(ctx, c.id);
+    let at = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+    let why = why.lines().next().unwrap_or("").trim();
+    percept(ctx, c, now, "body", c.id, 0, at, format!("You woke up: {why}"), 0.5);
+    Some(row.map(|r| (r.reason, r.arrived)).unwrap_or_default())
+}
+
+/// How long a body whose sleep ended unrested lies between that sleep and the next one of the
+/// same rest (sleep_duration in the script: a sleeper not yet rested sleeps again).
+pub const SLEEP_GAP_MS: u64 = 3_000;
+
+/// Keep a body's `Slumber` in step with its acts, at the end of each of its evaluations: a body
+/// that began to sleep is asleep; one asleep that no longer sleeps has woken (its sleep broken
+/// off, something else begun, or no next sleep within `SLEEP_GAP_MS` of the last one ending), is
+/// told so and, with a mind, is asked to think on the reasons that waited.
+pub fn slept(ctx: &ReducerContext, c: &Character, now: u64) {
+    let act = ctx.db.activity().id().find(c.id);
+    let sleep = act.as_ref().filter(|a| a.skill == "sleep");
+    let row = ctx.db.slumber().actor().find(c.id);
+    match (sleep, row) {
+        (Some(a), None) => {
+            ctx.db.slumber().insert(Slumber { actor: c.id, since_ms: now, until_ms: a.ends_ms, reason: String::new(), arrived: String::new() });
+        }
+        (Some(a), Some(mut r)) => {
+            if r.until_ms != a.ends_ms {
+                r.until_ms = a.ends_ms;
+                ctx.db.slumber().actor().update(r);
+            }
+        }
+        (None, Some(r)) => {
+            let woke = act.is_some() || now < r.until_ms || now >= r.until_ms + SLEEP_GAP_MS;
+            if !woke {
+                return;
+            }
+            ctx.db.slumber().actor().delete(c.id);
+            let at = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+            percept(ctx, c, now, "body", c.id, 0, at, "You woke up.".into(), 0.2);
+            if !r.reason.is_empty() {
+                let mut reason = "You woke up.".to_string();
+                let mut arrived = living_rules::reasons::first(&reason, now);
+                for (line, _) in living_rules::reasons::lines(&r.reason, &r.arrived) {
+                    living_rules::reasons::add(&mut reason, &mut arrived, &line, now);
+                }
+                request(ctx, c.id, &reason, now, false, None);
+            }
+        }
+        (None, None) => {}
+    }
+}
+
+fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool, wake: Option<Wake>) -> bool {
     let Some(c) = ctx.db.character().id().find(id) else { return false };
-    // Infants run on their instincts; they get a mind when they become children.
-    if !c.ai || !c.alive || c.stage == 0 {
+    if !c.alive {
         return false;
     }
-    // Minds of other species think less often; being attacked is always worth a thought.
-    let urgent = urgent || reason.contains("attacking you") || reason.starts_with("The fight with");
+    let wake = wake.or_else(|| (reason.contains("attacking you") || reason.starts_with("The fight with")).then_some(Wake::Attack));
+    // What wakes a sleeper wakes it whoever plays it; its mind then thinks on why it woke and
+    // on what waited while it slept.
+    let woke = wake.and_then(|_| wake_body(ctx, &c, reason, now));
+    let mut owned;
+    let reason = match &woke {
+        Some((waited, arrived)) => {
+            owned = format!("You woke up: {reason}");
+            let mut at = living_rules::reasons::first(&owned, now);
+            for (line, _) in living_rules::reasons::lines(waited, arrived) {
+                living_rules::reasons::add(&mut owned, &mut at, &line, now);
+            }
+            owned.as_str()
+        }
+        None => reason,
+    };
+    // Infants run on their instincts; they get a mind when they become children.
+    if !c.ai || c.stage == 0 {
+        return false;
+    }
+    // A sleeper thinks only on what wakes it: any other reason waits until it wakes (`slept`).
+    if wake.is_none() && asleep(ctx, id) {
+        let mut row = ctx.db.slumber().actor().find(id).unwrap_or_else(|| Slumber { actor: id, since_ms: now, until_ms: ctx.db.activity().id().find(id).map_or(now, |a| a.ends_ms), reason: String::new(), arrived: String::new() });
+        if row.reason.is_empty() {
+            row.reason = reason.to_string();
+            row.arrived = living_rules::reasons::first(reason, now);
+        } else {
+            living_rules::reasons::add(&mut row.reason, &mut row.arrived, reason, now);
+        }
+        if ctx.db.slumber().actor().find(id).is_some() {
+            ctx.db.slumber().actor().update(row);
+        } else {
+            ctx.db.slumber().insert(row);
+        }
+        return true;
+    }
+    // Minds of other species think less often; being attacked is always worth a thought, and
+    // so is whatever woke one.
+    let urgent = urgent || wake == Some(Wake::Attack) || woke.is_some();
     // Away from people an animal lives by its instincts: its mind is for encounters
     // (and for being attacked). Keeps thinking where the world is being lived and watched.
     if c.kind != "person" && !urgent {

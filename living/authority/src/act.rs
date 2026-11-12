@@ -2235,17 +2235,15 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     if yielded && !struck_since_yield {
         common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} struck {vn}, though {vn} had yielded"));
         witnessed(ctx, now, at, "fight", attacker, victim, "{a} struck {b}, though {b} had yielded", 0.95, &[attacker, victim]);
-        if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you, though you yielded!"), now);
-        }
+        // Wakes a sleeping victim whoever plays it; a mind thinks on it.
+        perceive::request_waking(ctx, victim, &format!("{label} is attacking you, though you yielded!"), now, perceive::Wake::Attack);
     } else if first_blow {
         if vc.kind == "person" || by_person {
             common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} attacked {vn}"));
         }
         witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]);
-        if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you!"), now);
-        }
+        // Wakes a sleeping victim whoever plays it; a mind thinks on it.
+        perceive::request_waking(ctx, victim, &format!("{label} is attacking you!"), now, perceive::Wake::Attack);
     } else if !dead {
         fight_report(ctx, victim, attacker, now);
         fight_report(ctx, attacker, victim, now);
@@ -2479,6 +2477,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, co
     ctx.db.vitals().id().delete(id);
     ctx.db.wake().id().delete(id);
     ctx.db.deliberation().actor().delete(id);
+    ctx.db.slumber().actor().delete(id);
     forget_dead(ctx, id);
     retire(ctx, id);
     crate::combat::died(ctx, id, killer, at, now);

@@ -829,6 +829,23 @@ pub struct MindCursor {
     pub updated_ms: u64,
 }
 
+/// A sleeping body (one in a `sleep` act, or between two sleeps of one night: a sleep that ends
+/// unrested is slept again) and the reasons to think that arrived while it slept. A sleeper's
+/// mind thinks only on what wakes the body (`perceive::Wake`); everything else waits here and is
+/// asked, after "You woke up", once it wakes (perceive.rs, `wake` and `woke`).
+#[spacetimedb::table(accessor = slumber)]
+pub struct Slumber {
+    #[primary_key]
+    pub actor: u32,
+    pub since_ms: u64,
+    /// When its current (or last) sleep ends: a sleep that ended is followed by the next one of
+    /// the same rest within `perceive::SLEEP_GAP_MS`, and the body sleeps on meanwhile.
+    pub until_ms: u64,
+    /// The deferred reasons and their arrival times (as `Deliberation`, living_rules::reasons).
+    pub reason: String,
+    pub arrived: String,
+}
+
 /// A pending request for the mind to reconsider, with a perceived scene snapshot (JSON).
 #[spacetimedb::table(accessor = deliberation)]
 pub struct Deliberation {

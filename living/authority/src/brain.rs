@@ -134,6 +134,10 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let played = !ev.me.ai;
     let result = ev.run(&root.root, 0);
     ev.after(result, &root.root);
+    // Fell asleep, or woke (and thinks on what waited): perceive::slept.
+    if let Some(me) = ctx.db.character().id().find(id) {
+        perceive::slept(ctx, &me, now);
+    }
     if played && result != St::Run {
         crate::command_done(ctx, id, now);
     }
@@ -1138,7 +1142,11 @@ impl<'a> Ev<'a> {
                             }
                         }
                     }
-                    self.deliberate(&why);
+                    // A bodily alarm wakes a sleeper, whoever plays it (a mind thinks on it).
+                    perceive::request_waking(self.ctx, self.me.id, &why, self.now, perceive::Wake::Body);
+                    if self.ctx.db.activity().id().find(self.me.id).is_none() {
+                        self.latched = None;
+                    }
                 }
             }
         }

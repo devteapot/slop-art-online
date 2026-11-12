@@ -2580,6 +2580,50 @@ def alarms(s):
         s.call("install_script", shipped)
 
 
+def sleeper(s):
+    """A sleeping body's mind thinks only on what wakes it (perceive.rs `Wake`, the `slumber`
+    table). Any other reason to think waits in its `slumber` row, through the moments between two
+    sleeps of one rest, and is asked for, after "You woke up.", once the body wakes. Being
+    attacked wakes it at once whoever plays it: the sleep stops, it is told why, and its mind is
+    asked with the waking reason first and what waited after it. No mind runs here, so requests
+    stay pending in `deliberation`."""
+    a, b = s.people(2)
+    marker = "verify sleeper thought"
+    pending = lambda label=None: "\n".join(r["reason"] for r in s.rows(f"SELECT reason FROM deliberation WHERE actor = {a}", label))
+    slumber = lambda label=None: s.rows(f"SELECT * FROM slumber WHERE actor = {a}", label)
+    sleeping = lambda: [x for x in s.rows(f"SELECT skill FROM activity WHERE id = {a}") if x["skill"] == "sleep"]
+    # A rest of short sleeps (5 s rested) with a think between them: the think comes in the gap,
+    # where the body has no sleep act and still sleeps.
+    s.graph(a, {"seq": [{"do": "sleep"}, {"think": marker}]})
+    s.wait(lambda: slumber(), seconds=20)
+    # (a think node asks once the deliberation clock has settled 45 s, brain.rs)
+    s.wait(lambda: any(marker in r["reason"] for r in slumber()), seconds=90, every=1)
+    row = slumber("deferred")[0]
+    s.expect("a reason that arrives while asleep waits in slumber, not in deliberation", marker not in pending("pending-asleep"), row)
+    s.wait(lambda: sleeping(), seconds=10)
+    s.expect("the body sleeps on through the gap between two sleeps", bool(slumber()), row)
+    # It wakes on its own (its graph gives it something else to do): told, and asked then.
+    s.graph(a, {"wait": 120})
+    s.wait(lambda: not slumber(), seconds=20)
+    reason = s.wait(lambda: (lambda p: p if "You woke up." in p and marker in p else None)(pending("pending-woke")), seconds=20)
+    s.expect("on waking, the waited reasons are asked after \"You woke up.\"", reason.index("You woke up.") < reason.index(marker), reason)
+    s.expect("the sleeper is told it woke", bool(s.told(a, "You woke up.", "body")))
+    # Asleep again, and attacked: woken at once with the attack as the reason.
+    s.graph(a, {"seq": [{"do": "sleep"}, {"think": marker + " again"}]})
+    # (a think node asks at most every 90 s, brain.rs)
+    s.wait(lambda: any((marker + " again") in r["reason"] for r in slumber()), seconds=150, every=1)
+    s.graph(b, {"wait": 120})
+    s.call("place_near", b, a)
+    # (an attack is graph behaviour, not a one-off act; the sleeper is the one beside it)
+    s.graph(b, {"do": "attack", "target": {"nearest": "person"}})
+    s.wait(lambda: s.told(a, "You woke up: ", "body"), seconds=30)
+    reason = s.wait(lambda: (lambda p: p if "You woke up: " in p and "attacking you" in p else None)(pending("pending-attacked")), seconds=10)
+    s.expect("an attack wakes a sleeper and its mind is asked why it woke", "attacking you" in reason.split("You woke up: ", 1)[1].split("\n")[0], reason)
+    s.expect("what waited is asked with the waking reason", (marker + " again") in reason, reason)
+    broke = [e for e in s.rows(f"SELECT text FROM experience WHERE observer = {a} AND kind = 'body'", "woken") if e["text"].startswith("You woke up: ")]
+    s.expect("it is told it woke and why", "attacking you" in broke[0]["text"], broke)
+
+
 def world_tiles(s):
     """This world's tiles (`terrain_chunk`) and a walkable test by tile code (water, rock,
     wall, drop and low tiles are not walkable; off the map is rock)."""
@@ -3742,6 +3786,7 @@ SCENES["chase"] = chase
 SCENES["doing_seen"] = doing_seen
 SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners
+SCENES["sleeper"] = sleeper
 
 
 def main():
