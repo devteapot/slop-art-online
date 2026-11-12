@@ -1,14 +1,1 @@
-{
-  "channels": {
-    "case": "channels",
-    "first_main": "00d3dc1b",
-    "first_seen": "2026-11-12T12:49:51+01:00",
-    "last_evidence": ".local/living/verify/core-talk1-channels, core-talk4-channels (Spark)",
-    "last_main": "00d3dc1b",
-    "last_seen": "2026-11-12T12:49:51+01:00",
-    "owner": "Spark",
-    "reason": "flaky, a staging race: the scene's unconnected player listener passes to the minds at takeover_s (30 s) after its join, and its first 'discovered'/'saw' rows land in whichever check's 'nothing else written' window is open (failed 2 of 4 on fix-sleep-talk: 'call: a second within 6 s', 'whisper to no one'; main passed by timing). Fix on fix-channels-race",
-    "skill": "verify-core",
-    "times": 0
-  }
-}
+{}
