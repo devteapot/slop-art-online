@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-d11b32d5-b2787c",
+ "published": "2026-11-12T05:44:21+01:00",
+ "imported": "2026-11-12T05:44:21+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 6: the eyes drawn as the reference draws its own (a broad lash band with an ink edge and flicks, an iris with a glow from below and one large highlight, a lower line on the outer part); lips and blush as a layer of their own in a fixed colour, which holds across Cullet's skin tones where the skin's recolouring washed them out. A type's file is 1.14 MB (1.07 before) and a near face seven primitives.",
+ "source": {
+  "commit": "d11b32d5dacca05cf14dab37c48b10640b198585",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "ea3bfd02a41b36a2496a581700aa5666503d04c5886a8241dfe2fd92a488ccde",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "eyes-close: six types' eyes before and after from the front and after from three-quarter, the reference's in the last row; faces-close: the same six faces before and after, and each head with a hair style at 2 m and at the game camera, each screen pixel enlarged; lips-blush-sweep: the woman preset with her skin set by a recipe colour at six of Cullet's tones and one darker, through the client's own recolouring, before (lips and blush painted in the skin) and after (their own layer), and at the game camera. Eyes are held open by the photo tool. The vroid member is the reference's eyes; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-d11b32d5-b2787c",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "3223b58ffd72c3e321b7bd975b20e5ee0164ebe88ebcec9ed9442ad73c33b05e",
+   "shots": [
+    "eyes-close",
+    "faces-close",
+    "lips-blush-sweep"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "804b368c121501f84585fcfa786d80fe181357274b949982f98b8e0b9eeb364a",
+   "shots": [
+    "eyes-close",
+    "faces-close",
+    "lips-blush-sweep"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "4809b9f024213ac4e66be0e6007cdd57c976ba672cf1cb6ef45b7bd87fa8f880",
+   "shots": [
+    "eyes-close",
+    "faces-close",
+    "lips-blush-sweep"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
