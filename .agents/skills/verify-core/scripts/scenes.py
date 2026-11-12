@@ -2830,9 +2830,11 @@ def stranger_filter(s):
         far_law = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
         s.call("install_script", compose(shipped, {"perceived_of": far_law}))
         seen = scene()
-        fe, ae, ne = seen.get(f, {}), seen.get(a, {}), seen.get(n, {})
-        s.expect("far: F (known, 5 m) is someone too far away to make out, with its id, no name and no community",
-                 fe.get("who") == FAR and "name" not in fe and "community" not in fe and fe.get("id") == f, fe)
+        # Since far-handle the far figure is named by a handle of the sighting, never F's id.
+        far_entries = [c for c in seen.values() if c.get("who") == FAR]
+        fe, ae, ne = (far_entries[0] if far_entries else {}), seen.get(a, {}), seen.get(n, {})
+        s.expect("far: F (known, 5 m) is someone too far away to make out, under a handle (not its id), no name and no community",
+                 fe.get("who") == FAR and "name" not in fe and "community" not in fe and fe.get("id", 0) >= 1_000_000_000 and f not in seen, {"far": fe, "ids": sorted(seen)})
         s.expect("near: A keeps its name and community; N is a stranger", ae.get("name") and ae.get("community") == "yours" and ne.get("who") == "a stranger" and "community" not in ne, {"A": ae, "N": ne})
         # The filter (law on) never matches a known neighbour, however far.
         s.call("place_at", n, line[0][0] + 70, line[0][1] + 52)

@@ -1,6 +1,10 @@
 # Core validation record
 
 
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle`, `core-farhandle`. Results: `stranger_filter` 9/9 (the far check now expects a handle ≥ 1000000000 and no entry with F's id), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7; speech `channels` 29/29 (`core-farhandle-ch`).
+
 ## 2026-11-12 owner-known: whose a thing is, and the public land row (Spark)
 
 Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `scenes.py owners` on a plan-test run, `core-owner4-050536`: 9/9 (the public land row carries none of the seed's 4 lot, 7 spot or street names and is no bigger than `land_plan`'s; a newcomer at a household's house is told "house" with no `by`/`home_of` and never the owner's name; the owner is told it is its own; a community member is told "Bryn Wren"). Cargo: `land::tests::public_params_build_the_same_land` (equal digests, lots and props for Cullet and plan-test; size bound on floor-megacity too). `just living-check` exit 0. In place: main's module published fresh on `verify-client-ownmig-044011`, then owner-known over it with `--keep-data`: `Creating table land_plan`, the scrub at `install_script`, characters, structures and land digests unchanged.
