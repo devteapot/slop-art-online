@@ -262,14 +262,24 @@ class Hair:
 
     # The layers styles are made of. ---------------------------------------------------------
 
-    def under(self, z_end, n=13, width=0.078, back_drop=0.0, g=42.0, blunt=0.3, chain=None, span=(56, 304), el=34.0, taper=2.6, ragged=0.0):
-        """The sides and back, hanging from mid-height: az from the temple round the back."""
+    def under(self, z_end, n=13, width=0.078, back_drop=0.0, g=42.0, blunt=0.3, chain=None, span=(64, 296), el=34.0, taper=2.6, ragged=0.0):
+        """The sides and back, hanging from mid-height: az from in front of the ear round the
+        back. Nothing of it hangs forward of the ear's front, where it would lie over the eye
+        from a three-quarter view; the scalp between it and the fringe is the temple locks'."""
+        for side in (-1, 1):
+            # From high on the temple, combed down and back to hang with the sides in front of
+            # the ear: they cover the scalp between the fringe's edge and this layer's roots.
+            # The last hangs straight, over the square root of this layer's first lock.
+            for az, e, back in ((54, 60, 0.95), (62, 54, 0.75), (67, 50, 0.15)):
+                a = side * az
+                self.lock(a + self.u(-2, 2), e + self.u(-2, 2), DOWN + np.array([0.0, -back, 0.0]), z_end=z_end + self.u(-0.003, 0.003), length=0.9, width=(0.040 if back > 0.3 else 0.056) + self.u(-0.003, 0.004), lift=0.006 if back > 0.3 else 0.008, g=20.0,
+                          blunt=blunt, layer=1, chain=-1 if chain is None else chain(side * 75.0), shade=-0.02, taper=taper)
         for i in range(n):
             az = span[0] + (span[1] - span[0]) * i / (n - 1)
             a = az if az <= 180 else az - 360
             back = smooth((abs(a) - 95) / 60)
             ch = -1 if chain is None else chain(a)
-            self.lock(a + self.u(-3, 3), el + self.u(-4, 4), "down", z_end=z_end - back_drop * back + self.u(-0.008, 0.008) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width + self.u(-0.005, 0.006), lift=0.004, g=g,
+            self.lock(a + self.u(-3, 3), el + self.u(-4, 4), "down", z_end=z_end - back_drop * back + self.u(-0.003, 0.003) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width * 1.10 + self.u(-0.004, 0.005), lift=0.004, g=g,
                       blunt=blunt, layer=0, chain=ch, shade=-0.05, taper=taper)
 
     def over(self, z_end, n=7, width=0.074, back_drop=0.0, g=30.0, blunt=0.3, chain=None, front=80.0, taper=2.6, lift=0.009, ragged=0.0):
@@ -292,7 +302,7 @@ class Hair:
                 back = smooth((t - 0.55) / 0.45)
                 a_end = 90 + 45 * back
                 ch = -1 if chain is None else chain(-side * a_end)
-                self.lock(az, el, comb, z_end=z_end - back_drop * back + self.u(-0.010, 0.006) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width + self.u(-0.006, 0.006), lift=lift, g=g, blunt=blunt, layer=1, chain=ch,
+                self.lock(az, el, comb, z_end=z_end - back_drop * back + self.u(-0.004, 0.003) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width * 1.10 + self.u(-0.005, 0.005), lift=lift, g=g, blunt=blunt, layer=1, chain=ch,
                           shade=0.03, taper=taper)
 
     def crown(self, z_end, n=7, width=0.070, back_drop=0.0, chain=None, blunt=0.3, taper=2.6, g=30.0, ragged=0.0):
@@ -304,7 +314,7 @@ class Hair:
             root = self.comb.surface(180.0 + math.degrees(a) * 0.45, 62.0 - 6 * abs(math.sin(a)))[0]
             az_end = 180 - math.degrees(a) * 0.9
             az_end = az_end if az_end <= 180 else az_end - 360
-            self.lock(0, 0, comb, root=root, z_end=z_end - back_drop + self.u(-0.010, 0.006) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width + self.u(-0.006, 0.006), lift=0.009, g=g, blunt=blunt, layer=2,
+            self.lock(0, 0, comb, root=root, z_end=z_end - back_drop + self.u(-0.004, 0.003) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width * 1.10 + self.u(-0.005, 0.005), lift=0.009, g=g, blunt=blunt, layer=2,
                       chain=-1 if chain is None else chain(az_end), shade=0.04, taper=taper, bulge=0.003)
 
     def bangs(self, mode="straight", n=7, reach=1.0, width=0.048, blunt=0.55, span=50.0, g=38.0):
@@ -317,6 +327,11 @@ class Hair:
             mode = self.fringe_style
         px = self.part_x()
         z_end = lerp(self.front_z - 0.004, self.brow_z + 0.004, f)
+        # Finer than the layers behind it: half as many locks again, each narrower, their ends
+        # within a millimetre or two of one line. Seven broad locks with ends 8 mm apart read
+        # as blocks.
+        n = max(n + 1, round(n * 1.6))
+        width *= 0.74
         sweep = 0.0
         if mode == "swept":
             sweep = 1.0 if px <= 0 else -1.0  # away from the parting
@@ -338,7 +353,16 @@ class Hair:
                 # A swept fringe is longest where it ends.
                 ze = z_end + (0.010 * abs(t) if mode == "straight" else -0.010 * sweep * -t)
                 az = az - sweep * 14
-            self.lock(az + self.u(-3, 3), el, comb, z_end=ze + self.u(-0.004, 0.004), length=0.20, width=width + self.u(-0.004, 0.006), lift=0.011, g=g, blunt=blunt, layer=2, shade=0.05, taper=3.2)
+            self.lock(az + self.u(-2, 2), el, comb, z_end=ze + self.u(-0.0015, 0.0015) + (0.0018 if i % 2 else 0.0), length=0.20, width=width + self.u(-0.002, 0.004), lift=0.011, g=g, blunt=min(blunt, 0.42), layer=2,
+                      shade=0.05, taper=3.2)
+
+    def sideburns(self, drop):
+        """Short locks in front of and above the ear, close to the head, `drop` metres long: a
+        short style's own scattered locks leave skin showing there, most on a narrow skull."""
+        for side in (-1, 1):
+            for az, el in ((58, 26), (66, 20), (74, 26), (70, 36), (82, 30), (62, 40)):
+                self.lock(side * az + self.u(-2, 2), el + self.u(-2, 2), DOWN + np.array([0, 0.12, 0]), length=drop * (1.0 + 0.5 * (el > 30)) + self.u(0, 0.006), width=0.030 + self.u(-0.003, 0.004), lift=0.003, g=40.0, layer=1,
+                          taper=2.2, blunt=0.1, shade=-0.03)
 
     def temples(self, z_end, n=2, width=0.030, chain=None):
         """Locks in front of the ears, to the jaw."""
@@ -389,16 +413,19 @@ class Hair:
     def _crop(self):
         k = self.length / 0.07
         self.field(84, 0.022 * (0.7 + 0.5 * k), width=0.036, jitter=0.18, tip_out=0.002 + 0.004 * self.volume, front=(0, 1, 0), lift=0.004, g=12.0)
+        self.sideburns(0.018)
 
     def _short(self):
         k = self.length / 0.07
         self.field(78, 0.040 * (0.7 + 0.4 * k), width=0.044, jitter=0.16, tip_out=0.003 + 0.006 * self.volume, front=(0.9 if self.part_x() <= 0 else -0.9, 0.55, 0), lift=0.006, g=20.0)
         self.bangs("swept", n=6, reach=0.55, width=0.036, blunt=0.2)
+        self.sideburns(0.026)
 
     def _tousled(self):
         k = self.length / 0.07
         self.field(78, 0.052 * (0.7 + 0.4 * k), width=0.044, jitter=0.36, tip_out=0.008 + 0.016 * self.volume, front=(0.4 if self.part_x() <= 0 else -0.4, 1, 0), lift=0.007, g=16.0)
         self.bangs("swept", n=7, reach=0.8, width=0.036, blunt=0.15)
+        self.sideburns(0.030)
 
     def _swept(self):
         # Combed back from the forehead; the sides back and down; the nape to the collar.
@@ -453,10 +480,10 @@ class Hair:
         z = self.side_line()
         chain = self._chains([("BackL", 95, 150), ("Back", 150, 181), ("Back", -181, -150), ("BackR", -150, -95), ("SideL", 40, 95), ("SideR", -95, -40)])
         drop = 0.03
-        # Ends at uneven lengths that thin over their last third, as long hair's do.
-        self.under(z, n=13, blunt=0.0, back_drop=drop, chain=chain, taper=1.9, ragged=0.035)
-        self.over(z + 0.02, n=8, blunt=0.0, back_drop=drop, chain=chain, taper=1.9, ragged=0.035)
-        self.crown(z + 0.01, blunt=0.0, back_drop=drop, chain=chain, taper=1.9, ragged=0.035)
+        # Ends cut to one hem, a little uneven: tapered to points at mixed lengths they read as ragged.
+        self.under(z, n=13, blunt=0.40, back_drop=drop, chain=chain, taper=2.6, ragged=0.006)
+        self.over(z + 0.02, n=8, blunt=0.40, back_drop=drop, chain=chain, taper=2.6, ragged=0.006)
+        self.crown(z + 0.01, blunt=0.40, back_drop=drop, chain=chain, taper=2.6, ragged=0.006)
         mode = "curtain" if abs(self.parting) < 0.3 else "swept"
         self.bangs(mode, n=8)
         self.temples(min(z + 0.10, -0.10), n=2)

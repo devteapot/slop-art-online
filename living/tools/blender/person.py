@@ -141,7 +141,7 @@ TYPED = False  # the head is a face type's cage, with the identity bones in it
 # living/tools/characters/share.py puts on files that people share. `far` is the far model's
 # skin (head, neck and hands), textured with the far picture.
 MAT = dict(
-    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", line="M00_000_00_FaceEyeline_00_FACE",
+    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", line="M00_000_00_FaceEyeline_00_FACE",
     hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
 )
 FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
@@ -733,6 +733,11 @@ def hairline(az):
     front (degrees, 0..180)."""
     r = RECEDE
     top = HF.top_z - 0.115
+    if TYPED:
+        # On a face type's head the line comes lower at the temple and in front of the ear (a
+        # sideburn to the middle of the ear) and sits close over the ear's top: the line tuned on
+        # pass 2's head left a bare temple and skin above the ear from the side.
+        return float(np.interp(abs(az), [0, 35, 60, 72, 82, 92, 104, 125, 180], [0.080 + top + r, 0.076 + top + 1.3 * r, 0.034 + 0.6 * r, 0.006, -0.014, 0.012, 0.004, -0.050, -0.078]))
     return float(np.interp(abs(az), [0, 35, 62, 80, 92, 104, 125, 180], [0.080 + top + r, 0.076 + top + 1.3 * r, 0.052 + 0.6 * r, -0.004, 0.016, 0.010, -0.050, -0.078]))
 
 
@@ -1076,6 +1081,8 @@ def make_far_head(arm, spec, picture_path):
     look = spec["look"]
     face = head_mesh.FarFace(HF, look, keep=lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.030 or bald_depth(c) > -0.012)
     m = face.mesh
+    if OVERLAY:
+        return far_beard(arm, m, look), face.base_pos, face.base_quads
     if TYPED and cage_head.CageFace.LINES:
         cage_head.far_jaw_line(m, HF, look)
     world = np.array(HEAD)[None, :] + np.array(m.v) * HEAD_SCALE
@@ -1090,6 +1097,23 @@ def make_far_head(arm, spec, picture_path):
         bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
         mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     return ob, face.base_pos, face.base_quads
+
+
+def far_beard(arm, m, look):
+    """A beard for the far head: the far head's own faces under the beard, a few millimetres
+    out, in a plain material the hair's tag tints. No picture and no expressions: beyond the far
+    switch a beard is a patch of the hair's colour."""
+    v = np.array(m.v, float)
+    az = np.degrees(np.arctan2(-v[:, 0], v[:, 1]))
+    cover = HF.beard_cover(look.get("beard"), np.abs(v[:, 0]), v[:, 2], az) if look.get("beard") else None
+    cover = np.zeros(len(v)) if cover is None else np.asarray(cover) * (v[:, 1] > -0.03)
+    faces = [f for f, k in zip(m.f, m.fm) if k == "face" and np.mean([cover[i] for i in f]) > 0.5]
+    used = sorted({i for f in faces for i in f})
+    index = {i: k for k, i in enumerate(used)}
+    out = v[used] - np.array(head_mesh.ORIGIN)
+    out = out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9) * 0.004
+    world = np.array(HEAD)[None, :] + (v[used] + out) * HEAD_SCALE
+    return raw_object("Overlay", world, [tuple(index[i] for i in f) for f in faces], [{"J_Bip_C_Head": 1.0}] * len(used), [(0.86, 0.86, 0.86)] * len(used), MAT["far_overlay"], arm)
 
 
 def make_neck(arm):

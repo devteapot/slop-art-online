@@ -454,17 +454,21 @@ def from_type(tid):
 
 STYLES = ("tousled", "short", "crop", "shag", "swept", "sides", "balding", "bob", "bob_parted", "braids", "tail", "long", "bun", "braid", "kerchief")
 CAPPED = ("tousled", "short", "crop", "shag", "swept", "sides", "balding")  # the styles also written as worn under a cap (`<style>.cap`)
+CUTS = 3  # how many cuts of each style are written: `<style>`, `<style>.2`, `<style>.3`, each with its own length, parting, fringe and volume
 STYLE_HEAD = "adult-f-b"  # the head every shared hair style is built on; a type's file carries its fit onto that type (hair_fit.py)
 
 
 def from_style(style):
     """The figure a shared hair style's file is built on (`style:<name>`): the standard head with
     every identity value at 0, and the style at the lengths and parting its own seed draws."""
-    style, _, under = style.partition(".")
-    if style not in STYLES or under not in ("", "cap") or (under and style not in CAPPED):
-        raise SystemExit(f"style {style!r}: not one of {STYLES}, or `<style>.cap` for {CAPPED}")
+    parts = style.split(".")
+    style, under, cut = parts[0], ("cap" if parts[-1] == "cap" else ""), next((int(x) for x in parts[1:] if x.isdigit()), 1)
+    if style not in STYLES or (under and style not in CAPPED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + (cut > 1):
+        raise SystemExit(f"style {'.'.join(parts)!r}: one of {STYLES}, with `.2` to `.{CUTS}` for another cut and `.cap` for {CAPPED} under a cap")
     male = style in ("short", "crop", "swept", "sides", "shag", "tousled", "balding")
-    return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style), sex="male" if male else "female", age=30, hair=dict(style=style), beard=dict(style="none", stubble=0.0),
+    # Another cut is the same style from another seed: the generator draws its length, parting,
+    # fringe, volume and curl from it, as it did for each person.
+    return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style) + 100 * (cut - 1), sex="male" if male else "female", age=30, hair=dict(style=style), beard=dict(style="none", stubble=0.0),
                 build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none")))
 
 
@@ -541,7 +545,8 @@ def worn(spec):
     else:
         top = [f"jersey-{form}"]
     style = spec["hair"]["style"]
-    hair = "kerchief" if head == "kerchief" else (f"{style}.cap" if head == "cap" and style in CAPPED else style)
+    cut = spec["seed"] % CUTS + 1  # which cut of the style this person wears
+    hair = "kerchief" if head == "kerchief" else (f"{style}.cap" if head == "cap" and style in CAPPED else (style if cut == 1 or style == "kerchief" else f"{style}.{cut}"))
     return hair, top + [f"trousers-{form}", f"boots-{form}"], [head] if head else []
 
 
