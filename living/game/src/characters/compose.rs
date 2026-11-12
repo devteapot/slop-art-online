@@ -282,7 +282,7 @@ pub fn prepare(recipe: &Recipe, assets: &AssetServer) -> (Recipe, Option<Styled>
             warn_once(format!("compose: no style file {file} ({})", recipe.name));
             continue;
         }
-        let handle = super::kept(assets, &file);
+        let handle = super::worn::handle(assets, &file);
         worn.push(Wear { file, slot, fitted, overlay, handle });
     }
     let composed = Recipe {
@@ -384,8 +384,9 @@ struct PlanMesh {
 }
 
 /// Plans by (type file, style file, fitted); toon materials by what they draw (`toons`: content
-/// and source colour) and the one each style file's material takes (`file_toons`). Both hold
-/// their assets for the session: a few dozen files serve any number of people.
+/// and source colour) and the one each style file's material takes (`file_toons`). They hold
+/// their assets while the files are worn: [`Plans::forget`] lets go of a file no one wears
+/// (`worn::free_unworn`).
 #[derive(Resource, Default)]
 pub struct Plans {
     plans: HashMap<(String, String, bool), Option<Arc<Plan>>>,
@@ -413,6 +414,30 @@ pub struct Composer<'w> {
     thumbs: Res<'w, super::Thumbs>,
     images: Res<'w, Assets<Image>>,
     tints: ResMut<'w, HairTints>,
+}
+
+impl Plans {
+    /// Let go of what was made for files no one wears any more (`worn::free_unworn`): their plans
+    /// (meshes and bind matrices made for a type and a style), their materials' toons, a type's
+    /// rest, and the shared toons no remaining file's material takes; Bevy frees each asset as its
+    /// last handle goes.
+    pub fn forget(&mut self, files: &HashSet<String>) {
+        self.plans.retain(|(t, s, _), _| !files.contains(t) && !files.contains(s));
+        self.file_toons.retain(|own, _| own.split_once('#').is_none_or(|(f, _)| !files.contains(f)));
+        for f in files {
+            self.rests.remove(f);
+        }
+        let live: HashSet<AssetId<Toon>> = self
+            .file_toons
+            .values()
+            .map(|h| h.id())
+            .chain(self.plans.values().flatten().flat_map(|p| p.meshes.iter().flat_map(|m| m.prims.iter().map(|x| x.2.id()))))
+            .collect();
+        for v in self.toons.values_mut() {
+            v.retain(|(_, h)| live.contains(&h.id()));
+        }
+        self.toons.retain(|_, v| !v.is_empty());
+    }
 }
 
 impl Composer<'_> {

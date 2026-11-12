@@ -378,6 +378,9 @@ fn dump(
             "cells": g.cells.iter().map(|c| serde_json::json!({"product": c.product, "item": c.item, "label": c.label, "allowed": c.allowed, "reason": c.reason, "detail": c.detail, "rows": c.rows})).collect::<Vec<_>>()})),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
         "looks": extra.looks_json(),
+        // Composed people's files (`characters::worn`): worn now, loaded and in their grace,
+        // freed and loaded this session.
+        "worn": crate::characters::worn::stats(),
     });
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
         Ok(()) => info!("ui: state written to {}", path.display()),

@@ -23,6 +23,9 @@ still window); and the last `assets:` line (main-world meshes, morph targets, CP
 glTF files) and `batches:`'s textures on the GPU. The load average at each run's start and end is recorded:
 measure on a quiet machine, and say so. `--far` draws everyone on the full model
 (`LIVING_GAME_FAR=1000`). Every run is uncapped (`LIVING_GAME_FPS_CAP=0`; `--fps-cap` to change it).
+`--churn S` replaces the still window and the three legs with a walk of S seconds through a ring
+of far-apart places (the residents' homes, `goto`), so many different people come into sight and
+go; each run then keeps its memory samples, `assets:` lines and `worn: freed` lines as a timeline.
 Writes DIR/live_crowd.json and a table on stdout.
 """
 import argparse
@@ -79,6 +82,21 @@ def peak_rss(pid_file, stop, out):
         stop.wait(2.0)
 
 
+def churn_stops(run, n=12):
+    """Far-apart places across the town for the churn walk: the residents' homes (their bodies'
+    positions at the start, owner SQL), picked farthest-first from the arrival."""
+    q = subprocess.run([sys.executable, os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py"), "sql", "--run", run, "SELECT x, y FROM body"], capture_output=True, text=True).stdout
+    pts = [(r["x"], r["y"]) for r in json.loads(q[q.find("["):])] if "[" in q else []
+    a = subprocess.run([sys.executable, os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py"), "sql", "--run", run, "SELECT arrive_x, arrive_y FROM land"], capture_output=True, text=True).stdout
+    arr = json.loads(a[a.find("["):])[0] if "[" in a else {"arrive_x": 0, "arrive_y": 0}
+    chosen = [(arr["arrive_x"], arr["arrive_y"])]
+    while pts and len(chosen) <= n:
+        far = max(pts, key=lambda p: min((p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 for c in chosen))
+        chosen.append(far)
+        pts.remove(far)
+    return chosen[1:] + chosen[:1]
+
+
 def one(a, arm, binary, env, k, out, run=None):
     name = f"cost-{arm}-{k}"
     run = run or a.run
@@ -90,10 +108,20 @@ def one(a, arm, binary, env, k, out, run=None):
     e = dict(os.environ, LIVING_GAME_FRAMES=frames, LIVING_GAME_PERF=perf, LIVING_GAME_FPS_CAP=a.fps_cap, **env)
     if a.far:
         e["LIVING_GAME_FAR"] = "1000"
-    plan = f"ready;wait:3;dump:t0;wait:{a.still};dump:t1;walk:90:8;walk:180:8;walk:270:8;dump:t2;quit"
+    if a.churn:
+        # Churn: the player walks a ring of far-apart places for `--churn` s, so many different
+        # people come into sight and go; memory and the `assets:`/`worn:` lines are kept as a
+        # timeline (`timeline` in the result).
+        stops = churn_stops(run)
+        leg = max(a.churn / max(len(stops), 1), 10.0)
+        plan = "ready;wait:3;dump:t0;wait:5;dump:t1;" + "".join(f"goto:{x:.1f},{y:.1f};wait:{leg:.0f};" for x, y in stops) + "dump:t2;quit"
+    else:
+        plan = f"ready;wait:3;dump:t0;wait:{a.still};dump:t1;walk:90:8;walk:180:8;walk:270:8;dump:t2;quit"
     load0 = load()
     stop, rss = threading.Event(), [0.0]
     cmd = [sys.executable, DRIVE, "--run", run, "--name", name, "--plan", plan, "--client", binary, "--timeout", "600"]
+    if a.churn:
+        cmd[cmd.index("--timeout") + 1] = str(int(a.churn + 300))
     p = subprocess.Popen(cmd, env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     # drive.py prints the client's pid first.
     pid_file = os.path.join(d, "pid")
@@ -134,6 +162,10 @@ def one(a, arm, binary, env, k, out, run=None):
     first_sight = [l for l in hitches if re.search(r"\b[1-9]\d* (characters|converted)\b", l)]
     people = re.search(r"\[people (\d+), (\d+) materials, (\d+)k, (\d+) mesh-material pairs\]", views[-1]) if views else None
     opaque = re.search(r"opaque (\d+) sets", batches[-1]) if batches else None
+    t_start = samples[0][0] if samples else 0
+    timeline = [dict(t=round(x[0] - t_start), rss=round(x[1]), footprint=x[2], gpu=x[3]) for x in samples]
+    asset_lines = [(l[:27], l.split("assets: ")[-1][:160]) for l in log.splitlines() if "assets:" in l]
+    worn_lines = [l.split("worn: ")[-1][:200] for l in log.splitlines() if "worn: freed" in l]
     r = dict(arm=arm, run=run, k=k, rc=p.returncode, load_start=round(load0, 1), load_end=round(load1, 1),
              still_frames=len(still), p50_ms=pct(still, 50), p99_ms=pct(still, 99),
              walk_frames=len(walk), walk_max_ms=max(walk) if walk else None, walk_over_50=sum(1 for x in walk if x > 50),
@@ -142,6 +174,7 @@ def one(a, arm, binary, env, k, out, run=None):
              opaque_sets=int(opaque.group(1)) if opaque else None, **memory, assets=assets[-1].split("assets:")[-1].strip()[:200] if assets else None,
              gpu_textures=(re.search(r"textures \d+ on the GPU [\d.]+ MiB", batches[-1]) or [None])[0] if batches else None,
              prewarm=next((l.split("loading: ")[-1] for l in log.splitlines() if "prewarm characters" in l), None),
+             timeline=timeline if a.churn else None, asset_lines=asset_lines if a.churn else None, worn_freed=worn_lines,
              composed=len(re.findall(r"compose: .* wears", log)), looks_warnings=sorted(set(re.findall(r"looks: [^\n]*", log)))[:6], evidence=d)
     out.append(r)
     print(json.dumps({x: r[x] for x in ("arm", "k", "rc", "p50_ms", "p99_ms", "walk_max_ms", "first_sight_hitches", "people_materials", "people_pairs", "opaque_sets", "peak_rss_mib", "steady_rss_mib", "steady_footprint_mib", "steady_gpu_mib", "load_start")}), flush=True)
@@ -159,6 +192,7 @@ def main():
     ap.add_argument("--far", action="store_true", help="everyone on the full model (LIVING_GAME_FAR=1000)")
     ap.add_argument("--perf", default="", help="more LIVING_GAME_PERF flags for every arm")
     ap.add_argument("--fps-cap", default="0", help="LIVING_GAME_FPS_CAP for every run (default 0: uncapped)")
+    ap.add_argument("--churn", type=float, default=0, help="walk a ring of far-apart places for this many seconds instead of standing (the memory timeline)")
     a = ap.parse_args()
     arms = []
     for spec in a.arm:

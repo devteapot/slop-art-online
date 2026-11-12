@@ -49,6 +49,7 @@
 pub mod book;
 pub mod compose;
 pub mod seen;
+pub mod worn;
 pub mod identity;
 pub mod outfit;
 
@@ -393,7 +394,10 @@ pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at:
     let file = crate::lookdev::animated(&recipe.base);
     // VRM 0.x models face −Z.
     let model = Model { vrm: true, file: file.clone(), height: recipe.height, ground_y: at.y, glow: None };
-    let root = kept(assets, &file);
+    // A composed person's files are counted by wearer and freed after the last (`worn`); other
+    // character files (a few bases) are kept for the session.
+    let root = if styled.is_some() { worn::handle(assets, &file) } else { kept(assets, &file) };
+    let wears = styled.as_ref().map(|s| worn::Wears(std::iter::once(file.clone()).chain(s.worn.iter().map(|w| w.file.clone())).collect()));
     let mut e = commands.spawn((
         model,
         Character { recipe, stride: 1.0 },
@@ -405,6 +409,9 @@ pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at:
     ));
     if let Some(s) = styled {
         e.insert(s);
+    }
+    if let Some(w) = wears {
+        e.insert(w);
     }
     e.id()
 }
@@ -630,7 +637,7 @@ impl Plugin for CharactersPlugin {
             .insert_resource(SpringSettings::from_env())
             .init_resource::<SpringClock>()
             .init_resource::<SpringStats>()
-            .add_systems(Update, (shape, recolor, rig_springs, outfit::dress, rebuilt, frames))
+            .add_systems(Update, (shape, recolor, rig_springs, outfit::dress, rebuilt, frames, worn::free_unworn))
             .add_systems(PostUpdate, (hips.after(bevy::app::AnimationSystems).before(TransformSystems::Propagate), springs.after(TransformSystems::Propagate)));
     }
 }
@@ -1096,6 +1103,11 @@ pub struct Thumbs(HashMap<AssetId<Image>, Thumb>);
 fn thumb_pictures(mut events: MessageReader<AssetEvent<Image>>, mut images: ResMut<Assets<Image>>, assets: Res<AssetServer>, mut thumbs: ResMut<Thumbs>) {
     let keep = crate::perf::has("keeppixels");
     for ev in events.read() {
+        // A picture freed (its file no longer worn, `worn`): its summary goes with it.
+        if let AssetEvent::Removed { id } = ev {
+            thumbs.0.remove(id);
+            continue;
+        }
         let AssetEvent::Added { id } = ev else { continue };
         let Some(path) = assets.get_path(*id) else { continue };
         if !path.path().starts_with("lookdev") {

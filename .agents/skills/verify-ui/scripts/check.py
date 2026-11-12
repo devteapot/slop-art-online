@@ -2207,6 +2207,34 @@ def looks(run, c):
             f"{len(drawn)} drawn, {len(set(drawn))} lines; outside decor {sorted(set(drawn) - decor_lines)[:3]}")
 
 
+@scenario("looks-free", cullet=True)
+def looks_free(run, c):
+    """looks-mem-1 (`characters::worn`): a composed person's files are freed once no one has worn
+    them for the grace (`worn::GRACE_S`, 20 s), and read again by the next wearer. On a Cullet
+    world: the people at the arrival in view (the dump's `worn`: files worn); I walk (`goto`) to
+    the farthest home and wait there, so the square's people leave my sight; their files are freed
+    (`worn: freed …` in the log, the dump's `freed` up); I walk back: the files are loaded again
+    (`loads` up) and everyone in view is drawn from their key."""
+    s = "looks-free"
+    rows = sql(run, "SELECT x, y FROM body")
+    arr = (sql(run, "SELECT arrive_x, arrive_y FROM land") or [{}])[0]
+    ax, ay = arr.get("arrive_x", 0.0), arr.get("arrive_y", 0.0)
+    far = max(rows, key=lambda r: (r["x"] - ax) ** 2 + (r["y"] - ay) ** 2) if rows else {"x": ax, "y": ay}
+    plan = f"ready;cursor:0.5,0.5;wait:6;dump:00;goto:{far['x']:.1f},{far['y']:.1f};wait:80;dump:01;goto:{ax:.1f},{ay:.1f};wait:80;dump:02;quit"
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    L = log(out)
+    w = [((dump(out, k) or {}).get("worn") or {}) for k in ("00", "01", "02")]
+    dist = ((far["x"] - ax) ** 2 + (far["y"] - ay) ** 2) ** 0.5
+    c.check(s, "at the arrival people's files are worn", w[0].get("worn", 0) > 0, f"{w[0]}")
+    c.check(s, "away from them, their files are freed after the grace", w[1].get("freed", 0) > w[0].get("freed", 0) and "worn: freed" in L, f"{w[0]} -> {w[1]} ({dist:.0f} m away)")
+    c.check(s, "back again, the files are read again", w[2].get("loads", 0) > w[1].get("loads", 0), f"{w[1]} -> {w[2]}")
+    looks2 = (dump(out, "02") or {}).get("looks") or []
+    book = json.load(open(LOOK_BOOK)) if os.path.exists(LOOK_BOOK) else {"lines": {}}
+    c.check(s, "everyone in view drawn again from their key", looks2 and all(x.get("composed") == (x.get("look") in book["lines"]) for x in looks2) and any(x.get("composed") for x in looks2),
+            f"{sum(1 for x in looks2 if x.get('composed'))} of {len(looks2)} composed")
+
+
 @scenario("looks-old")
 def looks_old(run, c):
     """look-1 on a world made without looks (the island seed: no `looks`, so no look rows and an
