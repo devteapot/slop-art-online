@@ -1100,6 +1100,17 @@ impl<'a> Ev<'a> {
         prev
     }
 
+    /// Seen too far away to make out less than `FAR_RECHECK_MS` ago (its mark is dropped once due).
+    fn far_wait(&mut self, id: u32) -> bool {
+        let now = self.now;
+        let Some(k) = self.st.seen.iter().position(|s| s.id == FAR_MARK | id) else { return false };
+        if now.saturating_sub(self.st.seen[k].at_ms) < FAR_RECHECK_MS {
+            return true;
+        }
+        self.st.seen.remove(k);
+        false
+    }
+
     /// Recently checked (fast path that avoids familiarity lookups every second).
     fn recently_seen(&mut self, key: u32) -> bool {
         let now = self.now;
@@ -1173,6 +1184,10 @@ impl<'a> Ev<'a> {
                 }
             }
             let danger = wolf_arrived && &*c.kind == "wolf" && c.dist <= laws.danger_near;
+            // Seen too far away to make out within the last 5 s: not looked at again yet.
+            if &*c.kind == "person" && self.far_wait(c.id) {
+                continue;
+            }
             if self.recently_seen(c.id) && !danger {
                 continue;
             }
@@ -1184,8 +1199,12 @@ impl<'a> Ev<'a> {
             if ch.kind == "person" {
                 let due = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().map_or(true, |f| now.saturating_sub(f.last_ms) > day);
                 if due && crate::perception::regard(self.ctx, &self.me, &ch, now).far {
-                    if let Some(s) = self.st.seen.iter_mut().find(|s| s.id == c.id) {
-                        s.at_ms = now.saturating_sub(FAR_RECHECK_MS);
+                    // Not "seen": a far figure is looked at again in 5 s (its own mark, since
+                    // `recently_seen` keeps a mark alive while someone stays in sight).
+                    self.st.seen.retain(|s| s.id != c.id);
+                    self.st.seen.push(Seen { id: FAR_MARK | c.id, at_ms: now });
+                    if self.st.seen.len() > 96 {
+                        self.st.seen.remove(0);
                     }
                     continue;
                 }
@@ -1413,9 +1432,10 @@ impl<'a> Ev<'a> {
     }
 }
 
-/// A person too far away to make out is looked at again after 5 s (`noticed`): `recently_seen`
-/// holds a mark for 90 s, so a mark this old is due again in 5.
-const FAR_RECHECK_MS: u64 = 85_000;
+/// A person seen too far away to make out is looked at again after this long (`noticed`,
+/// `far_wait`), under a mark of their own in `seen` (`FAR_MARK | id`).
+const FAR_RECHECK_MS: u64 = 5_000;
+const FAR_MARK: u32 = 0x2000_0000;
 
 /// First sights of one look that share one line (`noticed`).
 const FIRST_SIGHTS_PER_LINE: usize = 8;
