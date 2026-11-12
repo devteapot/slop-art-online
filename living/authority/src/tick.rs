@@ -72,6 +72,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         for id in wakes {
             ctx.db.wake().id().delete(id);
             if done.insert(id) {
+                common::diag(|| "eval:wake".into(), 1);
                 brain::evaluate(ctx, id, now);
             }
         }
@@ -83,6 +84,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
     for id in fighting {
         if done.insert(id) {
+            common::diag(|| "eval:combat".into(), 1);
             brain::evaluate(ctx, id, now);
         }
     }
@@ -99,6 +101,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
     for id in slot_ids {
         if done.insert(id) {
+            common::diag(|| "eval:slot".into(), 1);
             brain::evaluate(ctx, id, now);
         }
     }
@@ -358,6 +361,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     common::set_profiling(k.profile);
     let _timer = common::span("housekeeping");
     common::report_scenes();
+    common::report_diag();
     crate::town::refresh_weather(ctx, now);
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);
