@@ -15,7 +15,7 @@
 //! Already in the authority (docs/PERCEPTION.md, `perceive::speak`):
 //! - `said`: my own line; `subject` me, `object` whom I addressed (0: no one in particular);
 //! - `speech`: a line I heard; `subject` the speaker, `object` whom they addressed;
-//! - `silence`: "No answer from …": `subject` the one I addressed, `object` me, written in the
+//! - `silence`: "… could not have heard you." (`speech_truth`; "No answer from …" without it): `subject` the one I addressed, `object` me, written in the
 //!   same instant as my `said` row when they were out of earshot.
 
 use living_bindings::Experience;
@@ -41,7 +41,8 @@ pub fn heard(e: &Experience) -> Option<(u32, u32)> {
     (e.kind == "speech").then_some((e.subject, e.object))
 }
 
-/// "No answer from …": the one addressed, who did not hear me.
+/// A `silence` row ("… could not have heard you."): the one addressed, who did not hear me (0: a
+/// line to the room no one heard, "Nobody was near enough to hear you.").
 pub fn unheard(e: &Experience) -> Option<u32> {
     (e.kind == "silence").then_some(e.subject)
 }

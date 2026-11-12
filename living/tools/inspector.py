@@ -38,6 +38,11 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+# The speaker's `silence` row: the one a line was said to could not have heard it. Its words since
+# `speech_truth` ("Bram is too far away: they could not have heard you.", "… is out of earshot: …",
+# a planned line not said, and "Nobody was near enough to hear you." for a line to the room), speech-2's ("… is too far to hear you; …") and the first ("No answer from …").
+UNHEARD = re.compile(r"^No answer from|could not have heard you|^Nobody was near enough to hear you|is too far to hear you")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import journal_io  # noqa: E402
 
@@ -999,11 +1004,11 @@ class Run:
         return None
 
     def silence_for(self, l):
-        """Evidence that the one a line was said to did not hear it: the speaker's 'No answer'
-        percept, or the mind's 'out of earshot' for the pair, at the line."""
+        """Evidence that the one a line was said to did not hear it: the speaker's `silence`
+        percept ("… could not have heard you", or before `speech_truth` "No answer from …"), or the mind's 'out of earshot' for the pair, at the line."""
         sp, to, ms = l["speaker"], l["to"], l["ms"]
         for r in self.exps.get(sp, {}).values():
-            if r["ms"] is not None and r["text"].startswith("No answer from") and abs(r["ms"] - ms) <= (1500 if r["exact"] else 2500) \
+            if r["ms"] is not None and UNHEARD.search(r["text"]) and abs(r["ms"] - ms) <= (1500 if r["exact"] else 2500) \
                     and (r.get("subject") == to or not r.get("subject")):
                 return f"the speaker perceived “{r['text']}” ({r['src']})"
         i = bisect.bisect_left(self.log_ms, ms - 1000)

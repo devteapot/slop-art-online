@@ -1,5 +1,25 @@
 # Internal mind validation
 
+## 2026-11-12 speech-truth (Spark)
+
+Branch `speech-truth` with origin/main merged. Trial service `slop-trials-stdb` (2.14.1), fake model, private target dir. docs/COMMUNICATION.md §15.
+
+- Unit tests (`cargo test -p living-mind`): 100 pass in `minds-struth` and `minds-struth2`. In `minds-struth3`, `llm::tests::unreachable_provider_holds_calls` failed once on timing (it waited 1.998 s against a 2 s minimum, at load average ~90); `llm.rs` is unchanged here, and the test passed in every other run.
+- `minds-struth`: conversation, greet, alongside, parked and speech pass. Its `queued` (first form) failed on its own timing: the talk turn took 5.7 s, so the queued line came first.
+- The `queued` case was reworked over `minds-struth2`–`9`:
+  - a fixed wait cannot place the lines (talk turns of 5.7 and 2.9 s);
+  - a nod never set `hailed_ms`;
+  - a second resident's line drew a reply that reset the 2 s speaking limit;
+  - a settled pair took no turn on the second arm's like-worded question.
+- `minds-struth10-queued` passes:
+  - law off: the reply at 3.65 s and the queued line at 6.44 s after the install, both to the newcomer (gap 2.79 s);
+  - law on: the reply alone (4.00 s), no queued line, no `silence` row.
+- The 2 s speaking limit (`SPEAK_GAP_MS`) means one speaker's two lines are never under 2 s apart. ar2's "1.5 s apart" is not the authority's own line times.
+- `privacy.py --way say` (`minds-struth-privacy-say`): pass, no violations, 0 Neo4j nodes left.
+- Maintain pass: no `maintain-verification-skill` subagents were run. The map was updated by hand for this change: `conversations.md` (`queued`, `speech_truth`) and the case list in SKILL.md. No table, reducer, view or subscription changed.
+
+- Rerun after the coordinator's changes (fact-only outcome text, room lines), `minds-struth11-queued`: pass. Law off: reply at 3.68 s, queued line at 6.44 s (gap 2.76 s). Law on: the reply alone (4.02 s), no `silence` row. Mind unit tests 100 pass.
+
 ## 2026-11-12 arrive-2: exp-arrive's trial tooling on main, without the newcomer laws (Spark)
 
 Branch `arrive-2` (exp-arrive `1e63a30` with origin/main `a221a78` merged; the newcomer laws removed after the owner rejected them). Worktree, trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only. The branch's Rust is identical to main's; it changes trials.py, arrive_report.py, the arrive trials and docs.
