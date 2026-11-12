@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-83b3b0e7-3e9423",
+ "published": "2026-11-12T13:20:54+01:00",
+ "imported": "2026-11-12T13:20:54+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "One iris for every type. Composed eyes had come out about three times too light, with grey or coloured pupils on the lighter colours and stray hues from each type's own iris. Every type now names one iris picture, and a person's line carries the colour that brings its body to the eye colour: over 21 types and 7 colours the body is 1.2 CIE76 from the eye colour at the median (was 13.2), 2.9 at worst (was 39.7), and pupils are dark. What a composed eye still lacks is a whole file's warm glow.",
+ "source": {
+  "commit": "83b3b0e76f5ae60503b441d823960c7e237cf86f",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "ec79bb2176cc106e13aef81641dece43a816e43a9d794e36d43875a270c4a333",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "shared-iris: three bare type heads in the seven eye colours, eyes cropped: the type's own iris with the eye colour in the line (before), the shared iris with the line's new colour (now), both coloured by the game client itself through a recipe, and the same head built with its own iris in that colour (a whole file's, the target); below, the same by the client's rule applied in eye_colours.py. shared-iris-people: four residents composed by compose.py (the iris by the client's rule) before and now, above their own files. Eyes are held open by the photo tool; the idle clip turns the head a little between photographs. The vroid member is the reference's eyes through the same client; blue-protocol is for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-83b3b0e7-3e9423",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "3c499e6210100ce170400e6f254195dff7f6a4fbb90f5676b1f42952adb7c5fb",
+   "shots": [
+    "shared-iris",
+    "shared-iris-people"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "a03c02037663af7f33ea2f07372455e2561103e5073eaab1283b17fa4c35d69a",
+   "shots": [
+    "shared-iris",
+    "shared-iris-people"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "ff6ea6d1b0f44fe61e4d8dbff037ffdbe80d92217045eee1f3e2dff88ba62338",
+   "shots": [
+    "shared-iris",
+    "shared-iris-people"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
