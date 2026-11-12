@@ -2060,15 +2060,23 @@ class Instance:
             (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
             keep = self.opts.keep_db or self.trial.get("keep_db")
             if self.published and not keep and self.status != "failed-keep":
-                delete_db(self.db)
+                delete_db(self.db, self.shared["token"])
             elif self.published and self.trial.get("kind") == "life":
                 # Kept, but stopped: a paused world does not tick or grow.
                 self.call("set_paused", True)
 
 
-def delete_db(db):
+def delete_db(db, token=None):
+    """Delete a trial world's database, pausing it first: deleting a world that is still ticking
+    took the shared trial server down (2026-11-12, 12:52)."""
     if not db.startswith(PREFIX):
         raise RuntimeError(f"refusing to delete {db}")
+    try:
+        code, _ = http(f"/v1/database/{db}/call/set_paused", [True], token or admin_token())
+        if code == 200:
+            time.sleep(1.0)
+    except Exception:
+        pass  # a world that no longer answers is deleted as it is
     sh("docker", "exec", CONTAINER, "spacetime", "delete", "-s", "local", db, "-y", check=False)
     return http(f"/v1/database/{db}/sql", "SELECT 1 FROM world", raw=True)[0] == 404
 
@@ -2885,8 +2893,9 @@ def clean(a):
     guard()
     bdir = OUT / a.batch
     dbs = [d for d in databases() if d.startswith(f"{PREFIX}{a.batch}-")]
+    token = admin_token() if dbs else None
     for db in dbs:
-        print(f"delete {db}: {'ok (SQL 404)' if delete_db(db) else 'STILL ANSWERS'}")
+        print(f"delete {db}: {'ok (SQL 404)' if delete_db(db, token) else 'STILL ANSWERS'}")
     runs = [json.loads(p.read_text())["db"] for p in bdir.glob("*/summary.json")]
     if runs and docker_state(NEO4J) == "running":
         q = "MATCH (n) WHERE n.run IN $runs DETACH DELETE n"

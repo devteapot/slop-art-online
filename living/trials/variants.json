@@ -209,5 +209,11 @@
    "cues_on": true,
    "first_sight_thinks": true
   }
- }
+ },
+  "fast-lane": {
+    "about": "The fast lane on (docs/FAST_LANE.md): `default` with the world law `fast_lane_on` true, so a blow taken or a move seen started at the subject `seen_again_n` times asks its mind for a quick re-plan (rethink.json `fast.route`, deepseek-flash). R2 arm r2e.",
+    "models": {},
+    "env": {},
+    "world_laws": {"fast_lane_on": true}
+  }
 }
