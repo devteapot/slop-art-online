@@ -81,6 +81,30 @@ pub fn note_scene(n: usize) {
     }
 }
 
+thread_local! {
+    /// Diagnostic counts while profiling (docs/BATTLE_SCALE.md): percepts by kind and how many
+    /// woke their observer, onlookers per witnessed event, requests to think by reason, graph
+    /// evaluations by trigger, wakes. Logged once a second by `report_diag`, then cleared.
+    static DIAG: RefCell<std::collections::BTreeMap<String, u64>> = const { RefCell::new(std::collections::BTreeMap::new()) };
+}
+
+/// Count `n` under the key `key()` while profiling (no work otherwise).
+pub fn diag(key: impl FnOnce() -> String, n: u64) {
+    if PROFILE.with(|p| p.get()) {
+        DIAG.with(|d| *d.borrow_mut().entry(key()).or_default() += n);
+    }
+}
+
+/// One line a second while profiling: the counts since the last report.
+pub fn report_diag() {
+    if PROFILE.with(|p| p.get()) {
+        let m = DIAG.with(|d| std::mem::take(&mut *d.borrow_mut()));
+        if !m.is_empty() {
+            log::info!("diag: {}", serde_json::to_string(&m).unwrap_or_default());
+        }
+    }
+}
+
 /// While profiling, once a second: what graph scenes saw since the last report, one log line.
 pub fn report_scenes() {
     if PROFILE.with(|p| p.get()) {
@@ -97,6 +121,49 @@ pub fn profiling() -> bool {
 
 pub fn span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
     PROFILE.with(|p| p.get()).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
+}
+
+// ---- a module updated under a running instance (docs/LOOK.md §7, "The update panic") ------
+
+thread_local! {
+    /// A fingerprint of the database's list of tables (`st_table`) as this instance first saw it,
+    /// at its first scheduled call (0: not yet), and whether it has said it was replaced.
+    static SCHEMA: std::cell::Cell<(u64, bool)> = const { std::cell::Cell::new((0, false)) };
+}
+
+/// Whether the database's tables have changed under this module instance since its first
+/// scheduled call: a module update with a schema change was published while this instance (the
+/// old module's) still runs. SpacetimeDB 2.14.1 lets the outgoing module fire one more scheduled
+/// reducer after the update has committed, and the bindings keep each table's and index's id in
+/// a `static` resolved once per instance, so a table the update rewrote (a column appended: a new
+/// table id and new index ids) makes that call's first lookup panic with "No such index". A
+/// scheduled reducer that sees this returns at once, touching no table; the new module's own
+/// instances (whose first call takes the fingerprint afresh) carry on. One scan of `st_table`
+/// (about 150 short rows) through the host's uncached calls.
+pub fn schema_moved(reducer: &str) -> bool {
+    let Ok(st_table) = spacetimedb::sys::table_id_from_name("st_table") else { return false };
+    let Ok(mut rows) = spacetimedb::sys::datastore_table_scan_bsatn(st_table) else { return false };
+    let mut buf = Vec::with_capacity(16 * 1024);
+    while !rows.is_exhausted() {
+        rows.read(&mut buf);
+    }
+    // FNV-1a over the rows' bytes (never 0, so 0 means "not yet taken").
+    let h = buf.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3)) | 1;
+    SCHEMA.with(|s| {
+        let (seen, told) = s.get();
+        if seen == 0 {
+            s.set((h, false));
+            return false;
+        }
+        if seen == h {
+            return false;
+        }
+        if !told {
+            log::warn!("{reducer}: the database's tables changed under this module instance (a module update was published); this call does nothing, and the new module carries on");
+            s.set((seen, true));
+        }
+        true
+    })
 }
 
 thread_local! {
@@ -1217,8 +1284,15 @@ pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String 
 }
 
 /// Whose a structure is, as `observer` is told it (owner-known): the owner's name when the
-/// world's `owner_shown` law says so (it knows the owner's name: their label; the structure shows
-/// its owner, a sign: their name), else `None`, and the structure is just its kind.
+/// world's `owner_shown` law says so (it knows the owner's name, `perception::knows_name`, the
+/// shared answer; or the structure shows its owner, its kind's `shows_owner`), else `None`, and
+/// the structure is just its kind.
+///
+/// Where the owner stands now never matters (house-owner-label, 2026-11-12): whether one can make
+/// someone out (`perceived_of`'s `far`, Cullet's `known_within`) is about the person in sight,
+/// never about their house. Before, a known neighbour's house read as "someone too far away to
+/// make out"'s (or "a stranger"'s) whenever its owner was away from it (docs/IDEAS_AUDITS.md §2).
+/// The client names owners the same way, from `my_known_names` (`living/game/src/looks.rs`).
 pub fn owner_label(ctx: &ReducerContext, observer: &Character, owner: u32, kind: &str) -> Option<String> {
     if owner == 0 {
         return None;
@@ -1230,7 +1304,7 @@ pub fn owner_label(ctx: &ReducerContext, observer: &Character, owner: u32, kind:
     if !sc.owner_shown(knows, shows, kind) {
         return None;
     }
-    Some(if knows { label_for(ctx, observer, owner) } else { t.name })
+    Some(t.name)
 }
 
 /// The same, to begin a sentence with.
@@ -1310,7 +1384,62 @@ pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at:
     ctx.db.chronicle().insert(Chronicle { id: 0, at_ms: now, kind: kind.into(), a, b, x: at.0, y: at.1, text });
 }
 
+thread_local! {
+    /// Bystanders' wakes (docs/BATTLE_SCALE.md, fix 3): when each was last woken by what it saw,
+    /// and when a wake held back since is due.
+    static BYSTANDER: RefCell<std::collections::HashMap<u32, (u64, Option<u64>)>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// Wake `id`, a bystander of what it just saw (not party to it): at once unless it was woken by
+/// what it saw within `witness_wake_ms`, else when that window ends (`due_bystander_wakes`). A
+/// party to the event is woken by `wake`, at once.
+pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
+    let ms = laws(ctx).witness_wake_ms as u64;
+    if ms == 0 {
+        wake(ctx, id);
+        return;
+    }
+    let now_wake = BYSTANDER.with(|b| {
+        let mut b = b.borrow_mut();
+        let e = b.entry(id).or_insert((0, None));
+        if e.0 == 0 || now.saturating_sub(e.0) >= ms {
+            *e = (now, None);
+            true
+        } else {
+            e.1.get_or_insert(e.0 + ms);
+            false
+        }
+    });
+    if now_wake {
+        wake(ctx, id);
+    } else {
+        diag(|| "wake:deferred".into(), 1);
+    }
+}
+
+/// The bystanders whose held-back wake is due: woken now (each tick, before the wakes).
+pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
+    let due: Vec<u32> = BYSTANDER.with(|b| {
+        let mut b = b.borrow_mut();
+        let mut out = Vec::new();
+        b.retain(|id, (last, pending)| {
+            if pending.is_some_and(|t| t <= now) {
+                out.push(*id);
+                *last = now;
+                *pending = None;
+            }
+            pending.is_some() || now.saturating_sub(*last) < 60_000
+        });
+        out
+    });
+    for id in due {
+        diag(|| "wake:due".into(), 1);
+        wake(ctx, id);
+    }
+}
+
 pub fn wake(ctx: &ReducerContext, id: u32) {
+    diag(|| "wake".into(), 1);
     if ctx.db.wake().id().find(id).is_none() {
         ctx.db.wake().insert(Wake { id });
     }

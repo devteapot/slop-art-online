@@ -85,6 +85,9 @@ const PERCEIVED: &[&str] = &[
     "SELECT * FROM my_offers",
     // Whom my character knows by name (owner-known): a house is "{name}'s house" only then.
     "SELECT * FROM my_known_names",
+    // Who would hear me now at each way, and its sentence (the `earshot` law; no row while it
+    // is off): `talk.rs`, the box's hint line.
+    "SELECT * FROM my_earshot",
     "SELECT * FROM my_records",
     // What I hear but don't see (rows only while the world's `fov_on` law is on): `heardmark.rs`.
     "SELECT * FROM heard_sounds",

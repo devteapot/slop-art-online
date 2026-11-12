@@ -170,21 +170,30 @@ def extra(d, sid, names, minds):
     to_new = [s for s in speech if s.get("b") == sid and s.get("a") != sid]
     # The authority's own verdict, when recorded: a "silence" experience of the speaker at the
     # line's time ("No answer from …; they don't seem to be within earshot" before `speech_truth`,
-    # "… could not have heard you." since; `UNHEARD`). It counts every line said, where
-    # speech.jsonl merges a line repeated word for word into its earlier row. A planned line the
-    # authority did not say (`speech_truth`: its addressee out of reach as it came due) is no line.
-    earshot = {(r["observer"], r["at_ms"]) for r in jl(d / "experiences_all.jsonl")
-               if r.get("kind") == "silence" and r.get("subject") == sid and UNHEARD.search(r.get("text") or "")
-               and UNSAID not in (r.get("text") or "")}
+    # "… could not have heard you." since; `UNHEARD`). A planned line the authority did not say
+    # (`speech_truth`: its addressee out of reach as it came due) is no line. The row is matched to
+    # the line by its speaker and moment, whatever its subject: when the newcomer is too far away to
+    # make out, the row names them by the speaker's far handle (≥ 1000000000, far-handle), not their
+    # id, and reads "They are …" (fix-far-silence). Before 2026-11-12 (branch `earshot-stage`) only
+    # rows whose subject was the newcomer counted, which missed every line said from past Cullet's
+    # far line (fs1h r1: 2 of 12). Every line said is counted from the chronicle, where
+    # speech.jsonl merges a line repeated word for word into its earlier row.
+    unheard_at = {(r["observer"], r["at_ms"]) for r in jl(d / "experiences_all.jsonl")
+                  if r.get("kind") == "silence" and UNHEARD.search(r.get("text") or "")
+                  and UNSAID not in (r.get("text") or "")}
+    said_to_new = [r for r in jl(d / "chronicle.jsonl") if r.get("kind") == "speech" and r.get("b") == sid and r.get("a") != sid]
     heard, far = [], []
     for s in to_new:
         if (d / "experiences_all.jsonl").exists():
-            out = (s["a"], s["at_ms"]) in earshot
+            out = (s["a"], s["at_ms"]) in unheard_at
         else:
             p = pos_at(track, s["at_ms"])
             out = not (p and s.get("x") is not None and ((p[0] - s["x"]) ** 2 + (p[1] - s["y"]) ** 2) ** 0.5 <= EARSHOT_M)
         (far if out else heard).append(s)
-    n_far = len(earshot) if (d / "experiences_all.jsonl").exists() else len(far)
+    if (d / "experiences_all.jsonl").exists():
+        n_far = sum(1 for r in said_to_new if (r["a"], r["at_ms"]) in unheard_at) if said_to_new else len(far)
+    else:
+        n_far = len(far)
     # Every resident's lines, to anyone or the room, and those the authority's own verdict says
     # reached no one they were for (the earshot stage, docs/COMMUNICATION.md §17): `said` rows,
     # and `silence` rows (`UNHEARD`, a planned line not said left out as above).

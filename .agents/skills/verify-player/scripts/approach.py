@@ -18,7 +18,7 @@ controls the body).
     approach.py --run RUN [--expect-wait]
 
 `--expect-wait` checks the pre-fix behaviour (the player perceived as `wait` while walking);
-without it the script checks the fix (`walk → person`). Needs `verify.py launch --run RUN --seed
+without it the script checks the fix (`walk → you`: the walker's target named as R perceives it, since first-sight-crowd). Needs `verify.py launch --run RUN --seed
 island`. Admin `place_at` and `set_behavior` set the scene. Writes `RUN/approach.json`. Python
 standard library only.
 """
@@ -161,7 +161,7 @@ def main():
     if a.expect_wait:
         A.check(p, "before the fix: the walking player is perceived as wait", pe and pe.get("doing") == "wait", f"player {pe}")
     else:
-        A.check(p, "the walking player is perceived walking toward a person", pe and pe.get("doing") == "walk → person", f"player {pe}")
+        A.check(p, "the walking player is perceived walking toward R, as R perceives it (walk → you)", pe and pe.get("doing") == "walk → you", f"player {pe}")
     A.check(p, "the bystander's client sees the player's body move (seen_bodies), no doing row", moving_unshown(ev), f"{ev['bystander_seen_bodies']} {ev['bystander_seen_doing']}")
 
     # 2. The player stops: standing with nothing to do reads as wait, as before.
@@ -178,7 +178,7 @@ def main():
     goto = json.dumps({"seq": [{"do": {"skill": "goto", "target": {"id": r["id"]}}}, {"wait": 300}]})
     ev = EVIDENCE["ai_walking"] = walk(w["id"], lambda: p.call("set_behavior", [w["id"], goto], "admin"))
     we = ev["scene_entry"]
-    A.check(p, "the AI walker is perceived by its goto (unchanged)", we and we.get("doing") == "goto → person", f"ai {we}")
+    A.check(p, "the AI walker is perceived by its goto, its target named as R perceives it (goto → you)", we and we.get("doing") == "goto → you", f"ai {we}")
     A.check(p, "the bystander's client sees the AI's body move (seen_bodies), no doing row", moving_unshown(ev), f"{ev['bystander_seen_bodies']} {ev['bystander_seen_doing']}")
     EVIDENCE["resident_saw"] = [e["text"] for e in p.sql(f"SELECT text, kind, subject FROM experience WHERE observer = {r['id']}") if e["kind"] == "saw" and e["subject"] in (me, w["id"])]
     return finish(p)

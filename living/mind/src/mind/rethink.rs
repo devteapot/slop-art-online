@@ -140,6 +140,8 @@ pub struct LlmCfg {
 pub struct Gate {
     pub mode: Mode,
     pub file: File,
+    /// Jev's input price, from the local prices file (crate::prices); unknown without one.
+    pub prices: crate::prices::Prices,
     key: String,
     http: reqwest::Client,
 }
@@ -168,7 +170,11 @@ impl Gate {
             Mode::Llm => String::new(),
         };
         let http = reqwest::Client::builder().timeout(Duration::from_millis(file.jev.timeout_ms.max(500))).user_agent("sao-living-mind/0.1").build()?;
-        Ok(Self { mode, file, key, http })
+        let prices = crate::prices::Prices::load(root)?;
+        if mode == Mode::Jev {
+            log::info!("rethink gate: {}", prices.describe(&file.jev.provider.model));
+        }
+        Ok(Self { mode, file, prices, key, http })
     }
 
     fn jev_body(&self, state: &Value) -> Value {
@@ -204,7 +210,7 @@ impl Gate {
         .await;
         let latency_ms = started.elapsed().as_millis() as u64;
         let input_tokens = result.as_ref().ok().and_then(|v| v["usage"]["input_tokens"].as_u64());
-        let cost = input_tokens.map(|t| t as f64 * self.file.jev.provider.input_usd_per_m / 1e6);
+        let cost = self.prices.input_cost(&self.file.jev.provider.model, input_tokens);
         let answers: BTreeMap<String, f32> = result
             .as_ref()
             .ok()
@@ -220,7 +226,7 @@ impl Gate {
         .await;
         result?;
         let p = self.file.jev.combine.p(&answers).ok_or_else(|| anyhow!("no usable answer"))?;
-        Ok(Judged { p, answers, latency_ms, tokens: input_tokens.unwrap_or(0), cost_usd: cost.unwrap_or(0.0) })
+        Ok(Judged { p, answers, latency_ms, tokens: input_tokens.unwrap_or(0), cost_usd: cost })
     }
 
     /// Ask a chat model for a yes/no; the call is journaled by `Llm` (purpose `rethink`).
@@ -245,7 +251,8 @@ impl Gate {
         };
         let mut answers = BTreeMap::new();
         answers.insert("rethink".to_string(), p);
-        Ok(Judged { p, answers, latency_ms: started.elapsed().as_millis() as u64, tokens: r.tokens as u64, cost_usd: 0.0 })
+        // the chat model's cost is in its own journal entry (purpose rethink), not known here
+        Ok(Judged { p, answers, latency_ms: started.elapsed().as_millis() as u64, tokens: r.tokens as u64, cost_usd: None })
     }
 
     /// The probability at which this arm lets a trigger through.
@@ -275,7 +282,8 @@ pub struct Judged {
     pub answers: BTreeMap<String, f32>,
     pub latency_ms: u64,
     pub tokens: u64,
-    pub cost_usd: f64,
+    /// `None` when unknown: no price for the model, no token count, or a cost journaled elsewhere.
+    pub cost_usd: Option<f64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -357,7 +365,10 @@ pub struct Stats {
     pub max_hold: u64,
     pub fallback: u64,
     pub tokens: u64,
-    pub cost_usd: f64,
+    /// The known part of the judges' cost; `None` while none is known.
+    pub cost_usd: Option<f64>,
+    /// Judged calls whose cost is unknown (not counted in `cost_usd`).
+    pub cost_unknown: u64,
 }
 
 impl Stats {
@@ -585,7 +596,10 @@ impl Minds {
             s.count(verdict);
             if let Some(j) = &judged {
                 s.tokens += j.tokens;
-                s.cost_usd += j.cost_usd;
+                match j.cost_usd {
+                    Some(c) => s.cost_usd = Some(s.cost_usd.unwrap_or(0.0) + c),
+                    None => s.cost_unknown += 1,
+                }
             }
         }
         if verdict == Verdict::Hold {
@@ -849,7 +863,7 @@ mod tests {
     #[test]
     fn urgent_reasons_bypass_and_routine_ones_are_gated() {
         let file: File = serde_json::from_str(&std::fs::read_to_string(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../configs/rethink.json")).unwrap()).unwrap();
-        let g = Gate { mode: Mode::Jev, file, key: String::new(), http: reqwest::Client::new() };
+        let g = Gate { mode: Mode::Jev, file, prices: Default::default(), key: String::new(), http: reqwest::Client::new() };
         let r = |reason: &str| g.urgent(reason, Lane::deliberation(reason, false));
         assert!(r("I finished my plan.\nWolf is attacking you!"));
         assert!(r("Your body: You are very hungry."));

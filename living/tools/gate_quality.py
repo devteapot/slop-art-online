@@ -13,6 +13,14 @@ Subcommands (all read trial evidence; only `ask` makes paid calls, under a hard 
           replies in random order, with a hidden key.
   curve   POINTS LABELS... --key KEY
           the cost-against-harm curve over gate settings and model setups.
+  live    BATCH_DIR
+          the live check's measures per instance and arm (docs/GATE_LIVE.md): dollars and
+          deliberations per resident-hour, the gate's verdicts and holds.
+  held    BATCH_DIR OUT_DIR --n N --seed S
+          blind items for held triggers judged as delayed: the moment held, and what the
+          deliberation that finally ran did, and how long after.
+  watch   BATCH --root ROOT --stop-usd X --pid PID
+          the spend of a running batch from its live journals; SIGINT to the runner past X.
 """
 import argparse, glob, gzip, json, os, random, sys, time, urllib.request, urllib.error
 from pathlib import Path
@@ -370,10 +378,12 @@ def cmd_curve(a):
             held = [i for i in ids if not passes(pts[i])]
             hs = set(held)
             gc = 0.0 if name == "off" else gate_cost["jev" if name.startswith("jev") else "llm"]
-            cost = (sum(c for i, c in zip(ids, dc) if i not in hs) / n) + gc
+            # a gate whose question price is unknown (Jev without --jev-cost) has an unknown cost, not 0
+            cost = None if gc is None else (sum(c for i, c in zip(ids, dc) if i not in hs) / n) + gc
             rows_out.append({"gate": name, "held": len(held) / n, "wasted_caught": (sum(i in hs for i in wasted) / len(wasted)) if wasted else None,
                              "harmful_held": (sum(i in hs for i in hurt) / len(hurt)) if hurt else None,
-                             "harm_rate": sum(i in hs for i in hurt) / n, "usd_per_trigger": cost, "cost_vs_off": cost / base_cost if base_cost else None})
+                             "harm_rate": sum(i in hs for i in hurt) / n, "usd_per_trigger": cost,
+                             "cost_vs_off": cost / base_cost if base_cost and cost is not None else None})
         lab["gates"] = rows_out
         # The model axis: the recorded think model against the other cloud model on the same points.
         pk = [(i, prof) for (i, prof) in pairs if i in set(ids)]
@@ -396,7 +406,7 @@ def cmd_curve(a):
             cells = []
             for name, passes in gate_settings():
                 for setup in ("glm think", "deepseek think"):
-                    hv, cv, m = 0, 0.0, 0
+                    hv, cv, m, unknown = 0, 0.0, 0, False
                     for (i, prof) in pk:
                         r = pairs[(i, prof)]
                         if r["models"]["recorded"] == r["models"][prof]:
@@ -414,9 +424,11 @@ def cmd_curve(a):
                             cv += think_usd + compile_usd
                         else:
                             hv += bool(value.get(i, {}).get("hurt_if_skipped"))
-                        cv += 0.0 if name == "off" else gate_cost["jev" if name.startswith("jev") else "llm"]
+                        gq = 0.0 if name == "off" else gate_cost["jev" if name.startswith("jev") else "llm"]
+                        unknown = unknown or gq is None
+                        cv += gq or 0.0
                     if m:
-                        cells.append({"gate": name, "setup": setup, "n": m, "harm_rate": hv / m, "usd_per_trigger": cv / m})
+                        cells.append({"gate": name, "setup": setup, "n": m, "harm_rate": hv / m, "usd_per_trigger": None if unknown else cv / m})
             lab["cells"] = cells
         res["sets"][set_name] = lab
     Path(a.out).write_text(json.dumps(res, indent=1))
@@ -427,9 +439,184 @@ def cmd_curve(a):
         print("|---|---:|---:|---:|---:|---:|---:|")
         for r in lab["gates"]:
             f = lambda x: "–" if x is None else f"{x:.0%}"
-            print(f"| {r['gate']} | {f(r['held'])} | {f(r['wasted_caught'])} | {f(r['harmful_held'])} | {r['harm_rate']:.1%} | {r['usd_per_trigger']:.4f} | {f(r['cost_vs_off'])} |")
+            u = "unknown" if r["usd_per_trigger"] is None else f"{r['usd_per_trigger']:.4f}"
+            print(f"| {r['gate']} | {f(r['held'])} | {f(r['wasted_caught'])} | {f(r['harmful_held'])} | {r['harm_rate']:.1%} | {u} | {f(r['cost_vs_off'])} |")
         if lab.get("model_axis"):
             print("model axis:", json.dumps(lab["model_axis"]))
+
+
+def entry_cost(e):
+    """A journal entry's dollars: its own `cost_usd` (the Jev gate's, priced by the mind from the
+    local prices file), else from tokens and PRICES. None when unknown: a Jev call journaled without
+    a price, or a model PRICES does not list. Unknown is never counted as 0."""
+    if e.get("cost_usd") is not None:
+        return float(e["cost_usd"])
+    if str(e.get("model") or "").startswith("fake-") or (e.get("error") and e.get("prompt_tokens") is None):
+        return 0.0   # the verification fake server, or a call that failed before using any tokens
+    return cost(e.get("model"), e.get("prompt_tokens"), e.get("completion_tokens"), e.get("cached_tokens"))
+
+
+def known_usd(entries):
+    """(dollars of the calls whose cost is known, number of calls whose cost is unknown)."""
+    costs = [entry_cost(e) for e in entries]
+    return sum(c for c in costs if c is not None), sum(c is None for c in costs)
+
+
+def journal_files(inst):
+    return glob.glob(os.path.join(inst, "journal", "*.jsonl"))
+
+
+def holds_of(entries):
+    """Hold episodes from one actor's `rethink-gate` entries: a run of holds on one pending request
+    (its `requested_ms`), ended by the verdict that let a deliberation through."""
+    eps, cur = [], None
+    for e in sorted(entries, key=lambda e: e["at_ms"]):
+        if e.get("verdict") == "hold":
+            if cur is None:
+                cur = {"first": e, "holds": [e]}
+            else:
+                cur["holds"].append(e)
+        elif cur is not None:
+            cur["release"] = e
+            eps.append(cur)
+            cur = None
+    if cur is not None:
+        cur["release"] = None
+        eps.append(cur)
+    return eps
+
+
+def cmd_live(a):
+    out, by = [], {}
+    for inst in sorted(glob.glob(os.path.join(a.batch_dir, "*-r*"))):
+        sp = os.path.join(inst, "summary.json")
+        if not os.path.exists(sp):
+            continue
+        s = json.loads(Path(sp).read_text())
+        entries = [e for f in journal_files(inst) for e in rows(f)]
+        minutes = float(s.get("minutes_run") or 0)
+        thinkers = len({e.get("actor") for e in entries if e.get("purpose") in ("think", "talk", "consolidate")})
+        rh = thinkers * minutes / 60 or 1e-9
+        gates = [e for e in entries if e.get("purpose") == "rethink-gate"]
+        thinks = [e for e in entries if e.get("purpose") == "think"]
+        verdicts = {}
+        for g in gates:
+            verdicts[g.get("verdict")] = verdicts.get(g.get("verdict"), 0) + 1
+        by_actor = {}
+        for g in gates:
+            by_actor.setdefault(g.get("actor"), []).append(g)
+        eps = [ep for es in by_actor.values() for ep in holds_of(es)]
+        held_s = sorted(((ep["release"] or ep["holds"][-1])["at_ms"] - ep["first"]["at_ms"]) / 1000 for ep in eps)
+        # The providers' calls (DeepSeek, GLM) and the gate's Jev calls apart: Jev's price is local-only
+        # (docs/STORE.md, Model terms), so its dollars sit under the `jev` key, which the store's
+        # scrubber drops, and the top-level dollars are the providers' alone.
+        is_jev = lambda e: e.get("purpose") == "rethink" or str(e.get("model") or "").startswith("jev")
+        usd, unknown = known_usd([e for e in entries if e.get("purpose") != "rethink-gate" and not is_jev(e)])
+        gate_usd, gate_unknown = known_usd([e for e in entries if e.get("purpose") != "rethink-gate" and is_jev(e)])
+        jev_calls = sum(1 for e in entries if e.get("purpose") != "rethink-gate" and is_jev(e))
+        r = {"instance": os.path.basename(inst), "variant": s.get("variant"), "minutes": minutes, "thinkers": thinkers,
+             "resident_hours": round(rh, 2), "provider_usd": None if unknown else round(usd, 3),
+             "provider_usd_known": round(usd, 3), "calls_cost_unknown": unknown,
+             "provider_usd_per_resident_hour": None if unknown else round(usd / rh, 4),
+             "deliberations": len(thinks), "deliberations_per_resident_hour": round(len(thinks) / rh, 2),
+             "jev": {"calls": jev_calls, "cost_usd": None if gate_unknown else round(gate_usd, 4),
+                     "usd_per_resident_hour_with_jev": None if (unknown or gate_unknown) else round((usd + gate_usd) / rh, 4)},
+             "verdicts": verdicts,
+             "hold_episodes": len(eps), "released_by": {}, "held_s_p50": held_s[len(held_s) // 2] if held_s else None,
+             "held_s_p90": held_s[int(len(held_s) * 0.9)] if held_s else None, "stopped_by": s.get("stopped_by"), "runaways": s.get("runaways")}
+        for ep in eps:
+            k = (ep["release"] or {}).get("verdict") or "run ended"
+            r["released_by"][k] = r["released_by"].get(k, 0) + 1
+        # Reaction to a failed act: from "What you had decided did not work out" (any resident) to
+        # that resident's next deliberation (thoughts_all, kind deliberate), within 10 minutes.
+        delib = {}
+        for t in rows(os.path.join(inst, "thoughts_all.jsonl")) if os.path.exists(os.path.join(inst, "thoughts_all.jsonl")) else []:
+            if t.get("kind") == "deliberate":
+                delib.setdefault(t.get("actor"), []).append(t["at_ms"] - (t.get("latency_ms") or 0))
+        reacts, never = [], 0
+        for x in rows(os.path.join(inst, "experiences_all.jsonl")) if os.path.exists(os.path.join(inst, "experiences_all.jsonl")) else []:
+            if x.get("kind") == "act" and str(x.get("text", "")).startswith("What you had decided did not work out"):
+                nxt = [t for t in sorted(delib.get(x.get("observer"), [])) if t >= x["at_ms"]]
+                if nxt and nxt[0] - x["at_ms"] <= 600_000:
+                    reacts.append((nxt[0] - x["at_ms"]) / 1000)
+                else:
+                    never += 1
+        reacts.sort()
+        # Context, not a committed measure: the authority's own `stats` row (final.json): ticks since the
+        # world began and the largest gap between ticks. It is read from the database itself, so it does
+        # not depend on the server's database list (which no longer lists trial databases).
+        try:
+            st = (json.loads(Path(os.path.join(inst, "final.json")).read_text()).get("stats") or [{}])[0]
+        except (OSError, ValueError, IndexError, AttributeError):
+            st = {}
+        r.update({"ticks": st.get("ticks"), "max_tick_gap_ms": st.get("max_tick_gap_ms")})
+        r.update({"failed_acts": len(reacts) + never, "reaction_s_p50": reacts[len(reacts) // 2] if reacts else None,
+                  "reaction_s_p90": reacts[int(len(reacts) * 0.9)] if reacts else None, "no_deliberation_within_10_min": never})
+        out.append(r)
+        by.setdefault(r["variant"], []).append(r)
+    Path(os.path.join(a.batch_dir, "gate-live.json")).write_text(json.dumps(out, indent=1))
+    for r in out:
+        print(json.dumps(r))
+    print("\n| arm | runs | providers' $ per resident-hour | deliberations per resident-hour | holds | held s p50 / p90 | reaction to a failed act s p50 (none in 10 min) |\n|---|---:|---:|---:|---:|---:|---:|")
+    for v, rs in sorted(by.items()):
+        f = lambda k: " / ".join(str(r[k]) for r in rs)
+        print(f"| {v} | {len(rs)} | {f('provider_usd_per_resident_hour')} | {f('deliberations_per_resident_hour')} | {f('hold_episodes')} | {f('held_s_p50')} / {f('held_s_p90')} | {f('reaction_s_p50')} ({f('no_deliberation_within_10_min')}) |")
+
+
+def cmd_held(a):
+    """Held triggers judged as delayed: the state at the first hold, how long it was held and why it
+    was let go, and what the deliberation that then ran thought and meant to do."""
+    rnd = random.Random(a.seed)
+    items, key = [], []
+    for inst in sorted(glob.glob(os.path.join(a.batch_dir, "*-r*"))):
+        entries = [e for f in journal_files(inst) for e in rows(f)]
+        by = {}
+        for e in entries:
+            by.setdefault(e.get("actor"), []).append(e)
+        for actor, es in by.items():
+            gates = [e for e in es if e.get("purpose") == "rethink-gate"]
+            thinks = sorted((e for e in es if e.get("purpose") == "think" and not e.get("error")), key=lambda e: e["at_ms"])
+            for ep in holds_of(gates):
+                rel = ep["release"]
+                after = next((t for t in thinks if rel and t["at_ms"] >= rel["at_ms"]), None)
+                items.append({"state_at_hold": ep["first"].get("state"), "held_for_s": round(((rel or ep["holds"][-1])["at_ms"] - ep["first"]["at_ms"]) / 1000),
+                              "asked_again_while_held": len(ep["holds"]) - 1,
+                              "why_it_was_let_go": None if rel is None else (rel.get("verdict") + (" (held too long)" if rel.get("verdict") == "rethink" and (rel.get("held_s") or 0) >= 590 else "")),
+                              "reasons_when_it_ran": None if rel is None else rel.get("reason"),
+                              "the_deliberation_that_ran": None if after is None else {"after_s": round((after["at_ms"] - ep["first"]["at_ms"]) / 1000), "reply": reply_view(after.get("reply"))}})
+                key.append({"instance": os.path.basename(inst), "actor": actor, "first_hold_ms": ep["first"]["at_ms"]})
+    order = list(range(len(items)))
+    rnd.shuffle(order)
+    order = order[: a.n]
+    out = Path(a.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    with open(out / "held-items.jsonl", "w") as f, open(out / "held-key.jsonl", "w") as k:
+        for n, i in enumerate(order):
+            iid = f"h{n + 1:04d}"
+            f.write(json.dumps({"item": iid, **items[i]}, ensure_ascii=False) + "\n")
+            k.write(json.dumps({"item": iid, **key[i]}) + "\n")
+    print(f"{len(order)} of {len(items)} hold episodes → {out}")
+
+
+def cmd_watch(a):
+    """The running spend of batch BATCH (its live journals under ROOT/.local/living/journal), every
+    30 s; past --stop-usd, SIGINT to the runner (trials.py stops its instances and keeps evidence)."""
+    import signal
+    pat = os.path.join(a.root, ".local/living/journal", f"verify-trial-{a.batch}-*", "*.jsonl")
+    while True:
+        usd, unknown = known_usd([e for f in glob.glob(pat) for e in rows(f) if e.get("purpose") != "rethink-gate"])
+        more = f" (+ {unknown} calls of unknown cost, not counted)" if unknown else ""
+        print(f"[{time.strftime('%H:%M:%S')}] {a.batch}: ${usd:.2f}{more}", flush=True)
+        if usd > a.stop_usd:
+            print(f"stop: ${usd:.2f} > ${a.stop_usd}: SIGINT to {a.pid}", flush=True)
+            os.kill(a.pid, signal.SIGINT)
+            return
+        try:
+            os.kill(a.pid, 0)
+        except OSError:
+            print("runner gone", flush=True)
+            return
+        time.sleep(30)
 
 
 def main():
@@ -442,9 +629,14 @@ def main():
     s = sub.add_parser("items"); s.add_argument("points"); s.add_argument("out_dir"); s.add_argument("--sample", required=True); s.add_argument("--asked", action="append", default=[]); s.add_argument("--seed", type=int, default=1112)
     s = sub.add_parser("curve"); s.add_argument("points"); s.add_argument("out"); s.add_argument("--key", required=True)
     s.add_argument("--value", action="append", default=[]); s.add_argument("--pairs", action="append", default=[]); s.add_argument("--asked", action="append", default=[])
-    s.add_argument("--jev-cost", type=float, default=0.00006); s.add_argument("--glm-cost", type=float, default=0.00016)
+    # Jev's price is not committed (docs/STORE.md, Model terms): without --jev-cost its gates' cost is unknown
+    s.add_argument("--jev-cost", type=float, default=None, help="$ a Jev question; unknown when omitted")
+    s.add_argument("--glm-cost", type=float, default=0.00016)
+    s = sub.add_parser("live"); s.add_argument("batch_dir")
+    s = sub.add_parser("held"); s.add_argument("batch_dir"); s.add_argument("out_dir"); s.add_argument("--n", type=int, default=80); s.add_argument("--seed", type=int, default=1112)
+    s = sub.add_parser("watch"); s.add_argument("batch"); s.add_argument("--root", default="."); s.add_argument("--stop-usd", type=float, required=True); s.add_argument("--pid", type=int, required=True)
     a = ap.parse_args()
-    {"points": cmd_points, "ask": cmd_ask, "sample": cmd_sample, "items": cmd_items, "curve": cmd_curve}[a.cmd](a)
+    {"live": cmd_live, "held": cmd_held, "watch": cmd_watch, "points": cmd_points, "ask": cmd_ask, "sample": cmd_sample, "items": cmd_items, "curve": cmd_curve}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -96,10 +96,10 @@
   }
  },
  "animal-switches": {
-  "about": "Default with LIVING_ANIMAL_MINDS=pack,salient,choose: one mind per pack, think on salient change, one-call choice from a menu (docs/MIND_HARNESS.md item 3).",
+  "about": "Default with LIVING_ANIMAL_MINDS=salient,choose: think on salient change, one-call choice from a menu (docs/MIND_HARNESS.md item 3). Until 2026-11-12 also `pack` (one animal's decision copied to the others it saw), retired as shared hidden state (docs/PACK_MIND.md).",
   "models": {},
   "env": {
-   "LIVING_ANIMAL_MINDS": "pack,salient,choose"
+   "LIVING_ANIMAL_MINDS": "salient,choose"
   }
  },
  "greet-control": {
@@ -210,12 +210,62 @@
    "first_sight_thinks": true
   }
  },
+ "strangers-first-sight-hf": {
+  "about": "C + first sight, with the crowd fixes (docs/FIRST_SIGHT.md, \"Crowds\"): `first_sight_thinks` and `heard_first_rethinks` on (set_world_law after the laws guard). Whom someone walks to is named in every arm since first-sight-crowd (no switch).",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "heard_first_rethinks": true
+  }
+ },
  "strangers-earshot": {
   "about": "Strangers control + earshot (docs/COMMUNICATION.md §17): the `earshot` law on (set_world_law after the laws guard): a person's scene says whom a line said now would reach, at each way, among the people they see (\"who would hear you now\"). Everything else as `strangers-control`.",
   "models": {},
   "env": {},
   "world_laws": {
    "earshot": true
+  }
+ },
+ "gate-off-ds": {
+  "about": "The live gate check's control (docs/GATE_LIVE.md): the strangers C arm (`strangers-control`: main's laws) with the `people` mix as trials run it, except that think goes to deepseek-flash (deepseek-v4-1-flash-1017, effort low for think) instead of glm-flash. The rethink gate is off (no LIVING_RETHINK).",
+  "models": {
+   "mixes": {
+    "people": {
+     "think": "deepseek-flash"
+    }
+   }
+  },
+  "env": {}
+ },
+ "gate-jev-ds": {
+  "about": "The live gate check's gated arm (docs/GATE_LIVE.md): as `gate-off-ds`, with the rethink gate on (LIVING_RETHINK=jev; living/configs/rethink.json as shipped: Jev jev-1.14.0, proceed_above 0.3, max_hold_s 600). Nothing else differs.",
+  "models": {
+   "mixes": {
+    "people": {
+     "think": "deepseek-flash"
+    }
+   }
+  },
+  "env": {
+   "LIVING_RETHINK": "jev"
+  }
+ },
+ "strangers-first-sight-hf-earshot": {
+  "about": "C + first sight, heard_first and earshot (fs1e, docs/TRIALS.md): `first_sight_thinks`, `heard_first_rethinks` and `earshot` on (set_world_law after the laws guard); the naming fix is on in every world since first-sight-crowd.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "heard_first_rethinks": true,
+   "earshot": true
+  }
+ },
+ "pack-minds": {
+  "about": "Pack arena with minds on both sides (docs/PACK_MIND.md): people on the models file's default, wolves routed by its species map, LIVING_ANIMAL_MINDS=salient,choose (no pack: retired). fast_lane_on stays off (the world law's default).",
+  "models": {},
+  "env": {
+   "LIVING_ANIMAL_MINDS": "salient,choose"
   }
  },
   "fast-lane": {

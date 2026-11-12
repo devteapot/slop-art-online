@@ -13,6 +13,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     if ctx.sender() != ctx.database_identity() {
         return Err("tick is scheduled only".into());
     }
+    // The outgoing module's last call after an update: no table is touched (common::schema_moved).
+    if common::schema_moved("tick") {
+        return Ok(());
+    }
     let w = common::world(ctx);
     if w.paused {
         return Ok(());
@@ -64,6 +68,8 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
+    // Bystanders' wakes held back by `witness_wake_ms` whose window has ended.
+    common::due_bystander_wakes(ctx, now);
     let mut done = HashSet::new();
     for _ in 0..3 {
         let wakes: Vec<u32> = ctx.db.wake().iter().map(|w| w.id).collect();
@@ -73,6 +79,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         for id in wakes {
             ctx.db.wake().id().delete(id);
             if done.insert(id) {
+                common::diag(|| "eval:wake".into(), 1);
                 brain::evaluate(ctx, id, now);
             }
         }
@@ -84,6 +91,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
     for id in fighting {
         if done.insert(id) {
+            common::diag(|| "eval:combat".into(), 1);
             brain::evaluate(ctx, id, now);
         }
     }
@@ -100,6 +108,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
     for id in slot_ids {
         if done.insert(id) {
+            common::diag(|| "eval:slot".into(), 1);
             brain::evaluate(ctx, id, now);
         }
     }
@@ -350,6 +359,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     if ctx.sender() != ctx.database_identity() {
         return Err("housekeeping is scheduled only".into());
     }
+    if common::schema_moved("housekeeping") {
+        return Ok(());
+    }
     let w = common::world(ctx);
     if w.paused {
         return Ok(());
@@ -360,6 +372,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     let _timer = common::span("housekeeping");
     common::report_scenes();
     crate::perception::report_answers(ctx);
+    common::report_diag();
     crate::town::refresh_weather(ctx, now);
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);

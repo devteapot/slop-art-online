@@ -206,6 +206,73 @@ def room_detail(run, c):
     c.check(s, "a line to me carries no detail", tome is not None and not tome.get("how"), str(tome))
 
 
+@scenario("earshot")
+def earshot(run, c):
+    """The authority's earshot in the client (the `earshot` law, off by default): with it on, the
+    talk box takes whom Tab goes to, and their order, from `my_earshot`'s `say` list, and shows its
+    sentence (in my own labels) in the box's hint line; someone who steps out of a say's reach
+    drops from it while a call still reaches them. With it off: no row, the client's own reckoning,
+    as before. At noon on open grass, cleared (the authority lists only people one sees: 11 m by
+    day, 6 by night), residents A and B held 2 m and 6 m off a fresh player; B then 10 m off,
+    beyond a say's 9 m and within a call's reach and sight. The box cannot switch to whisper or call
+    (they have no place in it yet): their lists are only read."""
+    s = "earshot"
+    a, b = residents(run)
+    # Anyone within 25 m of the spot (offline player characters of earlier drives among them) is
+    # put 40 m east first: they would stand in every list.
+    people = {r["id"] for r in sql(run, "SELECT id, kind FROM character WHERE kind = 'person'")}
+    ax, ay = UNHEARD_SPOT
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] not in (a, b) and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 25):
+        call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"earshot-{int(time.time())}.token")
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}",
+             'on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx-10.0)|(my)", 'off=set_world_law|"earshot"|"false"']
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:on;sync:scene;wait:3;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
+            "key:Escape:tap;wait:0.3;sync:away;wait:2;key:Enter:tap;wait:1.2;shot:02_away;dump:e2;tab;wait:0.4;dump:t4;tab;wait:0.4;dump:t5;key:Escape:tap;wait:0.3;"
+            "sync:off;wait:2;key:Enter:tap;wait:1.2;shot:03_off;dump:e3;tab;wait:0.4;dump:t6;key:Escape:tap;wait:0.3;quit")
+    try:
+        out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{b}:-6:0"], syncs=syncs, extra=["--token", tok, "--player", "Hearer"])
+    finally:
+        call_admin(run, "set_world_law", ["earshot", "false"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("e1", "t1", "t2", "t3", "e2", "t4", "t5", "e3", "t6")}
+    ty = lambda k: d[k].get("typing") or {}
+    told = lambda k: ty(k).get("told") or {}
+    ways = lambda k: {w: h for w, h in told(k).get("ways") or []}
+    say1 = ways("e1").get("say")
+    c.check(s, "law on: the box's earshot is the authority's say list, both residents in it", say1 is not None and ty("e1").get("earshot") == say1 and a in say1 and b in say1, f"say {say1}; box {ty('e1').get('earshot')}; ways {ways('e1')}")
+    c.check(s, "law on: the sentence is given, in my own labels", bool(told("e1").get("text")) and "earshot" in told("e1").get("text", "").lower(), repr(told("e1").get("text")))
+    # Each press against the list it went by (`typing.tab`): the authority's say list at that
+    # moment, the next after the last, the room after the last of them (others than A and B may
+    # stand within a say's reach too).
+    def nxt(prev, e):
+        if not e:
+            return prev
+        if prev in e:
+            i = e.index(prev)
+            return e[i + 1] if i + 1 < len(e) else None
+        return e[0]
+    def steps(keys):
+        out = []
+        for k in keys:
+            tb = ty(k).get("tab") or {}
+            say = ways(k).get("say")
+            # Whether the press went by the authority's list (the client records it at the press:
+            # the row is rewritten up to four times a second and people walk in and out of reach,
+            # so a later dump's list may differ), and the step by that same list.
+            out.append((tb.get("authority") is True, tb.get("chose") == nxt(tb.get("prev"), tb.get("earshot") or []), tb.get("prev"), tb.get("chose"), tb.get("earshot")))
+        return out
+    st = steps(("t1", "t2", "t3"))
+    c.check(s, "law on: each Tab goes by the authority's say list, in its order", all(x[0] and x[1] for x in st), str(st))
+    say2, call2 = ways("e2").get("say"), ways("e2").get("call")
+    c.check(s, "B steps 10 m off: out of the say list, still in the call's (in sight); the box follows", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
+    st2 = steps(("t4", "t5"))
+    c.check(s, "Tab then goes by the new say list and never to B", all(x[0] and x[1] for x in st2) and all(b not in (x[4] or []) and x[3] != b for x in st2), str(st2))
+    c.check(s, "law off: no row, the client's own reckoning (A within it)", not ty("e3").get("told") and a in (ty("e3").get("earshot") or []), f"told {ty('e3').get('told')}; earshot {ty('e3').get('earshot')}")
+    t6 = ty("t6").get("tab") or {}
+    c.check(s, "law off: Tab as before, by the client's own reckoning", t6.get("authority") is False and t6.get("chose") == nxt(t6.get("prev"), t6.get("earshot") or []), str(t6))
+
+
 @scenario("talk")
 def talk(run, c):
     s = "talk"
@@ -428,6 +495,73 @@ def film(run, c):
     c.check(s, "the settings file keeps the last choice", saved == "screen", str(saved))
     out2, code2, _ = drive(run, s, "ready;wait:2;dump:05;quit")
     c.check(s, "the next start reads it back", (((dump(out2, "05") or {}).get("extra") or {}).get("film")) == "screen", str(((dump(out2, "05") or {}).get("extra") or {}).get("film")))
+
+
+@scenario("hair")
+def hair(run, c):
+    """The hair shine (`style::HAIR_SHINES`, Settings › Play › Hair shine): a fresh settings file
+    starts on Crown and saves no choice; Settings sets Soft and Today and the file keeps the last;
+    the next start reads it back. Then, with a resident's window open and the camera framing them
+    as they speak to me (admin `mind_say`, as in `talk`), the live script's `shine:` switches it in
+    one view close up, each shine between two shots of Crown: the hair changes, and away from every
+    head no more changes than between those two Crowns (the sun and people move meanwhile).
+    `LIVING_GAME_HAIR_SHINE` and `LIVING_GAME_HAIR_RING` must not be set."""
+    s = "hair"
+    for k in ("LIVING_GAME_HAIR_SHINE", "LIVING_GAME_HAIR_RING"):
+        if os.environ.get(k):
+            c.check(s, f"{k} is unset (it overrides the settings file)", False, os.environ[k])
+            return
+    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "hair")
+    st = os.path.join(out0, "settings.json")
+    if os.path.exists(st):
+        os.remove(st)
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
+    plan = ("ready;wait:2;dump:01;" + open_settings + "click:@settings:hair:soft;wait:0.4;dump:02;shot:02_settings;"
+            "click:@settings:hair:today;wait:0.4;dump:03;key:Escape:tap;wait:0.4;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    x = lambda o, k: ((dump(o, k) or {}).get("extra") or {})
+    c.check(s, "a fresh settings file starts on Crown and saves no choice", x(out, "01").get("hair_shine") == "crown" and x(out, "01").get("hair_shine_saved") is None, str((x(out, "01").get("hair_shine"), x(out, "01").get("hair_shine_saved"))))
+    c.check(s, "Settings › Play › Hair shine sets Soft, then Today", x(out, "02").get("hair_shine") == "soft" and x(out, "03").get("hair_shine") == "today", str((x(out, "02").get("hair_shine"), x(out, "03").get("hair_shine"))))
+    c.check(s, "the log names each choice", log(out).count("settings: hair shine: ") == 2)
+    saved = json.load(open(st)).get("hair_shine") if os.path.exists(st) else None
+    c.check(s, "the settings file keeps the last choice", saved == "today", str(saved))
+    # The same settings file: the next start reads Today back. Then A, placed beside me and held
+    # still, speaks to me with their window open, the camera comes in close (`view:`, 2.4 m),
+    # and the shines in turn.
+    a, _ = residents(run)
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    answer = f'answer=mind_say|{a}|"Good day to you."|{{me}}|""|0|{thought}'
+    seq = ["crown", "today", "crown", "soft", "crown"]
+    shots = "".join(f"shine:{v};wait:0.7;shot:{i + 1:02d}_{v};" for i, v in enumerate(seq))
+    plan = (f"ready;wait:2;dump:00;shine:crown;sync:scene;wait:1.5;menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:1;sync:answer;wait:0.5;view:8:2.4:30;wait:4;" + shots + "dump:06;quit")
+    out2, code2, _ = drive(run, s, plan, places=[f"{a}:-1.5:1.5"], syncs=[answer])
+    c.check(s, "the next start reads it back", x(out2, "00").get("hair_shine") == "today", str(x(out2, "00").get("hair_shine")))
+    c.check(s, "A's window is open in the photographs", any(w.startswith("Person") for w, _ in wins(dump(out2, "06"))), str(wins(dump(out2, "06"))))
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        c.check(s, "pixels: numpy and Pillow are available (uv run --with pillow --with numpy)", False)
+        return
+    names = [f"{i + 1:02d}_{v}" for i, v in enumerate(seq)]
+    shot = {n: np.asarray(Image.open(os.path.join(out2, f"{n}.png")).convert("RGB")).astype(int) for n in names}
+    h, w = shot[names[0]].shape[:2]
+    near = np.zeros((h, w), bool)
+    yy, xx = np.mgrid[0:h, 0:w]
+    for b in (dump(out2, "06") or {}).get("seen") or []:
+        (hx, hy), (fx, fy) = b["head"], b["feet"]
+        tall = max(abs(fy - hy), 8.0)
+        near |= ((xx - hx) / (0.32 * tall)) ** 2 + ((yy - hy - 0.06 * tall) / (0.22 * tall)) ** 2 <= 1.0
+    changed = lambda p, q: np.abs(shot[p] - shot[q]).max(2) > 10
+    for k in (1, 3):
+        before, this, after = names[k - 1], names[k], names[k + 1]
+        d, base = changed(before, this), changed(before, after)
+        c.check(s, f"{seq[k].title()} differs from Crown on the hair", (d & near).sum() > 40, f"{int((d & near).sum())} px near heads")
+        far, far0 = (d & ~near).mean() * 100, (base & ~near).mean() * 100
+        # People's idle motion, the speech bubble's timer and the sun's shadows move meanwhile:
+        # within a quarter of the Crowns' own change.
+        c.check(s, f"away from every head, {seq[k].title()} changes no more than the Crowns before and after it", far <= far0 * 1.25 + 0.05, f"{far:.3f}% against {far0:.3f}%")
 
 
 def act(actor, a):
@@ -1811,11 +1945,16 @@ def names(run, c):
     plan = ("ready;wait:5;dump:00;" + steps + "key:KeyL:tap;wait:0.6;dump:log;click:@log:tab:1;wait:0.6;dump:people;click:@log:person:0;wait:0.8;dump:window;"
             "click:@log:tab:2;wait:0.5;dump:events;quit")
     token = os.path.join(ROOT, ".local/living/verify", run, "ui", f"names-{int(time.time())}.token")
-    out, code, text = drive(run, s, plan, extra=["--token", token, "--player", "Newcomer"])
+    # The earshot law on, so the authority's sentence (in the talk box's hint line) is scanned too.
+    call_admin(run, "set_world_law", ["earshot", "true"])
+    try:
+        out, code, text = drive(run, s, plan, extra=["--token", token, "--player", "Newcomer"])
+    finally:
+        call_admin(run, "set_world_law", ["earshot", "false"])
     c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
     texts, given = naming_of(out)
     kinds = {w.split(":")[1] for w, _ in texts}
-    c.check(s, "names were on screen: plates, the talk box, the Log", {"plate", "talk"} <= kinds, f"{sorted(kinds)}; {len(texts)} texts; residents pointed at {[r['id'] for r in near]}")
+    c.check(s, "names were on screen: plates, the talk box, the Log, the earshot sentence", {"plate", "talk", "earshot"} <= kinds, f"{sorted(kinds)}; {len(texts)} texts; residents pointed at {[r['id'] for r in near]}")
     hits = leaked(texts, seeded, given)
     c.check(s, "no person or place is named by a seed name the player was not given", not hits, f"{hits[:6]}; given {sorted(given)[:8]}")
 

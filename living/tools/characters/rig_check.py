@@ -55,7 +55,7 @@ def skin_of(t):
 
 def composed(base, hf, values):
     mats = cage_head.bone_matrices(hf, values)
-    weights = cage_head.identity_weights(hf, base)
+    weights = cage_head.identity_weights(hf, base, brows=True)  # the face's own skin: the skin round a brow follows the brow's bone
     ph = np.concatenate([base, np.ones((len(base), 1))], axis=1)
     out = np.zeros_like(base)
     for i, ws in enumerate(weights):

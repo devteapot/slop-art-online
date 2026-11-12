@@ -33,6 +33,7 @@ import glob
 import gzip
 import hashlib
 import io
+import importlib.util
 import json
 import os
 import platform
@@ -638,6 +639,9 @@ DECISIONS = {
     "owner_notes": "The owner's own written feedback (FEEDBACK.md and similar).",
     "session_media": "Play-session stills, screenshots and video: they show the HUD, the chat and the "
                      "owner's typed lines as drawn, which text redaction cannot reach.",
+    "jev_pricing": "TypeSafe Jev's price and per-call costs, and Jev's share of totals. TypeSafe's "
+                   "Master Customer Agreement s.14.1 counts all pricing information as its Confidential "
+                   "Information. Anything but include removes them (jev_strip, jev_text).",
 }
 OWNER_NOTE_NAMES = ("FEEDBACK.md", "feedback.md", "NOTES.md")
 MEDIA_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".mkv")
@@ -973,6 +977,161 @@ def session_allowed(relpath):
         if fnmatch.fnmatchcase(inner, pat) and inner.count("/") == pat.count("/"):
             return True, what
     return False, f"held: not on the session allow-list (session/{inner})"
+
+
+# -- Jev's pricing (decision jev_pricing; docs/STORE.md, "Model terms") ----------------------------
+# Jev's price and per-call costs are removed, and so is Jev's share of any total: a total that lists
+# its parts is recomputed without Jev; a figure that mixes Jev with other costs and cannot be split
+# (a gated setup's cost per trigger, its cost against the gate off) is dropped. Other models' costs
+# are kept. "jev" as a word or a name part: jev-1.14.0, rethink-jev, gate-jev-ds, arm "jev".
+JEV = re.compile(r"(?<![A-Za-z])jev(?![A-Za-z])", re.I)
+TYPESAFE_URL = re.compile(r"typesafe\.ai", re.I)
+JEV_COST_KEY = re.compile(r"cost|usd|price|spend", re.I)
+JEV_CONTEXT_FIELDS = ("model", "profile", "arm", "gate", "url", "provider")
+JEV_REMOVED = "[removed: Jev pricing]"
+DOLLARS = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?")
+PERCENT = re.compile(r"\d+(?:\.\d+)?(?:[–-]\d+(?:\.\d+)?)?%")
+COST_WORD = re.compile(r"\b(?:costs?|costly|saving|savings|saves|dollars|cheaper|spend|spent|spending|price|"
+                       r"prices|priced)\b|\$", re.I)
+COST_HEADER = re.compile(r"cost|\$|usd|price|spend", re.I)
+SPEND_LINE = re.compile(r"\b(?:spend|spent|total)\b", re.I)
+
+
+def _costish(v):
+    """A value a cost key can hold: a number, null, or a number written as text."""
+    return v is None or isinstance(v, (int, float)) and not isinstance(v, bool) or \
+        isinstance(v, str) and bool(re.fullmatch(r"\s*\$?\s*-?\d[\d,]*(?:\.\d+)?(?:e-?\d+)?\s*", v, re.I))
+
+
+def _is_jev_obj(d):
+    for k in JEV_CONTEXT_FIELDS:
+        v = d.get(k)
+        if isinstance(v, str) and (JEV.search(v) or TYPESAFE_URL.search(v)):
+            return True
+    return False
+
+
+def jev_strip(obj, acc, in_jev=False, cost_parent=False):
+    """obj without Jev's price, its per-call costs and its share of totals.
+    - In a Jev object (its model, profile, arm, gate or provider names Jev; or it sits under a key that
+      names Jev), every cost, price or spend field is dropped, at any depth.
+    - Under a cost key ("spend_usd": {"jev": …, …, "total": …}) a part named for Jev is dropped
+      and a sibling "total" is recomputed without it."""
+    if isinstance(obj, list):
+        return [jev_strip(v, acc, in_jev, cost_parent) for v in obj]
+    if not isinstance(obj, dict):
+        return obj
+    ctx = in_jev or _is_jev_obj(obj)
+    out, removed = {}, 0.0
+    for k, v in obj.items():
+        ks = k if isinstance(k, str) else ""
+        names_jev = bool(JEV.search(ks))
+        if ctx and JEV_COST_KEY.search(ks) and (_costish(v) or isinstance(v, (dict, list))):
+            acc.add("jev-pricing", ks)
+            continue
+        if cost_parent and names_jev and _costish(v):
+            acc.add("jev-pricing", ks)
+            if isinstance(v, (int, float)):
+                removed += v
+            continue
+        out[k] = jev_strip(v, acc, ctx or names_jev, bool(JEV_COST_KEY.search(ks)))
+    if removed and isinstance(out.get("total"), (int, float)) and not isinstance(out["total"], bool):
+        out["total"] = round(out["total"] - removed, 6)
+        acc.add("jev-pricing", "total recomputed")
+    return out
+
+
+def _table_cells(line):
+    s = line.strip()
+    return [c for c in s.strip("|").split("|")] if s.startswith("|") else None
+
+
+def _redact_cost_percents(seg, only=None):
+    """Percentages in a segment that speaks of cost, savings or dollars; with `only`, just those."""
+    if not COST_WORD.search(seg):
+        return seg, 0
+    n = 0
+
+    def f(m):
+        nonlocal n
+        if only is not None and m.group(0) not in only:
+            return m.group(0)
+        n += 1
+        return JEV_REMOVED
+    return PERCENT.sub(f, seg), n
+
+
+def jev_text(text, acc):
+    """Text (Markdown, notes, logs) without Jev's prices and Jev-mixed costs.
+    - A table row that names Jev loses its cost cells (columns whose header names cost, $, usd, price
+      or spend).
+    - A line about Jev loses its dollar amounts, and the percentages of its clauses that speak of cost
+      or savings. A line is about Jev when it names Jev, or sits under a list item, or after a lead-in
+      paragraph, that does.
+    - Any later clause that repeats a cost percentage removed from a Jev row loses it too.
+    - In a text that names Jev, a spend or total line loses its dollar amounts (Jev is in them)."""
+    if not JEV.search(text):
+        return text
+    lines = text.split("\n")
+    removed_pcts, header, prev_table = set(), None, False
+    # pass 1: tables
+    for i, line in enumerate(lines):
+        cells = _table_cells(line)
+        if cells is None:
+            header, prev_table = None, False
+            continue
+        if not prev_table:
+            header = {j for j, c in enumerate(cells) if COST_HEADER.search(c)}
+            prev_table = True
+            continue
+        prev_table = True
+        if re.fullmatch(r"[\s|:-]+", line.strip()) or not header or not JEV.search(line):
+            continue
+        for j in header:
+            if j < len(cells) and re.search(r"\d", cells[j]):
+                removed_pcts.update(PERCENT.findall(cells[j]))
+                cells[j] = f" {JEV_REMOVED} "
+                acc.add("jev-pricing", "table cell")
+        lead = line[:len(line) - len(line.lstrip())]
+        lines[i] = lead + "|" + "|".join(cells) + "|"
+    # pass 2: prose
+    stack, lead_jev = [], False
+    for i, line in enumerate(lines):
+        if _table_cells(line) is not None or not line.strip():
+            continue
+        m = re.match(r"(\s*)(?:[-*+]|\d+[.)])\s", line)
+        mentions = bool(JEV.search(line))
+        if m:
+            ind = len(m.group(1))
+            while stack and stack[-1][0] >= ind:
+                stack.pop()
+            about = mentions or lead_jev or any(j for _, j in stack)
+            stack.append((ind, mentions))
+        else:
+            stack, lead_jev = [], mentions
+            about = mentions
+        s = line
+        if about or SPEND_LINE.search(s):
+            s, n = DOLLARS.subn(JEV_REMOVED, s)
+            for _ in range(n):
+                acc.add("jev-pricing", "dollar amount")
+        out = []
+        for seg in re.split(r"(;|\. |: )", s):
+            # clauses: "is 9.2%, as with no gate, at 74% of the cost" keeps the harm figure; a clause
+            # that only continues a cost ("…saving is 24%, not the 37–50% measured…") is about cost too
+            parts, cost = re.split(r"(, )", seg), False
+            for k in range(0, len(parts), 2):
+                clause = parts[k]
+                cost = bool(COST_WORD.search(clause)) or (cost and bool(re.match(r"\s*(?:not|against)\b", clause)))
+                if cost:
+                    clause, n = _redact_cost_percents("$ " + clause, None if about else removed_pcts)
+                    clause = clause[2:]
+                    for _ in range(n):
+                        acc.add("jev-pricing", "cost percentage")
+                parts[k] = clause
+            out.append("".join(parts))
+        lines[i] = "".join(out)
+    return "\n".join(lines)
 
 
 class Scrubber:
@@ -1689,21 +1848,31 @@ class Scrubber:
                 try:
                     obj = json.loads(line)
                 except ValueError:
-                    out.append(self.scrub_text(line, acc))
+                    out.append(self.scrub_text(self._jev_text(line, acc), acc))
                     continue
-                out.append(json.dumps(self.scrub_obj(obj, acc), ensure_ascii=False, separators=(",", ":")))
+                out.append(json.dumps(self.scrub_obj(self._jev_obj(obj, acc), acc), ensure_ascii=False,
+                                      separators=(",", ":")))
             new = "\n".join(out) + ("\n" if text.endswith("\n") else "")
         elif name.endswith(".json"):
             try:
                 obj = json.loads(text)
-                new = json.dumps(self.scrub_obj(obj, acc), ensure_ascii=False, indent=1) + "\n"
+                new = json.dumps(self.scrub_obj(self._jev_obj(obj, acc), acc), ensure_ascii=False, indent=1) + "\n"
             except ValueError:
-                new = self.scrub_text(text, acc)
+                new = self.scrub_text(self._jev_text(text, acc), acc)
         else:
-            new = self.scrub_text(text, acc)
+            new = self.scrub_text(self._jev_text(text, acc), acc)
         if self._echo_on():
             new = self._echo_pass(relpath, name, new, acc)
         return "ok", None, new.encode("utf-8"), acc
+
+    def _jev_on(self):
+        return self.decisions.get("jev_pricing") != "include"
+
+    def _jev_obj(self, obj, acc):
+        return jev_strip(obj, acc) if self._jev_on() else obj
+
+    def _jev_text(self, text, acc):
+        return jev_text(text, acc) if self._jev_on() else text
 
     def learn_bytes(self, relpath, data):
         name = os.path.basename(relpath)
@@ -2067,7 +2236,7 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
            "files": [{k: r[k] for k in ("path", "bytes", "status", "reason")} |
                      {"path": scrubber.publish_path(r["path"]),
                       "redactions": {c: v["count"] for c, v in r["findings"].items()}} for r in rows],
-           "models": _model_counts(calls),
+           "models": _model_counts(calls) | dict((analysis_batch(src) or {}).get("models_in_outputs") or {}),
            "held": [{"path": scrubber.publish_path(r["path"]), "reason": r["reason"]}
                     for r in rows if r["status"] in ("excluded", "held", "review", "refused")],
            "self_name_ambiguous": len([d for d in scrubber.ambiguous
@@ -2276,6 +2445,9 @@ def _isolate_hub_env():
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
 
+STORE_VENV_PYTHON = os.path.expanduser("~/.slop-store-venv/bin/python")
+
+
 class HFBackend(Backend):
     """Hugging Face datasets. Publishing needs the --yes-publish flag AND publish_enabled in the
     machine-local config; the check runs before huggingface_hub is imported. Every call passes the
@@ -2303,6 +2475,21 @@ class HFBackend(Backend):
                           f"{self.cfg.get('_local_config', LOCAL_CONFIG)} once the owner has agreed")
         if not self.namespace:
             raise Refused("backends.hf.namespace is not set in the machine-local config")
+        self.need_library()
+
+    def need_library(self):
+        """Fail before packing, not at the upload: huggingface_hub lives in its own venv
+        (docs/STORE.md, "Library"), not in the system Python that `just living-store` runs."""
+        if self._api is not None or "huggingface_hub" in sys.modules:
+            return
+        try:
+            found = importlib.util.find_spec("huggingface_hub") is not None
+        except (ImportError, ValueError):
+            found = False
+        if not found:
+            raise Refused(f"huggingface_hub is not installed for {sys.executable}. Run the store with "
+                          f"{tilde(STORE_VENV_PYTHON)} (create it: python3 -m venv ~/.slop-store-venv && "
+                          f"~/.slop-store-venv/bin/pip install huggingface_hub; docs/STORE.md, \"Library\")")
 
     def repo_id(self, repo):
         name = (self.cfg.get("repos") or {}).get(repo, repo)
@@ -2315,6 +2502,7 @@ class HFBackend(Backend):
 
     def api(self):
         if self._api is None:
+            self.need_library()
             _isolate_hub_env()
             from huggingface_hub import HfApi  # imported only past the gate or for a fetch
             self._api = HfApi(token=self.token())
@@ -2481,10 +2669,31 @@ def installed_sha_problems(rows, data):
     return out
 
 
+def analysis_batch(src):
+    """An analysis record (batch.json `"kind": "analysis"`): files made from other batches' evidence
+    (replays, judge items and labels), with no instances of its own. It declares, in
+    `models_in_outputs`, the models whose words it carries, so the model gate still applies."""
+    try:
+        with open(os.path.join(src, "batch.json"), encoding="utf-8") as f:
+            b = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return b if isinstance(b, dict) and b.get("kind") == "analysis" else None
+
+
 def check_batch_complete(src):
-    """A batch is complete when batch.json exists and every instance has its summary.json."""
+    """A batch is complete when batch.json exists and every instance has its summary.json.
+    An analysis record is complete when every file its batch.json lists is present."""
     if not os.path.exists(os.path.join(src, "batch.json")):
         raise Refused(f"{tilde(src)}: no batch.json")
+    a = analysis_batch(src)
+    if a is not None:
+        if not isinstance(a.get("models_in_outputs"), dict):
+            raise Refused(f"{tilde(src)}: an analysis record must declare models_in_outputs")
+        missing = [f["path"] for f in a.get("files") or [] if not os.path.exists(os.path.join(src, f["path"]))]
+        if not a.get("files") or missing:
+            raise Refused(f"{tilde(src)}: analysis record incomplete: {', '.join(missing[:3]) or 'no files listed'}")
+        return []
     insts = [d for d in sorted(os.listdir(src)) if os.path.isdir(os.path.join(src, d))
              and os.path.exists(os.path.join(src, d, "cast.json"))]
     if not insts:

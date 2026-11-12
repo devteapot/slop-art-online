@@ -4,11 +4,11 @@ Branch `trials-gate-quality`. Idea #3 of [MIND_RESEARCH_IDEAS](MIND_RESEARCH_IDE
 - **Two ways to cut a deliberation's cost.** Hold it with the gate (fewer calls), or make each call cheaper. Here the cheaper call is GLM 5.3 Flash for the think step against DeepSeek V4.1 Flash, the cloud pair our people's mix already uses.
 - **How quality is measured.** A blind two-part judge, on the same recorded requests.
 
-**Spend: $0.77 of the $5 ceiling.**
+**Spend: [removed: Jev pricing] of the [removed: Jev pricing] ceiling.**
 
 | Item | Cost |
 |---|---:|
-| Jev gate replay, 1,282 points | $0.080 |
+| Jev gate replay, 1,282 points | [removed: Jev pricing] |
 | GLM gate replay, 1,198 calls | $0.230 |
 | think re-asked: 171 on DeepSeek, 129 on GLM (60 of them the noise floor) | $0.455 |
 
@@ -57,12 +57,12 @@ Held share; share of the wasted it catches; share of the harmful-to-skip it hold
 | Gate | Held | Wasted caught | Harmful held | Harm | Cost vs off |
 |---|---:|---:|---:|---:|---:|
 | off | 0% | – | – | 0.0% | 100% |
-| Jev p ≥ 0.2 | 13% | 22% | 6% | 1.2% | 90% |
-| **Jev p ≥ 0.3 (shipped config)** | **27%** | **37%** | **16%** | **3.3%** | **76%** |
-| Jev p ≥ 0.4 | 43% | 54% | 28% | 5.8% | 61% |
-| Jev p ≥ 0.5 | 61% | 76% | 44% | 9.2% | 42% |
-| Jev, unless × 0.5, p ≥ 0.5 | 29% | 38% | 16% | 3.3% | 74% |
-| Jev, no `would_repeat`, p ≥ 0.7 | 32% | 44% | 16% | 3.3% | 72% |
+| Jev p ≥ 0.2 | 13% | 22% | 6% | 1.2% | [removed: Jev pricing] |
+| **Jev p ≥ 0.3 (shipped config)** | **27%** | **37%** | **16%** | **3.3%** | [removed: Jev pricing] |
+| Jev p ≥ 0.4 | 43% | 54% | 28% | 5.8% | [removed: Jev pricing] |
+| Jev p ≥ 0.5 | 61% | 76% | 44% | 9.2% | [removed: Jev pricing] |
+| Jev, unless × 0.5, p ≥ 0.5 | 29% | 38% | 16% | 3.3% | [removed: Jev pricing] |
+| Jev, no `would_repeat`, p ≥ 0.7 | 32% | 44% | 16% | 3.3% | [removed: Jev pricing] |
 | GLM p ≥ 0.5 | 44% | 60% | 28% | 5.8% | 61% |
 | GLM p ≥ 0.7 (shipped config) | 63% | 75% | 40% | 8.3% | 42% |
 | GLM p ≥ 0.8 | 72% | 84% | 50% | 10.4% | 32% |
@@ -71,11 +71,11 @@ Held share; share of the wasted it catches; share of the harmful-to-skip it hold
 
 | Gate | Held | Wasted caught | Harmful held | Harm | Cost vs off |
 |---|---:|---:|---:|---:|---:|
-| Jev p ≥ 0.2 | 36% | 47% | 21% | 10.0% | 68% |
-| **Jev p ≥ 0.3** | **49%** | **57%** | **35%** | **16.9%** | **55%** |
-| Jev, unless × 0.5, p ≥ 0.3 | 22% | 34% | 8% | 3.8% | 78% |
-| Jev, unless × 0.5, p ≥ 0.4 | 39% | 45% | 19% | 9.4% | 64% |
-| Jev, no `would_repeat`, p ≥ 0.5 | 31% | 36% | 14% | 6.9% | 70% |
+| Jev p ≥ 0.2 | 36% | 47% | 21% | 10.0% | [removed: Jev pricing] |
+| **Jev p ≥ 0.3** | **49%** | **57%** | **35%** | **16.9%** | [removed: Jev pricing] |
+| Jev, unless × 0.5, p ≥ 0.3 | 22% | 34% | 8% | 3.8% | [removed: Jev pricing] |
+| Jev, unless × 0.5, p ≥ 0.4 | 39% | 45% | 19% | 9.4% | [removed: Jev pricing] |
+| Jev, no `would_repeat`, p ≥ 0.5 | 31% | 36% | 14% | 6.9% | [removed: Jev pricing] |
 | GLM p ≥ 0.5 | 23% | 26% | 12% | 5.6% | 87% |
 | GLM p ≥ 0.7 | 40% | 45% | 23% | 11.2% | 70% |
 
@@ -83,10 +83,10 @@ The full grid (20 rules per set) is in `curve.json`.
 
 - **Both gates discriminate in both sets.** At equal holds they catch more waste than random and hold fewer of the harmful.
   - In the all-minds worlds Jev 0.3 holds 27% but only 16% of the harmful.
-  - At equal hold rates the two judges are about equal: GLM p ≥ 0.5 holds 44% and 28% of the harmful, Jev p ≥ 0.4 43% and 28%. Jev is cheaper ($0.00006 against $0.00019 a question) and faster (about 150 ms against 1.4 s).
-- **The gate holds much less where minds answer each other.** Jev 0.3 holds 27% of triggers in the all-minds worlds against 49% for the lone newcomer. So its saving there is about 24%, not the 37–50% measured live with a newcomer.
+  - At equal hold rates the two judges are about equal: GLM p ≥ 0.5 holds 44% and 28% of the harmful, Jev p ≥ 0.4 43% and 28%. Jev is cheaper ([removed: Jev pricing] against [removed: Jev pricing] a question) and faster (about 150 ms against 1.4 s).
+- **The gate holds much less where minds answer each other.** Jev 0.3 holds 27% of triggers in the all-minds worlds against 49% for the lone newcomer. So its saving there is about [removed: Jev pricing], not the [removed: Jev pricing] measured live with a newcomer.
 - **`would_repeat` is still where harmful holds come from, as in §6.**
-  - Halving it ("unless × 0.5") at p ≥ 0.3 holds only 8% of the newcomer's harmful deliberations, against 35%, at a cost of 78% against 55%.
+  - Halving it ("unless × 0.5") at p ≥ 0.3 holds only 8% of the newcomer's harmful deliberations, against 35%, at a cost of [removed: Jev pricing] against [removed: Jev pricing].
   - Among the all-minds residents it makes almost no difference at the same hold rate (p ≥ 0.5: 29% held, 16% harmful).
 
 ## Cheaper calls: GLM against DeepSeek for think (all-minds)
@@ -115,17 +115,17 @@ The frontier, cheapest first:
 | Gate | Think on | Harm | $ a trigger |
 |---|---|---:|---:|
 | GLM p ≥ 0.8 | GLM | 12.6% | 0.0010 |
-| Jev p ≥ 0.5 | DeepSeek | 9.7% | 0.0016 |
-| Jev p ≥ 0.4 | DeepSeek | 7.6% | 0.0024 |
-| **Jev, no `would_repeat`, p ≥ 0.7** | **DeepSeek** | **5.5%** | **0.0029** |
-| **Jev p ≥ 0.3** | **DeepSeek** | **5.9%** | **0.0030** |
+| Jev p ≥ 0.5 | DeepSeek | 9.7% | [removed: Jev pricing] |
+| Jev p ≥ 0.4 | DeepSeek | 7.6% | [removed: Jev pricing] |
+| **Jev, no `would_repeat`, p ≥ 0.7** | **DeepSeek** | **5.5%** | [removed: Jev pricing] |
+| **Jev p ≥ 0.3** | **DeepSeek** | **5.9%** | [removed: Jev pricing] |
 | *off (today's mix on these points)* | *GLM* | *9.2%* | *0.0031* |
-| Jev p ≥ 0.2 | DeepSeek | 4.6% | 0.0036 |
+| Jev p ≥ 0.2 | DeepSeek | 4.6% | [removed: Jev pricing] |
 | off | DeepSeek | 4.2% | 0.0040 |
 
-- **The combination beats either lever alone.** Gating with Jev and spending the saving on DeepSeek for think costs what today costs: $0.0030 against $0.0031 a trigger. Its harm is 5.9% against 9.2%. Today's setting (no gate, GLM think) is off the frontier.
+- **The combination beats either lever alone.** Gating with Jev and spending the saving on DeepSeek for think costs what today costs: [removed: Jev pricing] against [removed: Jev pricing] a trigger. Its harm is 5.9% against 9.2%. Today's setting (no gate, GLM think) is off the frontier.
 - **Each lever alone.**
-  - Gating with GLM think saves money at the same judged harm: Jev 0.3 with GLM is 9.2%, as with no gate, at 74% of the cost.
+  - Gating with GLM think saves money at the same judged harm: Jev 0.3 with GLM is 9.2%, as with no gate, at [removed: Jev pricing] of the cost.
   - DeepSeek with no gate lowers harm (4.2%) at 29% more cost.
 - **The difference is small against the noise.** 5.9% against 9.2% is 14 against 22 points of 238. The harm flags' own variation is about ±4 points (the noise rows). The direction is consistent with the pairwise preference, which is well beyond noise; the size is not established.
 
@@ -134,12 +134,12 @@ The frontier, cheapest first:
 **Jev at p ≥ 0.3, the configuration already in `rethink.json`, turned on together with DeepSeek for think** (the `deepseek-people` mix's think, or `people` with think on `deepseek-flash`).
 
 - **What it buys in the worlds the gate is for:**
-  - about 24% fewer deliberation dollars from the gate alone, not 37–50%;
+  - about [removed: Jev pricing] fewer deliberation dollars from the gate alone, not [removed: Jev pricing];
   - 37% of the waste caught;
   - a harmful hold on about 1 trigger in 30.
 - **Paired with DeepSeek for think,** total cost stays at today's level and the judged harm falls.
 - **Not "unless × 0.5" or "no `would_repeat`".** They protect the lone newcomer better (8% and 14% of its harmful held, against 35%). Among residents who answer they give the same harm for the same saving. The newcomer case is better served by keeping the shipped rule and its 600 s release.
-- **Before default-on, the live check idea #3 planned.** Hamlet `default` against `rethink-jev`, 4 × 1 h, with the think model held constant across the arms, plus one Cullet pair; about $16. It measures:
+- **Before default-on, the live check idea #3 planned.** Hamlet `default` against `rethink-jev`, 4 × 1 h, with the think model held constant across the arms, plus one Cullet pair; about [removed: Jev pricing]. It measures:
   - the time from a failed act to a changed plan;
   - the talk guards and `plans_other`;
   - deliberations and dollars per resident-hour.
@@ -155,6 +155,24 @@ The frontier, cheapest first:
 - **Not done here.** A local model (later, only for narrow cases), the gate's latency (Jev about 150 ms; unchanged), and anything about scale.
 
 ## Evidence
+
+**The store's run record: `gq1`** (an analysis batch, `"kind": "analysis"` in its `batch.json`; docs/STORE.md). It is at `~/dev/slop-gate-live/.local/living/trials/gq1/` on the Spark, so the store's manifest scans it.
+- **What it holds:** the replays and their gate journals, `points.jsonl`, the samples, the re-asked replies, the judge rubrics, items, labels and key, `curve.json`, and a copy of this page. `batch.json` lists every file with its sha256, the sources, the switches and the spend.
+- **The models whose words it carries** (`models_in_outputs`):
+
+  | Model | Count |
+  |---|---:|
+  | `zai-glm-5-3-flash` | 2,158 |
+  | `deepseek-v4-1-flash-1017` | 315 |
+  | `mistral-small-latest` | 223 (the newcomer runs' recorded thinks) |
+  | `jev-1.14.0` | 1,198 |
+  | `claude-opus-5-5` | 768 (judge labels) |
+
+- **Publishing is held, and nothing was uploaded.** The store's model gate holds three of these until the owner reads their terms: `mistral-small-latest` (as for b1–b3), `jev-1.14.0` and `claude-opus-5-5`.
+- **Checked 2026-11-12:**
+  - `store.py scrub --dry-run`: 77 files ok; the only redactions are home paths (3,850).
+  - `store.py pack batch` to `~/store-dryrun-2026-11-12/gq1-pack` (8.7 MB).
+  - A grep of the record and of the pack for every 12-character window of the three key values in the `.env` used, and for key-like patterns: **0 found**.
 
 `~/slop-evidence/gate-quality-20261112/` on the Spark:
 - `out/`: replays, `points.jsonl`, the re-asked replies, the samples, `judge-key.jsonl`, `curve.json`;
