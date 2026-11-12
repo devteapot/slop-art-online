@@ -188,6 +188,66 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## First sight fs1 (2026-11-12) — target, written before any paid call
+
+The paid stage of docs/FIRST_SIGHT.md, approved by the owner (2026-11-12) at about $13. It runs on main `dc45c259` (first-sight merged), worktree `~/slop-trials-fs1`, branch `trials-fs1`.
+
+**The world and script.** Cullet, as st2b:
+- 63 minds; 20 minutes; the world starts at 07:00;
+- the newcomer joins at 09:30 at the arrival point and stands 5 minutes;
+- then it walks the Strand past the Fish Steps (`walk_route`) and stands 5 minutes at the densest group;
+- it never speaks.
+
+**Arms,** one replicate each, run one after another (one sub-batch each):
+- **C** (`fs1-c`, `strangers-2b-c:strangers-control`): strangers as on main, the first-sight law off.
+- **C + first sight** (`fs1-f`, `strangers-2b-c:strangers-first-sight`): `first_sight_thinks` on, the gap at its 300 s.
+- **LS + cues + first sight** (`fs1-l`, `strangers-2b:strangers-filter-cues-fs`): `stranger_by_name`, `cues_on` and `first_sight_thinks` on. It runs only if the first two leave room under $13.
+
+The laws are set by `set_world_law` and read back from `world_law`.
+
+**Cost estimate:** st2b's $2.49 (C) and $3.08 (LS + cues), plus the design's +4–5% for first sight: about $2.5 + $2.6 + $3.2 = **$8.3**. A spend guard stops the runner past what is left of $13.
+
+**The target, unchanged** (docs/STRANGERS.md, "Target spread", as stage 2 and st2b used it; one replicate, so indicative only). In range now counts the newcomer's walk (st2b analysis), so it is restated as st2b re-scored it.
+
+| measure | target |
+|---|---|
+| in range (≤12 m during a stand or the walk) | about 18–24 |
+| asks | 1–3, Aldous among them |
+| approaches silently | 0–2 |
+| notices inwardly | 3–8 |
+| unaware | ≤6, ≤40% |
+| tells others (all residents) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | within 5 minutes |
+| `converge_60s` / `together_4m` | ≤3 / ≤2 |
+| out of shape, any arm | 5 or more askers; unaware above 60%; 3 or more residents within 4 m at once |
+| guards: false replies a min (main's rule since strangers-measures: an answer to a line that names someone else; group talk apart), repeated lines, `led_res` − placebo | within C's spread |
+
+**The stop rule, fixed before running.** It is checked after each arm, before the next starts. The batch stops, and nothing else is reported first, if a first-sight arm crowds like ar2's `notice` arm (2–6 residents converging within a minute):
+- its `converge_60s` is 4 or more, above every arm without a newcomer law in st2 and st2b (at most 3); or
+- its `together_4m` is 3 or more.
+
+Beside them, each arm records the raw count: the most residents who came within 4 m of the newcomer within 60 s of one another, whatever their reason. The Strand walk passes many residents, so C gives that count's baseline.
+
+**Measures,** beside the table above:
+- the raw 4 m convergence;
+- lines said to the newcomer out of earshot;
+- first sight → thought: each resident's first sight of the newcomer, whether a think request carried its line (taken, merged or none), and what that thought decided (its thought, its line, its plan);
+- false replies under main's rule, with group talk;
+- tick time (`spacetime_reducer_plus_query_duration_sec`, reducer `tick`);
+- spoken `#id` lines and handles.
+
+**Switches** (recorded again with the results): main `dc45c259`.
+- far-handle on (no switch); `fov_on` off; `regard_cache` on.
+- `first_sight_thinks` per arm; `cues_on` and `stranger_by_name` in LS + cues + first sight only.
+- `LIVING_GREET=nearest` and `LIVING_PARK=concurrent` (unset, main's defaults); `LIVING_SKILL_TIMINGS` on and `force_outcomes` true (as on main).
+- The sleeper fix is in. No arrival laws.
+- `LIVING_CONCURRENCY` 64; the people mix (glm-5-3-flash, deepseek-v4-1-flash).
+
+**Fake smoke** (`fs1s`, free, 6 minutes, before this record was committed):
+- C, C + first sight, LS + cues + first sight and `strangers-2b:strangers-control` all ran to duration, with no runaways;
+- each arm's laws were read back as set;
+- the fake's first-sight thoughts came 5–7 s after the first sight (Lark Morrow, Tobiah Dunmore), the line their only reason; C had none.
+
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
 Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.
