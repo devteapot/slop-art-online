@@ -919,3 +919,19 @@ Checked against the [views](https://spacetimedb.com/docs/functions/views/), [tab
 - **Cost per frame:** one `creatures_near` gather within the widest carry (22.5 m on the island, 30 m in Cullet) and one hearing lookup per person in the scene, the per-moment cached `senses` law.
 - **A mind's scene:** the same gather once per deliberation request, inside `scene_json`.
 - **Retained data:** one small row per played character.
+
+### Late lines: three options for the owner (prepared 2026-11-12; to be chosen after the ways change is measured)
+
+**What a late line is.** The earshot stage (`es1`, docs/TRIALS.md "Earshot stage") found the largest single share of unheard lines: 65–73 a 20-minute run at Cullet, of 151–179. In each, the addressee was within a said line when the mind thought, and gone by the time the line was said: a median of 7.6–8.1 s later, the model's time. The fact a mind is told is true when it thinks; people move meanwhile.
+
+The ways change comes first: a deliberation's line naming a way, which addresses another 22–33 lines a run ("only a call would reach"). Its measure decides how much remains for these options.
+
+| | (a) "Speak to" walks into hearing first | (b) Reach re-checked when the line falls due | (c) As it is |
+|---|---|---|---|
+| **What changes** | A line to a named person beyond the way's reach becomes an act: the speaker walks toward them, as `give` walks into reach, and says it once within the way's carry. It gives up, and is told, past a bound of distance or time. | When a mind's decided line comes due (`mind_install`, `mind_say`: a deliberation's line or a talk turn's), the authority checks the addressee against the way's reach (`speech::within_reach`). If they are beyond it, the line is not said. The speaker is told ("You had not yet said “…” to Magda Tarn: Magda Tarn is now too far away to hear you.") and thinks again with that in front of it, as `heard_first_rethinks` does (`held_for_another`). | Every decided line is said. The speaker is told at once that it was not heard ("Magda Tarn is too far away: they could not have heard you."), and may say it again. |
+| **For whom** | Both: a mind's line, and a player's if the client offers it as an act (`human_act`). `human_say` and `human_speak` stay immediate. | Minds. A player's line is said when they send it, with the people in view, so nothing is decided in advance to fall due. | Both, as now. |
+| **Rule change** | Act semantics: saying takes time and moves the body. | A new law, off by default, of the same kind as `heard_first_rethinks`. Like that law, it does not contradict "direct lines are always said" (§15): the line is not said into the air, it waits on a perceived fact at the moment it would be said. | None. |
+| **Cost and risk** | A walk interrupts what the speaker was doing; long walks across a quay; a line that arrives later than the model meant. Needs a bound and the words for giving up. | One more deliberation for each late line: about 65–73 a run on about 430, so +15–17% deliberations at Cullet. A mind may give up, call, walk, or say nothing, which is its choice. | Lines go unheard (about a quarter of residents' lines at Cullet); re-asks and "silence" readings as they are. |
+| **What it fixes** | The late line and some "not listed" ones: the speaker goes to the listener. | The late line: the mind sees it is late and chooses again. | Nothing. |
+
+The owner decides (a), which is act semantics, and whether (b) is turned on by default.
