@@ -80,6 +80,7 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
 - **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris was left a type's own then, and is one picture for every type since [one iris for every type](#one-iris-for-every-type).
 - **Pass 3, one iris for every type** ([one iris for every type](#one-iris-for-every-type)). Every type's file names one iris picture, and a person's line carries the colour that brings its body to the person's eye colour. Composed eyes had come out about three times too light, with grey pupils on the lighter colours and stray hues from the type's own iris; the iris's body is now within 3 CIE76 of the eye colour on every type. A whole file's warm glow in a dark or a blue eye is what a composed eye still lacks.
 - **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
+- **Pass 3, the neck's and the head's joints** ([the neck's and the head's joints](#the-necks-and-the-heads-joints)). Both are at the reference's places: the neck's 1.7 cm higher, the head's 1 cm higher. Every generated file was built again on the one skeleton; no clip key changes.
 - **look-1, the look book** ([the look book](#the-look-book)). A person line and its words for every look band a person can reach, under opaque keys: Cullet's 64 residents, a pool of 128 for newcomers and players, and 96 lines for background people. The client's book holds lines only; whose a line is, is in the world's data.
 - **Pass 3, the brows' place** ([the brows' place](#the-brows-place)), for the owner to judge. Measured against the reference, every type's brow sat on the head's own brow line, 0.3 of the eye's height above a large eye where the reference's sit 0.6 to 0.85 above. Each type's brow is lifted to 0.72; arch, tilt, length and thickness are unchanged. A brow now rides its own bone whole and the skin under it does not follow.
 - **Pass 3, the iris's lights** ([the iris's lights](#the-iriss-lights)). The glow, the streaks and the arc of sky in an eye are a layer of their own in fixed colours, on a disc before the iris in the lips' and blush's material, so the client's recolouring leaves them be. A composed eye is now within about 3 CIE76 of a whole file's in every eye colour; it was 10 to 14.
@@ -1590,6 +1591,43 @@ Every type's brow sat about 0.041 H above the eye, whatever the eye's size: on t
 **What the client needs:** nothing in code. Take the bundle: the types (their brows, the brow bones' places and the skin's weights), and every hair, outfit and overlay file (what hangs on a head no longer follows the brow bones). Lines are unchanged.
 
 
+### The neck's and the head's joints
+
+Pass 3, 2026-11-12. The neck step left the two joints where they were and noted that the neck's was lower than the reference's. They are now at the reference's places.
+
+**Measured** (`reference/neck.py`): each joint's height from the chin in H, and how far behind the face's front it lies in widths of the head.
+
+| | `J_Bip_C_Head` above the chin | behind the front | `J_Bip_C_Neck` below the chin | behind the front |
+|---|---|---|---|---|
+| The reference (Shino, Vivi) | 0.143, 0.128 H | 0.53, 0.54 | 0.173, 0.162 H | 0.57, 0.59 |
+| Ours before | 0.098 H | 0.53 to 0.59 | 0.234 H | 0.58 to 0.64 |
+| Ours after | 0.137 H | 0.50 to 0.56 | 0.168 H | 0.54 to 0.60 |
+
+- **The neck's joint was 1.7 cm too low and the head's 1 cm too low.** A head nodded about a point 2.5 cm above the chin and a neck bent from 6 cm below it, inside the collar.
+- **`person.py` `JOINTS`:** `J_Bip_C_Neck` from (0, -0.020, 1.475) to (0, -0.012, 1.492), and `J_Bip_C_Head` from (0, -0.010, 1.560) to (0, -0.003, 1.570), in the generator's frame (metres, +Y forward, +Z up). No mesh and no weight changed: the same skin turns about other points.
+- **One skeleton, so the depth is the types' middle:** a type's front lies where its own face puts it.
+
+**What had to be built again:** every file with the body's skeleton in it, which is every generated file: the 21 types, the 159 style files, and whole people. A set mixed from before and after would put a head, its hair or a collar up to 1.7 cm apart.
+
+- **`skeleton_check.py LOOKDEV`** compares every `J_Bip_*` bone's rest place across the types, the style files, whole people and the shared clip file, and fails on a tenth of a millimetre. The bundle runs it.
+- **`pose.py`** turns the neck and the head in a file (a turn, a nod, a tilt; the neck takes 0.4 of each), to photograph a pose the view has no control for.
+
+**The clips.** A baked clip keys 52 bones' rotations and the hips' translation. It keys no bone's place but the hips', so no key holds the neck's or the head's joint.
+
+- **Rebaked on the new skeleton, every key is the same.** The `man` preset's 29 clips before and after (`clips_compare.py`): 52 rotation tracks with the largest difference 0.00°, and the hips' translation 0.0 cm, in every clip. `marker_check` passes on the seven presets and the control.
+- **By eye** (the board's `head-joints`): the difference is small. A nod or a turn carries the chin and the back of the head a little less far, and the collar's gap changes less.
+
+**What the laptop redoes for the shared clip file,** `lookdev/anim/own-clips.glb`:
+
+1. Bake it again from this generator with its own clip library, as it was made: `ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man` (with `KIMODO_DIR` at the library).
+2. Run `python3 living/tools/characters/skeleton_check.py living/game/assets/lookdev`. It reads `anim/own-clips.glb` with the rest and must print 0.
+
+- **Why, when no key changes:** the shared clip file is a character file, the `man` preset with the clips, and it has the body's skeleton at rest in it. An old one would be the one file with the two joints at their old places. The client binds clips to bones by name, so it would still play; the check exists so that a set never holds two skeletons.
+- **`share.py` needs no change.**
+- **It is not in the bundle:** this machine holds 30 of the library's 86 clips, so its bake is not the laptop's file.
+
+**What the client needs:** nothing in code. Take the bundle whole: types, every style file, and the lines (unchanged). A type from after the move with hair or a collar from before, or the other way, sits up to 1.7 cm apart at the neck.
+
 ### The look book
 
 look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part of it). The live game drew no generated people. The look book is what lets it: a person line and its words for every look band a person can reach, under opaque keys.
@@ -1598,11 +1636,12 @@ look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part 
 
 | File | What it holds | Who reads it |
 |---|---|---|
-| `living/game/assets/characters/looks.json` (git-ignored) | `generation`; `lines`: `{"lk_…": {person: the line as the composer reads it, words: LookWords}}`; `decor`: line keys for the island's background people; `files`: every shared file the lines name, with how many lines use it and an outfit piece's slot and layer | the client |
+| `living/game/assets/characters/looks.json` (git-ignored) | `generation`, the one it was written in; `generations`, every one it holds, oldest first; `lines`: `{"lk_…": {person: the line as the composer reads it, words: LookWords}}`; `decor`: line keys for the island's background people; `files`: every shared file the lines name, with how many lines use it and an outfit piece's slot and layer | the client |
 | `living/seeds/worlds/cullet/looks.json` (tracked) | `looks`: `{generation, people: {lp: {band: lk}}, words: {lk: LookWords}, pool: [lp]}`; `residents`: `{the seed's name: lp}` | the authority's seed tools; never shipped to a client |
 
 - **The book does not say whose a line is.** No people, no pool, no names: a client cannot tell a resident's line from a newcomer's, or link one person's lines across ages. That is in the world's data only.
-- **Now:** generation `c4-…`, 887 lines: Cullet's 64 residents in 151 (1 infant, 11 child, 17 youth, 58 adult, 64 elder), 128 pool people in five bands each (640), 96 decor lines. The book is 1.8 MB, the world's data 0.2 MB.
+- **The book is append-only.** Writing it keeps the lines of the book already at that path, so a released world's keys stay drawable, and adds its generation to `generations` (`--fresh` starts again). The world's data is the newest generation alone.
+- **Now:** generation `c4-aa393793`, 887 lines: Cullet's 64 residents in 151 (1 infant, 11 child, 17 youth, 58 adult, 64 elder), 128 pool people in five bands each (640), 96 decor lines. The book is 1.8 MB, the world's data 0.2 MB.
 
 **Keys.**
 
@@ -1640,7 +1679,7 @@ look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part 
 
 **An unbuilt line's outfit colours.** A line's outfit colours are the colours as painted ("the line's colour is the painted colour" under [one shading mean a class](#one-shading-mean-a-class)), which a built file is measured for. A later band and a pool person have no built file. Their pieces' colours are their cloths' taken to what they would be painted: the value ratio, saturation ratio and turn of hue that the built residents' pieces of that kind have at the median (`paint_rule`). Against the built colours of Cullet's 293 pieces that is 0.5 CIE76 at the median, 3.2 at the 95th percentile and 3.7 at most.
 
-**Slot and layer.** Each outfit style file says where its piece is worn and how far out, in its scene's extras: `"outfit": {"piece": "smock_58-f", "slot": "upper", "layer": 1}` (`person_params.PIECE_WEAR`; `gen_styles.sh` writes it). The book's `files` carries the same.
+**Slot and layer.** Each outfit style file says where its piece is worn and how far out, in its scene's extras: `"outfit": {"piece": "smock_58-f", "slot": "upper", "layer": 1}` (`person_params.PIECE_WEAR`; `gen_styles.sh` writes it; `look_lines.py wear --check` fails if a file lacks it, and the bundle runs that). The book's `files` carries the same.
 
 | Piece | Slot | Layer |
 |---|---|---|
