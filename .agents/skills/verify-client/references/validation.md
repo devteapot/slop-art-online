@@ -1,5 +1,9 @@
 # Client protocol validation
 
+## 2026-11-12 fix-unseen-killer-id (Spark)
+
+Branch `fix-unseen-killer-id` from `7729fc9b`, the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-unseen-061951`: 42/42 (no schema change: `vitals.hurt_by`, `act_outcome.other` and `combat_seen.target` keep their columns; private tables and caller-scoped views as before).
+
 ## 2026-11-12 owner-known (Spark)
 
 Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-owner4-050631`: 42/42 (`land_plan` private; `my_known_names` returns only the caller's own known names). An earlier run, `client-owner-043942`, failed "own mind and player effects" once: the first identity's `{"wait":30}` command had ended (28 s passed before the effects probe on a loaded machine) and its plan was back to "waiting for you"; on rerun the gap was 7 s and it passed. That is a harness timing gap, not this change; the drive's 30 s command is short for a slow machine.
