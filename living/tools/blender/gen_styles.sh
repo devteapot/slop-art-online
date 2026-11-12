@@ -88,3 +88,6 @@ one() {
 }
 export -f one
 printf '%s\n' "${items[@]}" | xargs -P "${JOBS:-6}" -I{} bash -c 'one "$@"' _ {} "$root" "$blender" "$shared"
+# An outfit piece's file says where it is worn and how far out: its slot and layer, in the
+# scene's extras (look_lines.py wear; person_params.PIECE_WEAR).
+if [ -d "$root/outfit" ]; then python3 living/tools/characters/look_lines.py wear "$root" | tail -1; fi
