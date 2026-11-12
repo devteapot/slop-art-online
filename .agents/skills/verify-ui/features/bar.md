@@ -1,5 +1,7 @@
 # The cluster and the skill bar
 
+The bars over the slots are the world's `meters()` (the shown ones, in order: health and energy in the shipped script; stamina and mana appear from a world's rows), each moved along its rate between updates; the pills are its `status_of` statuses, none plain (the body's words when all is well). The dump's `me` has both.
+
 The cluster at the bottom: the meters (health, energy) over the skill bar. Which skill sits where is the rules' (`living_rules::ui::bar_places` over the world's script: declared `place`/`order` first, then by aim); each slot's label and look come from the skill's `UiSpec` (`<skill>_ui()` in `skills.rhai`, else its defaults). The slot primitive (`ui/prim.rs`) draws the glyph, the key, a count, a cooldown sweep, a held ring, greying with a reason and the refusal flash; the tooltip over a slot gives its label, why it is greyed, and the skill's help. The weapon (`weapon.rs`) is a client-side restriction: sheathed, the hostile slots are greyed and the first hostile press draws; X toggles.
 
 ## Sub-features
