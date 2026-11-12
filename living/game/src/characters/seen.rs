@@ -4,7 +4,7 @@
 //! touches the row.
 //!
 //! **Until the authority half lands** the bindings have no such columns, and these read a
-//! test-only shim instead: `LIVING_GAME_LOOK_SHIM=pool[;none=ID,…][;missing=ID,…]
+//! test-only shim instead: `LIVING_GAME_LOOK_SHIM=on[;none=ID,…][;missing=ID,…]
 //! [;generation=G][;grow=ID@S]`, or `old` (a world made before looks: no keys, no generation), gives each person a line the book lets characters wear, of the
 //! age band of their life stage, by their id; no key to the ids in `none`; a key the book lacks
 //! to those in `missing`; the world the generation `G` (default: the book's); and person `ID` a

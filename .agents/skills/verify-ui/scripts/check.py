@@ -1999,7 +1999,7 @@ def looks(run, c):
     book = json.load(open(LOOK_BOOK))
     a, b, d = residents(run, 3)
     grow_s = 14
-    env = {"LIVING_GAME_LOOK_SHIM": f"pool;none={b};missing={d};grow={a}@{grow_s}"}
+    env = {"LIVING_GAME_LOOK_SHIM": f"on;none={b};missing={d};grow={a}@{grow_s}"}
     burst = "".join(f"dump:s{i:02d};wait:0.15;" + (f"shot:s{i:02d};" if i % 6 == 0 else "") for i in range(48))
     plan = f"ready;sync:hold;wait:4;dump:00;shot:00_drawn;wait:6;sync:hold;wait:0.5;{burst}wait:2;dump:02;shot:02_grown;quit"
     out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0", f"{d}:0.5:2.2"], syncs=["hold=refree"], env=env)
@@ -2040,7 +2040,7 @@ def looks(run, c):
             f"swapping in {sum(1 for w in swapping if w)} of 48 dumps; in view {sum(in_view)} of 48; largest step {max(jumps) if jumps else None} px")
     c.check(s, "no generation warning when the world's generation is the book's", "looks: the world was made with look generation" not in L)
     # 2. A world whose generation the book does not hold.
-    out2, code2, text2 = drive(run, "looks-generation", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_SHIM": "pool;generation=c4-not-this-book"})
+    out2, code2, text2 = drive(run, "looks-generation", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_SHIM": "on;generation=c4-not-this-book"})
     L2 = log(out2)
     c.check(s, "a world generation the book does not hold: one warning at connect", code2 == 0 and L2.count("looks: the world was made with look generation c4-not-this-book") == 1, text2[-200:])
     # 2b. A world made before looks: everyone falls back quietly, one line at connect.
