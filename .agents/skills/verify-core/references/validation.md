@@ -1,5 +1,15 @@
 # Core validation record
 
+## 2026-11-12 goods-3: building as recipes, tools on recipes, the carry count, the goods audit (laptop host)
+
+Branch `goods-3`, own container `goods3-stdb` (2.14.1, port 3333), `scoped`, no minds, private `CARGO_TARGET_DIR` under `.local/goods3/`.
+
+- `core-g3-goods` (goods fixture): `goods` **27 of 27** (glass refused without a crucible, naming it, no fuel drawn; made with one, the crucible kept), `stock` 4 of 4, `making` 8 of 8, and the new `workplace` 6 of 7. The failure was the scene's own arithmetic: the actor already carried 3 fish from the fixture, and the scene expected an absolute count. The scene now compares before and after.
+- `core-g3-goods2` (fresh goods world, after two harness fixes): `making` 8 of 8. Its check that the world has Cullet's recipes over the shipped ones had been passing on text found only in a comment, and now reads the overlay. `workplace` **7 of 7**: building a hearth refused without masonry; with it, a hearth from 4 stone and 2 clay where they stand, out, in the chronicle; lit; lamp oil refused without a vessel, naming it; made with a pot (a vessel by trait), two fish used, the pot kept.
+- `core-g3-base` (default seed): `food` 4 of 4, `refusal` 4 of 4, `teach` 6 of 6.
+- `maintain-verification-skill`, scoped to `features/goods.md`: the source reader found no wrong refusal string or scene order. It found three overstatements, now corrected: the rules test checks products and does not make them; no test builds Cullet's other kinds; `making` depends on the seeded hearth's first 12 minutes, not on `goods`. The run block's time was corrected to 11 minutes. Both harness fixes were re-driven live (`core-g3-goods2`).
+- Not run: the rest of the baseline, `laws`, `decay`, `winter`, `rhythm`, `mechanics` and steering. The carry count has no scene; the rules' comparison `goods_check` covers it.
+
 ## 2026-11-12 fix-dealings: sight through one wall's corner is the same both ways (dev-box)
 
 Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, no model calls. `Map::sight_walk` now goes through an exact tile corner into the diagonal tile and is stopped there only when both tiles beside the corner are opaque. Before, it broke the tie toward one side, so one of two people across one wall's end saw the other and not back.

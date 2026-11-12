@@ -146,6 +146,8 @@ fn structures() {
     let out = [];
     for k in base_structures() {
         if k.name == "campfire" || k.name == "hall" || k.name == "inn" { k.lights = 6.0; }
+        // Cullet builds its common buildings (`built_here()`): not only its plan's.
+        if k.name == "hall" || k.name == "inn" || k.name == "workshop" || k.name == "market" { k.remove("seeded"); }
         if k.name != "lamp" { out.push(k); }
     }
     out + goods_structures() + store_kinds()
@@ -161,7 +163,14 @@ fn structures() {
 // game time (`_per_h`, `_h`), turned into real time for the 48-minute day by the engine.
 
 fn items() {
-    base_items() + [
+    let out = [];
+    for i in base_items() {
+        // The town's money is drops, small glass tokens cast at the Cone (the shipped `mark`,
+        // drawn as a drop): Cullet mints them (the `mark` recipe), so they are not only seeded.
+        if i.name == "mark" { i.remove("seeded"); i.label = "drop"; }
+        out.push(i);
+    }
+    out + [
         // Gathered on the shore; burnt to ash (4 to 1).
         #{ name: "kelp", icon: "kelp", label: "kelp", group: "material" },
         // Ash is an alkali: glass takes any alkali.
@@ -176,6 +185,19 @@ fn items() {
         #{ name: "peat", fuel: 1.0, icon: "peat", label: "peat", group: "fuel" },
         // Rendered from fish; what lamps burn.
         #{ name: "lamp_oil", oil: 1.0, icon: "lamp_oil", label: "lamp oil", group: "fuel" },
+        // What glass is made into (docs/CULLET_RULES.md, "Where Cullet's goods come from"): small
+        // panes (no one can make a large sheet), floats for the nets, bottles, and the drops.
+        #{ name: "pane", icon: "pane", label: "pane", group: "glass" },
+        #{ name: "float", icon: "float", label: "glass float", group: "glass" },
+        // A vessel holds what is rendered or carried wet (`vessel`: a glass bottle or a clay pot).
+        #{ name: "bottle", vessel: true, icon: "bottle", label: "bottle", group: "glass" },
+        #{ name: "pot", vessel: true, icon: "vessel", label: "pot", group: "tool" },
+        // Tools, held and not used up: a crucible to melt glass in, a blowpipe to blow it, the
+        // mould drops are cast in. Pots, crucibles and moulds are fired clay.
+        #{ name: "crucible", icon: "crucible", label: "crucible", group: "tool" },
+        #{ name: "mould", icon: "mould", label: "drop mould", group: "tool" },
+        #{ name: "blowpipe", seeded: "iron: the island's iron is the ships' fittings and none is new (docs/SMALL_CITY.md, materials); the Cone's pipes are what the ships left",
+           icon: "blowpipe", label: "blowpipe", group: "tool" },
     ]
 }
 
@@ -288,20 +310,76 @@ fn cullet_resources() {
 }
 
 fn know_how() {
-    base_know_how() + [
-        #{ name: "glassmaking", help: "melt ash and sand into glass at a burning furnace", brief: "glass from ash and sand at the furnace", requires: ["fire"] },
+    let out = [];
+    for k in base_know_how() {
+        // The pot maker's toolmaking is fired clay as well as axes and picks.
+        if k.name == "toolmaking" { k.brief = "axe, pick; pots, crucibles and drop moulds of fired clay"; }
+        out.push(k);
+    }
+    out + [
+        #{ name: "glassmaking", help: "melt ash and sand into glass at a burning furnace, and make panes, floats, bottles and drops of it", brief: "glass from ash and sand at the furnace, and panes, floats, bottles and drops", requires: ["fire"] },
     ]
 }
 
 // Cullet's workplaces, after the shipped recipes (crafting, and cooking and smoking at any fire).
+// Its nets are hung with glass floats and its coats are oilskins: those two stand in the shipped
+// ones' places (docs/CULLET_RULES.md, "Where Cullet's goods come from").
 fn recipes() {
-    base_recipes() + [
+    let out = [];
+    for r in base_recipes() {
+        if r.name == "net" { r = #{ name: "net", by: "craft", takes: #{ fiber: 3, float: 2 }, knows: "fishing" }; }
+        if r.name == "cloak" { r = #{ name: "cloak", by: "craft", takes: #{ fiber: 3, lamp_oil: 1 }, knows: "basketry" }; }
+        out.push(r);
+    }
+    out + made_here() + built_here()
+}
+fn made_here() {
+    [
         #{ name: "ash", at: "fire", lit: true, takes: #{ kelp: 4 }, ms: 6000 },
-        #{ name: "glass", at: "furnace", lit: true, takes: #{ alkali: 1, sand: 2 }, fuel: 1.0, knows: "glassmaking", ms: 15000 },
+        #{ name: "glass", at: "furnace", lit: true, takes: #{ alkali: 1, sand: 2 }, tools: #{ crucible: 1 }, fuel: 1.0, knows: "glassmaking", ms: 15000 },
+        // What glass is made into, at the Cone: two small panes or two floats from a gather,
+        // one bottle, or four drops cast in the mould (a drop is worth about a smoked fish:
+        // a quarter of a glass is a kelp, half a sand and a third of a peat).
+        #{ name: "pane", at: "furnace", lit: true, takes: #{ glass: 1 }, makes: 2, fuel: 0.25, knows: "glassmaking", ms: 8000 },
+        #{ name: "float", at: "furnace", lit: true, takes: #{ glass: 1 }, makes: 2, tools: #{ blowpipe: 1 }, fuel: 0.25, knows: "glassmaking", ms: 10000 },
+        #{ name: "bottle", at: "furnace", lit: true, takes: #{ glass: 1 }, tools: #{ blowpipe: 1 }, fuel: 0.25, knows: "glassmaking", ms: 10000 },
+        #{ name: "mark", at: "furnace", lit: true, takes: #{ glass: 1 }, makes: 4, tools: #{ mould: 1 }, fuel: 0.25, knows: "glassmaking", ms: 8000 },
+        // Fired clay, at the Batch's oven.
+        #{ name: "pot", at: "oven", lit: true, takes: #{ clay: 2 }, fuel: 0.5, knows: "toolmaking", ms: 10000 },
+        #{ name: "crucible", at: "oven", lit: true, takes: #{ clay: 3 }, fuel: 0.5, knows: "toolmaking", ms: 12000 },
+        #{ name: "mould", at: "oven", lit: true, takes: #{ clay: 1 }, fuel: 0.25, knows: "toolmaking", ms: 8000 },
         #{ name: "smoking", turns: "smokes_to", at: "smokehouse", lit: true, fuel: 0.5, knows: "smoking", ms: 10000 },
         #{ name: "baking", turns: "bakes_to", at: "oven", lit: true, fuel: 0.25, ms: 6000 },
-        #{ name: "lamp_oil", at: "fire", lit: true, takes: #{ fish: 2 }, ms: 8000 },
+        // Rendered in a vessel over a fire: a bottle or a pot (`vessel`), kept.
+        #{ name: "lamp_oil", at: "fire", lit: true, takes: #{ fish: 2 }, tools: #{ vessel: 1 }, ms: 8000 },
     ]
+}
+// What Cullet builds besides the shipped structures: its fires, workplaces and stores, of the
+// island's basalt, clay from the pit, the Hanger's scarce wood and its own panes. The numbers
+// are first guesses for the soak (docs/CULLET_RULES.md, "Where Cullet's goods come from").
+fn built_here() {
+    [
+        #{ name: "hearth", by: "build", takes: #{ stone: 4, clay: 2 }, knows: "masonry", ms: 20000 },
+        #{ name: "oven", by: "build", takes: #{ stone: 8, clay: 4 }, knows: "masonry", ms: 40000 },
+        #{ name: "furnace", by: "build", takes: #{ stone: 24, clay: 12 }, knows: "masonry", ms: 120000 },
+        #{ name: "smokehouse", by: "build", takes: #{ stone: 4, wood: 6 }, knows: "carpentry", ms: 30000 },
+        #{ name: "lamp", by: "build", takes: #{ stone: 2, pane: 4 }, knows: "glassmaking", ms: 15000 },
+        #{ name: "hall", by: "build", takes: #{ stone: 30, wood: 12, pane: 8 }, knows: "masonry", ms: 120000 },
+        #{ name: "inn", by: "build", takes: #{ stone: 20, wood: 10, pane: 6 }, knows: "masonry", ms: 90000 },
+        #{ name: "workshop", by: "build", takes: #{ stone: 12, wood: 8, pane: 2 }, knows: "carpentry", ms: 60000 },
+        #{ name: "market", by: "build", takes: #{ stone: 4, wood: 8 }, knows: "carpentry", ms: 30000 },
+        #{ name: "store", by: "build", takes: #{ stone: 16, wood: 8 }, knows: "masonry", ms: 60000 },
+        #{ name: "peat_barn", by: "build", takes: #{ stone: 10, wood: 6 }, knows: "masonry", ms: 40000 },
+        #{ name: "yard_store", by: "build", takes: #{ stone: 8, wood: 4 }, knows: "masonry", ms: 30000 },
+        #{ name: "house_store", by: "build", takes: #{ wood: 5 }, knows: "carpentry", ms: 12000 },
+    ]
+}
+
+// What building gives, with Cullet's own kinds after the shipped ones.
+fn build_spec() {
+    let s = base_build_spec();
+    s.gives += "; a hearth, an oven, a furnace or a smokehouse is a fire that burns fuel (feed it), a lamp lights the street while it has oil, a hall or an inn warms and roofs, a store, peat barn, yard store or house store keeps things";
+    s
 }
 
 
