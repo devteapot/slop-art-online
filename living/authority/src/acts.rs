@@ -34,7 +34,8 @@ pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, r
     let sp = common::species(&kind);
     if replace {
         ctx.db.act_queue().actor().delete(actor);
-        if let Some(a) = ctx.db.activity().id().find(actor).filter(|a| a.node == ACT) {
+        // A committed move under way runs its course (`combat::committed`).
+        if let Some(a) = ctx.db.activity().id().find(actor).filter(|a| a.node == ACT && !crate::combat::committed(&common::scripts(ctx), a)) {
             act::cancel(ctx, a, now, None);
         }
     }
@@ -99,7 +100,7 @@ pub fn next(ctx: &ReducerContext, actor: u32, now: u64) {
         };
         let revision = ctx.db.mind_state().id().find(actor).map(|s| s.revision).unwrap_or(0);
         let want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
-        match act::begin(ctx, actor, ACT, revision, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), (&want.0, want.1), (a.offer.unwrap_or(0), a.record.unwrap_or(0)), a.run, now) {
+        match act::begin(ctx, actor, ACT, revision, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), (&want.0, want.1), (a.offer.unwrap_or(0), a.record.unwrap_or(0)), a.run, a.spacing(), now) {
             Ok(()) => {
                 common::wake(ctx, actor);
                 return;

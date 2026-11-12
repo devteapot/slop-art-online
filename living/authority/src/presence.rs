@@ -171,7 +171,8 @@ fn hand_back(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     // What the minds had going stops: a pending thought, decided acts, the activity under way.
     ctx.db.deliberation().actor().delete(p.id);
     ctx.db.act_queue().actor().delete(p.id);
-    if let Some(a) = ctx.db.activity().id().find(p.id) {
+    // A committed move under way runs its course (`combat::committed`).
+    if let Some(a) = ctx.db.activity().id().find(p.id).filter(|a| !crate::combat::committed(&crate::common::scripts(ctx), a)) {
         crate::act::cancel(ctx, a, now, None);
     }
     if let Err(e) = crate::mind::set_graph(ctx, p.id, crate::WAITING_GRAPH, crate::WAITING, "human", now) {

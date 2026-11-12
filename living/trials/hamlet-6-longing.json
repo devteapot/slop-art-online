@@ -1,0 +1,12 @@
+{
+ "extends": "hamlet-6",
+ "title": "The larger hamlet, a later longing for a child",
+ "about": "`hamlet-6` with the world's own values of two laws (world.rules), as in `hamlet-longing`: `longing_after_min` 120 (shipped 20) and `longing_food` 4 (shipped 0). The longing for a child is felt 120 real minutes after one's own birth or one's youngest child's, shortened by nurture, and only while carrying at least 4 food. What a body can do is unchanged.",
+ "world": {
+  "seed": "hamlet-6",
+  "rules": {
+   "longing_after_min": 120,
+   "longing_food": 4
+  }
+ }
+}

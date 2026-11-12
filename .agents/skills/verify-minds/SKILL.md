@@ -1,6 +1,6 @@
 ---
 name: verify-minds
-description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations (and ways of speaking, mind_say; LIVING_GREET and LIVING_PARK), consolidation, reconnect handling, LIVING_ONLY, mind level of detail, the rethink gate (LIVING_RETHINK), the prompt frame (LIVING_FRAME), the timing of one's own known fighting moves (LIVING_SKILL_TIMINGS), or player memory (LIVING_PLAYER_MEMORY).
+description: "Verify the living core's internal mind service with the real living-mind binary and a local fake model on scratch databases. Use when changing the mind protocol (requests, thoughts, installed graphs, mind_* reducers) or what a mind is sent and does: deliberation and deliberate acts, conversations and ways of speaking, consolidation, reconnect and takeover, level of detail and the rethink gate, attention cues, the prompt frame, the mind service's LIVING_* switches, player memory, or trials."
 ---
 
 # Verify internal minds
@@ -37,7 +37,13 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case conversation
 ```
 
-`--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect`, `lod`, `takeover` ([features/takeover.md](features/takeover.md)), `dealings` and `answers` ([features/dealings.md](features/dealings.md)), `parked`, `alongside`, `greet` and `queued` ([features/conversations.md](features/conversations.md)), `sight`, `death-names` and `health-seen` ([features/sight.md](features/sight.md)), `fov` ([features/fov.md](features/fov.md)), `doing` ([features/sight.md](features/sight.md#what-someone-is-visibly-doing)), `drop` ([features/drop.md](features/drop.md); an island world), `resident` ([features/resident.md](features/resident.md); an island world, built in `.local/living/target-resident-island`, or in `CARGO_TARGET_DIR` when it is set, as `drop` too), `animals` ([features/animals.md](features/animals.md)), `night` ([features/sleep.md](features/sleep.md)), `jev` ([features/judgments.md](features/judgments.md)), `rethink`/`rethink-llm` ([features/rethink.md](features/rethink.md)), `frame` (`LIVING_FRAME=player`, [features/frame.md](features/frame.md)), `timings` (the timing of one's own known fighting moves, `LIVING_SKILL_TIMINGS`, [features/deliberation.md](features/deliberation.md)) and `reasons` ([features/deliberation.md](features/deliberation.md), a deliberation consumes the reasons its prompt contained), `run` ([features/deliberation.md](features/deliberation.md#running), a mind's act runs and pays breath). Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
+`--case` can repeat. `verify_minds.py --list` prints every case, in the order they are defined (each registers itself with `@case` where it is defined); [features/README.md](features/README.md) maps each case to its feature file. `drop` and `resident` run on an island world, built in `.local/living/target-resident-island`, or in `CARGO_TARGET_DIR` when it is set. Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
+
+Attention cues (docs/ATTENTION.md) have their own driver with Neo4j, `scripts/cues_mind.py` ([features/cues.md](features/cues.md)), with the same environment as `privacy.py`:
+
+```bash
+.agents/skills/verify-minds/scripts/cues_mind.py --run minds-cues-${R#minds-}
+```
 
 Seeded island residents (docs/SEEDED_LIVES.md) have their own driver, `scripts/lives_mind.py` ([features/lives-mind.md](features/lives-mind.md)): on an island run the mind service thinks for the named residents from the start (`LIVING_ONLY`) and a player speaks to each, with a scratch Neo4j and the fake model (free) or `--real PROFILE` (paid, only when authorized), and checks that each knows its own past and people and no one else's secrets.
 
@@ -68,7 +74,7 @@ Cleanup runs in `finally`, including after a failed check or Ctrl-C. If cleanup 
 
 First stop any surviving owned PIDs listed in that case's `processes.json`, after checking that the PID still belongs to this run. Do not kill by process name. Never clean another surface's database or a paused reference world.
 
-The [feature map](features/README.md) gives the source paths and assertions. The [validation record](references/validation.md) lists proven behavior and remaining failures. Use `maintain-verification-skill` after changing the mind protocol or launch commands.
+The [feature map](features/README.md) gives the source paths and assertions. The [validation records](references/validation/README.md), one per run with the newest the last validated, list proven behavior and remaining failures. Use `maintain-verification-skill` after changing the mind protocol or launch commands.
 
 ## Opt-in real-model tier
 

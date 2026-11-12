@@ -1,7 +1,7 @@
 {
   "max_hold_s": 600,
   "kinds": ["person"],
-  "urgent": [" died", " was killed", " is dead"],
+  "urgent": [" died", " was killed", " is dead", ": you watch for this ("],
   "state": {
     "perceived": 12,
     "outcomes": 8,

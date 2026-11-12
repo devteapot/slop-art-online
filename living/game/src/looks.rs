@@ -57,6 +57,49 @@ impl Looks {
     }
 }
 
+/// The names the authority has given me to show (for the UI dump's guard): everyone my character
+/// knows by name (`my_known_names`: itself, family, community, introductions, its community's
+/// remembered dead), everyone I perceive by name, and my own characters.
+pub fn known_names(net: &Net) -> Vec<String> {
+    let Some(c) = net.conn.as_ref() else { return Vec::new() };
+    c.db.my_known_names().iter().map(|x| x.name).chain(c.db.seen_characters().iter().map(|x| x.name)).chain(c.db.my_characters().iter().map(|x| x.name)).filter(|n| !n.trim().is_empty()).collect()
+}
+
+/// A structure as my character may call it (owner-known, docs/PERCEPTION.md "Whose a thing is,
+/// and what places are called"): my own "your house"; one whose owner my character knows by
+/// name (`my_known_names`) "Bram's house"; else the kind alone, "house". The authority's law is
+/// `owner_shown(#{knows, shows, kind})`, shipped `knows || shows`; `shows` (a sign trait) is set
+/// by no shipped kind and has no client field yet, so `knows` is the whole rule here. Nothing
+/// else in the client names an owner: not `land.params` (no names since owner-known), not the
+/// seed, not `structure.owner` alone.
+pub fn structure_name(conn: &DbConnection, me: u32, kind: &str, owner: u32) -> String {
+    let kind = kind.replace('_', " ");
+    if owner == 0 {
+        return kind;
+    }
+    if owner == me {
+        return format!("your {kind}");
+    }
+    match conn.db.my_known_names().id().find(&owner).map(|k| k.name).filter(|n| !n.trim().is_empty()) {
+        Some(name) => format!("{name}'s {kind}"),
+        None => kind,
+    }
+}
+
+/// Whom I perceive now (`seen_characters` ids), for the UI dump.
+pub fn perceived_ids(net: &Net) -> Vec<u32> {
+    let Some(c) = net.conn.as_ref() else { return Vec::new() };
+    let mut v: Vec<u32> = c.db.seen_characters().iter().map(|x| x.id).collect();
+    v.sort_unstable();
+    v
+}
+
+/// The places the rules say my character knows (`my_places`), by name.
+pub fn given_places(net: &Net) -> Vec<String> {
+    let Some(c) = net.conn.as_ref() else { return Vec::new() };
+    c.db.my_places().iter().map(|p| p.name).filter(|n| !n.trim().is_empty()).collect()
+}
+
 /// A colour's name, from its hue, saturation and value (a few plain words).
 pub fn colour_name(hex: &str) -> Option<&'static str> {
     let h = hex.trim_start_matches('#');

@@ -39,6 +39,9 @@ fn laws() {
         // How long one `follow` lasts before the follower looks again (seconds), and how far
         // `read` with nothing named looks for a sign (metres).
         follow_s: 12.0, read_sign_m: 8.0,
+        // A movement held to a creature (follow, keep_distance, circle, close_in, back_off) goes
+        // by where it was last seen while it is out of sight, and ends unseen this long (seconds).
+        lost_after_s: 2.0,
         // Others of one's kind within this many metres are kin near (`a.actor.kin_near`).
         kin_near_m: 4.0,
         // How long a trade offer can be accepted and a request to join stands (seconds).
@@ -83,6 +86,11 @@ fn laws() {
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
         // people in scenes, percepts and memory (`perception::knows_name`).
         stranger_by_name: false,
+        // Attention cues (docs/ATTENTION.md): a mind may write what in what it perceives should
+        // bring it to think about one of its stances, goals or projects. Off: none is matched.
+        // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
+        // brought to think by its cues at most once within `cue_gap_s`.
+        cues_on: false, cue_cooldown_s: 600.0, cue_gap_s: 60.0,
         fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
         fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
         // What is heard but not seen (only while the field is on) is told by its distance:
@@ -1594,6 +1602,12 @@ fn winded(a) {
 //              `<skill>_missile`), "facing" (a held guard), "dash" (a dodge), "none"
 //   timed      the combat timing above (one windup at a time, recovery, cooldown)
 //   rooted     a player's movement waits while it winds up
+//   committed  once started it runs its whole course (a windup to its release, a dash to its
+//              end), whoever controls the body: no movement key, new plan, condition that stops
+//              holding or target leaving sight ends it; its timing or something physical
+//              (death, a wall in a dash's way) does. Only a dash may cut in on a windup.
+//              A world may switch it per skill in its own laws (an overlay through
+//              `floors::compose`): `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }`.
 //   hostile    aimed at a creature, that creature is its victim and sees it coming
 //   reflex     it takes the body back from a deliberate act
 //   real_time  behavior of the moment: a graph's, not a one-off act's
@@ -1609,17 +1623,17 @@ fn winded(a) {
 //   needs      items the skill bar shows as missing (the check stays the rule)
 //   knows      techniques the skill bar shows as unknown
 // A dash moves `<skill>_dist(kind)` tiles at `<skill>_speed(kind)` tiles/s.
-fn strike_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
-fn bowshot_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
-fn firebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
+fn strike_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
+fn bowshot_combat() { #{ aim: "point", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
+fn firebolt_combat() { #{ aim: "point", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
 fn block_combat() { #{ aim: "facing", timed: true, reflex: true, real_time: true, hold_ms: 8000, arc: 75.0, takes: 0.25 } }
-fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
-fn dodge_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true } }
+fn heal_combat() { #{ aim: "self_or_ally", timed: true, committed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
+fn dodge_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true } }
 // A jump is a dash that does not evade: blows and missiles still land while you are in the air.
-fn jump_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true, evades: false } }
-fn attack_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
-fn shoot_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
-fn throw_combat() { #{ aim: "creature", timed: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn jump_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true, evades: false } }
+fn attack_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
+fn shoot_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn throw_combat() { #{ aim: "creature", timed: true, committed: true, hostile: true, reflex: true, real_time: true, force: true } }
 fn threaten_combat() { #{ aim: "creature", hostile: true, closes_in: true, menace: true } }
 fn yield_combat() { #{ reflex: true, force: true } }
 fn seize_combat() { #{ aim: "creature", dares: true } }
@@ -2416,7 +2430,46 @@ fn tend_spec() {
        takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" }
 }
 
-fn follow_spec() { #{ moment: true, target: true, reach: 2.0, args: ["run"], about: "Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone (run: true to run with them). It does not make them follow you.", takes: "a creature in sight", gives: "you beside them as they go" } }
+fn follow_spec() {
+    let l = laws();
+    #{ moment: true, target: true, reach: 2.0, args: ["distance", "run", "qty"],
+       about: `Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone. distance: how near to keep, in metres (default 2); qty: seconds (default ${short(l.follow_s)}). ${intent_pace()} It does not make them follow you.`,
+       takes: intent_sight(), gives: "you beside them as they go" }
+}
+// Movement intents (keep_distance, close_in, circle, back_off, and follow above): ways to move
+// relative to a creature one perceives, re-aimed at it at every steering step, under the same
+// steering, speeds, breath and facing as a player's keys (`living_rules::steer`). They are moves,
+// not tactics: when to use one is the mover's own choice.
+fn intent_pace() {
+    let m = motion(#{ actor: #{ kind: "person", stage: "adult" }, night: false });
+    `It moves you at your walk (a grown person ${short(walk_of("person"))} m/s), or with run: true at ${short(m.run)} times your walk while your breath lasts, then at a walk until you have breath again: the speeds your own legs give anyone who walks or runs.`
+}
+fn intent_sight() {
+    let l = laws();
+    `a creature in sight (or smelled); out of sight, you go by where you last saw it, and stop (lost sight of them) once it has been out of sight for ${short(l.lost_after_s)} s`
+}
+fn keep_distance_spec() {
+    let l = laws();
+    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty"],
+       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
+       takes: intent_sight(), gives: "you between min and max metres from it, facing it" }
+}
+fn close_in_spec() {
+    #{ target: true, target_class: "creature", args: ["distance", "run"],
+       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
+       takes: intent_sight(), gives: "you within that distance of it" }
+}
+fn circle_spec() {
+    let l = laws();
+    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty"],
+       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
+       takes: intent_sight(), gives: "you going round it at that distance" }
+}
+fn back_off_spec() {
+    #{ target: true, args: ["distance", "run"],
+       about: `Step back from a creature or a place until you are distance metres from it (default 4), facing it as far as you can while you go, and stop facing it. From a creature that moves, it backs away from where it is now. ${intent_pace()} Not running away (flee): it ends at that distance. With nowhere to go, it ends: cornered.`,
+       takes: "something in sight to back away from; breath if you run", gives: "you that far from it, facing it" }
+}
 fn flee_spec() { #{ reflex: true, moment: true, target: true, args: ["run"], about: "Run away from a creature or place until you are clear of it. It runs while your breath lasts (run: false to slip away at a quick walk instead).", takes: "something to run from; breath while you run", gives: "distance between you and it" } }
 
 fn offer_spec() {
@@ -2858,6 +2911,7 @@ fn laws_about(l) {
         scent_hz: `a creature smells afresh ${short(l.scent_hz)} times a second at most (or when it has moved a few metres); in between it keeps what it last smelled`,
         takeover_s: `a played character with no connection of its person for ${short(l.takeover_s)} s lives on under the world's minds`,
         follow_s: `one follow lasts ${short(l.follow_s)} s before the follower looks again`,
+        lost_after_s: `a movement held to someone (follow, keep_distance, circle, close_in, back_off) goes by where they were last seen while they are out of sight, and ends once they have been out of sight for ${short(l.lost_after_s)} s`,
         read_sign_m: `reading with nothing named reads the nearest sign within ${short(l.read_sign_m)} m`,
         kin_near_m: `others of one's kind within ${short(l.kin_near_m)} m are kin near`,
         trade_window_s: `a trade offer can be accepted for ${short(l.trade_window_s)} s`,
@@ -2874,6 +2928,9 @@ fn laws_about(l) {
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         stranger_by_name: if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
+        cues_on: if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
+        cue_cooldown_s: `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
+        cue_gap_s: `what one watches for brings one to think at most once in ${short(l.cue_gap_s)} s`,
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
