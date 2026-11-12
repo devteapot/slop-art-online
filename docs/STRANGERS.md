@@ -168,7 +168,12 @@ The general coordinator approved this design with the decisions below. Where the
 ### Target spread (fixed before any run)
 
 The target is for the 63-mind Cullet world under §6's script.
-- **Who is counted.** "In range" means within 12 m of the newcomer during a stand. About 10–16 residents are expected in range at 09:30 on the yard and the Fish Steps.
+- **Who is counted.** "In range" means within 12 m of the newcomer during a stand or during its walk along the Strand (since stage 2b). **About 18–24 residents are expected in range.**
+  - **This band changed after st2b** (2026-11-12, approved by the general coordinator; branch `strangers-measures`).
+  - **Old band, as committed before any run:** about 10–16, within 12 m during a stand, at 09:30 on the yard and the Fish Steps.
+  - **Why:** since stage 2b the newcomer also walks the Strand, and the walk now counts as in range (st2b analysis, docs/TRIALS.md). The old band was written for the stands only.
+  - **The new band is st2b's own spread with the walk:** 21, 18, 24 and 20 in C, L, LS and LS + cues. Re-scored for stands only, the same runs give 13, 11, 16 and 10, inside the old band.
+  - This is a reach measure, not an outcome. The outcome bands below (asks, approaches, notices inwardly, unaware, tells) are unchanged, as committed.
 - **The four exclusive classes.** Each resident in range has exactly one, taken in this order of precedence by the end of the run:
   - *asks*: a line to the newcomer, heard or not;
   - *approaches silently*: comes within 4 m with no line;
@@ -290,3 +295,7 @@ The general coordinator decided on a handle of the sighting.
 - The prompt shows a far figure under a handle, the line tagged with that handle, and no line tying the handle to F's name or id.
 - A wave at the handle reaches F.
 - Brought within 2 m, F is made out (the handle is joined to F's id), and the scene names F.
+
+**Measure change (2026-11-12, st2b analysis).**
+- "In range" now includes the newcomer's walks (`human_route`), not only its stands. Anyone it passes within 12 m on the Strand is classed (`arrive_report.WALKS`; `arrive_spread.py --stands-only` gives the old measure).
+- The target's "about 10–16 in range" was written for the stands. Re-scored, st2b has 18–24 in range. The band is now restated as about 18–24 under "Target spread", with the old band beside it.
