@@ -21,6 +21,8 @@ pub mod body;
 mod check;
 #[cfg(test)]
 mod seed_check;
+#[cfg(test)]
+mod overlay_check;
 pub mod context;
 pub mod fields;
 pub mod speech;

@@ -1,27 +1,29 @@
-"""Hair as the VRoid controls build it: a cap on the scalp and layers of broad locks combed over
-it, each lock a closed lens-shaped ribbon with its own column of a strand texture. numpy only (no
-Blender); person.py turns the result into the `Hair` object.
+"""Hair as sheets: a cap on the scalp and, over it, a few broad smooth sheets that end in points,
+with a lock here and there. numpy only (no Blender); person.py turns the result into the `Hair`
+object.
 
-What the controls showed (docs/CHARACTERS.md, "What was learnt from VRoid"; nothing of theirs is
-used, the locks here are computed and the texture is painted by `paint_strands`):
+The reference draws hair as broad smooth shapes that end in a few points. Until pass 3's sheets
+step this file made a head of hair from about fifty separate locks, each a ribbon with a tone and
+a wave of its own; that read as many waved ribbons, hid the face from the side and left skin
+between them. Now:
 
-- about fifty locks, each two faces thick (a front and a back surface closed at the edges), three
-  to five vertices across and many along, tapering to a point or cut blunt;
-- every lock mapped root to tip onto a tall grey texture of fine streaks, darker at the root and
-  the tip, tinted by the hair's colour, so each lock shows strands;
-- under them the scalp itself painted with the same streaks, so no skin shows between locks;
-- the long locks hang from chains of spring bones.
-
-How a head of hair is made here:
-
-1. **Roots and directions.** A style lays out locks in layers: where each starts on the scalp,
-   which way it is combed, how long it is or how low it hangs (`STYLES`).
-2. **Combing.** Every lock is walked from its root in small steps: it keeps its direction, bends
-   toward the ground, and is pushed out of the head, the neck and the shoulders (`Comb`), so it
-   flows over the skull and then hangs. A lock may instead be drawn toward a point (a tail's tie).
-3. **Curl** bends the walked path into waves.
-4. **Ribbons.** Each path becomes a lens-shaped ribbon standing a little off whatever it lies on,
-   with per-vertex colour (root shade, a tone of its own, grey hairs) and strand UVs.
+- **A sheet** (`sheet`) is one surface from a line of roots on the scalp: every root is combed
+  as a lock used to be (walked in small steps, bending to the ground, pushed out of the head,
+  the neck and the shoulders), and the walked paths are the sheet's columns. Its hem is cut into
+  a few points: columns run long at a point's tip and are cut back at the notch between two.
+  It is closed by a back surface a few millimetres behind, so it is one solid shape for outlines.
+- **A head of hair is a few sheets.** Hanging styles: one curtain round the sides and back, a
+  sheet a side from the parting over it, one from the crown, the fringe, a small one at each
+  temple. Short styles: rings of short sheets, one over the next as tiles lie, each cut into
+  points. Gathered styles: the scalp's hair as sheets drawn to the tie, and the tail a sheet
+  rolled into a tube.
+- **It is shaded and coloured as one thing:** normals half the sheet's own and half the way out
+  from the head; one colour, darker at the root, in the notches and at a sheet's own edges,
+  with a lighter band round the head; curl waves the whole head together, by height.
+- **Locks remain** where a single one is the drawing: the locks at the ears' front, sideburns,
+  a bun's coils, a braid's leaves.
+- Every sheet and lock is mapped root to tip onto one tall grey picture of fine streaks
+  (`paint_strands`), tinted by the hair's colour; long hair hangs from chains of spring bones.
 
 Positions are in the head's own frame (head_form.py): metres round the head's centre before
 person.py's HEAD_SCALE, +Y forward, +Z up, the character's left at -X.
@@ -202,6 +204,7 @@ class Hair:
         self.v, self.f, self.col, self.uv, self.nrm, self.chain, self.along = [], [], [], [], [], [], []
         self.chains = []
         self.locks = []
+        self.sheets = []  # sheets' own records; their columns are walked with the locks
         self.extra = []  # (kind, data) for person.py: ties and bands in cloth
         style = spec["style"]
         if style not in STYLES:
@@ -260,66 +263,166 @@ class Hair:
         """Where the parting lies across the head (the character's left at -X)."""
         return -0.040 * self.parting
 
+    # Sheets. --------------------------------------------------------------------------------
+
+    def _teeth(self, points, uneven, closed, cols, edges):
+        """Where a sheet's columns lie across it (0..1), how far each is cut back at the hem (0 a
+        point's tip, 1 the notch between two points) and which point it belongs to. The far
+        model keeps each point's notch and tip and drops the columns between."""
+        if points <= 0:
+            n = max(int(round(cols * (1.0 if self.detail >= 1 else 0.6))), 4)
+            return [(i / (n if closed else n - 1), 0.0, 0) for i in range(n)]
+        w = [1 + self.u(-uneven, uneven) for _ in range(points)]
+        tot = sum(w)
+        notch = [self.u(0.65, 1.0) for _ in range(points + 1)]
+        if closed:
+            notch[-1] = notch[0]
+        else:
+            notch[0], notch[-1] = edges
+        nodes, a = [], 0.0
+        for q, wi in enumerate(w):
+            b = a + wi / tot
+            c = a + (b - a) * self.u(0.36, 0.64)
+            tip = self.u(0.0, 0.28)
+            nodes.append((a, notch[q], q))
+            if self.detail >= 1:
+                nodes.append(((a + c) / 2, lerp(tip, notch[q], 0.36), q))
+            nodes.append((c, tip, q))
+            if self.detail >= 1:
+                nodes.append(((c + b) / 2, lerp(tip, notch[q + 1], 0.36), q))
+            a = b
+        if not closed:
+            nodes.append((1.0, notch[-1], points - 1))
+        return nodes
+
+    def sheet(self, roots, dirs="down", z_end=None, length=0.9, points=3, depth=0.03, cols=9, hem=None, lift=0.006, g=30.0, chain=None, shade=0.0, bulge=None, tip_out=0.0,
+              target=None, thick=0.0045, closed=False, uneven=0.25, edges=(1.0, 1.0), hug=1.0, check=False, groove=1.0, shine=0.0, tube=False, splay=0.0, even=0.0, off=0.0):
+        """A sheet of hair: one smooth surface from a line of roots on the scalp (`roots`, a
+        polyline; `closed` when it runs all the way round), combed along `dirs` (one vector, one
+        a root, `down` or `away`), ending in `points` points `depth` deep. It hangs to `z_end`
+        (plus `hem(u)`, u 0..1 across the sheet) or is `length` long (a number or a function of
+        u). `off` stands it that far out from where it was combed, for a sheet that lies over
+        another. `check` leaves out the stretches whose roots are bare, bald or covered."""
+        roots = np.asarray(roots, float).reshape(-1, 3)
+        ring = np.vstack([roots, roots[:1]]) if closed else roots
+        cum = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(ring, axis=0), axis=1))])
+        W = float(cum[-1])
+        at = lambda arr, u: np.array([np.interp((u % 1.0 if closed else u) * W, cum, arr[:, q]) for q in range(3)])
+        dv = None
+        if not isinstance(dirs, str):
+            dv = np.asarray(dirs, float)
+            dv = np.repeat(dv[None, :], len(ring), axis=0) if dv.ndim == 1 else (np.vstack([dv, dv[:1]]) if closed else dv)
+        nodes = self._teeth(points, uneven, closed, cols, edges)
+        jit = [np.array([self.u(-1, 1), self.u(-1, 1), self.u(-1, 1)]) for _ in range(max(points, 1))]
+        tone = [(self.u(-1, 1), self.rng.random()) for _ in range(max(points, 1))]
+        u0, phase = self.u(0, 1), self.u(0, 6.28)
+        made = []
+        for u, k, q in nodes:
+            pt = at(ring, u)
+            ok = not check or not (self.covered(pt) > 0 or self.bald(pt) > 0 or pt[2] < self.hairline(math.degrees(math.atan2(-pt[0], pt[1]))) - 0.004)
+            made.append((u, k, q, pt, ok))
+        runs, cur = [], []
+        for c in made:
+            if c[4]:
+                cur.append(c)
+            elif cur:
+                runs.append(cur)
+                cur = []
+        if cur:
+            runs.append(cur)
+        whole = len(runs) == 1 and len(runs[0]) == len(made)
+        if closed and not whole and len(runs) > 1 and made[0][4] and made[-1][4]:
+            runs[0] = [(c[0] - 1.0,) + c[1:] for c in runs.pop()] + runs[0]  # the stretch across the seam
+        for run in runs:
+            if len(run) < 3:
+                continue
+            sid = len(self.sheets)
+            loop = closed and whole
+            self.sheets.append(dict(u=[c[0] for c in run], k=[c[1] for c in run], q=[c[2] for c in run], W=W * (1.0 if loop else run[-1][0] - run[0][0]), loop=loop, thick=thick, shade=shade,
+                                    groove=groove, shine=shine, tube=tube, u0=u0, phase=phase, tone=tone, even=even, off=off))
+            for j, (u, k, q, pt, _) in enumerate(run):
+                if dv is None:
+                    d = DOWN.copy() if dirs == "down" else pt - self.whorl
+                else:
+                    d = at(dv, u)
+                if splay:
+                    d = unit(d) + jit[q] * splay
+                uu = u % 1.0 if closed else u
+                ze = None if z_end is None else z_end + depth * k + (hem(uu) if hem else 0.0)
+                ln = (length(uu) if callable(length) else length) - (depth * k if z_end is None else 0.0)
+                if ze is not None and target is None:
+                    ln = min(ln, (pt[2] - ze) * 1.25 + 0.05)
+                self.locks.append(dict(p=pt, d=unit(d), length=max(ln, 0.008), z_end=-9.0 if ze is None else ze, width=0.05, lift=lift, g=g, blunt=0.0, tip_out=tip_out,
+                                       bulge=(0.35 + 0.9 * self.volume) * 0.006 if bulge is None else bulge, target=target, layer=1, chain=-1 if chain is None else chain(uu), taper=2.6,
+                                       tone=0.0, shade=shade, thick=1.0, hug=hug, u0=u0, du=0.2, grey=0.5, even=even, sheet=(sid, j)))
+
     # The layers styles are made of. ---------------------------------------------------------
 
-    def under(self, z_end, n=13, width=0.078, back_drop=0.0, g=42.0, blunt=0.3, chain=None, span=(64, 296), el=34.0, taper=2.6, ragged=0.0):
-        """The sides and back, hanging from mid-height: az from in front of the ear round the
-        back. Nothing of it hangs forward of the ear's front, where it would lie over the eye
-        from a three-quarter view; the scalp between it and the fringe is the temple locks'."""
-        for side in (-1, 1):
-            # From high on the temple, combed down and back to hang with the sides in front of
-            # the ear: they cover the scalp between the fringe's edge and this layer's roots.
-            # The last hangs straight, over the square root of this layer's first lock.
-            for az, e, back in ((54, 60, 0.95), (62, 54, 0.75), (67, 50, 0.15)):
-                a = side * az
-                self.lock(a + self.u(-2, 2), e + self.u(-2, 2), DOWN + np.array([0.0, -back, 0.0]), z_end=z_end + self.u(-0.003, 0.003), length=0.9, width=(0.040 if back > 0.3 else 0.056) + self.u(-0.003, 0.004), lift=0.006 if back > 0.3 else 0.008, g=20.0,
-                          blunt=blunt, layer=1, chain=-1 if chain is None else chain(side * 75.0), shade=-0.02, taper=taper)
-        for i in range(n):
-            az = span[0] + (span[1] - span[0]) * i / (n - 1)
-            a = az if az <= 180 else az - 360
-            back = smooth((abs(a) - 95) / 60)
-            ch = -1 if chain is None else chain(a)
-            self.lock(a + self.u(-3, 3), el + self.u(-4, 4), "down", z_end=z_end - back_drop * back + self.u(-0.003, 0.003) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width * 1.10 + self.u(-0.004, 0.005), lift=0.004, g=g,
-                      blunt=blunt, layer=0, chain=ch, shade=-0.05, taper=taper)
+    def curtain(self, z_end, points=7, depth=0.028, back_drop=0.0, g=42.0, chain=None, front=72.0, el=34.0, tip_out=0.0, groove=1.0, splay=0.0):
+        """The sides and back as one sheet hanging from mid-height, from in front of one ear
+        round the back to the other. Its front edges hang at the ear's front, so from the side
+        the face stays clear."""
+        az = np.linspace(front, 360.0 - front, 33)
+        a = np.where(az <= 180, az, az - 360)
+        roots = self.comb.surface(a, np.full(len(a), float(el)))
 
-    def over(self, z_end, n=7, width=0.074, back_drop=0.0, g=30.0, blunt=0.3, chain=None, front=80.0, taper=2.6, lift=0.009, ragged=0.0):
-        """From the parting across the top and down over the under layer, on each side, then
-        fanning round the crown."""
+        def ang(u):
+            x = front + (360.0 - 2 * front) * u
+            return x if x <= 180 else x - 360
+
+        self.sheet(roots, "down", z_end=z_end, points=points, depth=depth, hem=lambda u: -back_drop * smooth((abs(ang(u)) - 95) / 60), lift=0.004, g=g,
+                   chain=None if chain is None else (lambda u: chain(ang(u))), shade=-0.05, edges=(0.25, 0.25), tip_out=tip_out, groove=groove, splay=splay)
+
+    def over(self, z_end, points=3, depth=0.03, back_drop=0.0, g=30.0, chain=None, front=70.0, lift=0.009, tip_out=0.0, splay=0.0):
+        """From the parting across the top and down over the curtain, one sheet a side, fanning
+        round the crown at the back. Its front edge comes down over the temple to the ear's front."""
         px = self.part_x()
         for side in (-1, 1):  # -1: toward the character's left (-X)
-            # The wider side of an off-centre parting takes more locks.
+            # The wider side of an off-centre parting takes more points.
             share = 0.5 + 0.5 * side * (px / 0.05) * -1
-            m = max(3, round(n * (0.75 + 0.5 * share)))
-            for j in range(m):
-                t = j / (m - 1)
+            roots, dirs = [], []
+            for t in np.linspace(0, 1, 13):
                 phi = math.radians(lerp(front, 128, t))  # from the front over the top to the crown
                 d = unit(np.array([px / 0.11 + side * 0.035, math.cos(phi), math.sin(phi)]))
-                p = ORIGIN + d * self.hf.radius(d[None, :])[0]
-                az, el = math.degrees(math.atan2(-p[0] + ORIGIN[0], p[1] - ORIGIN[1])), math.degrees(math.asin(np.clip((p[2] - ORIGIN[2]) / np.linalg.norm(p - ORIGIN), -1, 1)))
-                # Sideways at the front, fanning to straight back behind the crown.
-                th = math.radians(lerp(6, 50, smooth((t - 0.45) / 0.55)))
-                comb = np.array([side * math.cos(th), -0.22 - math.sin(th), 0.0])
-                back = smooth((t - 0.55) / 0.45)
-                a_end = 90 + 45 * back
-                ch = -1 if chain is None else chain(-side * a_end)
-                self.lock(az, el, comb, z_end=z_end - back_drop * back + self.u(-0.004, 0.003) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width * 1.10 + self.u(-0.005, 0.005), lift=lift, g=g, blunt=blunt, layer=1, chain=ch,
-                          shade=0.03, taper=taper)
+                roots.append(ORIGIN + d * self.hf.radius(d[None, :])[0])
+                # Sideways at the front, fanning to straight back behind the crown. The front edge
+                # starts far enough back that it comes down at the ear's front: rooted further
+                # forward, where the skull slopes to the forehead, it slides down over the eye.
+                th = math.radians(lerp(4, 50, smooth((t - 0.45) / 0.55)))
+                dirs.append([side * math.cos(th), -0.16 - math.sin(th), 0.0])
+            back = lambda u: smooth((u - 0.55) / 0.45)
+            self.sheet(roots, np.array(dirs), z_end=z_end, points=max(2, round(points * (0.75 + 0.5 * share))), depth=depth, hem=lambda u: -back_drop * back(u), lift=lift, g=g,
+                       chain=None if chain is None else (lambda u, side=side: chain(-side * (90 + 45 * back(u)))), shade=0.03, edges=(0.15, 0.6), shine=1.0, tip_out=tip_out, splay=splay, off=0.005)
+        self.temple()
 
-    def crown(self, z_end, n=7, width=0.070, back_drop=0.0, chain=None, blunt=0.3, taper=2.6, g=30.0, ragged=0.0):
-        """Round the crown: locks from the whorl fanning down the back, over the others."""
-        w = self.whorl
-        for i in range(n):
-            a = math.radians(-78 + 156 * i / (n - 1))  # 0 straight back
-            comb = np.array([-math.sin(a), -math.cos(a), 0.0])
-            root = self.comb.surface(180.0 + math.degrees(a) * 0.45, 62.0 - 6 * abs(math.sin(a)))[0]
-            az_end = 180 - math.degrees(a) * 0.9
-            az_end = az_end if az_end <= 180 else az_end - 360
-            self.lock(0, 0, comb, root=root, z_end=z_end - back_drop + self.u(-0.004, 0.003) + self.u(-0.3, 1.0) * ragged, length=0.9, width=width * 1.10 + self.u(-0.005, 0.005), lift=0.009, g=g, blunt=blunt, layer=2,
-                      chain=-1 if chain is None else chain(az_end), shade=0.04, taper=taper, bulge=0.003)
+    def temple(self):
+        """The temple, between the fringe's edge and the side hair: a small sheet a side from
+        the hairline, combed down and back and lying close. It ends at the brow in front and a
+        little lower toward the ear, so it closes the skin beside the fringe and stays above
+        and behind the eye."""
+        for side in (-1, 1):
+            az = side * np.linspace(34.0, 74.0, 9)
+            roots = np.array([self.point(a, self.hairline(a) + 0.006) for a in az])
+            self.sheet(roots, np.array([0.0, -0.55, -1.0]), length=lambda u: lerp(0.040, 0.028, u), points=2, depth=0.008, lift=0.004, g=30.0, shade=-0.03, edges=(0.6, 0.3), thick=0.003,
+                       bulge=0.001, check=True)
 
-    def bangs(self, mode="straight", n=7, reach=1.0, width=0.048, blunt=0.55, span=50.0, g=38.0):
-        """The fringe: from the top of the head forward and down over the forehead. `straight`
-        to a level line, `swept` to one side, `curtain` parted to the temples."""
+    def crown(self, z_end, points=4, depth=0.03, back_drop=0.0, chain=None, g=30.0, tip_out=0.0, splay=0.0):
+        """Round the crown: one sheet from the whorl fanning down the back, over the others."""
+        aa = np.linspace(-78, 78, 13)
+        roots = [self.comb.surface(180.0 + a * 0.45, 62.0 - 6 * abs(math.sin(math.radians(a))))[0] for a in aa]
+        dirs = [[-math.sin(math.radians(a)), -math.cos(math.radians(a)), 0.0] for a in aa]
+
+        def ch(u):
+            e = 180 - (-78 + 156 * u) * 0.9
+            return chain(e if e <= 180 else e - 360)
+
+        self.sheet(roots, np.array(dirs), z_end=z_end - back_drop, points=points, depth=depth, lift=0.009, g=g, chain=None if chain is None else ch, shade=0.04, bulge=0.003, shine=1.0,
+                   tip_out=tip_out, splay=splay, off=0.010)
+
+    def bangs(self, mode="straight", points=6, reach=1.0, depth=0.009, span=60.0, g=38.0, splay=0.0, tip_out=0.0):
+        """The fringe, one sheet from the top of the head forward and down over the forehead:
+        `straight` to a level line with longer flanks, `swept` to one side, `curtain` parted to
+        the temples (a sheet a side)."""
         f = self.fringe * reach
         if f <= 0.03:
             return
@@ -327,82 +430,83 @@ class Hair:
             mode = self.fringe_style
         px = self.part_x()
         z_end = lerp(self.front_z - 0.004, self.brow_z + 0.004, f)
-        # Finer than the layers behind it: half as many locks again, each narrower, their ends
-        # within a millimetre or two of one line. Seven broad locks with ends 8 mm apart read
-        # as blocks.
-        n = max(n + 1, round(n * 1.6))
-        width *= 0.74
         sweep = 0.0
         if mode == "swept":
             sweep = 1.0 if px <= 0 else -1.0  # away from the parting
             if abs(px) < 0.004:
                 sweep = 1.0 if self.rng.random() < 0.5 else -1.0
-        for i in range(n):
-            t = i / (n - 1) * 2 - 1  # -1 the character's right … 1 the left
-            az = t * span
-            el = 68 + self.u(-3, 3) - 4 * abs(t)
-            if mode == "curtain":
-                s = 1.0 if t > 0 else -1.0
-                if abs(t) < 0.12:
-                    continue
-                comb = np.array([-s * (0.55 + 0.5 * abs(t)), 1.0, 0.0])
-                ze = z_end - 0.020 * abs(t) - 0.012
-                az = t * span * 0.8 + s * 4
-            else:
-                comb = np.array([sweep * 0.75 + 0.25 * -t * 0.0, 1.0, 0.0])
-                # A swept fringe is longest where it ends.
-                ze = z_end + (0.010 * abs(t) if mode == "straight" else -0.010 * sweep * -t)
-                az = az - sweep * 14
-            self.lock(az + self.u(-2, 2), el, comb, z_end=ze + self.u(-0.0015, 0.0015) + (0.0018 if i % 2 else 0.0), length=0.20, width=width + self.u(-0.002, 0.004), lift=0.011, g=g, blunt=min(blunt, 0.42), layer=2,
-                      shade=0.05, taper=3.2)
+        if mode == "curtain":
+            for s in (-1, 1):
+                ts = np.linspace(0.10, 1.0, 9)
+                roots = self.comb.surface(s * (ts * span * 0.8 + 4), 68 - 4 * ts)
+                dirs = np.array([[-s * (0.55 + 1.3 * t * t), 1.0 - 0.5 * t, 0.0] for t in ts])  # the outer part goes to the side of the head, behind the eye
+                self.sheet(roots, dirs, z_end=z_end - 0.012, points=max(2, points // 2), depth=depth * 1.6, hem=lambda u: -0.020 * (0.10 + 0.90 * u), lift=0.011, g=g, shade=0.05,
+                           edges=(0.9, 0.1), shine=1.0, splay=splay, tip_out=tip_out, thick=0.0035, check=True)
+            return
+        ts = np.linspace(-1, 1, 15)
+        roots = self.comb.surface(ts * span - sweep * 14, 68 - 4 * np.abs(ts))
+        tt = lambda u: 2 * u - 1
+        if mode == "straight":
+            # A level line. The flanks stay at the brow: lower, they would hide the eye from the side.
+            hem = lambda u: 0.003 * abs(tt(u)) - 0.005 * smooth((abs(tt(u)) - 0.74) / 0.26)
+        else:
+            hem = lambda u: 0.010 * sweep * tt(u)  # longest where it ends
+        dirs = np.stack([sweep * 0.75 - 0.80 * np.sign(ts) * np.abs(ts) ** 2, np.ones(len(ts)), np.zeros(len(ts))], axis=1)  # the flanks fan out to the temples
+        self.sheet(roots, dirs, z_end=z_end, points=points, depth=depth, hem=hem, lift=0.011, g=g, shade=0.05, edges=(0.2, 0.2), shine=1.0, splay=splay,
+                   tip_out=tip_out, thick=0.0035, check=True)
 
     def sideburns(self, drop):
         """Short locks in front of and above the ear, close to the head, `drop` metres long: a
-        short style's own scattered locks leave skin showing there, most on a narrow skull."""
+        short style's own points leave skin showing there, most on a narrow skull."""
         for side in (-1, 1):
             for az, el in ((58, 26), (66, 20), (74, 26), (70, 36), (82, 30), (62, 40)):
                 self.lock(side * az + self.u(-2, 2), el + self.u(-2, 2), DOWN + np.array([0, 0.12, 0]), length=drop * (1.0 + 0.5 * (el > 30)) + self.u(0, 0.006), width=0.030 + self.u(-0.003, 0.004), lift=0.003, g=40.0, layer=1,
                           taper=2.2, blunt=0.1, shade=-0.03)
 
     def temples(self, z_end, n=2, width=0.030, chain=None):
-        """Locks in front of the ears, to the jaw."""
+        """Locks at the ears' front, to the jaw: far enough back that the eye shows from the side."""
         for side in (-1, 1):
             for k in range(n):
-                az = side * (64 + 9 * k)
-                self.lock(az + self.u(-2, 2), 30 + self.u(-3, 3), DOWN + np.array([0, 0.25, 0]), z_end=z_end + 0.02 * (n - 1 - k) + self.u(-0.008, 0.008), length=0.6, width=width, lift=0.006, g=45.0,
+                az = side * (72 + 8 * k)
+                self.lock(az + self.u(-2, 2), 30 + self.u(-3, 3), DOWN + np.array([0, 0.08, 0]), z_end=z_end + 0.02 * (n - 1 - k) + self.u(-0.008, 0.008), length=0.6, width=width, lift=0.006, g=45.0,
                           layer=1, chain=-1 if chain is None else chain(az), taper=2.0)
 
-    def field(self, n, length, width=0.040, jitter=0.25, tip_out=0.0, el_min=-40.0, el_max=88.0, g=22.0, front=None, lift=0.006, blunt=0.0):
-        """Short hair all over: roots spread evenly over the scalp, combed away from the crown
-        (and across the top from the parting)."""
+    def tiers(self, length, points=8, cut=0.6, el_max=88.0, tip_out=0.0, g=20.0, lift=0.006, front=None, splay=0.0):
+        """Short hair all over: rings of short sheets, one over the next as tiles lie, each cut
+        into points, combed away from the crown (and on top as the style says)."""
         px = self.part_x()
-        lo, hi = math.sin(math.radians(el_min)), math.sin(math.radians(el_max))
-        for i in range(n):
-            az = (i * 137.508 + 20) % 360 - 180
-            el = math.degrees(math.asin(lerp(hi, lo, (i + 0.5) / n)))
-            p = self.comb.surface(az, el)[0]
-            d = p - self.whorl
-            top = smooth((p[2] - 0.045) / 0.05)
-            if front is not None and p[1] > -0.02:
-                # On top, combed as the style says (forward, across, or back).
-                d = lerp(d, np.asarray(front, float) * 0.1 + np.array([0.06 * (1 if p[0] > px else -1) * (abs(px) > 0.004), 0, 0]), top)
-            ln = 1.45 * length * self.u(0.8, 1.25) * (1 - 0.35 * smooth((0.0 - p[2]) / 0.06))
-            low = smooth((0.0 - p[2]) / 0.05)  # toward the nape and round the ears it lies flat
-            self.lock(az, el, d, length=ln, width=width * self.u(0.85, 1.2), lift=lift, g=g, tip_out=tip_out * self.u(0.4, 1.3) * (1 - 0.85 * low), jitter=jitter * (1 - 0.5 * low), layer=1, blunt=blunt, taper=1.5, thick=0.6, even=1.0,
-                      bulge=0.002 + 0.004 * self.volume)
+        L = 1.45 * length
+        for q, el in enumerate((80.0, 58.0, 36.0, 14.0, -8.0, -28.0)):
+            if el > el_max:
+                continue
+            az = np.arange(-180.0, 180.0, 12.0) + 6.0 * (q % 2)
+            # Each ring wanders up and down as it goes round, so the rings do not read as rows.
+            wob, ph = (0.0 if q == 0 else 7.0), self.u(0, 6.28)
+            roots = self.comb.surface(az, el + wob * np.sin(np.radians(az) * (2 + q % 2) + ph))
+            dirs = roots - self.whorl
+            if q == 0:
+                # Round the top of the head: forward of the whorl the hair runs to the forehead.
+                dirs = roots - (self.whorl + np.array([0.0, -0.03, 0.0]))
+            if front is not None and el > 50:
+                top = (smooth((roots[:, 2] - 0.045) / 0.05) * (roots[:, 1] > -0.02))[:, None]
+                want = np.asarray(front, float)[None, :] * 0.1 + np.stack([0.06 * np.where(roots[:, 0] > px, 1.0, -1.0) * (abs(px) > 0.004), 0 * az, 0 * az], axis=1)
+                dirs = dirs * (1 - top) + want * top
+            zm = float(roots[:, 2].mean())
+            low = smooth((0.0 - zm) / 0.05)  # toward the nape and round the ears it lies flat
+            ln = L * (1 - 0.35 * smooth((0.0 - zm) / 0.06)) * (1.25 if q == 0 else 1.0)
+            n = max(4, int(round(points * math.cos(math.radians(el)) ** 0.8)))
+            self.sheet(roots, dirs, length=ln, points=n, depth=cut * ln, lift=lift * (1.25 - 0.08 * q), g=g, closed=True, check=True, tip_out=tip_out * (1 - 0.85 * low), splay=splay * (1 - 0.5 * low),
+                       thick=0.0040, even=1.0, shine=1.0 if 50 < el < 70 else 0.0, bulge=0.002 + 0.004 * self.volume, uneven=0.45, shade=0.02 * (2 - q))
 
-    def gather(self, target, n_edge=16, n_mid=9, width=0.052):
-        """Hair drawn back over the scalp to a point (a tail's or a bun's tie)."""
-        for i in range(n_edge):
-            az = -180 + 360 * (i + 0.5) / n_edge
-            z = self.hairline(az) + 0.010
-            p = self.point(az, z)
-            self.lock(0, 0, target - p, root=p, length=0.5, width=width * self.u(0.9, 1.15), lift=0.004, g=0.0, target=target, layer=0, taper=7.0, bulge=0.002 + 0.004 * self.volume)
-        for i in range(n_mid):
-            az = -150 + 300 * (i + 0.5) / n_mid
-            el = 62 + self.u(-6, 6)
-            p = self.comb.surface(az, el)[0]
-            self.lock(0, 0, target - p, root=p, length=0.5, width=width * self.u(0.9, 1.2), lift=0.007, g=0.0, target=target, layer=1, taper=7.0, bulge=0.002 + 0.004 * self.volume)
+    def gather(self, target, n_edge=24, n_mid=14):
+        """Hair drawn back over the scalp to a point (a tail's or a bun's tie): a sheet from the
+        hairline all round, and one over it from the top."""
+        az = -180 + 360 * (np.arange(n_edge) + 0.5) / n_edge
+        roots = np.array([self.point(a, self.hairline(a) + 0.010) for a in az])
+        self.sheet(roots, target - roots, length=0.5, points=0, cols=n_edge, lift=0.004, g=0.0, target=target, closed=True, bulge=0.002 + 0.004 * self.volume, thick=0.0035, groove=0.0)
+        az = -150 + 300 * (np.arange(n_mid) + 0.5) / n_mid
+        roots = self.comb.surface(az, 62.0 + 0 * az)
+        self.sheet(roots, target - roots, length=0.5, points=0, cols=n_mid, lift=0.007, g=0.0, target=target, bulge=0.002 + 0.004 * self.volume, thick=0.0035, groove=0.0, shine=1.0)
 
     def point(self, az, z):
         """The head's surface at angle az and height z."""
@@ -412,53 +516,55 @@ class Hair:
 
     def _crop(self):
         k = self.length / 0.07
-        self.field(84, 0.022 * (0.7 + 0.5 * k), width=0.036, jitter=0.18, tip_out=0.002 + 0.004 * self.volume, front=(0, 1, 0), lift=0.004, g=12.0)
+        self.tiers(0.022 * (0.7 + 0.5 * k), cut=0.45, tip_out=0.002 + 0.004 * self.volume, front=(0, 1, 0), lift=0.004, g=12.0, splay=0.08)
         self.sideburns(0.018)
 
     def _short(self):
         k = self.length / 0.07
-        self.field(78, 0.040 * (0.7 + 0.4 * k), width=0.044, jitter=0.16, tip_out=0.003 + 0.006 * self.volume, front=(0.9 if self.part_x() <= 0 else -0.9, 0.55, 0), lift=0.006, g=20.0)
-        self.bangs("swept", n=6, reach=0.55, width=0.036, blunt=0.2)
+        self.tiers(0.040 * (0.7 + 0.4 * k), cut=0.55, tip_out=0.003 + 0.006 * self.volume, front=(0.9 if self.part_x() <= 0 else -0.9, 0.55, 0), lift=0.006, g=20.0, splay=0.10)
+        self.bangs("swept", points=4, reach=0.55, depth=0.014)
         self.sideburns(0.026)
 
     def _tousled(self):
         k = self.length / 0.07
-        self.field(78, 0.052 * (0.7 + 0.4 * k), width=0.044, jitter=0.36, tip_out=0.008 + 0.016 * self.volume, front=(0.4 if self.part_x() <= 0 else -0.4, 1, 0), lift=0.007, g=16.0)
-        self.bangs("swept", n=7, reach=0.8, width=0.036, blunt=0.15)
+        self.tiers(0.052 * (0.7 + 0.4 * k), cut=0.70, tip_out=0.008 + 0.016 * self.volume, front=(0.4 if self.part_x() <= 0 else -0.4, 1, 0), lift=0.007, g=16.0, splay=0.26)
+        self.bangs("swept", points=5, reach=0.8, depth=0.020, splay=0.10)
         self.sideburns(0.030)
 
     def _swept(self):
         # Combed back from the forehead; the sides back and down; the nape to the collar.
         k = self.length / 0.07
         lean = -1 if self.part_x() > 0 else 1
-        for i in range(9):
-            t = i / 8 * 2 - 1
-            for row, el in enumerate((56, 70)):
-                self.lock(t * 56 + self.u(-4, 4), el + self.u(-3, 3) - 6 * abs(t), np.array([0.30 * t + 0.22 * lean, -1.0, 0.0]), length=0.085 * self.u(0.9, 1.15) * (0.8 + 0.3 * k),
-                          width=0.050, lift=0.007 + 0.006 * self.volume, g=10.0, layer=2 - row, tip_out=0.002, taper=2.4, bulge=0.003 + 0.006 * self.volume)
-        self.field(40, 0.050 * (0.7 + 0.4 * k), width=0.046, jitter=0.15, el_max=58, tip_out=0.003 + 0.004 * self.volume, g=24.0)
+        ts = np.linspace(-1, 1, 11)
+        for row, el in enumerate((56.0, 70.0)):
+            roots = self.comb.surface(ts * 58, el - 6 * np.abs(ts))
+            dirs = np.stack([0.30 * ts + 0.22 * lean, -np.ones(11), np.zeros(11)], axis=1)
+            self.sheet(roots, dirs, length=0.085 * (0.8 + 0.3 * k) * (1.0 + 0.1 * row), points=5 - row, depth=0.030, lift=0.007 + 0.006 * self.volume + 0.003 * (1 - row), g=10.0, tip_out=0.002,
+                       bulge=0.003 + 0.006 * self.volume, shine=1.0, check=True, edges=(0.5, 0.5))
+        self.tiers(0.050 * (0.7 + 0.4 * k), cut=0.5, el_max=58, tip_out=0.003 + 0.004 * self.volume, g=24.0, splay=0.08)
 
     def _shag(self):
         z = self.side_line()
-        self.under(z, n=13, blunt=0.0, taper=2.0)
-        self.over(z + 0.012, n=7, blunt=0.0, taper=2.0)
-        self.crown(z + 0.012, blunt=0.0, taper=2.0)
-        self.bangs("swept" if abs(self.parting) > 0.25 else "straight", n=8, blunt=0.15)
+        self.curtain(z, points=9, depth=0.045, tip_out=0.006, splay=0.05)
+        self.over(z + 0.012, points=4, depth=0.045, tip_out=0.006, splay=0.05)
+        self.crown(z + 0.012, points=5, depth=0.045, tip_out=0.006)
+        self.bangs("swept" if abs(self.parting) > 0.25 else "straight", points=6, depth=0.016)
         self.temples(z + 0.02, n=1)
 
     def _bob(self):
+        # Cut to one line, the ends turned under.
         z = self.side_line()
-        self.under(z, n=13, blunt=0.5, back_drop=-0.010)
-        self.over(z, n=7, blunt=0.5, back_drop=-0.010)
-        self.crown(z, blunt=0.5, back_drop=-0.010)
-        self.bangs("swept" if abs(self.parting) > 0.45 else "straight", n=7)
+        self.curtain(z, points=6, depth=0.010, back_drop=-0.010, tip_out=-0.010)
+        self.over(z, points=3, depth=0.010, back_drop=-0.010, tip_out=-0.010)
+        self.crown(z, points=3, depth=0.010, back_drop=-0.010, tip_out=-0.010)
+        self.bangs("swept" if abs(self.parting) > 0.45 else "straight", points=6)
 
     def _bob_parted(self):
         z = self.side_line()
-        self.under(z, n=13, blunt=0.4)
-        self.over(z, n=7, blunt=0.4, front=74.0)
-        self.crown(z, blunt=0.4)
-        self.bangs("curtain", n=8)
+        self.curtain(z, points=6, depth=0.014, tip_out=-0.006)
+        self.over(z, points=3, depth=0.014, tip_out=-0.006)
+        self.crown(z, points=3, depth=0.014, tip_out=-0.006)
+        self.bangs("curtain", points=5)
         self.temples(z + 0.03, n=1)
 
     def _chains(self, names):
@@ -480,12 +586,12 @@ class Hair:
         z = self.side_line()
         chain = self._chains([("BackL", 95, 150), ("Back", 150, 181), ("Back", -181, -150), ("BackR", -150, -95), ("SideL", 40, 95), ("SideR", -95, -40)])
         drop = 0.03
-        # Ends cut to one hem, a little uneven: tapered to points at mixed lengths they read as ragged.
-        self.under(z, n=13, blunt=0.40, back_drop=drop, chain=chain, taper=2.6, ragged=0.006)
-        self.over(z + 0.02, n=8, blunt=0.40, back_drop=drop, chain=chain, taper=2.6, ragged=0.006)
-        self.crown(z + 0.01, blunt=0.40, back_drop=drop, chain=chain, taper=2.6, ragged=0.006)
+        # Broad sheets down the back that end in a few long points.
+        self.curtain(z, points=5, depth=0.060, back_drop=drop, chain=chain)
+        self.over(z + 0.02, points=3, depth=0.060, back_drop=drop, chain=chain)
+        self.crown(z + 0.01, points=3, depth=0.060, back_drop=drop, chain=chain)
         mode = "curtain" if abs(self.parting) < 0.3 else "swept"
-        self.bangs(mode, n=8)
+        self.bangs(mode, points=6)
         self.temples(min(z + 0.10, -0.10), n=2)
 
     def _tail(self):
@@ -494,13 +600,12 @@ class Hair:
         chain = self._chains([("Tail", -400, 400)])
         out = unit(g - np.array([0.0, 0.0, g[2]]))
         tie = g + out * 0.012
-        for i in range(6):
-            a = 2 * math.pi * i / 6
-            off = np.array([math.cos(a) * 0.010, 0.0, math.sin(a) * 0.008])
-            self.lock(0, 0, out * 0.8 + DOWN * 0.6 + off * 8, root=tie + off, length=0.9, z_end=g[2] - self.length - 0.10 + self.u(-0.02, 0.02), width=0.040, lift=0.006, g=26.0, layer=3,
-                      chain=chain(0), taper=3.0, bulge=0.004)
+        offs = [np.array([math.cos(2 * math.pi * i / 8) * 0.014, 0.0, math.sin(2 * math.pi * i / 8) * 0.011]) for i in range(8)]
+        # The tail: one sheet rolled into a tube, ending in three points.
+        self.sheet([tie + o for o in offs], [out * 0.8 + DOWN * 0.6 + o * 6 for o in offs], z_end=g[2] - self.length - 0.10, points=3, depth=0.045, lift=0.006, g=26.0,
+                   chain=lambda u: chain(0), closed=True, tube=True, bulge=0.004, thick=0.0040)
         self.extra.append(("tie", dict(p=tie, axis=unit(out * 0.8 + DOWN * 0.6), r=0.017)))
-        self.bangs("curtain" if abs(self.parting) < 0.3 else "swept", n=7, reach=0.9)
+        self.bangs("curtain" if abs(self.parting) < 0.3 else "swept", points=5, reach=0.9)
         self.temples(-0.085, n=1, width=0.024)
 
     def _bun(self):
@@ -510,14 +615,14 @@ class Hair:
         r = 0.034 + 0.016 * min(self.length / 0.11, 1.5) / 1.5
         c = g + out * (r * 0.72)
         self.bun = dict(c=c, out=out, r=r)
-        self.bangs("curtain" if abs(self.parting) < 0.3 else "swept", n=7, reach=0.8)
+        self.bangs("curtain" if abs(self.parting) < 0.3 else "swept", points=5, reach=0.8)
         self.temples(-0.075, n=1, width=0.022)
 
     def _braid(self):
         g = self.comb.surface(180.0, 2.0)[0]
-        self.gather(g, n_mid=11)
+        self.gather(g, n_mid=16)
         self.braid = [dict(p=g, d=np.array([0.0, -0.5, -1.0]), length=0.16 + self.length * 1.6)]
-        self.bangs("curtain" if abs(self.parting) < 0.3 else "swept", n=7, reach=0.9)
+        self.bangs("curtain" if abs(self.parting) < 0.3 else "swept", points=5, reach=0.9)
         self.temples(-0.085, n=1, width=0.024)
 
     def _braids(self):
@@ -525,31 +630,28 @@ class Hair:
         self.braid = []
         for side in (-1, 1):
             g = self.comb.surface(side * 118.0, -8.0)[0]
-            for i in range(9):
-                az = side * (8 + 172 * (i + 0.5) / 9)
-                z = self.hairline(az) + 0.010
-                p = self.point(az, z)
-                self.lock(0, 0, g - p, root=p, length=0.5, width=0.052, lift=0.004, g=0.0, target=g, layer=0, taper=7.0, bulge=0.003)
-            for i in range(6):
-                az = side * (10 + 160 * (i + 0.5) / 6)
-                p = self.comb.surface(az, 64 + self.u(-5, 5))[0]
-                self.lock(0, 0, g - p, root=p, length=0.5, width=0.056, lift=0.007, g=0.0, target=g, layer=1, taper=7.0, bulge=0.003)
+            az = side * (8 + 172 * (np.arange(12) + 0.5) / 12)
+            roots = np.array([self.point(a, self.hairline(a) + 0.010) for a in az])
+            self.sheet(roots, g - roots, length=0.5, points=0, cols=12, lift=0.004, g=0.0, target=g, bulge=0.003, thick=0.0035, groove=0.0)
+            az = side * (10 + 160 * (np.arange(9) + 0.5) / 9)
+            roots = self.comb.surface(az, 64.0 + 0 * az)
+            self.sheet(roots, g - roots, length=0.5, points=0, cols=9, lift=0.007, g=0.0, target=g, bulge=0.003, thick=0.0035, groove=0.0, shine=1.0)
             self.braid.append(dict(p=g, d=np.array([side * 0.05, 0.45, -1.0]), length=0.10 + self.length * 1.3))
-        self.bangs("straight", n=7, reach=0.9)
+        self.bangs("straight", points=6, reach=0.9)
 
     def _sides(self):
         # What shows under a cap: the sides and the back, short.
         k = self.length / 0.07
-        self.field(64, 0.040 * (0.7 + 0.4 * k), width=0.042, jitter=0.15, el_max=40, tip_out=0.003, g=26.0)
+        self.tiers(0.040 * (0.7 + 0.4 * k), cut=0.5, el_max=40, tip_out=0.003, g=26.0, splay=0.08)
 
     def _kerchief(self):
         # Under a headscarf: a parted fringe and the temples.
-        self.bangs("curtain", n=8, reach=1.0)
+        self.bangs("curtain", points=5, reach=1.0)
         self.temples(-0.080, n=2)
 
     def _balding(self):
         k = self.length / 0.07
-        self.field(74, 0.036 * (0.7 + 0.4 * k), width=0.042, jitter=0.2, el_max=60, tip_out=0.003 + 0.004 * self.volume, g=26.0)
+        self.tiers(0.036 * (0.7 + 0.4 * k), cut=0.5, el_max=60, tip_out=0.003 + 0.004 * self.volume, g=26.0, splay=0.10)
 
     # ------------------------------------------------------------------------------- combing
 
@@ -627,7 +729,11 @@ class Hair:
         base, tipc, silver = np.array(spec["colour"]), np.array(spec["tip"]), np.array(spec["silver"])
         grey = float(spec.get("grey", 0.0))
         chain_pts = {}
+        sheets = {}
         for k, path, touch in zip(self.locks, paths, touches):
+            if "sheet" in k:
+                sheets.setdefault(k["sheet"][0], []).append((k, path, touch))
+                continue
             total = float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum())
             if total < 0.012:
                 continue
@@ -643,6 +749,8 @@ class Hair:
                 head_on = on & (pts[:, 2] > -0.11)
                 free_from = s[np.nonzero(head_on)[0].max()] if head_on.any() else 0.0
                 chain_pts.setdefault(k["chain"], []).append((pts, s, free_from, first, len(self.v)))
+        for sid in sorted(sheets):
+            self._sheet_mesh(self.sheets[sid], sheets[sid], base, tipc, silver, grey, chain_pts)
         self._springs(chain_pts)
         if hasattr(self, "bun"):
             self._bun_mesh(base, tipc, silver, grey)
@@ -657,8 +765,8 @@ class Hair:
 
     def _lock_colour(self, k, base, tipc, silver, grey):
         """A lock's own colour: a tone of the hair's, or one of the grey hairs."""
-        c = base * (1 + 0.10 * k["tone"] + k["shade"])
-        t = tipc * (1 + 0.10 * k["tone"] + k["shade"])
+        c = base * (1 + 0.04 * k["tone"] + k["shade"])
+        t = tipc * (1 + 0.04 * k["tone"] + k["shade"])
         if grey > 0.02:
             # Greying goes lock by lock before it goes all over.
             share = smooth((grey - 0.15) / 0.75)
@@ -674,7 +782,7 @@ class Hair:
         total = s[-1]
         amp = (0.004 + 0.012 * c) * min(total / 0.08, 1.0)
         freq = 2 * math.pi / lerp(0.11, 0.045, c)
-        ph = k["u0"] * 6.28
+        ph = 0.6 * k["u0"]  # near enough one phase for the whole head: locks wave together
         tan = unit(np.gradient(pts, axis=0))
         ref = unit(pts - np.array([0.0, -0.01, 0.0]) * np.array([1, 1, 0]))
         ref[:, 2] = 0
@@ -780,6 +888,106 @@ class Hair:
         self.along.append(0.0)
         for j in range(nr):
             self.f.append((v0 + (j + 1) % nr, v0 + j, root))
+
+    def _sheet_mesh(self, sp, cols, base, tipc, silver, grey, chain_pts):
+        """A sheet's mesh from its walked columns: a front surface and a back one a few
+        millimetres behind it, closed all round, so it is one solid shape for outlines. Rows run
+        across at the same share of each column's length, so the hem is the line through the
+        columns' ends: points where columns run long, notches where they are cut back."""
+        M = len(cols)
+        loop, tube = sp["loop"], sp["tube"]
+        Ls = np.array([float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum()) for _, path, _ in cols])
+        seg = (0.020 - 0.006 * self.curl) / self.detail
+        R = int(np.clip(round(float(np.median(Ls)) / seg), 3 if self.detail >= 1 else 2, 26))
+        C, S, ON = np.zeros((M, R + 1, 3)), np.zeros((M, R + 1)), np.zeros((M, R + 1), bool)
+        for j, (_, path, touch) in enumerate(cols):
+            C[j], ON[j], S[j] = self._resample(path, touch, R)
+        T = np.linspace(0.0, 1.0, R + 1)
+        OUT, SIDE = np.zeros_like(C), np.zeros_like(C)
+        mid = C.mean(axis=0)
+        for j in range(M):
+            if tube:
+                tan = unit(np.gradient(C[j], axis=0))
+                side = unit(np.cross(tan, unit(C[j] - mid)))
+                OUT[j], SIDE[j] = np.cross(side, tan), side
+            else:
+                _, OUT[j], SIDE[j] = self._frame(C[j], ON[j])
+        u = np.array(sp["u"])
+        kk = np.array(sp["k"])
+        L = Ls[:, None]
+        c = self.curl
+        if c >= 0.04 and R >= 3:
+            # Curl: the whole sheet waves together, the wave drifting slowly across it.
+            amp = (0.002 + 0.009 * c) * np.minimum(L / 0.08, 1.0)
+            freq = 2 * math.pi / lerp(0.13, 0.06, c)
+            # One wave for the whole head, by height and the way round it, so sheets that lie
+            # over one another wave as one and do not cut through each other.
+            ph = 1.3 * np.sin(np.arctan2(-C[..., 0], C[..., 1]))
+            wave = amp * smooth(S / np.maximum(0.35 * L, 1e-6)) * np.where(ON, 0.4, 1.0)
+            C = C + OUT * (wave * np.sin(-freq * C[..., 2] + ph))[..., None] + SIDE * (0.5 * wave * np.cos(-freq * C[..., 2] + ph))[..., None]
+        if loop:
+            E = np.ones(M)
+        else:
+            w = (u - u[0]) / max(u[-1] - u[0], 1e-9)
+            E = 0.12 + 0.88 * np.clip(np.minimum(w, 1 - w) * sp["W"] / 0.012, 0.0, 1.0) ** 0.6
+        k0 = cols[0][0]
+        th = sp["thick"] * E[:, None] * (smooth(T / 0.10 + 0.15) * (1 - 0.82 * T ** 3))[None, :]
+        rise = np.array([q[0]["bulge"] for q in cols])[:, None] * np.sin(np.pi * np.minimum(T * 1.15, 1.0))[None, :] + k0["tip_out"] * (T ** 2)[None, :] + sp["off"] * smooth(T / 0.25)[None, :]
+        F = C + OUT * (rise + th)[..., None]
+        B = C + OUT * (rise - 0.35 * th)[..., None]
+        # Colour: each point a shade of its own, slight; darker at the root, in the notches
+        # between points and at the sheet's own edges; a lighter band round the head.
+        cb, ct = np.zeros((M, 3)), np.zeros((M, 3))
+        for j in range(M):
+            tone, gr = sp["tone"][sp["q"][j]]
+            cb[j], ct[j] = self._lock_colour(dict(tone=0.6 * tone, shade=sp["shade"], grey=gr), base, tipc, silver, grey)
+        even = sp["even"]
+        rootshade = lerp(lerp(0.76, 0.92, even), 1.0, smooth(T / 0.22))
+        grad = smooth((T - 0.35) / 0.65) * (1 - 0.8 * even)
+        groove = 1 - 0.26 * sp["groove"] * (kk ** 1.5)[:, None] * smooth((T - 0.25) / 0.45)[None, :]
+        edge = (1 - 0.16 * (1 - (E - 0.12) / 0.88))[:, None]
+        band = 1 + 0.20 * sp["shine"] * np.exp(-(((F[..., 2] - (self.hf.top_z - 0.050)) / 0.014) ** 2))
+        col = (cb[:, None, :] * (1 - grad)[None, :, None] + ct[:, None, :] * grad[None, :, None]) * (rootshade[None, :] * groove * edge * band)[..., None] / TEX_MEAN
+        # Shaded as one head of hair: half the sheet's own facing, half the way out from the head.
+        ctr = np.zeros_like(F)
+        ctr[..., 1] = -0.010
+        ctr[..., 2] = np.minimum(F[..., 2], 0.030)
+        N = OUT if tube else unit(0.5 * OUT + 0.5 * unit(F - ctr))
+        # Across the picture of strands: a whole number of times round a closed sheet.
+        if loop:
+            U = sp["u0"] + np.append(u, 1.0) * max(1, round(sp["W"] / 0.22))
+        else:
+            U = sp["u0"] + (u - u[0]) * sp["W"] / max(u[-1] - u[0], 1e-9) / 0.22
+        Mx = M + 1 if loop else M  # a closed sheet's first column again, for the seam in the picture
+        nr = 2 * (R + 1)
+        v0 = len(self.v)
+        for j in range(Mx):
+            jj = j % M
+            first = len(self.v)
+            for i in range(R + 1):
+                self.v += [F[jj, i], B[jj, i]]
+                self.col += [col[jj, i], col[jj, i] * 0.55]
+                self.uv += [(U[j], 1 - T[i]), (U[j], 1 - T[i])]
+                self.nrm += [N[jj, i], -OUT[jj, i]]
+                self.along += [S[jj, i], S[jj, i]]
+            ch = cols[jj][0]["chain"]
+            self.chain += [ch] * nr
+            if ch >= 0:
+                # Free from where it last touches the head.
+                head_on = ON[jj] & (C[jj][:, 2] > -0.11)
+                free_from = S[jj][np.nonzero(head_on)[0].max()] if head_on.any() else 0.0
+                chain_pts.setdefault(ch, []).append((C[jj], S[jj], free_from, first, first + nr))
+        at = lambda j, i, back: v0 + j * nr + 2 * i + back
+        for j in range(Mx - 1):
+            for i in range(R):
+                self.f.append((at(j, i, 0), at(j + 1, i, 0), at(j + 1, i + 1, 0), at(j, i + 1, 0)))
+                self.f.append((at(j, i, 1), at(j, i + 1, 1), at(j + 1, i + 1, 1), at(j + 1, i, 1)))
+            self.f.append((at(j, 0, 0), at(j, 0, 1), at(j + 1, 0, 1), at(j + 1, 0, 0)))
+            self.f.append((at(j, R, 0), at(j + 1, R, 0), at(j + 1, R, 1), at(j, R, 1)))
+        if not loop:
+            for i in range(R):
+                self.f.append((at(0, i, 0), at(0, i + 1, 0), at(0, i + 1, 1), at(0, i, 1)))
+                self.f.append((at(Mx - 1, i + 1, 0), at(Mx - 1, i, 0), at(Mx - 1, i, 1), at(Mx - 1, i + 1, 1)))
 
     # --------------------------------------------------------------------- springs, bun, braid
 

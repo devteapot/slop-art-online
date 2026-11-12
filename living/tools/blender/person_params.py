@@ -224,6 +224,10 @@ def draw(given=None):
             style = "balding"
     else:
         style = pick("hair.style", ("kerchief", "bob", "bob_parted", "long", "tail", "bun", "braid"), (4, 1, 0.5, 0.5, 0.5, 4, 1.5) if old else (2, 2, 2, 3, 3, 3, 3))
+    # A style that is given takes its own lengths (a shared style's file names its style and
+    # draws the rest; until the sheets step its length came from the style its seed would have
+    # picked, so `long` came out at the jaw and `bob` at the shoulders).
+    style = (given.get("hair") or {}).get("style", style)
     lo_l, hi_l = HAIR_LENGTHS.get(style, (0.05, 0.09))
     p["hair"] = dict(style=style, colour=natural, grey=round(grey, 2), length=round(u("hair.length", lo_l, hi_l), 3), parting=round(clip(rnd(seed, "hair.parting").gauss(0, 0.5)), 2),
                      fringe=round(u("hair.fringe", 0.3, 0.9) if male and not child else u("hair.fringe", 0.5, 1.05), 2), volume=round(u("hair.volume", 0.25, 0.85), 2),
@@ -468,7 +472,12 @@ def from_style(style):
     male = style in ("short", "crop", "swept", "sides", "shag", "tousled", "balding")
     # Another cut is the same style from another seed: the generator draws its length, parting,
     # fringe, volume and curl from it, as it did for each person.
-    return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style) + 100 * (cut - 1), sex="male" if male else "female", age=30, hair=dict(style=style), beard=dict(style="none", stubble=0.0),
+    hair = dict(style=style)
+    if style == "balding":
+        # The crown is bald by how far the hairline has receded, and at the standard figure's age
+        # a seed draws almost none: until the sheets step this style's file had a full head of hair.
+        hair["recede"] = (0.85, 1.0, 0.74)[cut - 1]
+    return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style) + 100 * (cut - 1), sex="male" if male else "female", age=30, hair=hair, beard=dict(style="none", stubble=0.0),
                 build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none")))
 
 

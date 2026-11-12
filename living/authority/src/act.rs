@@ -1093,7 +1093,7 @@ pub enum Far<'a> {
 /// sight. `victim` is whom it reached (0 for a wall or nothing). Whoever made it is told, a mind
 /// or a person playing the character (whose line also gets its `act_outcome` row), in the same
 /// words; never anyone else. Instinct-only creatures are not.
-pub fn missile_told(ctx: &ReducerContext, owner: u32, skill: &str, victim: u32, how: Far, at: (f32, f32), now: u64) {
+pub fn missile_told(ctx: &ReducerContext, owner: u32, skill: &str, victim: u32, how: Far, at: (f32, f32), seen_as: Option<&str>, now: u64) {
     if !common::laws(ctx).force_outcomes {
         return;
     }
@@ -1104,7 +1104,11 @@ pub fn missile_told(ctx: &ReducerContext, owner: u32, skill: &str, victim: u32, 
     let Some(eye) = ctx.db.body().id().find(owner) else { return };
     let (w, map) = (common::world(ctx), common::map(ctx));
     let seen = crate::perception::sees(ctx, owner, &eye, at, &w, &map, now);
-    let label = if victim != 0 { common::label_for(ctx, &c, victim) } else { String::new() };
+    let label = match seen_as {
+        Some(l) => l.to_string(),
+        None if victim != 0 => common::label_for(ctx, &c, victim),
+        None => String::new(),
+    };
     let (ok, what, why) = match (seen, how) {
         (false, _) => (false, skill.to_string(), "it flew out of your sight".to_string()),
         (true, Far::Struck(dealt)) => (true, format!("{skill} → {label}"), format!("struck {label}: {dealt}")),
@@ -1912,7 +1916,8 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     }
     let rearing = |id: u32| ctx.db.rearing().id().find(id).map_or(false, |r| r.until_ms > now);
     if rearing(me) || rearing(other) {
-        return Err(if rearing(me) { "you are still raising your young".into() } else { format!("{other_name} is still raising their young") });
+        let seen = ctx.db.character().id().find(me).map(|c| common::label_for(ctx, &c, other)).unwrap_or(other_name);
+        return Err(if rearing(me) { "you are still raising your young".into() } else { format!("{} is still raising their young", common::capitalized(&seen)) });
     }
     // In a pack only one pair breeds: none while another pair nearby is expecting or raising young.
     let kind = ctx.db.character().id().find(me).map(|c| c.kind).unwrap_or_default();
@@ -2254,9 +2259,12 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         // The death record names the killer as the victim knew them (`perceived_of`): "killed
         // by a stranger" unless the name was known. The chronicle above keeps the real names.
         let by = common::label_for(ctx, &vc, attacker);
+        // The killer is told whom it killed as it perceives them (a name it knows, "a stranger",
+        // or the far label), read while the body is still there: the same rule as every told line.
+        let seen = ctx.db.character().id().find(attacker).map(|ac| common::label_for(ctx, &ac, victim)).unwrap_or_else(|| "them".into());
         let code = if yielded { living_rules::outcome::death::KILLED_YIELDING } else { living_rules::outcome::death::KILLED };
         die(ctx, victim, &if yielded { format!("killed by {by}, after yielding") } else { format!("killed by {by}") }, now, attacker, code);
-        return format!("killed {vn} ({amount:.0})");
+        return format!("killed {seen} ({amount:.0})");
     }
     if defense == Aim::Facing {
         format!("blocked, {amount:.0} got through")
@@ -2451,6 +2459,16 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, co
     if kind == "person" {
         common::chronicle(ctx, now, "death", id, killer, at, format!("{name} died ({cause})"));
     }
+    // Witnesses are told while the body is still there, so each names the dead and the killer
+    // as it perceives them (a name it knows, "a stranger", or the far label, which reads distance).
+    let text = if killer != 0 && cause.ends_with("after yielding") {
+        "{a} was killed by {b} after yielding".to_string()
+    } else if killer != 0 {
+        "{a} was killed by {b}".to_string()
+    } else {
+        format!("{{a}} died ({cause})")
+    };
+    witnessed(ctx, now, at, "death", id, killer, &text, if kind == "person" { 1.0 } else { 0.5 }, &[id]);
     ctx.db.body().id().delete(id);
     motion::remove(ctx, id);
     common::invalidate_bodies();
@@ -2463,13 +2481,5 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, co
     ctx.db.deliberation().actor().delete(id);
     forget_dead(ctx, id);
     retire(ctx, id);
-    let text = if killer != 0 && cause.ends_with("after yielding") {
-        "{a} was killed by {b} after yielding".to_string()
-    } else if killer != 0 {
-        "{a} was killed by {b}".to_string()
-    } else {
-        format!("{{a}} died ({cause})")
-    };
-    witnessed(ctx, now, at, "death", id, killer, &text, if kind == "person" { 1.0 } else { 0.5 }, &[id]);
     crate::combat::died(ctx, id, killer, at, now);
 }
