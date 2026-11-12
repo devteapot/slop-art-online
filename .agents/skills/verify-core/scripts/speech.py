@@ -52,6 +52,14 @@ class Person:
 
     def __init__(self, s, name):
         self.s = s
+        # A scene's player stands for a connected one. Its person never connects to the world
+        # (HTTP calls only), so after the `takeover_s` law's 30 s the minds would take it over, and
+        # its first look round ("discovered", "saw" rows) would land in whichever check is then
+        # counting rows (channels failed so in 2 of 4 runs on fix-sleep-talk). The law is raised
+        # for the scene before the first join and restored at its end (`main`).
+        if not hasattr(s, "takeover_s"):
+            s.takeover_s = scenes.law_value(s, "takeover_s")
+            scenes.set_law(s, "takeover_s", 3600.0, check=False)
         code, body = http("/v1/identity", {})
         assert code == 200, body
         self.token = json.loads(body)["token"]
@@ -388,6 +396,13 @@ def channels(s):
     """Whisper, call, truthful silence and overheard names (docs/COMMUNICATION.md items 6, 7, 8,
     10) on one quiet line: from the speaker a, b at 1 m, the deer at about 4 m, c at 4 m, the
     player at 7 m, e at 10 m (in sight by day, beyond the 9 m voice), d at 20 m (within a call)."""
+    # By day from start to end: e is placed to be seen by day, and the queued checks need it.
+    # The scene takes about 8 game hours on the 12-minute day, so on a reused world (a fresh
+    # launch starts at 07:00) it waits for the next morning when it would run into the dusk.
+    hour, day_ms = scenes.world_hour(s)
+    if not 6.0 <= hour < 11.0:
+        print(f"world hour {hour:.1f}: waiting for the morning (06:00-07:00)", flush=True)
+        s.wait(lambda: 6.0 <= scenes.world_hour(s)[0] < 7.0, seconds=day_ms / 1000 + 60, every=5)
     a, b, c, d, e = s.people(5)
     deer = next(x["id"] for x in s.rows("SELECT id, kind, alive FROM character") if x["kind"] == "deer" and x["alive"])
     s.graph(deer, {"wait": 120})
@@ -401,8 +416,13 @@ def channels(s):
     night = not (6 <= scenes.world_hour(s)[0] < 20)
     (s.out / f"{s.name}-cast.json").write_text(json.dumps({"a": a, "b": b, "c": c, "d": d, "e": e, "deer": deer, "p": p.id, "names": names, "at": {str(k): v for k, v in at.items()}, "night": night}, indent=2) + "\n")
     time.sleep(1.5)
+    # What the world tells the cast meanwhile and no line ever writes (food spoiling, a first
+    # sight, a place, a feeling): not counted as a line's rows, or a check that a line wrote
+    # nothing fails whenever one lands in its window (run 9 on fix-channels-race: "Some of your
+    # berries spoiled").
+    ambient = {"body", "discovered", "saw", "feeling", "life"}
     def rows(who, since, kinds=None):
-        return sorted((r for r in s.rows(f"SELECT * FROM experience WHERE observer = {who}") if r["at_ms"] >= since and (kinds is None or r["kind"] in kinds)), key=lambda r: r["id"])
+        return sorted((r for r in s.rows(f"SELECT * FROM experience WHERE observer = {who}") if r["at_ms"] >= since and (r["kind"] in kinds if kinds is not None else r["kind"] not in ambient)), key=lambda r: r["id"])
     def collect(r, t, label):
         got = {who: rows(who, t) for who in at}
         (s.out / f"{s.name}-{label}.json").write_text(json.dumps({"code": r.returncode, "error": (r.stderr or "")[-300:], "rows": {names.get(k, str(k)): v for k, v in got.items()}}, indent=2, ensure_ascii=False) + "\n")
@@ -524,7 +544,8 @@ def channels(s):
     time.sleep(GAP)
     # Overheard names: b says c's name to c; whoever hears it in full and sees c learns it.
     r, got, t = line_by(b, f"{names[c]}, come over here.", c, "say", "names")
-    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == c and x["since_ms"] >= t)
+    # (the cast only: a resident who wanders into earshot learns the name too, rightly)
+    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == c and x["since_ms"] >= t and x["observer"] in at)
     want = sorted(w for w in (a, p.id, e) if math.dist(at[b], at[w]) <= 9.0 and (math.dist(at[w], at[c]) <= (6.0 if night else 11.0)))
     s.expect("names: those who heard c named and saw c learn c's name; c and d do not", learned == want, (learned, want), fatal=False)
     told = [x["text"] for x in got[a] if x["kind"] == "introduced"]
@@ -537,7 +558,7 @@ def channels(s):
     t = now(s)
     p.call("human_say", ["I'm Mara.", 0])
     time.sleep(1.0)
-    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == p.id and x["since_ms"] >= t)
+    learned = sorted(x["observer"] for x in s.rows("SELECT * FROM acquaintance") if x["known"] == p.id and x["since_ms"] >= t and x["observer"] in at)
     s.expect("names: saying a given name (Mara of Mara Quill) introduces to those in earshot", learned == sorted(w for w in (a, b, c, e, d) if math.dist(at[p.id], at[w]) <= 9.0), learned, fatal=False)
     time.sleep(GAP)
     # Someone too far away to make out (fix-far-silence): with an overlay of `perceived_of` that
@@ -559,6 +580,8 @@ def channels(s):
         outs = [o for o in s.rows(f"SELECT * FROM act_outcome WHERE observer = {p.id}") if psil and o["id"] == psil[0]["id"]]
         s.expect("far: the player's silence and act outcome to d say `They are out of earshot …`",
                  [x["text"] for x in psil] == ["They are out of earshot: they could not have heard you."] and len(outs) == 1 and outs[0]["why"] == psil[0]["text"], (psil, outs), fatal=False)
+        played = s.rows(f"SELECT ai FROM character WHERE id = {p.id}")
+        s.expect("the player listener is still played at the end (the minds never took it over mid-scene)", played and played[0]["ai"] is False, played, fatal=False)
     finally:
         s.call("install_script", shipped, check=False)
 
@@ -650,6 +673,8 @@ def main():
         error = f"{type(e).__name__}: {e}"
         print(error, flush=True)
     finally:
+        if hasattr(s, "takeover_s"):
+            scenes.set_law(s, "takeover_s", s.takeover_s, check=False)
         (s.out / f"speech-{a.scene}-results.json").write_text(json.dumps({"db": s.db, "checks": s.results, "error": error}, indent=2) + "\n")
     return int(error is not None or any(r["status"] in {"FAIL", "XPASS"} for r in s.results.values()))
 
