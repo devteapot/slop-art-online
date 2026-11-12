@@ -202,7 +202,7 @@ Each change is general: it serves any time-critical thing a character does, with
 - **When asked:** on a salient change in what the character perceives (a new move shown, a band of distance or health crossed, a routine failing), at most 2–4 times a second, only for on-stage characters. Never per tick.
 - **Too slow for** everything in the first row of the table in §2.4.
 - **Not before R2:** only if minds, given §3.1–3.4, prepare alternative routines at all. Without alternatives, a chooser has nothing to choose.
-- **Data path:** the existing private `judged` table (at most 8 rows per character; the reducer `mind_judged`) and the existing Jev request; at 216 on-stage fighters and 4 Hz this is up to about 860 reducer calls a second and must be measured before it counts as accepted. Jev cost at about 900 input tokens: $0.00004 a judgment.
+- **Data path:** the existing private `judged` table (at most 8 rows per character; the reducer `mind_judged`) and the existing Jev request; at 216 on-stage fighters and 4 Hz this is up to about 860 reducer calls a second and must be measured before it counts as accepted. Jev cost at about 900 input tokens: a fraction of a cent a judgment (price not committed).
 
 ### 3.6 Memory readable within seconds (mind architecture, small)
 
