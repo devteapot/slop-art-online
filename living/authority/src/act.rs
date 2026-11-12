@@ -1220,12 +1220,43 @@ fn news(ctx: &ReducerContext, id: u32, what: &str, why: &str, now: u64) -> bool 
 /// choice refused on every look while a fallback runs counts once a window, not every look.
 /// Returns whether it was news (the evaluator then counts it in `fails`).
 pub fn refused(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, what: &str, why: &str, now: u64) -> bool {
+    // A move refused while its cooldown runs ("dodge is not ready yet (0.3 s)", a countdown
+    // that differs every tick) is told once per cooldown: the first refusal of this act until the
+    // skill is ready again (a streak), not one line a tick. Each refusal is still recorded (its
+    // routine's stat), for audit.
+    let waiting = format!("{skill} is not ready yet");
+    if why.starts_with(&waiting) {
+        let until = ctx.db.readiness().id().find(id).and_then(|r| r.ready.iter().find(|t| t.skill == skill).map(|t| t.at_ms)).unwrap_or(now);
+        let told = cooldown_news(ctx, id, what, &waiting, until, now);
+        routine_outcome(ctx, id, revision, node, false, why, now);
+        if told {
+            tell(ctx, id, false, skill, what, why, now, refusal(), false);
+        }
+        return told;
+    }
     if !news(ctx, id, what, why, now) {
         return false;
     }
     routine_outcome(ctx, id, revision, node, false, why, now);
     let code = refusal();
     tell(ctx, id, false, skill, what, why, now, code, false);
+    true
+}
+
+/// A cooldown refusal of `what` is news unless one was told during the same cooldown (its mark
+/// holds the time the skill is ready, `until`); news is marked so.
+fn cooldown_news(ctx: &ReducerContext, id: u32, what: &str, waiting: &str, until: u64, now: u64) -> bool {
+    let Some(mut st) = ctx.db.mind_state().id().find(id) else { return false };
+    let key = failure_mark(what, waiting);
+    if st.marks.iter().any(|m| m.node == key && now < m.at_ms) {
+        return false;
+    }
+    st.marks.retain(|m| m.node != key);
+    st.marks.push(Mark { node: key, at_ms: until.max(now + 1) });
+    if st.marks.len() > 24 {
+        st.marks.remove(0);
+    }
+    ctx.db.mind_state().id().update(st);
     true
 }
 
@@ -1366,6 +1397,31 @@ fn dodged(ctx: &ReducerContext, attacker: u32, vc: &Character, skill: &str, from
     "dodged".into()
 }
 
+/// How a dash that evades ends when nothing reached it while it lasted (`finish`).
+const MADE_WAY: &str = "made way";
+
+/// A blow or a missile reaches `vc` after a dodge of its own had ended: a dodge made while that
+/// blow was already coming (it ended after the blow began: the windup's start, or the shot's).
+/// What the dodger perceives is its own dodge ending and then the blow landing, so it is told
+/// that, as the dodge's outcome and once (that use's `skill_use` outcome says it): "You failed to
+/// dodge: it was over before the blow came". No timing it could not know; a person playing the
+/// character is told the same (`tell`, its `act_outcome` row).
+fn dodge_too_early(ctx: &ReducerContext, vc: &Character, attacker: u32, skill: &str, missile: Option<&str>, now: u64) {
+    let sc = common::scripts(ctx);
+    let Some(began) = ctx.db.skill_use().actor().filter(attacker).filter(|u| u.skill == skill && u.accepted_ms != 0 && u.accepted_ms <= now).map(|u| u.accepted_ms).max() else { return };
+    let dash = |s: &str| sc.combat(s).is_some_and(|c| c.aim == Aim::Dash && c.evades);
+    let Some(mut u) = ctx.db.skill_use().actor().filter(vc.id).filter(|u| u.outcome == MADE_WAY && (began..=now).contains(&u.outcome_ms) && dash(&u.skill)).max_by_key(|u| u.outcome_ms) else { return };
+    let came = match missile {
+        Some(m) => format!("the {}", m.strip_prefix("an ").or_else(|| m.strip_prefix("a ")).unwrap_or(m)),
+        None => "the blow".to_string(),
+    };
+    let why = format!("it was over before {came} came");
+    u.outcome = format!("{MADE_WAY}: {why}");
+    let skill = u.skill.clone();
+    ctx.db.skill_use().id().update(u);
+    tell(ctx, vc.id, false, &skill, &skill, &why, now, living_rules::outcome::act::FAILED, true);
+}
+
 /// Steering reports on the movement of an activity that is still on its way.
 pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
     let Some(a) = ctx.db.activity().id().find(id) else { return };
@@ -1387,7 +1443,7 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
         }
         Event::Arrived => match a.skill.as_str() {
             "goto" | "wander" | "flee" | "close_in" | "back_off" => finish(ctx, a, true, "", now),
-            s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, "made way", now),
+            s if aim_of(&common::scripts(ctx), s) == Aim::Dash || common::scripts(ctx).shows().aside(s) => finish(ctx, a, true, MADE_WAY, now),
             "follow" | "keep_distance" | "circle" => {}
             _ => {
                 let here = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
@@ -2282,6 +2338,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     if defense == Aim::Dash {
         return dodged(ctx, attacker, &vc, skill, from, at_v, now);
     }
+    dodge_too_early(ctx, &vc, attacker, skill, missile, now);
     let subject = if seen_shooter { attacker } else { 0 };
     if turned {
         let text = match missile {

@@ -1,0 +1,61 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-5c02f721-d0b704",
+ "published": "2026-11-12T06:30:02+01:00",
+ "imported": "2026-11-12T06:30:02+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "The nose's wedge starts at 65 degrees and is a small soft shape; the pale band across the lower face is gone (the map's socket and wait terms met at the nose's base 33 degrees apart); a fold in nine types' heads at the nose's base, the hairline from cheek to cheek, is mended.",
+ "source": {
+  "commit": "5c02f721cc408a87a1740bc283fd0879a79e3a03",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/characters/face_shadow.py",
+  "generator_sha256": "4430956759b92b9972ce08371d6c784ca94e5c4b4359c16e856abca557eddc35",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "faces-close: six types' faces before and after, the face 64 degrees from the sun (the type sheets' pose), 78 (the cast sheet's, the head turned 14 degrees away) and 94, with the reference under the same light in the last row. Eyes are held open by the photo tool. The blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-5c02f721-d0b704",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "2866414c7bd876d9752d2a9122e0fbacd2a2adfe912ab227c5192593d4f5acdd",
+   "shots": [
+    "faces-close"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "42b02dbdd6f9d40b7c9f74b7a262fe22f02b0deeb448c7420a186cacd6d2e2d2",
+   "shots": [
+    "faces-close"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "5391435407087810710d674235a0186d1b49c45c066e012d4d1afb69ee24c5d9",
+   "shots": [
+    "faces-close"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

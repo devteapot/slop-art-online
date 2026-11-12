@@ -38,6 +38,9 @@
 //! - `genoutlines`: generate every mesh's outline directions, ignoring those a file brings
 //!   (`style::outline_normals`); `keeppixels`: character pictures keep their pixels on the CPU
 //!   (`characters::thumb_pictures`). Both are the way before types-1, for comparison.
+//! - `filestyles`: composed people's style files take a toon material a file and material
+//!   name, as before compose-1 shared them by what they draw (`characters/compose.rs`), to
+//!   compare the two.
 //!
 //! The frame is often limited by neither the GPU nor one system but by the render world's
 //! per-batch work: every distinct material and mesh slab is a batch set per view and pass, and
@@ -127,6 +130,74 @@ pub fn diagnostics(app: &mut App) {
         return;
     }
     app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin).add_systems(Last, (log_diagnostics, log_views, log_assets));
+    if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
+        use bevy::render::{Render, RenderSystems};
+        render.add_systems(Render, log_batches.after(RenderSystems::PhaseSort).before(RenderSystems::Render));
+    }
+}
+
+/// `diag`, in the render world, every 2 s: how the binned phases batch (`batches:`), and the
+/// textures on the GPU. For each phase, summed over its views: multi-draw batch sets (one draw
+/// call each where the backend draws indirect lists natively; each of their meshes is one
+/// indirect draw within it), batchable bins (one instanced draw each) and unbatchable entities
+/// (one draw each: meshes with morph targets). The GPU preprocessing mode decides which a mesh
+/// is. Textures: every `GpuImage`'s bytes (mips included).
+#[allow(clippy::too_many_arguments)]
+fn log_batches(
+    support: Option<Res<bevy::render::batching::gpu_preprocessing::GpuPreprocessingSupport>>,
+    opaque: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::core_pipeline::core_3d::Opaque3d>>,
+    mask: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::core_pipeline::core_3d::AlphaMask3d>>,
+    prepass: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::core_pipeline::prepass::Opaque3dPrepass>>,
+    mask_prepass: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::core_pipeline::prepass::AlphaMask3dPrepass>>,
+    shadow: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::pbr::Shadow>>,
+    images: Res<bevy::render::render_asset::RenderAssets<bevy::render::texture::GpuImage>>,
+    mut last: Local<Option<std::time::Instant>>,
+) {
+    use bevy::render::render_phase::{BinnedPhaseItem, ViewBinnedRenderPhases};
+    if last.is_some_and(|t| t.elapsed().as_secs_f32() < 2.0) {
+        return;
+    }
+    *last = Some(std::time::Instant::now());
+    fn count<P: BinnedPhaseItem>(name: &str, phases: &ViewBinnedRenderPhases<P>) -> String {
+        let (mut sets, mut bins, mut lone) = (0, 0, 0);
+        for phase in phases.0.values() {
+            sets += phase.multidrawable_meshes.len();
+            bins += phase.batchable_meshes.len();
+            lone += phase.unbatchable_meshes.values().map(|u| u.entities.len()).sum::<usize>();
+        }
+        format!("{name} {sets} sets, {bins} bins, {lone} lone ({} views)", phases.0.len())
+    }
+    use bevy::render::batching::gpu_preprocessing::GpuPreprocessingMode as Mode;
+    let mode = match support.map(|s| s.max_supported_mode) {
+        Some(Mode::None) => "none",
+        Some(Mode::PreprocessingOnly) => "preprocessing only",
+        Some(Mode::Culling) => "culling (multi-draw)",
+        None => "?",
+    };
+    let bytes: u64 = images
+        .iter()
+        .map(|(_, g)| {
+            let d = &g.texture_descriptor;
+            let (bw, bh) = d.format.block_dimensions();
+            let block = d.format.block_copy_size(None).unwrap_or(4) as u64;
+            (0..d.mip_level_count.max(1))
+                .map(|m| {
+                    let (w, h) = ((d.size.width >> m).max(1), (d.size.height >> m).max(1));
+                    w.div_ceil(bw) as u64 * h.div_ceil(bh) as u64 * block * d.size.depth_or_array_layers as u64
+                })
+                .sum::<u64>()
+        })
+        .sum();
+    info!(
+        "batches: preprocessing {mode}; {}; {}; {}; {}; {}; textures {} on the GPU {:.1} MiB",
+        count("opaque", &opaque),
+        count("mask", &mask),
+        count("prepass", &prepass),
+        count("mask-prepass", &mask_prepass),
+        count("shadow", &shadow),
+        images.iter().count(),
+        bytes as f64 / (1024.0 * 1024.0)
+    );
 }
 
 /// `diag`: what the loaded assets hold, every 10 s: meshes (their vertex, index and morph-target
@@ -323,7 +394,9 @@ pub fn log_views(
         }
         let distinct = |people_only: bool| list.iter().filter(|e| !people_only || people.contains(*e)).filter_map(|e| mats.get(*e).ok().map(|m| m.0.id())).collect::<std::collections::HashSet<_>>().len();
         let distinct_meshes = list.iter().filter_map(|e| mesh3d.get(*e).ok().map(|m| m.0.id())).collect::<std::collections::HashSet<_>>().len();
-        format!("{n} meshes ({distinct_meshes} distinct, {} materials) {:.0}k tris [people {pn}, {} materials, {:.0}k]", distinct(false), t as f32 / 1000.0, distinct(true), pt as f32 / 1000.0)
+        // People's meshes that could share an instanced draw: the same mesh in the same material.
+        let pairs = list.iter().filter(|e| people.contains(*e)).filter_map(|e| Some((mesh3d.get(*e).ok()?.0.id(), mats.get(*e).ok()?.0.id()))).collect::<std::collections::HashSet<_>>().len();
+        format!("{n} meshes ({distinct_meshes} distinct, {} materials) {:.0}k tris [people {pn}, {} materials, {:.0}k, {pairs} mesh-material pairs]", distinct(false), t as f32 / 1000.0, distinct(true), pt as f32 / 1000.0)
     };
     let id = std::any::TypeId::of::<Mesh3d>();
     for (cam, vis) in &cams {

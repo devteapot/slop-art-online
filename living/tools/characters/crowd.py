@@ -40,7 +40,15 @@ and a photograph of each run.
 
 `lod` and `NAME-lod` runs (not by default) use the people's files holding the full and the far
 model (lookdev/lod/own-<name>.glb, town.py --lod both), which a client that switches by
-distance (lookdev.rs `far_models`) draws as one or the other. `--binary NAME=PATH` runs a set
+distance (lookdev.rs `far_models`) draws as one or the other.
+
+`town` and `composed` runs (not by default) stand the town's people as they are: each person's
+own recipe (height and proportions) on their both-file (lookdev/lod/own-<name>.glb), with their
+person line (`<name>.params.json`'s `person`) beside it, listed in the recipe book's `crowd` in
+the crowd's spawn order (children in its front rows). `town` draws each from their whole file;
+`composed` is the same book with `LIVING_GAME_COMPOSE=1`, so each person is composed from their
+type and style files (characters/compose.rs). Their logs add each person's mesh entities, the
+render world's batches (`batches:`, LIVING_GAME_PERF=diag) and when every person was ready. `--binary NAME=PATH` runs a set
 with another build of the game (`--runs before:ours,lod`: the `before` binary for `ours`), and
 `--game-env K=V` sets a variable for every run.
 """
@@ -153,6 +161,24 @@ def mac_memory(pid):
     return int(mib(*total.groups())) if total else 0, int(gpu)
 
 
+def town_book(book, people, sub, n):
+    """Add the town's people to a recipe book as they are, for a crowd of n (`town`, `composed`):
+    each person's own recipe on their file, with their person line, named in the book's `crowd`
+    in spawn order (children first: the crowd's front rows are its small folk)."""
+    lookdev = os.path.join(REPO, "living", "game", "assets", "lookdev")
+    names = []
+    for p in people:
+        params = json.load(open(os.path.join(lookdev, sub, f"own-{p['name']}.params.json")))
+        r = dict(name=f"town-{p['name']}", base=f"lookdev/{sub}own-{p['name']}.glb", **params["recipe"])
+        if params.get("person"):
+            r["person"] = params["person"]
+        book["recipes"] = [x for x in book["recipes"] if x["name"] != r["name"]] + [r]
+        names.append((p["params"]["age"] >= 16, r["name"]))
+    order = [nm for grown, nm in names if not grown] + [nm for grown, nm in names if grown]
+    book["crowd"] = (order * (n // max(len(order), 1) + 1))[:n]
+    return book["crowd"]
+
+
 def run_game(out, name, env, seconds, size, place="meadow", photo=True, binary=None):
     """Run the game headless on the line-up for `seconds`, logging; returns what was measured."""
     log = os.path.join(out, f"{name}.log")
@@ -215,11 +241,27 @@ def run_game(out, name, env, seconds, size, place="meadow", photo=True, binary=N
     files = re.findall(r"characters: (\S+) has (\d+) spring joints", text)
     res.update(files=len(set(f for f, _ in files)), spring_joints=sum(int(n) for _, n in files))
     clean = re.sub(r"\x1b\[[0-9;]*m", "", text)
-    views = re.findall(r"views: (\d+) toon materials; main (\d+) meshes \((\d+) distinct, (\d+) materials\) (\d+)k tris \[people (\d+), (\d+) materials, (\d+)k\]; cascade0 (\d+) meshes \((\d+) distinct, (\d+) materials\) (\d+)k tris", clean)
+    views = re.findall(r"views: (\d+) toon materials; main (\d+) meshes \((\d+) distinct, (\d+) materials\) (\d+)k tris \[people (\d+), (\d+) materials, (\d+)k(?:, (\d+) mesh-material pairs)?\]; cascade0 (\d+) meshes \((\d+) distinct, (\d+) materials\) (\d+)k tris", clean)
     if views:
-        v = [int(x) for x in views[-1]]
-        res.update(toon_materials=v[0], main_meshes=v[1], main_distinct_meshes=v[2], main_materials=v[3], main_ktris=v[4], people_meshes=v[5], people_materials=v[6], people_ktris=v[7],
-                   cascade_meshes=v[8], cascade_materials=v[10], cascade_ktris=v[11], cascades=len(re.findall(r"cascade\d+ ", clean.split("views:")[-1].splitlines()[0])))
+        v = [int(x) if x else None for x in views[-1]]
+        res.update(toon_materials=v[0], main_meshes=v[1], main_distinct_meshes=v[2], main_materials=v[3], main_ktris=v[4], people_meshes=v[5], people_materials=v[6], people_ktris=v[7], people_pairs=v[8],
+                   cascade_meshes=v[9], cascade_materials=v[11], cascade_ktris=v[12], cascades=len(re.findall(r"cascade\d+ ", clean.split("views:")[-1].splitlines()[0])))
+    shown = re.findall(r"(\d+) mesh entities shown of (\d+)", clean)
+    if shown:
+        res.update(people_mesh_entities_shown=int(shown[-1][0]), people_mesh_entities=int(shown[-1][1]))
+    ready = re.findall(r"people ready: (\d+) characters \((\d+) composed\) shaped and dressed ([\d.]+) s after the start", clean)
+    if ready:
+        res.update(ready_s=float(ready[0][2]), composed=int(ready[0][1]))
+    batches = re.findall(r"batches: preprocessing ([^;]+); (.*); textures (\d+) on the GPU ([\d.]+) MiB", clean)
+    if batches:
+        mode, phases, ntex, mib = batches[-1]
+        res.update(preprocessing=mode, gpu_textures=int(ntex), gpu_texture_mib=float(mib))
+        for name, sets, bins, lone in re.findall(r"([a-z-]+) (\d+) sets, (\d+) bins, (\d+) lone", phases):
+            res[f"batches_{name}"] = dict(sets=int(sets), bins=int(bins), lone=int(lone))
+    assets = re.findall(r"assets: (\d+) meshes ([\d.]+) MiB \(vertices ([\d.]+), indices ([\d.]+), morph targets ([\d.]+)\); (\d+) images ([\d.]+) MiB; (\d+) clips \((\d+) curves\); (\d+) graphs; (\d+) glTF files", clean)
+    if assets:
+        a_ = assets[-1]
+        res.update(mesh_assets=int(a_[0]), mesh_mib=float(a_[1]), morph_mib=float(a_[4]), image_assets=int(a_[5]), image_mib=float(a_[6]), clips=int(a_[7]), graphs=int(a_[9]), gltf_files=int(a_[10]))
     last = [m for m in re.findall(r"diag: (render/.*)", clean)]
     if last:
         gpu = {k.strip(): float(v) for k, v in (kv.rsplit(" ", 1) for kv in last[-1].split(";") if kv.strip()) if k.strip().endswith("elapsed_gpu") or k.strip().endswith("elapsed_cpu")}
@@ -276,7 +318,7 @@ def main():
     ap.add_argument("--env", default="meadow", help="the environment the crowd stands in (envs/<id>.json; `lineup` is the look-dev line-up, which also shows every file in lookdev/)")
     a = ap.parse_args()
     people = json.load(open(os.path.join(a.town, "town.json")))["people"]
-    sets = {"ours": (people, ""), "same": (people, ""), "far": (people, "far/"), "lod": (people, "lod/")}
+    sets = {"ours": (people, ""), "same": (people, ""), "far": (people, "far/"), "lod": (people, "lod/"), "town": (people, "lod/"), "composed": (people, "lod/")}
     for item in a.set:
         name, town = item.split("=", 1)
         other = json.load(open(os.path.join(town, "town.json")))["people"]
@@ -302,6 +344,18 @@ def main():
             return run_game(out, label, extra, a.seconds, a.size, a.env, photo, binary)
         if name == "vroid":
             return run_game(out, label, dict(extra, LIVING_GAME_CROWD=f"{a.count}:1"), a.seconds, a.size, a.env, photo, binary)
+        if name in ("town", "composed"):
+            book = json.loads(original)
+            who, sub = sets[name]
+            crowd = town_book(book, who, sub, a.count)
+            env = dict(extra, LIVING_GAME_CROWD=f"{a.count}:1", LIVING_GAME_COMPOSE="1" if name == "composed" else "0")
+            with open(RECIPES, "w") as f:
+                json.dump(book, f)
+            try:
+                return run_game(out, label, env, a.seconds, a.size, a.env, photo, binary)
+            finally:
+                with open(RECIPES, "w") as f:
+                    f.write(original)
         if name in sets:
             book = json.loads(original)
             who, sub = sets[name]
@@ -335,17 +389,17 @@ def main():
                 r = one(name, photo=name not in rounds)  # each set is photographed once, on its first run
                 r["load_average"] = round((before + load()) / 2, 1)
                 rounds.setdefault(name, []).append(r)
-                print(json.dumps({x: r.get(x) for x in ("run", "frame_ms", "interval_ms_p50", "gpu_ms", "people_materials", "people_meshes", "people_ktris", "rss_mb", "footprint_mb", "gpu_mb", "far_shown", "load_average")}), flush=True)
+                print(json.dumps({x: r.get(x) for x in ("run", "frame_ms", "interval_ms_p50", "interval_ms_p99", "gpu_ms", "people_materials", "people_meshes", "people_pairs", "people_mesh_entities", "people_ktris", "ready_s", "rss_mb", "footprint_mb", "gpu_mb", "far_shown", "load_average")}), flush=True)
         for name, rs in rounds.items():
             r = dict(rs[-1])
-            for key in ("frame_ms", "interval_ms_p50", "interval_ms_p95", "interval_ms_p99", "gpu_ms", "rss_mb", "footprint_mb", "gpu_mb", "springs_us", "anim_us", "load_average"):
+            for key in ("frame_ms", "interval_ms_p50", "interval_ms_p95", "interval_ms_p99", "gpu_ms", "rss_mb", "footprint_mb", "gpu_mb", "springs_us", "anim_us", "ready_s", "load_average"):
                 vals = sorted(x[key] for x in rs if x.get(key) is not None)
                 if vals:
                     r[key] = vals[len(vals) // 2]
                     r[key + "_range"] = [vals[0], vals[-1]]
             r["rounds"] = len(rs)
             # Every run of this set in the order it was made, to compare sets round by round.
-            r["each"] = [{k: x.get(k) for k in ("frame_ms", "interval_ms_p50", "gpu_ms", "rss_mb", "footprint_mb", "gpu_mb", "load_average")} for x in rs]
+            r["each"] = [{k: x.get(k) for k in ("frame_ms", "interval_ms_p50", "interval_ms_p99", "gpu_ms", "rss_mb", "footprint_mb", "gpu_mb", "ready_s", "load_average")} for x in rs]
             results.append(r)
     finally:
         with open(RECIPES, "w") as f:

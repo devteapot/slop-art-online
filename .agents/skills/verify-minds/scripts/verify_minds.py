@@ -1012,10 +1012,86 @@ def doing_case(run):
     sent = '\n'.join(text.values())
     assert re.search(r'"visibly":\s*\{[^}]*"phase":\s*"holding"', sent) and '"is":"block"' in sent.replace(' ', ''), 'the model is sent what the other visibly does'
     grammar = text.get('deliberate', '')
-    assert '{"doing": {"who": "person", "is": "strike", "phase": "winding up"' in grammar and 'about to release' in grammar, 'the grammar documents the doing condition'
+    assert '{"doing": {"who": "person", "is": "hostile", "phase": "winding up"' in grammar and 'about to release' in grammar, 'the grammar documents the doing condition'
     run.admin('set_behavior', other, json.dumps({'wait': 300}))
     return {'status': 'pass', 'visibly': entry.get('visibly'), 'entry': entry, 'purposes': sorted(text)}
 
+
+
+def dodge_wall(run):
+    """A walkable tile, the next one along an axis walkable and the one after it wall or rock, the
+    tile beside the first (a quarter turn) walkable: the tile, the axis, the side."""
+    w, h, tiles = terrain(run)
+    at = lambda x, y: tiles[y * w + x] if 0 <= x < w and 0 <= y < h else 4
+    walk = lambda x, y: at(x, y) not in UNWALKABLE
+    bodies = [(b['x'], b['y']) for b in run.sql('SELECT x, y FROM body', 'bodies')]
+    for y in range(6, h - 6):
+        for x in range(6, w - 6):
+            if not walk(x, y) or any(math.dist((x + .5, y + .5), q) < 8 for q in bodies):
+                continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if walk(x + dx, y + dy) and at(x + 2 * dx, y + 2 * dy) in OPAQUE and walk(x - dy, y + dx) and walk(x - dy + dx, y + dx + dy):
+                    return (x, y), (dx, dy), (-dy, dx)
+    raise RuntimeError('no wall to dodge into on this map')
+
+
+@case('dodge-told')
+def dodge_told_case(run):
+    """A dodge's outcome reaches the mind truthfully, and a cooldown's refusals once (fix-dodge-told;
+    docs/COMBAT.md "A dodge over before the blow came"). The eye dodges, toward the other, as
+    soon as the other's heavy blow (`attack`, a spear) winds up at it: the dash is over before the
+    blow releases, the blow lands, and the eye is told "You failed to dodge: it was over before the
+    blow came" (and its `skill_use` says so). Then it retries a dodge every tick for 4 s: "dodge is
+    not ready yet" is told at most once per cooldown (not once a tick). The prompt the fake model
+    is sent carries the first line, and no more "not ready yet" lines than cooldowns."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    # The eye two tiles short of a wall, the other beside it: the eye's dodge, aimed at the wall,
+    # has room for half its 2.6 m and ends within the blow's reach (1.4 m and the 0.6 m lunge).
+    (x, y), (dx, dy), (sx, sy) = dodge_wall(run)
+    e = (x + 0.5, y + 0.5)
+    for who in (eye, other):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + sx, e[1] + sy)
+    run.admin('grant_items', other, 'spear', 1)
+    # The mind runs throughout: a prompt lists what it was told while connected.
+    script = {'replies': {'think': {'thought': 'My dodge was too soon.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    run.start(model(run, script), [eye])
+    time.sleep(3.0)
+    run.admin('set_behavior', eye, json.dumps({'first': [
+        {'if': {'cond': {'doing': {'is': 'attack', 'phase': 'winding up', 'at_me': True}}, 'then': {'do': {'skill': 'dodge', 'target': {'at': [e[0] + 3 * dx, e[1] + 3 * dy]}}}}},
+        {'wait': 0.2}]}))
+    t0 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+    run.admin('set_behavior', other, json.dumps({'seq': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 300}]}))
+    early = run.wait(lambda: [x for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'eye-told') if x['at_ms'] >= t0 and 'it was over before the blow came' in x['text']] or None, 'the eye told its dodge was over before the blow came', 20)
+    uses = [u for u in run.private('SELECT * FROM skill_use', 'uses-early') if u['at_ms'] >= t0 and u['actor'] in (eye, other)]
+    blow = [u for u in uses if u['actor'] == other and u['skill'] == 'attack']
+    dodge = [u for u in uses if u['actor'] == eye and u['skill'] == 'dodge' and u['outcome'].startswith('made way: it was over before')]
+    assert early[0]['text'] == 'You failed to dodge: it was over before the blow came', early
+    assert blow and blow[-1]['outcome'].startswith('hit for') and dodge and dodge[-1]['accepted_ms'] >= blow[-1]['accepted_ms'], (blow, dodge)
+    # A dodge whose condition holds and nothing else: started again on the next tick after each
+    # one, so refused until it is ready (r2c's plans), for 4 s; once the mind has answered the
+    # attack (its reply installs a plan of its own).
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.wait(lambda: not run.private(f'SELECT * FROM deliberation WHERE actor = {eye}', 'pending-after-attack') or None, 'the mind answered the attack', 60)
+    time.sleep(2.0)
+    t1 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+    run.admin('set_behavior', eye, json.dumps({'if': {'cond': {'chance': 1.0}}, 'then': {'do': 'dodge'}}))
+    time.sleep(4.0)
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    told = [x for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'eye-told-streak') if x['at_ms'] >= t1 and 'is not ready yet' in x['text']]
+    made = [u for u in run.private('SELECT * FROM skill_use', 'uses-streak') if u['actor'] == eye and u['skill'] == 'dodge' and u['at_ms'] >= t1 and u['accepted_ms']]
+    assert made and len(told) <= len(made) + 1, {'told': [x['text'] for x in told], 'dodges': len(made)}
+    run.request(eye, 'dodge-told')
+    body = lambda x: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', []))
+    asked = run.wait(lambda: [body(x) for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] in ('think', 'deliberate') and 'verify dodge-told' in body(x)] or None, 'the prompt of the asked thought', 90)
+    (run.directory / 'sent-prompts.txt').write_text('\n\n=====\n\n'.join(body(x) for x in shared.rows(run.directory / 'fake-requests.jsonl')))
+    text = asked[0]
+    assert 'You failed to dodge: it was over before the blow came' in text, 'the model is told the dodge was over before the blow came'
+    waiting = len(re.findall(r'dodge is not ready yet', text))
+    assert waiting <= len(made) + 1, {'not_ready_lines_in_prompt': waiting, 'dodges': len(made)}
+    return {'status': 'pass', 'early': early[0]['text'], 'not_ready_told': len(told), 'dodges_in_streak': len(made), 'not_ready_in_prompt': waiting}
 
 @case('death-names')
 def death_names_case(run):
