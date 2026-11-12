@@ -1,6 +1,10 @@
 # Core validation record
 
 
+## 2026-11-12 fix-far-silence (Spark)
+
+Branch `fix-far-silence` (`b9413029`), the trial service `slop-trials-stdb`, default seed. `core-fixfar-ch`: speech `channels` 31/31, with two new checks under an overlay making everyone past 8 m `far`. A line to e (seen, beyond the voice) reads "They are too far away: they could not have heard you." The player's line to d reads "They are out of earshot: they could not have heard you.", in its silence row and its `act_outcome` `why`. Unit test `speech::tests::a_far_figure_is_they_not_the_label_twice`. `just living-check` passed.
+
 ## 2026-11-12 owner-known: whose a thing is, and the public land row (Spark)
 
 Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `scenes.py owners` on a plan-test run, `core-owner4-050536`: 9/9 (the public land row carries none of the seed's 4 lot, 7 spot or street names and is no bigger than `land_plan`'s; a newcomer at a household's house is told "house" with no `by`/`home_of` and never the owner's name; the owner is told it is its own; a community member is told "Bryn Wren"). Cargo: `land::tests::public_params_build_the_same_land` (equal digests, lots and props for Cullet and plan-test; size bound on floor-megacity too). `just living-check` exit 0. In place: main's module published fresh on `verify-client-ownmig-044011`, then owner-known over it with `--keep-data`: `Creating table land_plan`, the scrub at `install_script`, characters, structures and land digests unchanged.
