@@ -49,9 +49,10 @@ pub struct Line {
     pub words: serde_json::Value,
 }
 
-/// The client book as docs/LOOK.md §5 gives it (main `acfe1be4`): lines only, under their keys,
-/// and the decor lines. No names, no person entries, no pool: a client cannot tell from a key
-/// who someone is, who else they are at another age, or whether they were seeded.
+/// The client book (docs/LOOK.md §5, as settled with dev-box 2026-11-12): its generations, the
+/// lines under their keys, the colour words' swatches, each outfit style's slot and layer, and
+/// the decor lines. No names, no person entries, no pool: a client cannot tell from a key who
+/// someone is, who else they are at another age, or whether they were seeded.
 #[derive(Deserialize, Default, Debug)]
 #[serde(default)]
 pub struct LookBook {
@@ -60,8 +61,22 @@ pub struct LookBook {
     pub generation: String,
     pub generations: Vec<String>,
     pub lines: HashMap<String, Line>,
+    /// A colour word's swatch (`"green"` → `#5d7f4a`).
+    pub swatches: HashMap<String, String>,
+    /// Each outfit style's part of the body and layer (`"smock_58-f"` → upper, 2), for the
+    /// chips (`looks.rs`).
+    pub outfit: HashMap<String, Piece>,
     /// Lines for background people only (`lk_…`), apart from every line a character can wear.
     pub decor: Vec<String>,
+}
+
+/// Where an outfit style is worn: `slot` (`upper`, `lower`, or another a chip does not show)
+/// and `layer` (higher is worn over lower).
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct Piece {
+    pub slot: String,
+    #[serde(default)]
+    pub layer: i32,
 }
 
 /// Why a person is not drawn from the book.
@@ -258,6 +273,8 @@ mod tests {
                 "lk_00000000000000c1": line("child-u-a", "bob", &["smock_50-f"]),
             },
             "decor": ["lk_00000000000000a2", "lk_00000000000000c1"],
+            "swatches": { "green": "#5d7f4a" },
+            "outfit": { "jersey-f": { "slot": "upper", "layer": 1 }, "trousers-f": { "slot": "lower", "layer": 1 } },
         });
         LookBook::parse(&text.to_string()).unwrap()
     }
@@ -268,6 +285,8 @@ mod tests {
         assert_eq!(b.lines.len(), 3);
         assert!(b.knows("c4-test") && b.knows("c4-old") && !b.knows("c4-new"));
         assert_eq!(b.lines["lk_00000000000000c1"].person.kind, "child-u-a");
+        assert_eq!(b.swatches["green"], "#5d7f4a");
+        assert_eq!(b.outfit["trousers-f"], Piece { slot: "lower".into(), layer: 1 });
     }
 
     #[test]

@@ -1957,16 +1957,20 @@ def shot(run, c):
 LOOK_BOOK = os.path.join(ROOT, "living/game/assets/characters/looks.json")
 
 
-def outer_piece(line, upper):
+def outer_piece(line, upper, outfit=None):
     """The chip `looks.rs` reads from a line: its outermost upper (or lower) piece's colour, by
-    the pieces' names (until the style files carry `slot` and `layer`)."""
+    the book's slot and layer for each outfit style (`outfit`), else the pieces' names."""
     import re as _re
     ranks = {"jersey": 1, "jersey_smock": 1, "jersey_coat": 1, "smock": 2, "coat": 3} if upper else {"trousers": 1, "skirt": 1}
+    want = "upper" if upper else "lower"
     best = None
     for piece in line.get("styles", {}).get("outfit", []):
-        stem = _re.sub(r"_\d+$", "", piece.removesuffix("-f").removesuffix("-m"))
-        if stem in ranks and (best is None or ranks[stem] > best[0]):
-            best = (ranks[stem], piece)
+        if outfit and piece in outfit:
+            rank = outfit[piece]["layer"] if outfit[piece]["slot"] == want else None
+        else:
+            rank = ranks.get(_re.sub(r"_\d+$", "", piece.removesuffix("-f").removesuffix("-m")))
+        if rank is not None and (best is None or rank > best[0]):
+            best = (rank, piece)
     return line.get("colors", {}).get("outfit", {}).get(best[1]) if best else None
 
 
@@ -2020,8 +2024,8 @@ def looks(run, c):
     c.check(s, "one warning line each for no key and for a key the book lacks",
             L.count("looks: people without a look key in a world with looks") == 1 and L.count("looks: lk_ffffffffffffffff is not in the look book") == 1,
             f"{L.count('people without a look key')} and {L.count('lk_ffffffffffffffff is not in')}")
-    wrong = [(x["id"], x.get("chips"), [outer_piece(book["lines"][x["look"]]["person"], True), outer_piece(book["lines"][x["look"]]["person"], False)]) for x in composed
-             if (x.get("chips") or [None, None]) != [outer_piece(book["lines"][x["look"]]["person"], True), outer_piece(book["lines"][x["look"]]["person"], False)]]
+    chips = lambda key: [outer_piece(book["lines"][key]["person"], True, book.get("outfit")), outer_piece(book["lines"][key]["person"], False, book.get("outfit"))]
+    wrong = [(x["id"], x.get("chips"), chips(x["look"])) for x in composed if (x.get("chips") or [None, None]) != chips(x["look"])]
     c.check(s, "chips by piece: a composed person's chips are its line's outermost upper and lower pieces' colours", composed and not wrong, f"{wrong[:3]}")
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")

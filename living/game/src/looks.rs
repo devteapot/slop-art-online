@@ -181,8 +181,8 @@ enum Part {
     Lower,
 }
 
-/// An outfit style's part and layer (higher is worn over lower): the style file's scene extras
-/// (`slot`: `upper` or `lower`, `layer`: a number; char-4 writes them), else by its name. None
+/// An outfit style's part and layer (higher is worn over lower): the look book's (`outfit`:
+/// `slot`, `layer`), else the style file's scene extras (the same two), else by its name. None
 /// for what gives no chip (boots, caps, an apron or a smock's bands over the clothes).
 fn place(piece: &str) -> Option<(Part, i32)> {
     static CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<String, Option<(Part, i32)>>>> = std::sync::OnceLock::new();
@@ -190,17 +190,18 @@ fn place(piece: &str) -> Option<(Part, i32)> {
     if let Some(p) = cache.lock().unwrap().get(piece) {
         return *p;
     }
-    let file = format!("{}/outfit/{piece}.glb", crate::characters::compose::STYLES);
-    let extras = crate::lookdev::glb_json(&file).map(|j| j["scenes"][j["scene"].as_u64().unwrap_or(0) as usize]["extras"].clone());
-    let from_file = extras.and_then(|x| {
-        let part = match x["slot"].as_str()? {
-            "upper" | "top" | "torso" => Some(Part::Upper),
-            "lower" | "bottom" | "legs" => Some(Part::Lower),
-            _ => None,
-        };
-        Some(part.map(|p| (p, x["layer"].as_i64().unwrap_or(0) as i32)))
-    });
-    let p = from_file.unwrap_or_else(|| place_by_name(piece));
+    let part = |slot: &str| match slot {
+        "upper" | "top" | "torso" => Some(Part::Upper),
+        "lower" | "bottom" | "legs" => Some(Part::Lower),
+        _ => None,
+    };
+    let from_book = crate::characters::book::book().and_then(|b| b.outfit.get(piece)).map(|p| part(&p.slot).map(|x| (x, p.layer)));
+    let from_file = || {
+        let file = format!("{}/outfit/{piece}.glb", crate::characters::compose::STYLES);
+        let x = crate::lookdev::glb_json(&file).map(|j| j["scenes"][j["scene"].as_u64().unwrap_or(0) as usize]["extras"].clone())?;
+        Some(part(x["slot"].as_str()?).map(|p| (p, x["layer"].as_i64().unwrap_or(0) as i32)))
+    };
+    let p = from_book.or_else(from_file).unwrap_or_else(|| place_by_name(piece));
     cache.lock().unwrap().insert(piece.to_string(), p);
     p
 }
