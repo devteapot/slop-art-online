@@ -2038,6 +2038,158 @@ For composed people on char-4's bundle `9207d6a8` (main `42ca0b67`: the shared i
   - **Hair:** a whole file's hair is drawn from the person's own numbers, a composed person's is the shared cut (by design, [what a shared style gives up](#hair-as-shared-style-files)).
 
 
+## Pictures as KTX2
+
+looks-tex-1 (2026-11-12, from the laptop's proposal `~/archive/looks-tex-1-proposal.md` as the general coordinator agreed it). A composed person's pictures go into a character bundle as KTX2: BC7, a full mip chain and zstd supercompression, converted at bundle time from the generator's PNGs. The generator is unchanged. Its PNGs stay its intermediates (`shade_mean.py`, `eye_colours.py` and the boards read them), and the conversion is a separate step on the bundle's copies, which char-4's bundle builder calls.
+
+**Why:** on the GPU every picture is RGBA8 today (wgpu has no RGB8) with no mips (Bevy makes none for a PNG). BC7 is 1 byte a texel against 4, and a full chain adds a third, so about a third of the memory: Cullet's residents' set falls from 168 to 56 MiB and the whole book from 188 to 63 MiB. A PNG without mips also aliases at distance; a mip chain filters it.
+
+**Versions checked** (the client's pins, from source in the cargo registry): Bevy 0.20.1's `3d` feature brings `ktx2` and `zstd_rust`. `bevy_gltf` hands an image named by URI to the asset server, whose `ImageLoader` picks KTX2 by the `.ktx2` extension, while `gltf-json` 1.4.1 refuses an embedded `mimeType` other than PNG or JPEG: so KTX2 pictures are separate files named by `uri` with no `mimeType`. `bevy_image::ktx2` decides sRGB or linear from the loader's `is_srgb` (the glTF loader's per-texture choice, or `ImageLoaderSettings`), not from the file's `vkFormat`; the files still carry the right one. It fails on a block format the device lacks (`CompressedImageFormats::from_features`). Spec: [KTX 2.0](https://registry.khronos.org/KTX/specs/2.0/ktxspec.v2.html), [Khronos Data Format 1.3](https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html) (BC7's descriptor).
+
+### The files
+
+| Class | In the bundle | Format | Size (as the PNG) | Mips |
+|---|---|---|---|---|
+| Type atlas (head skin, eyes, ears) | `types/<type>.atlas.ktx2`, moved out of `types/<type>.glb` | BC7 sRGB | 1024² | box |
+| Shadow map | `types/<type>.face.ktx2` (for `.face.png`) | BC7 UNORM (linear data) | 512² | box |
+| Overlays (beards, stubble, lines, freckles) | `styles/overlay/<type>/<name>.ktx2`, moved out of `<name>.glb` | BC7 sRGB, alpha | 512² | coverage (stubble: box) |
+| Far page | `pages/types-far.ktx2` | BC7 sRGB | 1280² | box |
+| Tint page (lips, blush, the iris lights) | `pages/types-tint.ktx2` | BC7 sRGB, alpha | 1600×720 | box |
+| Iris page | `pages/types-iris.ktx2` | BC7 sRGB | 192² | box |
+| Hair strands | `strands.ktx2` | BC7 sRGB | 256×512 | box |
+
+- **Beside each `.ktx2`, its summary** `<name>.thumb.png`: 64×64, RGBA 16-bit, the client's `Thumb` cells (each cell's mean linear colour times alpha, and its mean alpha), so a KTX2 person's recolour source colours are the PNG person's. 16 bits, because 8-bit sRGB would round them by up to about 0.004 linear, the client's `SAME_SOURCE`, and split materials.
+- **The GLBs** name their pictures by `uri` (`<type>.atlas.ktx2`, `../pages/types-far.ktx2`, `../../strands.ktx2`, `<name>.ktx2`), with no `mimeType` or `bufferView`. Their binary chunk is repacked without the PNG: the other buffer views keep their order, on 4-byte boundaries, and every `bufferView` index is renumbered.
+- **Removed:** the PNGs the GLBs named by path (the three pages, `strands.png`) and the shadow maps. `pages/types.json` names the pages' `.ktx2`.
+- **`MANIFEST.txt`** gains a `pictures: ktx2-bc7` line under the builder's header (`pictures: ktx2-bc7 (png: overlay)` when a class is kept as PNG, `pictures: png` for an unconverted bundle). It lists every file with its sha256, in the builder's order, each new file after the one it was made from.
+- **Per-class switch:** `living/tools/characters/pictures.json` (`"format": "png"` keeps a class as the generator wrote it) or `--png CLASS`.
+
+### The tools
+
+```bash
+# The bundle step: unpack, convert, check, pack (KTX2, or the same bundle with `pictures: png`).
+python3 living/tools/characters/pictures.py bundle char-4-composed-<sha>.tar.gz OUT.tar.gz --pictures ktx2   # or: just living-pictures bundle …
+python3 living/tools/characters/pictures.py bundle IN.tar.gz OUT.tar.gz --pictures ktx2 --png tint            # keep a class as PNG
+python3 living/tools/characters/pictures.py convert DIR --pictures ktx2   # an unpacked bundle in place (refuses a folder without MANIFEST.txt)
+python3 living/tools/characters/pictures.py check OUT.tar.gz              # the post-conversion check (exit 1 on any failure)
+python3 living/tools/characters/pictures.py memory OUT.tar.gz             # GPU bytes per class, KTX2 against RGBA8 without mips
+
+# The test from one bundle: KTX2 twice and PNG once, compared; the check against broken bundles.
+python3 living/tools/characters/pictures_selftest.py char-4-composed-643ac265.tar.gz .local/tex1/out
+# The encoder's own tests: summaries against the client's Thumb::of and Bevy's loader, Bevy loading the files.
+cargo test --release --offline --manifest-path living/tools/bc7ktx/Cargo.toml   # BC7KTX_PICTURES=DIR adds a bundle's PNGs
+# PNG against KTX2 drawn by the client (composed people, the asset view), with a 4×-supersampled reference.
+python3 living/tools/characters/pictures_stills.py BINARY OUT png=A.tar.gz ktx2=B.tar.gz ref=A.tar.gz@4
+```
+
+**The encoder, `living/tools/bc7ktx`** (Rust, outside the `living` workspace, built by `pictures.py` with `cargo build --release --offline --locked` into `$CARGO_TARGET_DIR` or `.local/bc7ktx-target`; a cold build is under a minute from the cargo cache):
+
+- **BC7** from `intel_tex_2` 0.5.0 (Intel's ISPC texture compressor, prebuilt kernels in the crate: no ISPC compiler needed), its `slow` settings, the opaque modes for a picture with no alpha below 255 and the alpha modes otherwise. On x86_64 the kernel is called on ISPC's AVX2 target directly: the crate's own entry point picks SSE2 to AVX-512 by the CPU at run time, and the targets need not round alike. bc7ktx then needs AVX2 and refuses to run without it.
+- **Bundles are built on dev-box only.** Byte-identical output holds only on the same kernel: dev-box's x86_64 AVX2 target. An ARM machine (the laptop's Apple silicon, the Spark) runs a different ISPC kernel and would write different blocks and different sha256 for the same pictures, with no error. So `pictures.py bundle` is run on dev-box, and a bundle's `MANIFEST.txt` sha256 values are dev-box's. Elsewhere, read bundles; don't rebuild them. A rebuild on another x86_64 machine with AVX2 should match, but that hasn't been tested.
+- **KTX2 written by the tool:**
+  - `vkFormat` 146 (`BC7_SRGB_BLOCK`) or 145 (`BC7_UNORM_BLOCK`), `typeSize` 1, one layer, one face, every level down to 1×1;
+  - `supercompressionScheme` 2 (Zstandard), each level its own zstd frame at level 19 (libzstd 1.5.7 through `zstd` 0.13.3, one thread), stored smallest first;
+  - a basic DFD (colour model BC7, BT.709 primaries, sRGB or linear transfer, straight alpha, `bytesPlane0` 0 as the spec asks of a supercompressed file);
+  - one `KTXwriter` key (the tool and its version, no time).
+  - Levels whose sides are not a multiple of 4 (1600×720's 25×11 and below) are padded by repeating the edge.
+- **Mips**, all from level 0, in linear light (sRGB decoded with the client's own function and encoded again after), colour weighted by alpha so transparent texels do not bleed into a mark's edge. Each level is an area average of the level above, by exact integer texel overlap, so odd sides are averaged exactly. Level 0 is the source's own bytes.
+- **Thin marks.** Freckles and lines are one or two texels wide, and a box halves a one-texel line's alpha each level down until it is gone. The overlays' mips are made with **alpha-coverage preservation** (Castaño 2010, NVIDIA Texture Tools' `scaleAlphaToCoverage`), applied to the marks alone:
+  - level 0's texels above alpha 0.5 are the marks; the rest is the soft part (the shading round a line, stubble's haze, blush);
+  - both are averaged down; the soft part stays as averaged;
+  - the marks' alpha is scaled so that the share of texels above 0.5 stays level 0's, so a line holds at about half its ink over its wider footprint instead of fading out (`tests/client.rs` `coverage_keeps_thin_marks`).
+  - Stubble is a haze and keeps the box: its look at distance is its mean.
+  - The other way the brief allowed, starting the mips one level down, was not built.
+- **Deterministic:** a file depends only on its picture and its job: no time, path or thread count goes in, the kernel is pinned, the mips are integer-weighted f32 sums in a fixed order. `pictures_selftest.py` builds the bundle twice and compares the sha256 of every file. The same bytes on another x86_64 machine with AVX2 is expected, not tested. An ARM machine (the laptop, the Spark) runs ISPC's Neon target and may differ: bundles are built on the dev-box.
+- **The summaries** are `Thumb::of` exactly: the same sample positions, the same f32 arithmetic in the same order, Bevy's `gamma_function` for sRGB and a byte over 255 for data. `cargo test` checks it, bit for bit, against a verbatim copy of `Thumb::of` run on Bevy 0.20.1's own loaded `Image`, for pictures of its own and, with `BC7KTX_PICTURES`, every PNG of a bundle (122 pictures, sRGB and linear: identical). It also fails when the client's `Thumb::of` no longer matches the copy. `bevy_loads_the_files` loads the files with Bevy's KTX2 loader: BC7 sRGB or UNORM, the full chain, the levels' bytes; and refused on a device without BC.
+
+**The check** (`pictures.py check`, run by `bundle` before it writes) fails a bundle when:
+
+- a GLB's image URI does not resolve;
+- a `.ktx2` has no `.thumb.png`, or the thumb is not 64×64 RGBA 16-bit;
+- a KTX2's level count is not the full chain, its format class (`BC7_SRGB_BLOCK` sRGB for colour, `BC7_UNORM_BLOCK` linear for the shadow maps) is wrong, or its levels do not decompress to their sizes;
+- a GLB still embeds a picture, or names a PNG, of a class the manifest calls KTX2;
+- a converted PNG is left behind, a KTX2 or a thumb is unnamed, `types.json` names a missing page, or a manifest line's sha256 is wrong.
+
+The self-test breaks a KTX2 bundle each of those ways (a thumb removed, a URI to nowhere, an sRGB picture as a shadow map, a header a level short, the generator's own type GLB put back), and the check catches every one, each for its own reason.
+
+### From char-4-composed-643ac265
+
+`pictures_selftest.py`, dev-box, 12 threads: about 18 s a KTX2 bundle; evidence in `.local/tex1/out/selftest.json`.
+
+- **The PNG bundle** is the input file for file; its `MANIFEST.txt` differs only by `pictures: png`.
+- **The KTX2 bundle twice:** every file the same, all 118 `.ktx2` included (21 atlases, 21 shadow maps, 72 overlays, 3 pages, strands).
+- **Both pass the check.**
+- **Encoding error** at level 0 (`bc7ktx error`): the atlas RMS 0.11 to 0.13 of 255 a channel, the worst texel 4; the tint page 0.15 to 0.32, worst 16; a shadow map 0.08 to 0.24, worst 6. PSNR 62 to 69 dB.
+
+| Class | Pictures | Size | RGBA8, no mips (today) | BC7, every level | KTX2 files |
+|---|---|---|---|---|---|
+| Type atlas | 21 | 1024² | 84.00 MiB | 28.00 MiB | 2,782 KiB |
+| Shadow map | 21 | 512² | 21.00 MiB | 7.00 MiB | 2,117 KiB |
+| Overlays | 72 | 512² | 72.00 MiB | 24.00 MiB | 1,639 KiB |
+| Far page | 1 | 1280² | 6.25 MiB | 2.08 MiB | 250 KiB |
+| Tint page | 1 | 1600×720 | 4.39 MiB | 1.47 MiB | 241 KiB |
+| Iris page | 1 | 192² | 0.14 MiB | 0.05 MiB | 26 KiB |
+| Strands | 1 | 256×512 | 0.50 MiB | 0.17 MiB | 112 KiB |
+| **Whole book** | 118 | | **188.3 MiB** | **62.8 MiB** | |
+| **Cullet's residents' set** (21 types, 52 overlays, the pages, strands) | | | **168.3 MiB** | **56.1 MiB** | |
+
+GPU arithmetic: a picture's bytes on the GPU, without the driver's own padding or alignment, so the ratio is 3.00 for every class. The thumbs are 0.7 MiB on disk and 64 KiB each on the CPU, as the client's own summaries are.
+
+**Bundle size:** 25.93 MB as built, 29.06 MB as KTX2, +12% (the proposal estimated +20 to 30 MB): zstd takes the flat pictures' BC7 blocks down to 10 to 30% of their size. Unpacked 56.0 → 59.1 MB.
+
+### Stills
+
+`pictures_stills.py` draws five Cullet look lines composed by the client's asset view, from the PNG bundle and the KTX2 bundle. The people are light skin with blue eyes and lines (`lk_b23bcf72f485a061`), light skin with brown eyes, lines and freckles (`lk_97e70f4184cd645d`), dark skin with brown eyes and lines (`lk_3a24378c7d67ec75`), darker skin with grey-blue eyes, a beard, lines and freckles (`lk_c10f255e70477c0c`), and a child with freckles and green eyes (`lk_785d5fa2c550b36c`); every type has brows. The shots:
+
+- the game camera at 22 m with the far model, as the game draws it there;
+- the same with the full model (`LIVING_GAME_FAR=1000`);
+- the size the close camera gives at 7.5 m;
+- the face close up from the front and at 35°.
+
+A third arm draws the PNG bundle 4× larger and averages it down in linear light: the screen with ideal filtering. The dev-box GPU (RADV, Vulkan) reports `CompressedImageFormats(BC)`, and every KTX2 loaded.
+
+The client side below was applied to the dev-box worktree as a temporary patch for these runs only, both arms on the same binary, and never committed. The patch is kept as evidence for the laptop. The sheets (a row a person: PNG, KTX2, reference; crops enlarged by nearest neighbour), `stills.json` with each shot's differences, and the patch are in `~/archive/looks-tex-1-stills-20261112/` on the dev-box.
+
+- **Close up**, PNG and KTX2 differ by less than two PNG runs differ from each other (mean 0.06 to 1.7 of 255 against 0.13 to 1.9: eyes and timing move between runs). Skin, lips and blush, irises, brows, lines and freckles match, and no shadow edge bands.
+- **At distance**, the arm nearer the reference is the better drawing. Over the 15 distant shots the mean error against the reference was:
+
+  | Arm | Mean error, of 255 |
+  |---|---|
+  | PNG (no mips: aliased, marks kept by aliasing) | 4.96 |
+  | KTX2 with coverage on the overlays and the tint page | 4.94 |
+  | KTX2 with box mips everywhere | **4.77** |
+  | KTX2 as shipped (coverage on the overlays, box elsewhere), a later run | 5.07, PNG 5.03 in the same run |
+
+  The differences are within run-to-run variation. Both arms are about 4 to 6 off the reference everywhere, mostly at the outline, which is screen-width and so thinner in the 4× drawing.
+- **The iris lights take the box.** With coverage on the tint page (lights above alpha 0.7, the lips below it), the lights grew into bright yellow specks in the eyes at 7.5 m, where the reference keeps the eyes dark. The box draws them as the reference does.
+- **The overlays keep coverage.** It holds freckles and lines a little stronger than the reference at distance, which is what the brief asked for. The box draws them fainter, as the reference does. Switching the overlays to `"mips": "box"` is one line in `pictures.json`, if the coordinator prefers the reference.
+- **The atlas and the far page take the box.** A face at 22 m is about 10 pixels wide; the PNG shows the eyes as aliased dots and the KTX2 as their filtered mean, nearer the reference in the far model's shots.
+- **No class blurs or bands**, so none is kept as PNG.
+- **Seen in passing, not a picture fault:** at 22 m the child's black hair is sometimes green-grey, in either arm by turns from run to run. It is for the laptop.
+
+### What the client needs (for the laptop)
+
+Nothing in `living/game` was changed. A KTX2 bundle needs these three changes; a PNG bundle (`pictures: png`, or any bundle before this step) loads exactly as today. The patch the stills ran on is `~/archive/looks-tex-1-stills-20261112/client-proto.patch` on the dev-box.
+
+**1. Summaries from the thumbs** (`characters.rs`, `thumb_pictures`). A BC7 picture's blocks cannot be read on the CPU: `Image::get_color_at` fails on them, `Thumb::of` gives zero cells, and the recolour's source colour falls back to the material's base colour, so composed people lose their colours.
+
+- For an image under `lookdev/` whose path ends in `.ktx2`, read `<asset root>/<path with .ktx2 replaced by .thumb.png>` once (`std::fs`), not the image's pixels.
+- It is a 64×64 PNG, RGBA 16-bit. Each cell is `[r·a, g·a, b·a, a]` in linear light, `value / 65535`, row-major from the top: the cells `Thumb::of` makes from the PNG, to 1/65535.
+- Read through Bevy (`Image::from_buffer(…, ImageType::Extension("png"), CompressedImageFormats::NONE, false, …)` gives `Rgba16Unorm`, little-endian u16 in `data`) or the `image` crate (`into_rgba16`).
+- Keep `Thumb::of` for PNG pictures; nothing else in the recolour changes. `bc7ktx`'s test compares its summaries with a verbatim copy of `Thumb::of` and fails when the client's changes, so a change there needs the copy updated.
+- Insert the thumb under the image's id as now. The image's `asset_usage` may still become `RENDER_WORLD`: a KTX2's CPU copy is its blocks, which nothing on the CPU reads.
+
+**2. The shadow map as `.face.ktx2`.** Look for `<file>.face.ktx2`, else `<file>.face.png`, as now, in both places that name it:
+
+- `lookdev.rs` `convert` (`own = <file>.face.png`, line 473 at `c13a31df`);
+- `characters/compose.rs` `toon` (`map = <file>.face.png`, line 439).
+
+Keep `is_srgb = false` on its load. Bevy's KTX2 loader takes sRGB or linear from that setting, not from the file, so a shadow map loaded with the default (`true`) would be read as sRGB.
+
+**3. A warning without BC.** At start, one `warn!` when `CompressedImageFormatSupport` (a main-world resource from `RenderPlugin`) lacks `CompressedImageFormats::BC`: the KTX2 pictures would not load on that device and it needs a PNG bundle (`pictures.py bundle … --pictures png`). The dev-box reports `BC` (RADV); the laptop (Metal on Apple silicon) and the Spark (NVIDIA) should, to be confirmed by this line at the first start. Nothing else changes: no image is converted on load, and BC7 levels upload as they are.
+
+**Not covered:** the client's own measurement (resident and footprint memory, GPU textures, frame times and ready time over PNG and KTX2 on fresh Cullet worlds), which the proposal's prototype step owns on the laptop; ASTC (the laptop could draw it, the dev-box and the Spark cannot); cutting any class's size (judged first by stills: the far page at 640² is the proposal's first candidate); the bundle builder's call to `pictures.py`, which is char-4's.
+
 ## Motions on generated people
 
 `animate.py` retargets the clip library onto a generated person unchanged, since the skeleton is VRoid's. Limb lengths are our own, so a take can behave differently on our people than on a VRoid base: our man's arms are longer, and a hand that clears the floor on Shino goes 8 cm into it on him.

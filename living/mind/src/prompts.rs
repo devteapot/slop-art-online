@@ -611,6 +611,10 @@ pub fn think_framing() -> bool {
 /// under `think_framing`, word for word as replayed (docs/FRAMING.md).
 const TODAY_FRAMING: &str = "Start from why you are thinking now: that is what this moment of thought is about. Think about it as that person: what you make of it, and what you mean to do.";
 const NEUTRAL_FRAMING: &str = "What just happened is shown beside what you perceive. Think as that person about whatever matters to you now, which may or may not be what just happened, and decide what you mean to do.";
+/// How a mind is told to use the `#<id>` handles it is shown people by, the same sentence in every
+/// speaking mind's system prompt (think, deliberate, fast, talk): handles for acts and memory, never
+/// spoken (fix-spoken-ids; the speech primitive also says any that slip through as words).
+pub const IDS_NOT_SPOKEN: &str = "Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them.";
 /// The think prompt's reason section, and its name under `think_framing` (in the same place).
 const WHY_SECTION: &str = "\n# Why you are thinking now\n";
 const JUST_SECTION: &str = "\n# What just happened\n";
@@ -634,7 +638,7 @@ Think about it as that person: what you make of it, and what you mean to do. You
 staying safe, your work) unless you decide otherwise, so decide what this moment calls for, not everything. \
 When one of your habits keeps failing you (see how each has gone), you may decide to sit down and rework it. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, as well as practical matters; you may also stay silent. \
-Refer to people by the ids you see. Do not assume facts you have not perceived.\n\n{}\n\n\
+Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Do not assume facts you have not perceived.\n\n{}\n\n\
 Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
 \"intend\": [\"each thing you mean to do, in plain words, in order (e.g. ask Borno (#5) to start a family with me; give Galy (#8) 2 berries; \
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
@@ -768,7 +772,7 @@ and they may change through what you live. That person has already decided what 
 A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
 Your top level and your routines are all your body does: they began as your habits and they are yours; nothing eats, sleeps or keeps you warm unless they do. \
 To change one, rework it as an act, when what you decided says so. \
-Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
+Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"acts\": [ACTS to carry out now, in order] (optional), \
 \"plan\": \"one-line intention\", \"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what you mean to do...}}}} (becomes your routine \"current plan\", \
 weighed among your desires as \"the plan\": your top level shows each desire's weight; a plan weighed above your safety desire outweighs staying safe while it lasts, and needs keep their own pull, e.g. strong hunger ≈ 1.0, so a plan of 0.6 yields to it and resumes after), \
@@ -1057,7 +1061,7 @@ fn fast_system_in(frame: Frame) -> String {
 Something has just happened to you (see Why now). Your body goes on doing what your top level and your routines say while you think; \
 what you answer changes them from the next moment on, not the moment that is passing. \
 You may rewrite your `combat` branch, rewrite one of the routines listed under Your routines, switch your `combat` branch to one of them, or keep everything as it is. \
-Use only what you have perceived and what you know how to do. Refer to people by the ids you see. Reply with ONE JSON object, one of:\n\
+Use only what you have perceived and what you know how to do. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object, one of:\n\
 {{\"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}}, \"thought\": \"one sentence, in your words\"}}\n\
 {{\"routine\": {{\"name\": \"one of your routines\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
 {{\"switch\": \"one of your routines\", \"thought\": \"...\"}}\n\
@@ -1247,7 +1251,7 @@ or say what you actually want to say — what you think or feel, something you r
 Real conversations are short and have a point. As soon as something is settled between you (you agreed on something, \
 one of you declined, someone will think it over, or there is simply nothing more to say), say so in \"settled\": that line closes \
 the conversation for now; don't restate what was already agreed or keep saying goodbye. You don't have to answer everything: \
-silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
+silence (say null) is fine. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
 \"say\": \"your words\" or null, \"to\": id of who you speak to, {}\
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
 {{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to take a trade they offered (\"record\": id of their proposal, for terms), \
@@ -1333,6 +1337,16 @@ pub fn talk_user(t: &TalkUser) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// Every speaking mind is told, in the same words, that the `#<id>` handles are for acts and
+    /// memory and never spoken (fix-spoken-ids: r2e's minds said three lines with them).
+    #[test]
+    fn every_speaking_mind_is_told_ids_are_never_spoken() {
+        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("talk", talk_system())] {
+            assert_eq!(text.matches(IDS_NOT_SPOKEN).count(), 1, "{purpose}");
+        }
+        assert!(!IDS_NOT_SPOKEN.contains('#'), "one general sentence, no example");
+    }
 
     /// The grammar's `doing` example names no skill a reader may never face (a mind copied
     /// "strike" against a foe whose blow is `attack`; r2c): a kind word, and `is` is said to take
