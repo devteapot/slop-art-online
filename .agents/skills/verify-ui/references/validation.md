@@ -1,5 +1,9 @@
 # verify-ui: last real run
 
+**2026-11-12, branch `look-3b` (look-3 rebased onto main `f357c41e`, with fix-field-scene).** fix-field-scene's field walking branch is kept; everything else is look-3's (a duplicate `facing_at` dropped; main's is the same). living-game tests: 90 passed. On a fresh `verify-ui-l3b-1112-0115` from this commit, `check.py look-walk field` together: **120 passed, 0 failed**.
+- look-walk: ground speed 1.00× along the keys at every look for every preset; the others case passes.
+- field, with `FACE_WHILE_MOVING` on: the walk under way north-west; the facing 75° off the travel toward a look 135° off; the release brings it back.
+
 **2026-11-12, branch `fix-field-scene` (field failing on main 94c9e60f: walks at speed 0, a different 1–2 checks each re-run).** The cause was the scene, not fov-facing or look-2. Every walk, release, look and stand snapshot had `face_off` 0 (facing = travel). The walk itself was steered:
 - the scene placed a resident 5 m due north and walked the player due north at it;
 - the player started wherever the last run left it, often with a building north (slid along it at −4.1°, or boxed in at speed 0);
