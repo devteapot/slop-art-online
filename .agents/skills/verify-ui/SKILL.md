@@ -96,9 +96,7 @@ It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. 
 
 ## The client's unit tests
 
-`just living-check` runs `cargo test --release -p living-game` (its `game-tests` step), headless: no display, GPU or generated assets. A test it cannot run, or a known red one, goes in `GAME_TEST_SKIPS` in `living/tools/check.py` with its reason, and in this list, so it is run here by hand (`cargo test --release -p living-game -- --exact NAME`). No test needs a display: all ran headless on the Spark without assets (2026-11-12). Skipped:
-
-- `verbs::tests::make_is_offered_at_a_furnace_only_while_it_burns_with_fuel`: fails since goods-3's merge 30380b2e (passes at 11e4fcb1 and bf33831d): assertion 'lit true fuel 6 offered false'; owner dev-box; remove this ignore in the merge that fixes it.
+`just living-check` runs `cargo test --release -p living-game` (its `game-tests` step), headless: no display, GPU or generated assets. A test it cannot run, or a known red one, goes in `GAME_TEST_SKIPS` in `living/tools/check.py` with its reason, and in this list, so it is run here by hand (`cargo test --release -p living-game -- --exact NAME`). No test needs a display: all ran headless on the Spark without assets (2026-11-12). Skipped: none.
 
 `ik::spots::uneven_ground_spots` is `#[ignore]`d in the source: a tool that lists photo spots (`-- --ignored uneven_ground_spots --nocapture`), not a check.
 

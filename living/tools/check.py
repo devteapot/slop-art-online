@@ -83,7 +83,8 @@ STEPS = [
     # The game client's unit tests, in release so they reuse the game step's tree (no second
     # debug Bevy tree). The client reads the rules (verbs.rs's offered(), the checks), so a rules
     # change can break it: verbs::tests::make_is_offered_at_a_furnace_only_while_it_burns_with_fuel
-    # went red on main (f0061a07) while the check only built the game. They run headless, without
+    # went red on main (f0061a07) while the check only built the game (an out-of-date fixture:
+    # goods-3's glass needs a crucible held; fixed in fix-make-offer). They run headless, without
     # a display, a GPU or the generated (git-ignored) assets; a test that cannot is skipped here by
     # name in GAME_TEST_SKIPS, with its reason, and listed in the verify-ui skill to run by hand.
     {"name": "game-tests", "lane": "release", "packages": ["living-game"], "dirs": ["release"],
@@ -123,10 +124,7 @@ STEPS = [
 # headless on the Spark without assets, 2026-11-12), or a known red one that its owner fixes (it is
 # also on the scene gate's red-on-main list). `ik::spots::uneven_ground_spots` is #[ignore]d in the
 # source: a tool that lists photo spots (`-- --ignored uneven_ground_spots --nocapture`), not a check.
-GAME_TEST_SKIPS = {
-    "verbs::tests::make_is_offered_at_a_furnace_only_while_it_burns_with_fuel":
-        "fails since goods-3's merge 30380b2e (passes at 11e4fcb1 and bf33831d): assertion 'lit true fuel 6 offered false'; owner dev-box; remove this ignore in the merge that fixes it",
-}
+GAME_TEST_SKIPS: dict[str, str] = {}
 for _s in STEPS:
     if _s["name"] == "game-tests":
         _s["cmd"] = _s["cmd"] + (["--exact"] if GAME_TEST_SKIPS else []) + [x for name in sorted(GAME_TEST_SKIPS) for x in ("--skip", name)]
