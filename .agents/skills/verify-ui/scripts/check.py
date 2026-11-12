@@ -1521,9 +1521,9 @@ def unheard(run, c):
     at = {r["id"]: (r["x"], r["y"]) for r in rows_b if "x" in r}
     mine = at.get(me)
     dist = lambda p: ((p[0] - mine[0]) ** 2 + (p[1] - mine[1]) ** 2) ** 0.5
-    near = sorted(i for i, p in at.items() if i in people and i != me and dist(p) < 9.5) if mine else None
+    near = sorted(i for i, p in at.items() if i in people and i not in (me, b) and dist(p) < 9.5) if mine else None
     bd = round(dist(at[b]), 1) if mine and b in at else None
-    c.check(s, "scene: no one within 9 m of me (speech carries 9 m); the resident held 10 m away, within sight (11 m)", near == [] and bd is not None and 9.2 < bd < 10.8, f"me {mine}; within 9.5 m {near}; #{b} at {bd} m")
+    c.check(s, "scene: no one else within 9.5 m of me (speech carries 9 m); the resident held beyond 9 m, within sight (11 m)", near == [] and bd is not None and 9.0 < bd <= 11.0, f"me {mine}; within 9.5 m {near}; #{b} at {bd} m")
     t1 = d["01"].get("typing") or {}
     c.check(s, "addressing them far away: the box says out of earshot", t1.get("to") == b and "out of earshot" in (t1.get("label") or ""), json.dumps(t1))
     reach = [r for r in (sql(run, f"SELECT id, kind, ok, code, what, why, other, at_ms FROM act_outcome WHERE observer = {me} AND code = 'reach'") if me else []) if r.get("at_ms", 0) >= since]
@@ -1553,7 +1553,54 @@ def unheard(run, c):
     c.check(s, "a heard line: no reach note", not any("could not have heard" in n or "near enough to hear" in n or "out of earshot" in n for n in n6), str(n6))
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard}
+FAR = "someone too far away to make out"
+# verify-client's far_label.py's overlay: anyone farther than 4 m is too far to make out (as
+# Cullet's `perceived_of` does past 24 m), so the far case fits in view on the island.
+FAR_LAW = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
+
+
+def far(run, c):
+    """far-label in the client: someone too far away to make out keeps the authority's words in
+    the talk target (and the Log), while their plate and hover read "someone in blue" from the
+    colours drawn; close again, "a stranger in …". The colour words are presentation only:
+    nothing sent back carries them. The scene installs far_label.py's 4 m overlay of the shipped
+    script (admin `install_script`) and puts the shipped script back after."""
+    s = "far"
+    b = residents(run, 1)[0]
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    os.makedirs(out_dir, exist_ok=True)
+    shipped = open(os.path.join(ROOT, "living/scripts/skills.rhai")).read()
+    overlay = os.path.join(out_dir, "far-overlay.rhai")
+    open(overlay, "w").write(shipped.replace("fn perceived_of(p)", "fn base_perceived_of(p)", 1) + "\n" + FAR_LAW + "\n")
+    install = os.path.join(ROOT, "living/tools/install_script.py")
+    r = subprocess.run([sys.executable, install, f"verify-{run}", overlay], capture_output=True, text=True)
+    c.check(s, "the 4 m overlay is installed", r.returncode == 0, (r.stdout + r.stderr)[-300:])
+    line = "Hello over there."
+    plan = ("ready;sync:scene;wait:2.5;point:{B};wait:0.8;shot:01_near;dump:01;"
+            "sync:away;wait:3;point:{B};wait:0.8;shot:02_far;dump:02;key:Enter:tap;wait:0.6;shot:03_to_far;dump:03;"
+            f"type:{line};enter;wait:1.5;dump:04;key:Escape:tap;wait:0.3;"
+            "sync:back;wait:3;point:{B};wait:0.8;shot:05_close;dump:05;quit").replace("{B}", str(b))
+    syncs = [f"away=place_at|{b}|(mx+6.0)|(my)", f"back=place_at|{b}|(mx+2.0)|(my)"]
+    try:
+        out, code, text = drive(run, s, plan, places=[f"{b}:2:0"], syncs=syncs)
+    finally:
+        subprocess.run([sys.executable, install, f"verify-{run}"], capture_output=True, text=True)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ["01", "02", "03", "04", "05"]}
+    hov = lambda k: next((h.get("label") for h in d[k].get("hovered") or [] if h.get("id") == b), None)
+    near1, far2, near5 = hov("01"), hov("02"), hov("05")
+    c.check(s, "close up (2 m): the plate says a stranger in their colours", bool(near1) and near1.startswith("a stranger") and "too far" not in near1, f"{near1!r}")
+    c.check(s, "beyond the range (6 m): the plate says someone in their colours, or there is none", far2 is None or re.fullmatch(r"someone in [a-z]+( [a-z]+)?( and [a-z]+( [a-z]+)?)?", far2) is not None, f"{far2!r}; hovered {d['02'].get('hovered')}")
+    t3 = d["03"].get("typing") or {}
+    c.check(s, "the talk target carries the authority's words", t3.get("to") == b and FAR in (t3.get("label") or "") and " in " not in (t3.get("label") or "").replace(FAR, ""), json.dumps(t3))
+    L = log(out)
+    said = [x for x in sql(run, f"SELECT id, kind, object, text FROM experience WHERE kind = 'said' AND object = {b}") if line in x.get("text", "")]
+    c.check(s, "what I send carries my words and their id, no colour words", re.search(rf'say: "{re.escape(line)}" to #{b}\b', L) is not None and said and not any("someone in" in x.get("text", "") for x in said) and not re.search(r'(say|act)[^\n]*someone in ', L), f"{len(said)} said rows")
+    c.check(s, "close again: a stranger in their colours", bool(near5) and near5.startswith("a stranger"), f"{near5!r}")
+    notes_clear(c, s, out)
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far}
 
 
 def main():
