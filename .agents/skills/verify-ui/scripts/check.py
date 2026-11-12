@@ -589,6 +589,12 @@ def texel(meta, pix, x, y):
 # 1.4 m (the near ring), one 8 m to the south-east.
 FOV_LOOKS = [0, 90, 180, 270]
 FOV_PLACES = [(0.0, -5.0), (5.5, 0.0), (0.0, 5.0), (-5.5, 0.0), (1.0, -1.0), (5.7, 5.7)]
+# Where the field scene stands the player first (open grass west of Brackenford on the island
+# seed, look-walk's spot), so every run starts alike: a re-run used to start where the last one
+# left the character, often with a building north of it, and the walk was steered or blocked.
+FIELD_SPOT = (300.0, 330.0)
+# The walk goes north-west (compass), between the residents placed north and west, not at one.
+FIELD_WALK = 315
 LIT = 100.0   # a light on someone (`glow`) the client can't know, at night: a comparison it could flip is left out
 DAY_SIGHT = 11.0  # the shipped senses law's sight by day: no one is lit by day
 
@@ -643,8 +649,9 @@ def compare_fov(snap, dumps, me):
 def field(run, c):
     """Facing sight (`fov_on`): off, the client draws no field (its dumps have no facing); on (F5
     through the admin link), the field and its readout appear, and at four looks the authority's
-    perceived set matches the client's field; a walking look is held at `look_walk_deg`; a
-    release snaps a walk back to its travel and leaves a standing body facing where it was; the
+    perceived set matches the client's field; walking (north-west from a fixed open spot), the look
+    is released, or with FACE_WHILE_MOVING held at `look_walk_deg` off the travel; a release
+    brings the facing back to the travel and leaves a standing body facing where it was; the
     Settings switch turns it off again; each switch is a law_change row."""
     s = "field"
     ids = residents(run, len(FOV_PLACES))
@@ -658,14 +665,18 @@ def field(run, c):
     body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy, face_off, face_turn, face_turn_s FROM body WHERE id = {{me}}"
     # By day (`{epoch_at:12}`, a scratch fixture): at night side vision is left out of the
     # comparison for the lights the client can't know, and a day lasts 12 minutes.
-    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on;sync:senses"
+    plan = "ready;frame:0;yaw:0;sync:spot;wait:5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on;sync:senses"
+    # A look the other way first: a look within `look_slack_deg` (10°) of where a standing body
+    # already faces writes nothing (a re-run's character may already face about north), so the
+    # first look turns the body as every other does.
+    plan += f";look:{(FOV_LOOKS[0] + 180) % 360};wait:2"
     for deg in FOV_LOOKS:
         plan += f";look:{deg};wait:2.5;sync:h{deg};dump:h{deg};shot:h{deg}"
-    # Walking north with the look east (90° off): held at look_walk_deg; F3 (to "where you walk")
-    # releases it while walking, then standing.
-    plan += (";look:90;hold:0;wait:2;sync:walk;key:F3:tap;wait:1.5;sync:released;stop;wait:1.5;key:F3:tap;look:270;wait:2;sync:looked;key:F3:tap;wait:1.5;sync:stood;"
+    # Walking north-west with the look east (135° off the travel): held at look_walk_deg; F3 (to
+    # "where you walk") releases it while walking, then standing.
+    plan += (f";look:90;hold:{FIELD_WALK};wait:2;sync:walk;key:F3:tap;wait:1.5;sync:released;stop;wait:1.5;key:F3:tap;look:270;wait:2;sync:looked;key:F3:tap;wait:1.5;sync:stood;"
              "click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;shot:03_settings_on;dump:03;click:@settings:facing_sight;wait:2.5;shot:04_settings_off;dump:04;quit")
-    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", "senses=sql|SELECT * FROM character_senses WHERE id = {me}"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
+    syncs = [f"spot=place_at|{{me}}|{FIELD_SPOT[0]}|{FIELD_SPOT[1]}", "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", "senses=sql|SELECT * FROM character_senses WHERE id = {me}"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
     places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, FOV_PLACES)]
     env = {"LIVING_GAME_CONTROL": "cursor", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::controls=debug"}
     old = {k: os.environ.get(k) for k in list(env) + ["LIVING_SIGHT_FIELD_DUMP"]}
@@ -745,25 +756,41 @@ def field(run, c):
         rows = (snaps.get(n) or [{}])[0].get("rows") or []
         return rows[0] if rows else None
     walk, rel, looked, stood = b("walk"), b("released"), b("looked"), b("stood")
-    north = -90.0
-    # The client releases its look while a direction is held (controls::FACE_WHILE_MOVING off,
-    # until look-2): walking north with the cursor east, the body faces and walks north. With it
-    # on, the authority would hold the body 30° toward the look (look_walk_deg).
+    look = 0.0  # the look east (sim degrees), held through the walk
+    # Judged against the authority's own travel, not the keys' way: steering may bend a walk
+    # round someone or slide it along a wall, and the look is about the facing against the travel.
+    # FACE_WHILE_MOVING off: the client releases its look while a direction is held, so the facing
+    # is the travel. On (look-3, with look-2's authority): the facing turns toward the look, at
+    # most look_walk_deg (75°) off the travel.
     face_moving = re.search(r"pub const FACE_WHILE_MOVING: bool = (\w+);", open(os.path.join(ROOT, "living/game/src/controls.rs")).read())
     face_moving = face_moving and face_moving.group(1) == "true"
+
+    def travel_of(row, at):
+        """The travel (degrees): the velocity's way when moving, else the travel heading."""
+        if math.hypot(row["vx"], row["vy"]) > 0.5:
+            return math.degrees(math.atan2(row["vy"], row["vx"]))
+        return math.degrees(heading_at(row, at))
+
+    def off(a, b):
+        return math.degrees(wrap(math.radians(a - b)))
+
     if walk:
-        h = math.degrees(facing_at(walk, snaps["walk"][0]["wall_ms"]))
-        off = abs(math.degrees(wrap(math.radians(h - north))))
+        at = snaps["walk"][0]["wall_ms"]
+        f, t = math.degrees(facing_at(walk, at)), travel_of(walk, at)
         speed = math.hypot(walk["vx"], walk["vy"])
+        keys = math.degrees(wrap(math.radians(FIELD_WALK - 90)))
+        c.check(s, "the walk under way (north-west, the scene's open way)", speed > 0.5 and abs(off(t, keys)) < 30.0, f"travel {t:.1f}° (keys {keys:.1f}°), speed {speed:.2f}")
         if face_moving:
-            c.check(s, "walking north with the look east: the body turns 30° toward it, not more (look_walk_deg)", abs(off - 30.0) < 4.0 and speed > 0.5, f"heading {h:.1f}°, speed {speed:.2f}")
+            want = math.copysign(min(75.0, abs(off(look, t))), off(look, t))
+            c.check(s, "walking with the look 135° off: the facing turns 75° toward it, not more (look_walk_deg)", abs(off(f, t) - want) < 4.0, f"facing {f:.1f}°, travel {t:.1f}°: {off(f, t):+.1f}° (want {want:+.1f}°)")
         else:
-            c.check(s, "walking north with the cursor east: the look is released while moving, the body faces its travel", off < 4.0 and speed > 0.5, f"heading {h:.1f}°, speed {speed:.2f}")
+            c.check(s, "walking with the cursor east: the look is released while moving, the body faces its travel", abs(off(f, t)) < 4.0, f"facing {f:.1f}°, travel {t:.1f}°")
         moving_rel = re.search(r"look: human_face\(0\.000, 0\.000\)", L) is not None
         c.check(s, "…the release went as human_face(0, 0)", moving_rel or face_moving)
     if rel:
-        h = math.degrees(facing_at(rel, snaps["released"][0]["wall_ms"]))
-        c.check(s, "a release while walking snaps back to the travel (north)", abs(math.degrees(wrap(math.radians(h - north)))) < 4.0, f"heading {h:.1f}°")
+        at = snaps["released"][0]["wall_ms"]
+        f, t = math.degrees(facing_at(rel, at)), travel_of(rel, at)
+        c.check(s, "a release while walking brings the facing back to the travel", abs(off(f, t)) < 4.0, f"facing {f:.1f}°, travel {t:.1f}°")
     if looked and stood:
         h1 = math.degrees(facing_at(looked, snaps["looked"][0]["wall_ms"]))
         h2 = math.degrees(facing_at(stood, snaps["stood"][0]["wall_ms"]))
