@@ -1803,6 +1803,15 @@ mod tests {
         // Out.
         let (lit, fuel, offered) = glass(999_000);
         assert!(!lit && fuel == 0.0 && !offered, "lit {lit} fuel {fuel} offered {offered}");
+        // goods-3: the crucible is a tool held, not used up. Burning with fuel but none in the
+        // pack: not offered, and the recipe grid's cell is greyed with the rules' words naming it.
+        let bare = me(&[("sand", 2), ("ash", 1)], &["glassmaking"]);
+        let mut t = thing_facts("structure", "furnace", 5, 0.0, 1.0);
+        workplace(&sc, &mut t, 1_000_000 + 2 * hour, 1_000_000, day);
+        let all = skills_of(&sc);
+        assert!(!choices(&sc, &bare, &aim, Some(&t), &all).iter().any(|c| c.skill == "make" && c.item.as_deref() == Some("glass")));
+        let (why, _) = refusal_with(&sc, &bare, Some(&t), all.iter().find(|s| s.name == "make").unwrap(), "glass");
+        assert!(why.contains("crucible"), "{why}");
     }
 
     #[test]
