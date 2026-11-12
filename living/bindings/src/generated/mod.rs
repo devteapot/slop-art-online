@@ -67,6 +67,8 @@ pub mod familiar_table;
 pub mod familiar_type;
 pub mod far_handle_table;
 pub mod far_handle_type;
+pub mod fast_ask_table;
+pub mod fast_ask_type;
 pub mod fighter_seen_table;
 pub mod fighter_seen_type;
 pub mod fighter_table;
@@ -139,8 +141,10 @@ pub mod mind_act_reducer;
 pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
+pub mod mind_fast_done_reducer;
 pub mod mind_install_reducer;
 pub mod mind_judged_reducer;
+pub mod mind_patch_reducer;
 pub mod mind_routines_reducer;
 pub mod mind_say_reducer;
 pub mod mind_skip_reducer;
@@ -254,6 +258,8 @@ pub mod skill_use_table;
 pub mod skill_use_type;
 pub mod slow_timer_table;
 pub mod slow_timer_type;
+pub mod slumber_table;
+pub mod slumber_type;
 pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
 pub mod spawn_newcomer_reducer;
@@ -354,6 +360,8 @@ pub use familiar_table::*;
 pub use familiar_type::Familiar;
 pub use far_handle_table::*;
 pub use far_handle_type::FarHandle;
+pub use fast_ask_table::*;
+pub use fast_ask_type::FastAsk;
 pub use fighter_seen_table::*;
 pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
@@ -426,8 +434,10 @@ pub use mind_act_reducer::mind_act;
 pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
+pub use mind_fast_done_reducer::mind_fast_done;
 pub use mind_install_reducer::mind_install;
 pub use mind_judged_reducer::mind_judged;
+pub use mind_patch_reducer::mind_patch;
 pub use mind_routines_reducer::mind_routines;
 pub use mind_say_reducer::mind_say;
 pub use mind_skip_reducer::mind_skip;
@@ -541,6 +551,8 @@ pub use skill_use_table::*;
 pub use skill_use_type::SkillUse;
 pub use slow_timer_table::*;
 pub use slow_timer_type::SlowTimer;
+pub use slumber_table::*;
+pub use slumber_type::Slumber;
 pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use spawn_newcomer_reducer::spawn_newcomer;
@@ -649,6 +661,11 @@ pub enum Reducer {
         actor: u32,
         upto: u64,
     },
+    MindFastDone {
+        actor: u32,
+        asked_ms: u64,
+        thought: ThoughtIn,
+    },
     MindInstall {
         actor: u32,
         graph: String,
@@ -661,6 +678,13 @@ pub enum Reducer {
     MindJudged {
         actor: u32,
         items: Vec<JudgedIn>,
+    },
+    MindPatch {
+        actor: u32,
+        target: String,
+        graph: String,
+        asked_ms: u64,
+        thought: ThoughtIn,
     },
     MindRoutines {
         actor: u32,
@@ -784,8 +808,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::Kill { .. } => "kill",
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
+            Reducer::MindFastDone { .. } => "mind_fast_done",
             Reducer::MindInstall { .. } => "mind_install",
             Reducer::MindJudged { .. } => "mind_judged",
+            Reducer::MindPatch { .. } => "mind_patch",
             Reducer::MindRoutines { .. } => "mind_routines",
             Reducer::MindSay { .. } => "mind_say",
             Reducer::MindSkip { .. } => "mind_skip",
@@ -907,6 +933,15 @@ impl __sdk::Reducer for Reducer {
                     upto: upto.clone(),
                 })
             }
+            Reducer::MindFastDone {
+                actor,
+                asked_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_fast_done_reducer::MindFastDoneArgs {
+                actor: actor.clone(),
+                asked_ms: asked_ms.clone(),
+                thought: thought.clone(),
+            }),
             Reducer::MindInstall {
                 actor,
                 graph,
@@ -930,6 +965,19 @@ impl __sdk::Reducer for Reducer {
                     items: items.clone(),
                 })
             }
+            Reducer::MindPatch {
+                actor,
+                target,
+                graph,
+                asked_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_patch_reducer::MindPatchArgs {
+                actor: actor.clone(),
+                target: target.clone(),
+                graph: graph.clone(),
+                asked_ms: asked_ms.clone(),
+                thought: thought.clone(),
+            }),
             Reducer::MindRoutines { actor, routines } => {
                 __sats::bsatn::to_vec(&mind_routines_reducer::MindRoutinesArgs {
                     actor: actor.clone(),
@@ -1116,6 +1164,7 @@ pub struct DbUpdate {
     experience: __sdk::TableUpdate<Experience>,
     familiar: __sdk::TableUpdate<Familiar>,
     far_handle: __sdk::TableUpdate<FarHandle>,
+    fast_ask: __sdk::TableUpdate<FastAsk>,
     fighter: __sdk::TableUpdate<Fighter>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
     floor_seed: __sdk::TableUpdate<FloorSeed>,
@@ -1193,6 +1242,7 @@ pub struct DbUpdate {
     skill_code: __sdk::TableUpdate<SkillCode>,
     skill_use: __sdk::TableUpdate<SkillUse>,
     slow_timer: __sdk::TableUpdate<SlowTimer>,
+    slumber: __sdk::TableUpdate<Slumber>,
     speech_card: __sdk::TableUpdate<SpeechCard>,
     stats: __sdk::TableUpdate<Stats>,
     steer: __sdk::TableUpdate<Steer>,
@@ -1296,6 +1346,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "far_handle" => db_update
                     .far_handle
                     .append(far_handle_table::parse_table_update(table_update)?),
+                "fast_ask" => db_update
+                    .fast_ask
+                    .append(fast_ask_table::parse_table_update(table_update)?),
                 "fighter" => db_update
                     .fighter
                     .append(fighter_table::parse_table_update(table_update)?),
@@ -1527,6 +1580,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "slow_timer" => db_update
                     .slow_timer
                     .append(slow_timer_table::parse_table_update(table_update)?),
+                "slumber" => db_update
+                    .slumber
+                    .append(slumber_table::parse_table_update(table_update)?),
                 "speech_card" => db_update
                     .speech_card
                     .append(speech_card_table::parse_table_update(table_update)?),
@@ -1676,6 +1732,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.far_handle = cache
             .apply_diff_to_table::<FarHandle>("far_handle", &self.far_handle)
             .with_updates_by_pk(|row| &row.id);
+        diff.fast_ask = cache
+            .apply_diff_to_table::<FastAsk>("fast_ask", &self.fast_ask)
+            .with_updates_by_pk(|row| &row.actor);
         diff.fighter = cache
             .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
             .with_updates_by_pk(|row| &row.id);
@@ -1835,6 +1894,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.slow_timer = cache
             .apply_diff_to_table::<SlowTimer>("slow_timer", &self.slow_timer)
             .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.slumber = cache
+            .apply_diff_to_table::<Slumber>("slumber", &self.slumber)
+            .with_updates_by_pk(|row| &row.actor);
         diff.speech_card = cache
             .apply_diff_to_table::<SpeechCard>("speech_card", &self.speech_card)
             .with_updates_by_pk(|row| &row.name);
@@ -2030,6 +2092,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "far_handle" => db_update
                     .far_handle
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fast_ask" => db_update
+                    .fast_ask
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2260,6 +2325,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "slow_timer" => db_update
                     .slow_timer
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "slumber" => db_update
+                    .slumber
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "speech_card" => db_update
                     .speech_card
@@ -2397,6 +2465,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "far_handle" => db_update
                     .far_handle
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fast_ask" => db_update
+                    .fast_ask
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2628,6 +2699,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "slow_timer" => db_update
                     .slow_timer
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "slumber" => db_update
+                    .slumber
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "speech_card" => db_update
                     .speech_card
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2712,6 +2786,7 @@ pub struct AppliedDiff<'r> {
     experience: __sdk::TableAppliedDiff<'r, Experience>,
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
     far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
+    fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
     floor_seed: __sdk::TableAppliedDiff<'r, FloorSeed>,
@@ -2789,6 +2864,7 @@ pub struct AppliedDiff<'r> {
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
     skill_use: __sdk::TableAppliedDiff<'r, SkillUse>,
     slow_timer: __sdk::TableAppliedDiff<'r, SlowTimer>,
+    slumber: __sdk::TableAppliedDiff<'r, Slumber>,
     speech_card: __sdk::TableAppliedDiff<'r, SpeechCard>,
     stats: __sdk::TableAppliedDiff<'r, Stats>,
     steer: __sdk::TableAppliedDiff<'r, Steer>,
@@ -2855,6 +2931,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
         callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
+        callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
         callbacks.invoke_table_row_callbacks::<FighterSeen>(
             "fighter_seen",
@@ -3008,6 +3085,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>("skill_use", &self.skill_use, event);
         callbacks.invoke_table_row_callbacks::<SlowTimer>("slow_timer", &self.slow_timer, event);
+        callbacks.invoke_table_row_callbacks::<Slumber>("slumber", &self.slumber, event);
         callbacks.invoke_table_row_callbacks::<SpeechCard>("speech_card", &self.speech_card, event);
         callbacks.invoke_table_row_callbacks::<Stats>("stats", &self.stats, event);
         callbacks.invoke_table_row_callbacks::<Steer>("steer", &self.steer, event);
@@ -3713,6 +3791,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         experience_table::register_table(client_cache);
         familiar_table::register_table(client_cache);
         far_handle_table::register_table(client_cache);
+        fast_ask_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
         floor_seed_table::register_table(client_cache);
@@ -3790,6 +3869,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         skill_code_table::register_table(client_cache);
         skill_use_table::register_table(client_cache);
         slow_timer_table::register_table(client_cache);
+        slumber_table::register_table(client_cache);
         speech_card_table::register_table(client_cache);
         stats_table::register_table(client_cache);
         steer_table::register_table(client_cache);
@@ -3833,6 +3913,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "experience",
         "familiar",
         "far_handle",
+        "fast_ask",
         "fighter",
         "fighter_seen",
         "floor_seed",
@@ -3910,6 +3991,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "skill_code",
         "skill_use",
         "slow_timer",
+        "slumber",
         "speech_card",
         "stats",
         "steer",

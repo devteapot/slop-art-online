@@ -511,6 +511,20 @@ pub struct Laws {
     /// Diagnostic: every shared answer is also computed afresh and compared; differences are
     /// logged and counted (`perception::report_answers`). Costs both.
     pub regard_cache_check: bool,
+    /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
+    /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
+    pub fast_lane_on: bool,
+    /// The same visible move aimed at a character by the same creature, seen this many times
+    /// in one fight, asks a fast re-plan (counted for the trigger only; never told).
+    pub seen_again_n: f32,
+    /// Fast re-plans issued a second, across the world, at most.
+    pub fast_lane_rate: f32,
+    /// Fast re-plans in flight at once, across the world, at most.
+    pub fast_lane_inflight: f32,
+    /// A character's fast re-plans start at least this many seconds apart.
+    pub fast_lane_gap_s: f32,
+    /// A trigger still waiting its turn after this many seconds is dropped.
+    pub fast_lane_stale_s: f32,
     /// A sound heard but not seen is near within this, close within the next (metres), and
     /// lingers this long after it was last heard (seconds).
     pub heard_near_m: f32,
@@ -585,6 +599,12 @@ impl Default for Laws {
             cue_check_s: 1.0,
             regard_cache: true,
             regard_cache_check: false,
+            fast_lane_on: false,
+            seen_again_n: 3.0,
+            fast_lane_rate: 2.0,
+            fast_lane_inflight: 4.0,
+            fast_lane_gap_s: 6.0,
+            fast_lane_stale_s: 8.0,
             heard_near_m: 5.0,
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
@@ -2547,6 +2567,12 @@ impl Scripts {
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
+            fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
+            seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
+            fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
+            fast_lane_inflight: g("fast_lane_inflight", l.fast_lane_inflight).round().clamp(0.0, 256.0),
+            fast_lane_gap_s: g("fast_lane_gap_s", l.fast_lane_gap_s).clamp(0.0, 600.0),
+            fast_lane_stale_s: g("fast_lane_stale_s", l.fast_lane_stale_s).clamp(0.5, 600.0),
             heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
             heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
             heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),

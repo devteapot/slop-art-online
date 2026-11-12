@@ -2399,7 +2399,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         None if yielded => format!("{label} struck you though you had yielded ({amount:.0} damage)"),
         None => format!("{label} attacked you ({amount:.0} damage)"),
     };
-    percept(ctx, &vc, now, "attacked", subject, victim, at, felt, 1.0);
+    percept(ctx, &vc, now, "attacked", subject, victim, at, felt.clone(), 1.0);
+    if !dead {
+        crate::fast::struck(ctx, &vc, &felt, now);
+    }
     // What a witness is told: a missile as a shot by the shooter it sees, or by the missile alone.
     let shot = |seen: &str, unseen: &str| missile.map(|m| (seen.replace("{m}", m), unseen.replace("{M}", &common::capitalized(m)).replace("{m}", m)));
     let pleading = match missile {
@@ -2581,6 +2584,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
         return;
     }
     let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((c.home_x, c.home_y));
+    crate::fast::cancel(ctx, id);
     // What the rules make of it, while the dead's records and things are still there.
     crate::records::on_death(ctx, id, now);
     // A person who plays the character (now, or while the minds hold it) is told how it died,

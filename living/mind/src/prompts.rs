@@ -961,6 +961,42 @@ pub fn is_night(hour: f32) -> bool {
     compiled().is_some_and(|sc| sc.is_night(hour))
 }
 
+/// The fast lane's system prompt (docs/FAST_LANE.md): the person, the world's rules (physics) and
+/// the graph grammar, and the four answers it may give. No acts, no dealings, no tactics: what to
+/// do is the character's own.
+pub fn fast_system() -> String {
+    fast_system_in(frame())
+}
+
+fn fast_system_in(frame: Frame) -> String {
+    shared(format!(
+        "{} Stay in character: your personality, values, relationships and memories are yours. \
+Something has just happened to you (see Why now). Your body goes on doing what your top level and your routines say while you think; \
+what you answer changes them from the next moment on, not the moment that is passing. \
+You may rewrite your `combat` branch, rewrite one of the routines listed under Your routines, switch your `combat` branch to one of them, or keep everything as it is. \
+Use only what you have perceived and what you know how to do. Refer to people by the ids you see. Reply with ONE JSON object, one of:\n\
+{{\"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}}, \"thought\": \"one sentence, in your words\"}}\n\
+{{\"routine\": {{\"name\": \"one of your routines\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
+{{\"switch\": \"one of your routines\", \"thought\": \"...\"}}\n\
+{{\"keep\": true, \"thought\": \"...\"}}",
+        opening(frame, THINK_OPENING),
+    )) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str()
+}
+
+/// The fast lane's user prompt: why now (the event as perceived), who the character is (with its
+/// own moves' timings), what has just happened, its top level and its routines.
+pub fn fast_user(reason: &str, persona: &str, experiences: &[String], plan: &str, outline: &str, repertoire: &str) -> String {
+    let mut out = format!("# Why now\n{reason}\n\n# Who you are\n{persona}\n\n# What has just happened (oldest first)\n");
+    for e in experiences {
+        out.push_str(&format!("- {e}\n"));
+    }
+    out.push_str(&format!("\n# Your top level (plan: {plan})\n{outline}\n"));
+    if !repertoire.is_empty() {
+        out.push_str(&format!("\n# Your routines\n{repertoire}\n"));
+    }
+    out
+}
+
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> Segments {
     let mut out = Segments::default();
     out.push(Stability::Dynamic, format!("\n# Why you are thinking now\n{reason}\n\n"));

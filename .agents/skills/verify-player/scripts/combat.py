@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|committed|breath|heal|early_dodge|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|committed|breath|heal|early_dodge|fast_lane|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -16,6 +16,7 @@ Python standard library only.
 import argparse
 import importlib.util
 import json
+import re
 import math
 import sys
 import time
@@ -668,6 +669,36 @@ def scene_early_dodge(st):
           {"lines": [e["text"] for e in lines], "row": rows[-1] if rows else None, "dodge": u and u["outcome"], "blow": blow[-1:]})
 
 
+def scene_fast_lane(st):
+    """The fast lane never serves a body its person controls, and nothing it counts is told
+    (docs/FAST_LANE.md). With the world's `fast_lane_on` law on and `seen_again_n` at 2, a
+    resident beside the player strikes it with a spear's heavy blow four times. The player's
+    character gets no `fast_ask` row (read as the admin), and nothing in its `my_experience` says
+    "again" or counts the resident's moves. The laws are put back after."""
+    cid = me(st)
+    p = body(st, cid)
+    call(st, "set_world_law", ["fast_lane_on", "true"], "admin")
+    call(st, "set_world_law", ["seen_again_n", "2"], "admin")
+    t0 = int(time.time() * 1000)
+    d = dummy(st, p, 1.2, 0.0)
+    call(st, "grant_items", [d, "spear", 1], "admin")
+    call(st, "set_behavior", [d, json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": cid}}}, {"wait": 0.5}]})], "admin")
+    rows_seen, t = [], time.time() + 25
+    while time.time() < t:
+        rows_seen += sql(st, f"SELECT * FROM fast_ask WHERE actor = {cid}")
+        blows = [u for u in sql(st, f"SELECT skill, accepted_ms, target FROM skill_use WHERE actor = {d}") if u["skill"] == "attack" and u["target"] == cid and u["accepted_ms"] >= t0]
+        if len(blows) >= 4 or me(st) != cid:
+            break
+        time.sleep(0.25)
+    call(st, "set_behavior", [d, '{"wait":60}'], "admin")
+    call(st, "set_world_law", ["seen_again_n", "3"], "admin")
+    call(st, "set_world_law", ["fast_lane_on", "false"], "admin")
+    told = [e["text"] for e in sql(st, "SELECT id, kind, text, at_ms FROM my_experience", "player") if e["at_ms"] >= t0]
+    counted = [x for x in told if re.search(r"again|\btimes\b|\(×", x)]
+    check(st, "a played body gets no fast-lane request, and its rows carry no count or \"again\"",
+          len(blows) >= 3 and not rows_seen and not counted, {"windups": len(blows), "fast_ask_rows": rows_seen[:2], "counted": counted[:3], "told": told[-4:]})
+
+
 def scene_jump(st):
     """A jump (2026-11-11) carries the body like a dash but does not evade: jumping toward a
     resident whose strike is winding up, the blow is not dodged (it lands, or misses by reach)."""
@@ -960,7 +991,7 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "wolves": scene_wolves, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "fast_lane": scene_fast_lane, "wolves": scene_wolves, "death": scene_death}
 
 
 def main():
