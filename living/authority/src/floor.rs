@@ -311,6 +311,9 @@ pub fn genesis_step(ctx: &ReducerContext, _t: GenesisTimer) -> Result<(), String
     if ctx.sender() != ctx.database_identity() {
         return Err("genesis_step is scheduled only".into());
     }
+    if common::schema_moved("genesis_step") {
+        return Ok(());
+    }
     if let Err(e) = step(ctx) {
         log::error!("genesis: step failed: {e}");
         if let Some(mut g) = ctx.db.genesis().id().find(0) {
