@@ -168,7 +168,7 @@ The user decided on 2026-11-09: "A blow does its damage; if the damage is more t
 - `living/mind`: the FORCE paragraph and the yield line of the world rules.
 - `spawn_battle` and `spawn_skirmish`: the `"item": "kill"` on their attacks and strikes.
 
-**What the story says.** A first blow on a person, or by a person, is chronicled `attack`, "Siv attacked Grim" (it was `assault` "beat" or `attack` "tried to kill"); the victim feels "Siv attacked you (n damage)" and a mind is woken with "Siv is attacking you!". The first blow after a yield is "Siv struck Grim, though Grim had yielded" (witnessed at 0.95), and a death that follows is "killed by Siv, after yielding", as before.
+**What the story says.** A first blow on a person, or by a person, is chronicled `attack`, "Siv attacked Grim" (it was `assault` "beat" or `attack` "tried to kill"); the victim feels "Siv attacked you (n damage)" and a mind is woken with "Siv is attacking you!". The first blow after a yield is "Siv struck Grim, though Grim had yielded" (witnessed at 0.95), and a death that follows is "killed by Siv, after yielding", as before. A missile is told as a shot (since fix-missile-told, 2026-11-12): "Siv shot you with an arrow: hit for 7", or "An arrow struck you from somewhere you could not see: hit for 7" when the victim does not see the shooter; witnesses "Siv shot Grim with an arrow" or "An arrow struck Grim"; the chronicle "Siv shot Grim with an arrow" ([perception](PERCEPTION.md#a-missile-is-told-as-a-shot-fix-missile-told-2026-11-12)).
 
 **Yield.** What it still does: for `yield_ms` (20 s) the yielder's own attacks, strikes, shots and throws are refused, and striking someone who has yielded is news to everyone in sight. Blows on the yielded land in full.
 

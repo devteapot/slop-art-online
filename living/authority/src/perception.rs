@@ -189,6 +189,17 @@ pub fn in_sight(ctx: &ReducerContext, map: &Map, observer: u32, eye: (f32, f32),
     living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, keep)
 }
 
+/// Whether character `observer` sees creature `target` where it stands now (its own sight, the
+/// light on the target, a clear line). Itself it always sees; without either body, no.
+pub fn sees_creature(ctx: &ReducerContext, observer: u32, target: u32, now: u64) -> bool {
+    if observer == target {
+        return true;
+    }
+    let (Some(eye), Some(t)) = (ctx.db.body().id().find(observer), ctx.db.body().id().find(target)) else { return false };
+    let (e, at) = (pos(&eye, now), pos(&t, now));
+    in_sight(ctx, &common::map(ctx), observer, e, common::facing_at(&eye, now), target, at, common::dist(e, at), &common::world(ctx), now, false)
+}
+
 /// Whether character `id`, its body `eye`, sees the place `at` now.
 pub fn sees(ctx: &ReducerContext, id: u32, eye: &Body, at: (f32, f32), w: &World, map: &Map, now: u64) -> bool {
     let e = pos(eye, now);
