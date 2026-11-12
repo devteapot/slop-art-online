@@ -87,3 +87,17 @@ Since `speech-2`:
 - The `speech` case checks both, when the card has the ways:
   - a whispered question from 1 m is answered with a "(whisper)" line, and its prompt says it was whispered;
   - a call from 15 m is answered with a "(call)" line, and its prompt holds the distance, the voice's 9 m and the ways.
+
+## How a line to the room was said
+
+Since `speech-address` (2026-11-12, docs/COMMUNICATION.md §16), a line to the room says, in each hearer's own labels, whom it calls by name and whom its speaker is talking with: "A stranger said to the room, calling Edda Hollin and a stranger: “…”", "… said to the room while talking with Lorcan Vane: “…”". The words are part of the hearer's `speech` row, so the prompt shows them as the row is.
+
+The `room-address` case (`verify_minds.py --case room-address`) spawns four people. H (thought for) founds a community and welcomes K, so H knows K's name and not U's or the speaker's. Everyone stands within 2.5 m of H. The speaker says, by admin `mind_say`, 2.6 s apart: a room line calling K and U by their given names, a line to K, then a room line naming no one. It checks:
+
+1. `calling_reads_known_then_stranger`: H's row reads "A stranger said to the room, calling <K> and a stranger:".
+2. `no_unknown_name_in_the_detail`: neither U's nor the speaker's name is in that row.
+3. `talking_with_reads_the_partner`: the last room line reads "A stranger said to the room while talking with <K>:".
+4. `prompt_carries_both`: H's next think prompt holds both rows (`prompt-address.txt`).
+5. `addressed_line_has_no_room_detail`: the line to K, as H overheard it, has no "to the room".
+
+Evidence: `room-address.json`, `prompt-address.txt`.
