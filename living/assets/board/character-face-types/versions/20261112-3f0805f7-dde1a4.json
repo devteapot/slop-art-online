@@ -1,0 +1,61 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-3f0805f7-dde1a4",
+ "published": "2026-11-12T09:02:27+01:00",
+ "imported": "2026-11-12T09:02:27+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "The types' far-head pictures and lip layers are tiles of two pages every type shares (lookdev/pages/types-far.png, types-tint.png): one material each for all types where each type brought its own. Nothing shows: 0.0 to 0.4 of 255 where the pose is the same. The iris stays a type's own.",
+ "source": {
+  "commit": "3f0805f7240ffc53d2006a77c913a554ae46e1af",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/characters/share.py",
+  "generator_sha256": "ee143876ef9ab545ab7869cfebdff4058a06634eb21d1e1a96eed541898da605",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "types-pages: four residents composed from the type files and shared styles, uncoloured, and coloured by the client through recipes (skin, eyes, hair); the full head close from the front and 40 degrees and at the game camera, and the far head alone at the game camera, each before and after the types' far pictures and lip layers went onto shared pages. Eyes are held open by the photo tool. The vroid and blue-protocol members are the references, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-3f0805f7-dde1a4",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "d2fd18a40da89978bd871f6d3b47cc211ca4fbf29d9b4e3c079aa7e987b84309",
+   "shots": [
+    "types-pages"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "6c79576bb8159c3133d88ed375dfe3c73392e52829a5b8bc59702fac352b196c",
+   "shots": [
+    "types-pages"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "8cc37db3dd68ae1bfac93488fd77f2d4a12aa8bdca6f3f522c2cee53f64c0168",
+   "shots": [
+    "types-pages"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
