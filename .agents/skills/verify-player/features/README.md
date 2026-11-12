@@ -3,7 +3,9 @@
 | Feature | File |
 | --- | --- |
 | Player character: join, move, act (a command runs once, `command.py`; a failed command told as an AI is told, `told.py`), walk far by click-to-move, speak (`human_say`, `human_speak` in each way of `speech_card`, `my_heard`; `speak.py`), refusals | [player-character.md](player-character.md) |
-| Combat skills: use, refusals, strike, killing a person, bow, fire bolt, block, dodge, heal, wolves, death and rejoin | [combat.md](combat.md) |
+| Combat skills: use, refusals, strike, killing a person, bow, fire bolt, block, dodge, jump, breath (a run, dodge and jump costs, the refill without writes, "out of breath"), heal, wolves, death and rejoin | [combat.md](combat.md) |
+
+| Combat skills: use, refusals, strike, killing a person, bow, fire bolt, block, dodge, heal, wolves, death and rejoin; the strike's and the arrow's outcome told to the player as a mind is told it, its own only | [combat.md](combat.md) |
 | Gestures: wave, nod and face through `human_act`, answered by residents; refusals | [gestures.md](gestures.md) |
 | Hospitality: a resident takes the player in (`host`), `lodging`, the stay's end, no theft from the host's store during it; the player's own `host` refused without a house; `guest` private | [hosting.md](hosting.md) |
 | Verbs from the game client: F on a thing or person, C on oneself, words for writing, the pack and know-how panels, refusals shown with the rules' reason, a skill the world adds appearing with no client change | [verbs.md](verbs.md) |

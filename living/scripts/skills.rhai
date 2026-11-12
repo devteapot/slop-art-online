@@ -10,6 +10,11 @@ fn laws() {
         gestation_days: 1.0, bond_window_s: 120.0,
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
         repeat_failure_s: 120.0,
+        // Whoever strikes, shoots or casts is told how it came out (an `own` experience): a blow's
+        // hit, guard or kill when it lands, a missile's when it strikes, is dodged, hits a wall or
+        // nothing, or flies out of the shooter's sight (docs/COMBAT_MIND.md §3.1). Off: only
+        // notable skills (attack) and failures are told, as before 2026-11-11.
+        force_outcomes: true,
         road_speed: 1.4,
         // Steering: where bodies slow down and cut corners, and how often they look again
         // (how each creature turns and keeps apart is its `motion` law).
@@ -82,6 +87,35 @@ fn laws() {
         // is told at full speed, and only its facing (head and chest: what it sees by, where a
         // guard faces) turns toward the look, at most `look_walk_deg` off its way.
         look_slack_deg: 10.0, look_walk_deg: 75.0,
+        // Moving and breath (docs/STAMINA.md). A grown person's walk (m/s, before age, genes and
+        // tiredness: `walk_base()`; a player's Settings offer 3.0 and 3.4), a person's run as a
+        // share of its walk, and the fastest a road takes anyone (m/s; a body faster on its own,
+        // a wolf at 5.1, keeps its speed: no one outruns a wolf, even on a road). An exhausted
+        // body (energy below 10) walks at `tired_pace` of its pace.
+        walk_base: 2.6, run_share: 1.65, run_top: 4.6, tired_pace: 0.8,
+        // A wolf's and a deer's run as shares of their walks (3.4 and 3.7 m/s): paired with
+        // `run_share`, they decide whether a running person outruns a wolf (docs/STAMINA.md).
+        wolf_run: 1.5, deer_run: 1.5,
+        // Breath (`stamina`, real seconds, the `pools` law): the most one has rested, what comes
+        // back a second from `stamina_delay_s` after the last effort, what a run and a held guard
+        // take a second, what a run needs to start (or start again), and the tiredness (energy)
+        // each point spent costs.
+        stamina_max: 100.0, stamina_regen: 25.0, stamina_delay_s: 1.0, stamina_run: 4.0, stamina_guard: 4.0, stamina_resume: 30.0, stamina_tires: 0.02,
+        // The third pool (`focus`; on screen the world's `pool_word("focus")`): its most, what comes
+        // back a second, from how long after the last use.
+        focus_max: 100.0, focus_regen: 3.0, focus_delay_s: 2.0,
+        // What each move takes from its pool (`combat_pool`), paid at its release.
+        cost_strike: 20.0, cost_bowshot: 6.0, cost_firebolt: 30.0, cost_heal: 35.0, cost_dodge: 20.0, cost_jump: 10.0, cost_block: 5.0,
+        cost_attack: 20.0, cost_throw: 10.0, cost_shoot: 6.0, cost_threaten: 3.0,
+        // Health and blows (docs/STAMINA.md, "Fight length"): a grown, whole body's health by
+        // kind (read when a body comes into the world), a bare blow by kind, and what each
+        // weapon or skill does before strength, skill and armor. Every blow does its full damage.
+        // A fight between equals lasts tens of seconds, paced by breath: blows about half what they
+        // were (strike 10, wolf 13), a wolf sturdier (55) and a deer as many bites from death as
+        // before (40 at 13 a bite).
+        hp_person: 100.0, hp_deer: 22.0, hp_wolf: 80.0,
+        blow_person: 4.0, blow_deer: 2.0, blow_wolf: 7.0,
+        dmg_spear: 9.0, dmg_strike: 5.0, dmg_strike_spear: 8.0, dmg_bowshot: 7.0, dmg_firebolt: 12.0, dmg_throw: 12.0, dmg_shoot: 8.0,
     }
 }
 
@@ -218,8 +252,13 @@ fn call_speech() {
 // (metres) and how strongly that bends its way; how far a wander may turn from the way it was
 // heading (radians) and for how long after stopping it still keeps that way (seconds). Asked per creature at every steering step and
 // kept per state, like senses: the shipped law reads nothing, so every creature shares it.
+// A person runs `run_share` times its walk: 1.65, about 4.3 m/s at the 2.6 walk, the fastest the
+// run still reads as a natural run in the game (the laptop's look-dev, 2026-11-11; at 4.8 it
+// scurries); animals keep their own
+// run (a wolf 5.1 m/s, a deer 5.55). A road speeds no one past `run_top` (m/s), and a run costs
+// breath (`pools`).
 fn motion(a) {
-    #{ run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0 }
+    #{ run: switch a.actor.kind { "person" => law("run_share"), "wolf" => law("wolf_run"), "deer" => law("deer_run"), _ => 1.5 }, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: law("run_top"), charge: a.actor.kind == "wolf" }
 }
 
 // A grown, rested body of a kind at its normal pace (for descriptions).
@@ -230,8 +269,8 @@ fn motion_law() {
     #{
         cadence: "hot",
         topic: "moving",
-        covers: ["move_speed"],
-        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. Running is ${short(m.run)} times one's walk and a flight ${short(m.flee)} times; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can. A stroll (wander) keeps roughly the way it was going, turning at most about ${short(m.wander_turn)} radians, even after a stop of up to ${short(m.wander_keep_s)} s.`,
+        covers: ["move_speed", "slowed"],
+        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. A person runs ${short(m.run)} times its walk (a wolf ${short(law("wolf_run"))} times, a deer ${short(law("deer_run"))}; no road takes anyone past ${short(m.top)} m/s), at a cost of breath: running is for hurry, flight and fights. A flight runs while breath lasts, else goes ${short(m.flee)} times one's walk; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can. A stroll (wander) keeps roughly the way it was going, turning at most about ${short(m.wander_turn)} radians, even after a stop of up to ${short(m.wander_keep_s)} s.`,
     }
 }
 
@@ -393,9 +432,9 @@ fn items_with(t) { having("items", t) }
 //   remains_h                   game hours its remains lie before they are gone
 fn kinds() {
     [
-        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_h: 120.0 },
-        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_h: 60.0 },
-        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_h: 60.0 },
+        #{ name: "person", max_hp: law("hp_person"), lunge: 0.6, blow: law("blow_person"), dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_h: 120.0 },
+        #{ name: "deer", grazes: true, max_hp: law("hp_deer"), lunge: 0.6, blow: law("blow_deer"), dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_h: 60.0 },
+        #{ name: "wolf", max_hp: law("hp_wolf"), lunge: 1.8, blow: law("blow_wolf"), dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_h: 60.0 },
     ]
 }
 fn kind_of(kind) { let all = kinds(); for k in all { if k.name == kind { return k; } } all[0] }
@@ -524,8 +563,6 @@ fn rates(a) {
         hunger *= 0.5;
     } else if act == "rest" {
         energy = 3.0;
-    } else if act == "block" {
-        energy = -6.0;
     }
     // Elders heal slower and tire sooner; infants get hungry more slowly. (Death of old age
     // comes at each creature's own point late in its lifespan.)
@@ -564,11 +601,48 @@ fn rates(a) {
     r
 }
 
+// A grown person's walk (m/s), the `walk_base` law: a world (or a player's setting, through
+// `set_world_law`) changes it without replacing `move_speed`.
+fn walk_base() { law("walk_base") }
 fn move_speed(a) {
-    let base = switch a.actor.kind { "deer" => 3.7, "wolf" => 3.4, _ => 2.6 };
+    let base = switch a.actor.kind { "deer" => 3.7, "wolf" => 3.4, _ => walk_base() };
     if a.actor.stage == "infant" { base *= 0.4; } else if a.actor.stage == "child" { base *= 0.8; } else if a.actor.stage == "elder" { base *= 0.85; }
     base *= a.actor.speed;
-    if a.actor.energy < 10.0 { base * 0.6 } else { base }
+    if a.actor.energy < 10.0 { base * law("tired_pace") } else { base }
+}
+// Why a body walks slower than its pace, in the words its status shows and its mind feels ("":
+// it is not slowed). Every slowdown in `move_speed` but age has its words here; `slowed(a)`
+// (a skill's context: the scene a mind reads) and `status_of` (the body: a player's pill and the
+// mind's felt words) both ask `slow_words`, so a world changes them in one place.
+fn slow_words(kind, energy) { if energy < 10.0 { "exhausted, so you walk slower" } else { "" } }
+fn slowed(a) { slow_words(a.actor.kind, a.actor.energy) }
+
+// ---- breath and focus (a law per creature, kept per state) ---------------------------------
+// Two short pools in real seconds, beside tiredness (`energy`, the needs): breath (`stamina`) for
+// running and every bodily move, and `focus` for hurling fire and closing wounds by hand. Each
+// comes back by itself `delay_ms` after its last use at `regen_per_s`. The engine caps breath by
+// tiredness: full from `rested_at` energy, `spent_share` of `max` at none, and refills it at
+// `exhausted_regen` of the rate below `exhausted_below`. A run takes `run_per_s` and stops when
+// breath runs out (it starts again at `resume`); a held guard takes `guard_per_s` and drops; each
+// point spent costs `tires_per_point` energy. Elders get their breath back slower; deer have more.
+fn pools(a) {
+    let regen = law("stamina_regen");
+    if a.actor.stage == "elder" { regen *= 0.7; }
+    let most = law("stamina_max");
+    if a.actor.kind == "deer" { most *= 1.2; }
+    #{
+        stamina: #{ max: most, regen_per_s: regen, delay_ms: law("stamina_delay_s") * 1000.0, run_per_s: law("stamina_run"), guard_per_s: law("stamina_guard"),
+                    resume: law("stamina_resume"), tires_per_point: law("stamina_tires"), rested_at: 35.0, spent_share: 0.5, exhausted_below: 10.0, exhausted_regen: 0.5 },
+        focus: #{ max: law("focus_max"), regen_per_s: law("focus_regen"), delay_ms: law("focus_delay_s") * 1000.0 },
+    }
+}
+// What a pool is called where people read it (a player's bar, the minds' words): a world's word.
+fn pool_word(pool) { switch pool { "focus" => "mana", _ => pool } }
+fn pools_law() {
+    let p = pools(#{ actor: #{ kind: "person", stage: "adult" } });
+    let b = p.stamina;
+    #{ cadence: "hot", topic: "moving",
+       about: `Stamina (breath) is short: running takes ${short(b.run_per_s)} a second and every fighting move some. It comes back by itself ${short(b.delay_ms / 1000.0)} s after your last effort, ${short(b.regen_per_s)} a second (empty to full in ${short(b.max / b.regen_per_s)} s), slower when you are old or exhausted, and being tired leaves you less of it (exhausted, only short bursts). Out of breath, a run slows to a walk (it starts again once you have ${short(b.resume)}) and you cannot strike, dodge, jump, shoot or guard until it comes back. Every bit spent tires you a little. ${pool_word("focus")} pays for hurling fire and closing wounds by hand, and comes back slowly, ${short(p.focus.regen_per_s)} a second.` }
 }
 
 // ---- gathering and food ------------------------------------------------
@@ -1174,7 +1248,7 @@ fn attack_check(a) {
     if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
     let wary = dares(a);
     if wary != "" { return wary; }
-    ""
+    winded(a)
 }
 // The windup: time the target has to see it coming and react.
 fn attack_duration(a) { switch a.actor.kind { "wolf" => 550, _ => if inv(a, "spear") > 0 { 750 } else { 650 } } }
@@ -1182,10 +1256,10 @@ fn attack_duration(a) { switch a.actor.kind { "wolf" => 550, _ => if inv(a, "spe
 // a wolf leaps, a person steps into a thrust. Out of reach by more than this, it misses.
 fn lunge(kind) { kind_of(kind).lunge }
 fn attack_done(a) {
-    let dmg = if a.actor.kind == "person" && inv(a, "spear") > 0 { 18.0 } else { kind_of(a.actor.kind).blow };
+    let dmg = if a.actor.kind == "person" && inv(a, "spear") > 0 { law("dmg_spear") } else { kind_of(a.actor.kind).blow };
     // Strength and skill at fighting (knack × practice) make blows count.
     let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
-    [#{ op: "damage", amount: dmg }, #{ op: "vitals", energy: -1.5 }]
+    [#{ op: "damage", amount: dmg }] + spent("attack")
 }
 // Leather armor takes the edge off a blow.
 fn armor(a) { let n = a.target.inv["armor"]; if n == () || n < 1 { 1.0 } else { 0.65 } }
@@ -1198,10 +1272,10 @@ fn threaten_check(a) {
     if a.actor.stage == "child" && a.target.stage != "child" && a.target.stage != "infant" { return "you are too small to frighten a grown-up; ask them instead (say)"; }
     if a.target.class != "creature" || !a.target.alive { return "no one to threaten"; }
     if a.target.id == a.actor.id { return "cannot threaten yourself"; }
-    ""
+    winded(a)
 }
 fn threaten_duration(a) { 2000 }
-fn threaten_done(a) { [#{ op: "vitals", energy: -0.5 }] }
+fn threaten_done(a) { spent("threaten") }
 
 // Taking by force without killing: from someone who has yielded, or who is badly hurt.
 fn seize_check(a) {
@@ -1481,12 +1555,30 @@ fn rework_done(a) { [#{ op: "rework" }, #{ op: "vitals", energy: -1.0 }] }
 // Every combat move has a windup (its `_duration`: the time others have to see it coming),
 // then its release, a recovery in which only a dodge can follow (`combat_recover`), and a
 // cooldown counted from its start (`combat_cooldown`), for anyone who uses it: player or
-// graph, person or animal. `combat_cost` is the energy it takes, paid at the release.
+// graph, person or animal. `combat_cost` is what it takes from its pool (`combat_pool`: breath,
+// or focus for fire and healing hands), paid at the release; too little, and it is refused.
 fn combat_recover(skill) { switch skill { "strike" => 250, "bowshot" => 250, "firebolt" => 350, "heal" => 300, "dodge" => 200, "jump" => 150, "attack" => 300, "shoot" => 300, "throw" => 400, _ => 0 } }
 fn combat_cooldown(skill) { switch skill { "strike" => 650, "bowshot" => 900, "firebolt" => 4000, "heal" => 8000, "dodge" => 900, "block" => 400, "jump" => 600, _ => 0 } }
-fn combat_cost(skill) { switch skill { "strike" => 2.0, "bowshot" => 1.5, "firebolt" => 12.0, "heal" => 15.0, "dodge" => 4.0, "block" => 1.0, "jump" => 2.0, _ => 0.0 } }
-fn spent(skill) { [#{ op: "vitals", energy: -combat_cost(skill) }] }
-fn winded(a) { if a.actor.energy < combat_cost(a.skill) { "too tired" } else { "" } }
+fn combat_cost(skill) {
+    switch skill {
+        "strike" => law("cost_strike"), "bowshot" => law("cost_bowshot"), "firebolt" => law("cost_firebolt"), "heal" => law("cost_heal"),
+        "dodge" => law("cost_dodge"), "block" => law("cost_block"), "jump" => law("cost_jump"),
+        "attack" => law("cost_attack"), "throw" => law("cost_throw"), "shoot" => law("cost_shoot"), "threaten" => law("cost_threaten"),
+        _ => 0.0,
+    }
+}
+fn combat_pool(skill) { switch skill { "firebolt" | "heal" => "focus", _ => "stamina" } }
+fn spent(skill) { [#{ op: "spend", pool: combat_pool(skill), amount: combat_cost(skill) }] }
+// What a move costs, in words ("10 breath").
+fn cost_words(skill) { `${short(combat_cost(skill))} ${pool_word(combat_pool(skill))}` }
+// Refused for too little in its pool: out of breath, or short of the world's word for focus. (The
+// pool is read here, not in a helper: a law called with `a` copies the whole context.)
+fn short_of(pool) { if pool == "focus" { `not enough ${pool_word("focus")}` } else { "out of breath" } }
+fn winded(a) {
+    let p = combat_pool(a.skill);
+    let have = if p == "focus" { a.actor.focus } else { a.actor.stamina };
+    if have < combat_cost(a.skill) { short_of(p) } else { "" }
+}
 
 // What each combat skill is: `<skill>_combat()`, read once when the script is installed (the
 // authority never asks per tick). Every skill that has one is a combat skill, gets a
@@ -1551,20 +1643,42 @@ fn making_grid(skill, text) {
     if products_of(skill).len() > 0 { u.source = "products"; u.detail = "made_how"; }
     u
 }
-fn make_ui() { making_grid("make", "Making {item}") }
-fn craft_ui() { making_grid("craft", "Making {item}") }
-fn cook_ui() { making_grid("cook", "Cooking {item}") }
-fn smoke_ui() { making_grid("smoke", "Smoking {item}") }
+// Each way of making with its icon (a wheel's section, a list's row).
+fn making_look(u, icon) { u.look = #{ icon: icon }; u }
+fn make_ui() { making_look(making_grid("make", "Making {item}"), "hammer") }
+fn craft_ui() { making_look(making_grid("craft", "Making {item}"), "hammer") }
+fn cook_ui() { making_look(making_grid("cook", "Cooking {item}"), "pot") }
+fn smoke_ui() { making_look(making_grid("smoke", "Smoking {item}"), "pot") }
 // A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
 // theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
 fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
 fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+// The person wheel's acts look as they read (an icon each; what they do is their spec and check).
+fn give_ui() { #{ look: #{ icon: "give" } } }
+fn offer_ui() { #{ look: #{ icon: "trade" } } }
+fn teach_ui() { #{ look: #{ icon: "book" } } }
+fn appraise_ui() { #{ label: "Look over", look: #{ icon: "eye" } } }
+fn wave_ui() { #{ look: #{ icon: "wave" } } }
+fn nod_ui() { #{ look: #{ icon: "wave" } } }
+// A workplace's wheel (Cullet's fuel fires): feeding (making's look is with its grid above).
+fn feed_ui() { #{ look: #{ icon: "fire" } } }
+// Which places get a wheel, and its layout (docs/INTERFACE.md §8): hold F on a target, move
+// toward a section, let go. A person's social acts are pinned, so a direction learned once keeps
+// working (a refused one greys in place); anything else the rules offer is behind More. Any
+// other creature or thing gets a wheel of what the rules allow now, nothing pinned. Oneself (C)
+// keeps its list. Presentation only: what a skill may do is its spec, shape and check.
+fn menus() { [
+    #{ on: "person", kinds: ["person"], choose: "wheel", fill: false,
+       wheel: #{ n: "talk", ne: "give", e: "offer", se: "teach", s: "more", sw: "window", w: "appraise", nw: "wave" } },
+    #{ on: "person", choose: "wheel" },
+    #{ on: "thing", choose: "wheel" },
+] }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }
 
-fn dodge_check(a) { if a.actor.energy < 5.0 { "too exhausted to dodge" } else { "" } }
+fn dodge_check(a) { winded(a) }
 fn dodge_done(a) { spent("dodge") }
 
 // A jump (proposal for the owner, 2026-11-11): a hop of `jump_dist` tiles the way you move or
@@ -1573,26 +1687,29 @@ fn dodge_done(a) { spent("dodge") }
 // does, and does not evade: blows and missiles land while you are in the air.
 fn jump_dist(kind) { switch kind { "wolf" => 2.0, "deer" => 2.4, _ => 1.6 } }
 fn jump_speed(kind) { switch kind { "wolf" => 6.0, "deer" => 6.0, _ => 3.6 } }
-fn jump_check(a) { if a.actor.energy < combat_cost("jump") { "too tired to jump" } else { "" } }
+fn jump_check(a) { winded(a) }
 fn jump_done(a) { spent("jump") }
 
 // A guard is held for `qty` ms (a player holds it until they let go, at most its `hold_ms`),
-// else a moment. Holding it is tiring (see `rates`).
+// else a moment. Holding it takes breath (`pools`: `guard_per_s`), and it drops when breath runs out.
 fn block_check(a) { if a.actor.kind != "person" { return "only people can block"; } winded(a) }
-fn block_duration(a) { let most = block_combat().hold_ms; if a.qty > 0 { if a.qty > most { most } else { a.qty } } else { 1200 } }
-fn block_done(a) { [#{ op: "vitals", energy: -0.5 }] }
+fn block_duration(a) {
+    let most = block_combat().hold_ms;
+    let want = if a.qty > 0 { if a.qty > most { most } else { a.qty } } else { 1200 };
+    // What breath is left after its cost at the release, at what holding it takes a second.
+    let breath = ((a.actor.stamina - combat_cost("block")) / law("stamina_guard") * 1000.0).to_int();
+    if breath < want { if breath < 200 { 200 } else { breath } } else { want }
+}
+fn block_done(a) { spent("block") }
 
 // ---- the starter skills (docs/GAME_BRIEF.md): sword strike, bow shot, fire bolt, heal ------
 
 // A quick, telegraphed blow at a creature in reach; it does its damage like an attack.
-fn strike_check(a) {
-    let why = attack_check(a);
-    if why != "" { return why; }
-    winded(a)
-}
+// Its rules are an attack's, breath included.
+fn strike_check(a) { attack_check(a) }
 fn strike_duration(a) { 350 }
 fn strike_done(a) {
-    let dmg = if inv(a, "spear") > 0 { 15.0 } else { 10.0 };
+    let dmg = if inv(a, "spear") > 0 { law("dmg_strike_spear") } else { law("dmg_strike") };
     let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
     [#{ op: "damage", amount: dmg }] + spent("strike")
 }
@@ -1612,9 +1729,9 @@ fn bowshot_check(a) {
 fn bowshot_duration(a) { 300 }
 fn bowshot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "launch" }] + spent("bowshot") }
 fn bowshot_missile(a) { #{ speed: 30.0, range: 22.0, radius: 0.15 } }
-fn bowshot_hit(a) { [#{ op: "damage", amount: 14.0 * a.actor.strength * a.actor.factor * armor(a) }] }
+fn bowshot_hit(a) { [#{ op: "damage", amount: law("dmg_bowshot") * a.actor.strength * a.actor.factor * armor(a) }] }
 
-// A bolt of fire: slower, shorter, wider and much harder, at a great cost of energy.
+// A bolt of fire: slower, shorter, wider and much harder, at a great cost of focus.
 fn firebolt_check(a) {
     if !knows(a, "fire_bolt") { return "you don't know how to hurl fire" + learn_how("fire_bolt"); }
     aim_check(a)
@@ -1622,7 +1739,7 @@ fn firebolt_check(a) {
 fn firebolt_duration(a) { 450 }
 fn firebolt_done(a) { [#{ op: "launch" }] + spent("firebolt") }
 fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35 } }
-fn firebolt_hit(a) { [#{ op: "damage", amount: 24.0 * a.actor.factor * armor(a) }] }
+fn firebolt_hit(a) { [#{ op: "damage", amount: law("dmg_firebolt") * a.actor.factor * armor(a) }] }
 
 // Closing wounds by hand (wound_tending): yourself or an ally in sight, quickly, even mid-fight.
 fn heal_check(a) {
@@ -1641,10 +1758,10 @@ fn throw_check(a) {
     if a.target.class != "creature" || !a.target.alive { return "nothing to throw at"; }
     if young(a) { return "too young to fight"; }
     if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
-    ""
+    winded(a)
 }
 fn throw_duration(a) { 800 }
-fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: 24.0 * armor(a) }, #{ op: "vitals", energy: -2.0 }] }
+fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: law("dmg_throw") * armor(a) }] + spent("throw") }
 
 fn shoot_check(a) {
     if inv(a, "bow") < 1 { return "no bow to shoot with"; }
@@ -1652,10 +1769,10 @@ fn shoot_check(a) {
     if a.target.class != "creature" || !a.target.alive { return "nothing to shoot at"; }
     if young(a) { return "too young to fight"; }
     if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
-    ""
+    winded(a)
 }
 fn shoot_duration(a) { 700 }
-fn shoot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "damage", amount: 16.0 * a.actor.strength * a.actor.factor * armor(a) }, #{ op: "vitals", energy: -1.0 }] }
+fn shoot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "damage", amount: law("dmg_shoot") * a.actor.strength * a.actor.factor * armor(a) }] + spent("shoot") }
 
 // ---- trade ------------------------------------------------------------------------
 
@@ -2130,8 +2247,9 @@ fn fuels() {
 fn goto_spec() {
     let l = laws();
     #{ target: true, reach: 0.8,
-       about: "Walk to something in sight or a place you know and stop beside it. An act aimed at a target walks there by itself, so you need goto only to be somewhere (home before dark, a meeting place). Not following someone who moves (follow), not running away (flee).",
+       about: "Walk to something in sight or a place you know and stop beside it (run: true to run there, for hurry: it costs breath and runs only while that lasts). An act aimed at a target walks there by itself, so you need goto only to be somewhere (home before dark, a meeting place). Not following someone who moves (follow), not running away (flee).",
        takes: "a target in sight or a known place",
+       args: ["run"],
        gives: `you there; within ${l.fire_warmth} tiles of a campfire or ${l.shelter_warmth} of a shelter or house the night cold can't hurt you` }
 }
 fn wander_spec() { #{ moment: true, about: "Stroll to a random spot nearby, to look around when nothing you need is in sight. It searches for nothing in particular.", gives: "you at a nearby spot you may not have seen" } }
@@ -2234,33 +2352,33 @@ fn drop_spec() { #{ item: true, args: ["qty"], about: "Set items down where you 
 fn attack_spec() {
     #{ notable: true, target: true, reach: 1.4,
        about: "Strike a creature beside you. Every blow does its full damage and whoever reaches 0 health dies; there is no holding back. To frighten someone without harm, threaten. Killing game yields meat and hide.",
-       takes: "a creature in reach, a little energy",
+       takes: `a creature in reach, ${cost_words("attack")}`, args: ["run"],
        gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" }
 }
 fn strike_spec() {
     #{ target: true, reach: 1.6,
        about: "A quick blow at a creature in reach, after a short windup they can see. It does its full damage like any blow; 0 health is death.",
-       takes: `a creature within reach, ${combat_cost("strike")} energy; ready again ${combat_cooldown("strike")} ms after you start`,
+       takes: `a creature within reach, ${cost_words("strike")}; ready again ${combat_cooldown("strike")} ms after you start`,
        gives: "a quick blow (harder with a spear, strength and practice); out of reach by then, it misses; a raised guard in front of them takes most of it" }
 }
 fn bowshot_spec() {
     #{ target: true, reach: 22.0,
        about: "Loose an arrow toward a creature or a point (target {\"at\": [x, y]}): it flies straight and hits the first creature in its path, whoever that is.",
-       takes: `a bow and 1 arrow, ${combat_cost("bowshot")} energy, a creature or a point to aim at (up to 22 tiles)`,
+       takes: `a bow and 1 arrow, ${cost_words("bowshot")}, a creature or a point to aim at (up to 22 tiles)`,
        gives: "a hit at range (softened by armor); the arrow is spent" }
 }
 fn firebolt_spec() {
     #{ target: true, reach: 16.0,
        about: "Hurl a bolt of fire toward a creature or a point: it burns the first creature it meets, hard. Needs the fire_bolt technique.",
-       takes: `knowing fire_bolt, ${combat_cost("firebolt")} energy, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`,
+       takes: `knowing fire_bolt, ${cost_words("firebolt")}, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`,
        gives: "a bolt of fire that burns the first creature it meets" }
 }
-fn throw_spec() { #{ target: true, reach: 7.0, about: "Throw your spear at a creature up to 7 tiles away. The spear is gone afterwards.", takes: "your spear", gives: "a hard hit at range" } }
-fn shoot_spec() { #{ target: true, reach: 9.0, about: "Shoot an arrow from your bow at a creature up to 9 tiles away.", takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" } }
+fn throw_spec() { #{ target: true, reach: 7.0, about: "Throw your spear at a creature up to 7 tiles away. The spear is gone afterwards.", takes: `your spear, ${cost_words("throw")}`, gives: "a hard hit at range" } }
+fn shoot_spec() { #{ target: true, reach: 9.0, about: "Shoot an arrow from your bow at a creature up to 9 tiles away.", takes: `a bow and 1 arrow, a creature within 9 tiles, ${cost_words("shoot")}`, gives: "a hit at range (softened by armor); the arrow is spent" } }
 fn threaten_spec() {
     #{ notable: true, target: true, reach: 3.0,
        about: "Menace a creature within a few tiles for 2 s, weapon raised. No harm is done, but they and anyone watching see it: a way to make a warning or a demand felt without a blow.",
-       takes: "a creature within a few tiles, 2 seconds", gives: "no harm: they see you menacing them, and so does anyone watching" }
+       takes: `a creature within a few tiles, 2 seconds, ${cost_words("threaten")}`, args: ["run"], gives: "no harm: they see you menacing them, and so does anyone watching" }
 }
 fn seize_spec() {
     #{ target: true, item: true, args: ["qty"], reach: 1.8,
@@ -2273,13 +2391,13 @@ fn yield_spec() {
        takes: "a second",
        gives: `for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in` }
 }
-fn dodge_spec() { #{ about: "Dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses. For fights, not travel.", takes: `${combat_cost("dodge")} energy`, gives: "a quick dash of a few tiles" } }
-fn jump_spec() { #{ about: "Jump: a short hop the way you move or face. It does not clear walls, fences or water, and blows still land while you are in the air (it is not a dodge).", takes: `${combat_cost("jump")} energy; ready again after ${combat_cooldown("jump") / 1000.0} s`, gives: "you a hop of a tile or two along" } }
-fn block_spec() { #{ args: ["qty"], about: "Raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it). Blows from the front do a quarter of their damage; from behind it does not help.", takes: `${combat_cost("block")} energy, holding still`, gives: "a guard in front of you" } }
+fn dodge_spec() { #{ about: "Dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses. For fights, not travel.", takes: cost_words("dodge"), gives: "a quick dash of a few tiles" } }
+fn jump_spec() { #{ about: "Jump: a short hop the way you move or face. It does not clear walls, fences or water, and blows still land while you are in the air (it is not a dodge).", takes: `${cost_words("jump")}; ready again after ${combat_cooldown("jump") / 1000.0} s`, gives: "you a hop of a tile or two along" } }
+fn block_spec() { #{ args: ["qty"], about: "Raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it). Blows from the front do a quarter of their damage; from behind it does not help.", takes: `${cost_words("block")}, and ${short(law("stamina_guard"))} ${pool_word("stamina")} a second while you hold it (it drops when you run out), holding still`, gives: "a guard in front of you" } }
 fn heal_spec() {
     #{ reach: 8.0,
        about: "Close wounds at once with your hands, your own or an ally's in sight within 8 tiles, even in a fight. Needs the wound_tending technique. It heals bodies only: it does not mend tools, hinges, nets or anything else.",
-       takes: `knowing wound_tending, ${combat_cost("heal")} energy, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`,
+       takes: `knowing wound_tending, ${cost_words("heal")}, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`,
        gives: "their wounds closed at once" }
 }
 fn tend_spec() {
@@ -2288,8 +2406,8 @@ fn tend_spec() {
        takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" }
 }
 
-fn follow_spec() { #{ moment: true, target: true, reach: 2.0, about: "Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone. It does not make them follow you.", takes: "a creature in sight", gives: "you beside them as they go" } }
-fn flee_spec() { #{ reflex: true, moment: true, target: true, about: "Run away from a creature or place until you are clear of it.", takes: "something to run from", gives: "distance between you and it" } }
+fn follow_spec() { #{ moment: true, target: true, reach: 2.0, args: ["run"], about: "Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone (run: true to run with them). It does not make them follow you.", takes: "a creature in sight", gives: "you beside them as they go" } }
+fn flee_spec() { #{ reflex: true, moment: true, target: true, args: ["run"], about: "Run away from a creature or place until you are clear of it. It runs while your breath lasts (run: false to slip away at a quick walk instead).", takes: "something to run from; breath while you run", gives: "distance between you and it" } }
 
 fn offer_spec() {
     #{ target: true, item: true, args: ["qty", "want", "want_qty"], reach: 3.0, talk: true,
@@ -2489,11 +2607,16 @@ fn rates_awake() {
 // `meters()`: the bars a body has, each naming fields of its `my_vitals` row: `value`, and `max`
 // a field or a number; `shown: false` keeps a meter off the screen while it still bounds its
 // value and feeds the statuses. A world that adds a vital adds its column and a row here.
+// Breath is a bar under health, always; focus a bar under the world's word for it, while it is
+// not full; tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
 fn meters() {
+    let w = pool_word("focus");
     [
         #{ name: "health", value: "hp", max: "max_hp", order: 0 },
-        #{ name: "energy", value: "energy", max: 100.0, order: 1 },
-        #{ name: "hunger", value: "hunger", max: 100.0, order: 2, shown: false },
+        #{ name: "stamina", value: "stamina", max: "stamina_max", order: 1 },
+        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1), while_short: true },
+        #{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },
+        #{ name: "hunger", value: "hunger", max: 100.0, order: 4, shown: false },
     ]
 }
 
@@ -2549,6 +2672,12 @@ fn status_of(a) {
         out.push(#{ name: "freezing", tone: "bad", text: "Freezing", alarm: "You are freezing in the night air; you need a fire or shelter.", salience: 0.6, think: "always" });
     }
     if a.hurt_ago_s != () && a.hurt_ago_s >= 0.0 && a.hurt_ago_s < 15.0 { out.push(#{ name: "in_combat", tone: "bad", text: "In combat" }); }
+    // Breath: short of it after a run or in a fight (the refusal's words); slowed, and why.
+    if a.stamina != () && a.stamina < 20.0 { out.push(#{ name: "out_of_breath", tone: "warn", text: "Out of breath", meter: "stamina", felt: "out of breath" }); }
+    if a.energy != () {
+        let slow = slow_words(a.kind, a.energy);
+        if slow != "" { out.push(#{ name: "slowed", tone: "warn", text: "Walking slower", meter: "energy", felt: "walking slower" }); }
+    }
     if falling < -0.01 { out.push(#{ name: "wasting", tone: "bad", text: "Wasting", felt: "you are growing weaker" }); }
     else if falling > 0.01 && f != () && f < 0.99 { out.push(#{ name: "recovering", tone: "good", text: "Recovering", felt: "your wounds are mending" }); }
     out
@@ -2654,8 +2783,8 @@ fn remains_law() {
 }
 
 fn combat_law() {
-    #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "lunge", "max_hp", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
-       about: `fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
+    #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "combat_pool", "lunge", "max_hp", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
+       about: `fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). Every move takes stamina (fire and healing hands take mana instead), so a fight is paced by breath: about ten blows or five dodges from fresh, then a few seconds to get it back. While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
 }
 
 fn force_law() {
@@ -2725,6 +2854,7 @@ fn laws_about(l) {
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         stranger_by_name: if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
+        force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,
@@ -2737,5 +2867,45 @@ fn laws_about(l) {
         heard_linger_s: `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
         look_slack_deg: `a player's look within ${short(l.look_slack_deg)} degrees of the last is the same look`,
         look_walk_deg: `walking, one goes where one is going and faces where one looks, at most ${short(l.look_walk_deg)} degrees off one's way`,
+        walk_base: `a grown person walks ${l.walk_base} m/s`,
+        run_share: `and runs ${l.run_share} times that`,
+        run_top: `no road takes anyone past ${l.run_top} m/s`,
+        tired_pace: `the exhausted walk at ${l.tired_pace} of their pace`,
+        wolf_run: `a wolf runs ${l.wolf_run} times its walk`,
+        deer_run: `a deer ${l.deer_run} times its`,
+        stamina_max: `stamina holds ${l.stamina_max} rested`,
+        stamina_regen: `and comes back ${l.stamina_regen} a second`,
+        stamina_delay_s: `from ${l.stamina_delay_s} s after the last effort`,
+        stamina_run: `a run takes ${l.stamina_run} a second`,
+        stamina_guard: `a held guard ${l.stamina_guard} a second`,
+        stamina_resume: `a run starts with ${l.stamina_resume} at least`,
+        stamina_tires: `each point spent tires by ${l.stamina_tires}`,
+        focus_max: `mana holds ${l.focus_max}`,
+        focus_regen: `and comes back ${l.focus_regen} a second`,
+        focus_delay_s: `from ${l.focus_delay_s} s after the last use`,
+        cost_strike: `a strike takes ${l.cost_strike}`,
+        cost_bowshot: `a bow shot ${l.cost_bowshot}`,
+        cost_firebolt: `a fire bolt ${l.cost_firebolt} mana`,
+        cost_heal: `a heal ${l.cost_heal} mana`,
+        cost_dodge: `a dodge ${l.cost_dodge}`,
+        cost_jump: `a jump ${l.cost_jump}`,
+        cost_block: `a guard ${l.cost_block}`,
+        cost_attack: `an attack ${l.cost_attack}`,
+        cost_throw: `a throw ${l.cost_throw}`,
+        cost_shoot: `a shot ${l.cost_shoot}`,
+        cost_threaten: `a threat ${l.cost_threaten}`,
+        hp_person: `a grown person has ${l.hp_person} health`,
+        hp_deer: `a deer ${l.hp_deer}`,
+        hp_wolf: `a wolf ${l.hp_wolf}`,
+        blow_person: `a bare blow does ${l.blow_person}`,
+        blow_deer: `a deer's ${l.blow_deer}`,
+        blow_wolf: `a wolf's bite ${l.blow_wolf}`,
+        dmg_spear: `a spear thrust ${l.dmg_spear}`,
+        dmg_strike: `a sword strike ${l.dmg_strike}`,
+        dmg_strike_spear: `with a spear ${l.dmg_strike_spear}`,
+        dmg_bowshot: `an arrow ${l.dmg_bowshot}`,
+        dmg_firebolt: `a fire bolt ${l.dmg_firebolt}`,
+        dmg_throw: `a thrown spear ${l.dmg_throw}`,
+        dmg_shoot: `a shot ${l.dmg_shoot}`,
     }
 }

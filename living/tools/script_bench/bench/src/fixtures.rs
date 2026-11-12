@@ -152,6 +152,9 @@ fn actor(r: &mut Rng, id: u32) -> ActorFacts {
         community: 0,
         home: String::new(),
         lit: false,
+        // Rested breath and focus (no extra draws, so the samples before stamina-1 stay the same).
+        stamina: 100.0,
+        focus: 100.0,
     }
 }
 

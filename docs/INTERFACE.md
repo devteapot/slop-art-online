@@ -759,9 +759,9 @@ The Spark's build order: `my_offers`, the teach fix, `my_senses`, `act_outcome`,
 - **Teaching:** `teach_check` refusing fire_bolt and wound_tending is the Spark's to fix, with a verify-core case.
 - **`make`:** never offered at a fuel-burning workplace, probably because the client fakes facts. `my_senses` and `offered()` remove that cause, and the Spark also checks the rules side.
 
-## 8. The wheel (proposed, play-test 5)
+## 8. The wheel (play-test 5; built in ui-1 step 5)
 
-Status: proposed 2026-11-11 for the owner's decision; nothing is built. Line references in this section are to `origin/main` at `25c1fb92`, or to `origin/ui-1-step4` (`4cdf6442`) where named.
+Status: proposed 2026-11-11; the open questions (8.7) accepted as defaults; built 2026-11-12 in `ui-1-step5` (8.8 says what was built and how it differs). Line references in this section are to `origin/main` at `25c1fb92`, or to `origin/ui-1-step4` (`4cdf6442`) where named.
 
 The owner, play-test 5 (`.local/living/playtest-5/FEEDBACK.md`, item 5): "I think we could introduce some interactions that work with the wheel. You go in a direction and you get the wheel that you can select, kind of like in a pie chart, a section of the pie chart to do a specific thing. I wouldn't put it necessarily everywhere, but it could make sense in some specific locations."
 
@@ -971,15 +971,21 @@ No reducer changes, so verify-player is not needed.
 - **Script calls.** Opening runs the checks the list runs today (`options`, within the 1 ms budget at `verbs.rs:58`). The layout is cached per script revision, place and target kind. Hovering runs no script.
 - **SpacetimeDB.** There is no new table, view, reducer or subscription: acts go through `human_act` as today, and `menus()` adds under 1 kB to the `script` row. Section 7's documentation check covers these paths. The official documentation was not re-read for this section, because nothing on the data path changes.
 
-### 8.7 Open questions for the owner
+### 8.7 Open questions, accepted as defaults (2026-11-12)
 
-1. **The two-finger press.** Should it open the wheel?
-   - Recommended: not at first; hold F is the one way in. Once sheathe and draw lands, a held two-finger press opens the wheel while the weapon is sheathed, and strikes while it is drawn.
-2. **Choosing before it draws.** Should F plus a quick flick choose without waiting for the wheel to appear? Recommended: yes, with the 80 ms and 30 px guards, tunable in F1.
-3. **A wheel for yourself (C).** Recommended: not now. Revisit after playing with the person wheel.
-4. **The person layout.**
-   - Recommended: the schematic above (Talk n, Give ne, Trade e, Teach se, More s, Their window sw, Look over w, Wave nw), with fixed directions and gaps where a target has fewer acts, rather than spreading the sections evenly.
-   - Tried in-game, not judged from the schematic.
+1. **The two-finger press:** not at first. Hold F is the one way in; once sheathe and draw is played with, a held two-finger press may open the wheel while the weapon is sheathed (and strike while drawn).
+2. **Choosing before it draws:** yes. F and a quick flick choose without waiting, with the 80 ms and 30 px guards.
+3. **A wheel for yourself (C):** not now; C keeps its list. Revisit after playing with the person wheel.
+4. **The person layout:** as proposed (Talk n, Give ne, Trade e, Teach se, More s, Their window sw, Look over w, Wave nw), fixed directions with gaps, to be judged in game.
+
+### 8.8 As built (ui-1 step 5)
+
+- **Rules** (`living_rules::ui`, `ui/wheel.rs` in the rules crate): `Choose::Wheel`, `Dir`/`DIRS`, `Section`/`SECTIONS`, `MENU_TRAITS`; `MenuSpec`, `Pin` (a skill or a client section), `Candidate`, `Wheel`, `wheel_of`; `Scripts::menus()` and `menu_for(on, kind)`, read leniently into `ui_errors` and refused at install by every case of 8.1 (a creature's `kinds` are not checked: species are not in the script). Tests: the shipped rows, a world with none keeps every list, pins never move, fills show only while allowed, the wheel and More reach exactly the list, the refusals, the vocabulary only grows; the rules are the same with `menus()` stripped.
+- **Shipped:** `skills.rhai`'s `menus()` has the person wheel (pinned, `fill: false`) and the general person and thing rows. The fuel fires' row is Cullet's (`seeds/worlds/cullet/laws.rhai`, over `base_menus()`): the island has no furnace, oven or smokehouse, and a row naming them there is refused. Looks were declared for the person wheel's acts (`give`, `offer`, `teach`, `appraise` as "Look over", `wave`, `nod`) and for `make` and `feed`, so no icon is chosen by name in Rust.
+- **Client** (`living/game/src/ui/wheel.rs`, `verbs.rs`, `pointer.rs`): held F, a flick, and a tap with nothing likely (sticky) open it where `menu_for` is `wheel`; held where the world pins acts it opens even with nothing allowed, greyed, so a cold hearth says what belongs there and why not. Sectors, dead zone, hysteresis and clamp as 8.2 (unit tested); arrows, digits 1–8, Esc (first in the Esc order), another bar key or the target leaving sight close or choose as 8.2. The held cursor: `Pointer.hold` takes motion (one finger, a two-finger swipe) as the selection, keeps the view from turning and a pinch from zooming, hides the drawn cursor, and lets go where it was (to the pixel). One wheel spawned hidden, updated in place.
+- **Greyed sections:** the hub shows the rules' `_check` text. An item-taking skill is asked with a real item (its own first, a product, else the first carried) and, chosen while greyed, is sent with that same item, so the hub's words and the authority's note are the same ("Ash takes 4 kelp …").
+- **Not built yet:** a `choose: "wheel"` sub-choice as a second wheel (it is validated; a section's sub-choice opens its list, beside the target, as today); running arcs and progress on a section (8.4); the products grid behind Make (the recipe grid, next); a wheel on storage.
+- **Verified** (`verify-ui` `wheel`, `wheel-workplace`; `.agents/skills/verify-ui/references/validation.md`): on the island the person wheel's layout, the held cursor, Wave sent and noted, Esc and the hub sending nothing, a flick, a digit, the cursor back within 1 px; on Cullet a cold hearth's Make and Feed grey with the rules' reasons and Make sent all the same, its refusal noted in the same words.
 
 ## References
 

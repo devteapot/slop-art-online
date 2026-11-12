@@ -8,7 +8,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 - `living/game/src/ui/facing.rs`: Settings › Play › Facing sight, with the switch (read-only without the admin link), "Facing sight: on/off" and the values.
 - `living/game/src/heardmark.rs`: a soft ground mark per `heard_sounds` row, keyed by its per-viewer key. It sits that compass way at its band's rough distance and fades after the row goes.
 - `living/game/src/controls.rs` `look`: `human_face(dx, dy)`.
-  - Facing the cursor: the cursor's direction while standing; released while a direction is held (`FACE_WHILE_MOVING` off until look-2).
+  - Facing the cursor: the cursor's direction, standing and walking (`FACE_WHILE_MOVING` on since look-3; before look-2 it was off and the look was released while a direction was held).
   - Facing where you walk: only while a move is aimed, then released with `(0, 0)`.
   - A look is sent on changes over 4°, at most every 0.1 s. A send the bucket refused ("too many movement inputs") is retried.
   - The look goes before the frame's move, so the release reaches the authority while the body still stands: the facing is kept, and the walk turns on its eased curve. A release mid-walk would snap the heading to the travel, a leg jump `look-walk` catches.
@@ -20,7 +20,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 - `senses`: after F5, the dump's `facing_sight` (`source: Authority`, `sight`, the field) equals the `character_senses` row for the player (owner SQL; `my_senses` is its view).
 - `readout`: the log line `facing: Facing sight on — Focal ±70° · side ±110° at 33% of sight · near 3 m all round · margin 10°`. On screen, a pill at the top centre (under the target plate, away from my character) says "Facing sight on · F5 switches it" for 3 s (the dump's `extra.facing_note`). The five values are never over the play view: they are in Settings › Play and in the developer panel (F1).
 - `match`: at a look (live script `look:DEG`, which `human_face` sends), the authority's `perceived` rows for the player agree with the client's field texel under each creature within 15 m. Creatures that the keep margins (1 m, 10°) or a light could decide are counted apart.
-- `walk`: walking north with the cursor east, the client releases its look while a direction is held (`controls::FACE_WHILE_MOVING`, off until dev-box's look-2), so the body faces and walks north. With the switch on, the authority would hold the heading 30° off the travel (`look_walk_deg`); the check follows the switch. A release (F3 to "where you walk") leaves the walk on its travel. Standing, a release leaves the facing where it was.
+- `walk`: walking north-west with the cursor east, 135° off the travel. With `controls::FACE_WHILE_MOVING` off, the client releases its look while a direction is held, so the body faces its travel. On (look-3, with look-2's authority), the facing turns 75° toward the look (`look_walk_deg`). The check follows the switch. Both are judged against the authority's own travel (the snapshot's velocity), not the keys' way: steering bends a walk round people and slides it along walls. A release (F3 to "where you walk") brings the facing back to the travel. Standing, a release leaves the facing where it was.
 - `heard`: each authority `heard` row (owner SQL) has a live mark with the same key, bearing and band in the dump's `extra.heard`. None is for someone in sight. Marks fade after their rows go.
 
 ## How to get to it (user POV)
@@ -30,7 +30,7 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 
 ## Driving it with drive.py
 
-Preconditions: baseline, plus six residents (`residents(run, 6)`) placed round the player: north and south at 5 m, east and west at 5.5 m (`place_at` puts them on tile centres; past the near ring's 3 m, side vision's 3.7 m and their 1 m keep margin), one at 1.4 m and one 8 m to the south-east.
+Preconditions: baseline. The player is first placed on open grass at (300, 330) (`FIELD_SPOT`, admin `place_at`, look-walk's spot), so every run starts alike. A re-run used to start where the last left the character, and with a building north of it the walk was steered, slid or blocked (fix-field-scene). Then six residents (`residents(run, 6)`) are placed round the player: north and south at 5 m, east and west at 5.5 m (`place_at` puts them on tile centres; past the near ring's 3 m, side vision's 3.7 m and their 1 m keep margin), one at 1.4 m and one 8 m to the south-east.
 
 - **Scenario:** `check.py --run $R field`. It sets `fov_on` false first, as admin.
 - **Client flags:**

@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """What residents do about a newcomer who says nothing (docs/TRIALS.md, "Arrivals"; docs/STRANGERS.md).
 
-Ported from branch `exp-arrive` (2026-11-12, strangers-1) without its arrival laws, which were
-rejected: the `marked` column ("new to you" in a scene) is gone. A newcomer who joins later
-(`newcomer` in the trial, cast role `newcomer`, event `newcomer_join`) is read as the newcomer
-and its join as its arrival; a run whose minds think only for some (`LIVING_ONLY` in
-`mind-env.json`) counts only those as residents. Unheard lines (the speaker's silence row, in
-either wording: "No answer from …" before `speech_truth`, "… could not have heard you." since) and
-re-asks are counted by arrive_spread.py, not here.
+A newcomer who joins later (`newcomer` in the trial, cast role `newcomer`, event `newcomer_join`)
+is read as the newcomer and its join as its arrival; a run whose minds think only for some
+(`LIVING_ONLY` in `mind-env.json`) counts only those as residents. Unheard lines (the speaker's
+silence row, in either wording: "No answer from …" before `speech_truth`, "… could not have heard
+you." since) and re-asks are counted by arrive_spread.py, not here.
 
   arrive_report.py BATCH [BATCH...] [--root DIR] [--examples N] [--json OUT]
   arrive_report.py --journal DIR --subject ID --from-ms MS --to-ms MS [--examples N]
@@ -277,8 +275,10 @@ def thinkers_of(d):
     return {int(x) for x in only.split(",") if x.strip()} if only else None
 
 
-def windows_of(events):
-    """The silent stands (arrive) or listening windows (greet) as [(from_ms, to_ms)]."""
+def windows_of(events, end_ms=None):
+    """The silent stands (arrive) or listening windows (greet) as [(from_ms, to_ms)]. A stand
+    the run's end cut short (no `_end` event) ends at `end_ms`, the run's last position sample,
+    when given."""
     out, opened = [], {}
     for e in events:
         for key, end in (("human_stand", "human_stand_end"), ("human_listen", "human_listen_end")):
@@ -288,7 +288,8 @@ def windows_of(events):
                 k = (key, e[end].get("stand", e[end].get("cycle")))
                 if k in opened:
                     out.append((opened.pop(k), e[end]["to_ms"]))
-    return out
+    out += [(a, end_ms) for a in opened.values() if end_ms and end_ms > a]
+    return sorted(out)
 
 
 def run_report(d):
@@ -302,7 +303,7 @@ def run_report(d):
         m = re.search(r"#(\d+)", str(summary.get("subject", "")))
         sid = int(m.group(1)) if m else None
     events = jl(d / "events.jsonl")
-    wins = windows_of(events)
+    wins = windows_of(events, max((p.get("ms") or 0 for p in jl(d / "positions.jsonl")), default=None))
     if sid is None or not wins:
         return None
     t0 = wins[0][0]

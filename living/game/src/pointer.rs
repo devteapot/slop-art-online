@@ -90,6 +90,14 @@ pub struct Pointer {
     /// Two-finger scroll over a window this frame (logical px, positive up), and a script's.
     pub scroll_px: f32,
     pub scripted_scroll: f32,
+    /// The wheel holds the cursor (`ui/wheel.rs`): motion this frame goes to `held_delta`
+    /// (logical px) instead of moving the cursor, the view does not turn by hand and a pinch is
+    /// ignored; when it lets go the cursor is where it was on screen.
+    pub hold: bool,
+    pub held_delta: Vec2,
+    /// Where the cursor was held, and the script's last cursor (headless).
+    held_at: Option<Vec2>,
+    last_scripted: Option<Vec2>,
     left: Left,
     /// A tap's strike was pressed this frame; let go of it next frame.
     release_next: bool,
@@ -134,10 +142,32 @@ fn update(
         buttons.release(MouseButton::Left);
         p.release_next = false;
     }
+    p.held_delta = Vec2::ZERO;
+    // Let go: the cursor is where it was held (a script's cursor too, which the motion moved).
+    let released = if !p.hold { p.held_at.take() } else { None };
+    if p.hold && p.held_at.is_none() {
+        p.held_at = p.pos;
+    }
     let window = windows.single_mut().ok();
     let Some((win_e, mut win, mut cursor)) = window else {
-        // Headless: the script's cursor and taps, if any.
-        p.pos = p.scripted.map(|f| f * crate::capture::size().as_vec2());
+        // Headless: the script's cursor and taps, if any. Held, a script's cursor moving is the
+        // wheel's motion and the cursor stays.
+        if let Some(at) = released {
+            p.scripted = Some(at / crate::capture::size().as_vec2());
+        }
+        let scripted = p.scripted.map(|f| f * crate::capture::size().as_vec2());
+        if p.hold {
+            if let (Some(now_at), Some(was)) = (scripted, p.last_scripted) {
+                p.held_delta = now_at - was;
+            }
+            p.last_scripted = scripted;
+            p.pos = p.held_at.or(scripted);
+            p.turn_px = 0.0;
+            p.zoom = 1.0;
+            return;
+        }
+        p.last_scripted = scripted;
+        p.pos = scripted;
         if std::mem::take(&mut p.scripted_tap) {
             buttons.press(MouseButton::Left);
             p.release_next = true;
@@ -218,7 +248,7 @@ fn update(
                 p.left = Left::Pending { since, moved };
             }
         }
-        Left::Dragging => p.turn_px += delta.x,
+        Left::Dragging if !p.hold => p.turn_px += delta.x,
         _ => {}
     }
     p.dragging = p.left == Left::Dragging;
@@ -237,7 +267,10 @@ fn update(
                     }
                     TouchPhase::Moved => {}
                 }
-                if p.coasting {
+                if p.hold {
+                    // Two fingers move the wheel's selection, not the view.
+                    p.held_delta -= Vec2::new(e.x, e.y) / win.scale_factor();
+                } else if p.coasting {
                 } else if ui.over() {
                     // Over a window, two fingers scroll it instead of turning the view.
                     p.scroll_px += e.y / win.scale_factor();
@@ -253,13 +286,31 @@ fn update(
         }
     }
     for g in pinch.read() {
-        p.zoom *= 1.0 - g.0.clamp(-0.5, 0.5);
+        if !p.hold {
+            p.zoom *= 1.0 - g.0.clamp(-0.5, 0.5);
+        }
     }
     if taps.read().count() > 0 {
         p.align = true;
     }
-    // Where the cursor is.
-    if p.captured {
+    if let Some(at) = released {
+        p.pos = Some(at);
+        if !p.captured {
+            win.set_cursor_position(Some(at));
+        }
+    }
+    // Where the cursor is: held by the wheel, its motion is the wheel's.
+    if p.hold {
+        p.turn_px = 0.0;
+        p.zoom = 1.0;
+        if p.captured {
+            p.held_delta += delta;
+        } else if let (Some(now_at), Some(at)) = (win.cursor_position(), p.held_at) {
+            p.held_delta += now_at - at;
+            win.set_cursor_position(Some(at));
+        }
+        p.pos = p.held_at.or(p.pos);
+    } else if p.captured {
         let moving = if p.dragging { Vec2::ZERO } else { delta };
         p.pos = Some((p.pos.unwrap_or(size / 2.0) + moving).clamp(Vec2::ZERO, size));
         if moving != Vec2::ZERO {
@@ -342,7 +393,8 @@ fn draw_cursor(p: Res<Pointer>, mut q: Query<&mut Node, With<GameCursor>>, scale
     let k = scale.map_or(1.0, |s| s.0);
     let headless_shown = windows.is_empty() && p.scripted.is_some();
     for mut n in &mut q {
-        let show = (p.captured || headless_shown) && p.pos.is_some();
+        // Hidden while the wheel holds it: the selection shows instead.
+        let show = (p.captured || headless_shown) && p.pos.is_some() && !p.hold;
         let want = if show { Display::Flex } else { Display::None };
         if n.display != want {
             n.display = want;

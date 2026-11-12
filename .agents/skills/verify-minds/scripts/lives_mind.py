@@ -16,7 +16,7 @@ and the replies are recorded for reading; the same prompt checks run.
 
 Checks per resident: an AI character under the world admin before anyone engages it; its
 `relation` rows match its sheet; the people it knows by name are introduced (`acquaintance`) and one it
-does not (`knows_name: false`) stays "a stranger" in its mind; its persona is its authored
+does not (`knows_name: false`) stays "a stranger #<id>" in its mind; its persona is its authored
 narrative; its first prompt carries its narrative, people from its sheet and its authored
 memories (`[before all this]`); every seeded situation it is in (`cast/*.json`) shows in that
 prompt through the other people in it it knows by name; its mind marks the sheet `authored`
@@ -261,7 +261,7 @@ def main():
             for x in unnamed:
                 rows = lab.cypher(f"MATCH (n {{run: '{lab.db}', actor: {rid}, key: 'person:{ids[x]}'}}) RETURN n.name")
                 mind_names[x] = rows[0].strip('"') if rows else None
-            lab.check(f"{name}: who it does not know by name stays a stranger", all(ids[x] not in acq for x in unnamed) and all(v in (None, "a stranger") for v in mind_names.values()), f"{len(unnamed)} not known by name, in its mind as {mind_names}; {len(acq)} introductions")
+            lab.check(f"{name}: who it does not know by name stays a stranger", all(ids[x] not in acq for x in unnamed) and all(v is None or v == f"a stranger #{ids[x]}" for x, v in mind_names.items()), f"{len(unnamed)} not known by name, in its mind as {mind_names}; {len(acq)} introductions")
             # Source marks in its mind.
             marks = {}
             for l in lab.cypher(f"MATCH (n {{run: '{lab.db}', actor: {rid}}}) WHERE n.lived_under IS NOT NULL UNWIND n.lived_under AS l RETURN l, count(*)") + lab.cypher(f"MATCH ({{run: '{lab.db}', actor: {rid}}})-[r]->() WHERE r.lived_under IS NOT NULL UNWIND r.lived_under AS l RETURN l, count(*)"):

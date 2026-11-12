@@ -236,7 +236,7 @@ fn the_three_looks_by_name_are_declared_not_coded() {
     let mut declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
     declared.sort();
     // and the recipe grids of the ways of making (recipes-1): craft, cook, smoke, make.
-    assert_eq!(declared, ["accept", "block", "bowshot", "cook", "craft", "decline", "dodge", "face", "firebolt", "heal", "jump", "make", "shoot", "smoke", "strike", "throw"], "the shipped script declares these");
+    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "cook", "craft", "decline", "dodge", "face", "feed", "firebolt", "give", "heal", "jump", "make", "nod", "offer", "shoot", "smoke", "strike", "teach", "throw", "wave"], "the shipped script declares these");
     // Face is in no list of a player's (play-test 5): a player faces where it looks, as the tip says.
     let face = s.ui("face").unwrap();
     assert!(face.on.is_empty() && face.tip.is_some() && !s.ui_default("face").unwrap().on.is_empty(), "{face:?}");
@@ -933,7 +933,8 @@ fn without_ui(src: &str) -> String {
     let mut depth = 0i32;
     for line in src.lines() {
         let t = line.trim_start();
-        let opens = depth == 0 && t.starts_with("fn ") && t.split('(').next().is_some_and(|h| h.ends_with("_ui"));
+        // `<name>_ui()` declarations, and `menus()` (and an overlay's `base_menus()`).
+        let opens = depth == 0 && t.starts_with("fn ") && t.split('(').next().is_some_and(|h| h.ends_with("_ui") || h.ends_with("menus"));
         if opens || depth > 0 {
             depth += line.matches('{').count() as i32 - line.matches('}').count() as i32;
             continue;
@@ -1151,6 +1152,9 @@ const GOLDEN: &[(&str, &[&str])] = &[
     ("WAY_UI_TRAITS", &["alias", "to_label", "room_label", "rows", "bubble"]),
     ("LOOK_TRAITS", &["icon", "clip", "effect"]),
     ("RUNNING_TRAITS", &["show", "text"]),
+    ("DIRS", &["n", "ne", "e", "se", "s", "sw", "w", "nw"]),
+    ("SECTIONS", &["talk", "window", "introduce", "more"]),
+    ("MENU_TRAITS", &["on", "kinds", "choose", "wheel", "fill"]),
 ];
 
 #[test]
@@ -1161,6 +1165,7 @@ fn the_vocabulary_only_grows() {
         ("UNREADY", UNREADY), ("RUN_SHOWS", RUN_SHOWS), ("REFUSALS", REFUSALS), ("MARKERS", MARKERS), ("ROWS", ROWS), ("BUBBLES", BUBBLES),
         ("ICONS", ICONS), ("ITEM_ICONS", ITEM_ICONS), ("CLIPS", CLIPS), ("EFFECTS", EFFECTS), ("STATES", STATES), ("ITEM_GROUPS", ITEM_GROUPS),
         ("UI_TRAITS", UI_TRAITS), ("WAY_UI_TRAITS", WAY_UI_TRAITS), ("LOOK_TRAITS", LOOK_TRAITS), ("RUNNING_TRAITS", RUNNING_TRAITS),
+        ("DIRS", DIRS), ("SECTIONS", SECTIONS), ("MENU_TRAITS", MENU_TRAITS),
     ];
     assert_eq!(now.len(), GOLDEN.len());
     for ((n, list), (g, golden)) in now.iter().zip(GOLDEN) {
@@ -1314,4 +1319,146 @@ fn the_shipped_bar_is_declared_and_placed() {
     }
     assert_eq!(sc.ui("strike").unwrap().look.clips, vec!["slash", "overhead", "thrust"]);
     assert_eq!(sc.ui("firebolt").unwrap().label, "Fire bolt");
+}
+
+// ---- the wheel (docs/INTERFACE.md §8) ------------------------------------------------------------
+
+fn cand(name: &str, allowed: bool) -> Candidate {
+    Candidate { what: Pin::parse(name), allowed, sub: false, words: false }
+}
+
+fn dirs(w: &Wheel) -> Vec<(&'static str, String, bool)> {
+    w.sections.iter().map(|s| (s.dir.as_str(), s.what.name().to_string(), s.allowed)).collect()
+}
+
+#[test]
+fn the_shipped_menus_read_and_cover_their_places() {
+    for (world, s) in worlds() {
+        assert!(s.ui_errors().is_empty(), "{world}: {:?}", s.ui_errors());
+        let person = s.menu_for(On::Person, "person").expect("a person has a row");
+        assert_eq!(person.choose, Choose::Wheel);
+        assert!(!person.fill, "{world}: the person wheel pins its acts and keeps the rest behind More");
+        let pins: Vec<(&str, &str)> = Dir::ALL.iter().filter_map(|d| person.wheel[d.index()].as_ref().map(|p| (d.as_str(), p.name()))).collect();
+        assert_eq!(pins, [("n", "talk"), ("ne", "give"), ("e", "offer"), ("se", "teach"), ("s", "more"), ("sw", "window"), ("w", "appraise"), ("nw", "wave")], "{world}");
+        // Any other creature or thing: a wheel of what the rules allow, nothing pinned.
+        for (on, kind) in [(On::Person, "wolf"), (On::Thing, "berry_bush")] {
+            let m = s.menu_for(on, kind).expect("the general rows");
+            assert!(m.kinds.is_empty() && m.fill && m.wheel.iter().all(|p| p.is_none()), "{world} {kind}: {m:?}");
+        }
+        // Oneself keeps its list.
+        assert!(s.menu_for(On::Me, "person").is_none());
+    }
+    // Cullet's fuel fires: make and feed in fixed directions.
+    let c = crate::cullet_check::cullet();
+    let f = c.menu_for(On::Thing, "furnace").expect("Cullet's workplace row");
+    assert_eq!((f.pinned(&Pin::parse("make")), f.pinned(&Pin::parse("feed"))), (Some(Dir::N), Some(Dir::E)));
+    assert!(c.menu_for(On::Thing, "campfire").is_some_and(|m| m.kinds.is_empty()), "a campfire takes the general row");
+}
+
+#[test]
+fn a_world_that_declares_no_menus_keeps_every_list() {
+    let s = Scripts::new(&without_ui(include_str!("../../../scripts/skills.rhai"))).unwrap();
+    assert!(s.menus().is_empty());
+    for (on, kind) in [(On::Person, "person"), (On::Person, "wolf"), (On::Thing, "berry_bush"), (On::Me, "person")] {
+        assert!(s.menu_for(on, kind).is_none(), "{kind}");
+    }
+}
+
+#[test]
+fn a_pinned_section_never_moves_and_greys_in_place() {
+    let s = island();
+    let m = s.menu_for(On::Person, "person").unwrap();
+    // The same person under different facts: what the client's checks allow changes, the pins do not.
+    let full = ["talk", "window", "give", "offer", "teach", "appraise", "wave", "nod", "threaten", "introduce"];
+    let cases: Vec<Vec<Candidate>> = vec![
+        full.iter().map(|n| cand(n, true)).collect(),
+        // An empty pack, nothing to teach, no one to look over: those grey.
+        full.iter().map(|n| cand(n, !matches!(*n, "give" | "offer" | "teach" | "appraise"))).collect(),
+        // The list offers some of them not at all (a refused act is no row): still in place.
+        ["talk", "window", "wave"].iter().map(|n| cand(n, true)).collect(),
+    ];
+    let mut layouts = Vec::new();
+    for cs in &cases {
+        let w = wheel_of(m, cs);
+        let at: Vec<(&str, String)> = w.sections.iter().map(|s| (s.dir.as_str(), s.what.name().to_string())).collect();
+        layouts.push(at);
+        // A refused or missing pinned act greys; More is always there.
+        for sec in &w.sections {
+            let c = cs.iter().find(|c| c.what == sec.what);
+            assert_eq!(sec.allowed, sec.what == Pin::Own(Section::More) || c.is_some_and(|c| c.allowed), "{sec:?}");
+        }
+        // Not pinned, not on the wheel (`fill: false`): behind More, in the list's order.
+        let behind: Vec<&str> = w.more.iter().map(|p| p.name()).collect();
+        let want: Vec<&str> = cs.iter().filter(|c| c.allowed && m.pinned(&c.what).is_none()).map(|c| c.what.name()).collect();
+        assert_eq!(behind, want);
+    }
+    assert!(layouts.windows(2).all(|p| p[0] == p[1]), "{layouts:?}");
+}
+
+#[test]
+fn filled_sections_show_only_while_allowed_and_more_takes_the_rest() {
+    let s = island();
+    let general = s.menu_for(On::Thing, "berry_bush").unwrap().clone();
+    // A bush: gather only. One section at north, no More.
+    let w = wheel_of(&general, &[cand("gather", true), cand("appraise", false)]);
+    assert_eq!(dirs(&w), [("n", "gather".to_string(), true)]);
+    assert!(w.more.is_empty());
+    // Nine allowed acts with nothing pinned: seven fill clockwise from north, More keeps south
+    // for the rest (the first free direction clockwise from south).
+    let many: Vec<Candidate> = (0..9).map(|i| cand(&format!("act{i}"), true)).collect();
+    let w = wheel_of(&general, &many);
+    let at: Vec<(&str, String)> = w.sections.iter().map(|s| (s.dir.as_str(), s.what.name().to_string())).collect();
+    assert_eq!(at, [("n", "act0"), ("ne", "act1"), ("e", "act2"), ("se", "act3"), ("s", "more"), ("sw", "act4"), ("w", "act5"), ("nw", "act6")].map(|(d, n)| (d, n.to_string())));
+    assert_eq!(w.more.iter().map(|p| p.name()).collect::<Vec<_>>(), ["act7", "act8"]);
+    // Eight fit exactly: no More.
+    let w = wheel_of(&general, &many[..8]);
+    assert_eq!(w.sections.len(), 8);
+    assert!(w.more.is_empty() && w.at(Dir::S).is_some_and(|s| s.what == Pin::parse("act4")));
+    // Pinned ones keep theirs; the filled skip them.
+    let mut pinned = general.clone();
+    pinned.wheel[Dir::N.index()] = Some(Pin::parse("act5"));
+    let w = wheel_of(&pinned, &many[..3]);
+    assert_eq!(dirs(&w), [("n", "act5".to_string(), false), ("ne", "act0".to_string(), true), ("e", "act1".to_string(), true), ("se", "act2".to_string(), true)]);
+}
+
+#[test]
+fn the_wheel_and_more_reach_exactly_the_list() {
+    // Every act the list offers is on the wheel or behind More, and the wheel adds only pinned
+    // sections (greyed when the list does not offer them).
+    let s = island();
+    for (on, kind) in [(On::Person, "person"), (On::Person, "wolf"), (On::Thing, "berry_bush")] {
+        let m = s.menu_for(on, kind).unwrap();
+        let list: Vec<Candidate> = ["talk", "window", "give", "wave", "nod", "follow", "goto", "flee", "threaten", "tend", "appraise"].iter().map(|n| cand(n, true)).collect();
+        let w = wheel_of(m, &list);
+        let mut reach: Vec<String> = w.sections.iter().filter(|s| s.allowed && s.what != Pin::Own(Section::More)).map(|s| s.what.name().to_string()).chain(w.more.iter().map(|p| p.name().to_string())).collect();
+        reach.sort();
+        let mut want: Vec<String> = list.iter().map(|c| c.what.name().to_string()).collect();
+        want.sort();
+        assert_eq!(reach, want, "{kind}");
+        for sec in w.sections.iter().filter(|s| !s.allowed) {
+            assert!(sec.pinned, "{kind}: only a pinned section is ever grey: {sec:?}");
+        }
+    }
+}
+
+#[test]
+fn a_bad_menu_is_logged_by_a_client_and_refused_at_install() {
+    let cases: &[(&str, &str)] = &[
+        (r#"fn menus() { [#{ on: "person", choose: "wheel", wheel: #{ up: "give" } }] }"#, "`up` is no direction"),
+        (r#"fn menus() { [#{ on: "person", choose: "wheel", wheel: #{ n: "give", s: "give" } }] }"#, "names `give` twice"),
+        (r#"fn menus() { [#{ on: "person", choose: "wheel", wheel: #{ n: "eat" } }] }"#, "`eat` is not on `person`"),
+        (r#"fn menus() { [#{ on: "thing", choose: "wheel", wheel: #{ n: "talk" } }] }"#, "`talk` is a person's section"),
+        (r#"fn menus() { [#{ on: "bar", choose: "wheel" }] }"#, "a wheel opens where F or C opens a list"),
+        (r#"fn menus() { [#{ on: "thing", kinds: ["furnace"], choose: "wheel" }] }"#, "`furnace` is no structure or resource"),
+        (r#"fn menus() { [#{ on: "thing", choose: "wheel" }, #{ on: "thing", choose: "list" }] }"#, "the same `on` and `kinds`"),
+        (r#"fn menus() { [#{ on: "person", choose: "wheel", wheel: #{ n: "talk", ne: "give", e: "offer", se: "teach", s: "nod", sw: "window", w: "appraise", nw: "wave" } }] }"#, "pins all eight and no `more`"),
+        (r#"fn menus() { [#{ on: "person", choose: "wheel", spin: true }] }"#, "unknown key `spin`"),
+        ("fn give_ui() { #{ choose: \"wheel\" } }", "changes as one carries or learns things"),
+    ];
+    for (src, want) in cases {
+        // A client compiles it and logs the problem; the install refuses it.
+        let s = Scripts::new(&format!("{}\n{src}\n", without_ui(include_str!("../../../scripts/skills.rhai")))).expect("compiles: a declaration never fails the compile");
+        assert!(s.ui_errors().iter().any(|e| e.contains(want)), "{src}: {:?} lacks {want:?}", s.ui_errors());
+        assert!(s.validate().is_err(), "{src}: the install refuses it");
+    }
 }

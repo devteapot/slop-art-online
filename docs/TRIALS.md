@@ -21,12 +21,14 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `cast.<role>.pick` | Scripted characters, picked the same way. |
 | `timeline` | Steps. `"at": "prepare"` runs right after publishing, `"at": "start"` at the start hour before the mind starts, `"at": <minutes>` during the run, and `"when": {…}` on a trigger. An entry is one step or has `steps`, each with an optional `after` (seconds). |
 | `probes` | Probes the trial is about (all probes are computed for every trial). |
-| `minds` | Who the mind service thinks for. Default: the subject (`LIVING_ONLY`). `"only": "all"`: every person and animal. With `"max": N` as well, at most N at a time: those already thinking who are alive, then the earliest-born of the rest past infancy. A death frees a place, and a newborn takes one when it becomes a child. The runner restarts the mind with the new `LIVING_ONLY` when someone joins the set, at most every 2 minutes (a `reslot` event; planned restarts do not count toward the runaway watchdog's restarts). A death alone only drops the dead from the set. |
+| `minds` | Who the mind service thinks for. Default: the subject (`LIVING_ONLY`). `"only": "all"`: every person and animal. With `"max": N` as well, at most N at a time: those already thinking who are alive, then the earliest-born of the rest past infancy. A death frees a place, and a newborn takes one when it becomes a child. The runner restarts the mind with the new `LIVING_ONLY` when someone joins the set, at most every 2 minutes (a `reslot` event; planned restarts do not count toward the runaway watchdog's restarts). A death alone only drops the dead from the set. `concurrency`: how many model calls the trial's mind service runs at once (`LIVING_CONCURRENCY`); default 64 where many think (`only: "all"` or `max`) and 4 for a single thinker, recorded in `mind-env.json` and the summary (`concurrency`). Every trial ran at 4 before 2026-11-11 (see below). |
 | `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. A world seed with its own laws (`laws`/`laws_file`) has them composed over the file first (`compose_laws` in `living/tools/install_script.py`, as `floors::compose` does at creation). The runner's laws guard then refuses to start the instance (the **laws guard**, under [the hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11), Cullet's day and laws). |
 | `census_s` | Every so many seconds, every character of the world goes to `census.jsonl`: stage, alive, cause and time of death, parents, position, hunger, activity, and who the mind thinks for. This is meant for small worlds (four whole-table reads per census). |
 | `life.stop_on_death` | `false`: a life run goes on to its duration after the subject dies, and the mind keeps running (default `true`: it stops 20 s after the death). |
-| `human` | A scripted human player for a `subject.join` trial (`Player` in trials.py): `minutes`, and `script: greet` for the greeting trial (`wait_s`, `listen_s`, `earshot_m`, `greetings`, `addressed`; [the greeting trial](#the-greeting-trial-2026-11-11)). Without `script` it plays the takeover session. |
-| `record` | Small-world evidence: `speech` (every line said, `speech.jsonl`), `talk` (every conversation turn, `talk.jsonl`), `audience` (the `audience` rows where the world keeps them, `audience.jsonl`). |
+| `subject.join` | A human player joins as the subject through the real `join` reducer with its own identity (`Player` in trials.py): `name`, and `after_s`, how long the world lives first. |
+| `human` | A scripted human player for a `subject.join` trial (`Player` in trials.py), played with the player reducers only: `minutes`, and `script: greet` for the greeting trial (`wait_s`, `listen_s`, `earshot_m`, `greetings`, `addressed`; [the greeting trial](#the-greeting-trial-2026-11-11)) or `script: arrive` for [the arrival trial](#arrivals-a-stranger-who-says-nothing-2026-11-11) (`settle_s`, `walk_s`, `within_m`, `stand_s`, `stands`, and `answer`: one line said back to the first resident who addresses it). Without `script` it plays the takeover session. The arrival player approaches and answers only residents the trial's minds think for (`Player.is_mind`: past infancy, in `LIVING_ONLY` or the `minds.max` thinkers), never one who lives by its graph and could not answer. |
+| `variants` | The only variants the trial runs with; others named on the command line are skipped for it (`arrive-answer` runs with the control only). |
+| `record` | Small-world evidence, whole-table reads each sample: `speech` (every line said, `speech.jsonl`), `talk` (every conversation turn, `talk.jsonl`), `audience` (the `audience` rows where the world keeps them, `audience.jsonl`), `experiences` (every character's experience rows before minds integrate them, `experiences_all.jsonl`), `gestures` (wave, nod, face, appraise uses, `gestures.jsonl`), `positions` (every person's position, heading and activity target, `positions.jsonl`), `thoughts` (every thought row, with `detail.reasons`, `thoughts_all.jsonl`). |
 
 Steps (`do`): `place` (`to`: an anchor), `graph` (a graph, `instinct:<name>` from `instincts.json`, or `original`: the graph the character had before the trial changed it), `items`, `know`, `say` (`text`, `to`), `act` (`act` or `acts`: `do` nodes), `structure`, `background`, `kill`, `clear_routines`, `clear_items`, `call` (any admin reducer), `note`.
 
@@ -65,6 +67,8 @@ python3 living/tools/trial_evidence.py b4 --quotes 2      # per instance: death,
 python3 living/tools/trial_evidence.py b1 b4 --table      # one row per trial x variant with spread
 python3 living/tools/trials.py down                      # stop the containers (kept)
 ```
+
+**Mind concurrency (2026-11-11).** The runner gave every trial's mind `LIVING_CONCURRENCY=4`. In the hamlet's greeting batches (12 minds), the queue, not the model, then set the pace: talk turns waited a median 2–7 s in the queue (p90 15–25 s, at most 78 s) for 0.8 s of model time, and deliberations 6–13 s (p90 up to 41 s), by the resident inspector's reading. Play-test 2 ran at 192 and waited under 0.2 s. It is now the trial's `minds.concurrency`, by default 64 where many think and 4 for one thinker, so one-mind batches stay comparable with earlier ones. Batches of many minds before this date ran queued: their latencies are not the model's.
 
 Three runner behaviours since 2026-11-11 (branch `exp-greet`):
 
@@ -753,6 +757,49 @@ The cost is an estimate, not a measurement. It uses the island figure of about $
 - `verify-client` was not run for the new private `audience` table. Its scripts assume the shared server on 3300, which this machine leaves to other work. Privacy was checked through `verify-player`: a player's SQL is refused the table.
 - The game client's cursor addressing is emulated only by its fallback, the nearest person in earshot.
 
+## Arrivals: a stranger who says nothing (2026-11-11)
+
+Branch `exp-arrive`. Status: **the trials and the report are kept as tooling for a control world; the newcomer laws were rejected and are not in the code** (2026-11-12).
+
+**The owner's observation (play-test 3).** The owner said one "Hi", to the child Bram, who answered in character in 3.2 s. Then the owner stood silent on and around the square for 3 min 16 s with residents in earshot, and nobody approached or spoke.
+
+**What was tried and rejected.** `exp-arrive` added three number laws (`newcomer_salience`, `newcomer_scene_min`, `newcomer_drive_s`, off by default) and arms that switched them on. They were measured in [ar2](#arrival-batch-ar2-2026-11-11). The owner rejected them as prescribed attention: "I don't really like the fact that this has been encoded as a world rule. It should be something emergent from the personality and role of NPCs." None of them was merged, not even switched off. The diagnosis, the laws, their verify-core scene and the fake proofs `af1`–`af8` stay on `exp-arrive` (`1e63a304`). What was merged (`arrive-2`): the two trials, `arrive_report.py`, the scripted player (`Player.arrive_session`), the `record` options, a trial's `variants` and `minds.concurrency`.
+
+### The trial and the report
+
+[`arrive`](../living/trials/arrive.json): the hamlet on Cullet's day and laws (12 people in two settlements; the 11 past infancy are thought for, `minds.max` 11). Under Cullet's life law (`life_years`, since lives-3: a lifespan of 90, a child until 15, deaths of old age from 75) the cast's stages at the start are as before: Pim and Lio children, Teodor old, Tobin an infant. A year of age is about 6.9 real minutes, so no one dies of old age within 14 minutes; the earliest, Teodor at 70, is due from about 34 minutes. Tobin leaves infancy (2.1 years) about 8 minutes in. With `minds.max` 12 the runner then restarted the mind service in the middle of the second stand (`af5`: `reslot` at 482 s, the stand 373–673 s), breaking off every mind's calls and conversations. With 11 he stays on his graph, and the player neither approaches nor answers him. The world lives 30 s (`subject.join.after_s`). Then a scripted player (`Player.arrive_session`: `join`, `human_act`, `human_move` with its own identity) joins at the arrival point, waits 20 s, walks to the densest group until two residents are within 5 m, steps to face into it and stands silent 5 minutes. Then it walks to the group sharing fewest members with the first and stands silent 5 more minutes, then stays to the end (14 minutes). It never speaks, gestures or names itself. It runs the shipped rules (`arrive-control`). Every line, conversation turn, experience row (before it is integrated), gesture and position with activity target is recorded (`record`).
+
+[`arrive_report.py`](../living/tools/arrive_report.py) (read-only, no model calls; its docstring defines every column), per resident within 12 m of the newcomer during a stand:
+
+- `seen`, `first_s`, `first_sal`, `crowd`: the newcomer in their experiences, the first-sight percept's time and salience, or none;
+- `asked`: a thought whose reason is an experience about the newcomer;
+- `thinks`, `in_prompt`: thoughts during the stands and how many prompts had the newcomer;
+- `mention`, `words`: replies naming them by id, or with stranger/newcomer words;
+- `approach`, `aimed`, `close`: came up to them (distance fell 3 m and ended within 4 m), an activity aimed at them, within 3 m;
+- `gesture`: wave, nod, face or appraise at them;
+- `to_them`, `about_them`: lines to them, or about them to others or to no one.
+
+Per run, it gives the share of residents in range who acted, the time from the arrival to the first resident-initiated contact, thoughts per resident-minute, and calls, tokens and dollars per hour. Residents are those the minds think for (census `thinkers`, else past infancy). Then, per arm:
+
+- **First contact by class**, per resident: `greeting`, `question` (who are you, are you new, where from), `offer` (food, a bed, help, work, company), `warning/hostility`, `other line`. Without a line: an offer or hostile act aimed at them, else `watching` (a face or appraise gesture; a gaze, standing still and turning to face them from 4–25 m; a thought naming them), else `approach, no line`. Counts per arm and three verbatim examples per class. The classes are keyword heuristics: read the examples.
+- **Follow-through** (`arrive-answer`): whom the newcomer answered, how many lines that resident said after it before 90 s of quiet, the seconds to each, and who else joined.
+- **Crowding**, a cost, since several converging at once reads as scripted: `converge_60s`, the most residents who spoke, gestured or aimed an activity at the newcomer within one minute; `together_4m`, the most within 4 m at once who had; `runs_3plus`. `converge_any_60s` and `together_any_4m` add approaches by distance, which routines make in every arm.
+- **Cost**: dollars per hour and per run, calls and tokens per minute. Also `reused_share` (reason lines an earlier thought of the same resident already had) and `reused_events` (those that are one-time events rather than plan states: the stale-reasons effect).
+
+`--journal DIR --subject ID --from-ms --to-ms` reads a play-test's journals (no positions). A stand the run's end cut short (no `human_stand_end`) ends at the run's last position sample, so a short or stopped run still reports.
+
+**`arrive-answer`** ([trial](../living/trials/arrive-answer.json)) is `arrive` with one change: the player says "Hello. I'm new here." back to the first resident who addresses it, then is silent again. It runs only with the control (the trial's `variants`). Its question is whether contact becomes a conversation.
+
+Both trials think with `minds.concurrency` 64 (the default for many minds since 2026-11-11). The player approaches and answers only residents the minds think for; the greeting trial's script, on `exp-greet`, addressed Tobin, who is not one, 2–5 times a run.
+
+```bash
+python3 living/tools/trials.py build arrive
+python3 living/tools/trials.py run --batch af1 arrive --variants arrive-control \
+    --replicates 1 --fake --fake-script living/trials/fake/latency.json --parallel 5 --stagger 15
+python3 living/tools/arrive_report.py af1 --examples 2
+python3 living/tools/trials.py clean --batch af1
+```
+
 ## Fast iterations
 
 | # | Hypothesis | Change (branch) | Runs | Result | Keep? |
@@ -1091,6 +1138,8 @@ Paths are relative to `~/dev/slop-runs-greet/.local/living/trials/`. Lines are f
    - This is the right reaction to a stranger who never answers. It is awkward because the script never answers.
 
 ## Arrival batch ar2 (2026-11-11)
+
+**Rejected (2026-11-12).** The owner rejected the law arms (`notice`, `known`, `wonder`, `all`) as prescribed attention: "I don't really like the fact that this has been encoded as a world rule. It should be something emergent from the personality and role of NPCs." The newcomer laws were not merged, not even switched off; attention to a stranger has to come from the residents' personalities and roles. The `arrive` and `arrive-answer` trials and `arrive_report.py` stay as tooling, with only the control (`arrive-control`). The figures below remain the record of what the arms did.
 
 Paid runs of the arrival trials from branch `exp-arrive` ("Arrivals: a stranger who says nothing" in that branch's TRIALS.md: the diagnosis, the three laws and the fake proofs `af1`–`af8`). A scripted player joins the hamlet, walks to the densest group of residents, and stands silent among them for two 5-minute stands. It never speaks, gestures or names itself. In `arrive-answer` it says "Hello. I'm new here." once, to the first resident who addresses it. The arms differ only in the arrival laws, so differences between arms are caused by the laws.
 

@@ -61,6 +61,10 @@ const NEAR: f32 = 1.07;
 pub enum Family {
     /// The authority says whether the body runs: that family only, at any speed.
     Running(bool),
+    /// Between the two while the authority's word changes: the walking family's gaits and the
+    /// running family's, at this weight of the running ones (0 walks, 1 runs; `live.rs` eases it
+    /// so a switch crossfades instead of popping).
+    Mix(f32),
     /// The split speed (m/s for a character of the 1.75 m base, off a road): walking clips below
     /// it, running clips above, blending within ±[`CROSS_BAND`].
     Split(f32),
@@ -69,6 +73,17 @@ pub enum Family {
     #[default]
     Clips,
 }
+impl Family {
+    /// A mix at either end is that family alone.
+    pub fn settled(self) -> Self {
+        match self {
+            Family::Mix(w) if w <= 0.0 => Family::Running(false),
+            Family::Mix(w) if w >= 1.0 => Family::Running(true),
+            f => f,
+        }
+    }
+}
+
 /// Animals blend two gaits within this ratio either side of their geometric mean, unless their
 /// sidecar gives its own `band`.
 const ANIMAL_BAND: f32 = 1.1;
@@ -444,6 +459,7 @@ impl Gaits {
     /// right) would fall back: the caller falls back to the forward gaits along the travel, so
     /// both sides always look alike.
     pub fn blend_toward(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        let family = family.settled();
         let b = self.blend_side(speed, stride, family, travel, len)?;
         self.blend_side(speed, stride, family, -travel, len)?;
         Some(b)
@@ -530,7 +546,7 @@ impl Gaits {
     /// The walk ↔ run split for `family` (m/s at stride 1), or None when the authority picks.
     fn split_speed(&self, family: Family) -> Option<f32> {
         match family {
-            Family::Running(_) => None,
+            Family::Running(_) | Family::Mix(_) => None,
             Family::Split(v) => Some(v),
             Family::Clips => Some(self.clips_split()),
         }
@@ -540,7 +556,7 @@ impl Gaits {
     /// runs, clear of the blend into running.
     pub fn walks(&self, speed: f32, stride: f32, family: Family) -> bool {
         match self.split_speed(family) {
-            None => family == Family::Running(false),
+            None => matches!(family, Family::Running(false)) || matches!(family, Family::Mix(w) if w <= 0.0),
             Some(v) => speed / stride.max(0.05) <= v - CROSS_BAND,
         }
     }
@@ -567,6 +583,30 @@ impl Gaits {
     /// base's, in `family`, and the metres a cycle covers at stride 1. `len(i)` gives a gait's
     /// length (s) when the sidecar has none.
     pub fn blend(&self, speed: f32, stride: f32, family: Family, len: impl Fn(usize) -> f32) -> Blend {
+        match family.settled() {
+            Family::Mix(w) => {
+                // Partway through a switch: the walking blend and the running one, weighted.
+                let (a, b) = (self.blend_in(speed, stride, Family::Running(false), &len), self.blend_in(speed, stride, Family::Running(true), &len));
+                let mut parts: Vec<(usize, f32)> = Vec::with_capacity(4);
+                for (i, x) in a.parts().iter().map(|&(i, x)| (i, x * (1.0 - w))).chain(b.parts().iter().map(|&(i, x)| (i, x * w))) {
+                    match parts.iter_mut().find(|p| p.0 == i) {
+                        Some(p) => p.1 += x,
+                        None => parts.push((i, x)),
+                    }
+                }
+                parts.retain(|p| p.1 > 1e-4);
+                let mut out = Blend { parts: [(parts.first().map_or(0, |p| p.0), 0.0); 4], n: parts.len().min(4), cycle_m: (1.0 - w) * a.cycle_m + w * b.cycle_m };
+                for (k, &p) in parts.iter().take(4).enumerate() {
+                    out.parts[k] = p;
+                }
+                out
+            }
+            f => self.blend_in(speed, stride, f, &len),
+        }
+    }
+
+    /// [`Gaits::blend`] for one family (not [`Family::Mix`]).
+    fn blend_in(&self, speed: f32, stride: f32, family: Family, len: &dyn Fn(usize) -> f32) -> Blend {
         let s = speed / stride.max(0.05);
         let cycle = |i: usize| {
             let g = &self.clips[i];
@@ -642,6 +682,17 @@ pub fn of(file: &str) -> Arc<Gaits> {
 #[derive(Component)]
 pub struct Feet;
 
+/// A connected body whose feet the log records, with its id: mine, and the one
+/// `LIVING_GAME_FEET_ID` names (another player's, to check how others are drawn). Each line
+/// carries `id`, and `sim` and `heading` are that body's.
+#[derive(Component)]
+pub struct Logged(pub u32);
+
+/// The other body `LIVING_GAME_FEET_ID` asks the feet log to follow too.
+pub fn logged_other() -> Option<u32> {
+    std::env::var("LIVING_GAME_FEET_ID").ok().and_then(|v| v.trim().parse().ok())
+}
+
 pub struct GaitPlugin;
 
 impl Plugin for GaitPlugin {
@@ -683,7 +734,7 @@ fn record(
     time: Res<Time>,
     island: Option<Res<crate::island::Island>>,
     envs: Option<Res<crate::envs::Envs>>,
-    who: Query<(Entity, &GlobalTransform, Option<&crate::lookdev::Model>), Or<(With<Feet>, With<crate::envs::Player>)>>,
+    who: Query<(Entity, &GlobalTransform, Option<&crate::lookdev::Model>, Option<&Logged>), Or<(With<Feet>, With<Logged>, With<crate::envs::Player>)>>,
     children: Query<&Children>,
     bones: Query<(&Name, &GlobalTransform)>,
     anims: Query<&crate::anim::Anim>,
@@ -701,7 +752,7 @@ fn record(
         (None, Some(e)) => e.ground.height(x, z),
         _ => 0.0,
     };
-    for (e, root, model) in &who {
+    for (e, root, model, logged) in &who {
         if !feet.contains_key(&e) {
             let find = |name: &str| children.iter_descendants(e).find(|d| bones.get(*d).is_ok_and(|(n, _)| n.as_str() == name));
             if let (Some(l), Some(r), Some(la), Some(ra)) = (find("J_Bip_L_ToeBase"), find("J_Bip_R_ToeBase"), find("J_Bip_L_Foot"), find("J_Bip_R_Foot")) {
@@ -745,7 +796,10 @@ fn record(
         };
         // Where I look and travel (sim radians as degrees, counter-clockwise from east), and the
         // authority's segment speed: connected play only.
-        let mine = net.as_ref().and_then(|n| n.my_id).and_then(|id| scene.as_ref().and_then(|s| s.shown.get(&id).copied()));
+        let my_id = net.as_ref().and_then(|n| n.my_id);
+        let id = logged.map(|l| l.0).or(my_id);
+        let is_me = id.is_some() && id == my_id;
+        let mine = id.and_then(|id| scene.as_ref().and_then(|s| s.shown.get(&id).copied()));
         let look = input.as_ref().and_then(|i| i.scripted_look.or(i.look)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x).to_degrees());
         let rest = serde_json::json!({
             "t": time.elapsed_secs_f64(),
@@ -763,11 +817,15 @@ fn record(
             "hips_yaw": bone_yaw(at[0]),
             "chest_yaw": bone_yaw(at[1]),
             "head_yaw": bone_yaw(at[2]),
-            "look": look,
+            "id": id,
+            "look": look.filter(|_| is_me),
             "heading": mine.and_then(|(_, h)| h).map(|h| h.to_degrees()),
             "sim": mine.map(|(p, _)| [p.x, p.y]),
             "reverse": motions.get(e).ok().map(|m| m.reverse),
             "pace": motions.get(e).ok().map(|m| m.pace),
+            // Walking or running clips as drawn (`live.rs` `family`), and my row's own word.
+            "family": motions.get(e).ok().map(|m| format!("{:?}", m.family)),
+            "running": roam.running,
             // Connected play: the authority time my body is drawn at, and its segment then.
             "mine_ms": scene.as_ref().map(|s| s.mine_ms),
             // The game camera's eye and its pitch below the horizon (degrees).
@@ -936,6 +994,36 @@ pub(crate) mod tests {
         assert_eq!(g.blend(1.7, 1.0, walk34, |_| 1.0).n, 2);
         assert_eq!(names(&g.blend(4.3, 1.0, walk34, |_| 1.0)), vec![("run_fast", 1.0)]);
         assert!(g.gaits()[..5].iter().all(|x| x.clip != "sneak" && x.clip != "walk_back"));
+    }
+
+    #[test]
+    fn the_authoritys_running_word_picks_the_family_and_a_switch_crossfades() {
+        let g = vivi();
+        let len = |_| 1.0;
+        let run_share = |b: &Blend| b.parts().iter().filter(|&&(i, _)| g.gaits()[i].run).map(|p| p.1).sum::<f32>();
+        // Walking at the walk choices (2.6, 3.0, 3.4 m/s): walking clips only, whatever the speed.
+        for v in [2.6, 3.0, 3.4] {
+            assert_eq!(run_share(&g.blend(v, 1.0, Family::Running(false), len)), 0.0, "walking at {v}");
+        }
+        // Running at the rules' run (about 4.3) and the road top (4.6): running clips only.
+        for v in [4.3, 4.6] {
+            assert!((run_share(&g.blend(v, 1.0, Family::Running(true), len)) - 1.0).abs() < 1e-5, "running at {v}");
+        }
+        // A mix at the ends is that family; between, both families by the weight, and the
+        // weights and the cycle move continuously with it (no pop at the switch).
+        assert_eq!(g.blend(3.4, 1.0, Family::Mix(0.0), len), g.blend(3.4, 1.0, Family::Running(false), len));
+        assert_eq!(g.blend(3.4, 1.0, Family::Mix(1.0), len), g.blend(3.4, 1.0, Family::Running(true), len));
+        let mut last = g.blend(3.4, 1.0, Family::Mix(0.0), len);
+        for k in 1..=20 {
+            let w = k as f32 / 20.0;
+            let b = g.blend(3.4, 1.0, Family::Mix(w), len);
+            assert!((run_share(&b) - w).abs() < 1e-4, "run share {} at {w}", run_share(&b));
+            assert!((b.parts().iter().map(|p| p.1).sum::<f32>() - 1.0).abs() < 1e-4);
+            assert!((b.cycle_m - last.cycle_m).abs() < 0.1, "cycle jumps at {w}");
+            last = b;
+        }
+        // The walking stop plays only while the word is walking.
+        assert!(g.walks(3.4, 1.0, Family::Mix(0.0)) && !g.walks(3.4, 1.0, Family::Mix(0.5)));
     }
 
     #[test]

@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|jump|heal|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|jump|breath|heal|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -28,6 +28,7 @@ spec.loader.exec_module(V)
 
 RESULTS = []
 ADMIN = None
+SCENE = None  # the scene running, named on each result (the scene gate's per-scene red-on-main list)
 
 
 def admin():
@@ -55,7 +56,7 @@ def call(st, reducer, args, who="player"):
 
 
 def check(st, name, ok, detail):
-    RESULTS.append({"check": name, "ok": bool(ok), "detail": detail})
+    RESULTS.append({"check": name, "ok": bool(ok), "detail": detail, "scene": SCENE})
     V.log(st, f"{'PASS' if ok else 'FAIL'} {name}: {detail}")
 
 
@@ -282,6 +283,26 @@ def scene_refusals(st):
     check(st, "a second fire bolt within the cooldown is refused", len(us) == 2 and us[0]["accepted_ms"] > 0 and us[1]["accepted_ms"] == 0 and ("not ready" in us[1]["outcome"] or "middle of" in us[1]["outcome"]), [u["outcome"] for u in us])
 
 
+def told(st, cid, skill, t0_ms, secs=4.0):
+    """How the player's own `skill` came out, as its character is told it (the `force_outcomes`
+    law, docs/COMBAT.md "The outcome of one's own blow or shot"): its `own` lines in
+    `my_experience` since `t0_ms`, each with its `my_act_outcomes` row, and, read as the admin,
+    every such line and row in the world (to show they reach the one who made the move only)."""
+    t = time.time() + secs
+    lines = []
+    while time.time() < t:
+        lines = [e for e in sql(st, "SELECT id, kind, text, at_ms FROM my_experience", "player")
+                 if e["kind"] == "own" and e["at_ms"] >= t0_ms and (e["text"].startswith(f"You finished: {skill}") or e["text"].startswith(f"You failed to {skill}"))]
+        if lines:
+            break
+        time.sleep(0.2)
+    rows = {o["id"]: o for o in sql(st, "SELECT * FROM my_act_outcomes", "player")}
+    everyone = [e for e in sql(st, f"SELECT id, observer, kind, text FROM experience WHERE at_ms >= {t0_ms}")
+                if e["kind"] == "own" and (e["text"].startswith(f"You finished: {skill}") or e["text"].startswith(f"You failed to {skill}"))]
+    outcomes = [o for o in sql(st, f"SELECT id, observer, skill FROM act_outcome WHERE at_ms >= {t0_ms}") if o["skill"] == skill]
+    return lines, [rows.get(l["id"]) for l in lines], everyone, outcomes
+
+
 def scene_strike(st):
     cid = me(st)
     p = body(st, cid)
@@ -303,6 +324,12 @@ def scene_strike(st):
     check(st, "the player perceives release and hit, with the amount", 1 in kinds and hits and hits[-1]["amount"] > 0, [(e["kind"], round(e["amount"], 1)) for e in ev[-4:]])
     fd = sql(st, f"SELECT band FROM fighter WHERE id = {d}")
     check(st, "the target's band is public, not its health", fd and 0 <= fd[0]["band"] <= 4, fd)
+    lines, rows, everyone, outcomes = told(st, cid, "strike", int(t0 * 1000))
+    check(st, "the player is told its strike's outcome as a mind is: 'You finished: strike → … hit for N', with its my_act_outcomes row",
+          lines and "hit for" in lines[-1]["text"] and rows[-1] and rows[-1]["kind"] == "own" and rows[-1]["ok"] and rows[-1]["skill"] == "strike" and rows[-1]["code"] == "done",
+          {"lines": [l["text"] for l in lines], "rows": rows})
+    check(st, "the strike's line and row reach the striker only", everyone and {e["observer"] for e in everyone} == {cid} and {o["observer"] for o in outcomes} <= {cid},
+          {"lines_to": sorted({e["observer"] for e in everyone}), "rows_to": sorted({o["observer"] for o in outcomes})})
     return d
 
 
@@ -315,7 +342,8 @@ def scene_kill(st):
     time.sleep(0.4)
     trail = []
     final = None
-    t = time.time() + 45
+    # About twenty strikes at the stamina-1 blows (5), paced by breath: two minutes at most.
+    t = time.time() + 120
     while time.time() < t:
         live = sql(st, f"SELECT alive FROM character WHERE id = {d}")
         if not live or not live[0]["alive"]:
@@ -329,8 +357,10 @@ def scene_kill(st):
         if u and "killed" in u["outcome"]:
             final = (h, u)
             break
-        if u and "too tired" in u["outcome"]:
-            break
+        if u and "out of breath" in u["outcome"]:
+            # Ten strikes take a bar of breath (10 each): wait for it to come back.
+            time.sleep(3)
+            continue
     dead = sql(st, f"SELECT alive, cause FROM character WHERE id = {d}")
     mine = sql(st, f"SELECT name FROM character WHERE id = {cid}")[0]["name"]
     # The death record names the killer as the victim knew them (perceived_of): the player's
@@ -343,7 +373,8 @@ def scene_kill(st):
     mh = sql(st, f"SELECT max_hp FROM vitals WHERE id = {d}")
     mh = mh[0]["max_hp"] if mh else 100.0
     low = [h for h, o in trail if h < 0.4 * mh]
-    landed = all(o and (o.startswith("hit for") or "killed" in o) for h, o in trail)
+    # A strike refused for breath waits and goes on (since stamina-1); every one made lands.
+    landed = all(o and (o.startswith("hit for") or "killed" in o) for h, o in trail if o and "out of breath" not in o)
     check(st, "strikes keep landing below 40% health (no beating stops short)", len(low) >= 1 and landed, {"max_hp": round(mh, 1), "trail": trail})
     # Health was read before the strike's wait; vitals settle to the blow's instant, so allow a
     # small drift.
@@ -369,6 +400,12 @@ def scene_bow(st):
     impact = [e for e in ev if e["kind"] == 11 and e["actor"] == cid]
     check(st, "an arrow flies (launch and impact perceived) and strikes the first body in its path", launch and impact and h0 is not None and h1 is not None and h1 < h0, f"{u and u['outcome']} (#{hit}{', the dummy' if hit == d else ', in the path'}) hp {h0}->{h1} launch speed {launch and launch[-1]['amount']}")
     check(st, "the arrow is spent", arrows1 == arrows0 - 1, f"{arrows0}->{arrows1}")
+    lines, rows, everyone, outcomes = told(st, cid, "bowshot", t0)
+    check(st, "the player is told where its arrow went as a mind is: 'You finished: bowshot → … struck …: hit for N', with its my_act_outcomes row",
+          lines and "struck" in lines[-1]["text"] and ("hit for" in lines[-1]["text"] or "got through" in lines[-1]["text"] or "killed" in lines[-1]["text"]) and rows[-1] and rows[-1]["kind"] == "own" and rows[-1]["skill"] == "bowshot",
+          {"lines": [l["text"] for l in lines], "rows": rows})
+    check(st, "the arrow's line and row reach the shooter only", everyone and {e["observer"] for e in everyone} == {cid} and {o["observer"] for o in outcomes} <= {cid},
+          {"lines_to": sorted({e["observer"] for e in everyone}), "rows_to": sorted({o["observer"] for o in outcomes})})
 
 
 def scene_bolt(st):
@@ -489,6 +526,85 @@ def scene_jump(st):
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
 
 
+def my_vitals(st):
+    r = sql(st, "SELECT * FROM my_vitals", "player")
+    return r[0] if r else None
+
+
+def breath_of(v, now_ms):
+    """Breath now from the row (living_rules::pools::level), as a client projects it."""
+    start = max(v["at_ms"], v["stamina_from_ms"])
+    return max(0.0, min(v["stamina"] + v["stamina_rate"] * max(0, now_ms - start) / 1000, v["stamina_max"]))
+
+
+def scene_breath(st):
+    """Breath through the player's reducers (docs/STAMINA.md): `human_move` with run drains it
+    (the row's rate, written once at the start), letting go writes the refill a second on, and
+    standing it comes back with no row written; a dodge takes 20 and a jump 10; dodging on
+    with no time to get it back is refused "out of breath" (`my_combat` REFUSED, the use's
+    outcome). Everything is read through the player's own `my_vitals` view."""
+    cid = me(st)
+    home = body(st, cid)
+    time.sleep(2.5)
+    v0 = my_vitals(st)
+    check(st, "my_vitals carries breath and focus, rested and full", v0 and v0["stamina_max"] > 0 and abs(breath_of(v0, int(time.time() * 1000)) - v0["stamina_max"]) < 1.0 and v0["focus_max"] > 0, v0)
+    call(st, "human_move", [1.0, 0.0, False])
+    time.sleep(0.8)
+    walk = sql(st, f"SELECT speed FROM body WHERE id = {cid}")[0]["speed"]
+    call(st, "human_move", [1.0, 0.0, True])
+    time.sleep(0.8)
+    run = sql(st, f"SELECT speed FROM body WHERE id = {cid}")[0]["speed"]
+    v1 = my_vitals(st)
+    src = sql(st, "SELECT source FROM script WHERE name = 'skills'")[0]["source"]
+    own = [r for r in sql(st, "SELECT * FROM world_law") if r["name"] == "run_share"]
+    share = float(own[0]["value"]) if own else float(__import__("re").search(r"\brun_share: ([0-9.]+)", src).group(1))
+    check(st, "a player's run is the run_share law times its walk and drains 4 breath a second from the row's anchor", walk and abs(run / walk - share) < 0.02 and abs(v1["stamina_rate"] + 4.0) < 1e-3 and v1["stamina_from_ms"] == v1["at_ms"], {"walk": walk, "run": run, "row": v1})
+    time.sleep(1.5)
+    v1b = my_vitals(st)
+    # The needs may re-anchor the row meanwhile; the drain goes on from the new anchor.
+    check(st, "a held run keeps draining while it lasts (no write of its own)", abs(v1b["stamina_rate"] + 4.0) < 1e-3 and v1b["stamina_from_ms"] == v1b["at_ms"], {"first": v1["at_ms"], "later": v1b["at_ms"]})
+    call(st, "human_move", [0.0, 0.0, False])
+    time.sleep(0.6)
+    v2 = my_vitals(st)
+    spent = v0["stamina_max"] - v2["stamina"]
+    check(st, "letting go of the run: its breath back from a second later, at 25 a second", abs(v2["stamina_rate"] - 25.0) < 1e-3 and 0 < v2["stamina_from_ms"] - v2["at_ms"] <= 1000 and 6.0 < spent < 14.0, {"spent": spent, "row": v2})
+    time.sleep(2.0)
+    v3 = my_vitals(st)
+    check(st, "standing, breath comes back with no row written (the client projects it)", v3 == v2 and breath_of(v3, int(time.time() * 1000)) > v2["stamina"] + 5, {"row": v3, "now": breath_of(v3, int(time.time() * 1000))})
+    time.sleep(3.0)
+    # Back where the scene began (the run carried the body on; a dodge needs room).
+    call(st, "place_at", [cid, home[0], home[1]], "admin")
+    time.sleep(0.5)
+    p = body(st, cid)
+    full = breath_of(my_vitals(st), int(time.time() * 1000))
+    ready(st, "dodge")
+    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+    wait_outcome(st, "dodge", 3)
+    vd = my_vitals(st)
+    check(st, "a dodge takes 20 breath", abs(full - vd["stamina"] - 20.0) < 0.6, {"before": full, "row": vd})
+    time.sleep(1.5)
+    p = body(st, cid)
+    before = breath_of(my_vitals(st), int(time.time() * 1000))
+    ready(st, "jump")
+    call(st, "use_skill", ["jump", 0, p[0] + 2.0, p[1]])
+    wait_outcome(st, "jump", 3)
+    vj = my_vitals(st)
+    check(st, "a jump takes 10 breath", abs(before - vj["stamina"] - 10.0) < 0.6, {"before": before, "row": vj})
+    # Dodging on with no pause to get it back (cooldown 0.9 s, the refill starts 1 s after):
+    # the sixth or so is refused.
+    trail = []
+    for k in range(9):
+        p = body(st, cid)
+        ready(st, "dodge")
+        call(st, "use_skill", ["dodge", 0, p[0], p[1] + (3.0 if k % 2 else -3.0)])
+        u = wait_outcome(st, "dodge", 2)
+        trail.append(u and u["outcome"])
+        if u and "out of breath" in u["outcome"]:
+            break
+    told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")]
+    check(st, "dodging on without a pause is refused out of breath, and told (my_combat REFUSED)", trail and trail[-1] and "out of breath" in trail[-1] and len(trail) >= 3 and told, {"outcomes": trail, "told": told[-1:]})
+
+
 def scene_heal(st):
     cid = me(st)
     h0 = hp(st, cid)
@@ -556,7 +672,7 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "breath": scene_breath, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
 
 
 def main():
@@ -576,7 +692,9 @@ def main():
         time.sleep(1.0)
     home = body(st, me(st))
     names = list(SCENES) if a.scene == "all" else a.scene.split(",")
+    global SCENE
     for n in names:
+        SCENE = n
         if n not in ("wolves", "death") and home:
             call(st, "place_at", [me(st), home[0], home[1]], "admin")
             time.sleep(0.3)

@@ -18,13 +18,14 @@ BASE = ROOT / ".local/living/verify"
 
 class Scene:
     def __init__(self, run, name):
-        if not re.fullmatch(r"core-[a-z0-9-]+", run):
-            raise ValueError("use a core-* run name with lowercase letters, digits and hyphens")
+        # gate-*: the merge's scene gate (living/tools/scene_gate.py), databases verify-gate-*.
+        if not re.fullmatch(r"(core|gate)-[a-z0-9-]+", run):
+            raise ValueError("use a core-* (or the scene gate's gate-*) run name with lowercase letters, digits and hyphens")
         self.out = BASE / run
         state = json.loads((self.out / "state.json").read_text())
         self.db = state["db"]
         if self.db != "verify-" + run or not state.get("published"):
-            raise ValueError("use a published core-* run created by verify.py launch")
+            raise ValueError("use a published core-* or gate-* run created by verify.py launch")
         self.name = name
         self.results = {}
         self.log = self.out / f"{name}-actions.jsonl"
@@ -1286,9 +1287,9 @@ def doing(s):
 
 def moves(s):
     """How a creature moves besides its walk is the script's `motion(a)` law: a flight at 1.15
-    times the walk, turning on the spot at 6 rad/s. A person walks off (its cruising speed is
-    its walk), then flees a second person (1.15 times that), then turns to face someone behind
-    it (the body row's turn rate). An installed overlay with a flight of 2 and turning at 3
+    times the walk (`run: false`; a flight runs by default, at the `run_share` law), turning on the spot at
+    6 rad/s. A person walks off (its cruising speed is its walk), then flees a second person
+    (1.15 times that, then at a run), then turns to face someone behind it (the body row's turn rate). An installed overlay with a flight of 2 and turning at 3
     shows both changed; the shipped script is installed again at the end."""
     line = open_line(s)
     a, b = s.people(2)
@@ -1305,9 +1306,16 @@ def moves(s):
         time.sleep(1.5)
         walk = body(f"{label}-walk")["speed"]
         s.call("place_at", a, *line[3])
-        s.graph(a, {"seq": [{"do": {"skill": "flee", "target": {"id": b}}}, {"wait": 300}]})
+        s.graph(a, {"seq": [{"do": {"skill": "flee", "target": {"id": b}, "run": False}}, {"wait": 300}]})
         time.sleep(1.5)
         flee = body(f"{label}-flee")["speed"]
+        # A flight runs by default (breath permitting, docs/STAMINA.md): the run's share.
+        s.graph(a, {"wait": 300})
+        time.sleep(1.0)
+        s.call("place_at", a, *line[3])
+        s.graph(a, {"seq": [{"do": {"skill": "flee", "target": {"id": b}}}, {"wait": 300}]})
+        time.sleep(1.5)
+        fled = body(f"{label}-flee-run")["speed"]
         s.graph(a, {"wait": 300})
         time.sleep(2.5)
         h = body(f"{label}-stand")["heading"]
@@ -1317,11 +1325,13 @@ def moves(s):
         s.graph(a, {"seq": [{"do": {"skill": "face", "target": {"id": b}}}, {"wait": 300}]})
         time.sleep(2)
         turn = abs(body(f"{label}-face")["turn"])
-        return {"walk": walk, "flee": flee, "ratio": round(flee / walk, 3) if walk else None, "turn": round(turn, 3)}
+        return {"walk": walk, "flee": flee, "ratio": round(flee / walk, 3) if walk else None, "run_ratio": round(fled / walk, 3) if walk else None, "turn": round(turn, 3)}
 
     try:
         got = measure("shipped")
-        s.expect("shipped law: a flight is 1.15 times the walk", got["ratio"] and abs(got["ratio"] - 1.15) < 0.02, got)
+        s.expect("shipped law: a flight that does not run is 1.15 times the walk", got["ratio"] and abs(got["ratio"] - 1.15) < 0.02, got)
+        share = law_value(s, "run_share")
+        s.expect("a flight runs by default, at the run_share law times the walk", got["run_ratio"] and abs(got["run_ratio"] - share) < 0.02, {**got, "run_share": share})
         s.expect("shipped law: turning on the spot at 6 rad/s", abs(got["turn"] - 6.0) < 0.01, got)
         src = shipped.replace("fn motion(a)", "fn base_motion(a)", 1) + "\nfn motion(a) { let m = base_motion(a); m.flee = 2.0; m.turn_rate = 3.0; m }\n"
         s.call("install_script", src)
@@ -1330,6 +1340,16 @@ def moves(s):
         s.expect("an installed law changes turning: 3 rad/s", abs(got["turn"] - 3.0) < 0.01, got)
     finally:
         s.call("install_script", shipped)
+
+
+def law_value(s, name):
+    """A world law in force: the world's own value (`world_law`, set with `set_world_law`), else
+    the installed script's `laws()` number."""
+    own = [r for r in s.rows("SELECT * FROM world_law") if r["name"] == name]
+    if own:
+        return float(own[0]["value"])
+    src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
+    return float(re.search(r"\b" + name + r": ([0-9.]+)", src).group(1))
 
 
 def body_at(s, actor, now=None, row=None):
@@ -1348,6 +1368,353 @@ def apart(s, a, b):
     at = {r["id"]: body_at(s, r["id"], now, r) for r in rows}
     return round(math.dist(at[a], at[b]), 2)
 
+
+def breath_now(v, now):
+    """A pool's level now from the vitals row (living_rules::pools::level): `stamina` anchored at
+    `at_ms`, changing by `stamina_rate` a second from `max(at_ms, stamina_from_ms)`."""
+    def level(pool):
+        start = max(v["at_ms"], v[pool + "_from_ms"])
+        return max(0.0, min(v[pool] + v[pool + "_rate"] * max(0, now - start) / 1000, v[pool + "_max"]))
+    return level("stamina"), level("focus")
+
+
+def stamina(s):
+    """Breath and focus (docs/STAMINA.md) through the authority, for graph-driven bodies, with the
+    shipped laws and world laws changed on the running world (`set_world_law`). A person's run is
+    the `run_share` law times its walk and drains breath (the vitals row's rate, written once when the run starts);
+    when breath runs out the body walks (the row says the refill starts a second later) and runs
+    again at 30; a body standing refills with no row written; a dodge takes 20 breath and no
+    tiredness worth the name; too little breath refuses it ("out of breath"); fire takes mana and
+    the fourth bolt in 12 s is refused ("not enough mana"); a held guard drains 4 a second and
+    drops; tiredness caps breath (75 at energy 17.5); a wolf charges at 1.5 times its walk and a
+    deer flees at a run; `walk_base` changes the walk."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    law = lambda name, value: s.call("set_world_law", name, json.dumps(value))
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    line = open_line(s, length=64)
+    a, b = s.people(2)
+    s.call("place_at", b, line[0][0], line[0][1] + 30)
+    try:
+        # The walk: the body's cruising speed walking to the far end, then at a run.
+        s.call("place_at", a, *line[0])
+        time.sleep(0.5)
+        s.graph(a, {"seq": [{"do": {"skill": "goto", "target": {"at": list(line[-1])}}}, {"wait": 300}]})
+        time.sleep(1.0)
+        walk = s.rows(f"SELECT speed FROM body WHERE id = {a}", "walk")[0]["speed"]
+        s.graph(a, {"wait": 300})
+        time.sleep(4)
+        # A drain that empties in about 7 s instead of 25 (a world law changed on the running
+        # world), so the 64 m line holds a run to empty, its walk and a second run of about 2 s
+        # even for a fast runner (genes: 5.5 m/s at run 1.65); at 10 one reached the line's end
+        # 0.45 s into the second run and the sampled rows missed its drain.
+        law("stamina_run", 14.0)
+        s.call("place_at", a, *line[0])
+        time.sleep(3)
+        v0 = s.vitals(a, "before-run")
+        s.expect("a body standing has its breath full and no drain", abs(breath_now(v0, now())[0] - v0["stamina_max"]) < 0.5 and v0["stamina_rate"] >= 0, v0)
+        s.graph(a, {"seq": [{"do": {"skill": "goto", "target": {"at": list(line[-1])}, "run": True}}, {"wait": 300}]})
+        samples = []
+        end = time.monotonic() + 20
+        while time.monotonic() < end:
+            rows = s.rows(f"SELECT * FROM body WHERE id = {a}")
+            v = s.vitals(a)
+            samples.append({"t": now(), "speed": rows[0]["speed"], "vx": rows[0]["vx"], "vy": rows[0]["vy"], "running": rows[0]["running"], "vitals": v})
+            if rows[0]["vx"] == 0 and rows[0]["vy"] == 0 and len(samples) > 5:
+                break
+            time.sleep(0.25)
+        (s.out / f"{s.name}-run-samples.json").write_text(json.dumps(samples, indent=1) + "\n")
+        speeds = [x["speed"] for x in samples]
+        run = max(speeds)
+        share = law_value(s, "run_share")
+        s.expect("a person runs the run_share law times its walk", walk and abs(run / walk - share) < 0.02, {"walk": walk, "run": run, "run_share": share})
+        draining = [x for x in samples if x["vitals"]["stamina_rate"] < 0]
+        s.expect("the run drains breath at the law's rate, from the row's anchor", draining and all(abs(x["vitals"]["stamina_rate"] + 14.0) < 1e-3 and x["vitals"]["stamina_from_ms"] == x["vitals"]["at_ms"] for x in draining), draining[:1])
+        winded = [i for i, x in enumerate(samples) if i and samples[i - 1]["speed"] > walk * 1.5 and abs(x["speed"] - walk) < 0.05]
+        s.expect("out of breath, the run becomes a walk", winded, speeds)
+        w = samples[winded[0]]["vitals"]
+        s.expect("the row says breath comes back a second after it ran out, at 25 a second", abs(w["stamina"]) < 0.5 and abs(w["stamina_rate"] - 25.0) < 1e-3 and 0 < w["stamina_from_ms"] - w["at_ms"] <= 1000, w)
+        # Timed by the rows themselves (the samples come about a second apart): the drain starts
+        # again, from 30, 2.2 s after the row said breath ran out.
+        resumed = [x["vitals"] for i, x in enumerate(samples) if i > winded[0] and x["vitals"]["stamina_rate"] < 0]
+        again = [i for i, x in enumerate(samples) if i > winded[0] and x["speed"] > walk * 1.5]
+        s.expect("it runs again once it has 30 breath back, 2.2 s after it ran out", resumed and again and abs(resumed[0]["stamina"] - 30.0) < 0.6 and 2100 <= resumed[0]["at_ms"] - w["at_ms"] <= 2400,
+                 {"winded_row": w["at_ms"], "resumed_row": resumed[0] if resumed else None, "running_again_sample": samples[again[0]]["t"] if again else None})
+        # `body.running` (what a client draws): true at the run's speed, false walking out of breath.
+        fast = [x for x in samples if x["speed"] > walk * 1.5 and (x["vx"] or x["vy"])]
+        slow = [x for x in samples if abs(x["speed"] - walk) < 0.05 and (x["vx"] or x["vy"])]
+        s.expect("body.running says running at a run and walking out of breath", fast and slow and all(x["running"] for x in fast) and not any(x["running"] for x in slow),
+                 {"running_at_run": [x["running"] for x in fast], "running_walking": [x["running"] for x in slow]})
+        writes = sorted({x["vitals"]["at_ms"] for x in samples})
+        s.expect("the row is written at the run's edges only, not every tick", len(writes) <= 8, writes)
+        s.wait(lambda: s.rows(f"SELECT vx, vy FROM body WHERE id = {a}")[0]["vx"] == 0, seconds=20)
+        law("stamina_run", 4.0)
+        time.sleep(1.5)
+        # Refill without writes: the row stays as it is while breath comes back.
+        r0 = s.vitals(a, "refill-0")
+        time.sleep(3)
+        r1 = s.vitals(a, "refill-1")
+        s.expect("standing, breath comes back with no row written", r0 == r1 and breath_now(r1, now())[0] > breath_now(r0, r0["at_ms"])[0] - 0.01 and r1["stamina_rate"] > 0, {"row": r1, "now": breath_now(r1, now())})
+        e_spent = v0["energy"] - s.needs(a, "after-run")["energy"]
+        s.expect("breath spent tires a little (0.02 a point), not by itself much", 0.5 < e_spent < 6.0, {"energy_spent": e_spent})
+        # A dodge: 20 breath, its refill a second after.
+        time.sleep(5)
+        n0 = s.needs(a, "before-dodge")
+        s.graph(a, {"seq": [{"do": "dodge"}, {"wait": 300}]})
+        d = s.wait(lambda: next((v for v in [s.vitals(a)] if v["stamina_rate"] > 0 and v["stamina"] < v["stamina_max"] - 10), None), seconds=10, every=0.2)
+        s.expect("a dodge takes 20 breath; it comes back from a second later", abs(d["stamina_max"] - d["stamina"] - 20.0) < 0.6 and 0 < d["stamina_from_ms"] - d["at_ms"] <= 1000, d)
+        n1 = s.needs(a, "after-dodge")
+        s.expect("a dodge costs no tiredness but its spillover", n0["energy"] - n1["energy"] < 0.6, {"before": n0["energy"], "after": n1["energy"]})
+        # Too little breath: a world where breath holds 15 refuses a dodge (20), not a jump (10).
+        law("stamina_max", 15.0)
+        c, = s.people(1)
+        cv = s.vitals(c, "small-breath")
+        s.expect("a body comes into the world with its breath at the law's cap", abs(cv["stamina"] - 15.0) < 0.01 and cv["stamina_max"] == 15.0, cv)
+        t0 = now()
+        s.graph(c, {"seq": [{"do": "dodge"}, {"wait": 300}]})
+        s.wait(lambda: s.told(c, "out of breath", kind="own") or s.told(c, "out of breath"), seconds=10)
+        told = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {c}", "refused") if "out of breath" in r["text"] and r["at_ms"] >= t0]
+        s.expect("too little breath refuses a dodge: out of breath", told, told[:2])
+        s.graph(c, {"seq": [{"do": "jump"}, {"wait": 300}]})
+        j = s.wait(lambda: next((v for v in [s.vitals(c)] if v["stamina"] < 14.0), None), seconds=10, every=0.2)
+        s.expect("a jump with enough breath goes, taking 10", abs(j["stamina"] - 5.0) < 0.6, j)
+        law("stamina_max", 100.0)
+        # Tiredness caps breath: a body come into the world at energy 17.5 has 75.
+        law("spawn_energy", 17.5)
+        t, = s.people(1)
+        tv = s.vitals(t, "tired-breath")
+        s.expect("tiredness caps breath: 75 at energy 17.5", abs(tv["stamina_max"] - 75.0) < 0.6 and abs(tv["stamina"] - tv["stamina_max"]) < 0.01, tv)
+        law("spawn_energy", 85.0)
+        # Fire takes mana: three bolts from full, a fourth if 4 s of refill came back in time (30
+        # each, 3 a second from 2 s after each), then refused.
+        s.call("grant_know_how", a, "fire_bolt")
+        aim = [line[-1][0], line[-1][1] + 6]
+        t0 = now()
+        s.graph(a, {"seq": [{"do": {"skill": "firebolt", "target": {"at": aim}}}, {"wait": 4.2}, {"do": {"skill": "firebolt", "target": {"at": aim}}}, {"wait": 4.2},
+                            {"do": {"skill": "firebolt", "target": {"at": aim}}}, {"wait": 4.2}, {"do": {"skill": "firebolt", "target": {"at": aim}}}, {"wait": 4.2},
+                            {"do": {"skill": "firebolt", "target": {"at": aim}}}, {"wait": 300}]})
+        s.wait(lambda: [r for r in s.rows(f"SELECT text, at_ms FROM experience WHERE observer = {a}") if "not enough mana" in r["text"] and r["at_ms"] >= t0], seconds=35)
+        bolts = [u for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "bolts") if u["skill"] == "firebolt" and u["at_ms"] >= t0 and u["accepted_ms"] > 0]
+        fv = s.vitals(a, "after-bolts")
+        s.expect("three or four fire bolts from full, then refused: not enough mana", len(bolts) in (3, 4), [(u["at_ms"], u["outcome"]) for u in bolts])
+        s.expect("the bolts took mana, not breath or tiredness", fv["focus"] < 30.0 and fv["focus_rate"] == 3.0, fv)
+        # A held guard: 4 breath a second while up, 5 at the release, then the refill.
+        time.sleep(6)
+        s.graph(a, {"seq": [{"do": {"skill": "block", "qty": 3000}}, {"wait": 300}]})
+        g = s.wait(lambda: next((v for v in [s.vitals(a)] if v["stamina_rate"] < 0), None), seconds=5, every=0.1)
+        s.expect("a held guard drains 4 breath a second", abs(g["stamina_rate"] + 4.0) < 1e-3, g)
+        e = s.wait(lambda: next((v for v in [s.vitals(a)] if v["stamina_rate"] > 0 and v["stamina_from_ms"] > g["at_ms"]), None), seconds=8, every=0.2)
+        s.expect("the guard drops and breath comes back after the delay: 3 s held, 12 + 5 taken", abs(e["stamina_max"] - e["stamina"] - 17.0) < 1.5 and 0 < e["stamina_from_ms"] - e["at_ms"] <= 1000, e)
+        # The narrow walk law: a setting of 3.0 walks 3.0 / 2.6 as fast.
+        law("walk_base", 3.0)
+        s.call("place_at", a, *line[0])
+        time.sleep(0.5)
+        s.graph(a, {"seq": [{"do": {"skill": "goto", "target": {"at": list(line[-1])}}}, {"wait": 300}]})
+        time.sleep(1.0)
+        faster = s.rows(f"SELECT speed FROM body WHERE id = {a}", "walk-3")[0]["speed"]
+        s.expect("walk_base 3.0 walks 3.0 / 2.6 as fast, through the same move_speed", abs(faster / walk - 3.0 / 2.6) < 0.02, {"walk": walk, "walk_3": faster})
+        law("walk_base", 2.6)
+        # Animals: a wolf charges at a run (1.5 times its walk), a deer flees at a run.
+        wolf = next((c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'wolf' AND alive = true")), None)
+        deer = next((c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'deer' AND alive = true")), None)
+        if wolf and deer:
+            s.graph(wolf, {"wait": 300})
+            s.graph(deer, {"wait": 300})
+            s.call("place_at", wolf, *line[0])
+            s.call("place_at", deer, *line[-1])
+            time.sleep(1)
+            s.graph(wolf, {"seq": [{"do": {"skill": "goto", "target": {"at": list(line[-1])}}}, {"wait": 300}]})
+            time.sleep(1)
+            wolf_walk = s.rows(f"SELECT speed FROM body WHERE id = {wolf}")[0]["speed"]
+            s.call("place_at", wolf, *line[0])
+            s.graph(wolf, {"seq": [{"do": {"skill": "attack", "target": {"id": deer}}}, {"wait": 300}]})
+            time.sleep(1)
+            charge = s.rows(f"SELECT speed FROM body WHERE id = {wolf}", "wolf-charge")[0]["speed"]
+            s.expect("a wolf charges at a run: 1.5 times its walk", wolf_walk and abs(charge / wolf_walk - 1.5) < 0.03, {"walk": wolf_walk, "charge": charge})
+            s.graph(wolf, {"wait": 300})
+            s.call("place_at", wolf, line[-1][0] - 5, line[-1][1])
+            s.call("place_at", deer, *line[-1])
+            time.sleep(0.5)
+            s.graph(deer, {"seq": [{"do": {"skill": "flee", "target": {"id": wolf}}}, {"wait": 300}]})
+            time.sleep(1)
+            fled = s.rows(f"SELECT speed FROM body WHERE id = {deer}", "deer-flight")[0]["speed"]
+            s.expect("a deer flees at a run (1.5 times a deer's walk of 3.7, by its genes)", 3.7 * 1.5 * 0.7 < fled < 3.7 * 1.5 * 1.3, fled)
+        else:
+            s.expect("the world has a wolf and a deer for the animals' run", False, {"wolf": wolf, "deer": deer}, fatal=False)
+    finally:
+        for name, value in (("stamina_run", 4.0), ("stamina_max", 100.0), ("spawn_energy", 85.0), ("walk_base", 2.6)):
+            law(name, value)
+
+
+def fights(s):
+    """How long a fight between equals lasts under the world's laws (health, damage, breath and
+    the run): graph-driven 1v1s, the same graphs on any module (docs/STAMINA.md, "Fight length").
+    Each side strikes the other (a wolf attacks) and flees below 20% of its health; in `pp-dodge`
+    and `pw` a person also dodges a blow it sees coming, at 0.15 a look of its graph (about half
+    the windups: a graph that dodged every one was never hit). `pp-trade` trades blows, no dodge.
+    A fight runs from the first blow to a death or a flight (the first `flee`), or `FIGHT_S` (90)
+    seconds; after a flight the scene watches 20 s more: caught (hurt again or killed) or clear
+    (12 m off). `fights-results.json`: per fight its type, length, blows made and landed by each
+    side, dodges, how it ended, and the flight's outcome. `FIGHTS` (5) of each type."""
+    import statistics, collections
+    n = int(os.environ.get("FIGHTS", "5"))
+    limit = float(os.environ.get("FIGHT_S", "90"))
+    line = open_line(s, length=16)
+    out = []
+
+    def graph(other, flee_below, melee="strike", dodge=True):
+        return {"first": [
+            {"if": {"cond": {"all": [{"hurt_within": 30}, {"health": {"below": flee_below}}]}, "then": {"do": {"skill": "flee", "target": {"id": other}}}}}]
+            + ([{"if": {"cond": {"all": [{"threatened": True}, {"chance": 0.15}]}, "then": {"do": "dodge"}}}] if dodge else [])
+            + [{"do": {"skill": melee, "target": {"id": other}}}]}
+
+    def fight(kind, a, b, melee_b, dodge=True):
+        va, vb = s.vitals(a), s.vitals(b)
+        s.call("place_at", a, *line[6])
+        s.call("place_at", b, *line[8])
+        time.sleep(1.0)
+        t_start = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        s.graph(a, graph(b, 0.2 * va["max_hp"], dodge=dodge))
+        s.graph(b, graph(a, 0.2 * vb["max_hp"], melee_b, dodge=dodge and melee_b == "strike"))
+        first, end, how, fled, fled_at, flight = None, None, "timeout", None, None, None
+        seen_uses, trail = {}, []
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < limit + 40:
+            now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+            alive = {c["id"]: c["alive"] for c in s.rows(f"SELECT id, alive FROM character WHERE id = {a} OR id = {b}")}
+            hp = {v["id"]: round(v["hp"] + v["hp_rate"] * max(0, now - v["at_ms"]) / 60000, 1) for v in s.rows(f"SELECT id, hp, hp_rate, at_ms FROM vitals WHERE id = {a} OR id = {b}")}
+            d = apart(s, a, b) if all(alive.values()) else None
+            acts = {x["id"]: x["skill"] for x in s.rows(f"SELECT id, skill FROM activity WHERE id = {a} OR id = {b}")}
+            trail.append({"t": now, "hp": hp, "d": d, "acts": acts})
+            for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {a} OR actor = {b}"):
+                if u["at_ms"] >= t_start:
+                    seen_uses[u["id"]] = u
+            if first is None:
+                used = [u["accepted_ms"] for u in seen_uses.values() if u["accepted_ms"] and u["skill"] in ("strike", "attack", "dodge")]
+                first = min(used) if used else None
+            dead = [x for x in (a, b) if not alive.get(x)]
+            if fled is None:
+                if dead:
+                    end, how = now, "death"
+                    break
+                runner = next((x for x in (a, b) if acts.get(x) == "flee"), None)
+                if runner:
+                    fled, fled_at, end, how = runner, now, now, "flight"
+                    fled_hp = hp.get(runner)
+                elif first and now - first > limit * 1000:
+                    end = now
+                    break
+            else:
+                # After a flight: caught (hurt again, or dead) or clear.
+                if dead or hp.get(fled, 0) < fled_hp - 2:
+                    flight = "caught" + (" and killed" if dead else "")
+                    break
+                if d is not None and d > 12:
+                    flight = "clear"
+                    break
+                if now - fled_at > 20000:
+                    flight = "neither in 20 s"
+                    break
+            time.sleep(0.3)
+        for x in (a, b):
+            s.graph(x, {"wait": 300})
+        time.sleep(1.0)
+        for u in s.rows(f"SELECT * FROM skill_use WHERE actor = {a} OR actor = {b}"):
+            if u["at_ms"] >= t_start:
+                seen_uses[u["id"]] = u
+        uses = [u for u in seen_uses.values() if u["at_ms"] <= (end or 1e18)]
+        blows = lambda who: [u for u in uses if u["actor"] == who and u["skill"] in ("strike", "attack") and u["accepted_ms"]]
+        landed = lambda who: [u for u in blows(who) if u["outcome"].startswith("hit") or "killed" in u["outcome"]]
+        r = {"type": kind, "a": a, "b": b, "seconds": round((end - first) / 1000, 1) if first and end else None,
+             "ended": how + ({a: " of A", b: " of B"}.get(fled, "") if how == "flight" else ""), "flight": flight,
+             "blows": [len(blows(a)), len(blows(b))], "landed": [len(landed(a)), len(landed(b))],
+             "dodges": len([u for u in uses if u["skill"] == "dodge" and u["accepted_ms"]]),
+             "exchanges": len(blows(a)) + len(blows(b)), "refused": [u["outcome"] for u in uses if not u["accepted_ms"] and u["outcome"]][:6],
+             "hp_end": trail[-1]["hp"] if trail else None, "max_hp": [va["max_hp"], vb["max_hp"]]}
+        print(json.dumps(r), flush=True)
+        out.append(r)
+        (s.out / f"{s.name}-trail-{kind}-{a}-{b}.json").write_text(json.dumps(trail) + "\n")
+
+    types = os.environ.get("FIGHT_TYPES", "pp-dodge,pp-trade,pw").split(",")
+    for k in range(n if "pp-dodge" in types else 0):
+        a, b = s.people(2)
+        fight("pp-dodge", a, b, "strike")
+    for k in range(n if "pp-trade" in types else 0):
+        a, b = s.people(2)
+        fight("pp-trade", a, b, "strike", dodge=False)
+    wolves = [] if "pw" not in types else [c["id"] for c in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if c["stage"] >= 2]
+    for k in range(min(n, len(wolves))):
+        p, = s.people(1)
+        # A bold wolf (as a seed's hostile pack is), so it attacks a healthy adult, not only back.
+        s.call("set_background", wolves[k], json.dumps({"pack": "verify fights", "bold": True}, separators=(",", ":")))
+        fight("pw", p, wolves[k], "attack")
+    (s.out / f"{s.name}-results.json").write_text(json.dumps(out, indent=1) + "\n")
+    for kind in ("pp-dodge", "pp-trade", "pw"):
+        f = [r for r in out if r["type"] == kind and r["seconds"] is not None]
+        if f:
+            secs = sorted(r["seconds"] for r in f)
+            print(f"{kind}: {len(f)} fights, median {statistics.median(secs)} s (range {secs[0]}-{secs[-1]}), exchanges median {statistics.median(r['exchanges'] for r in f)}, "
+                  f"ends {dict(collections.Counter(r['ended'] for r in f))}, flights {dict(collections.Counter(r['flight'] for r in f if r['flight']))}", flush=True)
+    s.expect("the fights happened", any(r["seconds"] for r in out), [r["seconds"] for r in out])
+
+
+def chase(s):
+    """A bold wolf charges a person 5 m away who goes straight off along an open line, running
+    (`goto` with `run: true`, while breath lasts) or walking: the time until the gap is down to
+    the wolf's catch distance (its attack's reach and its lunge, 3.2 m), or the gap at 30 s
+    (`CHASE_S`) if never. Timed on the distance, not on a blow landing, so the time of day (a
+    wolf losing its prey beyond its night sight) does not decide it. `CHASES` (4) of each;
+    `chase-results.json`. The runner and the wolf go at their `motion` laws (`run_share`,
+    `wolf_run`): set them with `set_world_law` to measure another pairing."""
+    import statistics
+    n = int(os.environ.get("CHASES", "4"))
+    limit = float(os.environ.get("CHASE_S", "30"))
+    catch = 3.2
+    line = open_line(s, length=64)
+    wolves = [c["id"] for c in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if c["stage"] >= 2]
+    out = []
+    for mode in ("run", "walk"):
+        for k in range(min(n, len(wolves))):
+            alive = {c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'wolf' AND alive = true")}
+            if wolves[k] not in alive:
+                continue
+            p, = s.people(1)
+            w = wolves[k]
+            s.call("set_background", w, json.dumps({"pack": "verify chase", "bold": True}, separators=(",", ":")))
+            s.graph(w, {"wait": 300})
+            s.call("place_at", p, *line[8])
+            s.call("place_at", w, *line[3])
+            time.sleep(1.0)
+            s.graph(p, {"do": {"skill": "goto", "target": {"at": list(line[63])}, "run": mode == "run"}})
+            s.graph(w, {"do": {"skill": "attack", "target": {"id": p}}})
+            t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+            caught, d, speeds, gaps = None, None, [], []
+            while True:
+                now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+                b = {r["id"]: r for r in s.rows(f"SELECT id, vx, vy FROM body WHERE id = {p} OR id = {w}")}
+                speeds.append({x: round(math.hypot(b[x]["vx"], b[x]["vy"]), 2) for x in b})
+                d = apart(s, p, w)
+                gaps.append((now - t0, d))
+                if d <= catch:
+                    caught = round((now - t0) / 1000, 1)
+                    break
+                if now - t0 > limit * 1000:
+                    break
+                time.sleep(0.15)
+            s.graph(p, {"wait": 300})
+            s.graph(w, {"wait": 300})
+            moving = lambda x: [sp[x] for sp in speeds if sp.get(x, 0) > 0.3]
+            med = lambda v: round(statistics.median(v), 2) if v else 0
+            r = {"mode": mode, "person": p, "wolf": w, "caught_s": caught, "gap_end": d, "gap_max": max(g for _, g in gaps),
+                 "person_speed_med": med(moving(p)), "wolf_speed_med": med(moving(w))}
+            print(json.dumps(r), flush=True)
+            out.append(r)
+            time.sleep(3)
+    (s.out / f"{s.name}-results.json").write_text(json.dumps(out, indent=1) + "\n")
+    for mode in ("run", "walk"):
+        c = [r["caught_s"] for r in out if r["mode"] == mode]
+        got = sorted(x for x in c if x is not None)
+        print(f"{mode}: caught {len(got)} of {len(c)}, median {statistics.median(got) if got else None} s, range {got[:1] + got[-1:]}", flush=True)
+    s.expect("the chases happened", out, len(out))
 
 def flee(s):
     """A deer flees a wolf 6 tiles off: it runs away from the wolf (the distance only grows)
@@ -2437,7 +2804,67 @@ def stranger_filter(s):
         off_the_line(s, line, [o, a, n], dy=50)
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter}
+
+def outcomes(s):
+    """Whoever strikes or shoots is told how it came out (the `force_outcomes` law,
+    docs/COMBAT_MIND.md §3.1). Before 2026-11-11 a mind-held archer was never told how its
+    arrow went (0 of 10 tries in the wolves trials), while `attack` reported "hit for 7".
+    Three minded people (`spawn_crowd`, no mind service): an archer shoots a still target 6 m
+    off (told "struck …: hit for N" when the arrow lands), a striker beside the target strikes
+    it (told "hit for N"), the archer looses at an empty point past its sight (told it came to
+    nothing), and with the law off a hit is not told."""
+    a, b, c = s.people(3)
+    here = body_at(s, a)
+    s.call("place_at", b, here[0] + 6.0, here[1])
+    s.call("place_at", c, here[0] + 6.0, here[1] + 1.2)
+    s.call("grant_items", a, "bow", 1)
+    s.call("grant_items", a, "arrow", 20)
+    time.sleep(1.0)
+    gap = apart(s, a, b)
+    s.expect("archer and target 4-8 m apart, in the open", 4.0 <= gap <= 8.0, gap)
+
+    def own(actor, words):
+        return [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {actor}") if r["kind"] == "own" and words in r["text"]]
+
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"id": b}}}, {"wait": 60}]})
+    hit = s.wait(lambda: own(a, "You finished: bowshot") or own(a, "You failed to bowshot"), seconds=20)
+    s.rows(f"SELECT * FROM experience WHERE observer = {a}", "archer-told")
+    s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "archer-uses")
+    s.expect("the archer is told its arrow struck the target, with the damage",
+             any("struck" in r["text"] and ("hit for" in r["text"] or "got through" in r["text"]) for r in hit), [r["text"] for r in hit])
+
+    s.graph(c, {"seq": [{"do": {"skill": "strike", "target": {"id": b}}}, {"wait": 60}]})
+    blow = s.wait(lambda: own(c, "You finished: strike") or own(c, "You failed to strike"), seconds=20)
+    s.rows(f"SELECT * FROM experience WHERE observer = {c}", "striker-told")
+    s.expect("the striker is told its blow's outcome", any("hit for" in r["text"] or "got through" in r["text"] for r in blow), [r["text"] for r in blow])
+
+    # An arrow loosed at an empty point 20 m off (beyond day sight, 11 m) comes to nothing.
+    far = (here[0] - 20.0, here[1])
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"at": [far[0], far[1]]}}}, {"wait": 60}]})
+    gone = s.wait(lambda: [r for r in own(a, "You failed to bowshot") if any(w in r["text"] for w in ("out of your sight", "hit nothing", "struck a wall"))], seconds=20)
+    s.expect("an arrow that reaches no one is told as coming to nothing", bool(gone), [r["text"] for r in gone])
+
+    # Bounded to the maker: every outcome line in the world for these moves is the archer's or
+    # the striker's own, never a bystander's or the target's.
+    lines = [r for r in s.rows("SELECT observer, kind, text FROM experience", "outcome-lines")
+             if r["kind"] == "own" and any(r["text"].startswith(p) for p in ("You finished: bowshot", "You failed to bowshot", "You finished: strike", "You failed to strike"))]
+    s.expect("outcome lines reach the one who made the move only",
+             lines and all((r["observer"] == a) == ("bowshot" in r["text"]) and r["observer"] in (a, c) for r in lines),
+             sorted({(r["observer"], r["text"][:40]) for r in lines}))
+
+    # The switch: with the law off, a hit is not told (the archer's lines stay as they were).
+    set_law(s, "force_outcomes", False)
+    before = len(own(a, "You finished: bowshot"))
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"id": b}}}, {"wait": 60}]})
+    s.wait(lambda: [u for u in s.rows(f"SELECT outcome FROM skill_use WHERE actor = {a}") if u["outcome"].startswith("struck")][1:], seconds=20)
+    time.sleep(1.0)
+    after = len(own(a, "You finished: bowshot"))
+    s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "archer-uses-law-off")
+    set_law(s, "force_outcomes", True)
+    s.expect("with force_outcomes off, a hit is not told", after == before, {"before": before, "after": after})
+
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter}
 
 
 def goods(s):
@@ -2941,6 +3368,9 @@ SCENES["making"] = making
 SCENES["stock"] = stock
 SCENES["decay"] = decay
 SCENES["winter"] = winter
+SCENES["stamina"] = stamina
+SCENES["fights"] = fights
+SCENES["chase"] = chase
 
 
 def main():
