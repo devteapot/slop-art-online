@@ -67,6 +67,12 @@ Names learned from a lived line, down to the memory graph ([features/names.md](f
 .agents/skills/verify-knowledge/scripts/names.py --run minds-names-$(date +%Y%m%d-%H%M%S)
 ```
 
+Two strangers stay two people in memory ([features/strangers.md](features/strangers.md)): two players the mind does not know by name say different things, the fake model folds both under one description, and the graph, recall and a later introduction keep them apart. Same environment as `names.py`, plus a `CARGO_TARGET_DIR` holding a release `living-mind` (the recall replay is built there):
+
+```bash
+.agents/skills/verify-knowledge/scripts/strangers.py --run minds-strangers-$(date +%Y%m%d-%H%M%S)
+```
+
 ## Doctor
 
 The run records the shared doctor result in `actions.log`, confirms `RETURN 1` against its scratch graph, records the image and mounts in `neo4j-doctor.log`, and checks the fake's `/health`. It requires the real mind's subscription and scratch Neo4j connection log before checking memory effects.
@@ -83,7 +89,7 @@ For a running attempt:
 
 The runner asserts table changes, exact knowledge sources, preserved row IDs and acquisition times, negative effects for blocked actions, successful practice counts, graph content, projected rows and recalled prompt content. Admin reducers prepare and drive deterministic authority scenes. They do not prove player permissions.
 
-Seven ignored memory tests create and delete graphs inside this scratch Neo4j. `recall_replay` requires `LIVING_RECALL_CASES`; the runner generates nonempty cases against the real mind's graph and asserts budgets and recalled content from its output. It also runs the two focused truthful-feedback rules tests.
+Ten ignored memory tests (`TESTS` in the runner, `strangers_stay_apart` among them) create and delete graphs inside this scratch Neo4j. `recall_replay` requires `LIVING_RECALL_CASES`; the runner generates nonempty cases against the real mind's graph and asserts budgets and recalled content from its output. It also runs the two focused truthful-feedback rules tests.
 
 Evidence remains in `.local/living/verify/$R/`. Inspect `results.json`, the recorded SQL snapshots, `graph-*.cypher` and `graph-*.txt`, `recalled-deliberation.json`, Cargo test logs, `requests.jsonl`, `journal/` and `cleanup.json`. `knowledge-state.json` and shared `state.json` are private operational state, not evidence to share.
 

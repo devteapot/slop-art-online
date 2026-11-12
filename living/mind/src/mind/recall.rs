@@ -92,13 +92,20 @@ pub(super) fn within_tokens(mind: Vec<String>, memories: Vec<String>, tokens: Op
 }
 
 impl Minds {
-    /// People named in a text (by their names as words), for cues.
-    pub(super) fn named_people(&self, text: &str) -> Vec<u32> {
+    /// People named in a text (by their names as words) whose names `actor` knows, for cues. A
+    /// name heard but not known (someone calling "Cal" across the square) does not tell whose
+    /// it is, so it cues no one: the person it belongs to stays "a stranger #<id>" in memory.
+    pub(super) fn named_people(&self, actor: u32, text: &str) -> Vec<u32> {
         let words: Vec<String> = text.to_lowercase().split(|c: char| !c.is_alphabetic()).filter(|w| w.len() >= 3).map(String::from).collect();
         if words.is_empty() {
             return Vec::new();
         }
-        self.conn.db.character().iter().filter(|c| c.kind == "person" && words.iter().any(|w| *w == c.name.to_lowercase())).map(|c| c.id).collect()
+        let named: Vec<u32> = self.conn.db.character().iter().filter(|c| c.kind == "person" && words.iter().any(|w| *w == c.name.to_lowercase())).map(|c| c.id).collect();
+        if named.is_empty() {
+            return named;
+        }
+        let knows = self.known_names(actor);
+        named.into_iter().filter(|id| knows.contains(id)).collect()
     }
 
     fn hour_now(&self) -> f32 {
@@ -110,7 +117,7 @@ impl Minds {
     pub(super) fn scene_cues(&self, actor: u32, scene: &Value, reason: &str) -> Cues {
         let mut cues = Cues::default();
         let named = |c: &mut Cues, text: &str, w: f64| {
-            for id in self.named_people(text) {
+            for id in self.named_people(actor, text) {
                 if id != actor {
                     c.key(format!("person:{id}"), w);
                 }
@@ -193,7 +200,7 @@ impl Minds {
                 cues.key(k, 1.0);
             }
             cues.text(&e.text, 0.7);
-            for id in self.named_people(&e.text) {
+            for id in self.named_people(actor, &e.text) {
                 if id != actor {
                     cues.key(format!("person:{id}"), 0.8);
                 }
@@ -231,7 +238,11 @@ impl Minds {
         let memories: Vec<String> = r
             .memories
             .iter()
-            .map(|(exp, t, gist)| if memory::is_authored_memory(*exp) { format!("[before all this] {gist}") } else { format!("[{}] {gist} (experience {exp})", fmt(*t)) })
+            .map(|(exp, t, gist)| {
+                // With who it involves, as this mind names them: two strangers' deeds stay apart.
+                let gist = memory::with_involved(gist, r.involved.get(exp));
+                if memory::is_authored_memory(*exp) { format!("[before all this] {gist}") } else { format!("[{}] {gist} (experience {exp})", fmt(*t)) }
+            })
             .collect();
         let (mind, memories) = within_tokens(mind, memories, recall_tokens(what));
         let cued_stances = self

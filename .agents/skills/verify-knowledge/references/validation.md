@@ -1,5 +1,16 @@
 # Knowledge validation
 
+## 2026-11-12 fix-stranger-merge: two strangers stay two people (Spark)
+
+Branch `fix-stranger-merge` (from main `23771d59`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), the trial stack's Neo4j (`slop-trials-neo4j`, 7699) for the scenes, private `CARGO_TARGET_DIR`, fake models only. No table, reducer, view or subscription changed (the SpacetimeDB data paths are as before); the change is in the mind's graph naming, recall and integration. Evidence under `.local/living/verify/`.
+
+- `strangers.py` (new): `minds-strangers-s4` 10 of 10 (0 nodes left). Earlier attempts were driver faults: `s1` and `s3` waited on experience ids the authority had already dropped after integration, or on a fourth consolidation inside the 90 s gap (the driver now collects ids as they come, waits for the backlog integration first and says 4 lines); `s2` passed 9 of 10, its prompt filter matching "You know how to: … spear" (now only the deed's lines).
+- `verify_knowledge.py run`: `knowledge-strangers-1112-002907` all 22 proofs, with the new ignored test `strangers_stay_apart` (10 ignored tests), death cleanup, fading, recall replay and the night batch.
+- `names.py`: `minds-names-strangers1` 7 of 7 (the node reads "a stranger #<id>" before the name, "Mercy" after).
+- `player_memory.py --mode direct`: `knowledge-pmem-str-004441` all pass. `facts_mind.py`: `knowledge-facts-str-005022` all pass ("a stranger stays a stranger").
+- verify-minds `consolidation` (its documented XFAIL), `speech`, `death-names`, `conversation`: as before / pass.
+- Not run: `player_memory.py --mode batch`, `lives_mind.py` (its check now expects "a stranger #<id>"), any paid tier.
+
 ## 2026-11-11 recipes-1: crafting, cooking and smoking as recipes (dev-box)
 
 Branch `recipes-1` (from main `3c73d835`), own container `recipes1-stdb` (2.14.1, port 3327), one private `CARGO_TARGET_DIR`: the runner now builds the mind, its tests and the module there when it is set (it had its own `.local/living/verify/build-knowledge` and `living/target/verify-authored-test`), `scoped`, no model calls.
