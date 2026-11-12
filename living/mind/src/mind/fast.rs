@@ -90,7 +90,10 @@ impl Minds {
         }
         let reference = super::reference(actor, "fast");
         let base = json!({"trigger_ms": ask.trigger_ms, "issued_ms": ask.issued_ms, "picked_ms": picked_ms, "reason": ask.reason});
-        if self.attention(actor, None) != Attention::OnStage {
+        // Off stage by the level of detail (`LIVING_LOD`), not merely unwatched: with a staged model
+        // mix every character no player watches counts as off stage for model routing, which
+        // would leave a fight with no player in sight (an arena) without the lane at all.
+        if self.lod.on && self.attention(actor, None) != Attention::OnStage {
             return self.fast_done(actor, ask.issued_ms, "off stage", base, &reference, None).await;
         }
         let fmt = self.fmt_time();

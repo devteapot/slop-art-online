@@ -4,6 +4,8 @@ docs/FAST_LANE.md; `living/mind/src/mind/fast.rs` (serving an issued `fast_ask` 
 
 ## Cases (fake model; `LIVING_RETHINK_CONFIG` routes `fast` to the fake's profile)
 
+`fast-lane` routes through a staged mix (compile by stage of attention, as the shipped models do), so the eye, which no player watches, is off stage for model routing; with the level of detail off, it is still served.
+
 - `fast-lane`: the other strikes at the eye with a spear's heavy blow over and over.
   - (e) asleep: the eye sleeps; the other's one blow issues nothing.
   - (a) a blow taken issues one fast request; its prompt holds, in this order, who you are, the top level, the routines, why now (the eye's own line for the blow) and what has just happened (stable parts first, for the providers' prefix caches), and no count or "again"; the reply's `combat` branch is installed through `mind_patch` (source `fast`, a `fast` thought "… → combat branch rewritten").

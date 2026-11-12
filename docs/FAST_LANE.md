@@ -63,7 +63,7 @@ A private table, one row per character, holds its newest trigger: reason, when, 
 
 - **A sleeping body is never fast-laned.** A sleeper (in a sleep act, or between two sleeps of one rest: `perceive::asleep`) is not counted or triggered.
 - **The waking blow does not count.** It starts the waking deliberation, as today; later blows, on the woken body, do.
-- **Off stage, no fast lane.** Off-stage characters (`lod`: `Attention::OffStage`) don't get it either. Their fights are coarse and their minds slow by design.
+- **Off stage, no fast lane, when the level of detail is on.** With `LIVING_LOD` on, off-stage characters (`Attention::OffStage`) don't get it: their fights are coarse and their minds slow by design. With it off (the default, and in trials) every character is served. A staged model mix calls every character no player watches "off stage" for model routing; that alone does not keep the lane off (fix-fast-onstage, 2026-11-12: r2e's fake run found every request answered "kept: off stage" in an arena with no player).
 
 ## 2. What it sends and gets back
 

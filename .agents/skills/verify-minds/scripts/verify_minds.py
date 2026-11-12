@@ -1078,7 +1078,12 @@ def fast_lane_case(run):
               'rules': [{'purpose': 'fast', 'reply': FAST_PATCH, 'times': 1},
                         {'purpose': 'fast', 'reply': FAST_PATCH, 'delay_s': 2.5, 'times': 1},
                         {'purpose': 'deliberate', 'delay_s': 5, 'times': -1}]}
-    run.start(model(run, script), [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run)})
+    # A staged mix, as the shipped models are (compile by stage of attention): with no player in
+    # sight the eye is off stage for model routing, which must not keep the fast lane off.
+    models = model(run, script)
+    models['mixes'] = {'staged': {'deliberate': {'on_stage': 'local', 'off_stage': 'local'}, '*': 'local'}}
+    models['assign'] = {people[0]['name']: 'staged'}
+    run.start(models, [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run)})
     requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
     body = lambda x: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', []) if m.get('role') == 'user')
     clock = lambda: run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
