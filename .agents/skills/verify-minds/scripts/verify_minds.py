@@ -21,7 +21,8 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run', 'timings', 'queued')
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run', 'timings', 'queued', 'doing',
+         'intents')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -301,6 +302,57 @@ def breath_case(run):
             'scene_stamina': scene['you']['stamina'], 'experiences': len(act)}
 
 
+def intents_case(run):
+    """A mind's plan can say a movement intent (docs/COMBAT_MIND.md §3.3): its prompt's skill
+    reference documents keep_distance, close_in, circle and back_off with their distances and the
+    speeds and sight rule from the laws; a fake model's plan `keep_distance` (3–6 m) from someone
+    in sight installs as written, its steering holds that band (`steer`: a band goal held to them
+    by sight), and when they walk at the character it backs off."""
+    people = prepare(run)
+    actor, other = [p['id'] for p in people]
+    for who in (actor, other):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    # An open row of walkable tiles with nothing that blocks sight, 3 wide and 16 long.
+    w, h, tiles = terrain(run)
+    ok = lambda x, y: 0 <= x < w and 0 <= y < h and tiles[y * w + x] not in UNWALKABLE
+    row = next((x, y) for y in range(8, h - 8, 3) for x in range(8, w - 24, 2) if all(ok(x + i, y + d) for i in range(16) for d in (-1, 0, 1)))
+    run.admin('place_at', actor, row[0] + 10.5, row[1] + 0.5)
+    run.admin('place_at', other, row[0] + 14.5, row[1] + 0.5)
+    time.sleep(1.0)
+    me = run.private(f'SELECT * FROM body WHERE id = {actor}', 'actor-body')[0]
+    plan = 'verify minds keep distance'
+    graph = {'do': 'keep_distance', 'target': {'id': other}, 'min': 3, 'max': 6, 'qty': 120}
+    script = {'replies': {'think': {'thought': 'I keep my distance from them.', 'intend': ['keep_distance'], 'say': None},
+                          'deliberate': basic_reply(graph, plan=plan)}}
+    models = model(run, script)
+    run.request(actor, 'verify intents')
+    run.start(models, [actor])
+    accepted(run, actor, plan)
+    time.sleep(2.0)
+    run.private(f'SELECT * FROM brain WHERE id = {actor}', 'brain-after')
+    run.private(f'SELECT * FROM mind_state WHERE id = {actor}', 'mind-state-after')
+    run.private(f'SELECT * FROM activity WHERE id = {actor}', 'activity-after')
+    st = run.wait(lambda: next((r for r in run.private(f'SELECT * FROM steer WHERE id = {actor}', 'steer') if r['goal'] == 5), None), 'the band held by steering', 30)
+    assert st['target'] == other and abs(st['keep'] - 3) < 1e-3 and abs(st['far'] - 6) < 1e-3 and st['flags'] & 128, st
+    # The plan is the character's "current plan" routine, as the model wrote it (normalized).
+    plan_row = next(r for r in run.private(f'SELECT * FROM routine WHERE actor = {actor}', 'routines') if r['name'] == 'current plan')
+    g = plan_row['graph'].replace(' ', '')
+    assert '"skill":"keep_distance"' in g and '"min":3' in g and '"max":6' in g and f'"id":{other}' in g, plan_row['graph'][:400]
+    start = run.private(f'SELECT * FROM body WHERE id = {actor}', 'before-approach')[0]
+    other_at = run.private(f'SELECT * FROM body WHERE id = {other}', 'other-before')[0]
+    # They walk at it, past where it stands: it backs off.
+    run.admin('set_behavior', other, json.dumps({'seq': [{'do': {'skill': 'goto', 'target': {'at': [row[0] + 1.5, row[1] + 0.5]}}}, {'wait': 120}]}))
+    moved = run.wait(lambda: next((b for b in [run.private(f'SELECT * FROM body WHERE id = {actor}', 'backing')[0]] if math.dist((b['x'], b['y']), (start['x'], start['y'])) > 1.5 or b['vx'] or b['vy']), None), 'it backs off', 15)
+    sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    text = '\n'.join(str(m.get('content', '')) for e in sent for m in e['body'].get('messages', []))
+    (run.directory / 'sent-prompt-intents.txt').write_text(text)
+    for line in ('- keep_distance(target, min, max, run, qty)', '- close_in(target, distance, run)', '- circle(target, radius, side, run, qty)', '- back_off(target, distance, run)', '- follow(target, distance, run, qty)'):
+        assert line in text, f'the reference documents {line}'
+    assert 'm/s' in text and 'lost sight of them' in text, 'speeds and the sight rule from the laws'
+    return {'status': 'pass', 'plan_routine': plan_row['graph'], 'steer': {k: st[k] for k in ('goal', 'target', 'keep', 'far', 'flags')},
+            'backing': {k: moved[k] for k in ('x', 'y', 'vx', 'vy', 'speed')}, 'other_from': [other_at['x'], other_at['y']]}
+
+
 # A line of `prompts::own_timings` ("- strike: winds up 350 ms …") or its heading.
 OWN_TIMING = re.compile(r'- [a-z_]+: (winds up \d|a dash at once|raised at once|takes effect at once)|How long the fighting moves you know take')
 
@@ -338,6 +390,8 @@ def run_case(run, case):
         return sight_case(run)
     if case == 'fov':
         return fov_case(run)
+    if case == 'doing':
+        return doing_case(run)
     if case == 'drop':
         return drop_case(run)
     if case == 'death-names':
@@ -362,6 +416,8 @@ def run_case(run, case):
         return reasons_case(run)
     if case == 'run':
         return breath_case(run)
+    if case == 'intents':
+        return intents_case(run)
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'],
@@ -934,6 +990,46 @@ def fov_case(run):
     finally:
         run.admin('set_world_law', 'fov_on', 'false')
     return {'status': 'pass', 'heard': heard, 'facing': scene.get('you', {}).get('facing'), 'noticed': [x['text'] for x in told], 'habit_turned': turned[:1], 'facing_after': round(facing, 2)}
+def doing_case(run):
+    """What someone is visibly doing reaches a mind (docs/PERCEPTION.md, "What someone is visibly
+    doing"): a resident faces another 3 m east of it who holds up a guard (`block`, held). The
+    scene of its deliberation request lists the other with `visibly` {is: block, phase: holding}
+    (`at` only as `you`, when the other's guard happens to face it), the prompt the fake model is sent carries it, and the
+    graph grammar the mind is given documents the `doing` condition."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    e = wall_spots(run)['open']
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 3.0, e[1])
+    run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] + 4.0, e[1]]}}}, {'wait': 300}]}))
+    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['outcome']], 'the eye turned to the other', 20)
+    run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'block', 'qty': 5000}}]}))
+    run.wait(lambda: [f for f in run.private(f'SELECT * FROM fighter WHERE id = {other}', 'fighter-other') if f['act'] != 0], 'the guard is up', 20)
+    script = {'replies': {'think': {'thought': 'They hold up a guard.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    pending = run.request(eye, 'doing')
+    scene = json.loads(pending[0]['scene']) if pending and 'scene' in pending[0] else {}
+    (run.directory / 'scene.json').write_text(json.dumps(scene, indent=2))
+    entry = next((c for c in scene.get('creatures', []) if c.get('id') == other), {})
+    seen = entry.get('visibly') or {}
+    # A guard is aimed at nobody: `at` is 'you' only when the other happens to face the eye.
+    assert {k: v for k, v in seen.items() if k != 'at'} == {'is': 'block', 'phase': 'holding'} and seen.get('at', 'you') == 'you', entry
+    run.start(models, [eye])
+    reqs = run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] in ('think', 'deliberate')] or None, 'prompts sent to the model', 60)
+    run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'deliberate'] or None, 'the deliberate prompt', 60)
+    reqs = [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] in ('think', 'deliberate')]
+    text = {x['purpose']: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', [])) for x in reqs}
+    (run.directory / 'sent-prompts.txt').write_text('\n\n=====\n\n'.join(f'[{k}]\n{v}' for k, v in text.items()))
+    sent = '\n'.join(text.values())
+    assert re.search(r'"visibly":\s*\{[^}]*"phase":\s*"holding"', sent) and '"is":"block"' in sent.replace(' ', ''), 'the model is sent what the other visibly does'
+    grammar = text.get('deliberate', '')
+    assert '{"doing": {"who": "person", "is": "strike", "phase": "winding up"' in grammar and 'about to release' in grammar, 'the grammar documents the doing condition'
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    return {'status': 'pass', 'visibly': entry.get('visibly'), 'entry': entry, 'purposes': sorted(text)}
+
+
 def death_names_case(run):
     """A community member killed in view of a mind's character, who shares the community and
     feels something for them: the experience the authority gives that mind names the dead, and

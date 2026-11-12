@@ -1,0 +1,105 @@
+{
+ "about": "Proof only, for births_report.py's conceive-attempt measures on hamlet-6 (docs/TRIALS.md, \"Births 2\"): latency-like delays, and four people's first two deliberations each decide to conceive with someone the script names, one toward each class: Sefa Reed toward her brother Lio (#18; close kin, and a child at the start, so the body refuses), Edda Marrow toward her husband Brisk (#5; partner), Kesta Ashby toward Fenn Mallory (#24; other) and Ansel Tarn toward Sefa (#17; other). Real minds decide for themselves; this only puts attempts of known kinds into a fake run.",
+ "rules": [
+  {
+   "purpose": "deliberate",
+   "contains": "# Who you are (Sefa Reed)",
+   "delay_s": 4.0,
+   "times": 2,
+   "reply": {
+    "plan": "verify fake: start a family with #18",
+    "graph": {
+     "wait": 2
+    },
+    "acts": [
+     {
+      "do": "conceive",
+      "target": {
+       "id": 18
+      }
+     }
+    ]
+   }
+  },
+  {
+   "purpose": "deliberate",
+   "contains": "# Who you are (Edda Marrow)",
+   "delay_s": 4.0,
+   "times": 2,
+   "reply": {
+    "plan": "verify fake: start a family with #5",
+    "graph": {
+     "wait": 2
+    },
+    "acts": [
+     {
+      "do": "conceive",
+      "target": {
+       "id": 5
+      }
+     }
+    ]
+   }
+  },
+  {
+   "purpose": "deliberate",
+   "contains": "# Who you are (Kesta Ashby)",
+   "delay_s": 4.0,
+   "times": 2,
+   "reply": {
+    "plan": "verify fake: start a family with #24",
+    "graph": {
+     "wait": 2
+    },
+    "acts": [
+     {
+      "do": "conceive",
+      "target": {
+       "id": 24
+      }
+     }
+    ]
+   }
+  },
+  {
+   "purpose": "deliberate",
+   "contains": "# Who you are (Ansel Tarn)",
+   "delay_s": 4.0,
+   "times": 2,
+   "reply": {
+    "plan": "verify fake: start a family with #17",
+    "graph": {
+     "wait": 2
+    },
+    "acts": [
+     {
+      "do": "conceive",
+      "target": {
+       "id": 17
+      }
+     }
+    ]
+   }
+  },
+  {
+   "purpose": "think",
+   "delay_s": 5.0,
+   "times": -1
+  },
+  {
+   "purpose": "deliberate",
+   "delay_s": 4.0,
+   "times": -1
+  },
+  {
+   "purpose": "talk",
+   "delay_s": 1.5,
+   "times": -1
+  },
+  {
+   "purpose": "consolidate",
+   "delay_s": 2.0,
+   "times": -1
+  }
+ ]
+}

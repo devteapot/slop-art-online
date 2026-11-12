@@ -356,6 +356,15 @@ pub struct Steer {
     pub pace: f32,
     #[default(0.0f32)]
     pub run_pace: f32,
+    /// A movement intent's second distance: the far edge of a band (`GOAL_BAND`, `keep` the
+    /// near one), the side a circle goes round (`GOAL_ORBIT`, +1 left as one faces it; `keep`
+    /// its radius).
+    #[default(0.0f32)]
+    pub far: f32,
+    /// A goal held to a creature by sight (`FLAG_SIGHT`): when its steering first found it out
+    /// of sight (0 while it is in sight); `gx`/`gy` where it was last seen.
+    #[default(0u64)]
+    pub unseen_ms: u64,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):

@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|jump|breath|heal|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|breath|heal|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -408,6 +408,118 @@ def scene_bow(st):
           {"lines_to": sorted({e["observer"] for e in everyone}), "rows_to": sorted({o["observer"] for o in outcomes})})
 
 
+def scene_shot(st):
+    """The player shot (fix-missile-told): told as a mind is, as a shot, never "attacked". A
+    resident 6 m off with a clear line shoots the player: its `my_experience` line is "<the
+    shooter as the player sees them> shot you with an arrow: hit for N" and its feed's hit names
+    the shooter. A resident past the player's sight (18-20 m, within the bow's 22) looses at the
+    player's spot: "An arrow struck you from somewhere you could not see: hit for N", and the
+    feed's hit and impact carry no shooter (actor 0).
+
+    The player's own rows carry an unseen shooter's id nowhere (fix-unseen-killer-id):
+    `my_vitals.hurt_by` is the seen shooter after the near hit and 0 after the far one; the far
+    archer then shoots until the player dies: its death row (`my_act_outcomes`, kind death) has
+    `other` 0, its feed's death `target` 0, its line "You were killed by an arrow from someone
+    unseen.", while the chronicle keeps the real killer. After a rejoin the near archer shoots
+    until the player dies again: that death row's `other` and the feed's `target` are the
+    archer. The player rejoins after each death."""
+    cid = me(st)
+    p = body(st, cid)
+
+    def shot_lines(t0):
+        return [e for e in sql(st, "SELECT id, kind, subject, text, at_ms FROM my_experience", "player") if e["kind"] == "attacked" and e["at_ms"] >= t0]
+
+    def wait_line(t0, secs=12.0):
+        t = time.time() + secs
+        while time.time() < t:
+            got = shot_lines(t0)
+            if got:
+                return got
+            time.sleep(0.3)
+        return []
+
+    d, at = shot_dummy(st, p, [(0.0, -6.0), (0.0, 6.0), (-6.0, 0.0), (6.0, 0.0)])
+    call(st, "grant_items", [d, "bow", 1], "admin")
+    call(st, "grant_items", [d, "arrow", 10], "admin")
+    t0 = int(time.time() * 1000)
+    call(st, "set_behavior", [d, json.dumps({"seq": [{"do": {"skill": "bowshot", "target": {"id": cid}}}, {"wait": 60}]})], "admin")
+    got = wait_line(t0)
+    call(st, "set_behavior", [d, '{"wait":60}'], "admin")
+    hits = [e for e in seen(st) if e["kind"] in (2, 4) and e["target"] == cid and e["at_ms"] >= t0]
+    near_hurt_by = (sql(st, "SELECT hurt_by FROM my_vitals", "player") or [{}])[0].get("hurt_by")
+    check(st, "shot by someone it sees, the player is told '… shot you with an arrow: hit for N', and its feed names the shooter",
+          got and all("attacked" not in e["text"] for e in got) and any(" shot you with an arrow: " in e["text"] and e["subject"] == d for e in got) and any(h["actor"] == d for h in hits),
+          {"lines": [e["text"] for e in got], "hits": [(h["kind"], h["actor"]) for h in hits]})
+    # Far: past sight, a clear line, no body in the way.
+    far = None
+    for dx, dy in [(0.0, -19.0), (0.0, 19.0), (-19.0, 0.0), (19.0, 0.0), (13.5, 13.5), (-13.5, 13.5), (13.5, -13.5), (-13.5, -13.5)]:
+        if open_line(st, p, (p[0] + dx, p[1] + dy)):
+            far = dummy(st, p, dx, dy)
+            time.sleep(0.4)
+            fa = body(st, far)
+            if fa and 17.5 <= math.dist(fa, p) <= 21.0 and open_line(st, fa, p) and free_of_bodies(st, fa, p, {cid, far}):
+                break
+            far = None
+    if far is None:
+        check(st, "a clear line 18-20 m long to stage the unseen archer", False, "none found round the player")
+        return
+    call(st, "grant_items", [far, "bow", 1], "admin")
+    call(st, "grant_items", [far, "arrow", 10], "admin")
+    t1 = int(time.time() * 1000)
+    call(st, "set_behavior", [far, json.dumps({"seq": [{"do": {"skill": "bowshot", "target": {"at": [p[0], p[1]]}}}, {"wait": 60}]})], "admin")
+    got = wait_line(t1)
+    call(st, "set_behavior", [far, '{"wait":60}'], "admin")
+    far_hurt_by = (sql(st, "SELECT hurt_by FROM my_vitals", "player") or [{}])[0].get("hurt_by")
+    ev = [e for e in seen(st) if e["at_ms"] >= t1 and (e["target"] == cid or e["kind"] == 11)]
+    hits = [e for e in ev if e["kind"] in (2, 4) and e["target"] == cid]
+    check(st, "shot by someone it cannot see, the player is told only 'An arrow struck you from somewhere you could not see: …', and its feed carries no shooter",
+          got and any(e["text"].startswith("An arrow struck you from somewhere you could not see: ") and e["subject"] == 0 for e in got) and all("attacked" not in e["text"] for e in got)
+          and hits and all(e["actor"] != far for e in ev),
+          {"distance": round(math.dist(body(st, far) or p, p), 1), "lines": [e["text"] for e in got], "feed": [(e["kind"], e["actor"], e["target"]) for e in ev]})
+    check(st, "my_vitals.hurt_by is the shooter it saw, and 0 for one it did not see", near_hurt_by == d and far_hurt_by == 0,
+          {"after_near_hit": near_hurt_by, "near_archer": d, "after_far_hit": far_hurt_by, "far_archer": far})
+
+    def shot_dead(archer, target, secs=120):
+        """The archer shoots (`target`) until the player's character dies; its death row, feed
+        death and line."""
+        call(st, "grant_items", [archer, "arrow", 60], "admin")
+        call(st, "set_behavior", [archer, json.dumps({"first": [{"do": {"skill": "bowshot", "target": target}}]})], "admin")
+        t = time.time() + secs
+        while time.time() < t and me(st) == cid_now[0]:
+            time.sleep(0.5)
+        call(st, "set_behavior", [archer, '{"wait":60}'], "admin")
+        dead = cid_now[0]
+        outs = [o for o in sql(st, "SELECT * FROM my_act_outcomes", "player") if o["kind"] == "death" and o["observer"] == dead]
+        feed = [e for e in seen(st) if e["kind"] == 7 and e["actor"] == dead]
+        line = [e["text"] for e in sql(st, "SELECT id, kind, text FROM my_experience", "player") if e["kind"] == "death"]
+        cause = sql(st, f"SELECT alive, cause FROM character WHERE id = {dead}")
+        chron = sql(st, f"SELECT kind, a, b FROM chronicle WHERE kind = 'killing' AND b = {dead}")
+        return dead, outs, feed, line, cause, chron
+
+    cid_now = [cid]
+    dead, outs, feed, line, cause, chron = shot_dead(far, {"at": [p[0], p[1]]})
+    check(st, "killed by a shooter it did not see: the death row's `other` and the feed's death `target` are 0, the line names no one; the chronicle keeps the killer",
+          cause and not cause[0]["alive"] and outs and outs[-1]["other"] == 0 and feed and feed[-1]["target"] == 0
+          and line and line[-1] == "You were killed by an arrow from someone unseen." and chron and chron[-1]["a"] == far,
+          {"cause": cause, "row": outs[-1] if outs else None, "feed": [(e["actor"], e["target"]) for e in feed], "line": line[-1:], "chronicle": chron})
+    # Back, and shot dead by the one it sees.
+    call(st, "join", ["Tester"])
+    time.sleep(1.0)
+    cid_now[0] = me(st)
+    if cid_now[0] is None:
+        check(st, "rejoined after the unseen kill", False, "no living character")
+        return
+    q = body(st, cid_now[0])
+    d2, at2 = shot_dummy(st, q, [(0.0, -6.0), (0.0, 6.0), (-6.0, 0.0), (6.0, 0.0)])
+    call(st, "grant_items", [d2, "bow", 1], "admin")
+    dead, outs, feed, line, cause, chron = shot_dead(d2, {"id": cid_now[0]})
+    check(st, "killed by a shooter it saw: the death row's `other` and the feed's death `target` are the shooter",
+          cause and not cause[0]["alive"] and outs and outs[-1]["other"] == d2 and feed and feed[-1]["target"] == d2,
+          {"shooter": d2, "cause": cause, "row": outs[-1] if outs else None, "feed": [(e["actor"], e["target"]) for e in feed], "line": line[-1:]})
+    call(st, "join", ["Tester"])
+    time.sleep(1.0)
+
+
 def scene_bolt(st):
     cid = me(st)
     p = body(st, cid)
@@ -672,7 +784,7 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "breath": scene_breath, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "breath": scene_breath, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
 
 
 def main():

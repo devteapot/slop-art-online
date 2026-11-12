@@ -204,6 +204,26 @@ pub struct Action {
     /// breath, while it lasts (`pools(a)`). A flight runs unless this says false.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<bool>,
+    /// The distances of a movement intent (`steer::Spacing`): a band (`keep_distance`), a
+    /// circle's radius and side (`circle`, +1 left as one faces it), how near or how far
+    /// (`close_in`, `follow`, `back_off`), in metres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radius: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<f32>,
+}
+
+impl Action {
+    /// The distances a movement intent names.
+    pub fn spacing(&self) -> crate::steer::Spacing {
+        crate::steer::Spacing { min: self.min, max: self.max, radius: self.radius, side: self.side, distance: self.distance }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -261,6 +281,10 @@ pub enum Cond {
     Count(CountCond),
     /// How healthy a creature in sight is, as a percentage of its full health.
     HealthOf(HealthOfCond),
+    /// Someone in sight is visibly doing something, and how far into it: what their body shows,
+    /// as a player sees it drawn (`living_rules::doing`), e.g. `{"doing": {"who": "person",
+    /// "is": "hostile", "phase": "about to release", "at_me": true}}`.
+    Doing(DoingCond),
     /// A judgment the mind maintains from its beliefs.
     Believes(Believes),
     /// A typed judgment of the character's own that its mind refreshes in the background (a
@@ -299,6 +323,28 @@ pub struct CountCond {
     pub at_least: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at_most: Option<u32>,
+}
+
+/// `{"doing": {"who": "person", "is": "strike", "phase": "winding up", "at_me": true, "within": 4}}`:
+/// holds while some creature in sight that fits `who` (a kind, or a kind and a relation;
+/// anyone by default) is visibly doing what `is` names (a skill's name, its label, or a kind
+/// word such as `hostile`, `melee`, `missile`, `guard`, `dash`, `gesture`, `work`), in `phase`
+/// (`living_rules::doing::Phase`), aimed at me (`at_me`), within `within` m. Every field is
+/// optional: `{"doing": {}}` holds while anyone in sight is visibly doing anything.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct DoingCond {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub who: Option<Filter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    /// It is aimed at me: at me as its target, or its aim points at me.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at_me: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within: Option<f32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -678,6 +724,20 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
                 return Err("count needs at_least or at_most".into());
             }
         }
+        Cond::Doing(d) => {
+            if let Some(p) = &d.phase {
+                if crate::doing::Phase::parse(p).is_none() {
+                    let words: Vec<&str> = crate::doing::Phase::ALL.iter().map(|p| p.word()).collect();
+                    return Err(format!("doing: unknown phase `{p}`; phases are {}", words.join(", ")));
+                }
+            }
+            if d.is.as_ref().is_some_and(|s| s.trim().is_empty() || s.len() > 40) {
+                return Err("doing: `is` is 1..40 bytes".into());
+            }
+            if d.within.is_some_and(|w| !(w > 0.0)) {
+                return Err("doing: within must be above 0".into());
+            }
+        }
         Cond::Has(h) => {
             if h.item != "food" && crate::catalog::item(&h.item).is_none() {
                 return Err(format!("unknown item `{}`", h.item));
@@ -773,6 +833,21 @@ pub fn describe(n: &Node) -> String {
             }
             if let Some(q) = a.qty {
                 s.push_str(&format!(" x{q}"));
+            }
+            match (a.min, a.max) {
+                (Some(n), Some(f)) => s.push_str(&format!(" {n}–{f} m")),
+                (Some(n), None) => s.push_str(&format!(" at least {n} m")),
+                (None, Some(f)) => s.push_str(&format!(" within {f} m")),
+                _ => {}
+            }
+            if let Some(r) = a.radius {
+                s.push_str(&format!(" at {r} m"));
+            }
+            if let Some(side) = a.side {
+                s.push_str(if side < 0.0 { " to the right" } else { " to the left" });
+            }
+            if let Some(d) = a.distance {
+                s.push_str(&format!(" {d} m"));
             }
             if let Some(t) = &a.target {
                 s.push_str(" → ");
@@ -879,6 +954,31 @@ pub fn describe_cond(c: &Cond) -> String {
                 Some(w) => format!("{n} {who} within {w}"),
                 None => format!("{n} {who} in sight"),
             }
+        }
+        Cond::Doing(d) => {
+            let mut s = match &d.who {
+                Some(f) => match &f.relation {
+                    Some(r) => format!("{} ({r})", f.kind),
+                    None => f.kind.clone(),
+                },
+                None => "someone".into(),
+            };
+            s.push_str(" in sight is ");
+            match (&d.is, &d.phase) {
+                (Some(i), Some(p)) => s.push_str(&format!("{p}: {i}")),
+                (Some(i), None) => s.push_str(&format!("doing {i}")),
+                (None, Some(p)) => s.push_str(p),
+                (None, None) => s.push_str("visibly doing something"),
+            }
+            match d.at_me {
+                Some(true) => s.push_str(" at me"),
+                Some(false) => s.push_str(" not at me"),
+                None => {}
+            }
+            if let Some(w) = d.within {
+                s.push_str(&format!(" within {w}"));
+            }
+            s
         }
         Cond::HealthOf(h) => {
             let mut s = format!("health of {}", describe_target(&h.target));

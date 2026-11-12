@@ -26,6 +26,10 @@ python3 living/tools/walk_times.py --db verify-$R --clicks 40 --out .local/livin
 
 Expect "You did what you had decided: goto → (x,y)." for every journey and click, `left_m` 0.0, and walk times close to the road or straight-line length at 2.6 m/s walking (1.4× on roads). Compare with docs/PATHS.md.
 
+## Movement intents
+
+The movement intents (`keep_distance`, `close_in`, `circle`, `back_off`, `follow`; [verify-core steering](../../verify-core/features/steering.md#movement-intents)) are steering for any controller, not abilities a player lacks: a player gets them by keys (`human_move`, `human_face`) or as commands (`human_act`: `close_in` and `back_off` as one-off acts, the held ones as a one-shot graph). `scripts/intents.py --run $R` (any seed, about 1 min; admin `place_at` and `set_behavior` set the scene): the player's keys walk and run (the run drains breath); the same body's `back_off` (a walk) and `close_in` with `run: true` (a run) through `human_act` go at the keys' speeds within 1% (the row's cruising `speed`, sampled velocities kept as evidence); a resident's `back_off` and `close_in` through its graph run at the same `run_share` of its own walk as the player's keys. The scene starts within 5 m: at night sight is 6 m, and a `close_in` on someone farther is refused "no #N in sight". Evidence: `intents.json`.
+
 ## How to get to it (user POV)
 
 - A client calls `join(name)`, then `human_move(dx, dy, run)`, `human_act(node)` and `human_say(text, to)` or `human_speak(text, to, way)` with its own identity.

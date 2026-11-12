@@ -432,8 +432,13 @@ pub struct Laws {
     /// How long a played character stands without any connection of its person before the
     /// world's minds take it over (seconds; docs/PLAYER_MEMORY.md).
     pub takeover_s: f32,
-    /// How long one `follow` lasts before the follower looks again, seconds.
+    /// How long one `follow` lasts before the follower looks again, seconds (also how long a
+    /// `keep_distance` or a `circle` lasts when it names no time).
     pub follow_s: f32,
+    /// A movement held to a creature (`follow`, `keep_distance`, `circle`, `close_in`,
+    /// `back_off`) goes by where it was last seen while it is out of sight, and ends when it has
+    /// not been seen for this many seconds (`steer::INTENTS`).
+    pub lost_after_s: f32,
     /// `read` with nothing named reads the nearest sign within this many metres.
     pub read_sign_m: f32,
     /// Others of one's own kind within this many metres count as kin near (`a.actor.kin_near`).
@@ -527,6 +532,7 @@ impl Default for Laws {
             flee_clear: 9.0,
             takeover_s: 30.0,
             follow_s: 12.0,
+            lost_after_s: 2.0,
             read_sign_m: 8.0,
             kin_near_m: 4.0,
             trade_window_s: 180.0,
@@ -2259,6 +2265,15 @@ impl Scripts {
         decode_missile(&f, self.call(&f, ctx)?)
     }
 
+    /// What a missile of `skill` is to one it strikes or who sees it strike: the `called` of
+    /// `<skill>_missile(a)` ("an arrow"), "something" when the script does not say.
+    pub fn missile_called(&self, skill: &str) -> String {
+        let f = format!("{skill}_missile");
+        let ctx = SkillCtx { skill: skill.to_string(), ..Default::default() };
+        let called = if self.has(&f) { self.call(&f, &ctx).ok().and_then(|d| d.try_cast::<Map>()).and_then(|m| m.get("called").and_then(|v| v.clone().into_string().ok())) } else { None };
+        called.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "something".into())
+    }
+
     /// What the rules make of an event (`on_<event>(a)`: `on_give`, `on_store`, `on_host` after
     /// that skill was done, `on_expire` when a record falls due, `on_death`): effects on records,
     /// and what is told and seen. None when the script has no such hook.
@@ -2470,6 +2485,7 @@ impl Scripts {
             flee_clear: g("flee_clear", l.flee_clear).clamp(1.0, 60.0),
             takeover_s: g("takeover_s", l.takeover_s).clamp(0.0, 3_600.0),
             follow_s: g("follow_s", l.follow_s).clamp(0.5, 600.0),
+            lost_after_s: g("lost_after_s", l.lost_after_s).clamp(0.0, 60.0),
             read_sign_m: g("read_sign_m", l.read_sign_m).clamp(0.0, 64.0),
             kin_near_m: g("kin_near_m", l.kin_near_m).clamp(0.0, 32.0),
             trade_window_s: g("trade_window_s", l.trade_window_s).clamp(1.0, 3_600.0),
@@ -2831,6 +2847,9 @@ fn seconds(ms: u32) -> String {
 fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
     let m = d.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
+    if m.get("called").is_some_and(|v| !v.is_string()) {
+        return Err(format!("{f}: `called` is what the missile is called, a string (\"an arrow\")"));
+    }
     Ok(crate::combat::MissileSpec { speed: g("speed")?.clamp(1.0, 120.0), range: g("range")?.clamp(0.5, 80.0), radius: g("radius")?.clamp(0.05, 3.0) })
 }
 
@@ -3217,7 +3236,7 @@ mod tests {
         assert_eq!(with(|k| k.latch), "build cook craft eat experiment feed gather give make plant read rest sleep store take teach write");
         assert_eq!(with(|k| k.notable), "attack build conceive cook craft feed give make store take threaten yield");
         assert_eq!(with(|k| k.moving), "eat signal wait");
-        assert_eq!(with(|k| k.moment), "flee follow graze rest sleep wait wander");
+        assert_eq!(with(|k| k.moment), "circle flee follow graze keep_distance rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
         assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
@@ -3736,6 +3755,21 @@ mod tests {
     /// The shapes the script declares classify the existing skills exactly as the name lists
     /// they replaced (2026-11-09) did.
     #[test]
+    fn a_missile_is_called_what_its_skill_says() {
+        let s = scripts();
+        assert_eq!(s.missile_called("bowshot"), "an arrow");
+        assert_eq!(s.missile_called("firebolt"), "a bolt of fire");
+        // A skill with no missile, or a missile that does not say: "something".
+        assert_eq!(s.missile_called("strike"), "something");
+        // Every missile the shipped script has says what it is.
+        for (skill, shape) in s.shapes().iter() {
+            if shape.missile {
+                assert_ne!(s.missile_called(skill), "something", "{skill}_missile has no `called`");
+            }
+        }
+    }
+
+    #[test]
     fn combat_shapes_classify_the_existing_skills_as_before() {
         use crate::combat::Aim;
         let s = scripts();
@@ -3765,7 +3799,7 @@ mod tests {
         let real: Vec<&str> = s.skills().names().filter(|n| sh.real_time(n)).collect();
         let mut real = real;
         real.sort();
-        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
+        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "keep_distance", "circle", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
         let mut reflex: Vec<&str> = s.skills().names().filter(|n| sh.reflex(n)).collect();
         reflex.sort();
         assert_eq!(reflex, sorted(vec!["flee", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"]));

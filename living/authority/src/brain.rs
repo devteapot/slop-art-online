@@ -92,6 +92,8 @@ struct Ev<'a> {
     answers: (u64, u64),
     /// The `run` of the action being started (a `Do` node's).
     run: Option<bool>,
+    /// The distances of a movement intent being started (a `Do` node's).
+    spacing: living_rules::steer::Spacing,
     /// Node of the activity in progress if it is work that completes on its own (see `latches`).
     latched: Option<u16>,
     /// A deliberate act holds the body: graph leaves wait, except reflexes (see `acts.rs`).
@@ -125,7 +127,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         cur = ctx.db.activity().id().find(id);
     }
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, latched: None, acting };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
@@ -149,7 +151,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     let g = common::compiled(ctx, id, st.revision)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, latched: None, acting: false };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false };
     ev.sensed(t)
 }
 
@@ -473,16 +475,34 @@ impl<'a> Ev<'a> {
                 }
             }
             Node::Do(a) => {
+                // A leaf that has finished is done, whether or not its target is still in sight
+                // (a back_off or a flight that took it out of sight succeeded all the same).
+                if let Some(done) = self.finished(id) {
+                    return done;
+                }
                 let target = match &a.target {
                     Some(t) => match self.sensed(t) {
                         Some(r) => r,
-                        None => return self.leaf_fail(id, &format!("{}: no {} in sight", a.skill, graph::describe_target(t))),
+                        None => {
+                            // A movement intent under way goes by where its target was last seen
+                            // until steering loses it (`motion::FLAG_SIGHT`, the `lost_after_s`
+                            // law): one rule for a graph's and an act's, not the next evaluation.
+                            if living_rules::steer::INTENTS.contains(&a.skill.as_str()) {
+                                if let Some(act) = self.ctx.db.activity().id().find(self.me.id).filter(|x| x.node == id && x.revision == self.st.revision) {
+                                    self.running = Some(id);
+                                    self.status = act.label;
+                                    return St::Run;
+                                }
+                            }
+                            return self.leaf_fail(id, &format!("{}: no {} in sight", a.skill, graph::describe_target(t)));
+                        }
                     },
                     None => Resolved::none(),
                 };
                 self.want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
                 self.answers = (a.offer.unwrap_or(0), a.record.unwrap_or(0));
                 self.run = a.run;
+                self.spacing = a.spacing();
                 self.leaf(id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), graph::describe(n))
             }
             Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
@@ -591,6 +611,22 @@ impl<'a> Ev<'a> {
         St::Fail
     }
 
+    /// The outcome of leaf `id`'s activity that has ended since it was last visited (read once),
+    /// unless that activity is still under way.
+    fn finished(&mut self, id: u16) -> Option<St> {
+        let rev = self.st.revision;
+        let l = self.st.last.clone().filter(|l| l.node == id && l.revision == rev)?;
+        if self.ctx.db.activity().id().find(self.me.id).is_some_and(|a| a.node == id && a.revision == rev) {
+            return None;
+        }
+        self.st.last = None;
+        if l.ok {
+            return Some(St::Ok);
+        }
+        self.last_fail = l.why.clone();
+        Some(St::Fail)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
         if self.acting {
@@ -613,20 +649,14 @@ impl<'a> Ev<'a> {
                 return St::Run;
             }
         }
-        if let Some(l) = self.st.last.clone() {
-            if l.node == id && l.revision == rev {
-                self.st.last = None;
-                if l.ok {
-                    return St::Ok;
-                }
-                self.last_fail = l.why.clone();
-                return St::Fail;
-            }
+        if let Some(done) = self.finished(id) {
+            return done;
         }
         let want = std::mem::take(&mut self.want);
         let answers = std::mem::take(&mut self.answers);
         let run = self.run.take();
-        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, self.now) {
+        let spacing = std::mem::take(&mut self.spacing);
+        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, spacing, self.now) {
             Ok(()) => {
                 self.running = Some(id);
                 self.status = self.ctx.db.activity().id().find(self.me.id).map(|a| a.label).unwrap_or(desc);
@@ -888,6 +918,33 @@ impl<'a> Ev<'a> {
                     n += 1;
                 }
                 c.at_least.map_or(true, |a| n >= a) && c.at_most.map_or(true, |b| n <= b)
+            }
+            // What someone in sight is visibly doing (docs/PERCEPTION.md, "What someone is visibly
+            // doing"): over the scene this evaluation already gathered (sight, field, sight line),
+            // two point lookups per creature that fits `who` and `within`; nothing else is read.
+            Cond::Doing(d) => {
+                let _span = common::span("brain.doing");
+                let (me, at, now) = (self.me.id, self.at, self.now);
+                let sc = common::scripts(self.ctx);
+                let want = d.phase.as_deref().and_then(living_rules::doing::Phase::parse);
+                self.scene();
+                let scene = self.scene.as_ref().expect("scene built");
+                for x in &scene.creatures {
+                    if d.within.is_some_and(|w| dist(at, x.pos) > w) {
+                        continue;
+                    }
+                    if let Some(f) = &d.who {
+                        if (f.kind != "creature" && *x.kind != *f.kind) || f.relation.as_deref().is_some_and(|rel| !self.relation_ok(x.id, rel)) {
+                            continue;
+                        }
+                    }
+                    let Some(v) = crate::perception::visibly(self.ctx, &sc, x.id, now) else { continue };
+                    if want.is_some_and(|p| !v.phase.fits(p)) || d.is.as_deref().is_some_and(|i| !v.is(&sc, i)) || d.at_me.is_some_and(|m| v.at(me, at, x.pos) != m) {
+                        continue;
+                    }
+                    return true;
+                }
+                false
             }
             Cond::HealthOf(h) => {
                 let Some(r) = self.resolve(&h.target).filter(|r| r.class == 3) else { return false };

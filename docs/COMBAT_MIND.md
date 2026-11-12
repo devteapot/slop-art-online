@@ -40,7 +40,7 @@ Everything here is on `main` unless marked.
 ### 1.2 What a character perceives of a fight
 
 - **On novelty and danger** (`saw`): "A wolf is close: 7 tiles west, attack → person." What a creature is doing, how far and which way, with hysteresis, not every second.
-- **Blows taken** (`attacked`): "A wolf attacked you (13 damage)." The attacker as the victim knows it; not which skill, nor from how far.
+- **Blows taken** (`attacked`): "A wolf attacked you (13 damage)." The attacker as the victim knows it; not which skill, nor from how far. Since fix-missile-told (2026-11-12) a missile is told as a shot: "A stranger shot you with an arrow: hit for 7", or "An arrow struck you from somewhere you could not see: hit for 7"; melee blows are as before.
 - **One's own melee outcome** (`own`): "You finished: attack → wolf. hit for 7." Defences: "You blocked Grim's blow", "Grim dodged your attack", "Your blow missed: …".
 - **Refusals and failed decisions:** "You failed to bowshot → #308: bowshot is not ready yet (0.2 s)", "What you had decided did not work out: …".
 - **Fight reports** (`act.rs` `fight_report`): while people fight, at least 3 s apart, when health crosses a quarter, three blows come to nothing, three land or one's defence works three times, else after 12 s: "The fight with Grim: you have been hit 3 times … Your health 61; theirs looks about 70%." It is a reason to think. *(Finding: "theirs looks about 70%" is exact health; others otherwise see only a band, `fighter.band`. That is a perception leak, separate from this design.)*
@@ -168,6 +168,7 @@ Each change is general: it serves any time-critical thing a character does, with
 - **Change, percept:** when a creature someone is fighting or watching starts a move aimed at them, the observer's experience names it and the distance once per move kind and fight, then folds repeats ("Grim winds up a fire bolt at you from 12 m" once, then "… again (×3)"). These are words for memory and recall to work on; nothing counts or classifies them for the mind.
 - **General use:** a child reaching the edge of a terrace, a seller packing up a stall, someone reaching for what you hold.
 - **Data path:** the condition is one primary-key read of a row the tick already reads in the chunk cache; percepts are bounded per move and witness and folded; no new table. Players already receive the same rows through `seen_fighters`.
+- **Built** (`doing-percept`, 2026-11-12; [perception](PERCEPTION.md#what-someone-is-visibly-doing)): the condition as `{"doing": {"who", "is", "phase", "at_me", "within"}}` and each seen creature's `visibly` in a mind's scene. Changes from the text above: `is` takes a skill's name, its label or a kind word (`hostile`, `melee`, `missile`, `guard`, `dash`, an act card's look); the windup is split into `winding up` and `about to release` (its halves, as the clip's run-up and its approach to the peak), plus `under way` for an act card; no `left_ms` (the drawing shows a phase, not milliseconds). The folded experience percept above is not built yet.
 
 ### 3.3 Movement as intent the body carries out (steering, rules)
 
@@ -180,6 +181,10 @@ Each change is general: it serves any time-critical thing a character does, with
 - **Same for every controller:** these are ways for a graph to steer, as WASD is for a player; speed, turning, running costs (stamina), collisions and sight are the shared rules. A player gets nothing a mind lacks, and the reverse.
 - **General use:** herding, escorting a child, keeping a polite distance, following someone unseen, a chase.
 - **Data path:** new goal kinds in the private `steer` table, written when a goal changes; steering keeps its cadence (8 Hz in a fight). `screen` scores a bounded set of points (on start and on each re-plan) with the existing sight sweep. To be measured at the 216-character gate before it counts as accepted.
+- **Implemented (`move-intents`, 2026-11-12) as general movement, not tactics.** The approved forms are graph leaves and, for those that end on their own, one-off acts: `keep_distance` (`min`, `max`; with neither, the distance it starts at ±1 m), `close_in` (`distance`, default 1), `circle` (`radius`, default the distance it starts at; `side` `left`/`right` as one faces it), `back_off` (`distance`, default 4; from a creature or a place) and `follow` (now with `distance`), each with `run`, and `qty` seconds for the held ones (`keep_distance`, `circle`, `follow`: graph only, default the `follow_s` law). `screen` is not built. Grammar and checks: `living_rules::steer::Spacing` and `normalize::spacing`, with refusals that name the fix (a band upside down, a side that is not left or right, a distance past 40 m). Specs and speeds in `skills.rhai` (`keep_distance_spec`…, from the `motion` law), so the minds' skill reference documents them. Steering: `GOAL_BAND` (5) and `GOAL_ORBIT` (6) beside the existing creature and flight goals, all with `FLAG_SIGHT`.
+  - **The perception rule.** At each steering update the target is tested with the one sight rule (`perception::in_sight`, the keep margins of something seen) or the body's scent. Seen, the body aims at where it is now and records that as last seen. Unseen, it goes by the last-seen place and ends "lost sight of them" once the `lost_after_s` law (2 s) has passed since steering found it out of sight. It starts only toward one perceived now ("you cannot see them" otherwise; a graph's or an act's target is resolved from what is sensed). A graph leaf under way keeps to this rule instead of failing at its next evaluation.
+  - **Same as a player's keys.** The speeds are the body's walk, and `run_share` times it with `run: true`, draining breath as any run does. Facing is a held look (within `look_walk_deg` while walking). Players reach the intents by keys or through `human_act`.
+  - **Data path.** Two columns appended to the private `steer` row (`far`, `unseen_ms`, constant defaults: an automatic migration, [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations), [default values](https://spacetimedb.com/docs/tables/default-values)). The steer row is written when a goal starts, when the target moves half a metre while seen, and when sight is lost or regained; no new table and no public column ([performance](https://spacetimedb.com/docs/tables/performance/): private rows cost no client bandwidth). Each steering update does primary-key reads of the target's body and character, the sight test and the map, and writes the moving body's row as every steering update does. Measured on the Spark under load (`scenes.py intents_cost`, 16 intents: 8 circling, 8 holding a band from walking partners): about 7 steering updates a second per intent, about 19 µs each, about 0.14 ms of tick time a second per intent, partners' walks included. That is not the 216-character gate.
 
 ### 3.4 A fast lane between the routine and the slow mind (mind architecture)
 
@@ -220,7 +225,7 @@ An arena is a [trial](TRIALS.md): a JSON file in `living/trials/` with a cast wh
 
 - **Opponents are fixtures**, written with the shared skills only and kept in the trial files. Each has one learnable pattern built from a pool of conditions (not a fixed loop, or a mind learns a loop and nothing that transfers):
   - **heavy telegraph:** opens with `attack` (650–750 ms windup) at close range, strikes otherwise; the answer that fits is leaving reach, dodging or guarding during the heavy windup, and striking in its recovery;
-  - **kiter:** `bowshot` beyond 8 m, backs off when closed (`flee` until §3.3 exists, then `keep_range`); the answer that fits is closing through cover or a dodge, breaking sight, or out-ranging;
+  - **kiter:** `bowshot` beyond 8 m, backs off when closed (`keep_distance`, §3.3); the answer that fits is closing through cover or a dodge, breaking sight, or out-ranging;
   - **guard that punishes greed:** raises `block` when threatened and strikes after its guard has taken a blow; the answer that fits is fewer strikes into a raised guard, timing a strike after it drops, or a flank when facing matters (`fov_on`);
   - **switcher:** one pattern, then another from a timeline step mid-fight; the answer that fits is dropping the first answer and finding the second;
   - **control:** the same skills at random, no pattern.
@@ -317,7 +322,24 @@ Batch `cm0`: `wolves`, 4 replicates, `--fake` (every model call answered at once
 - `act_outcome` rows are written only for a character a person plays (`outcomes::write`): none here. A played character gets one per told line, kept with its newest 64 lines (`frame::LINES_SHOWN`).
 - Not measured: the contract's 200-character battle of minds, where the same rate would be about ten times this (a row per blow).
 
-R2 and R3 need the trial files written (fixtures only); this turn is docs-only, so they are described, not added. R2 before any of §3 is built: if minds already prepare and use routines for a pattern, §3.5 is not needed yet, and §3.2–3.4 are judged by how much they add.
+### 5.3 R2: within one fight, against scripted opponents (2026-11-12)
+
+Runs `r2b` (10 fights, origin/main `ec5561f1`, $0.40) and `r2c` (the two heavy fights r2b lost to fixture faults, re-run with the fixed fixture on origin/main `49dfc2cd`, which also carries doing-percept (3.2); $0.11). Details, build and switch states: [TRIALS.md](TRIALS.md#r2-results-r2b-10-fights-040) and [the re-run](TRIALS.md#r2-heavy-blow-re-run-r2c-2-fights-011). Against §2.3:
+
+| Wanted (§2.3) | What R2 showed |
+|---|---|
+| **Notice the opponent's skills, ranges and timings within a fight** | Yes in words, late: the heavy blow by the third or fourth exposure in 3 of 4 r2b fights and both r2c fights ("he winds up again"), the kiter in 5 of 5 ("keep my distance, ready my bow"). An arrow told as "attacked you" was read as a swing once (fixed since: fix-missile-told). Timings in ms: never cited. |
+| **Change approach while the fight is on** | In one heavy fight of five (r2c r2): after seven exposures a plan to dodge and then to break away answered 6 of the next 7 blows (K = 8). In the other four the fight ended (2–5 heavies) before a plan arrived. Kiter: 5 of 48 arrows answered, never three in a row. Overall the heavy blow was answered 7 of 36 times, 0 of 15 in the first three exposures. In r2c r2 the plan that answered came 13 s after the exposure before it (think and compile p50 5.5–6.0 s each). |
+| **Prepared schemes that apply on their own conditions** | Barely. Plans held `dodge` and `threatened` conditions (3 of 5 heavy, 4 of 5 kiter in r2b; r2c r2's desires weighted `threatened` 3.0), but as a rewrite after the blows, not an alternative prepared before. The one change that fit was a dodge rhythm (3 of 77 dodges inside a windup), not a reply timed to the windup. |
+| **Beliefs steer behaviour without a re-plan** | Not seen: every change came through a new plan. |
+| **A decision model times what the mind prepared** | Not tested (off). |
+| **Lessons carry to the next encounter** | Not in R2's scope (R3). |
+| **Know one's own skills well enough to plan** | The own timing lines (3.7) and outcome lines (3.1) were told; outcomes were used in words ("come off better each time", "still recovering"), timings not at all. |
+| **React inside a windup** | Only by reflex and by a dodge rhythm. No subject's graph read 3.2's `doing` condition in r2c (0 graphs), although its scene showed what the foe was doing. |
+
+What it means for §3: the minds see the pattern and write plans that answer it, but the answers are coarse and late, and 3.2's perception went unused by the plans the minds wrote. The next run is R2 again with the same fixtures once 3.3 (movement intents) is in, to see whether a routine a mind writes, reading `doing` and its own timings, answers the windup with no model in the loop.
+
+R3 needs its trial files written (fixtures only). R2 was planned before any of §3 was built: if minds already prepare and use routines for a pattern, §3.5 is not needed yet, and §3.2–3.4 are judged by how much they add.
 
 ## 6. What stays the same for players and AI, and what must never become a guard
 

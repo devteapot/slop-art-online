@@ -36,7 +36,7 @@ Anchors: `{"arrival": true}` (the island's `land.arrive_*`), `{"town": "<name>"}
 
 Substitutions in steps: `"$<role>"` is that character as a target (`{"id": n}`), `"$addressee"` the person the subject just spoke to (in a `said` trigger), `"$<role>_xy"` where the role stands now (`"$subject_xy+9,0"` with an offset, `"$subject_xy@pack:9"` 9 tiles from the subject toward the pack).
 
-Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of`, `within`), `hour`; with `max`, `per_addressee`, `after_min`.
+Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of` or `to`, `within`; or `beyond`: fires when all are farther apart than that, and with `for_s` only once that has held so long, the clock starting again after each firing), `hour`; with `max`, `per_addressee`, `after_min`.
 
 **Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds`, `lod`, `projects` (`LIVING_PROJECTS=1`: [projects](LIVING_CORE.md#projects-experiment-2026-11-11); the thought rows' `detail.projects` says which project each plan served) and `player-frame` (`LIVING_FRAME=player`, [below](#the-player-frame-experiment-2026-11-11)). In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
 
@@ -680,6 +680,8 @@ The owner's working target is an experiment, not a change to the defaults: over 
 
 ### The arithmetic
 
+**Correction (2026-11-12, `bi1`).** The table below is for `species.json`'s 70-year life. The hamlet runs Cullet's laws, whose `life_years` law gives a person 90 years: a child until 15, deaths of old age from 75. The hamlet's real figures are in [births batch bi1](#births-batch-bi1-2026-11-12): a life of 10.3 h, 6 deaths of old age in 6 hours rather than 9, and 7.6 births needed rather than 9.6.
+
 The person life table (`species.json`): `years` 70; infant until 0.03 of a lifespan, child until 0.23, elder from 0.85; death of old age at each person's own point between `old_age` 0.87 and 1.0, spread evenly by id; `gestation` 0.011; `interbirth` 0.03 (after a birth both parents are raising the child, `rearing`, and neither can conceive); `litter` 1. Only adults (0.23 to 0.85) may conceive (`conceive_check`). A game day is 48 real minutes in the hamlet (`day_minutes`) and 12 on the island.
 
 A lifespan in game days is L = years × `year_days` × `life_pace`.
@@ -748,6 +750,314 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 - Cullet's laws were written for Cullet's town (lamplight, hearths, coats). The hamlet's houses and campfires are what the authored-test layout gives: no lamps and no coats in the stores.
 - The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
 - The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
+
+## Births batch bi1 (2026-11-12)
+
+The first paid run of [the birth arms](#rule-arms): `hamlet`, `hamlet-spaced`, `hamlet-provided` and `hamlet-longing`, **one replicate each**, 6 hours (2026-11-11 23:28 to 2026-11-12 05:30), on the DGX Spark. At most 12 minds per world (`minds.max`). The worlds ran on Cullet's day and laws, and the laws guard passed on each.
+
+- **Run checkout** `/home/gooning/dev/slop-runs-arrive` at **461c63cd**. That is exp-arrive 1e63a30 (main 6caebe20), plus the laws guard (fix-verify-laws) and the consolidation capacity fallback (fix-consolidation-429, e301aa9f). Evidence is in `.local/living/trials/bi1/` in that checkout.
+- **Models.** glm-flash (`zai-glm-5-3-flash`), overflowing to deepseek-flash. Consolidation could overflow on capacity (`capacity_overflow`).
+- **Switches.** Greeting (`LIVING_GREET`) off: it is on by default only after exp-greet. Not in this build: `meters()` alarm levels, skill timings, act outcomes, stamina-1 and speech-truth. The newcomer laws were present at 0 and no trial used them.
+- **The arms**, as [planned](#rule-arms):
+  - control: shipped values;
+  - spaced: `interbirth` 0.15, 72 real minutes of raising after a birth;
+  - provided: `conceive_food` 8 and `conceive_roof` true;
+  - longing: `longing_after_min` 120 and `longing_food` 4.
+
+```bash
+# read-only against the run checkout; no model calls
+python3 living/tools/births_report.py --root /home/gooning/dev/slop-runs-arrive/.local/living/trials --stores bi1
+```
+
+### What the life table really is in the hamlet
+
+`births_report.py` used to read the seed against this checkout's `living/seeds`. It now reads it against the run checkout (`LIVING_ROOT` in `mind-env.json`). A trial's derived seed lives under that checkout's `.local`. Before this fix the report fell back to the island's pace.
+
+The report also missed the seed laws' `life_years` law. Cullet's laws set a person's life to 90 years, childhood to 15 and the first deaths of old age to 75 (`person_years()` in `worlds/cullet/laws.rhai`). The report now applies a `person_years()` of that shape. Its due times matched every death of old age in the batch within 0.2 minutes: Teodor 111.6, Cal 207.7, Oren 256.6, Ilsa 257.1, Edda 352.4 and Brisk 359.7.
+
+The hamlet's numbers on that life table:
+
+| | Under Cullet's laws |
+| --- | --- |
+| A life | 90 × 4 × 0.0357 = 12.85 game days = **617 real minutes (10.3 h)**. A year of age is still 6.9 real minutes. |
+| Adult | from 15 years: 103 real minutes after birth |
+| Elder (no more children) | from 59.5 years: 408 minutes after birth, as before |
+| Gestation, raising, infancy | unchanged in real time: about 5, 14 (72 when spaced) and 14 minutes |
+| Death of old age | from 75 years (514 minutes of age) up to 90 years. The mean age at death is 565 minutes. |
+| Seeded deaths | 6 in the 6 hours, at 112, 208, 257, 257, 352 and 360 minutes. The other 6 come after the run: Wenna 363, Mara 443, Sefa 466, Lio 492, Pim 531 and Tobin 573. By about 9.6 h every seeded person is dead. |
+| Births a stationary 12 needs | 12 × 360 / 565 = **7.6 in 6 hours**. Over the 9.6 h that all twelve seeded people take to die: 12. |
+
+### Population
+
+The table gives the census every 30 s, the chronicle's births and deaths, and the journals' conceive acts and refusals. The "refused" row counts what each mind was told after a refusal, one per actor and game minute.
+
+| | `hamlet` (control) | `hamlet-spaced` | `hamlet-provided` | `hamlet-longing` |
+| --- | --- | --- | --- | --- |
+| Births / deaths (all of old age, all on time) | **9** / 6 | 4 / 6 | **1** / 6 | 5 / 6 |
+| Alive at 0, 60, 120, 180, 240, 300, 360 min | 12, 16, 16, 18, 18, 17, **15** | 12, 15, 14, 15, 14, 12, **10** | 12, 13, 12, 12, 11, 9, **7** | 12, 12, 14, 15, 14, 13, **11** |
+| At the end, by stage | 10 adults, 5 elders | 5 adults, 5 elders | 2 adults, 5 elders | 6 adults, 5 elders |
+| Births and their time (min) | Dell 13, Lark 52, Vale 58, Pia 60, Nia 102, Hana 148, Sol 157, Bee 198, Jory 251 | Teal 19, Juno 51, Rook 52, Bee 149 | Uma 30 | Hollis 63, Teal 100, Vesper 104, Ada 176, Rook 245 |
+| Couples with a birth | 5: Brisk+Edda 3, Pim+Mara 2, Sefa+Lio 2, Cal+Wenna 1, Oren+Ilsa 1 | 3: Brisk+Edda 2, Cal+Wenna 1, Oren+Ilsa 1 | 1: Brisk+Edda | 3: Brisk+Edda 3, Oren+Ilsa 1, Sefa+Lio 1 |
+| Births to a brother and sister (`kin_births`) | 2 | 0 | 0 | 1 |
+| Births to someone born in the run (`gen2_births`) | **0** | **0** | **0** | **0** |
+| Conceive acts decided | 63, all by seeded people | 29 | 19 (Uma 2) | **12** |
+| Refused, by reason | partner moved away 23, child already on the way 12, no partner 10, partner not adult 6, not adult 3, too hungry 1 | partner not adult 7, no partner 5, moved away 4, on the way 3, not adult 3, **still raising 1** | **not under a roof 17**, moved away 2, no partner 2, partner not adult 2, **not enough food 1**, on the way 1 | on the way 4, moved away 2, no partner 1 |
+| Adult-minutes with no mind (the cap of 12) | 19% | 5% | 0 | 2% |
+
+**Where each world is heading.** In every arm the six remaining seeded people die between 363 and 573 minutes. The run-born then begin to die of old age from about 527 minutes, starting with Dell. If no one born in the run has a child, each world falls to its run-born people by 9.6 h: 9, 4, 1 and 5. None of the four is stable.
+
+- **Control.** It grew from 12 to 18 by 3 hours, then fell as the seeded died. It had 9 births against 6 deaths, and the stationary 7.6, in 6 hours. It is the only arm on the target's pace so far. But its births all came from seeded couples, and the last came at 251 minutes. With 10 adults alive from 4 to 6 hours, no one conceived.
+- **Spaced and longing.** They peaked at 15 and are falling: 10 and 11 at 6 hours, heading to 4 and 5.
+- **Provided.** It is collapsing: 7 at 6 hours, of whom 5 are elders, heading to 1.
+
+**What the arms' differences show.** The four worlds differ in one law each. Seed, cast, map and models are the same. With one replicate:
+
+- **Provided: the roof gate is what held births down.** After the one early birth, the body refused conceive acts 17 times for "not under a roof". The food gate refused once: two people carried 2 food, against the 8 needed. The stores held 190–750 food all run. Minds mostly decide to conceive where they stand, outdoors.
+
+  Brisk and Edda learned from it. Refused at the western fire at 14–23 minutes, they planned to "walk Edda home under our own roof, start our family there". They conceived Uma at home at 24 minutes. Later Brisk gathered berries "toward the eight a family needs". But he asked Edda again away from home, at 94 minutes. By 209–223 minutes both were elders, and he told her "no fault is hers".
+
+  This rests on direct refusals and the journals, so it is the strongest result in the batch. How much the gate holds births down is a single run's number.
+- **Spaced held births down mostly through fewer attempts, not refusals.** The body refused only once for "you are still raising your young". The arm decided 29 conceive acts against the control's 63. The likely reason is in the code: the longing alert is felt only when one is not `rearing` (`broody` in `authority/src/brain.rs`). A longer raising time is therefore also 72 minutes without "You long for…". This arm tests the drive as well as the body.
+- **Later longing gave the fewest attempts** (12) and the first birth later (63 minutes against 13).
+- Spaced (4 births) and longing (5) cannot be told apart, nor can either be ranked against the control's 9 with confidence.
+
+**What cannot be concluded from one replicate.**
+
+- How large the spread between replicates is. Birth counts this small can differ by several from chance alone (whom the minds meet, and when).
+- Whether any arm keeps 12 over a full generation. That turns on the run-born having children, which no world showed in 6 hours.
+- Anything about Cullet's town, its lamps or its coats.
+- Whether the models' mix matters. About a quarter of calls went to deepseek on capacity, differently in each world.
+
+### Life in the four worlds
+
+| | control | spaced | provided | longing |
+| --- | --- | --- | --- | --- |
+| Starving (hunger ≥ 100) | never | never | never | never |
+| Hungry (over 50), share of census rows: children / adults / elders | **0.47** / 0.16 / 0.02 | 0.25 / 0.04 / 0 | 0.24 / 0.06 / 0.04 | 0.36 / 0.05 / 0.05 |
+| Highest hunger: children / infants | 90 / 37 | 89 / 36 | 83 / 36 | 89 / 36 |
+| Food in the two stores (#9 Reedmouth + #5 Millbrook), from scenes, at 0 / 180 / 360 min | 204 / 390 / 519 | 186 / 491 / 750 | 191 / 488 / 601 | 227 / 579 / 749 |
+| Grown people asleep, share of rows | 0.47 | 0.48 | 0.48 | 0.47 |
+| Awake grown people: work / idle / walking | 0.38 / 0.44 / 0.17 | 0.36 / 0.44 / 0.19 | 0.33 / 0.46 / 0.20 | 0.34 / 0.43 / 0.23 |
+| Lines said (chronicle) / talk turns | 2,019 / 556 | 1,880 / 566 | 1,763 / 532 | 1,977 / 629 |
+| Plans about food / about children | 0.74 / 0.17 | 0.57 / 0.06 | 0.58 / 0.08 | 0.58 / 0.08 |
+| Infant time with a grown person within 4 m (`infant_cover`) | 0.68 | 0.66 | 0.78 | 0.64 |
+| Grown people's time near an infant | 3.4% (150 adult-min) | 1.7% (75) | 2.3% (82) | 1.6% (68) |
+
+In the activity row, work is gather, cook, store, take, give, teach, build, plant and keep. Idle is wait, wander, follow, rest and no activity.
+
+- **No one went hungry for want of food.** The stores grew in every world. The hungry were children: in the control nearly half of children's census rows were over 50, and one child reached 90. They think for themselves and fed themselves late. Most food comes from fishing: cooked fish piled up at Reedmouth and berries at Millbrook. The control, with the most mouths, had the most plans about food. That is a correlation, not a cause.
+- **Care of infants.** Infancy lasts only about 14 minutes here. Parents were the nearest grown people most of the time; older siblings, themselves children, often came next. The least-covered infants:
+  - Lark (control): a grown person was near for 0.19 of her infancy, but she was given food 28 times.
+  - Juno (spaced): 0.40.
+  - Hollis and Vesper (longing): 0.42 and 0.44. Edda and Brisk had three infants in 2 hours.
+  - No infant's hunger passed 37 and no infant died. No neglect shows.
+- **Work and talk.** Awake grown people worked 33–38% of the time and idled 43–46%. That is 26–28 lines said per resident-hour and 7.7–8.8 talk turns.
+
+### Mind cost
+
+| | control | spaced | provided | longing | batch |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cost (journal at `trials.py` prices) | $9.88 | $9.10 | $8.75 | $9.31 | **$37.04** (glm $22.42, deepseek $14.62) |
+| Resident-hours thinking (census `thinkers`) | 71.8 | 71.7 | 65.8 | 71.8 | 281 |
+| $ per resident-hour | **0.137** | 0.127 | 0.133 | 0.130 | 0.132 |
+| Deliberations per resident-hour, whole run (authority's count) | 24.6 (22.4) | 22.4 (21.1) | 22.5 (20.6) | 22.2 (20.7) | |
+| Same, by day / by night | 28.6 / 18.4 | 24.8 / 18.5 | 25.3 / 18.0 | 25.1 / 17.7 | |
+| Consolidations: attempted / on the primary / on the fallback / retried / lost | 1,655 / 1,215 / 435 / 5 / 0 | 1,572 / 1,179 / 384 / 8 / 1 | 1,489 / 1,101 / 384 / 4 / 0 | 1,661 / 1,197 / 454 / 10 / 0 | 6,377 / 4,692 / 1,657 / 27 / 1 |
+
+- **The capacity fallback did its job.** glm-flash failed 5,048 of its 19,619 calls (26%), 5,045 of them with a capacity 429, in think, deliberate and consolidate alike. Each of those went to deepseek-flash. One consolidation was lost (Rook, spaced), and none was trimmed. Before the fallback, these would have been lost consolidations.
+- **Cost against the plan.** $0.13 per resident-hour against the plan's $0.10, about $1.5 per world-hour for 11–12 thinkers. `summary.json`'s `cost_per_resident_hour` (0.090–0.112) divides by everyone who ever thought times the whole run, so it counts hours for the run-born before they thought. Use the census figure.
+- **Deliberations.** 22–25 per resident-hour over whole days and nights. Compare ar2's 24 (14 minutes, daylight, 11 thinkers) and strangers stage 2's 18.4, on other builds. By day the rate here is 25–29, at or above ar2's.
+- **Asleep, still deliberating.** At night 89% of thinkers were asleep, yet they deliberated 18 times an hour. Over the whole run, 30–34% of deliberations came from someone whose activity at the nearest census was sleep: 529 of 1,766 in the control. In the control's night hours alone it was about 360. The reasons given at night:
+
+  | Reason | Deliberations |
+  | --- | ---: |
+  | "A quiet moment to take stock of how things are going" | 177 |
+  | "I finished my plan" | 86 |
+  | Lonely | 33 |
+  | Restless | 21 |
+  | Freezing | 8 |
+
+  So about a third of deliberation cost goes to sleepers. That is for the mind service to weigh, not the birth arms.
+
+### What the journals showed beyond the tables
+
+These were read from journals, without the inspector and without a paid judge.
+
+- **A brother and sister became a couple.** Sefa and Lio Reed are Wenna's children: seeded as sister and brother, with Wenna as a parent of both. They became partners in two worlds and had three children: Sol and Jory in the control, Rook in longing. Their mother's mind spoke of it warmly: "Sefa has said her heart to Lio plain". Two other attempts:
+  - In spaced, Lio asked Wenna, his mother, to start a family. She was refused because she was an elder.
+  - In provided, Cal, Sefa's uncle, asked Sefa.
+
+  `conceive_check` has no condition on kinship. In a world of twelve people in four related households there are few unrelated partners. Whether to add a kin rule is the owner's decision. It would also lower the hamlet's births.
+- **The run-born felt the longing but did not act on it.** Grown run-born people did get "You long for a child of your own." with no partner named. Dell, Lark, Vale and Pia did from 142–258 minutes, but planned instead to learn fire, cooking or fishing, which the newborn do not know. Only Uma (provided) decided to conceive. In the control, the cap of 12 also left Nia, Hana, Sol, Bee and others on their graphs for 6–149 minutes each, and graph adults do not conceive.
+- Wenna's prompt names most neighbours "a stranger (#6)", including her family-to-be. Names are not carried across in these worlds (`stranger_by_name`). This is not a births matter.
+
+### Recommendation
+
+The question that decides a stable population was not reached: **do people born in the run pair up and have children?** Every seeded person is gone by about 9.6 h.
+
+The next births batch:
+
+- run 10 h or more;
+- set `minds.max` at least 20, so that no adult lives on a graph;
+- run control and longing, 2–3 replicates each. Longing gave the fewest attempts per birth, and the control was closest to replacement.
+- measure `gen2_births`, couples and the run-born's longing against their conceive acts.
+
+Rough estimate: 2 arms × 3 × 10 h × about 15 thinkers × $0.13 ≈ **$120**, or about $80 with 2 replicates. Two things to settle first:
+
+- whether provided's roof condition stays: as written it refuses where minds actually decide;
+- the owner's decision on kin.
+
+**Decided (2026-11-12).** The roof rule, `hamlet-provided`'s `conceive_roof` refusal of conception without shelter, is **rejected** and dropped from future arms. It was a hard refusal of a life choice, and the owner's rule is that life choices get no hard-coded refusals. Shelter may matter as a consequence, such as cold or a sick infant, but never as a refusal. No kin rule or norm is added either: the next batch tests a larger seed first ([births 2](#births-2-a-larger-hamlet-2026-11-12)).
+
+### What this batch does not show
+
+- The spread between replicates. Every number above is one run.
+- Anything after 6 hours, when the run-born would have to replace the seeded.
+- A causal account of why the run-born did not conceive. Their prompts and plans suggest craft-learning and having no partner came first. That is a reading of the journals, and the models' stated plans are not proof of cause.
+- Whether the food gate would bind in a leaner world. Here it refused once.
+- Performance. The trial service carried four worlds. Tick timings were not examined.
+
+## Births 2: a larger hamlet (2026-11-12)
+
+Branch `births-2-prep`. Status: **built and proved with fake minds only** (`b2f` and `b2g`, below). Nothing paid has run.
+
+**Why.** In [bi1](#births-batch-bi1-2026-11-12) no world kept its numbers and no one born in the run had a child. Close kin paired: Sefa and Lio, sister and brother, in two worlds, and Wenna and her brother-in-law Cal. The minds knew the kinship. The seed left little choice: twelve people in four households, and at the Reeds' first attempts one or two unrelated, unpaired adults. The general coordinator decided: no kin rule or norm for now; test a larger seed first. The roof rule is rejected ([the decision](#recommendation)), so there is no provided arm.
+
+### The seed
+
+[`hamlet-6`](../living/seeds/hamlet-6.json) is [`hamlet`](../living/seeds/hamlet.json) (itself from [`authored-test`](../living/seeds/authored-test.json)) with four more households, twelve more people. It keeps the hamlet's map, its two settlements, its twelve people and their tensions, its day and its laws (`day_minutes` 48, `laws_file` `worlds/cullet/laws.rhai`, `year_days` 4, `life_pace` 0.0357). Under Cullet's `life_years` a life is 90 years, 617 real minutes. A year of age is 6.9 minutes. One is an adult from 15 years, an elder from 59.5 years, and dies of old age between 75 and 90 years. There is no roof rule, no food rule and no kin rule: `conceive_check` is the shipped one. The hamlet's facts are seed data (sheets, households, stores, resources), not laws.
+
+The old twelve gain a few ties to their new neighbours. Sefa's narrative no longer says everyone in Reedmouth is her family or her uncle's rival. The new households:
+
+| Id | Who | Age | Household (settlement) | Adult at (min) | Dies of old age at (min) |
+| ---: | --- | ---: | --- | ---: | ---: |
+| 9 | Gerd Tarn, weaver, widower | 46 | tarn (Millbrook) | adult | 301 |
+| 10 | Ansel Tarn, his son | 21 | tarn | adult | 420 |
+| 11 | Wren Tarn, his daughter | 13 | tarn | 14 | 507 |
+| 12 | Dagny Tarn, his daughter | 4 | tarn | 75 | 533 |
+| 13 | Sabine Orme, healer, widow | 33 | orme (Millbrook) | adult | 358 |
+| 14 | Tam Orme, her son | 5 | orme | 69 | 539 |
+| 19 | Bram Ashby, fisher | 43 | ashby (Reedmouth) | adult | 242 |
+| 20 | Hild Ashby, fisher, Bram's wife | 40 | ashby | adult | 315 |
+| 21 | Kesta Ashby, their daughter | 17 | ashby | adult | 401 |
+| 22 | Ivo Ashby, their son | 12 | ashby | 21 | 453 |
+| 23 | Nell Ashby, their daughter | 2 | ashby | 89 | 581 |
+| 24 | Fenn Mallory, builder from upriver, lives alone | 23 | mallory (Reedmouth) | adult | 429 |
+
+Ids are the seeding order. Millbrook's five households come first, so the Reeds are now 15–18 and their old-age deaths move: Wenna 307, Cal 213, Sefa 437 and Lio 498 minutes. Pim (adult at 55 minutes) and Tobin (96) keep theirs. Everyone seeded is dead of old age by about 581 minutes (9.7 h).
+
+**Candidates per generation.** The table counts candidates the way `births_report.py` does (below), assuming no births. Paired means the sheets' three couples, Oren+Ilsa, Brisk+Edda and Bram+Hild. A candidate is an unrelated, unpaired adult. For the hamlet at the same moments: 4 unpaired of 8 adults and 2.8 candidates per adult at 0 minutes, 5 of 9 and 3.0 at 60, 6 of 10 and 3.9 at 120.
+
+| Minute | Adults | Unpaired | Candidates per adult | Unpaired adults |
+| ---: | ---: | ---: | ---: | --- |
+| 0 | 15 | 8 | 6.9 | Mara 25, Ansel 21, Sabine 33, Wenna 37, Cal 52, Sefa 19, Kesta 17, Fenn 23 |
+| 60 | 18 | 11 | 9.1 | + Wren, Ivo, Lio, Pim (Cal is an elder from 51) |
+| 120 | 20 | 15 | 12.7 | + Dagny, Tam, Nell, Tobin |
+| 240 | 12 | 12 | 9.8 | the seeded children, Ansel, Sefa, Kesta, Fenn |
+| 300 | 8 | 8 | 6.5 | Pim, Tobin, Wren, Dagny, Tam, Lio, Ivo, Nell |
+| 360 | 4 | 4 | 3.0 | Tobin, Dagny, Tam, Nell |
+| 420 | 0 | 0 | 0 | every seeded person is an elder or dead |
+
+Seeded children come of age at 14, 21, 34, 55, 69, 75, 89 and 96 minutes, from six households. So the first run-born children, adult 103 minutes after birth, overlap the youngest seeded adults until about 400 minutes. After that the run-born have only each other. The old twelve keep their kin: Wenna and Ilsa are sisters, so Wenna is aunt to Pim; Cal is uncle to Sefa and Lio (their late father's brother, by the sheets); Pim is cousin to Sefa and Lio, which is not close kin.
+
+**Food and houses** (verify-generation, `generation-hamlet6-20261112-061500`, 99 of 99 checks). There are 8 houses, one per household, 2 stores and 2 campfires. Within 24 m of the two squares are 38 and 32 berry bushes and 3 and 7 fishing spots; the hamlet had 31 and 22, and 2 and 7. The settlements promise more (`resources` 12 bushes and 3 spots in Millbrook, 6 and 7 in Reedmouth). Stores start with 30 berries, 10 cooked fish and 16 wood in Millbrook, and 12 berries, 8 cooked fish and 10 fish in Reedmouth. Food at the start, in stores and packs, is 153 portions for 24 people. In bi1 the stores grew in every world. Twice the people on about 1.5 times the bushes is a leaner world, but no one should starve for want of bushes or fish.
+
+### Trials
+
+- [`hamlet-6`](../living/trials/hamlet-6.json) (control) and [`hamlet-6-longing`](../living/trials/hamlet-6-longing.json) (`longing_after_min` 120, `longing_food` 4, as `hamlet-longing`). There is no spaced arm and no provided arm.
+- `minutes` 600, census every 30 s, `minds.only` "all".
+- `minds.max` 48. Everyone past infancy thinks. 48 is a cost guard above the expected peak (below), not a cap meant to bind.
+
+**The runner no longer restarts the mind for every new child** (`trials.py`, `slots`/`reslot`). Before, any `minds.max` ran the mind with `LIVING_ONLY` listing the thinkers. Every newborn who became a child restarted the mind service, at most every 2 minutes, which broke off model calls and conversations for everyone. With 20–30 births that would be 20–30 restarts. Now, while everyone the mind would think for fits under the cap, the mind runs without `LIVING_ONLY` and takes up a new child itself. The runner only updates the census `thinkers` (an event `joined`, `capped` false, at most 2 minutes late). The mind is restarted when the cap starts or stops binding, or when a capped set gains someone, as before. When the hamlet's 12 binds, it behaves as it did.
+
+### Measures
+
+`births_report.py` adds the following (read-only, no model calls):
+
+- **Every conceive attempt.** That is every conceive act in deliberation and talk replies. bi1 had 36 in talk replies besides the 123 in deliberations, and `conceive_acts` still counts deliberations only. Each attempt records the actor, the target, what the target is to the actor, and its class: `partner`, `close_kin` or `other`. It also records `candidates`: the unrelated, unpaired adults alive at the census in force at that moment, other than the actor.
+  - **Kin** (`Kin`) comes from parent links (the census `parents`, seeded and run-born) and from seeded people's sheet labels, for kin the parent links miss: Cal is "uncle" to Sefa, while their father is not in the world. Close kin are parent, child, sibling, uncle or aunt, and niece or nephew. Grandparents, cousins and in-laws are named but are not close. `kin_births` now uses the same close kin. bi1's counts are unchanged (2, 0, 0, 1).
+  - **Paired** means co-parent of a child alive at that census, or a sheet's wife, husband or partner label to someone alive. That label is the only recorded agreement: the worlds keep no other. A pregnancy counts only once the child is born.
+- **Per run:** `attempts`, `to_partner`, `to_close_kin`, `close_kin_share`, `cands_at_kin` and `cands_at_all` (the mean candidates at close-kin attempts and at all attempts), and `zero_cand_attempts`. A series gives unpaired adults over adults and the mean candidates per adult every 30 minutes. Each attempt is printed; `--attempts N` limits them.
+- **The run-born generation:** how many grew up (`born_grown`), tried to conceive (`born_tried`, and toward whom, seeded or not), became parents (`born_parents`), their couples (`born_couples`, and how many of them close kin) and their births (`gen2_births`).
+
+Read back on bi1 (`--root /home/gooning/dev/slop-runs-arrive/.local/living/trials bi1`), close kin was not for want of choice. Close-kin attempts were 8 of 81 in the control, 8 of 38 in spaced, 4 of 19 in longing and 1 of 21 in provided. At those attempts the actor had a mean of 2.0, 4.4, 5.0 and 2.0 candidates. In longing, Sefa and Lio asked each other at 239–240 minutes with 5 candidates each. No run-born person tried except Uma, in provided, toward Pim. So the seed's thin choice was not the only cause. The larger seed tests whether more choice changes it.
+
+```bash
+python3 living/tools/trials.py build hamlet-6 hamlet-6-longing
+python3 living/tools/trials.py run --batch b2f hamlet-6 hamlet-6-longing --replicates 1 --minutes 10 --fake
+python3 living/tools/births_report.py --attempts 20 b2f
+python3 living/tools/trials.py clean --batch b2f
+```
+
+### Fake proof
+
+`b2f`, 2026-11-12 06:19–06:30. Fake model (default replies), 10 minutes, one replicate of each arm, on the trial service (`slop-trials-stdb`, load 30–35 from other work). The run checkout was this worktree at `b677166f`, its merge of main `49dfc2cd` (the trials-bi1 merge). The modules were `trial-hamlet-6-8a6bde48` (control) and `-f8161869` (longing).
+
+| Run | Laws guard | Thinkers (census) | Model calls (by purpose) | Calls per real minute per mind | Mind restarts |
+| --- | --- | --- | --- | ---: | ---: |
+| `hamlet-6` | passed: script row as sent, seed laws composed as the world composed them, `day_ms` 2880000 | 22 at the start, 24 by the end; Nell joined at 121 s (`joined`, `capped` false) | 493 (consolidate 161, think 146, deliberate 146, talk 40) | 2.14 | 0 (`LIVING_ONLY=all`) |
+| `hamlet-6-longing` | passed, the same | the same (Nell at 122 s) | 498 (consolidate 161, think 148, deliberate 148, talk 41) | 2.16 | 0 |
+
+The population stayed 24 → 24: 2 infants, 6 children, 15 adults and 1 elder. Nobody is due to die before Teodor at 112 minutes. No one was hungry over 50. The report gave the old-age due times in the seed table above and the candidate series' first point, 8 unpaired of 15 adults and 6.9 candidates per adult, as computed from the seed. Fake replies carry no acts, so the attempt measures were empty there.
+
+`b2g`, 06:30–06:39. A fake script ([`fake/conceive.json`](../living/trials/fake/conceive.json)) makes four people's first two deliberations decide to conceive, one toward each class. It ran `hamlet-6` for 8 minutes. The report classed all 7 attempts correctly:
+
+- Edda → Brisk, `partner` (co-parents of Tobin), 8 candidates, twice;
+- Ansel → Sefa, `other`, 7, twice;
+- Kesta → Fenn, `other`, 7, twice (the eighth decision was not reached in 8 minutes);
+- Sefa → Lio, `close_kin: sibling`, 5. That is the 8 unpaired adults less herself, her mother and her uncle.
+
+The body refused each of them, as each mind was told next: they moved away 2, no partner 2, not in sight 1, not of an age (Lio was a child) 1. So no child came of them. With no one born in the run, the run-born measures read zero. They were exercised on bi1 above (grown 9, 4, 5 and 1; Uma's two attempts toward Pim).
+
+verify-generation was rerun on the merged head `b677166f` (`generation-hamlet6-20261112-063859`): `hamlet-6` passed 99 of 99 checks and `hamlet` 63 of 63, and the original seeds were unchanged. Both batches were cleaned (`trials.py clean`).
+
+### Plan for the paid batch (not run)
+
+Two arms, `hamlet-6` (control) and `hamlet-6-longing`. Each runs 10 hours, `minds.max` 48, on glm-flash (`default`) with the capacity fallback to deepseek-flash, as bi1:
+
+```bash
+python3 living/tools/trials.py build hamlet-6 hamlet-6-longing
+python3 living/tools/trials.py run --batch b2 hamlet-6 hamlet-6-longing --replicates 2 --sample-s 5 --stagger 15
+python3 living/tools/births_report.py --stores b2
+```
+
+**Expected population.** Twenty-four people hold steady at 24 × 600 / 565 ≈ 25 births in 10 hours, about 2.5 an hour. bi1's control had 9 births from 12 people in 6 hours. That pace on twice the people is 3 an hour. Projected thinkers (alive and past infancy), from the seed's death times and births at an even pace:
+
+| Births | Peak alive | Mean thinkers | Resident-hours per run |
+| --- | ---: | ---: | ---: |
+| none (seeded only) | 24 | 15.7 | 157 |
+| 1.7 an hour for 6 h (bi1 longing's pace, doubled) | 29 | 22.5 | 225 |
+| 3 an hour for 6 h, none after (bi1 control's pattern) | 34 | 27.9 | 279 |
+| 3 an hour for 10 h (the run-born keep it up) | 34 | 30.0 | 300 |
+| 4.5 an hour for 10 h (a high case) | 45 | 37.1 | 371 |
+
+The expected peak is about 34; 48 leaves room for the high case.
+
+**Cost** at bi1's census figure, **$0.13 per resident-hour**. Take a control near 300 resident-hours and a longing run near 225, 525 for one replicate of both:
+
+| Replicates | Runs | Resident-hours | Estimate | Range (225–371 a run) |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 4 | 1,050 | **≈ $137** | $117–193 |
+| 3 | 6 | 1,575 | **≈ $205** | $175–290 |
+
+What may move it:
+
+- **More people in each scene.** Fake minds called 2.14 times a real minute per mind here against 1.80 on the hamlet (`hm2`). If paid calls scale the same way, add about a fifth: about $163 or $244.
+- **The sleeper fix.** In bi1, 30–34% of deliberations came from sleepers. `fix-sleep-thinking` would lower that, but it is not on main as of 2026-11-12 06:40, so it was not measured. Rerun one 10-minute fake run of `hamlet-6` on a build with it and compare its deliberations per resident-hour (here 146 in 10 minutes for 22.9 thinkers, 38 an hour) before pricing the batch again.
+- **Provider capacity.** bi1 overflowed 26% of glm-flash calls on capacity with 48 minds in four worlds. This batch puts about 120–140 minds on the service at once (4–6 worlds), so expect more overflow to deepseek-flash. That changes the price mix and the models' mix between worlds. A `--stagger` spreads only the start.
+
+Recommendation: 2 replicates first, about $137 (to about $190). A third pair is worth adding only if the two disagree on whether the run-born have children.
+
+Switches in the fake proofs, to record again with the paid batch: greeting `nearest` and parking `concurrent` (the defaults; `LIVING_GREET` and `LIVING_PARK` unset), skill timings on (`LIVING_SKILL_TIMINGS` unset), the `force_outcomes` law true, and the `meters()` alarm levels in the build. There are no newcomer laws and no roof, food or kin rule.
+
+**SpacetimeDB.** Nothing here adds or changes a table, reducer, view or subscription. The census is the same SQL read of four small tables every 30 s as in the hamlet, for a developer's audit truth. The [HTTP database API](https://spacetimedb.com/docs/http/database/) (checked 2026-11-11) calls that endpoint intended for management and debugging, not a game data path. At 24–45 characters the reads stay small.
+
+### Not covered
+
+- Fake minds do not choose to conceive, so nothing here says whether the larger seed changes whom minds choose. `b2g`'s attempts are scripted.
+- No tick timings or mind memory were examined. The trial service carried other work.
+- The candidate count is a count, not a measure of who met whom. Two settlements a short walk apart still decide who sees whom, and names cross settlements only through the seeded ties.
+
 
 ## The greeting trial (2026-11-11)
 
@@ -977,6 +1287,7 @@ python3 living/tools/ooc.py .local/living/trials/<b>
 - **The minds named the pattern in words, late.** Heavy: by the third or fourth exposure in 3 of 4 fights ("at my arm again mid-swing", "give ground, let their blow miss, then hit back", "slip #9's swing", "I've traded blows with him before and come off better each time"). Kiter: in 5 of 5 ("keep my distance, ready my bow", "put an arrow in them if they close the distance", "break away, put distance between us"). One kiter's subject read arrows as blows ("already swinging", "struck me from behind"): an arrow is told as "A stranger attacked you (7 damage)", which does not say it was an arrow (the gap COMBAT_MIND §3.2 names).
 - **The answer reached the plans, not the body in time.** Compiled plans held `dodge` in 3 of 5 heavy fights and 4 of 5 kiter fights, `threatened` conditions in 3 and 4, a bow shot in 3 kiter fights, a `combat` patch in 2; but they were installed around the third or fourth exposure, and the heavy fights ended within one or two more. Revisions in the fights: 4–10 deliberations each.
 - **Fixture faults (heavy):** two of five heavy runs had no fight worth measuring. In one the subject stood 11–12 m off, past day sight, and the fixture's `attack` cannot start on someone it does not see; its graph has no approach. In another it stayed 60 m away after its placement. And the fixture loses to the subject's reflex in 2–5 exposures. A rerun needs a fixture that follows when it cannot see the subject and lasts long enough for a pattern to be learned (leather armor, the 0.65 the rules give, is a fixture's gear, not a rule change).
+- **Fixture fix (branch `arena-heavy-fix`, 2026-11-12; trial files and the runner only).** *Approach:* a timeline trigger `near {who: foe, of: subject, beyond: 5, for_s: 4}` (night sight is 6 m; the fixture's pause is at most 3 s, so a subject stepping back in the pause is not followed early) sets the foe's graph to walk to where the subject stands (`$subject_xy`, read when it fires) and fight again; within 5 m `attack` closes in by itself. *Lasting:* in the pause, below 70 health, the foe mends its own wounds with the ordinary `heal` (given `wound_tending` at the start) and then waits 1.5 or 2.5 s, so the pause stays 2–3 s; no armor. Free dry runs (`--fake`, 6 minutes): `r2hf` (2 fights) and `r2hf2` (scratch copies of the fixture, not kept: started 12 m off, past day sight, and without armor). Started 12.3 m off, the foe waited about 8 s and walked in (9.7, 4.5, 1.2 m). The foe now outlasts the fake-minded subject's reflex: it healed 2–5 times and killed the subject at 3.6–4.1 minutes, after 12–14 heavy blows (before the fix, the reflex killed the foe at 169 s, 6 blows in). A subject that does not answer the pattern now dies of it.
 
 **What the minds did with the real timings and outcomes.** No reply cited a timing (no "ms", "winds up", "ready again" in any think or compile reply): the timing lines went unused. Outcome lines were told (heavy 0–14 a fight, kiter 0–20) and used in words ("come off better each time", "they're barely standing"), not as numbers.
 
@@ -985,6 +1296,31 @@ python3 living/tools/ooc.py .local/living/trials/<b>
 **Cost and latency.** $0.40 for the batch (glm-flash $0.09, deepseek-flash $0.31; 355 calls, 1.86 M tokens); per 10-minute fight $0.027–0.053 (mean $0.040), 20–42 calls; think and compile p50 5.5–5.8 s per call. GLM's consolidation failed 23 of 30 calls (retried on DeepSeek), a reliability note for the default mix, not a cost.
 
 **Defect found (3.1, `force_outcomes`).** A melee kill is told to the killer with the victim's real name: "You finished: attack → person. killed Agnes Fenner (9)", where the killer knew her only as a stranger. The line's words are `act::damage`'s result, which names the victim by `common::display`; a missile's kill avoids it (`act::Far::Killed`, "struck a stranger and killed them"), a blow that resolves at its release does not. Before `force_outcomes` this reached minds only for `attack` (a notable skill); now it reaches every striker, players included. The fix is to tell a kill in the maker's terms (`label_for`) in `act.rs` `report`; not made here.
+
+### R2 heavy-blow re-run (`r2c`, 2 fights, $0.11)
+
+The two r2b heavy fights with no fight in them (r2: 0 exposures, the subject 11–12 m off; r4: 1, the foe 60 m away) run again with the fixed fixture, so the heavy arena has five fights with a fight in them: r2b r1, r3, r5 and r2c r1, r2.
+
+**Build and switches.** Trial module and `living-mind` built from origin/main `49dfc2cd`, branch `r2-heavy-rerun` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force, beyond r2b's: arena-heavy-fix (`561ba7a7`: the approach trigger, the heal in the pause), fix-missile-told (`7729fc9b`: no effect here, the heavy fixture is melee) and doing-percept (combat mind 3.2, `2ff786aa`, always on: each creature in a mind's scene shows what it is visibly doing and how far in, and graphs may read `doing`). `force_outcomes` on, `LIVING_SKILL_TIMINGS` on (main's defaults); `fov_on` off (the shipped default); the `default` variant (glm-flash, overflow deepseek-flash). Not in: fix-unseen-killer-id. The r2b and r2c fights are therefore not one build: r2c's minds also had 3.2's scene. Ran 2026-11-12, 06:29–06:41, 2 replicates of `arena-heavy`. The key loaded from a copied `.env`, deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 50 files. Evidence: `.local/living/trials/r2c/` (`arena_report.json`, `report.md`) in the `r2-heavy-rerun` checkout on the Spark.
+
+**`arena_report.py` fix.** A heavy blow refused at its release because the subject had moved away ("failed: they moved away") was counted as unanswered; by the measure's own definition (it did not land: out of reach) it is answered, and it now reads as `evaded`. r2b had no such outcome (its numbers are unchanged); five of r2c r2's exposures did.
+
+**Main measure, the five heavy fights with a fight in them:**
+
+| Fight | Exposures | Answered | K | End |
+|---|---|---|---|---|
+| r2b r1 | 4 | 0 | never | the subject killed the foe |
+| r2b r3 | 5 | 0 | never | the subject killed the foe |
+| r2b r5 | 2 | 0 | never | the subject killed the foe |
+| r2c r1 | 5 | 0 | never | the subject killed the foe after 5 heavies, through 4 heals |
+| r2c r2 | 20 | **7** (0 of the first 7, 6 of blows 8–14) | **8** | both lived the 10 minutes (the subject's lowest health 19.7; the foe healed 7 times) |
+| **All** | **36** | **7 of 36**: 0 of 15 in the first three, 7 of 21 after | once, at 8 | |
+
+- **One fight changed, after seven exposures, and the change came from the mind's plan.** In r2c r2 the subject traded blows in the pause for seven heavies, as every other subject did (its seeded reflex). At 186 s, 13 s after the seventh, the mind installed "Dodge his blow, answer with my spear, keep shouting for the household" (`threatened` weighted 3.0 in its desires); from then the body dodged about every 2 s for 40 s, and blows 8, 9 and 10 were dodged or missed it. At 229 s and 247 s the plan became "Break away from his swings, run for the hall … bind my wounds": blows 13 and 14 were refused as it moved off. It said what it saw: "he's found me again and he's already swinging — 3 metres off … I can only dodge this one blow and put distance between us before he winds up again" (exposure 12). At night it slept and the foe, following, found it ("He found me asleep and is swinging again"): blows 15–19 landed; then 18 bow shots, 14 of them hits, as it broke away.
+- **The fit is coarse.** Only 3 of its 77 dodges fell inside one of the foe's 20 windups: the answer is a dodge rhythm and running off, not a dodge timed to the 750 ms the blow shows, and it cost breath ("I have almost no breath left"). No graph in either fight read the new `doing` condition (0 of the subjects' graphs), and no reply cited a timing in ms; "recover" appears only from its own outcome lines ("still recovering from your last move").
+- **The fixture fix:** the foe approached in both fights (no fight lost to distance). It outlasted the subject in r2c r2, not in r2c r1, where the subject countered with three blows a pause, about 30 damage against a 22-point heal.
+- **Spoken ids:** 0 of 19 spoken lines.
+- **Cost and latency:** $0.108 ($0.041 and $0.067; 28 and 46 calls); think and compile p50 6.0 and 5.8 s.
 
 ### What the told outcome lines cost in a battle
 
