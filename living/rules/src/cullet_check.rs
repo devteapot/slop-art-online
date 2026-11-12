@@ -322,7 +322,53 @@ mod tests {
         let stranger = |dist: u16| crate::script::RegardIn { known: false, ..p(dist) };
         assert!(s.perceived_of(&stranger(40)).far && !s.perceived_of(&stranger(10)).far && !s.perceived_of(&stranger(10)).name);
         assert!(!island().perceived_of(&p(40)).far);
+        // The look (docs/LOOK.md §3): the key goes to whoever sees; a mind is told the far words
+        // past knowing distance, all of them within it.
+        use crate::look::LookSeen;
+        assert_eq!((s.perceived_of(&p(24)).look, s.perceived_of(&p(25)).look, s.perceived_of(&stranger(40)).look), (LookSeen::Full, LookSeen::Far, LookSeen::Far));
+        assert_eq!(island().perceived_of(&p(40)).look, LookSeen::Full);
         assert!(s.structure("lamp").lights > 0.0 && s.structure("campfire").lights > 0.0 && island().widest_light() == 0.0);
+    }
+
+    /// Cullet's and the island's composed laws keep the shipped look bands and scene rule
+    /// (docs/LOOK.md §4): their overlays do not override them.
+    #[test]
+    fn composed_worlds_keep_the_shipped_look_bands() {
+        for s in [cullet(), island()] {
+            assert_eq!(s.look_bands_law(), Ok(crate::look::LookBands { youth: 12.0, adult: 18.0 }));
+            assert_eq!(s.appearance_in_scene_law(), Ok(crate::look::AppearanceInScene::Unnamed));
+            assert!(s.law_specs()["look_bands"].about.contains("until 12 years old, like youths until 18"), "{}", s.law_specs()["look_bands"].about);
+        }
+    }
+
+    /// char-4's band cases for Cullet's cast (worlds/cullet/look-cases.json, written by
+    /// living/tools/characters/look_lines.py): each resident's age gives the stage under Cullet's
+    /// life law and the band under its look bands, and the bands still ahead.
+    #[test]
+    fn cullet_s_band_cases_hold() {
+        let s = cullet();
+        let cases: serde_json::Value = serde_json::from_str(include_str!("../../seeds/worlds/cullet/look-cases.json")).unwrap();
+        let person = crate::life::Life { years: 70.0, infant: 0.03, child: 0.23, elder: 0.85, old_age: 0.87, ..crate::life::Life::default() };
+        let life = s.life("person", person);
+        let st = &cases["bands"]["stages"];
+        assert!((life.infant * life.years - st["infant_until"].as_f64().unwrap() as f32).abs() < 0.01, "{life:?}");
+        assert!((life.child * life.years - st["child_until"].as_f64().unwrap() as f32).abs() < 0.01);
+        assert!((life.elder * life.years - st["elder_from"].as_f64().unwrap() as f32).abs() < 0.01);
+        let bands = s.look_bands();
+        assert_eq!((bands.youth, bands.adult), (cases["bands"]["youth"].as_f64().unwrap() as f32, cases["bands"]["adult"].as_f64().unwrap() as f32));
+        let list = cases["bands"]["cases"].as_array().unwrap();
+        assert_eq!(list.len(), 11);
+        for c in list {
+            let (age, name) = (c["age"].as_f64().unwrap() as f32, c["resident"].as_str().unwrap());
+            let stage = crate::look::stage_code(life.stage(age, crate::life::Pace { year_days: 1.0, pace: 1.0 }));
+            assert_eq!(stage as u64, c["stage"].as_u64().unwrap(), "{name}'s stage");
+            let band = crate::look::look_band(stage, age, &bands);
+            assert_eq!(band.code() as u64, c["band"].as_u64().unwrap(), "{name}'s band");
+            assert_eq!(crate::look::band_at(&life, age, &bands), band, "{name}: band_at agrees");
+            let ahead: Vec<u64> = std::iter::successors(Some((age, band)), |(a, _)| crate::look::next_change(&life, *a, &bands).map(|t| (t, crate::look::band_at(&life, t, &bands)))).map(|(_, b)| b.code() as u64).collect();
+            let want: Vec<u64> = c["bands"].as_array().unwrap().iter().map(|b| b.as_u64().unwrap()).collect();
+            assert_eq!(ahead, want, "{name}'s bands ahead");
+        }
     }
 
     /// The island's rates did not change in real time: they are the old per-minute numbers.

@@ -69,6 +69,8 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            'far_handle',
            # A sleeper's waiting reasons (fix-sleep-thinking): the authority's only.
            'slumber',
+           # Lines a sleeper heard and did not wake for, told once it wakes (fix-sleep-talk): the authority's only.
+           'heard_asleep',
            # Records the world's rules keep (docs/WORLD_RULES.md); a player reads its own via my_records.
            'record', 'record_party', 'record_clock',
            # A world's own law values (its seed's `rules`; docs/WORLD_RULES.md, since laws-2).
@@ -86,19 +88,24 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            'line_heard',
            # What each player's character senses (the `senses` law), read through my_senses.
            'character_senses',
+           # Whom each player's line said now would reach, per way (earshot); read through my_earshot.
+           'character_earshot',
            # How each player's acts and death came out, in codes; read through my_act_outcomes.
-           'act_outcome']
+           'act_outcome',
+           # A person's look and the world's look lines (docs/LOOK.md): a client gets only the
+           # `lk_` key on its seen_characters rows.
+           'look', 'look_line']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_act_outcomes', 'my_known_names']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_act_outcomes', 'my_known_names']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -128,6 +135,8 @@ ADMIN = {
     'stop_genesis': [], 'resume_genesis': [],
     # Change a law on a running world (fov-1, admin only).
     'set_world_law': ['fov_on', 'false'],
+    # Move a live world to its seed's looks (look-1, admin only).
+    'relook': ['probe'],
 }
 
 
@@ -693,6 +702,8 @@ class Run:
                     and {h['speaker'] for h in p['my_heard']} <= mine
                     # My senses: exactly one row, my character's, with the law's sight and hearing.
                     and [s['id'] for s in p['my_senses']] == sorted(mine) and all(s['sight'] > 0 and s['hearing'] > 0 for s in p['my_senses'])
+                    # My earshot: at most one row, my character's, naming only people my character sees.
+                    and {r['id'] for r in p['my_earshot']} <= mine and all(set(h for w in r['ways'] for h in w['hearers']) <= set(p['seen_characters']) for r in p['my_earshot'])
                     # My outcomes: only my character's, each keyed by a line of my_experience.
                     and {o['observer'] for o in p['my_act_outcomes']} <= mine
                     # Whom my character knows by name (owner-known): itself among them, names only.

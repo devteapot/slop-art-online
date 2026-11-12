@@ -44,9 +44,15 @@ Run cleanup after a failed manual attempt too. The automatic recipe is preferred
 
 ## Someone too far away to make out
 
+On a launched and doctored `client-*` run (any seed), `scripts/earshot.py --run "$R"` joins a player, spawns three strangers and puts them 3 m, 10 m and 15 m from it on a quiet open line, turns the `earshot` law on, and reads the player's `my_earshot` through the SDK probe: the one at 3 m at say, the one at 10 m added at call by day, the unseen one at 15 m never listed or named. The player then says a line and calls one (`human_say`, `human_speak`), and who receives each must match the row. It turns the law off at the end ([features/perception.md](features/perception.md)). Run it on its own launch: it joins the run's player identity.
+
 On a launched and doctored `client-*` run (any seed), `scripts/room_address.py --run "$R"` joins a player, spawns two strangers K and S beside it and has S say lines to the room (admin `mind_say`). It reads the player's `my_experience` through the SDK probe: "naming a stranger and you" before K tells their name, "naming <K>" after, then "while talking with <K>" after a line to K, with no name the player does not know ([features/perception.md](features/perception.md)).
 
 On a launched and doctored `client-*` run (any seed), `scripts/far_label.py --run "$R"` joins a player, installs an overlay that makes everyone past 4 m `far` (as Cullet's law does past 24 m), places two strangers at 2 m and 6 m, and reads the player's `seen_characters` through the SDK probe: `a stranger` near, `someone too far away to make out` far, then `a stranger` once the far one is brought close ([features/perception.md](features/perception.md)). Admin calls set the scene. It installs the shipped script again at the end; run cleanup after it.
+
+## Looks
+
+On a launched and doctored `client-*` run whose seed has looks (`--seed plan-test` or `--seed cullet`), `scripts/look_rows.py --run "$R"` checks the look key a real client receives: `look` and `look_line` refused, an `lk_` key on every seen person row, far rows included, none for the unseen, the same after a reconnect ([features/looks.md](features/looks.md)).
 
 ## Check one query during triage
 
