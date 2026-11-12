@@ -1848,6 +1848,48 @@ def think_framing_case(run):
     return {'status': 'pass', **result}
 
 
+@case('spoken-ids')
+def spoken_ids_case(run):
+    """Ids are not words (fix-spoken-ids): every speaking mind's system prompt (think, deliberate)
+    carries the one sentence that the `#<id>` handles are for acts and memory and never spoken
+    (prompts.rs `IDS_NOT_SPOKEN`). A deliberation whose line names someone by `#id` anyway is
+    spoken without it (the speech primitive); the speaker gets a `spoken_as` experience with what
+    it wrote beside what was said; the mind journals it in `outcomes/spoken_as.jsonl`, which
+    trials.py counts per batch."""
+    people = prepare(run)
+    actor, other = people[0]['id'], people[1]['id']
+    run.admin('set_behavior', actor, json.dumps({'wait': 300}))
+    run.admin('place_near', other, actor)
+    written = f'Watch out, #{other} is here.'
+    sentence = ('Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: '
+                'when you speak, name people by their name or as you would describe them.')
+    # The decision speaks (think's `say`); the compile carries it out and never adds speech.
+    script = {'replies': {'think': {'thought': 'I warn the room.', 'intend': ['warn everyone'], 'say': {'text': written, 'to': None}},
+                          'deliberate': basic_reply()}}
+    run.request(actor, 'spoken ids')
+    run.start(model(run, script), [actor])
+    accepted(run, actor)
+    lines = lambda: [c for c in run.sql(f'SELECT * FROM chronicle WHERE a = {actor}', 'spoken-ids-chronicle') if c['kind'] == 'speech' and 'Watch out,' in c['text']]
+    said = run.wait(lines, 'the deliberation\'s line is spoken', 60)[0]['text']
+    rows = lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'spoken-ids-experience') if e['kind'] == 'spoken_as']
+    spoken_as = run.wait(rows, 'a spoken_as experience', 30)[0]
+    outcome = run.journal / 'outcomes' / 'spoken_as.jsonl'
+    journaled = run.wait(lambda: [r for r in shared.rows(outcome) if r.get('actor') == actor] if outcome.exists() else [], 'the mind journals the line', 30)
+    requests = list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    system = lambda purpose: [str(m.get('content', '')) for e in requests if e['purpose'] == purpose for m in e['body'].get('messages', []) if m.get('role') == 'system']
+    checks = {
+        'think_prompt_has_the_sentence_once': bool(system('think')) and all(s.count(sentence) == 1 for s in system('think')),
+        'deliberate_prompt_has_the_sentence_once': bool(system('deliberate')) and all(s.count(sentence) == 1 for s in system('deliberate')),
+        'spoken_without_the_id': f'#{other}' not in said and 'is here.' in said,
+        'spoken_as_keeps_both': written in spoken_as['text'] and f'#{other}' in spoken_as['text'] and said.split('“')[-1].rstrip('”') in spoken_as['text'],
+        'journaled_with_both': written in journaled[0].get('line', '') and journaled[0].get('name'),
+    }
+    result = {'actor': actor, 'other': other, 'said': said, 'spoken_as': spoken_as['text'], 'journaled': journaled[0], 'checks': checks}
+    (run.directory / 'spoken-ids.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('health-seen')
 def health_seen_case(run):
     """A mind in a fight is told its opponent's health as the band everyone sees, never as a

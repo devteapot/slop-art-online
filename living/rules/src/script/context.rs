@@ -9,8 +9,8 @@ use rhai::{Array, Dynamic, Map};
 /// Fields of `a`. The order is the bit order of [`Plan::top`].
 pub const TOP: [&str; 21] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record", "daylight", "offer_id", "record_id", "offer"];
 /// Fields of `a.actor` (the body genes are `genes::BODY`; `factor` is the skill factor).
-pub const ACTOR: [&str; 32] = [
-    "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor", "lit", "stamina", "focus",
+pub const ACTOR: [&str; 33] = [
+    "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "hurt_by_near", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor", "lit", "stamina", "focus",
 ];
 pub const TARGET: [&str; 25] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home", "hosts", "lit", "fuel"];
 pub const ROUTINE: [&str; 4] = ["exists", "ok", "failed", "changed_s"];
@@ -45,7 +45,8 @@ impl Keys {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Plan {
     pub top: u32,
-    pub actor: u32,
+    /// One bit per `ACTOR` field (more than 32 of them since `hurt_by_near`).
+    pub actor: u64,
     pub target: u32,
     pub routine: u8,
     pub actor_inv: Keys,
@@ -55,7 +56,7 @@ pub struct Plan {
 
 impl Plan {
     pub fn all() -> Plan {
-        Plan { top: u32::MAX, actor: u32::MAX, target: u32::MAX, routine: u8::MAX, actor_inv: Keys::All, actor_sensed: Keys::All, target_inv: Keys::All }
+        Plan { top: u32::MAX, actor: u64::MAX, target: u32::MAX, routine: u8::MAX, actor_inv: Keys::All, actor_sensed: Keys::All, target_inv: Keys::All }
     }
 
     /// The plan for a law reading `u` of its context. `strict` refuses a field the engine does not
@@ -80,7 +81,7 @@ impl Plan {
             match k.as_str() {
                 "actor" => {
                     if whole {
-                        (p.actor, p.actor_inv, p.actor_sensed) = (u32::MAX, Keys::All, Keys::All);
+                        (p.actor, p.actor_inv, p.actor_sensed) = (u64::MAX, Keys::All, Keys::All);
                         continue;
                     }
                     for (f, w) in &v.keys {
@@ -88,7 +89,7 @@ impl Plan {
                             unknown("actor.", f, &ACTOR)?;
                             continue;
                         };
-                        p.actor |= 1 << j;
+                        p.actor |= 1u64 << j;
                         match f.as_str() {
                             "inv" => p.actor_inv = Keys::of(w),
                             "sensed" => p.actor_sensed = Keys::of(w),
@@ -146,7 +147,7 @@ impl Plan {
                 continue;
             }
             match *t {
-                "actor" => out.extend(ACTOR.iter().enumerate().filter(|(j, _)| self.actor & (1 << j) != 0).map(|(_, f)| match *f {
+                "actor" => out.extend(ACTOR.iter().enumerate().filter(|(j, _)| self.actor & (1u64 << j) != 0).map(|(_, f)| match *f {
                     "inv" => format!("actor.inv{}", keys(&self.actor_inv)),
                     "sensed" => format!("actor.sensed{}", keys(&self.actor_sensed)),
                     f => format!("actor.{f}"),
@@ -326,7 +327,7 @@ enum Level {
 /// Every field the plan includes, in a fixed order.
 fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static str, Val)) {
     let a = &c.actor;
-    let has = |mask: u32, i: usize| mask & (1 << i) != 0;
+    let has = |mask: u64, i: usize| mask & (1u64 << i) != 0;
     for (i, name) in ACTOR.iter().enumerate() {
         if p.top & 1 == 0 || !has(p.actor, i) {
             continue;
@@ -350,6 +351,7 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "pasture" => Val::F(a.pasture),
             "hurt_by" => Val::I(a.hurt_by as i64),
             "hurt_ago" => Val::Ago(a.hurt_ago),
+            "hurt_by_near" => Val::B(a.hurt_by_near),
             "yielded_ago" => Val::Ago(a.yielded_ago),
             "sensed" => Val::Inv(&a.sensed, &p.actor_sensed),
             "bold" => Val::B(a.bold),
@@ -367,7 +369,7 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
     }
     let t = &c.target;
     for (i, name) in TARGET.iter().enumerate() {
-        if p.top & 2 == 0 || !has(p.target, i) {
+        if p.top & 2 == 0 || !has(p.target as u64, i) {
             continue;
         }
         let v = match *name {
