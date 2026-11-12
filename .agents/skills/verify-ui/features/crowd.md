@@ -6,6 +6,7 @@ What a town of generated people costs in the client and whether the client draws
 
 - `faces`: a face whose file has no `<file>.face.png` takes the map its material's glTF extras name (`face_map`, share.py `pages`). Every face on a page is one `Face` material.
 - `far`: a file built with `LOD=both` holds `Far*` mesh nodes on the same skeleton. Beyond `LIVING_GAME_FAR` metres (default 10, for a 1.75 m person, scaled by height) the far meshes show and the full ones hide. A far person comes back to the full model once it is `LIVING_GAME_FAR_BAND` (default 1.5 m) nearer.
+- `identity`: a recipe's `identity` values move a type's identity bones (`characters/identity.rs`) when the scene comes in; `LIVING_GAME_PERF=…` `RUST_LOG=living_game::characters=debug` logs each bone's transform (`identity: <recipe> <bone> t … r … s …`) to compare with compose.py's nodes.
 - `rebuild`: a character's scene spawned again is fitted, shaped, dressed and bound again (`characters::on_ready`), and a file is read once (`characters::SceneOf`).
 - `clips`: `own-*` files (and `lookdev/types/`) take their clips from `lookdev/anim/own-clips.glb` when it is there. A file without clips of its own is given its player and bone targets (`anim::bind`). `LIVING_GAME_SHARED_CLIPS=0` plays each file's own clips.
 
@@ -42,6 +43,7 @@ Each run's log (`LIVING_GAME_PERF=frames,diag`) holds what the check reads:
 | `anim: lookdev/…/own-<name>.glb bound to lookdev/anim/own-clips.glb` | once a person for files without clips |
 | `anim: lookdev/anim/own-clips.glb: 29 clips, …` | one graph for every generated person |
 | `assets: … N clips (C curves); G graphs; …` | `lod` with the shared file: the VRoid bases' clips plus one set (159, 2 graphs); own clips: 64 sets (1,986, 65 graphs) |
+| `assets: … N images M MiB; …; outline directions generated for G meshes, brought by B` | images: the scene's own few MiB, not the people's pages (`keeppixels` keeps them: 526 MiB for Cullet's 64); B > 0 for files from `outline_normals.py` (types, new people) |
 | `characters: … scene was rebuilt and not shaped again` | never. Before rebuild-keep, 0–10 people a run lost their proportions |
 | `LIVING_GAME_PERF=…,rebuild=4`: `characters: X's scene was spawned again (2 times); fitting and shaping it again` | once per character; then each is fitted, shaped (the same `characters: <recipe> … stride` line as at the start) and bound again (`bound to`) |
 

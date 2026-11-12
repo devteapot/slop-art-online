@@ -8,11 +8,13 @@
 //!   video, which the report encodes. With `LIVING_GAME_RECORD_FPS=0` there are only stills,
 //!   every `LIVING_GAME_RECORD_EVERY` seconds (default 3) and at each line, reducer call,
 //!   bubble and act note. The GPU draws a small copy of the finished frame and only that is read
-//!   back (record_frames.rs); one worker thread writes the JPEGs. A full queue drops a frame
-//!   rather than wait. Past `LIVING_GAME_RECORD_MAX_MB` of frames (default 4096) it keeps one
+//!   back (record_frames.rs); one worker thread writes the JPEGs. Nothing waits: at most one
+//!   readback is in flight, a late one and a full queue drop the frame ([`guard`]), and the
+//!   state lines count the drops by reason. Past `LIVING_GAME_RECORD_MAX_MB` of frames (default 4096) it keeps one
 //!   every 5 s.
 //! - `state.jsonl`: four times a second, where I am, the camera, the people the HUD knows
-//!   (label, distance, hovered, targeted, talking), the bubbles and chat lines on screen, the
+//!   (label, distance, hovered, targeted, talking), the bubbles and chat lines on screen, each
+//!   speaking body's mouth (`mouths`, mouth.rs), the
 //!   target, the text box, hp, the frame time and the recorder's own main-thread time.
 //! - `events.jsonl`: presses as the game reads them (a tap or a held press, keys outside the
 //!   text box), each line I send, and every reducer call with the authority's answer (net.rs
@@ -61,8 +63,43 @@ fn spent(t0: std::time::Instant) {
 /// Bytes of frames written so far (for the size cap).
 static WRITTEN: AtomicU64 = AtomicU64::new(0);
 
-/// Stills dropped because the writer was behind.
+/// Stills dropped, in all and by reason: a readback still in flight when the next was due
+/// (`busy`), one that came back later than [`guard::LATE_MS`] (`late`), the writer's queue full
+/// (`queue`). See [`guard`].
 static DROPPED: AtomicU32 = AtomicU32::new(0);
+static DROPPED_BUSY: AtomicU32 = AtomicU32::new(0);
+static DROPPED_LATE: AtomicU32 = AtomicU32::new(0);
+static DROPPED_QUEUE: AtomicU32 = AtomicU32::new(0);
+/// When the readback in flight was asked for (unix µs; 0: none).
+static IN_FLIGHT: AtomicU64 = AtomicU64::new(0);
+
+/// The recorder never makes the game wait (record-guard, after headless runs under load froze
+/// the main thread 2–5 s with readbacks and JPEGs piling up):
+/// - at most one readback is in flight: a still due while one is outstanding is dropped
+///   (`busy`), unless that one is older than `LOST_MS` (then it is given up);
+/// - a readback that comes back later than `LATE_MS` after it was asked for is dropped
+///   (`late`): the GPU is behind, and encoding it would only add to the load. The owner's
+///   play-test 5 session had readbacks at 33 ms (p50), 47 (p90) and 73 (p99), so 100 ms drops
+///   under 1% of a healthy session's frames (50 ms would drop 6%);
+/// - the writer's queue holds `QUEUE` frames; one more is dropped (`queue`).
+/// Dropping is counted, never waited on, so memory stays at one readback and `QUEUE` frames.
+pub(crate) mod guard {
+    pub const LATE_MS: f64 = 100.0;
+    pub const LOST_MS: f64 = 2000.0;
+    pub const QUEUE: usize = 2;
+
+    /// May a still be asked for now (unix µs), with a readback in flight since `in_flight`
+    /// (0: none)?
+    pub fn may_ask(in_flight: u64, now: u64) -> bool {
+        in_flight == 0 || (now.saturating_sub(in_flight) as f64) / 1000.0 > LOST_MS
+    }
+
+    /// Is a readback asked for at `want` and back at `got` (unix µs) still worth writing?
+    pub fn in_time(want: u64, got: u64) -> bool {
+        (got.saturating_sub(want) as f64) / 1000.0 <= LATE_MS
+    }
+}
+use guard::QUEUE;
 
 /// A reducer's answer, from `Net::on_reply`. Cheap and silent when not recording.
 pub fn reply(what: &str, reducer: &dyn std::fmt::Debug, outcome: Result<(), String>, server_us: i64) {
@@ -94,7 +131,7 @@ impl Plugin for RecordPlugin {
         // A long session's frames are capped (about 2.3 GB an hour at 960 px, 10 a second):
         // past `LIVING_GAME_RECORD_MAX_MB` (default 4096) one frame every 5 s is kept.
         let max_bytes = std::env::var("LIVING_GAME_RECORD_MAX_MB").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(4096) * 1_000_000;
-        let (tx, rx) = sync_channel::<Frame>(8);
+        let (tx, rx) = sync_channel::<Frame>(QUEUE);
         let stills = dir.join("stills");
         let mut csv = open("captures.csv");
         std::thread::Builder::new()
@@ -296,6 +333,7 @@ fn sample(
     hud: Res<HudModel>,
     controls: Res<crate::controls::Input>,
     cams: Query<&GlobalTransform, With<Camera3d>>,
+    mouths: Option<Res<crate::mouth::Mouths>>,
 ) {
     let now = time.elapsed_secs_f64();
     if now < rec.next_state {
@@ -326,10 +364,11 @@ fn sample(
     let chat = if controls.chat_open { Some(format!("typing ({} chars)", controls.chat.chars().count())) } else { None };
     let line = json!({
         "t": unix_us() / 1000, "me": me, "me_pos": pos, "heading": heading, "cam": cam, "drawn": drawn,
-        "bubbles": bubbles, "log": log, "target": hud.target.as_ref().map(|t| t.name.clone()),
+        "bubbles": bubbles, "mouths": mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), json!((w * 100.0).round() / 100.0))).collect::<serde_json::Map<_, _>>()), "log": log, "target": hud.target.as_ref().map(|t| t.name.clone()),
         "chat_open": controls.chat_open, "chat": chat, "hp": hud.me.as_ref().map(|m| m.hp),
         "energy": hud.me.as_ref().map(|m| m.energy), "frame_ms": (time.delta_secs_f64() * 10000.0).round() / 10.0,
         "dropped_stills": DROPPED.load(Ordering::Relaxed),
+        "dropped": {"busy": DROPPED_BUSY.load(Ordering::Relaxed), "late": DROPPED_LATE.load(Ordering::Relaxed), "queue": DROPPED_QUEUE.load(Ordering::Relaxed)},
         "rec_main_us": MAIN_NS.swap(0, Ordering::Relaxed) / 1000,
     });
     let _ = rec.lines.send((true, line.to_string()));
@@ -374,6 +413,16 @@ fn shoot(
     let t0 = std::time::Instant::now();
     rec.want = false;
     rec.last_shot = now;
+    let want = unix_us();
+    if !guard::may_ask(IN_FLIGHT.load(Ordering::Relaxed), want) {
+        // The last readback hasn't come back: skip this one rather than queue more GPU work.
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+        DROPPED_BUSY.fetch_add(1, Ordering::Relaxed);
+        let every = rec.every;
+        rec.next_shot = now + every;
+        spent(t0);
+        return;
+    }
     // Keep the clock steady: the next frame is due one interval after this one was.
     let every = if WRITTEN.load(Ordering::Relaxed) > rec.max_bytes { rec.every.max(5.0) } else { rec.every };
     rec.next_shot = if now - rec.next_shot > every { now + every } else { rec.next_shot + every };
@@ -395,19 +444,54 @@ fn shoot(
     }
     grab.now = true;
     let tx = rec.tx.clone();
-    let want = unix_us();
     let handle = grab.image.clone().unwrap();
+    IN_FLIGHT.store(want, Ordering::Relaxed);
     commands.spawn(ReadbackOnce::texture(handle)).observe(move |mut ev: On<ReadbackComplete>| {
         let t0 = std::time::Instant::now();
+        // This one is back (a later one may have replaced it after `LOST_MS`).
+        let _ = IN_FLIGHT.compare_exchange(want, 0, Ordering::Relaxed, Ordering::Relaxed);
+        let got = unix_us();
+        if !guard::in_time(want, got) {
+            DROPPED.fetch_add(1, Ordering::Relaxed);
+            DROPPED_LATE.fetch_add(1, Ordering::Relaxed);
+            spent(t0);
+            return;
+        }
         let data = std::mem::take(&mut ev.event_mut().data);
-        match tx.try_send(Frame { want_us: want, got_us: unix_us(), size, data }) {
+        match tx.try_send(Frame { want_us: want, got_us: got, size, data }) {
             Ok(()) => {}
             Err(TrySendError::Full(_)) => {
                 DROPPED.fetch_add(1, Ordering::Relaxed);
+                DROPPED_QUEUE.fetch_add(1, Ordering::Relaxed);
             }
             Err(TrySendError::Disconnected(_)) => {}
         }
         spent(t0);
     });
     spent(t0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::guard::*;
+
+    #[test]
+    fn one_readback_in_flight_and_late_or_lost_ones_let_go() {
+        let t = 1_000_000_000u64;
+        assert!(may_ask(0, t), "nothing in flight");
+        assert!(!may_ask(t, t + 30_000), "one in flight 30 ms: the next still is dropped");
+        assert!(!may_ask(t, t + 1_900_000), "still in flight at 1.9 s");
+        assert!(may_ask(t, t + 2_100_000), "given up after LOST_MS");
+        assert!(in_time(t, t + 33_000) && in_time(t, t + 100_000), "a healthy readback (p50 33 ms, p99 73) is written");
+        assert!(!in_time(t, t + 150_000), "150 ms late: dropped");
+        assert!(in_time(t, t), "a clock that didn't move is in time");
+        assert_eq!(QUEUE, 2);
+    }
+
+    #[test]
+    fn a_full_writer_queue_drops_instead_of_waiting() {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<u8>(QUEUE);
+        assert!(tx.try_send(1).is_ok() && tx.try_send(2).is_ok());
+        assert!(matches!(tx.try_send(3), Err(std::sync::mpsc::TrySendError::Full(_))), "a third frame is dropped, not waited for");
+    }
 }

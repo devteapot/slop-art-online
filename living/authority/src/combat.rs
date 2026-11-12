@@ -575,8 +575,9 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
         ctx.db.skill_card().skill().delete(old);
     }
     for (skill, shape) in shapes.iter() {
-        let c = living_rules::script::SkillCtx { actor: living_rules::script::ActorFacts { kind: "person".into(), ..Default::default() }, skill: skill.to_string(), qty: shape.hold_ms, ..Default::default() };
+        let c = living_rules::script::SkillCtx { actor: living_rules::script::ActorFacts { kind: "person".into(), stamina: 100.0, focus: 100.0, ..Default::default() }, skill: skill.to_string(), qty: shape.hold_ms, ..Default::default() };
         let missile = if shape.missile { sc.missile(skill, &c).ok() } else { None };
+        let timing = sc.timing(skill).unwrap_or_default();
         let reach = match (missile, shape.aim) {
             (Some(m), _) => m.range,
             (None, Aim::Dash) => sc.num_of(&format!("{skill}_dist"), "person", 0.0) as f32,
@@ -586,9 +587,9 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
             skill: skill.to_string(),
             slot: shapes.bar().iter().position(|b| b == skill).map_or(NOT_ON_BAR, |i| i as u8),
             cost: sc.num_of("combat_cost", skill, 0.0) as f32,
-            windup_ms: if matches!(shape.aim, Aim::Dash | Aim::Facing) { 0 } else { sc.duration_ms(skill, &c).unwrap_or(0) as u32 },
-            recover_ms: sc.num_of("combat_recover", skill, 0.0) as u32,
-            cooldown_ms: sc.num_of("combat_cooldown", skill, 0.0) as u32,
+            windup_ms: timing.windup_ms,
+            recover_ms: timing.recover_ms,
+            cooldown_ms: timing.cooldown_ms,
             reach,
             code: shape.code,
             aim: shape.aim.as_str().into(),
@@ -596,6 +597,7 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
             arc: shape.arc,
             needs: shape.needs.join(","),
             knows: shape.knows.join(","),
+            pool: sc.text_of("combat_pool", skill).filter(|p| !p.is_empty()).unwrap_or_else(|| "stamina".into()),
         };
         if ctx.db.skill_card().skill().find(card.skill.clone()).is_some() {
             ctx.db.skill_card().skill().update(card);
@@ -677,7 +679,7 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
     }
     // A guard is held until let go, at most as long as the rules allow.
     let qty = shape.hold_ms;
-    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), (0, 0), now) {
+    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), (0, 0), None, now) {
         Ok(()) => Ok(()),
         Err(why) => {
             // Nothing started, so the walk under way simply goes on.

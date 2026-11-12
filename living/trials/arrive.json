@@ -1,0 +1,42 @@
+{
+ "title": "A stranger arrives and says nothing: does anyone approach, greet, watch or talk about them?",
+ "about": "The hamlet (12 people in four households in two settlements; the 11 past infancy at the start are thought for, `minds.max` 11, so that the infant Tobin's becoming a child about 8 minutes in does not restart the mind service in the middle of a stand; docs/TRIALS.md, the hamlet) on Cullet's day and laws (the seed's own: sight 48 m by day, names within 24 m, speech 12 m). The world lives 30 s, then a scripted human player (`Player.arrive_session`: the real player reducers `join`, `human_act`, `human_move` with its own non-admin identity) joins at the arrival point, waits 20 s, walks (`goto` to a point, re-aimed every 15 s) to the densest group of residents until two are within 5 m, steps toward them so that it faces into the group, and stands there for 5 minutes saying and doing nothing; then it walks to the group that shares the fewest members with the first and stands silent 5 more minutes; then it stays where it is. It never speaks, gestures or names itself, so it stays a stranger unless a resident makes contact. It runs the shipped rules (the `arrive-control` variant or any other); the newcomer-law arms it was built for were rejected on 2026-11-12 and removed. Every line, conversation turn, experience row (before minds integrate it), gesture and position is recorded for arrive_report.py.",
+ "gradient": "Play-test 3: the owner stood silent in the square for three minutes with residents in earshot and no one approached or spoke. When a newcomer stands near residents and says nothing, how often does anyone approach, greet, watch or talk about them, how soon, and what stands in between (docs/TRIALS.md, \"Arrivals\")?",
+ "world": {
+  "seed": "hamlet"
+ },
+ "minutes": 14,
+ "subject": {
+  "join": {
+   "name": "Arlen",
+   "after_s": 30
+  }
+ },
+ "minds": {
+  "only": "all",
+  "max": 11
+ },
+ "human": {
+  "script": "arrive",
+  "minutes": 14,
+  "settle_s": 20,
+  "walk_s": 150,
+  "within_m": 5,
+  "stand_s": 300,
+  "stands": 2
+ },
+ "record": {
+  "speech": true,
+  "talk": true,
+  "experiences": true,
+  "gestures": true,
+  "positions": true,
+  "thoughts": true
+ },
+ "census_s": 30,
+ "cast": {},
+ "timeline": [],
+ "probes": [
+  "residents_thinking"
+ ]
+}

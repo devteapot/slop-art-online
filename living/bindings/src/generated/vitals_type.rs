@@ -19,6 +19,14 @@ pub struct Vitals {
     pub rate_key: u32,
     pub hurt_ms: u64,
     pub hurt_by: u32,
+    pub stamina: f32,
+    pub stamina_max: f32,
+    pub stamina_rate: f32,
+    pub stamina_from_ms: u64,
+    pub focus: f32,
+    pub focus_max: f32,
+    pub focus_rate: f32,
+    pub focus_from_ms: u64,
 }
 
 impl __sdk::InModule for Vitals {
@@ -41,6 +49,14 @@ pub struct VitalsCols {
     pub rate_key: __sdk::__query_builder::Col<Vitals, u32>,
     pub hurt_ms: __sdk::__query_builder::Col<Vitals, u64>,
     pub hurt_by: __sdk::__query_builder::Col<Vitals, u32>,
+    pub stamina: __sdk::__query_builder::Col<Vitals, f32>,
+    pub stamina_max: __sdk::__query_builder::Col<Vitals, f32>,
+    pub stamina_rate: __sdk::__query_builder::Col<Vitals, f32>,
+    pub stamina_from_ms: __sdk::__query_builder::Col<Vitals, u64>,
+    pub focus: __sdk::__query_builder::Col<Vitals, f32>,
+    pub focus_max: __sdk::__query_builder::Col<Vitals, f32>,
+    pub focus_rate: __sdk::__query_builder::Col<Vitals, f32>,
+    pub focus_from_ms: __sdk::__query_builder::Col<Vitals, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for Vitals {
@@ -59,6 +75,14 @@ impl __sdk::__query_builder::HasCols for Vitals {
             rate_key: __sdk::__query_builder::Col::new(table_name, "rate_key"),
             hurt_ms: __sdk::__query_builder::Col::new(table_name, "hurt_ms"),
             hurt_by: __sdk::__query_builder::Col::new(table_name, "hurt_by"),
+            stamina: __sdk::__query_builder::Col::new(table_name, "stamina"),
+            stamina_max: __sdk::__query_builder::Col::new(table_name, "stamina_max"),
+            stamina_rate: __sdk::__query_builder::Col::new(table_name, "stamina_rate"),
+            stamina_from_ms: __sdk::__query_builder::Col::new(table_name, "stamina_from_ms"),
+            focus: __sdk::__query_builder::Col::new(table_name, "focus"),
+            focus_max: __sdk::__query_builder::Col::new(table_name, "focus_max"),
+            focus_rate: __sdk::__query_builder::Col::new(table_name, "focus_rate"),
+            focus_from_ms: __sdk::__query_builder::Col::new(table_name, "focus_from_ms"),
         }
     }
 }

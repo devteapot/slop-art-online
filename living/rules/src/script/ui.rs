@@ -20,6 +20,8 @@ pub(super) struct UiRead {
     pub order: Vec<String>,
     pub errors: Vec<String>,
     pub missiles: BTreeMap<String, MissileSpec>,
+    /// `menus()`: which places get a wheel, and its layout (docs/INTERFACE.md §8.1).
+    pub menus: Vec<ui::MenuSpec>,
     /// The work reading took, in deterministic units (a cost test bounds it).
     pub work: UiWork,
 }
@@ -159,7 +161,130 @@ impl Scripts {
             }
         }
         r.order = names;
+        r.menus = self.read_menus(&r.specs, &mut r.errors);
         r
+    }
+
+    /// `menus()`, the world's table of wheels: rows of `on`, `kinds`, `choose`, `wheel` (a map
+    /// from a direction to a section) and `fill`. Lenient as `_ui()` is: a row with a problem is
+    /// left out (its places keep their list), and the problem goes into `ui_errors`.
+    fn read_menus(&self, specs: &BTreeMap<String, UiSpec>, errors: &mut Vec<String>) -> Vec<ui::MenuSpec> {
+        let f = "menus()";
+        if !self.nullary.contains("menus") {
+            return Vec::new();
+        }
+        let rows = match self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "menus", ()).map_err(|e| format!("{f}: {e}")).and_then(|d| d.try_cast::<Array>().ok_or_else(|| format!("{f} must return a list of rows"))) {
+            Ok(a) => a,
+            Err(e) => {
+                errors.push(e);
+                return Vec::new();
+            }
+        };
+        let kinds: Vec<String> = {
+            let t = self.tables.borrow();
+            t.names("structures").iter().chain(t.names("resources").iter()).cloned().collect()
+        };
+        let mut out: Vec<ui::MenuSpec> = Vec::new();
+        for (i, row) in rows.into_iter().enumerate() {
+            let Some(m) = row.try_cast::<Map>() else {
+                errors.push(format!("{f}: row {i} is not a map"));
+                continue;
+            };
+            let at = format!("{f} row {i}");
+            let before = errors.len();
+            errors.extend(keys_of(&at, "key", &m, ui::MENU_TRAITS));
+            let on = match m.get("on").map(|v| one_of(&at, "on", v, On::parse, ui::PLACES)) {
+                Some(Ok(p)) if ui::MENU_PLACES.contains(&p) => p,
+                Some(Ok(p)) => {
+                    errors.push(format!("{at}: `on: {}`: a wheel opens where F or C opens a list (person, thing or self)", p.as_str()));
+                    continue;
+                }
+                Some(Err(e)) => {
+                    errors.push(e);
+                    continue;
+                }
+                None => {
+                    errors.push(format!("{at}: `on` is needed (person, thing or self)"));
+                    continue;
+                }
+            };
+            let mut spec = ui::MenuSpec { on, kinds: Vec::new(), choose: ui::Choose::List, wheel: Default::default(), fill: true };
+            if let Some(v) = m.get("kinds") {
+                match texts(&at, "kinds", v) {
+                    Ok(ks) => {
+                        // A thing's kinds are the world's structures and resources; a creature's
+                        // kinds (species) are not in the script, so they are not checked.
+                        for k in ks.iter().filter(|k| on == On::Thing && !kinds.contains(k)) {
+                            errors.push(format!("{at}: `kinds`: `{k}` is no structure or resource of this world"));
+                        }
+                        spec.kinds = ks;
+                    }
+                    Err(e) => errors.push(e),
+                }
+            }
+            if let Some(v) = m.get("choose") {
+                match one_of(&at, "choose", v, ui::Choose::parse, ui::CHOOSE) {
+                    Ok(ui::Choose::Grid) => errors.push(format!("{at}: `choose` is `list` or `wheel` for a place")),
+                    Ok(c) => spec.choose = c,
+                    Err(e) => errors.push(e),
+                }
+            }
+            if let Some(v) = m.get("fill") {
+                match v.as_bool() {
+                    Ok(b) => spec.fill = b,
+                    Err(_) => errors.push(format!("{at}: `fill` is true or false")),
+                }
+            }
+            if let Some(v) = m.get("wheel") {
+                match v.clone().try_cast::<Map>() {
+                    Some(w) => {
+                        for (d, sec) in w.iter() {
+                            let Some(d) = ui::Dir::parse(d.as_str()) else {
+                                errors.push(format!("{at}: `wheel`: `{d}` is no direction ({})", ui::DIRS.join(", ")));
+                                continue;
+                            };
+                            let Ok(name) = sec.clone().into_string() else {
+                                errors.push(format!("{at}: `wheel.{}` names a skill or one of {}", d.as_str(), ui::SECTIONS.join(", ")));
+                                continue;
+                            };
+                            let pin = ui::Pin::parse(&name);
+                            if spec.pinned(&pin).is_some() {
+                                errors.push(format!("{at}: `wheel` names `{name}` twice"));
+                                continue;
+                            }
+                            let why = match &pin {
+                                ui::Pin::Own(ui::Section::More) => None,
+                                ui::Pin::Own(_) if on != On::Person => Some(format!("`{name}` is a person's section, and the row is on `{}`", on.as_str())),
+                                ui::Pin::Own(_) => None,
+                                ui::Pin::Skill(k) => match specs.get(k) {
+                                    None => Some(format!("`{k}` is not a skill")),
+                                    Some(u) if !u.is_on(on) => Some(format!("`{k}` is not on `{}` (its `on`: {})", on.as_str(), u.on.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", "))),
+                                    Some(_) => None,
+                                },
+                            };
+                            match why {
+                                Some(w) => errors.push(format!("{at}: `wheel.{}`: {w}", d.as_str())),
+                                None => spec.wheel[d.index()] = Some(pin),
+                            }
+                        }
+                    }
+                    None => errors.push(format!("{at}: `wheel` is a map from a direction to a section")),
+                }
+            }
+            if spec.wheel.iter().all(|p| p.is_some()) && spec.pinned(&ui::Pin::Own(ui::Section::More)).is_none() {
+                errors.push(format!("{at}: `wheel` pins all eight and no `more`: the acts it leaves out could not be reached"));
+            }
+            if out.iter().any(|o| o.on == spec.on && o.kinds == spec.kinds) {
+                errors.push(format!("{at}: another row has the same `on` and `kinds` (the first wins)"));
+                continue;
+            }
+            // A row with a problem in its wheel is left out: its places keep their list.
+            if errors.len() > before && spec.choose == ui::Choose::Wheel {
+                continue;
+            }
+            out.push(spec);
+        }
+        out
     }
 
     /// One declaration over its defaults. Each field that is wrong keeps its default.
@@ -293,6 +418,22 @@ impl Scripts {
             match why {
                 Some(w) => err(format!("{f}: `source: {}`: {w}", src.as_str())),
                 None => u.source = Some(src),
+            }
+        }
+        // A second wheel only for a small fixed set: directions must not move as one carries or
+        // learns things (docs/INTERFACE.md §8.1).
+        if u.choose == ui::Choose::Wheel {
+            use ui::ItemSource as S;
+            let n = spec.map_or(0, |k| k.items.len());
+            let why = match u.source {
+                Some(S::SpecItems | S::Products) if n > 8 => Some(format!("a wheel holds at most eight, and `{name}_spec()` lists {n}")),
+                Some(S::SpecItems | S::Products | S::Signals) => None,
+                Some(s) => Some(format!("`{}` changes as one carries or learns things, so its directions would not hold (a wheel takes `spec_items`, `signals` or `products`)", s.as_str())),
+                None => Some(format!("`{name}` chooses no item")),
+            };
+            if let Some(w) = why {
+                err(format!("{f}: `choose: \"wheel\"`: {w}"));
+                u.choose = ui::Choose::List;
             }
         }
         if let Some(d) = field!("detail", |v| text(f, "detail", v)) {
@@ -455,6 +596,17 @@ impl Scripts {
             }
         }
         None
+    }
+
+    /// The world's `menus()` rows, in order (none: every place keeps its list).
+    pub fn menus(&self) -> &[ui::MenuSpec] {
+        &self.ui.menus
+    }
+
+    /// The `menus()` row for a target of this kind at this place: the first that covers it.
+    /// None means the list (a world that declares nothing plays as today).
+    pub fn menu_for(&self, on: On, kind: &str) -> Option<&ui::MenuSpec> {
+        self.ui.menus.iter().find(|m| m.covers(on, kind))
     }
 
     /// The work reading the declarations took (deterministic units, for the cost test).

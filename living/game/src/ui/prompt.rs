@@ -152,7 +152,7 @@ pub fn update(
 ) {
     let f = binds.first(Act::Interact);
     // What F acts on, and what a tap does.
-    let aimed = verbs.aim.as_ref().filter(|_| !input.chat_open && verbs.menu.is_none() && model.death.is_none());
+    let aimed = verbs.aim.as_ref().filter(|_| !input.chat_open && verbs.menu.is_none() && verbs.wheel.is_none() && model.death.is_none());
     let person = aimed.and_then(|a| match a {
         crate::verbs::Aim::Creature { id } => model.actors.iter().find(|x| x.id == *id as u64),
         _ => None,

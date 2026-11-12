@@ -35,6 +35,7 @@ pub mod say;
 pub mod settings;
 mod theme;
 pub mod tips;
+pub mod wheel;
 mod top;
 mod verbs;
 pub mod win;
@@ -87,11 +88,11 @@ impl Plugin for UiPlugin {
             .add_systems(PreStartup, (theme::load_fonts, icons::build))
             .init_resource::<ThemeState>()
             // The UI's trees are spawned once the theme is known, and again on each new theme.
-            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
+            .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, wheel::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
         let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
-        let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update);
+        let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update, wheel::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(sample::fill).before(UiSystems::Prepare));
@@ -346,6 +347,10 @@ fn dump(
         // The notes on screen now (the facing-sight readout among them).
         "toasts": model.verbs.toasts.iter().map(|(t, _, _)| t.clone()).collect::<Vec<_>>(),
         "extra": extra.json(),
+        // The open wheel: whom, how it opened, its sections, the one selected, what is behind More.
+        "wheel": verbs.wheel.as_ref().map(|w| serde_json::json!({"title": w.title, "held": w.held, "sel": w.sel.map(|d| d.as_str()), "vec": [w.vec.x, w.vec.y], "at": [w.at.x, w.at.y],
+            "sections": w.layout.sections.iter().map(|s| serde_json::json!({"dir": s.dir.as_str(), "what": s.what.name(), "label": w.labels.get(&s.what), "allowed": s.allowed, "pinned": s.pinned, "sub": s.sub, "reason": w.reasons.get(&s.what)})).collect::<Vec<_>>(),
+            "more": w.layout.more.iter().map(|p| p.name()).collect::<Vec<_>>()})),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
     });
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
@@ -371,6 +376,7 @@ pub struct DumpExtra<'w, 's> {
     fov: Option<Res<'w, crate::facing::FovState>>,
     heard: Option<Res<'w, crate::heardmark::HeardMarks>>,
     edge: Option<Res<'w, crate::sightedge::SightEdge>>,
+    mouths: Option<Res<'w, crate::mouth::Mouths>>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -395,7 +401,9 @@ impl DumpExtra<'_, '_> {
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
-            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
+            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()),
+            // Each speaking body's mouth now (`mouth.rs`), by character id.
+            "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())})
     }
 }
 

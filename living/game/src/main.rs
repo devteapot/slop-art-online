@@ -37,6 +37,7 @@ mod island;
 mod live;
 mod loading;
 mod lookdev;
+mod mouth;
 mod net;
 mod perf;
 mod phase;
@@ -72,7 +73,12 @@ fn main() {
     let mut app = App::new();
     let size = capture::size();
     // Assets live beside the crate, wherever the binary is run from.
-    let plugins = DefaultPlugins.set(AssetPlugin { file_path: lookdev::asset_root(), ..default() });
+    // Character files carry their outline's directions (`_OUTLINE_NORMAL`, outline_normals.py),
+    // smoothed across their meshes; meshes without it get them generated (`style::outline_normals`).
+    // The gltf crate names a custom attribute without its leading underscore (`Semantic::Extras`).
+    let plugins = DefaultPlugins
+        .set(AssetPlugin { file_path: lookdev::asset_root(), ..default() })
+        .set(bevy::gltf::GltfPlugin::default().add_custom_vertex_attribute("OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL));
     let headless = capture::headless();
     if headless {
         // Scripted photographs: no window; the camera renders into an image (capture.rs).
@@ -185,6 +191,8 @@ fn main() {
         app.add_plugins(verbs::VerbsPlugin);
         // Whom the text box speaks to: the person pointed at or the nearest within earshot.
         app.add_plugins(talk::TalkPlugin);
+        // Mouths move while their lines show (presentation only).
+        app.add_plugins(mouth::MouthPlugin);
         // How the edge of my sight is shown: fade, not seen now, limited view (F2).
         app.add_plugins(sightedge::SightEdgePlugin);
         app.add_plugins(sightfield::SightFieldPlugin);

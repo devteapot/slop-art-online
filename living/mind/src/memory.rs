@@ -26,6 +26,7 @@ use anyhow::Result;
 use neo4rs::{query, BoltType, Graph};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 /// A graph patch written by a reasoning episode (already sanitized).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -829,6 +830,9 @@ const STOP: &[&str] = &[
     "done", "take", "well", "even", "keep", "let's", "lets", "yours", "mine", "ours", "these", "those", "because", "again", "right", "now", "tiles", "tile",
     "someone", "something", "thing", "things", "feel", "feels", "felt", "look", "looks", "away", "around", "near", "nearest", "north", "south", "east", "west",
     "northeast", "northwest", "southeast", "southwest", "first", "time", "respond", "json", "object", "you're", "we're", "i'll", "we'll",
+    // How everyone unnamed is perceived ("a stranger"): it says nothing about which one, so it
+    // must not bring back every stranger's deeds (people are cued by their `person:<id>`).
+    "stranger",
     // The engine's own vocabulary in reasons and feedback says nothing about the world.
     "note", "parts", "previous", "graph", "invalid", "dropped", "branch", "applies", "apply", "skill", "goto", "target", "composite", "current",
     "plan", "nothing", "works", "action", "actions", "failing", "fails", "failed", "sight", "reply", "node", "nodes", "most", "least", "wait",
@@ -876,6 +880,9 @@ pub struct Recalled {
     pub stances: Vec<(String, f64)>,
     pub people: Vec<(u32, f64)>,
     pub memories: Vec<(u64, u64, String)>,
+    /// Who each memory in `memories` involves, as this mind names them (the person nodes'
+    /// names: "Bram", "a stranger #77"), by the memory's experience.
+    pub involved: HashMap<u64, Vec<String>>,
     /// Cued memories to rehearse (see [`Store::rehearse`]).
     pub rehearse: Vec<u64>,
     pub seeds: usize,
@@ -1191,9 +1198,124 @@ impl Store {
             }
         }
         mems.sort_by_key(|m| m.1);
+        out.involved = self.involved(actor, &mems.iter().map(|m| m.0).collect::<Vec<_>>()).await?;
         out.memories = mems;
         out.ms = started.elapsed().as_millis() as u64;
         Ok(out)
+    }
+
+    /// The people kept memories involve, by experience: their nodes' names, so a gist that
+    /// says "a stranger" is shown with which one ("a stranger #77", or the name learned since).
+    /// Indexed point lookups of the memories' own keys.
+    async fn involved(&self, actor: u32, exps: &[u64]) -> Result<HashMap<u64, Vec<String>>> {
+        let mut out: HashMap<u64, Vec<String>> = HashMap::new();
+        if exps.is_empty() {
+            return Ok(out);
+        }
+        let keys: Vec<String> = exps.iter().map(|e| format!("exp:{e}")).collect();
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "UNWIND $keys AS k
+                     MATCH (m:Concept {run: $run, actor: $actor, key: k})-[:INVOLVES]->(p:Concept)
+                     WHERE p.key STARTS WITH 'person:' AND NOT p:Merged
+                     RETURN m.exp AS exp, coalesce(p.name, p.key) AS name ORDER BY p.key",
+                    actor,
+                )
+                .param("keys", keys),
+            )
+            .await?;
+        while let Some(r) = rows.next().await? {
+            out.entry(r.get::<i64>("exp").unwrap_or(0) as u64).or_default().push(r.get("name").unwrap_or_default());
+        }
+        Ok(out)
+    }
+
+    /// Give existing person nodes the names this mind now knows them by (`(key, name)`); a node
+    /// that does not exist is not made. Run at each integration for the people its experiences
+    /// involve, so a stranger's node takes the name once it is learned even when the model wrote
+    /// nothing about them.
+    pub async fn rename_people(&self, actor: u32, names: &[(String, String)]) -> Result<()> {
+        if names.is_empty() {
+            return Ok(());
+        }
+        let rows: Vec<Value> = names.iter().map(|(k, n)| json!({"key": k, "name": n})).collect();
+        self.g
+            .run(self.q(
+                "UNWIND $rows AS r
+                 MATCH (c:Concept {run: $run, actor: $actor, key: r.key})
+                 WHERE coalesce(c.name, '') <> r.name
+                 SET c.name = r.name",
+                actor,
+            )
+            .param("rows", p(Value::Array(rows))))
+            .await?;
+        Ok(())
+    }
+}
+
+/// Anchor person keys a reply wrote as a description (`person:the_stranger`: not an id and,
+/// read as a name, `is_name` of nobody) to ids: each edge's end to the one person the
+/// experiences that edge cites involve whom the mind does not know by name (`unnamed_in`),
+/// where there is exactly one, and the key's node, retractions and merges where all its edges
+/// went to one person. "The stranger" who taught and "the stranger" who cooked become the two
+/// people they were, never one node gathering both deeds; a description with no single person
+/// behind it stays a concept of its own. Returns `(description, id)` for each edge end anchored.
+pub fn anchor_described(patch: &mut Patch, is_name: &dyn Fn(&str) -> bool, unnamed_in: &dyn Fn(u64) -> Vec<u32>) -> Vec<(String, u32)> {
+    let describes = |k: &str| k.strip_prefix("person:").is_some_and(|rest| rest.parse::<u32>().is_err() && !is_name(&rest.trim_start_matches('#').replace('_', " ")));
+    let mut anchored: Vec<(String, u32)> = Vec::new();
+    let mut by_key: HashMap<String, std::collections::BTreeSet<u32>> = HashMap::new();
+    for e in patch.edges.iter_mut() {
+        let mut ids: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        for x in &e.because {
+            ids.extend(unnamed_in(*x));
+        }
+        for k in [&mut e.from, &mut e.to] {
+            if !describes(k) {
+                continue;
+            }
+            let set = by_key.entry(k.clone()).or_default();
+            if ids.len() == 1 {
+                let id = *ids.iter().next().unwrap();
+                set.insert(id);
+                anchored.push((k.clone(), id));
+                *k = format!("person:{id}");
+            } else {
+                // Unanchored here: the key's other uses cannot take one person either.
+                set.insert(0);
+            }
+        }
+    }
+    let one: HashMap<String, u32> = by_key.into_iter().filter(|(_, ids)| ids.len() == 1 && !ids.contains(&0)).map(|(k, ids)| (k, *ids.iter().next().unwrap())).collect();
+    let fix = |k: &mut String| {
+        if let Some(id) = one.get(k.as_str()) {
+            *k = format!("person:{id}");
+        }
+    };
+    for n in patch.nodes.iter_mut() {
+        fix(&mut n.key);
+    }
+    for r in patch.retract.iter_mut() {
+        fix(&mut r.0);
+        fix(&mut r.2);
+    }
+    for m in patch.merges.iter_mut() {
+        fix(&mut m.0);
+        fix(&mut m.1);
+    }
+    anchored
+}
+
+/// A recalled memory's gist with the people it involves that the gist does not already name:
+/// "A stranger was teaching Lio (with a stranger #77)".
+pub fn with_involved(gist: &str, involved: Option<&Vec<String>>) -> String {
+    let low = gist.to_lowercase();
+    let extra: Vec<&str> = involved.into_iter().flatten().map(|s| s.as_str()).filter(|n| !n.is_empty() && !low.contains(&n.to_lowercase())).collect();
+    if extra.is_empty() {
+        gist.to_string()
+    } else {
+        format!("{gist} (with {})", extra.join(", "))
     }
 }
 
@@ -1975,7 +2097,7 @@ mod tests {
                        "words": cues.words.iter().map(|w| &w.0).collect::<Vec<_>>(),
                        "facts": r.facts.iter().map(|f| render_keys(f, &t)).collect::<Vec<_>>(),
                        "stances": r.stances, "people": r.people,
-                       "memories": r.memories.iter().map(|m| &m.2).collect::<Vec<_>>()})
+                       "memories": r.memories.iter().map(|m| with_involved(&m.2, r.involved.get(&m.0))).collect::<Vec<_>>()})
             );
         }
     }
@@ -1984,6 +2106,105 @@ mod tests {
     fn cue_words_fold_plurals_and_skip_filler() {
         assert_eq!(cue_words("Wolves near the ford! Berries, stores and the fishing spot."), vec!["wolv", "wolf", "ford", "berr", "store", "fish", "spot"]);
         assert!(cue_words("that this with from").is_empty());
+        // "A stranger" names no one in particular: it cues nobody's deeds.
+        assert_eq!(cue_words("A stranger is teaching the strangers' children"), vec!["teach", "children"]);
+    }
+
+    #[test]
+    fn recalled_memories_say_who_they_involve() {
+        let who = vec!["a stranger #77".to_string(), "Lio".to_string()];
+        assert_eq!(with_involved("A stranger was teaching Lio to hunt.", Some(&who)), "A stranger was teaching Lio to hunt. (with a stranger #77)");
+        assert_eq!(with_involved("Lio caught a fish.", Some(&vec!["Lio".to_string()])), "Lio caught a fish.");
+        assert_eq!(with_involved("Rain at dawn.", None), "Rain at dawn.");
+    }
+
+    /// `person:the_stranger` is anchored, edge by edge, to the one unnamed person each edge's
+    /// cited experiences involve; with two, or none, it stays its own concept; a name is never
+    /// taken as a description.
+    #[test]
+    fn described_people_anchor_to_one_id_per_edge() {
+        let v = json!({
+            "nodes": [{"key": "person:the_stranger", "name": "the stranger"}, {"key": "person:spear_teacher", "name": "the spear teacher"}],
+            "edges": [
+                {"from": "person:the_stranger", "rel": "TEACHES", "to": "person:5", "because": [10]},
+                {"from": "person:the_stranger", "rel": "COOKS", "to": "kind:campfire", "because": [11]},
+                {"from": "person:spear_teacher", "rel": "TEACHES", "to": "person:5", "because": [10]},
+                {"from": "person:the_strangers", "rel": "CAMP_AT", "to": "place:east", "because": [10, 11]},
+                {"from": "person:cal", "rel": "TEACHES", "to": "person:5", "because": [10]},
+                {"from": "person:someone_in_the_dark", "rel": "WALKS", "to": "place:east", "because": [12]},
+                {"from": "person:77", "rel": "TEACHES", "to": "person:5", "because": [10]}
+            ]});
+        let (mut p, _) = patch_from(&v, &[10, 11, 12], &|_| None);
+        let unnamed = |x: u64| match x {
+            10 => vec![77],
+            11 => vec![200],
+            _ => vec![],
+        };
+        let anchored = anchor_described(&mut p, &|n| n == "cal" || n == "lio", &unnamed);
+        let ends: Vec<String> = p.edges.iter().map(|e| format!("{} {}", e.from, e.rel)).collect();
+        assert_eq!(ends, ["person:77 TEACHES", "person:200 COOKS", "person:77 TEACHES", "person:the_strangers CAMP_AT", "person:cal TEACHES", "person:someone_in_the_dark WALKS", "person:77 TEACHES"]);
+        assert_eq!(anchored.len(), 3, "{anchored:?}");
+        let nodes: Vec<&str> = p.nodes.iter().map(|n| n.key.as_str()).collect();
+        assert_eq!(nodes, ["person:the_stranger", "person:77"], "a description used for two people keeps its own node; one used for one person is that person");
+    }
+
+    /// Two strangers a mind does not know by name are two nodes, each with its own name and
+    /// deeds: what cues one (its id, "a stranger" in the words) never brings back the other's
+    /// deeds, a memory is shown with who it involves, and when one is named its node takes
+    /// the name.
+    #[tokio::test]
+    #[ignore]
+    async fn strangers_stay_apart() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-strangers-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Teodor").await.unwrap();
+        let now = crate::llm::now_ms();
+        let v = json!({
+            "nodes": [{"key": "person:77", "labels": ["Person"], "name": "a stranger #77"}, {"key": "person:200", "labels": ["Person"], "name": "a stranger #200"},
+                      {"key": "person:5", "labels": ["Person"], "name": "Lio"}],
+            "edges": [{"from": "person:77", "rel": "TEACHES_SPEAR", "to": "person:5", "confidence": 0.9, "because": [10]},
+                      {"from": "person:200", "rel": "STANDS_SILENT_AT", "to": "idea:the_cookfire", "confidence": 0.9, "because": [11]}],
+            "remember": [{"exp": 10, "gist": "A stranger was teaching Lio to hunt with a spear."}, {"exp": 11, "gist": "A stranger stood silent by our fire."},
+                         {"exp": 12, "gist": "Rain at dawn."}, {"exp": 13, "gist": "The mill wheel creaked."}]
+        });
+        let involves = |x: u64| match x {
+            10 => vec!["person:77".to_string(), "person:5".to_string()],
+            11 => vec!["person:200".to_string()],
+            _ => vec![],
+        };
+        let (p, _) = patch_from(&v, &[10, 11, 12, 13], &|x| Some((now - 1000 * (20 - x), 0.8, involves(x))));
+        s.apply(1, &p, "t1", now).await.unwrap();
+        // The newcomer (#200) is in sight and someone says "a stranger".
+        let mut cues = Cues::default();
+        cues.key("person:200", 1.0);
+        cues.text("A stranger is standing at the fire; who is the stranger?", 1.0);
+        let r = s.recall(1, &cues.bounded(), 12, 3).await.unwrap();
+        let facts: Vec<String> = r.facts.iter().map(|f| render(f, &|_| String::new())).collect();
+        assert!(facts.iter().any(|f| f.contains("a stranger #200 (person:200)") && f.contains("STANDS_SILENT_AT")), "{facts:?}");
+        assert!(!facts.iter().any(|f| f.contains("person:77")), "the other stranger's deeds came back: {facts:?}");
+        assert!(!r.memories.iter().any(|m| m.0 == 10), "the other stranger's memory came back: {:?}", r.memories);
+        assert_eq!(with_involved(&r.memories.iter().find(|m| m.0 == 11).expect("its own memory").2, r.involved.get(&11)), "A stranger stood silent by our fire. (with a stranger #200)");
+        // "the stranger" alone cues no one.
+        let mut cues = Cues::default();
+        cues.text("the stranger", 1.0);
+        assert_eq!(s.recall(1, &cues.bounded(), 12, 3).await.unwrap().seeds, 0);
+        // Cued by #77, its own memory comes back, said to be about #77; then #77 tells its name.
+        let mut cues = Cues::default();
+        cues.key("person:77", 1.0);
+        let r = s.recall(1, &cues.clone().bounded(), 12, 3).await.unwrap();
+        assert_eq!(with_involved(&r.memories.iter().find(|m| m.0 == 10).expect("its memory").2, r.involved.get(&10)), "A stranger was teaching Lio to hunt with a spear. (with a stranger #77)");
+        assert!(!r.memories.iter().any(|m| m.0 == 11), "{:?}", r.memories);
+        s.rename_people(1, &[("person:77".into(), "Cal".into()), ("person:404".into(), "Nobody".into())]).await.unwrap();
+        let r = s.recall(1, &cues.bounded(), 12, 3).await.unwrap();
+        assert_eq!(r.involved.get(&10), Some(&vec!["Lio".to_string(), "Cal".to_string()]));
+        let mut q = s.g.execute(query("MATCH (c:Concept {run: $run, actor: 1}) WHERE c.key STARTS WITH 'person:' RETURN c.key AS key, c.name AS name ORDER BY key").param("run", run.clone())).await.unwrap();
+        let mut people = Vec::new();
+        while let Some(row) = q.next().await.unwrap() {
+            people.push(format!("{}={}", row.get::<String>("key").unwrap(), row.get::<String>("name").unwrap_or_default()));
+        }
+        assert_eq!(people, vec!["person:200=a stranger #200", "person:5=Lio", "person:77=Cal"], "renaming makes no node");
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
     }
 
     #[test]

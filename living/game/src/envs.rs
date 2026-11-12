@@ -32,7 +32,6 @@ use crate::style::{outline, Outlined, Style};
 use crate::world::{hash, rgb, scale, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
-use bevy_mod_outline::OutlineMeshExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::f32::consts::{PI, TAU};
@@ -963,7 +962,7 @@ pub fn switch(
                 .entry((slot.kind.clone(), variant))
                 .or_insert_with(|| {
                     let (mut b, g) = placeholder(&slot.kind, variant * 17 + si as u32);
-                    let _ = b.generate_outline_normals(&Default::default());
+                    crate::style::outline_normals(&mut b);
                     (meshes.add(b), g.map(|g| meshes.add(g)))
                 })
                 .clone();

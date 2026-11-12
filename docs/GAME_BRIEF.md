@@ -294,6 +294,65 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
     - **Calibration:** the limits were set on the 2026-11-11 library, where 14 of the 32 Kimodo picks fail a check (listed in the script's header).
     - **First use (2026-11-11):** work, play, sit_ground_down, sit_ground and stand_up_ground were redone, then redone again after dev-box's in-game review asked for an upright, live seat. The seat is now its own pose entry, `sit_ground_pose`, keyed by all three, as `stand` is for standing. The entries' notes give the scores. The locomotion entries (assets-locomotion) were scored against the laptop's request and in-game verdicts (metres a cycle against the forward gait, seam angle), and the failing ones were retaken or re-picked.
     - **Posture and work metrics** (for `--expect`): `torso_pitch_deg` and `head_pitch_deg` (+ leans forward; standing −2 and 8), `shoulder_range_cm`, `seated_feet_min_cm` (the ankles' lowest height while seated; standing 7), `bench_busy_share` (both hands at bench height in front, one moving), `hops`, `cycle_ratio` (metres a cycle against walk_brisk or run_fast) and `loop_seam_deg`. Raw numbers differ from the baked ones: the bake picks its own loop cut and scales each rig, so the raw cycle ratio and seam angle read better than the laptop's bake.
+    - **Gait metrics (2026-11-11, speed takes):** `toe_slide_pct` is the laptop's no-slide line measured on the raw take: the slower toe within 5 cm of the floor, as a share of the body's speed (median after the skip; check it with `--expect 'toe_slide_pct<=5'`). The 2026-11-11 picks read 2.1–2.4 % (walk, walk_brisk), 4.5 and 3.2 % (run, run_fast), 7.4 % (run_back) and 8.5 and 8.1 % (strafe_run left and right), within a point or two of the shares the laptop measured in the game. `air_share` (both feet up) separates a walk from a jog, and `hips_bounce_cm` shows a bounding run (run#1: 8). An entry's `cadence_ref` names the forward take made for the same speed, in place of the family's forward gait. Raw speed for a game speed is the game speed over 0.955 on Vivi (Shino 0.985, own-man 0.93).
+    - **Kimodo's speed ceiling (measured 2026-11-11; do not ask it again):** a clean run above about 4 m/s raw is beyond the motion model. The forward run was pinned to a path at each speed and scored on the toe line, feet under the floor and contact slide:
+
+      | Path speed, raw m/s (on Vivi) | Takes | Hold the 5 % toe line | Also keep feet within 2 cm of the floor and contact slide within 10 cm/s | Median toe slide | Median hips bounce |
+      |---|---|---|---|---|---|
+      | 3.6 (3.44) | 16 | 5 | 2 | 5.4 % | 12 cm |
+      | 3.8 (3.63) | 84 | 13 | 7 | 7.4 % | 12 cm |
+      | 4.0 (3.82) | 40 | 1 | 0 | 12.2 % | 12 cm |
+      | 4.2 (4.01) | 24 | 0 | 0 | 14.4 % | 12 cm |
+      | 4.4 (4.20) | 16 | 0 | 0 | 20.7 % | 16 cm |
+      | 4.7 (4.49) | 16 | 0 | 0 | 39.7 % | 22 cm |
+      | 5.03 (4.80) | 74 | 0 | 0 | 21.4 % | 56 cm |
+
+      - At 5.03 m/s raw (the rules' 4.8 m/s run) the 74 takes covered 7 prompts, text and constraint guidance from 1 to 3.5, a ramped path and an 8 s take. The foot skims the floor at body speed for about three frames before it plants, and the hips bound 20–140 cm.
+      - Unpinned, "runs forward fast" levels off at 3.5–3.7 m/s raw (where `run_fast#1` was cut), and an unpinned 8 s "sprint" slows to 0.2–1.9 m/s.
+      - The best clean run is `run_v48` s0: 3.8 m/s raw, 3.63 m/s natural on Vivi, 2.80 m a cycle raw (2.68 on Vivi, `run_fast`'s), toe slide 4.3 %. Baked with `--target run_v48=4.8` it is time-scaled about 1.32. At 4.8 m/s it steps as often as `run_fast` does.
+      - Backward, sideways and back-diagonal runs are worse: no take of 132 held the toe line at any path speed from 2.6 to 3.8 m/s raw (best 5.6–8 %, medians 8–16 %), and slide rises sharply above 3.4.
+      - A faster run, or a 5.5 m/s road sprint, therefore needs another source: retiming a clean take (the bake's `--target`, or the game's phase rate), another motion generator, or hand keys.
+      - Evidence: `~/kimodo-locomotion-2026-11-12/` on the Spark (`lab/run_v48*/checks.json`, `exp*/`), and `extra/` in the handoff `speed-1-forward-2026-11-11.tar.gz`.
+    - **Open goal: a clean run stride longer than 2.8 m a cycle raw** (2.68 on Vivi). No clip has one, which caps natural-looking running at about 4.3 m/s (the run speed was set to ×1.65 for that reason, 2026-11-12). Tried on 2026-11-11 and 12, all pinned to a path:
+      - **Faster paths.** Strides of 3.0 m or more appear above the ceiling (9 of 73 takes at 5.03 m/s raw, 4 of 24 at 4.2), never with clean feet: their best toe slide is 11.5 % and 9.1 %.
+      - **Prompts at the ceiling (3.8 m/s raw).** "fast with long strides", "sprints forward" and "with long bounding strides" give the same median stride (2.4–2.5 m); the seed decides more than the prompt. The longest clean, loopable stride of 84 takes is 2.80 m (`run_v48` s0).
+      - **A search for the stride itself** (`run_long` in the lab: 96 takes of "long bounding strides" and "huge leaping strides", loop cut held to 0.78–1.05 s, stride of 3.1 m asked): 2 takes reach 3.1 m, 8 hold the toe line, none passes. The one long stride with clean feet (s25 of the bounding prompt: 3.1, 3.7 and 3.4 m between right footfalls, toe slide 4.3 %) is uneven, each stride longer than the last (0.80, 0.97, 0.90 s), so it does not loop: pose 12.6 cm off (limit 8), velocity 0.93 m/s (limit 0.6).
+      - **Guidance, a ramped path, an 8 s take:** tried at 5.03 m/s raw only (above), not at the ceiling.
+      - **Not tried:** pinning footfalls at a long stride's spacing (Kimodo has `LeftFootConstraintSet` and `RightFootConstraintSet`; `batch.py` uses only the root path and full-body keyframes); keying a take's start and end to the same mid-stride pose a long stride apart; lengthening a clean take's stride in the bake (scaling the feet's travel and the belt together, then the leg IK). Retiming alone does not help: it changes how often a clip steps, not how far a step goes.
+    - **The walk has a ceiling too (2026-11-12):** a clean true walk (never both feet up, toe line held) stops at about 3.0 m/s on Vivi.
+
+      | Path speed, raw m/s (on Vivi) | Takes | Never both feet up | Also hold the 5 % toe line | Pass every check |
+      |---|---|---|---|---|
+      | 2.72 (2.60) | 62 | 41 | 30 | 6 (`walk_v26` s37) |
+      | 3.14 (3.00) | 88 | 40 | 12 | 1 with the plant rule, 2 without (`walk_v30` s82) |
+      | 3.28 (3.13) | 32 | 20 | 1 | 0 |
+      | 3.42 (3.27) | 72 | 48 | 1 | 0 (`walk_v34` s83 is the near-miss: toe slide 6.1 %, a 3.8-frame plant) |
+      | 3.56 (3.40) | 88 | 24 | 0 | 0 |
+
+      For a 3.4 m/s walk, `walk_v30` driven at 3.4 (time scale 1.14) is cleaner than any take made near 3.4.
+    - **Lessons from the laptop's verdicts on the speed takes (2026-11-12):**
+      - **Planted slide is the gate for gaits.** `plant_slide_cm` is the game's `living/tools/marker_check.py` slide, emulated on the raw take driven at the entry's `game_speed` (game m/s on Vivi). For each plant, the slower of two points (the heel point under the ankle, a quarter of the foot behind it, and the ball) is followed against the ground passing at the clip's own speed, and its movement is summed; the worst plant counts. It is a distance per plant in cm, not a share of speed, so compare it with marker_check's number, not with `toe_slide_pct`. The check is built in for every gait at marker_check's 4 cm. `plants` (per foot), `plant_frames_min` and `plant_frames_med` come from the same emulated foot-down markers (heel point or ball within 3 cm of the sole's standing height and at most 0.3 game m/s, gaps of 2 frames filled, plants of 2 dropped, after the bake's re-timing); the laptop's rule is 4 frames or more (`--expect 'plant_frames_min>=4'`).
+      - **How far the raw number can be trusted** (2026-11-12, against the laptop's marker_check on the baked clips of three rigs):
+
+        | Clip (time scale) | `plant_slide_cm`, raw | Laptop, baked, cm | Agree at 4 cm? |
+        |---|---|---|---|
+        | `walk_v30` (1.00) | 2.9 | 3–7, accepted | yes |
+        | `walk_v34` (1.04) | 4.8 | 10–19, failed | yes |
+        | walk diagonals of the 2.6 set (1.00) | 2.6, 3.7, 3.2, 3.0 | 3–9 | yes |
+        | `walk_back_v26` (1.00) | 4.6 | 14–24 | yes |
+        | `strafe_walk_left_v26` (1.00) | 4.7 | 15–21 | yes |
+        | `walk_brisk` #1 (1.00, unpinned) | 4.7 | 3–6, today's clip | no: the raw number is over the line |
+        | `run_back_v48` (1.48) | 2.1; feet plant 2 and 1 times in 3.5 s | 37–40 | no |
+        | `run_diag_fr_v48` (1.48) | 2.0 | 21 | no |
+        | `run_diag_fl_v48`, `run_diag_bl_v48` (1.48) | 2.3, 1.2; bl plants once a foot | clean | slide yes; the plant count is too strict on bl |
+        | `strafe_run_left_v48`, `strafe_run_right_v48`, `run_diag_br_v48` (1.48) | 1.3–2.2; 2–3 plants a foot, shortest 3 frames | a foot never planted | by plants, not by slide |
+
+        - **Walks near their own speed:** it sides with the laptop on all eight reported takes, but it reads 2 to 5 times lower than the bake on the failing ones (4.6–4.8 against 10–24 cm), so the margin at the line is thin: the worst passing walk reads 3.7 and the best failing one 4.6.
+        - **Takes scaled well past their own speed (×1.3 and more):** the raw slide does not show the bake's (2 against 21–40 cm). The warning there is the plants: a 3-frame shortest plant and feet that plant fewer times than they step. Hold those to `plant_frames_min>=4` and a plant every stride.
+        - Unpinned takes that speed up over their length (`walk_brisk` #1, `walk_v26`'s last second at 6.2) read high because the whole take after the skip is scored, not the bake's one cut cycle.
+        - marker_check on the baked clip stays the final word; the lab's number is for not handing off what will plainly fail. The bake cannot be run on the Spark (no Blender).
+      - **One stride a loop.** Keep the entry's `cycle` upper bound under twice the take's step period: two diagonal walks with a 0.6–0.68 s period and `cycle` up to 1.2 s were cut as two strides.
+      - **Directional takes are not worth more lab time for now.** None of the 14 backward, sideways and diagonal takes of the 2.6 m/s walk set and the 4.8 m/s run set was wired. Since look-walk the legs stay on the travel line, so directional loops play only after sudden turns and at the twist limit, where the procedural fallback does as well.
     - **Not covered:** it judges the raw take, not the retargeted VRoid clip. Skirts, grips, the game's foot IK and how a clip looks in the renderer are judged in the game.
   - **Loops:** idle, idle_look, walk, walk_brisk, run, run_fast, sneak, talk, talk_explain, listen and sit_idle are cut where pose and foot contacts match, and their seams are spread.
   - **One-shots:** wave, point, sit_down, stand_up, stand_up_ground, sword_slash, sword_overhead, sword_thrust, block, dodge, hit, death, cast and bow_shoot. Kimodo keyframes them to a shared neutral standing pose at the ends that should blend with idle. sit_idle and stand_up continue from sit_down.
@@ -922,7 +981,8 @@ All five are in the same finishing pass, from the same sight field. `memory` add
 - **The switch:** F5, or the switch in Settings › Play. `set_world_law` is admin only, and the player's identity gets no admin rights. A play scene that opts in (`"law_toggle": true`) has its launcher give the client the world admin's token in a private file. The client opens a second connection with it, for that one call and only to a `verify-*` world. Elsewhere the line is read-only.
 - **The walk speed:** the same path (`facing::set_law`) sets the world's walk law (`facing::WALK_LAW`, the Spark's `walk_base`). Settings › Play › Walk speed offers 2.6, 3.0 or 3.4 m/s, and shows the value read-only without the link.
 - **The look:** `human_face(dx, dy)` (`controls::look`).
-  - Facing the cursor, the cursor's direction is sent while standing. While a direction is held the look is released (`FACE_WHILE_MOVING`, off until look-2 makes a look turn only the facing): on main a look bends the walk itself, which play-test 5 felt as drift.
+  - Facing the cursor, the cursor's direction is sent standing and walking (`FACE_WHILE_MOVING`, on since look-3). Until dev-box's look-2 it was off and a look was released while a direction was held, because a look then bent the walk itself, which play-test 5 felt as drift. With look-2 the travel follows the keys at full speed (1.00× along the keys at 45, 90 and 135°, verify-ui look-walk) and the look turns only the facing, at most `look_walk_deg` (75°) off it.
+  - Every body's upper body follows the authority's facing (`live.rs` `authority_facing`, the row's `face_off`, `face_turn` and `face_turn_s` through `steer::facing`). My own body draws my look ahead of the row. The look-walk presets share the facing between head and chest; the legs stay on the travel.
   - Facing where you walk, a look is sent only while a move is aimed, then released.
 - **Heard, not seen:** each `heard_sounds` row is a soft, fading mark on the ground that compass way, at its band's rough distance (near, close, far), keyed by its per-viewer key (`heardmark.rs`). Visual only.
 - **Verified:** `verify-ui` `field` ([its recipe](../.agents/skills/verify-ui/features/field.md)).
@@ -1270,6 +1330,8 @@ Settings › Play › Look chooses it, F4 cycles it (a note names it: "Theme: Ni
 **Offers to me** (`ui/people.rs`, from the `my_offers` and `my_records` views): each standing swap offer, and each proposal of terms, is a card in its maker's window ("A stranger in green offers you 2 berries for 1 wood."; terms with their words and "The world keeps count of what each owes."). A new one opens their window when the left anchor is free and says so in a note (terms are told by the rules' own record note). The card's buttons are the skills whose `_ui()` puts them on `offer` (Accept and Decline, both with the trade icon), sent as `living_rules::ui::act_node` toward `ActTarget::Offer` (`"offer": id`) or, for terms, `ActTarget::Record` (`"record": id`), so a card's act takes exactly that card's offer. A refusal ("Out of reach", "that offer is gone") is noted in the rules' words and the card stays. Decline tells the maker ("… declined your offer of 2 berries for 5 hide."). The card goes when its row does (taken, declined, withdrawn, offered again or out of time). One function (`answer_offer`) builds every answer.
 
 **Face is in no list** (play-test 5: "I don't like the F to face things … I never use it"; the rules refused it seven times in the session). `face_ui() { on: [], tip: "You face where you look." }`: a player faces where it looks (`human_face`), minds keep the act. `living_rules::ui` accepts an empty `on` only with a `tip` saying how a player does it instead, and the client's lists keep only what a skill's `UiSpec` puts on that kind of target (the defaults are the lists' own, so only a declaration changes them).
+
+**The wheel** (ui-1 step 5, docs/INTERFACE.md §8; play-test 5, item 5): hold F on a person or a thing whose place the world's `menus()` gives a wheel, move toward a section, let go. A person's wheel: Talk n, Give ne, Offer e, Teach se, More s, Their window sw, Look over w, Wave nw. Cullet's fuel fires: Make n, Feed e. A pinned act keeps its direction and greys in place when the rules refuse it, with their reason in the hub, and is sent all the same when chosen (the authority's note says the same words); other acts fill the free directions while allowed; the rest is behind More, the full list. While it is open the cursor is held: motion moves the selection and the view does not turn; it hides, and comes back where it was. A flick (F and a quick move) chooses before it draws; digits 1–8 choose at once; Esc or letting go in the hub sends nothing; another bar key closes it so a player attacked mid-choice can fight. C (acts on yourself), the pack and offers keep their lists and buttons. A `›` section opens its list (a second wheel, the products grid and running arcs are not built yet).
 
 **Fixed from talk-1:**
 - Health read "111 / 110" (here "110 / 109"). The authority's row was hp = max_hp = 109.48 (owner SQL on `verify-ui-a`; no row of the 311 in that world exceeds its max): the client rounded hp up and max to nearest. Both now round alike (`ui::hp_text`).

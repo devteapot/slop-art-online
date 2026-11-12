@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Write the shared style files (docs/CHARACTERS.md, "Hair styles" and "Outfit pieces"). Output is
+# git-ignored.
+# - lookdev/styles/hair/<style>.glb: a hair style, alone, built once on the standard head
+#   (person_params.STYLE_HEAD): the `Hair` mesh, its tie in cloth where it has one, and on the same
+#   skeleton the far mesh `FarHair`; spring chains under J_Id_Cranium; neutral shades for the
+#   client's tag. `<style>.cap.glb` is the style as worn under a cap.
+# - lookdev/styles/outfit/<piece>.glb: an outfit piece, alone, built once at the standard build:
+#   the `Cloth` mesh and its far mesh `FarCloth`, skinned to the J_Bip_* bones every person has.
+#   Body pieces come as `-m` and `-f`; `cap` and `kerchief` sit on the standard head.
+# No file holds a head, a body or clips. The strand picture is the one shared file. A person wears
+# them on any face type and build: compose.py shows the rule.
+# Usage: living/tools/blender/gen_styles.sh [hair|outfit|NAME ...]     (default: everything)
+#   JOBS=<n>     how many to build at once (default 6)
+#   OUT=<dir>    where to write (default living/game/assets/lookdev/styles)
+set -euo pipefail
+cd "$(dirname "$0")/../../.."
+root=${OUT:-living/game/assets/lookdev/styles}
+shared=living/game/assets/lookdev/strands.png
+blender=${BLENDER:-blender}
+mkdir -p "$root/hair" "$root/outfit"
+names() {
+  python3 -c "
+import sys; sys.path.insert(0, 'living/tools/blender'); sys.path.insert(0, 'living/tools/characters'); import person_params as p
+hair = ['hair/' + s for s in p.STYLES] + ['hair/' + s + '.cap' for s in p.CAPPED]
+outfit = ['outfit/' + n + f for n in p.PIECES for f in ('-m', '-f')] + ['outfit/' + n for n in p.HEAD_PIECES]
+print('\\n'.join(dict(hair=hair, outfit=outfit, all=hair + outfit)['$1']))"
+}
+items=()
+[ $# -gt 0 ] || set -- all
+for a in "$@"; do
+  case "$a" in
+    hair|outfit|all) while read -r n; do items+=("$n"); done < <(names "$a") ;;
+    */*) items+=("$a") ;;
+    *) echo "gen_styles: name a file as hair/<style> or outfit/<piece>" >&2; exit 1 ;;
+  esac
+done
+one() {
+  item=$1; root=$2; blender=$3; shared=$4
+  kind=${item%%/*}; n=${item#*/}
+  log=$(mktemp); tmp=$(mktemp -d)
+  if [ "$kind" = hair ]; then
+    args=(--variant "style:$n" --parts hair)
+  else
+    keep=$(python3 -c "import sys; sys.path.insert(0, 'living/tools/blender'); sys.path.insert(0, 'living/tools/characters'); import person_params as p; print(','.join(p.piece_parts('$n')))")
+    args=(--variant "piece:$n" --parts keep --keep "$keep")
+  fi
+  if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${args[@]}" --lod both --out "$tmp/x.glb" > "$log" 2>&1; then
+    grep -v OpenColorIO "$log" | tail -30; rm -rf "$log" "$tmp"; return 1
+  fi
+  python3 living/tools/merge_primitives.py "$tmp/x.glb" "$root/$item.glb" > /dev/null
+  if [ "$kind" = hair ]; then
+    [ -f "$shared" ] || cp "$tmp/strands.png" "$shared"
+    python3 living/tools/characters/share.py strands --shared "$shared" "$root/$item.glb" > /dev/null
+  fi
+  python3 living/tools/characters/outline_normals.py "$root/$item.glb" > /dev/null
+  rm -rf "$log" "$tmp"
+  python3 living/tools/characters/share.py list "$root/$item.glb" | head -1
+}
+export -f one
+printf '%s\n' "${items[@]}" | xargs -P "${JOBS:-6}" -I{} bash -c 'one "$@"' _ {} "$root" "$blender" "$shared"

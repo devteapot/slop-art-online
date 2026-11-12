@@ -26,6 +26,7 @@ pub struct Body {
     pub face_off: f32,
     pub face_turn: f32,
     pub face_turn_s: f32,
+    pub running: bool,
 }
 
 impl __sdk::InModule for Body {
@@ -53,6 +54,7 @@ pub struct BodyCols {
     pub face_off: __sdk::__query_builder::Col<Body, f32>,
     pub face_turn: __sdk::__query_builder::Col<Body, f32>,
     pub face_turn_s: __sdk::__query_builder::Col<Body, f32>,
+    pub running: __sdk::__query_builder::Col<Body, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for Body {
@@ -76,6 +78,7 @@ impl __sdk::__query_builder::HasCols for Body {
             face_off: __sdk::__query_builder::Col::new(table_name, "face_off"),
             face_turn: __sdk::__query_builder::Col::new(table_name, "face_turn"),
             face_turn_s: __sdk::__query_builder::Col::new(table_name, "face_turn_s"),
+            running: __sdk::__query_builder::Col::new(table_name, "running"),
         }
     }
 }

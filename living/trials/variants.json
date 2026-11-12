@@ -164,5 +164,10 @@
   "env": {
    "LIVING_FRAME": "player"
   }
+ },
+ "arrive-control": {
+  "about": "Default (the shipped rules and mind switches as they stand): the arrival trial's control world. The newcomer-law arms (arrive-notice, -known, -wonder, -all) were rejected on 2026-11-12 as prescribed attention and removed (docs/TRIALS.md, \"Arrival batch ar2\").",
+  "models": {},
+  "env": {}
  }
 }

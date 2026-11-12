@@ -4,14 +4,17 @@
 //!
 //! - **`meters()`** lists the bars a body has. Each row names fields of the `my_vitals` row:
 //!   `#{ name: "health", value: "hp", max: "max_hp", order: 0 }`, `max` a field or a number, and
-//!   `shown: false` for a meter the screen leaves out (it still bounds its value). Nothing here
+//!   `shown: false` for a meter the screen leaves out (it still bounds its value), `while_short:
+//!   true` for one the screen shows only while it is not full (a pool that is mostly full). Nothing here
 //!   lists the vitals: a world that adds one (a column at the end of `vitals`) adds its row.
 //! - **`status_of(a)`** says how the body is: a list of `#{ name, tone, text }`, with optional
 //!   `meter` (the meter it speaks of), `felt` (a mind's words for it), and an alarm told once per
 //!   episode (`alarm`, `salience`, `think`: always, no_food or never, `routine`: the want whose
 //!   routine is shown when it asks the mind to think). Its `a` is the body, not a skill's
 //!   context: every numeric field of the vitals row by name, as it stands now (a field with a
-//!   `<field>_rate` moved along it since `at_ms`, held within its meter), each `<x>_ms` time as
+//!   `<field>_rate` moved along it since `at_ms`, held within its meter; a pool, a field with a
+//!   `<field>_from_ms`, moves by its rate a second from the later of `at_ms` and that time,
+//!   docs/STAMINA.md), each `<x>_ms` time as
 //!   `<x>_ago_s` (whole seconds, at most an hour; -1 never), `share` (each meter's value over
 //!   its max, by meter name), `kind`, `stage` and `night`.
 //!
@@ -32,7 +35,7 @@ pub const THINKS: [&str; 3] = ["always", "no_food", "never"];
 /// Keys of a `status_of` entry.
 const STATUS_KEYS: [&str; 9] = ["name", "tone", "text", "meter", "felt", "alarm", "salience", "think", "routine"];
 /// Keys of a `meters()` row.
-const METER_KEYS: [&str; 6] = ["name", "value", "max", "order", "label", "shown"];
+const METER_KEYS: [&str; 7] = ["name", "value", "max", "order", "label", "shown", "while_short"];
 /// Fields of a vitals row that are not facts of the body: ids, the anchor and the rates' cache key.
 const NOT_FACTS: [&str; 3] = ["id", "at_ms", "rate_key"];
 /// A time ago is told up to this many seconds (beyond, all one state).
@@ -59,6 +62,8 @@ pub struct Meter {
     pub label: String,
     /// Drawn as a bar (false: it only bounds its value and feeds statuses).
     pub shown: bool,
+    /// Drawn only while its value is below its max (a pool that is mostly full: focus).
+    pub while_short: bool,
 }
 
 impl Meter {
@@ -140,7 +145,12 @@ impl BodyFacts {
                 continue;
             }
             let rate = get(&format!("{k}_rate")).unwrap_or(0.0);
-            let mut x = v + rate * minutes;
+            // A pool (`<field>_from_ms`): its rate is a second's, from the later of the anchor
+            // and its start (`living_rules::pools::level`).
+            let mut x = match get(&format!("{k}_from_ms")) {
+                Some(from) => v + rate * ((now_ms as f64 - from.max(at)) / 1000.0).max(0.0),
+                None => v + rate * minutes,
+            };
             if rate != 0.0 {
                 let max = meters.iter().find(|m| m.value == *k).and_then(|m| m.max_of(raw));
                 x = x.max(0.0).min(max.unwrap_or(f64::MAX));
@@ -206,8 +216,8 @@ pub(super) struct Body {
 /// The meters when the script declares none: health and energy, as the client drew them.
 pub fn default_meters() -> Vec<Meter> {
     vec![
-        Meter { name: "health".into(), value: "hp".into(), max: MeterMax::Field("max_hp".into()), order: 0, label: "Health".into(), shown: true },
-        Meter { name: "energy".into(), value: "energy".into(), max: MeterMax::Value(100.0), order: 1, label: "Energy".into(), shown: true },
+        Meter { name: "health".into(), value: "hp".into(), max: MeterMax::Field("max_hp".into()), order: 0, label: "Health".into(), shown: true, while_short: false },
+        Meter { name: "energy".into(), value: "energy".into(), max: MeterMax::Value(100.0), order: 1, label: "Energy".into(), shown: true, while_short: false },
     ]
 }
 
@@ -254,11 +264,12 @@ fn read_meters(d: Dynamic) -> (Vec<Meter>, Vec<String>) {
         };
         let order = m.get("order").and_then(|v| v.as_int().ok()).unwrap_or(out.len() as i64) as i32;
         let shown = m.get("shown").and_then(|v| v.as_bool().ok()).unwrap_or(true);
+        let while_short = m.get("while_short").and_then(|v| v.as_bool().ok()).unwrap_or(false);
         if out.iter().any(|o| o.name == name) {
             errors.push(format!("meters: `{name}` is declared twice"));
             continue;
         }
-        out.push(Meter { label: text("label").unwrap_or_else(|| capitalised(&name)), name, value, max, order, shown });
+        out.push(Meter { label: text("label").unwrap_or_else(|| capitalised(&name)), name, value, max, order, shown, while_short });
     }
     out.sort_by_key(|m| m.order);
     (out, errors)
@@ -424,7 +435,10 @@ impl Scripts {
 
 /// The fields of the shipped `vitals` row, for checks with no authority at hand (the rules'
 /// tests and `validate`); the authority checks a script against its own row's columns.
-pub const SHIPPED_VITALS: [&str; 12] = ["id", "hp", "max_hp", "hunger", "energy", "at_ms", "hp_rate", "hunger_rate", "energy_rate", "rate_key", "hurt_ms", "hurt_by"];
+pub const SHIPPED_VITALS: [&str; 20] = [
+    "id", "hp", "max_hp", "hunger", "energy", "at_ms", "hp_rate", "hunger_rate", "energy_rate", "rate_key", "hurt_ms", "hurt_by",
+    "stamina", "stamina_max", "stamina_rate", "stamina_from_ms", "focus", "focus_max", "focus_rate", "focus_from_ms",
+];
 
 /// A vitals row as `(field, value)` pairs from its JSON object (numbers only): how the mind
 /// service and a client read their `vitals`/`my_vitals` rows without naming the columns.
@@ -439,7 +453,7 @@ mod tests {
     const SHIPPED: &str = include_str!("../../../scripts/skills.rhai");
 
     fn row(hp: f64, hunger: f64, energy: f64, hp_rate: f64) -> Vec<(String, f64)> {
-        let v = [0.0, hp, 100.0, hunger, energy, 0.0, hp_rate, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let v = [0.0, hp, 100.0, hunger, energy, 0.0, hp_rate, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0, 100.0, 0.0, 0.0, 100.0, 100.0, 0.0, 0.0];
         SHIPPED_VITALS.iter().zip(v).map(|(k, v)| (k.to_string(), v)).collect()
     }
 
@@ -451,7 +465,7 @@ mod tests {
     fn the_shipped_meters_name_vitals_fields() {
         let sc = Scripts::new(SHIPPED).unwrap();
         let names: Vec<(&str, &str, bool)> = sc.meters().iter().map(|m| (m.name.as_str(), m.value.as_str(), m.shown)).collect();
-        assert_eq!(names, [("health", "hp", true), ("energy", "energy", true), ("hunger", "hunger", false)]);
+        assert_eq!(names, [("health", "hp", true), ("stamina", "stamina", true), ("focus", "focus", true), ("energy", "energy", false), ("hunger", "hunger", false)]);
         assert_eq!(sc.meters()[0].max, MeterMax::Field("max_hp".into()));
         assert!(sc.meters_unknown(&SHIPPED_VITALS).is_empty());
         assert!(sc.meter_errors().is_empty());
@@ -461,7 +475,7 @@ mod tests {
     fn one_set_of_thresholds_for_screens_alarms_and_words() {
         let sc = Scripts::new(SHIPPED).unwrap();
         assert_eq!(statuses(&sc, &row(100.0, 30.0, 60.0, 0.0), false), ["not_hungry", "rested", "unhurt"]);
-        assert_eq!(statuses(&sc, &row(30.0, 82.0, 8.0, -0.5), true), ["very_hungry", "exhausted", "badly_hurt", "freezing", "wasting"]);
+        assert_eq!(statuses(&sc, &row(30.0, 82.0, 8.0, -0.5), true), ["very_hungry", "exhausted", "badly_hurt", "freezing", "slowed", "wasting"]);
         // The alarms the authority used to hold in Rust, at their thresholds.
         let alarms = |r: Vec<(String, f64)>, night| sc.status_of(&BodyFacts::of("person", "adult", night, &r, sc.meters(), 0)).unwrap().iter().filter_map(|s| s.alarm.clone()).map(|a| (a.text, a.think)).collect::<Vec<_>>();
         assert_eq!(alarms(row(100.0, 80.0, 60.0, 0.0), false), [("You are very hungry.".to_string(), Think::NoFood)]);
@@ -474,7 +488,7 @@ mod tests {
         assert_eq!(alarms(row(10.0, 30.0, 60.0, 0.0), false)[0].0, "You are badly hurt.");
         let starving = sc.status_of(&BodyFacts::of("person", "adult", false, &row(100.0, 99.0, 60.0, 0.0), sc.meters(), 0)).unwrap();
         assert_eq!(starving[0].alarm.as_ref().unwrap().routine, "food");
-        assert_eq!(sc.felt(&BodyFacts::of("person", "adult", false, &row(30.0, 82.0, 8.0, -0.5), sc.meters(), 0)).unwrap(), "very hungry, exhausted, badly wounded; you are growing weaker");
+        assert_eq!(sc.felt(&BodyFacts::of("person", "adult", false, &row(30.0, 82.0, 8.0, -0.5), sc.meters(), 0)).unwrap(), "very hungry, exhausted, badly wounded, walking slower; you are growing weaker");
         let by = sc.felt_by_meter(&BodyFacts::of("person", "adult", false, &row(90.0, 85.0, 20.0, 0.0), sc.meters(), 0)).unwrap();
         assert_eq!(by, [("hunger".to_string(), "very hungry".to_string()), ("energy".to_string(), "tired".to_string()), ("health".to_string(), "unhurt".to_string())]);
     }
@@ -498,20 +512,21 @@ mod tests {
         assert_eq!(b.get("hurt_ago_s"), Some(120.0), "times ago are told up to two minutes");
         assert_eq!(b.get("hurt_ms"), None);
         assert_eq!(b.get("id"), None);
-        assert_eq!(b.share, [("health".to_string(), 0.4), ("energy".to_string(), 0.0), ("hunger".to_string(), 1.0)]);
+        assert_eq!(b.share, [("health".to_string(), 0.4), ("stamina".to_string(), 1.0), ("focus".to_string(), 1.0), ("energy".to_string(), 0.0), ("hunger".to_string(), 1.0)]);
         let never = BodyFacts::of("person", "adult", false, &row(50.0, 0.0, 50.0, 0.0), sc.meters(), 600_000);
         assert_eq!(never.get("hurt_ago_s"), Some(-1.0));
     }
 
     #[test]
     fn a_world_adds_a_vital_with_a_meters_row() {
-        // A column `stamina` (and its rate) on the vitals row, one meters row and a status: no
-        // change to the engine (docs/STAMINA_PROPOSAL.md may split energy this way).
+        // A column `thirst` (and its rate) on the vitals row, one meters row and a status: no change
+        // to the engine. Breath and focus came this way (docs/STAMINA.md): `vitals` columns,
+        // `Vitals::FIELDS` in the authority and rows in the shipped `meters()`.
         let overlay = r#"
-fn meters() { base_meters() + [#{ name: "stamina", value: "stamina", max: "max_stamina", order: 3 }] }
+fn meters() { base_meters() + [#{ name: "thirst", value: "thirst", max: "max_thirst", order: 9 }] }
 fn status_of(a) {
     let out = base_status_of(a);
-    if a.stamina != () && a.stamina < 10.0 { out.push(#{ name: "winded", tone: "warn", text: "Winded", meter: "stamina", felt: "out of breath" }); }
+    if a.thirst != () && a.thirst < 10.0 { out.push(#{ name: "parched", tone: "warn", text: "Parched", meter: "thirst", felt: "parched" }); }
     out
 }
 "#;
@@ -519,17 +534,53 @@ fn status_of(a) {
         let sc = Scripts::new(&src).unwrap();
         sc.validate().unwrap();
         let mut fields: Vec<&str> = SHIPPED_VITALS.to_vec();
-        assert_eq!(sc.meters_unknown(&fields).len(), 2, "the shipped row has no stamina");
-        fields.extend(["stamina", "max_stamina", "stamina_rate"]);
+        assert_eq!(sc.meters_unknown(&fields).len(), 2, "the shipped row has no thirst");
+        fields.extend(["thirst", "max_thirst", "thirst_rate"]);
         assert!(sc.meters_unknown(&fields).is_empty());
         let mut r = row(100.0, 30.0, 60.0, 0.0);
-        r.extend([("stamina".to_string(), 20.0), ("max_stamina".to_string(), 50.0), ("stamina_rate".to_string(), -2.0)]);
+        r.extend([("thirst".to_string(), 20.0), ("max_thirst".to_string(), 50.0), ("thirst_rate".to_string(), -2.0)]);
         // Six minutes on: 20 - 12 = 8.
         let b = BodyFacts::of("person", "adult", false, &r, sc.meters(), 360_000);
-        assert_eq!(b.get("stamina"), Some(8.0));
-        assert!(sc.status_of(&b).unwrap().iter().any(|s| s.name == "winded"));
-        assert!(sc.felt(&b).unwrap().contains("out of breath"));
-        assert_eq!(sc.meters().last().unwrap().name, "stamina");
+        assert_eq!(b.get("thirst"), Some(8.0));
+        assert!(sc.status_of(&b).unwrap().iter().any(|s| s.name == "parched"));
+        assert!(sc.felt(&b).unwrap().contains("parched"));
+        assert_eq!(sc.meters().last().unwrap().name, "thirst");
+    }
+
+    #[test]
+    fn breath_is_a_bar_focus_shows_while_short_and_tiredness_is_a_pill() {
+        let sc = Scripts::new(SHIPPED).unwrap();
+        let names: Vec<(&str, bool, bool)> = sc.meters().iter().map(|m| (m.name.as_str(), m.shown, m.while_short)).collect();
+        assert_eq!(names, [("health", true, false), ("stamina", true, false), ("focus", true, true), ("energy", false, false), ("hunger", false, false)]);
+        assert_eq!(sc.meters()[2].label, "Mana", "the world's word for focus");
+        // A pool moves by its rate a second from its start, not along the needs' anchor: 40
+        // breath at t=0, refilling at 25 a second from 1 s on, is 65 at 2 s.
+        let mut r = row(100.0, 30.0, 60.0, 0.0);
+        for (k, v) in r.iter_mut() {
+            match k.as_str() {
+                "stamina" => *v = 40.0,
+                "stamina_rate" => *v = 25.0,
+                "stamina_from_ms" => *v = 1000.0,
+                _ => {}
+            }
+        }
+        let b = BodyFacts::of("person", "adult", false, &r, sc.meters(), 2000);
+        assert_eq!(b.get("stamina"), Some(65.0));
+        assert_eq!(BodyFacts::of("person", "adult", false, &r, sc.meters(), 500).get("stamina"), Some(40.0), "before its start it holds");
+        assert_eq!(BodyFacts::of("person", "adult", false, &r, sc.meters(), 60_000).get("stamina"), Some(100.0), "within its meter");
+        // Out of breath below 20, felt in the refusal's words; slowed when exhausted, and why.
+        let mut low = row(100.0, 30.0, 60.0, 0.0);
+        for (k, v) in low.iter_mut() {
+            if k == "stamina" { *v = 10.0; }
+        }
+        let st = statuses(&sc, &low, false);
+        assert!(st.contains(&"out_of_breath".to_string()), "{st:?}");
+        assert!(sc.felt(&BodyFacts::of("person", "adult", false, &low, sc.meters(), 0)).unwrap().contains("out of breath"));
+        assert!(!statuses(&sc, &row(100.0, 30.0, 60.0, 0.0), false).contains(&"out_of_breath".to_string()));
+        assert!(statuses(&sc, &row(100.0, 30.0, 5.0, 0.0), false).contains(&"slowed".to_string()));
+        assert!(!statuses(&sc, &row(100.0, 30.0, 20.0, 0.0), false).contains(&"slowed".to_string()), "tired on the island walks at its pace");
+        let cullet = Scripts::new(&crate::floors::compose(SHIPPED, include_str!("../../../seeds/worlds/cullet/laws.rhai")).unwrap()).unwrap();
+        assert!(statuses(&cullet, &row(100.0, 30.0, 20.0, 0.0), false).contains(&"slowed".to_string()), "tired on Cullet walks slower, and says so");
     }
 
     #[test]
@@ -539,12 +590,12 @@ fn status_of(a) {
             assert_ne!(src, SHIPPED, "{from}");
             Scripts::new(&src).and_then(|s| s.validate().map(|_| ())).unwrap_err()
         };
-        assert!(bad(r#"#{ name: "energy", value: "energy", max: 100.0, order: 1 },"#, r#"#{ name: "energy", value: "energy", max: 0.0, order: 1 },"#).contains("max"));
-        assert!(bad(r#"#{ name: "energy", value: "energy", max: 100.0, order: 1 },"#, r#"#{ name: "energy", value: "energy", max: 100.0, order: 1, colour: "red" },"#).contains("unknown key 'colour'"));
+        assert!(bad(r#"#{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },"#, r#"#{ name: "energy", value: "energy", max: 0.0, order: 3, shown: false },"#).contains("max"));
+        assert!(bad(r#"#{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },"#, r#"#{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false, colour: "red" },"#).contains("unknown key 'colour'"));
         assert!(bad(r#"tone: "warn", text: "Tired""#, r#"tone: "amber", text: "Tired""#).contains("tone 'amber'"));
         assert!(bad(r#"think: "no_food""#, r#"think: "maybe""#).contains("think 'maybe'"));
-        let sc = Scripts::new(&SHIPPED.replace(r#"value: "energy", max: 100.0"#, r#"value: "stamina", max: 100.0"#)).unwrap();
-        assert!(sc.meters_unknown(&SHIPPED_VITALS)[0].contains("'stamina', which is not a my_vitals field"));
+        let sc = Scripts::new(&SHIPPED.replace(r#"value: "energy", max: 100.0"#, r#"value: "thirst", max: 100.0"#)).unwrap();
+        assert!(sc.meters_unknown(&SHIPPED_VITALS)[0].contains("'thirst', which is not a my_vitals field"));
     }
 
     #[test]
@@ -561,6 +612,6 @@ fn status_of(a) {
         let src = crate::floors::compose(SHIPPED, laws).unwrap();
         let sc = Scripts::new(&src).unwrap();
         sc.validate().unwrap();
-        assert_eq!(sc.meters().len(), 3);
+        assert_eq!(sc.meters().len(), 5);
     }
 }

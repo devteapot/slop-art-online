@@ -20,6 +20,8 @@ pub struct Steer {
     pub input_ms: u64,
     pub look_on: bool,
     pub look: f32,
+    pub pace: f32,
+    pub run_pace: f32,
 }
 
 impl __sdk::InModule for Steer {
@@ -43,6 +45,8 @@ pub struct SteerCols {
     pub input_ms: __sdk::__query_builder::Col<Steer, u64>,
     pub look_on: __sdk::__query_builder::Col<Steer, bool>,
     pub look: __sdk::__query_builder::Col<Steer, f32>,
+    pub pace: __sdk::__query_builder::Col<Steer, f32>,
+    pub run_pace: __sdk::__query_builder::Col<Steer, f32>,
 }
 
 impl __sdk::__query_builder::HasCols for Steer {
@@ -62,6 +66,8 @@ impl __sdk::__query_builder::HasCols for Steer {
             input_ms: __sdk::__query_builder::Col::new(table_name, "input_ms"),
             look_on: __sdk::__query_builder::Col::new(table_name, "look_on"),
             look: __sdk::__query_builder::Col::new(table_name, "look"),
+            pace: __sdk::__query_builder::Col::new(table_name, "pace"),
+            run_pace: __sdk::__query_builder::Col::new(table_name, "run_pace"),
         }
     }
 }

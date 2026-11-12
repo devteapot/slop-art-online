@@ -39,9 +39,6 @@ fn rates(a) {
         hunger *= 0.5;
     } else if act == "rest" {
         energy = 2.5;
-    } else if act == "block" {
-        // Bracing in a fight costs what it costs on the island in real time.
-        energy = -7.2;
     }
     let healing = 1.0;
     if a.actor.stage == "elder" {
@@ -81,11 +78,17 @@ fn sleep_duration(a) {
 }
 
 // Tired (under 35 energy, about a day and a night without sleep) one walks slowly; exhausted
-// (under 10) slower still, as everywhere.
+// (under 10) slower still, as everywhere. The pace itself is the shipped one, from the
+// `walk_base` law (`base_move_speed` reads it), so a world law changes Cullet's walk too.
 fn tired_below() { 35.0 }
 fn move_speed(a) {
     let s = base_move_speed(a);
     if a.actor.energy < tired_below() && a.actor.energy >= 10.0 { s * 0.8 } else { s }
+}
+// The status and the minds say why: tired (a slow walk), or exhausted as everywhere.
+fn slow_words(kind, energy) {
+    if energy < tired_below() && energy >= 10.0 { return "tired, so you walk slower"; }
+    base_slow_words(kind, energy)
 }
 
 // ---- light and sight (docs/SMALL_CITY.md §5; decision 6) --------------------------------------
@@ -319,6 +322,14 @@ fn know_how() {
     out + [
         #{ name: "glassmaking", help: "melt ash and sand into glass at a burning furnace, and make panes, floats, bottles and drops of it", brief: "glass from ash and sand at the furnace, and panes, floats, bottles and drops", requires: ["fire"] },
     ]
+}
+
+// The fires that burn fuel get a wheel with making and feeding in fixed directions (docs/
+// INTERFACE.md §8.3), over the shipped rows (a campfire needs no feeding: the general row).
+fn menus() {
+    let rows = [#{ on: "thing", kinds: ["hearth", "oven", "furnace", "smokehouse"], choose: "wheel", wheel: #{ n: "make", e: "feed" } }];
+    rows += base_menus();
+    rows
 }
 
 // Cullet's workplaces, after the shipped recipes (crafting, and cooking and smoking at any fire).

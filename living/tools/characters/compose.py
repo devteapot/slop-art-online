@@ -40,7 +40,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import face_types  # noqa: E402
-from merge_primitives import read_accessor, read_glb, write_glb  # noqa: E402
+from array import array  # noqa: E402
+
+from merge_primitives import COMPONENT, append_accessor, read_accessor, read_glb, write_glb  # noqa: E402
 
 
 def quat(axis, deg):
@@ -103,6 +105,140 @@ def compose(j, values, head_m=None):
     return moved
 
 
+def bind_world(j, binary, skin):
+    """Each joint's world matrix at bind, by node index: the inverse of its inverse bind matrix."""
+    ibm = np.array(read_accessor(j, binary, skin["inverseBindMatrices"])[0]).reshape(-1, 4, 4).transpose(0, 2, 1)
+    return {n: np.linalg.inv(ibm[k]) for k, n in enumerate(skin["joints"])}
+
+
+def attach(j, binary, style_path, out_path, colour=None, far=False, fitted=True):
+    """Put a shared style file's meshes on a type's (or a person's) file, as the client attaches
+    them: hair and head pieces with the type's `hair_fit` (`fitted`), body pieces without. Every
+    mesh node of the file whose name does or does not start `Far` (by `far`) comes across. Returns
+    the names of the bones added."""
+    h, _ = read_glb(style_path)
+    added = []
+    for n in h["nodes"]:
+        if "mesh" in n and (n.get("name") or "").startswith("Far") == far:
+            added += attach_hair(j, binary, style_path, out_path, colour if (n["name"] in ("Hair", "FarHair") or not fitted or len([m for m in h["nodes"] if "mesh" in m and (m.get("name") or "").startswith("Far") == far]) == 1) else None, far, node=n["name"], fitted=fitted)
+    return added
+
+
+def attach_hair(j, binary, style_path, out_path, colour=None, far=False, node=None, fitted=True):
+    """Put a shared hair style on a type's (or a person's) file, as the client attaches one.
+
+    - The style's hair mesh comes in as it is, in the standard head's space, with its weights.
+    - Its joints are the target's own bones, found by name. The bones only the style has (its
+      spring chains, which hang under `J_Id_Cranium`) are added under the target's.
+    - Where a hair vertex stands at rest is `hair_fit` (the target scene's extras; nothing for
+      the standard head) times where it stands in the style's file. So the hair's inverse bind
+      matrix for a joint is the inverse of that joint's rest in the target, times `hair_fit`;
+      and a spring bone's rest in the target is `hair_fit` times its rest in the style's file.
+    - `colour` (linear r, g, b) tints the hair's neutral shades, standing in for the mesh tag.
+    Returns the names of the bones added."""
+    h, hbin = read_glb(style_path)
+    names = {n.get("name"): i for i, n in enumerate(j["nodes"])}
+    fit = np.array((j["scenes"][j.get("scene", 0)].get("extras") or {}).get("hair_fit", {}).get("matrix", np.eye(4).T.ravel().tolist())).reshape(4, 4).T if fitted else np.eye(4)
+    tskin = j["skins"][0]
+    tworld = bind_world(j, binary, tskin)
+    # Bones an earlier attach added (a style's spring chains) are at rest where their nodes put them.
+    up = {c: i for i, n in enumerate(j["nodes"]) for c in n.get("children", [])}
+    for i, n in enumerate(j["nodes"]):
+        if i not in tworld and "matrix" in n and up.get(i) in tworld:
+            tworld[i] = tworld[up[i]] @ np.array(n["matrix"]).reshape(4, 4).T
+    hnode = next(n for n in h["nodes"] if n.get("name") == (node or ("FarHair" if far else "Hair")) and "mesh" in n)
+    hskin = h["skins"][hnode["skin"]]
+    hworld = bind_world(h, hbin, hskin)
+    hparent = {c: i for i, n in enumerate(h["nodes"]) for c in n.get("children", [])}
+    # Joints: by name, adding the style's own bones under the target's.
+    joint, added = {}, []
+
+    def place(hn):
+        name = h["nodes"][hn].get("name")
+        if hn in joint:
+            return joint[hn]
+        if name in names:
+            joint[hn] = names[name]
+            return joint[hn]
+        parent = place(hparent[hn])
+        world = fit @ hworld[hn]
+        tworld[len(j["nodes"])] = world
+        local = np.linalg.inv(tworld[parent]) @ world
+        j["nodes"].append(dict(name=name, matrix=[float(v) for v in local.T.ravel()]))
+        j["nodes"][parent].setdefault("children", []).append(len(j["nodes"]) - 1)
+        names[name] = joint[hn] = len(j["nodes"]) - 1
+        added.append(name)
+        return joint[hn]
+
+    order = [place(hn) for hn in hskin["joints"]]
+    ibm = np.array([np.linalg.inv(tworld[n]) @ fit for n in order])
+    skin = dict(joints=order, inverseBindMatrices=append_accessor(j, binary, array("f", ibm.transpose(0, 2, 1).astype(np.float32).ravel().tolist()), 5126, "MAT4", False))
+    j["skins"].append(skin)
+    # The mesh: every accessor copied across; the material and its picture with it.
+    def copy(acc, scale=None):
+        values, (ct, typ, norm) = read_accessor(h, hbin, acc)
+        if scale is not None:
+            v = np.array(values, dtype=np.float64).reshape(-1, 4)
+            unit = {5126: 1.0, 5123: 65535.0, 5121: 255.0}[ct]
+            mean = np.maximum(v[:, :3].mean(axis=0) / unit, 1e-4)
+            v[:, :3] = np.clip(v[:, :3] * (np.array(scale) / mean), 0.0, unit)
+            values = array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()])
+        return append_accessor(j, binary, values, ct, typ, norm, None)
+
+    mats = {}
+    prims = []
+    for p in h["meshes"][hnode["mesh"]]["primitives"]:
+        q = dict(attributes={k: copy(a, scale=colour if k == "COLOR_0" and colour is not None else None) for k, a in p["attributes"].items()}, mode=p.get("mode", 4))
+        if "indices" in p:
+            q["indices"] = copy(p["indices"])
+        mi = p.get("material")
+        if mi is not None:
+            if mi not in mats:
+                m = json.loads(json.dumps(h["materials"][mi]))
+                tex = (m.get("pbrMetallicRoughness") or {}).get("baseColorTexture")
+                if tex is not None:
+                    t = json.loads(json.dumps(h["textures"][tex["index"]]))
+                    img = json.loads(json.dumps(h["images"][t["source"]]))
+                    if "bufferView" in img:
+                        bv = h["bufferViews"][img["bufferView"]]
+                        data = bytes(hbin[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]])
+                        while len(binary) % 4:
+                            binary.append(0)
+                        j["bufferViews"].append(dict(buffer=0, byteOffset=len(binary), byteLength=len(data)))
+                        binary.extend(data)
+                        img["bufferView"] = len(j["bufferViews"]) - 1
+                    else:
+                        there = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(style_path)), img["uri"]))
+                        img["uri"] = os.path.relpath(there, os.path.dirname(os.path.abspath(out_path))).replace(os.sep, "/")
+                    j.setdefault("images", []).append(img)
+                    t["source"] = len(j["images"]) - 1
+                    if "sampler" in t:
+                        j.setdefault("samplers", []).append(json.loads(json.dumps(h["samplers"][t["sampler"]])))
+                        t["sampler"] = len(j["samplers"]) - 1
+                    j.setdefault("textures", []).append(t)
+                    tex["index"] = len(j["textures"]) - 1
+                j["materials"].append(m)
+                mats[mi] = len(j["materials"]) - 1
+            q["material"] = mats[mi]
+        prims.append(q)
+    j["meshes"].append(dict(name=hnode["name"], primitives=prims))
+    j["nodes"].append(dict(name=hnode["name"], mesh=len(j["meshes"]) - 1, skin=len(j["skins"]) - 1))
+    root = next((n for n in j["nodes"] if "children" in n and any("mesh" in j["nodes"][c] for c in n["children"])), None)
+    if root is not None:
+        root["children"].append(len(j["nodes"]) - 1)
+    else:
+        j["scenes"][j.get("scene", 0)]["nodes"].append(len(j["nodes"]) - 1)
+    # The spring chains, in the file's VRM block, as the generator lists them (the game swings them).
+    hv = (((h.get("extensions") or {}).get("VRM") or {}).get("secondaryAnimation") or {}) if hnode["name"] == "Hair" else {}
+    tv = ((j.get("extensions") or {}).get("VRM") or {}).setdefault("secondaryAnimation", {})
+    hname = [n.get("name") for n in h["nodes"]]
+    if hv.get("boneGroups") and not far:
+        if not tv.get("colliderGroups"):
+            tv["colliderGroups"] = [dict(g, node=names[hname[g["node"]]]) for g in hv.get("colliderGroups", []) if hname[g["node"]] in names]
+        tv.setdefault("boneGroups", []).extend(dict(g, bones=[names[hname[b]] for b in g["bones"]], colliderGroups=[c for c in g.get("colliderGroups", []) if c < len(tv["colliderGroups"])]) for g in hv["boneGroups"])
+    return added
+
+
 def skinned(path, want=lambda mesh, material: material.endswith("Face_00_SKIN")):
     """A file's vertices as its nodes pose them (linear blend skinning in numpy), in the file's space."""
     j, binary = read_glb(path)
@@ -125,11 +261,24 @@ def skinned(path, want=lambda mesh, material: material.endswith("Face_00_SKIN"))
             world[i] = (w(parent[i]) if i in parent else np.eye(4)) @ local(nodes[i])
         return world[i]
 
-    skin = j["skins"][0]
-    ibm = np.array(read_accessor(j, binary, skin["inverseBindMatrices"])[0]).reshape(-1, 4, 4).transpose(0, 2, 1)
-    mats = np.array([w(jn) @ ibm[k] for k, jn in enumerate(skin["joints"])])
+    def local_matrix(n):
+        return np.array(n["matrix"]).reshape(4, 4).T if "matrix" in n else local(n)
+
+    def w(i):  # noqa: F811
+        if i not in world:
+            world[i] = (w(parent[i]) if i in parent else np.eye(4)) @ local_matrix(nodes[i])
+        return world[i]
+
+    skin_of = {n["mesh"]: n.get("skin", 0) for n in nodes if "mesh" in n}
+    pose = {}
     out = []
-    for mesh in j["meshes"]:
+    for mi, mesh in enumerate(j["meshes"]):
+        si = skin_of.get(mi, 0)
+        if si not in pose:
+            skin = j["skins"][si]
+            ibm = np.array(read_accessor(j, binary, skin["inverseBindMatrices"])[0]).reshape(-1, 4, 4).transpose(0, 2, 1)
+            pose[si] = np.array([w(jn) @ ibm[k] for k, jn in enumerate(skin["joints"])])
+        mats = pose[si]
         for p in mesh["primitives"]:
             if not want(mesh.get("name", ""), j["materials"][p["material"]]["name"]):
                 continue
@@ -160,6 +309,29 @@ def compare(a, b, want=KINDS[0][1]):
     return dict(vertices=len(pa), rms_mm=float(np.sqrt((d ** 2).mean()) * 1000), p95_mm=float(np.percentile(d, 95) * 1000), most_mm=float(d.max() * 1000))
 
 
+TYPE_SKIN = (0.905, 0.745, 0.650)  # the skin a type's own file is painted in (person_params.from_type: tone 0.25), sRGB
+
+
+def tint_skin(j, binary, hexc):
+    """Stand in for the client's tag colour on skin: the type's skin shades, moved from the tone
+    its file is painted in to this person's."""
+    to = np.array(linear(hexc)) / np.array(linear("#" + "".join(f"{round(c * 255):02x}" for c in TYPE_SKIN)))
+    for mesh in j["meshes"]:
+        for p in mesh["primitives"]:
+            if j["materials"][p["material"]]["name"].endswith("_SKIN") and "COLOR_0" in p["attributes"]:
+                values, (ct, typ, norm) = read_accessor(j, binary, p["attributes"]["COLOR_0"])
+                n = 4 if typ == "VEC4" else 3
+                v = np.array(values, dtype=np.float64).reshape(-1, n)
+                unit = {5126: 1.0, 5123: 65535.0, 5121: 255.0}[ct]
+                v[:, :3] = np.clip(v[:, :3] * to, 0.0, unit)
+                p["attributes"]["COLOR_0"] = append_accessor(j, binary, array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()]), ct, typ, norm, None)
+
+
+def linear(hexc):
+    c = [int(hexc.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)]
+    return [((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("inp")
@@ -167,6 +339,14 @@ def main():
     ap.add_argument("--identity", default="", help="values as `k=v,k=v` or a JSON object")
     ap.add_argument("--params", help="a person's NAME.params.json (person.py writes it): its `identity`")
     ap.add_argument("--compare", action="store_true", help="measure the first file's skin against the second's")
+    ap.add_argument("--hair", help="a shared hair style's file (lookdev/styles/hair/<style>.glb) to attach, the client's way")
+    ap.add_argument("--hair-colour", help="the hair's colour, `#rrggbb`, standing in for the client's mesh tag")
+    ap.add_argument("--far-hair", action="store_true", help="attach the style's far mesh too (FarHair)")
+    ap.add_argument("--piece", action="append", default=[], metavar="FILE[=#rrggbb]", help="an outfit piece's file (lookdev/styles/outfit/<piece>.glb) to attach, with the colour its mean moves to; repeatable")
+    ap.add_argument("--head-piece", action="append", default=[], metavar="FILE[=#rrggbb]", help="a piece worn on the head (cap, kerchief): attached with the type's hair_fit; repeatable")
+    ap.add_argument("--person", help="a person's NAME.params.json: attach everything its `person` line names (type's file is INP) and pose its identity")
+    ap.add_argument("--styles", default="living/game/assets/lookdev/styles", help="where the style files are, for --person")
+    ap.add_argument("--drop", default="", help="mesh nodes to leave out, by the start of their names, comma-separated (`Far`: today's client draws a file's far meshes over its near ones)")
     a = ap.parse_args()
     if a.compare:
         for kind, want in KINDS:
@@ -179,6 +359,33 @@ def main():
     if a.identity:
         values.update(json.loads(a.identity) if a.identity.strip().startswith("{") else {k: float(v) for k, v in (x.split("=") for x in a.identity.split(",") if x)})
     j, binary = read_glb(a.inp)
+    if a.person:
+        line = json.load(open(a.person))["person"]
+        cols = line.get("colors", {})
+        a.hair = a.hair or os.path.join(a.styles, "hair", line["styles"]["hair"] + ".glb")
+        a.hair_colour = a.hair_colour or cols.get("hair")
+        for name in line["styles"]["outfit"]:
+            item = os.path.join(a.styles, "outfit", name + ".glb") + ("=" + cols["outfit"][name] if name in cols.get("outfit", {}) else "")
+            (a.head_piece if name in ("cap", "kerchief") else a.piece).append(item)
+        values.update(line.get("identity") or {})
+        if cols.get("skin"):
+            tint_skin(j, binary, cols["skin"])
+    if a.hair:
+        colour = linear(a.hair_colour) if a.hair_colour else None
+        added = attach(j, binary, a.hair, a.out, colour)
+        if a.far_hair:
+            attach(j, binary, a.hair, a.out, colour, far=True)
+        print(f"compose: {a.out}: hair from {a.hair}: {len(added)} bones added under the cranium")
+    for spec_, fitted in [(x, False) for x in a.piece] + [(x, True) for x in a.head_piece]:
+        path, _, hexc = spec_.partition("=")
+        attach(j, binary, path, a.out, linear(hexc) if hexc else None, fitted=fitted)
+    for start in [x for x in a.drop.split(",") if x]:
+        gone = {i for i, n in enumerate(j["nodes"]) if "mesh" in n and (n.get("name") or "").startswith(start)}
+        for n in j["nodes"]:
+            if "children" in n:
+                n["children"] = [c for c in n["children"] if c not in gone]
+        for sc in j["scenes"]:
+            sc["nodes"] = [c for c in sc["nodes"] if c not in gone]
     moved = compose(j, values)
     write_glb(a.out, j, binary)
     print(f"compose: {a.out}: {len(values)} values, {len(moved)} bones moved from rest")

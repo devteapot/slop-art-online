@@ -219,6 +219,7 @@ pub fn set_rules(revision: u32, source: &str) {
             *RULES_REV.write().unwrap() = Some(revision);
             *RULES_SOURCE.write().unwrap() = Some((revision, Arc::new(source.to_string())));
             *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
+            *TIMINGS.write().unwrap() = Some(Arc::new(timings_of(&s)));
         }
         Err(e) => log::warn!("rules revision {revision} unreadable: {e}"),
     }
@@ -231,6 +232,56 @@ pub fn shapes() -> Arc<living_rules::combat::Shapes> {
     }
     let bundled = Arc::new(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).map(|s| s.shapes().clone()).unwrap_or_default());
     SHAPES.write().unwrap().get_or_insert(bundled).clone()
+}
+
+/// Each combat skill's timing in words (`Scripts::timing`: the numbers `skill_card` shows).
+static TIMINGS: std::sync::RwLock<Option<Arc<std::collections::BTreeMap<String, String>>>> = std::sync::RwLock::new(None);
+
+fn timings_of(s: &living_rules::script::Scripts) -> std::collections::BTreeMap<String, String> {
+    // Only the skills under the combat timing model (`timed`: a windup, recovery and cooldown
+    // the other side can read); the older force skills' durations are not windups.
+    s.shapes().iter().filter(|(_, shape)| shape.timed).filter_map(|(skill, _)| s.timing(skill).map(|t| (skill.to_string(), t.words()))).collect()
+}
+
+/// The world's combat timings (the bundled rules' until the world's have been read).
+fn timings() -> Arc<std::collections::BTreeMap<String, String>> {
+    if let Some(t) = TIMINGS.read().unwrap().as_ref() {
+        return t.clone();
+    }
+    let bundled = Arc::new(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).map(|s| timings_of(&s)).unwrap_or_default());
+    TIMINGS.write().unwrap().get_or_insert(bundled).clone()
+}
+
+/// Whether the skill reference states each combat skill's timing (`LIVING_SKILL_TIMINGS`, on
+/// unless `0`, `off` or `false`; docs/COMBAT_MIND.md §3.7). Off, the reference is as before.
+pub fn timings_on() -> bool {
+    !matches!(std::env::var("LIVING_SKILL_TIMINGS").unwrap_or_default().trim().to_ascii_lowercase().as_str(), "0" | "off" | "false")
+}
+
+/// The timing of the fighting moves a character knows, for its own prompt ("# Who you are"):
+/// the timed combat skills its body is offered (`ui::offered`) whose techniques it knows
+/// (`<skill>_combat()`'s `knows`: the rule a player's bar shows "Unknown" by), each with its
+/// timing (docs/COMBAT_MIND.md §3.7). Never another's: what an opponent's moves take is for a
+/// character to learn by watching. Empty when it knows none, or with `LIVING_SKILL_TIMINGS` off.
+pub fn own_timings(body: Option<&living_rules::species::Species>, knows: impl Fn(&str) -> bool) -> String {
+    if !timings_on() {
+        return String::new();
+    }
+    own_timings_of(body, knows)
+}
+
+/// `own_timings` whatever the switch says.
+fn own_timings_of(body: Option<&living_rules::species::Species>, knows: impl Fn(&str) -> bool) -> String {
+    let (t, shapes, skills) = (timings(), shapes(), living_rules::catalog::skills());
+    let lines: Vec<String> = living_rules::ui::offered(&skills, body)
+        .into_iter()
+        .filter(|s| shapes.get(&s.name).is_some_and(|sh| sh.knows.iter().all(|k| knows(k))))
+        .filter_map(|s| t.get(&s.name).map(|w| format!("- {}: {w}", s.name)))
+        .collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!("\nHow long the fighting moves you know take:\n{}", lines.join("\n"))
 }
 
 /// A person's skill reference: each skill under the world's rules, with what it takes and gives.
@@ -343,12 +394,12 @@ Nodes:
 - {{\"first\": [N, ...]}} priority: every check, the first child that is running or succeeds wins; higher children interrupt lower ones. Optional label: {{\"first\": [...], \"label\": \"...\"}}.
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
 - {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds, except that work already begun under it (sleep, rest, eat, gather, build, craft, cook, teach, write, read, plant...) is finished; walking, fleeing and fighting stop as soon as C no longer holds.
-- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically.{making}
+- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically. Add \"run\": true to run there instead (goto, follow, an attack's approach): it costs breath and is for hurry, flight and fights; out of breath you walk. A flight (flee) runs unless \"run\": false.{making}
 - {{\"say\": \"<the words>\", \"to\": T}} speak (each say node speaks at most once per 45 s).{say_note}
 - {{\"wait\": seconds}}
 - {{\"think\": \"reason\"}} ask yourself to reconsider (non-blocking; ignored within 45 s of a decision, then at most once per 90 s). Put it where your plan runs out (e.g. last in a seq or as the final fallback), not where it is reached on every check.
 Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"above\": 60}}, \"has\": {{\"item\": \"food\"}}}}, \"then\": {{\"do\": \"eat\", \"item\": \"food\"}}}}
-Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100)
+Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100) {{\"stamina\": {{\"below\": 30}}}} (breath, 0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
   {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight looks (% of full: exact for yourself or one you appraised, else as its wound looks)
   {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
@@ -398,7 +449,7 @@ Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happe
 {\"do\": \"join\"|\"welcome\", \"target\": {\"id\": 6}}, {\"do\": \"found\", \"text\": \"a name\"}, {\"do\": \"threaten\", \"target\": {\"id\": 6}}, {\"do\": \"seize\", \"target\": {\"id\": 6}, \"item\": \"hide\", \"qty\": 2}, {\"do\": \"yield\", \"target\": {\"id\": 6}}, and any other single piece of work (build, craft, cook, store, take, plant). \
 {\"do\": \"rework\", \"item\": \"find food and eat\", \"graph\": {...the whole new version...}} reworks one of your ways (\"retire\": true instead drops it; a new name works out a new way; \
 item \"top level\" with a {\"desires\": [...]} graph changes what you weigh and how). \
-A single walk ({\"do\": \"goto\", \"target\": T}) can be a step before an act (e.g. goto a place, then build there); \
+A single walk ({\"do\": \"goto\", \"target\": T}, with \"run\": true to hurry at the cost of breath) can be a step before an act (e.g. goto a place, then build there); \
 following, fleeing, fighting, sleeping and resting are not acts: they are your graph. Words change nothing in the world by themselves: \
 if you agree to do something now, do it as an act.";
 
@@ -1063,6 +1114,25 @@ pub fn talk_user(t: &TalkUser) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn the_skill_reference_states_combat_timings() {
+        let s = living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).unwrap();
+        let t = timings_of(&s);
+        assert!(t["strike"].contains("winds up 350 ms") && t["strike"].contains("250 ms to recover") && t["strike"].contains("ready again 650 ms"), "{}", t["strike"]);
+        assert!(t["dodge"].starts_with("a dash at once") && t["dodge"].contains("ready again 900 ms"), "{}", t["dodge"]);
+        assert!(t["block"].starts_with("raised at once and held up to 8 s"), "{}", t["block"]);
+        assert!(t["bowshot"].contains("flies 30 m/s") && t["firebolt"].contains("ready again 4 s"), "{} / {}", t["bowshot"], t["firebolt"]);
+        assert!(!t.contains_key("yield") && !t.contains_key("tend") && !t.contains_key("threaten"), "only timed skills: {:?}", t.keys().collect::<Vec<_>>());
+        assert!(t.values().all(|w| !w.contains("then 0 ms")), "{t:?}");
+        // A character's own moves only, by the techniques it knows; the shared reference has none.
+        let archer = own_timings_of(None, |t| t != "fire_bolt");
+        assert!(archer.contains("- bowshot: winds up 300 ms") && archer.contains("- strike: winds up 350 ms"), "{archer}");
+        assert!(!archer.contains("- firebolt:"), "fire bolt's timing for one who does not know it: {archer}");
+        let caster = own_timings_of(None, |_| true);
+        assert!(caster.contains("- firebolt: winds up 450 ms"), "{caster}");
+        assert!(!skills_help().contains("timing") && !skills_help().contains("winds up 350"), "the shared reference states no timings");
+    }
+
+    #[test]
     fn talk_examples_show_every_shown_act() {
         // talk_acts() leaves these out as already shown; a name missing from the examples is an
         // act a conversation turn never offers (host was, until fix-host-example).
@@ -1077,10 +1147,19 @@ mod tests {
         use super::{felt_body, Body};
         let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(&Body { hp, max_hp: 100.0, hunger, energy, hp_rate, ..Default::default() });
         assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, rested, unhurt");
-        assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded; you are growing weaker");
+        assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded, walking slower; you are growing weaker");
         assert_eq!(b(70.0, 10.0, 90.0, 0.4), "well fed, well rested, a little hurt; your wounds are mending");
-        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive; you are growing weaker");
+        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive, walking slower; you are growing weaker");
         assert!(!b(55.0, 60.0, 40.0, 0.0).chars().any(|c| c.is_ascii_digit()));
+        // Breath, from the vitals row as the service reads it: out of breath below 20 (after a
+        // run or a fight), the status law's words; nothing said above.
+        let winded = |s: f64| {
+            let row = vec![("hp".to_string(), 100.0), ("max_hp".to_string(), 100.0), ("hunger".to_string(), 30.0), ("energy".to_string(), 60.0), ("at_ms".to_string(), 1000.0),
+                           ("stamina".to_string(), s), ("stamina_max".to_string(), 100.0), ("stamina_rate".to_string(), 25.0), ("stamina_from_ms".to_string(), 5000.0)];
+            felt_body(&Body { hp: 100.0, max_hp: 100.0, hunger: 30.0, energy: 60.0, row, now_ms: 2000, kind: "person".into(), stage: "adult".into(), ..Default::default() })
+        };
+        assert!(winded(5.0).contains("out of breath"), "{}", winded(5.0));
+        assert!(!winded(60.0).contains("out of breath"), "{}", winded(60.0));
     }
 
     #[test]

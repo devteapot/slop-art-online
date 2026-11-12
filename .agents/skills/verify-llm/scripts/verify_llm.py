@@ -63,7 +63,7 @@ def stop(process):
 
 class Run:
     def __init__(self, name, prefix="llm"):
-        if prefix not in ("llm", "minds"):
+        if prefix not in ("llm", "minds", "gate"):  # gate: the merge's scene gate (living/tools/scene_gate.py)
             raise ValueError("unsupported caller prefix")
         if not re.fullmatch(prefix + r'-[a-zA-Z0-9-]+', name):
             raise ValueError('run must match the validated caller prefix')
