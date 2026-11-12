@@ -62,6 +62,9 @@ pub struct ActorFacts {
     /// Who last hurt the actor, and how long ago (ms; none when never).
     pub hurt_by: u32,
     pub hurt_ago: Option<f32>,
+    /// The one who last hurt the actor is alive and within the `wake_reach` law of it, and the
+    /// fight is still on (struck within the authority's fight window, `act::FIGHT_MS`).
+    pub hurt_by_near: bool,
     /// How long ago the actor yielded (ms; none when it has not).
     pub yielded_ago: Option<f32>,
     /// Creatures the actor senses (in sight, or smelled for a species with a scent) by kind;
@@ -502,6 +505,12 @@ pub struct Laws {
     /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
     /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
     pub pack_reflex: bool,
+    /// A body struck this many seconds ago cannot fall asleep (the script's `sleep_check`, the
+    /// same for every controller).
+    pub alert_after_hit_s: f32,
+    /// A body cannot fall asleep while the one who last struck it, in a fight still on, is within
+    /// `wake_reach` (the fact `hurt_by_near`).
+    pub alert_while_attacker_near: bool,
     /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
@@ -626,6 +635,8 @@ impl Default for Laws {
             longing_food: 0.0,
             fov_on: false,
             pack_reflex: true,
+            alert_after_hit_s: 15.0,
+            alert_while_attacker_near: true,
             stranger_by_name: false,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -1907,7 +1918,7 @@ impl Scripts {
         let Some(i) = context::ACTOR.iter().position(|f| *f == field) else { return false };
         ["_check", "_duration", "_done"].iter().any(|p| {
             let f = format!("{skill}{p}");
-            self.has(&f) && self.plan(&f).actor & (1 << i) != 0
+            self.has(&f) && self.plan(&f).actor & (1u64 << i) != 0
         })
     }
 
@@ -2660,6 +2671,8 @@ impl Scripts {
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
             pack_reflex: flag("pack_reflex", l.pack_reflex),
+            alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
+            alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),

@@ -59,3 +59,15 @@ A sleeping body's mind is asked to think only on what wakes it (`perceive::Wake`
 ### A signal's reach from its loudness (since `packs-2`)
 
 A species signal with no `range` of its own carries its `loudness` times each listener's own hearing (`species::Signal::reach`; `perceive::signal` gathers within the widest hearing times the loudness, then keeps each listener within its own). The shipped howl is loudness 2: 18 m where people hear 9 m. As loud as a shout, it wakes a sleeper within `wake_reach`. Signals with a `range` (the cry 12 m, growl, whimper, yip, the deer's calls) keep it. `scenes.py howl_reach` (default seed): a wolf howls on an open line; a person asleep 6 m off wakes, told "You woke up: You hear a long howl from a wolf, …"; one 15 m off hears it; one 25 m off does not. Cargo: `species::tests::a_signal_without_a_range_carries_by_its_loudness`. Evidence: `howl_reach-heard.json`.
+
+## Sleep in a fight
+
+A body does not fall asleep in a fight. The script's `sleep_check(a)` (`living/scripts/skills.rhai`) refuses the sleep skill, for graphs, minds' acts and `human_act` alike, in the body fact's words and nothing else:
+
+- "you cannot sleep: you were struck moments ago" while `a.actor.hurt_ago` is within the `alert_after_hit_s` law (15 s; the `in_combat` status's window);
+- "you cannot sleep: someone who struck you is close" while the law `alert_while_attacker_near` is on (default) and the fact `a.actor.hurt_by_near` holds: the one who last struck the body is alive, within the `wake_reach` law, and the fight is still on (struck within `act::FIGHT_MS`, 30 s, the gap after which a blow is a new fight's first). `hurt_by_near` is worked out in `act::facts` from the `vitals` row (`hurt_by`, `hurt_ms`) and the attacker's body; no table gains a column.
+
+A refused sleep fails its routine, so a graph's next desire takes over; a mind is told the refusal as any failed act. Every blow that lands wakes a sleeping victim, whoever plays it (`perceive::wake_struck` in `act::damage`): before, only a fight's first blow did (through its deliberation request), and later blows went to the AI-only, throttled fight report, so a body could sleep through a fight (r2e heavy r4: 8 of 10 night blows landed on a sleeper). The first blow's deliberation is unchanged.
+
+`scenes.py alert_after_hit` (any seed, about 2 min): struck once, a sleep is refused for 15 s and then taken; struck with the attacker left 2 m off, refused as "someone who struck you is close" past 15 s and taken once they walk away (within the 30 s fight); with both laws off (so a struck body sleeps again at once), the fight's second blow (within 30 s, not a first) wakes the sleeper with "You woke up: … is attacking you!". It sets and restores both laws.
+

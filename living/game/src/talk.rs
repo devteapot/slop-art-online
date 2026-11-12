@@ -9,9 +9,14 @@
 //! - **Tab** goes to the next person within earshot (nearest first), then back to the room.
 //! - A tap on a peaceful person, F on them, or a click in their window's box addresses them.
 //! - **The box says whom:** "To the room", "To a child in red" (labels by looks, `looks.rs`).
-//! - **Modes come from a table** ([`MODES`]): today the room and a person. Whispering (close, or
-//!   through skills) and skill channels are the Spark coordinator's `docs/COMMUNICATION.md`;
-//!   the table keeps a place for whisper, shown greyed, with no rules behind it yet.
+//! - **Ways come from the world** ([`ways`], `speech_card`): its ways of speaking in their order
+//!   (say, whisper, call… as the rules name and label them); the box's chip shows the one it
+//!   has, and a click on it or the Way key (Up) moves to the next. A line goes in that way
+//!   (`human_speak`); its limits are the card's (`max_chars` cuts the box, `gap_ms` greys the
+//!   chip), and whatever the rules refuse (a whisper to no one, a call too soon) comes back in
+//!   their words as a note. Tab follows the way's reach: the authority's list for it when the
+//!   `earshot` law gives one, else its carry by the rules (`WaySpec::carry_for`, a reach such as a
+//!   whisper's as the limit).
 //! - **Earshot is the rules'.** The world's `senses(a)` law (`hearing`), asked per person
 //!   perceived (their kind and stage; night and dark from the displayed clock).
 //! - **When the room does not answer, the client says so.** Minds give no turn to a line to the
@@ -31,17 +36,14 @@ use living_rules::script::{ActorFacts, SkillCtx};
 use spacetimedb_sdk::Table;
 use std::collections::HashSet;
 
-/// A way of speaking the box offers: its key, whether it names a person, and whether the
-/// world's rules allow it yet (whisper and skill channels come with `docs/COMMUNICATION.md`).
-pub struct ModeSpec {
-    pub key: &'static str,
-    pub person: bool,
-    pub available: bool,
+/// The world's ways of speaking (`speech_card`: say, whisper, call… as the rules name them), in
+/// the box's order (the card's `order`): the first is the box's own until another is chosen.
+/// No way is named here (the rules' ratchet, `living_rules::ui`).
+pub fn ways(conn: &DbConnection) -> Vec<SpeechCard> {
+    let mut v: Vec<SpeechCard> = conn.db.speech_card().iter().collect();
+    v.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
+    v
 }
-
-/// The box's ways of speaking, in Tab's order: a person in earshot, then the room. Whisper is
-/// listed, unavailable, so the box shows where it will go.
-pub const MODES: [ModeSpec; 3] = [ModeSpec { key: "person", person: true, available: true }, ModeSpec { key: "room", person: false, available: true }, ModeSpec { key: "whisper", person: true, available: false }];
 
 /// How long the room has to take a line up before the note says nobody did (s).
 const ROOM_WAIT_S: f64 = 10.0;
@@ -65,6 +67,14 @@ pub struct Talk {
     /// earshot if you say it: ...; a whisper would reach no one; a call would also reach: ..."),
     /// and each way's hearers. None with the law off.
     pub told: Option<Told>,
+    /// The way of speaking chosen in the box (a `speech_card` name; None: the world's first), the
+    /// card it is now (for the box's chip, its limit and gap), and a request for the next one (the
+    /// Way key, a click on the chip).
+    pub way: Option<String>,
+    pub card: Option<SpeechCard>,
+    pub next_way: bool,
+    /// When each way was last used here (app s), for its gap (`gap_ms`).
+    pub used_at: std::collections::HashMap<String, f64>,
     /// A left tap on a peaceful person (`combat.rs`): open the box to them, or, open, address them.
     pub open_to: Option<u32>,
     /// Tab in the box (`ui/say.rs`).
@@ -142,8 +152,12 @@ pub fn earshot_row(conn: &DbConnection, me: u32) -> Option<Told> {
 
 /// The people within earshot of me, nearest first.
 #[allow(clippy::too_many_arguments)]
-fn earshot(conn: &DbConnection, scene: &Scene, rules: &crate::verbs::Rules, me: u32, at: Vec2, hour: f32, town: &crate::town::Town, combat: &crate::combat::Combat) -> Vec<u32> {
+fn earshot(conn: &DbConnection, scene: &Scene, rules: &crate::verbs::Rules, me: u32, at: Vec2, hour: f32, town: &crate::town::Town, combat: &crate::combat::Combat, way: Option<&SpeechCard>) -> Vec<u32> {
     let Some(sc) = rules.scripts.as_ref() else { return Vec::new() };
+    // A way's words carry by the rules (`WaySpec::carry_for` the hearer's hearing); one that names
+    // someone within a reach (a whisper) reaches no further than that.
+    let spec = way.and_then(|w| sc.way(&w.name));
+    let reach = way.map_or(0.0, |w| w.reach_m);
     let mut near: Vec<(f32, u32)> = scene
         .shown
         .iter()
@@ -151,7 +165,10 @@ fn earshot(conn: &DbConnection, scene: &Scene, rules: &crate::verbs::Rules, me: 
         .filter_map(|(id, (p, _))| {
             let c = conn.db.seen_characters().id().find(id).filter(|c| c.kind == "person")?;
             let d = p.distance(at);
-            (d <= hearing(sc, &c, hour)?).then_some((d, *id))
+            let h = hearing(sc, &c, hour)?;
+            let carry = spec.map_or(h, |w| w.carry_for(h));
+            let within = if reach > 0.0 { carry.min(reach) } else { carry };
+            (d <= within).then_some((d, *id))
         })
         .collect();
     near.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -212,6 +229,26 @@ fn address(
         input.keep_words = false;
         return;
     }
+    // The way of speaking: the one chosen if the world still has it, else its first; the Way
+    // key or the chip moves to the next.
+    let all = ways(conn);
+    let mut i = talk.way.as_ref().and_then(|w| all.iter().position(|c| &c.name == w)).unwrap_or(0);
+    if std::mem::take(&mut talk.next_way) && !all.is_empty() {
+        i = (i + 1) % all.len();
+        talk.way = Some(all[i].name.clone());
+        talk.next_ask = 0.0;
+        info!("talk: way {}", all[i].name);
+    }
+    let card = all.get(i).cloned();
+    // The way's longest line (`max_chars`): the box holds no more, however the words came.
+    if let Some(max) = card.as_ref().map(|c| c.max_chars as usize).filter(|m| *m > 0) {
+        if input.chat.chars().count() > max {
+            input.chat = input.chat.chars().take(max).collect();
+        }
+    }
+    if talk.card != card {
+        talk.card = card;
+    }
     let fresh = !talk.was_open;
     talk.was_open = true;
     if fresh || now >= talk.next_ask {
@@ -219,9 +256,11 @@ fn address(
         // The authority's own list when it gives one (the box can only say: its `say` way; whisper
         // and call have no place here yet), else the client's reckoning, as before.
         let told = earshot_row(conn, me);
-        talk.earshot = match told.as_ref().and_then(|t| t.hearers("say")) {
+        // That way's own list (the authority's, by its name), else its reach by the rules.
+        let way = talk.card.clone();
+        talk.earshot = match told.as_ref().zip(way.as_ref()).and_then(|(t, w)| t.hearers(&w.name)) {
             Some(h) => h.to_vec(),
-            None => earshot(conn, &scene, &rules, me, at, clock.hour(), &town, &combat),
+            None => earshot(conn, &scene, &rules, me, at, clock.hour(), &town, &combat, way.as_ref()),
         };
         if talk.told != told {
             talk.told = told;

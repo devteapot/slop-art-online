@@ -548,10 +548,10 @@ fn status_of(a) {
     }
 
     #[test]
-    fn breath_is_a_bar_focus_shows_while_short_and_tiredness_is_a_pill() {
+    fn breath_and_focus_are_bars_always_and_tiredness_is_a_pill() {
         let sc = Scripts::new(SHIPPED).unwrap();
         let names: Vec<(&str, bool, bool)> = sc.meters().iter().map(|m| (m.name.as_str(), m.shown, m.while_short)).collect();
-        assert_eq!(names, [("health", true, false), ("stamina", true, false), ("focus", true, true), ("energy", false, false), ("hunger", false, false)]);
+        assert_eq!(names, [("health", true, false), ("stamina", true, false), ("focus", true, false), ("energy", false, false), ("hunger", false, false)]);
         assert_eq!(sc.meters()[2].label, "Mana", "the world's word for focus");
         // A pool moves by its rate a second from its start, not along the needs' anchor: 40
         // breath at t=0, refilling at 25 a second from 1 s on, is 65 at 2 s.
