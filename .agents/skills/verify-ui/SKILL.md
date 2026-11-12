@@ -88,7 +88,7 @@ Compare a photograph with the design's picture (`/Users/carlid/dev/slop-art-onli
 $V cleanup --run $R
 ```
 
-It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. `drive.py` waits for its own client to quit (a plan ends with `quit`; a stuck client is stopped by its pid after `--timeout`). Never point a run at the paused reference worlds or at `verify-play*` worlds.
+It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. `drive.py` waits for its own client to quit (a plan ends with `quit`; a stuck client is stopped by its pid after `--timeout`). Whatever ends a drive (a scene's error, SIGTERM, SIGHUP) stops its client by its pid; a drive killed outright leaves a client that quits by itself within a second once its parent is gone (`live.rs`, "my launcher … is gone" in client.log). Never point a run at the paused reference worlds or at `verify-play*` worlds.
 
 ## Feature map
 
