@@ -38,10 +38,9 @@
 //! - `genoutlines`: generate every mesh's outline directions, ignoring those a file brings
 //!   (`style::outline_normals`); `keeppixels`: character pictures keep their pixels on the CPU
 //!   (`characters::thumb_pictures`). Both are the way before types-1, for comparison.
-//! - `sharestyles`: composed people's style files share a toon material wherever their
-//!   materials are the same, in place of one a file (`characters/compose.rs`), to measure what
-//!   the materials cost. Colours are wrong with it (each piece recolours from the first one's
-//!   mean).
+//! - `filestyles`: composed people's style files take a toon material a file and material
+//!   name, as before compose-1 shared them by what they draw (`characters/compose.rs`), to
+//!   compare the two.
 //!
 //! The frame is often limited by neither the GPU nor one system but by the render world's
 //! per-batch work: every distinct material and mesh slab is a batch set per view and pass, and

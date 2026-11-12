@@ -972,6 +972,54 @@ fn mean_color(toon: &Toon, mesh: &Mesh, thumbs: &Thumbs) -> Option<Vec3> {
     (wsum > 0.0).then(|| sum / wsum * base)
 }
 
+/// A recolour's source colour over several meshes of one material (linear): the mean of its
+/// picture's texels the meshes use (from its summary, or from its pixels while they are still on
+/// the CPU), else of their vertex colours by area, times its base colour. What `recolor` finds
+/// from one mesh, for a material shared between files (`compose.rs`). None while its picture is
+/// neither summarised nor readable.
+pub(crate) fn source_mean(base: &StandardMaterial, meshes: &[&Mesh], thumbs: &Thumbs, images: &Assets<Image>) -> Option<Vec3> {
+    let b = base.base_color.to_linear();
+    let b = Vec3::new(b.red, b.green, b.blue);
+    let Some(tex) = base.base_color_texture.as_ref() else {
+        let (mut sum, mut w) = (Vec3::ZERO, 0.0);
+        for m in meshes {
+            if let Some((s, a)) = vertex_sum(m) {
+                sum += s;
+                w += a;
+            }
+        }
+        return Some(if w > 0.0 { sum / w * b } else { b });
+    };
+    let own;
+    let thumb = match thumbs.0.get(&tex.id()) {
+        Some(t) => t,
+        None => {
+            own = Thumb::of(images.get(tex)?)?;
+            &own
+        }
+    };
+    let (mut sum, mut wsum) = (Vec3::ZERO, 0.0);
+    for m in meshes {
+        let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) = m.attribute(Mesh::ATTRIBUTE_UV_0) else { continue };
+        let step = (uvs.len() / 4000).max(1);
+        for uv in uvs.iter().step_by(step) {
+            let c = thumb.at(uv[0], uv[1]);
+            sum += c.truncate();
+            wsum += c.w;
+        }
+    }
+    Some(if wsum > 0.0 { sum / wsum * b } else { b })
+}
+
+/// The recolour's material values for a source colour, quantised to 1/1024 so that two
+/// materials are given the same values exactly when their sources agree to below what the
+/// screen shows (`compose.rs` keys materials by them): mode 3 and `recolor_from`.
+pub(crate) fn recolor_source(mean: Vec3) -> (Vec4, Vec4) {
+    let q = |x: f32| (x * 1024.0).round() / 1024.0;
+    let m = hsv(mean);
+    (Vec4::new(0.0, 0.0, 0.0, 3.0), Vec4::new(q(m.x), HUE_SPREAD, q(m.y), q(m.z)))
+}
+
 /// Cells a side of a texture's summary.
 const THUMB: u32 = 64;
 /// Samples a side within each cell.
@@ -1039,9 +1087,9 @@ fn thumb_pictures(mut events: MessageReader<AssetEvent<Image>>, mut images: ResM
     }
 }
 
-/// A mesh's mean vertex colour (linear), weighted by area: the outfit pieces' colours are per
-/// vertex, and a brass button's many small triangles shouldn't outweigh a coat's panels.
-fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
+/// A mesh's vertex colours summed by area, and the area: [`vertex_mean`]'s parts, to pool
+/// several meshes.
+fn vertex_sum(mesh: &Mesh) -> Option<(Vec3, f32)> {
     use bevy::mesh::VertexAttributeValues as V;
     let colours: Vec<Vec3> = match mesh.attribute(Mesh::ATTRIBUTE_COLOR)? {
         V::Float32x4(c) => c.iter().map(|c| Vec3::new(c[0], c[1], c[2])).collect(),
@@ -1057,7 +1105,14 @@ fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
         sum += (colours[t[0]] + colours[t[1]] + colours[t[2]]) / 3.0 * area;
         wsum += area;
     }
-    (wsum > 0.0).then(|| sum / wsum)
+    Some((sum, wsum))
+}
+
+/// A mesh's mean vertex colour (linear), weighted by area: the outfit pieces' colours are per
+/// vertex, and a brass button's many small triangles shouldn't outweigh a coat's panels.
+fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
+    let (sum, w) = vertex_sum(mesh)?;
+    (w > 0.0).then(|| sum / w)
 }
 
 /// Give each character's meshes their recipe's colours. Characters share their base file's toon
@@ -1102,6 +1157,13 @@ pub fn recolor(
         };
         if !ready.contains(&mat.0.id()) {
             let Some(toon) = toons.get(&mat.0) else { continue };
+            // A material given its source colour when it was made (a composed person's style
+            // materials, `compose.rs`) keeps it: it may be shared by meshes of several files.
+            if toon.extension.params.recolor.w > 2.5 {
+                ready.insert(mat.0.id());
+                commands.entity(e).insert((bevy::mesh::MeshTag::new(tag_color(srgb)), Recolored));
+                continue;
+            }
             let Some(mean) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &thumbs)) else { continue };
             let m = hsv(mean);
             if let Some(mut t) = toons.get_mut(&mat.0) {

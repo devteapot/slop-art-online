@@ -80,6 +80,17 @@ python3 living/tools/characters/compose_check.py <binary> .local/living/<run>/fi
 | `composed/view.log` | `compose: … wears …: N meshes` once a person; no `could not be put on`, `did not load` or `joint … is neither` |
 | `stills/<name>.jpg` | hair, cap, kerchief, apron, beard, stubble and every piece on; the iris in the line's `eyes`; no floating or missing piece; the known limits (an overlay's one strength, no blush, a smock's sleeve bands taking its hue); with `FAR=0.01` a bearded man's far model keeps his beard |
 
+Colours, the town's people against their whole files, and sharing against one material a file:
+
+```bash
+python3 living/tools/characters/colour_check.py <binary> .local/living/<run>/colour [name ...]   # default: the whole town; about 30 min for 64
+```
+
+| Read | Pass |
+| --- | --- |
+| `colour.json` `summary.sharing` | `composed_vs_perfile` within `composed_vs_again` (two runs of the same thing): sharing materials changes no pixel beyond the runs' own noise |
+| `summary.delta_e` (head, torso, legs, face) | where a composed person's colours moved from their whole file's, by band (CIE76 ΔE of the band's mean); `summary.worst` names the bands to look at in the shots. Known movers: lines and blush on faces, aprons and smocks' sleeve bands |
+
 Cost, the town's 64 as they are, both modes interleaved (`town` is each person's whole file, `composed` the same recipes with the switch on):
 
 ```bash
@@ -92,7 +103,7 @@ python3 $C … --runs x:town,x:composed,x:composed,x:town --repeat 3 --game-env 
 | `people ready: 65 characters (64 composed) …` | 64 composed with the switch on, 0 off |
 | `people perf: … N mesh entities shown of M` | at the game camera (all far): 431 of 1,220 composed, 210 of 722 whole (Cullet's 95 shared files) |
 | `views: … [people …, P mesh-material pairs]` | the draws the people make once instanced: 97 composed against 210 whole at the game camera, 203 against 530 on the full model |
-| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 86 composed against 10 whole at the game camera, 116 against 84 on the full model. `LIVING_GAME_PERF=sharestyles` (colours wrong, measurement only) shows what sharing style materials would give: 28 and 64 |
+| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 86 composed against 10 whole at the game camera, 116 against 84 on the full model. Style toons are keyed by content and source colour (`compose.rs`): they share only where the result is the same, so the count falls as the generator's pieces come to share one shading mean. `LIVING_GAME_PERF=filestyles` keys one a file, to compare |
 | `assets: N meshes M MiB (… morph targets …)` and `batches: … textures … MiB` | composed far below whole: mesh data and morph targets, and GPU textures |
 
 ## Gotchas

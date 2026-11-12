@@ -121,7 +121,7 @@ except ImportError:
 arms = ["whole", "composed", "control"]
 os.makedirs(os.path.join(out, "stills"), exist_ok=True)
 for p in people:
-    shots = sorted(f for f in os.listdir(os.path.join(out, "whole", "recipe:town-" + p)) if f.endswith(".png"))
+    shots = sorted(f for f in os.listdir(os.path.join(out, "whole", "recipe:town-" + p)) if f.endswith(".png") and not f.endswith(".plate.png"))
     w, h = 450, 600
     sheet = Image.new("RGB", (w * 3, h * len(shots) + 30), (24, 24, 24))
     dr = ImageDraw.Draw(sheet)

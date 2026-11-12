@@ -31,6 +31,9 @@
 //!   (`assets/characters/recipes.json`; folks `adult`, `giant`, `small`) at its own height; a
 //!   recipe with a person line is composed from shared files with `LIVING_GAME_COMPOSE=1`
 //!   (`characters/compose.rs`), as in the game.
+//! - `LIVING_GAME_VIEW_PLATE=1`: after each photograph, a second of the same view and pose with
+//!   the model hidden (`NN-<shot>.plate.png`): the background alone, to tell the model's pixels
+//!   from it (`colour_check.py`).
 //! - `LIVING_GAME_VIEW_JOINTS=<file>`: at each photograph, append a JSON line with every bone's
 //!   (`J_*`) place in the model's own frame, in metres (unturned, from its root), and its
 //!   scale: to compare two ways of building a person joint by joint.
@@ -164,6 +167,8 @@ pub struct ViewState {
     /// The mood's fog distances: the day curve scales them every frame, and in the game the
     /// camera resets them first (camera::follow), so the view does that here.
     fog: Option<bevy::pbr::FogFalloff>,
+    /// Batch, `LIVING_GAME_VIEW_PLATE`: the model in focus is hidden for its shot's plate.
+    plate: bool,
 }
 
 /// Resolve the requested files to paths under the asset folder.
@@ -332,6 +337,7 @@ pub fn setup(
         started: 0.0,
         shift: (0.0, Vec3::ZERO),
         fog: cams.iter().next().map(|f| f.falloff.clone()),
+        plate: false,
     });
 }
 
@@ -388,7 +394,7 @@ pub fn layout(state: Res<ViewState>, mut items: Query<(&Item, &Fitted, &mut Tran
         let c = item.turn * fit.center;
         tf.translation.x = at - c.x + off.x;
         tf.translation.z = -c.z + off.z;
-        *vis.into_inner() = if !batch || item.index == state.focus { Visibility::Inherited } else { Visibility::Hidden };
+        *vis.into_inner() = if !batch || (item.index == state.focus && !state.plate) { Visibility::Inherited } else { Visibility::Hidden };
     }
 }
 
@@ -585,11 +591,23 @@ pub fn batch(
         return;
     };
     if now - at > settle {
+        if state.plate {
+            // The same view with the model hidden.
+            crate::capture::shot(&mut commands, target.as_deref(), dir.join(format!("{step:02}-{name}.plate.png")));
+            state.plate = false;
+            state.batch = (i, step + 1, now + 0.3);
+            return;
+        }
         if let (Ok(path), Some(root)) = (std::env::var("LIVING_GAME_VIEW_JOINTS"), roots.iter().find(|(_, it)| it.index == i).map(|(e, _)| e)) {
             write_joints(&path, &file, &name, root, &children, &bones);
         }
         crate::capture::shot(&mut commands, target.as_deref(), dir.join(format!("{step:02}-{name}.png")));
-        state.batch = (i, step + 1, now + 0.3);
+        if std::env::var("LIVING_GAME_VIEW_PLATE").is_ok_and(|v| v == "1") {
+            state.plate = true;
+            state.batch = (i, step, now + 0.3);
+        } else {
+            state.batch = (i, step + 1, now + 0.3);
+        }
     }
 }
 

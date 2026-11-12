@@ -25,10 +25,20 @@
 //!    and colliders join the person's (`rig_springs`).
 //!
 //! **Shared, not copied.** A style file is loaded once ([`super::kept`]) and its meshes are the
-//! file's own mesh assets for everyone wearing it; each file's materials become one toon
-//! material a file and material name ([`Plans`]), shared the same way. Bind matrices are one
-//! asset a type and file. People differ only in their bones and their mesh tags (colours), so
-//! the shared meshes can batch.
+//! file's own mesh assets for everyone wearing it. Bind matrices are one asset a type and file.
+//! People differ only in their bones and their mesh tags (colours), so the shared meshes batch.
+//!
+//! **Materials by what they draw** ([`Plans`]). Every material is a batch set in every view and
+//! pass, so style files share toon materials wherever the result is the same. A person's colours
+//! are not in a material: each mesh carries its own in its tag, and the shader moves the
+//! material's source colour to it (`toon.wesl` `recolor`, mode 3). What a material brings is its
+//! content (the glTF material, its picture, its kind of shading, a face's shadow map) and that
+//! source colour: the mean of the texels or vertex colours its file's meshes use (near meshes
+//! first), worked out once and quantised to 1/1024 (`characters::recolor_source`). A toon is
+//! keyed by both, so two files share one exactly when every tag draws the same on either, and
+//! `recolor` keeps the source it was given. Files whose pieces are built around one shading mean
+//! then share one material. `LIVING_GAME_PERF=filestyles` (measurement only) keys one a file and
+//! material name, as before, to compare.
 //!
 //! **Colours** go through the mesh tag as recipes recolour today (`recolor`, mode 3): hair by its
 //! `_HAIR` material, skin by `_SKIN`, an outfit piece by its own name in the line's
@@ -264,12 +274,14 @@ struct PlanMesh {
     morphs: Option<(usize, Option<crate::lookdev::FaceMorphs>)>,
 }
 
-/// Plans by (type file, style file, fitted); toon materials by style file and material name.
-/// Both hold their assets for the session: a few dozen files serve any number of people.
+/// Plans by (type file, style file, fitted); toon materials by what they draw (`toons`: content
+/// and source colour) and the one each style file's material takes (`file_toons`). Both hold
+/// their assets for the session: a few dozen files serve any number of people.
 #[derive(Resource, Default)]
 pub struct Plans {
     plans: HashMap<(String, String, bool), Option<Arc<Plan>>>,
     toons: HashMap<String, Handle<Toon>>,
+    file_toons: HashMap<String, Handle<Toon>>,
     /// A type's rest (bind) world matrix by joint name.
     rests: HashMap<String, Arc<HashMap<String, Mat4>>>,
     outlined: HashSet<AssetId<Mesh>>,
@@ -288,6 +300,8 @@ pub struct Composer<'w> {
     meshes: ResMut<'w, Assets<Mesh>>,
     style: Res<'w, Style>,
     plans: ResMut<'w, Plans>,
+    thumbs: Res<'w, super::Thumbs>,
+    images: Res<'w, Assets<Image>>,
 }
 
 impl Composer<'_> {
@@ -311,7 +325,13 @@ impl Composer<'_> {
         Some(rest)
     }
 
-    fn toon(&mut self, file: &str, name: &str, material: Option<&Handle<GltfMaterial>>) -> Handle<Toon> {
+    /// The toon a style file's material takes: one already made that draws the same (the same
+    /// content and source colour), else a new one. `sources` are the file's meshes in it.
+    fn toon(&mut self, file: &str, name: &str, material: Option<&Handle<GltfMaterial>>, sources: &[Handle<Mesh>]) -> Handle<Toon> {
+        let own = format!("{file}#{name}");
+        if let Some(h) = self.plans.file_toons.get(&own) {
+            return h.clone();
+        }
         let gm = material.and_then(|m| self.gmaterials.get(m)).cloned().unwrap_or_default();
         let base = bevy::pbr::gltf::standard_material_from_gltf_material(&gm);
         // As `lookdev::convert` gives a character's meshes by material name: hair as hair; a
@@ -319,7 +339,8 @@ impl Composer<'_> {
         // file, else as skin; eyes and lines as face parts; clothes plain.
         let skin = name.ends_with("_SKIN") || name.contains("Skin");
         let map = format!("{}.face.png", file.trim_end_matches(".glb"));
-        let face = (skin && name.contains("Face") && exists(&map)).then(|| self.assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(map));
+        let face_map = (skin && name.contains("Face") && exists(&map)).then_some(map);
+        let face = face_map.clone().map(|m| self.assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(m));
         let kind = match () {
             _ if name.contains("_HAIR") => Kind::Hair,
             _ if face.is_some() => Kind::Face,
@@ -327,16 +348,29 @@ impl Composer<'_> {
             _ if name.contains("_FACE") || name.contains("_EYE") => Kind::FacePart,
             _ => Kind::Plain,
         };
-        // One material a file and material name: recolouring keeps each material's mean colour,
-        // and every piece's differs. `LIVING_GAME_PERF=sharestyles` shares one material between
-        // files whose materials are the same (measurement only: every piece then recolours
-        // from the first piece's mean, so colours are wrong).
-        let key = if crate::perf::has("sharestyles") { format!("{kind:?} {base:?}") } else { format!("{file}#{name}") };
-        if let Some(h) = self.plans.toons.get(&key) {
-            return h.clone();
-        }
-        let h = self.toons.add(self.style.kind(base, kind, face));
-        self.plans.toons.insert(key, h.clone());
+        // The source colour the recolour moves to a person's: over the file's meshes in this
+        // material. Without it (a picture not yet readable) the material is the file's own and
+        // `recolor` finds it from the first mesh, as for any character.
+        let meshes: Vec<&Mesh> = sources.iter().filter_map(|m| self.meshes.get(m)).collect();
+        let source = super::source_mean(&base, &meshes, &self.thumbs, &self.images).map(super::recolor_source);
+        let key = match source {
+            Some((_, from)) if !crate::perf::has("filestyles") => format!("{kind:?} {face_map:?} {from:?} {base:?}"),
+            _ => own.clone(),
+        };
+        let h = match self.plans.toons.get(&key) {
+            Some(h) => h.clone(),
+            None => {
+                let mut toon = self.style.kind(base, kind, face);
+                if let Some((recolor, from)) = source {
+                    toon.extension.params.recolor = recolor;
+                    toon.extension.params.recolor_from = from;
+                }
+                let h = self.toons.add(toon);
+                self.plans.toons.insert(key, h.clone());
+                h
+            }
+        };
+        self.plans.file_toons.insert(own, h.clone());
         h
     }
 
@@ -371,6 +405,16 @@ impl Composer<'_> {
         let mut bones = Vec::new();
         let mut meshes = Vec::new();
         let mesh_nodes: Vec<GltfNode> = gnodes.iter().filter_map(|h| self.nodes.get(h)).filter(|n| n.mesh.is_some() && n.skin.is_some()).cloned().collect();
+        // Each material's meshes in the file, near ones first: its source colour is theirs.
+        let name_of = |h: &Handle<GltfMaterial>| materials.iter().find(|(_, m)| *m == h).map(|(n, _)| n.to_string()).unwrap_or_default();
+        let mut sources: HashMap<String, (Vec<Handle<Mesh>>, Vec<Handle<Mesh>>)> = HashMap::new();
+        for node in &mesh_nodes {
+            let Some(gmesh) = node.mesh.as_ref().and_then(|m| self.gmeshes.get(m)) else { continue };
+            for p in &gmesh.primitives {
+                let e = sources.entry(p.material.as_ref().map(name_of).unwrap_or_default()).or_default();
+                if node.name.starts_with("Far") { e.1.push(p.mesh.clone()) } else { e.0.push(p.mesh.clone()) }
+            }
+        }
         for node in mesh_nodes {
             let rest = self.skin_rest(node.skin.as_ref()?)?;
             let style_rest: HashMap<&str, Mat4> = rest.iter().map(|(n, m)| (n.as_str(), *m)).collect();
@@ -403,11 +447,11 @@ impl Composer<'_> {
             }
             let bindposes = self.bindposes.add(SkinnedMeshInverseBindposes::from(ibm));
             let gmesh = self.gmeshes.get(node.mesh.as_ref()?)?.clone();
-            let name_of = |h: &Handle<GltfMaterial>| materials.iter().find(|(_, m)| *m == h).map(|(n, _)| n.to_string()).unwrap_or_default();
             let mut prims = Vec::new();
             for p in &gmesh.primitives {
                 let mname = p.material.as_ref().map(name_of).unwrap_or_default();
-                let toon = self.toon(&wear.file, &mname, p.material.as_ref());
+                let own = sources.get(&mname).map(|(near, far)| if near.is_empty() { far.clone() } else { near.clone() }).unwrap_or_default();
+                let toon = self.toon(&wear.file, &mname, p.material.as_ref(), &own);
                 if self.plans.outlined.insert(p.mesh.id()) {
                     if let Some(mut m) = self.meshes.get_mut(&p.mesh) {
                         crate::style::outline_normals(&mut m);
