@@ -273,6 +273,15 @@ class Cage:
                ("brow", p.brow_z + 0.004), ("crease", max(lid_top + 0.022, lerp(lid_top, p.brow_z, 0.45))), ("lid_top", lid_top), ("eye", eye_row), ("lid_bot", lid_bot), ("under", lid_bot - 0.032), ("cheek", cheek_z)]
         shares = [("tip", min(no["tip_z"] / cheek_z, 0.90)), ("base", no["base_z"] / cheek_z), ("lip_up", (m["z"] + 0.024) / cheek_z), ("mouth", m["z"] / cheek_z), ("lip_low", (m["z"] - 0.024) / cheek_z),
                   ("chin_top", m["z"] * 0.50 / cheek_z), ("chin", 0.028 / cheek_z), ("jaw", 0.0)]
+        # Each row lies below the one before it, on every column. The tip's row is held to 0.90
+        # of the way up to the cheek's; on a face whose nose base is higher than that (the men's
+        # and one child's types) the base's row came out above the tip's away from the nose, and
+        # the strip between them was folded inside out across both cheeks: a hairline at the
+        # nose's base from cheek to cheek. On the midline both rows take the nose's own heights.
+        ordered = []
+        for name, share in shares:
+            ordered.append((name, share if not ordered else min(share, ordered[-1][1] - (0.05 if name == "base" else 0.0))))
+        shares = ordered
         self.row_names = ["pole"] + [n for n, _ in top] + [n for n, _ in shares] + ["under_jaw", "neck"]
         R = {n: i for i, n in enumerate(self.row_names)}
         self.R = R
@@ -348,8 +357,17 @@ class Cage:
         # The nose: a wedge on the midline and the column beside it, from the bridge to the base.
         tip = np.array([0.0, no["tip_y"], no["tip_z"]])
         half_w = no["width"] / 2
+        # A short nose (a child's) has its tip almost at the row under the eyes: on the ridge that
+        # row stands clear above the tip, so the ridge between them has its length.
+        grid[R["under"], C_MID, 2] = min(max(grid[R["under"], C_MID, 2], no["tip_z"] + 0.045), grid[R["lid_bot"], C_MID, 2] - 0.010)
         for name in ("under", "cheek", "tip", "base"):
             z = grid[R[name], C_MID, 2]
+            if name == "cheek":
+                # On the ridge the cheek's row stays above the tip. A nose whose tip is higher than
+                # the cheek's row (the men's types) put the tip above it, and the ridge's faces
+                # between the two were folded inside out: a ragged patch on the nose.
+                z = max(z, lerp(no["tip_z"], grid[R["under"], C_MID, 2], 0.4))
+                grid[R[name], C_MID, 2] = z
             ridge = lerp(0.0, no["tip_y"], smooth((p.eye_z - z) / max(p.eye_z - no["tip_z"], 1e-6)) ** 1.25) if z >= no["tip_z"] else lerp(grid[R[name], C_MID, 1] + 0.012, no["tip_y"] - 0.03, 0.75)
             grid[R[name], C_MID, 1] = max(ridge, grid[R[name], C_MID, 1])
             k = smooth((p.eye_z - z) / max(p.eye_z - no["base_z"], 1e-6))

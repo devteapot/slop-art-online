@@ -49,12 +49,12 @@ H = 0.2564  # a type's head in the file, chin to crown (types.json, file.head_he
 ANGLES = [55.0, 58.0, 61.0, 64.0, 68.0, 72.0, 76.0, 80.0, 85.0, 90.0, 96.0, 104.0, 114.0, 126.0, 140.0, 155.0, 168.0, 180.0]
 # When each shape comes in, degrees of the light from the face's front. The face is flat until the
 # first of them, as the reference's is; these are the numbers to move if a shape reads too early.
-WEDGE_ON = 56.0  # the nose's wedge on the far cheek (nothing is drawn at the first angle, 55, so it fades in from there)
+WEDGE_ON, WEDGE_FULL = 65.0, 95.0  # the nose's wedge on the far cheek: a hint that grows slowly, taken in by the far side's shade before it is full
 SIDE_ON, SIDE_FULL = 60.0, 72.0  # the far side plane: from the silhouette in to the cheek's corner line
 MIDDLE, CROSS = 96.0, 26.0  # the edge reaches the middle of the face at MIDDLE, having left the far corner CROSS degrees before
-SOCKET_ON, SOCKET_FULL, SOCKET = 72.0, 86.0, 0.5  # between brow and nose base the edge runs ahead by this share of the way to the bridge
+SOCKET_ON, SOCKET_FULL, SOCKET = 72.0, 86.0, 0.35  # between brow and nose base the edge runs ahead by this share of the way to the bridge
 JAW_ON = 60.0  # the band along the far jaw
-WAIT = 20.0  # how many degrees later the far half fills below the nose
+WAIT = 8.0  # how many degrees later the far half fills at the chin; it grows from nothing at the nose's base
 SOFT_MM = 1.4  # the blur that softens every edge, millimetres
 FLOOR = 0.14  # the face is fully lit while the light is within this (of 180 degrees) of its front
 PX = 0.0005  # the front view's drawing grid, metres a pixel
@@ -249,12 +249,15 @@ def draw_masks(h):
         # beside them is already dark, so the edge leaves the nose's wing and runs out and down
         # to the jaw, and is not one line down the middle of the face. It catches up past MIDDLE.
         lean = 7.0 * (up - 0.5)
-        wait = WAIT * float(smooth(MIDDLE + 30.0, MIDDLE - 4.0, a)) * smooth(h.base_y + 0.002, h.base_y - 0.022, gy)
+        # Both this and the socket's lead below change slowly with height. They used to meet at
+        # the nose's base within a centimetre, 33 degrees apart: the cheek above went dark while
+        # the mouth and jaw below were still lit, a pale band with a hard upper edge.
+        wait = WAIT * float(smooth(MIDDLE + 30.0, MIDDLE - 4.0, a)) * smooth(h.base_y + 0.008, h.chin + 0.012, gy)
         f = np.clip((MIDDLE + lean + wait - a) / CROSS, -1.0, 1.0)  # 1 at the far corner, 0 the midline, -1 the near corner
         # Between the brow and the nose's base the far half fills a little sooner: the socket is
         # set back and the nose stands in the light's way, so there the edge runs ahead toward
         # the bridge. It stays one edge: nothing is left lit behind it.
-        ahead = SOCKET * float(smooth(SOCKET_ON, SOCKET_FULL, a)) * smooth(h.brow_y + 0.022, h.brow_y - 0.004, gy) * smooth(h.base_y - 0.012, h.base_y - 0.001, gy)
+        ahead = SOCKET * float(smooth(SOCKET_ON, SOCKET_FULL, a)) * smooth(h.brow_y + 0.022, h.brow_y - 0.004, gy) * smooth(h.base_y - 0.045, h.base_y + 0.012, gy)
         f = np.where(f > 0, f * (1 - ahead), f)
         if a >= MIDDLE - CROSS:
             m |= gx < -cor * f
@@ -262,13 +265,16 @@ def draw_masks(h):
         if a >= 138.0:
             t = smooth(138.0, 172.0, a)
             m |= gx < cor + (sil - cor) * t
-        # 4. The nose's wedge on the far cheek: from the bridge's far edge down to the wing,
-        # its point reaching a little further out and lower as the light goes round. It is small,
-        # and the far side's shade takes it in soon after.
-        if a >= WEDGE_ON:
-            reach = min(math.tan(math.radians(min(a, 75.0))) * 0.4 * (h.bridge_z - h.tip_z + 0.006), 1.2 * h.nose_w) * float(smooth(WEDGE_ON, WEDGE_ON + 10.0, a))
-            top = h.tip_y + 0.5 * (ey - h.tip_y)
-            m |= poly([(-0.0012, top), (-h.nose_w - reach, h.base_y + 0.25 * (h.tip_y - h.base_y) - 0.15 * reach), (-0.5 * h.nose_w, h.base_y - 0.003), (0.0, h.base_y + 0.001)])
+        # 4. The nose's wedge on the far cheek: a small blunt shape beside the tip that grows
+        # slowly as the light goes round, so its threshold changes gently across it and the shader
+        # draws it soft. It never reaches far: a long point out across the cheek read as a hard
+        # triangle, and its tip as a hairline beside the nose. The far side's shade takes it in.
+        if a > WEDGE_ON:
+            grow = float(smooth(WEDGE_ON, WEDGE_FULL, a))
+            out = (0.55 + 0.55 * grow) * h.nose_w
+            top = h.tip_y + (0.08 + 0.26 * grow) * (ey - h.tip_y)
+            low = h.base_y + 0.30 * (h.tip_y - h.base_y)
+            m |= poly([(-0.0012, top), (-0.75 * out, 0.5 * (top + low) + 0.002), (-out, low + 0.004), (-out, low - 0.001), (-0.5 * h.nose_w, h.base_y - 0.002), (0.0, h.base_y + 0.001)])
         # 5. A band along the far jaw, rising as the light goes round; the near jaw's later.
         if a >= JAW_ON:
             band = 0.050 * H * smooth(JAW_ON, JAW_ON + 40.0, a) * smooth(0.0, 0.012, -gx)

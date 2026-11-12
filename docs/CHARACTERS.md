@@ -691,11 +691,11 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 - **18 angles** from 55° to 180°, light from the face's right; the left is the mirror. Each drawing is the one before plus more, so a texel goes dark once.
 - **The face is flat until about 55°,** as the reference's is. Step 4 drew a nose wedge from 30° and a lit triangle inside the shaded cheek; close up they read as hard patches, not form, and step 4b (2026-11-12) moved every onset later and took the islands out.
 - **Drawn in the face's front view** at half a millimetre a pixel, from the landmarks. The onsets are named numbers at the top of `face_shadow.py`:
-  1. the nose's wedge on the far cheek from 56° (`WEDGE_ON`), small, taken in by the far side's shade soon after;
+  1. the nose's wedge on the far cheek from 65° (`WEDGE_ON`), a small blunt shape beside the tip that grows slowly to 95° (`WEDGE_FULL`), so it is drawn soft, and is taken in by the far side's shade before it is full ([the wedge, the band and the fold](#the-nose-wedge-the-pale-band-and-the-fold));
   2. the far side plane, from the silhouette in to the cheek's corner line (60° to 72°, `SIDE_ON`, `SIDE_FULL`);
   3. the edge crossing the front as the corner line scaled toward the middle, so it follows the cheek's own contour; it reaches the middle at 96° (`MIDDLE`, `CROSS`);
-  4. between the brow and the nose's base the edge runs half the way ahead toward the bridge (72° to 86°, `SOCKET_ON`, `SOCKET`): the socket's shade;
-  5. below the nose the far half waits 20° (`WAIT`), so the mouth and chin keep their light and the edge leaves the nose's wing and runs out to the jaw;
+  4. between the brow and the nose's base the edge runs a third of the way ahead toward the bridge (72° to 86°, `SOCKET_ON`, `SOCKET`): the socket's shade, fading out over the 5 cm below the nose's base;
+  5. below the nose the far half waits, by nothing at the nose's base and 8° at the chin (`WAIT`), so the edge leans as it comes down and is not one line down the middle of the face;
   6. a band along the far jaw from 60° (`JAW_ON`), and the near jaw's later.
 - **Nothing holds its light inside the shade:** no cheek triangle, no bright near side of the nose.
 - **Interpolated** between each pair of drawings by their distance fields, then blurred by 1.4 mm (`SOFT_MM`), so every edge is a pixel or two soft at close range.
@@ -714,6 +714,22 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 - The sweep's heads are copies without clips, held straight: the idle clip turns the head, and with it the angle of the light, so the later shapes did not show.
 - **At the game camera a face is about a dozen pixels across.** The shapes do not read there; only which half is darker does. They are a close-up matter.
 - **Turned from the light** the camera sees the lit side, so the edge past the middle is mostly out of view; the sheets of the drawings show it.
+
+### The nose wedge, the pale band and the fold
+
+Pass 3, after step 6 (2026-11-12). Two faults showed on almost everyone in the `cast-64` sheet: a large hard triangle from the nose to the cheek, and on many men a pale band across the lower face with a hard upper edge. Both were in the drawn shadow map, and the band's edge was sharpened by a fold in the head's mesh.
+
+**The light.** The type sheets and the cast sheet are lit the same: the asset view's default hour, 15, which puts the sun 64° to the side of straight ahead and 47° up. The type sheets photograph the bind pose, facing the camera: the face is 64° from the light. The cast sheet photographs a frame of the idle clip, in which the head is turned about 14° away from the light: 78°. That is past every onset the map had (the wedge at 56°, the far side plane from 60°, the socket's lead from 72°), so the cast showed all of them at once where the type sheets showed the wedge alone. Neither angle is unusual for the game: people stand at every angle to the sun, and 78° is as common as 64°.
+
+| Fault | Cause | Change |
+|---|---|---|
+| The wedge: a hard triangle from the nose to the cheek | A polygon from 56° whose point reached up to 2.2 nose widths out and half way up to the eye, full within 10° | From 65° (`WEDGE_ON`), a blunt shape beside the tip at most 1.1 nose widths out and a third of the way up, growing over 30° (`WEDGE_FULL` 95°). Its threshold changes gently across it, so the shader draws it soft. At the cast's 78° it is a hint |
+| The pale band: the lower face lit with a hard upper edge at the nose's base | Two terms of the map met there within a centimetre, 33° apart: above the base the far half filled sooner by half the way to the bridge (`SOCKET`), below it 20° later (`WAIT`). On `adult-m-a` the far cheek's threshold stepped from 83° to 100° in 6 mm. Between those angles the cheek was dark and the mouth and jaw lit | `SOCKET` is 0.35 and fades over 5 cm below the nose's base; `WAIT` is 8° at the chin and grows from nothing at the base. The same column now runs 83° to 89° |
+| A hairline at the nose's base from cheek to cheek, and a ragged patch on the nose | A fold in the cage head. The tip's row is held to 0.90 of the way up to the cheek's row; on a face whose nose base is higher than that (the men's types and `child-u-a`: nine of the 21) the base's row came out above the tip's away from the nose, and the strip between them was inside out across both cheeks (88 triangles on `adult-m-a`). On the nose's ridge the tip stood above the cheek's row, folding that too | `cage_head.py` keeps each row below the one before it on every column, and on the ridge keeps the cheek's row (and on a short nose the row under the eyes) above the tip. No front face looks backward on any type now. `cage_accept.py`: 21 of 21 types within 0.03 H |
+
+- **What the fold changed downstream.** Nine types' heads moved by a few millimetres at the cheeks beside the nose, so the overlay files (which are faces of a type's own skin), the six presets and the 64 were built again.
+- **Which of the brief's guesses it was:** the threshold map (its socket and wait terms, not its jaw band), with the mesh's fold as the hard line. It was not a seam between face and jaw, not the lips and blush layer, and not the stubble or line overlays.
+- **Judged** on the board's `faces-close` (six types at 64°, 78° and 94°, before and after, with the reference under the same light) and `cast-64` (`faces-before-after`).
 
 ### Lines where the form turns
 
@@ -1559,7 +1575,7 @@ What pass 2 proposed, in order of gain, and what became of it:
 1. **Hair.** Long hair stands off the back as one flat plane where the reference's falls close to it; the shading is one colour with a soft band where the reference paints a hard highlight and a dark edge; short styles read as clumps from behind. Next.
 2. **The brows** are strands where the reference draws one tapered stroke.
 3. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top, its glow hotter. At the game camera an eye is two or three pixels and the difference does not show.
-4. **The nose's wedge** reads as a hard triangle in three-quarter view (unchanged; the owner's answer on step 4b is awaited).
+4. **The nose's wedge** read as a hard triangle. Mended after this step ([the wedge, the band and the fold](#the-nose-wedge-the-pale-band-and-the-fold)): it is a hint from 65°.
 5. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
 6. **Clothes and silhouette, hands** (unchanged).
 
