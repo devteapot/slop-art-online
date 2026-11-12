@@ -29,7 +29,8 @@ STDB_CONTAINER = os.environ.get('LIVING_STDB_CONTAINER', 'sao-living_spacetimedb
 FAKE = Path(__file__).with_name('fake_llm.py')
 CASES = ('basic', 'routing-group', 'routing-assign', 'routing-rotate', 'routing-child',
          'routing-default', 'overflow', 'capacity-overflow', 'capacity-retry', 'retry-fallback', 'error-overflow', 'outage',
-         'repair', 'deliberation-retry', 'retry-exhausted', 'timeout', 'missing-default-key', 'mix')
+         'repair', 'deliberation-retry', 'retry-exhausted', 'timeout', 'missing-default-key', 'mix',
+         'fast-route', 'fast-cap')
 FIELDS = {'at_ms', 'actor', 'purpose', 'profile', 'model', 'latency_ms', 'request', 'reply', 'tokens', 'error', 'lane', 'queue_wait_ms', 'prompt_tokens', 'completion_tokens', 'cached_tokens', 'effort', 'mix', 'attention'}
 
 
@@ -233,7 +234,111 @@ def profile(port, model, **extra):
             'reasoning_effort': {p: p for p in ('think', 'deliberate', 'consolidate', 'talk')}, **extra}
 
 
+def fast_case(run, case):
+    """The fast lane (docs/FAST_LANE.md) on a real world with the release mind and a fake fast
+    provider. Fighters are spawned minds (`spawn_crowd`), each pair 1.2 m apart with spears, the
+    world's `fast_lane_on` law on; a blow taken issues a `fast_ask` row the mind serves.
+
+    fast-route: one pair, only the victim served. Purpose `fast` goes to `rethink.json`'s
+    `fast.route` profile (a profile of its own here) on the urgent lane, never to the default
+    profile; the first reply is held past `fast.timeout_ms` and is dropped as a timeout
+    (journaled, a `fast` thought "kept: timed out"); later ones keep the plan ("kept: as it is").
+
+    fast-cap: a battle of 20 (ten pairs attacking each other), all served, under the world's laws
+    as shipped (`fast_lane_rate` 2 a second, `fast_lane_inflight` 4), each fast reply held 2.5 s.
+    At most 4 requests are ever issued at once (sampled `fast_ask`) and in flight at the provider,
+    and no more start in any second than the rate allows (the bucket holds one second's worth).
+    Records how many fighters got a call and how long each trigger waited for its turn."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    pairs = 1 if case == 'fast-route' else 10
+    run.admin('spawn_crowd', 2 * pairs, True)
+    made = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    assert len(made) == 2 * pairs, made
+    victims, foes = made[:pairs], made[pairs:]
+    for who in made:
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('set_world_law', 'fast_lane_on', 'true')
+    origin = run.sql(f'SELECT x, y FROM body WHERE id = {victims[0]}', 'origin')[0]
+    for k, (v, f) in enumerate(zip(victims, foes)):
+        x, y = origin['x'] + 4.0 * (k % 5), origin['y'] + 4.0 * (k // 5)
+        run.admin('place_at', v, x, y)
+        run.admin('place_at', f, x + 1.2, y)
+        run.admin('grant_items', f, 'spear', 1)
+        run.admin('grant_items', v, 'spear', 1)
+    a, b = free_port(), free_port()
+    while b == a:
+        b = free_port()
+    models = {'default': 'primary', 'profiles': {'primary': profile(a, 'fake-primary'), 'fastp': profile(b, 'fake-fast')}}
+    cfg = json.loads((ROOT / 'living/configs/rethink.json').read_text())
+    cfg['fast'] = {'route': 'fastp', 'timeout_ms': 3000, 'experiences': 12}
+    path = run.directory / 'rethink-fast.json'
+    path.write_text(json.dumps(cfg, indent=2))
+    run.fake(a, {}, 'primary')
+    held = {'rules': [{'purpose': 'fast', 'delay_s': 5, 'times': 1}]} if case == 'fast-route' else {'rules': [{'purpose': 'fast', 'delay_s': 2.5, 'times': -1}]}
+    run.fake(b, held, 'fast')
+    served = victims if case == 'fast-route' else made
+    run.start(models, served, extra_env={'LIVING_RETHINK_CONFIG': str(path), 'LIVING_CONCURRENCY': '32'})
+    t0 = int(time.time() * 1000)
+    graph = lambda other: json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': other}}}, {'wait': 0.5}]})
+    for v, f in zip(victims, foes):
+        run.admin('set_behavior', f, graph(v))
+        if case == 'fast-cap':
+            run.admin('set_behavior', v, graph(f))
+    fast_log = run.directory / 'fast-requests.jsonl'
+    thoughts = lambda: [t for t in run.private('SELECT * FROM thought', 'thoughts') if t['kind'] == 'fast']
+    if case == 'fast-route':
+        run.wait(lambda: len([t for t in thoughts() if t['summary'].startswith('kept: as it is')]) >= 1 and any('timed out' in t['summary'] for t in thoughts()), 'a timed-out and an answered fast request', 90)
+        fast = [r for r in rows(fast_log) if r['purpose'] == 'fast']
+        primary_fast = [r for r in rows(run.directory / 'primary-requests.jsonl') if r['purpose'] == 'fast']
+        journal = [e for e in run.exchanges() if e.get('purpose') == 'fast']
+        assert len(fast) >= 2 and not primary_fast, {'fast_at_fast': len(fast), 'fast_at_primary': len(primary_fast)}
+        assert all(r['model'] == 'fake-fast' for r in fast), [r['model'] for r in fast]
+        assert any('timeout' in (e.get('error') or '') for e in journal), journal[:3]
+        answered = [e for e in journal if not e.get('error')]
+        assert answered and all(e.get('profile') == 'fastp' and str(e.get('lane', '')).lower() == 'urgent' and 'latency_ms' in e and 'queue_wait_ms' in e for e in answered), answered[:2]
+        (run.directory / 'result.json').write_text(json.dumps({'case': case, 'pass': True, 'fast_requests': len(fast), 'journal': len(journal),
+                                                               'thoughts': [t['summary'] for t in thoughts()][:6]}, indent=2))
+        return
+    # fast-cap: watch the issued rows for 30 s.
+    issued_max, samples = 0, 0
+    end = time.time() + 30
+    while time.time() < end:
+        issued = [r for r in run.private('SELECT * FROM fast_ask', 'fast-ask') if r['issued_ms']]
+        issued_max = max(issued_max, len(issued))
+        samples += 1
+        time.sleep(0.25)
+    for v, f in zip(victims, foes):
+        run.admin('set_behavior', f, json.dumps({'wait': 300}))
+        run.admin('set_behavior', v, json.dumps({'wait': 300}))
+    time.sleep(4)
+    calls = sorted(r['at_ms'] for r in rows(fast_log) if r['purpose'] == 'fast')
+    spans = [(r['at_ms'], r['at_ms'] + int(r['delay_s'] * 1000)) for r in rows(fast_log) if r['purpose'] == 'fast']
+    concurrent = max((sum(1 for s, e in spans if s <= t < e) for t, _ in spans), default=0)
+    per_second = max((sum(1 for u in calls if t <= u < t + 1000) for t in calls), default=0)
+    done = thoughts()
+    waits, by_fighter = [], {}
+    for t in done:
+        d = json.loads(t['detail'] or '{}')
+        if d.get('issued_ms') and d.get('trigger_ms'):
+            waits.append((d['issued_ms'] - d['trigger_ms']) / 1000)
+        by_fighter[t['actor']] = by_fighter.get(t['actor'], 0) + 1
+    q = sorted(waits)
+    pct = lambda p: round(q[min(len(q) - 1, int(p * len(q)))], 2) if q else None
+    record = {'case': case, 'fighters': len(made), 'laws': {'fast_lane_rate': 2, 'fast_lane_inflight': 4, 'fast_lane_gap_s': 6},
+              'window_s': 30, 'samples': samples, 'issued_at_once_max': issued_max, 'in_flight_at_provider_max': concurrent,
+              'started_in_one_second_max': per_second, 'calls': len(calls), 'fighters_with_a_call': len(by_fighter),
+              'calls_per_fighter': sorted(by_fighter.values()), 'wait_s_p50': pct(0.5), 'wait_s_p90': pct(0.9), 'wait_s_max': q[-1] if q else None}
+    (run.directory / 'result.json').write_text(json.dumps(record, indent=2))
+    assert calls and issued_max <= 4 and concurrent <= 4 and per_second <= 3, record
+    record['pass'] = True
+    (run.directory / 'result.json').write_text(json.dumps(record, indent=2))
+
+
 def run_case(run, case):
+    if case in ('fast-route', 'fast-cap'):
+        return fast_case(run, case)
     run.harness('launch')
     run.harness('doctor')
     people = sorted(run.sql("SELECT id, name, stage, alive FROM character WHERE kind = 'person'", 'people'), key=lambda x: x['id'])

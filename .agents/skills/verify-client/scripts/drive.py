@@ -54,7 +54,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberation', 'rearing',
+PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberation', 'rearing',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
            'routine', 'routine_stat', 'background', 'brain', 'mind_state', 'mind_cursor',
@@ -108,6 +108,9 @@ PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           'human_face': [1.0, 0.0]}
 MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged']
+# The fast lane's answers (docs/FAST_LANE.md): for an open request only, which exists only for a
+# body its mind holds, so a player is refused even on its own character.
+FAST = ['mind_patch', 'mind_fast_done']
 ADMIN = {
     'set_paused': [False], 'install_script': [''], 'set_profile': [False],
     'spawn_crowd': [0, False], 'grant_know_how': [0, 'gather'], 'own_habits': [],
@@ -146,6 +149,7 @@ def mind_args(name, actor, marker):
         'mind_say': [actor, '', 0, '', 0, t],
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
+        'mind_patch': [actor, 'combat', '{"wait":30}', 1, t], 'mind_fast_done': [actor, 1, t],
         'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],
         'mind_update': [actor, {'persona': {'some': {'narrative': marker, 'values': [],
                          'goals': [], 'traits': '{}', 'mood': 'probe', 'pastimes': [], 'calling': ''}},
@@ -378,7 +382,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
+        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
@@ -426,6 +430,10 @@ class Run:
                 for actor in [ai['id'], other]:
                     self.call(label, token, reducer, mind_args(reducer, actor, label), 'not your character')
                 self.call(label, token, reducer, mind_args(reducer, own, label))
+            for reducer in FAST:
+                for actor in [ai['id'], other]:
+                    self.call(label, token, reducer, mind_args(reducer, actor, label), 'not your character')
+                self.call(label, token, reducer, mind_args(reducer, own, label), 'no fast re-plan was asked')
             for reducer in ['tick', 'housekeeping']:
                 self.call(label, token, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                           'No such procedure', expected_status=404)
@@ -441,7 +449,7 @@ class Run:
                 self.call(label, token, reducer, args)
         for reducer, args in ADMIN.items():
             self.call('anonymous-http-no-token', None, reducer, args, 'admin only')
-        for reducer in MIND:
+        for reducer in MIND + FAST:
             self.call('anonymous-http-no-token', None, reducer, mind_args(reducer, ai['id'], 'anonymous'), 'not your character')
         for reducer in ['tick', 'housekeeping']:
             self.call('anonymous-http-no-token', None, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
