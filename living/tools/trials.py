@@ -3063,7 +3063,7 @@ def recorded_replicas():
                     except (OSError, ValueError):
                         pass
                 paid = any(not str(m).startswith("fake") and m != "jev" and (v or {}).get("tokens") for m, v in (st.get("by_model") or {}).items())
-                info = {"batch": bdir.name, "instance": inst.name, "db": st.get("db"), "paid": paid, "fake": bool(b.get("fake")), "root": str(bdir)}
+                info = {"batch": bdir.name, "instance": inst.name, "db": st.get("db"), "paid": paid, "fake": bool(b.get("fake")), "root": str(bdir), "module": None}
                 if st.get("replica"):
                     rec[str(st["replica"])] = info
                 started = b.get("started")
@@ -3071,12 +3071,30 @@ def recorded_replicas():
                 if started and al.exists():
                     day = datetime.datetime.fromisoformat(started)
                     for line in al.read_text(errors="replace").splitlines():
-                        m = re.match(r"(\d\d):(\d\d):(\d\d) published (\S+)", line)
+                        m = re.match(r"(\d\d):(\d\d):(\d\d) published (\S+) from (\S+?)\.wasm", line) or re.match(r"(\d\d):(\d\d):(\d\d) published (\S+)", line)
                         if m:
+                            if m.lastindex >= 5:
+                                info = {**info, "module": m[5]}
                             t = day.replace(hour=int(m[1]), minute=int(m[2]), second=int(m[3]))
                             if t < day - datetime.timedelta(hours=1):
                                 t += datetime.timedelta(days=1)
                             pubs.append((t.astimezone(datetime.timezone.utc).timestamp(), info))
+        # Verification runs (verify.py launch): "HH:MM:SS published <db> from …" in each case's
+        # actions.log, dated by the file (a scene runs within a day).
+        for al in (root / "verify").glob("*/actions.log"):
+            try:
+                text = al.read_text(errors="replace")
+                day = datetime.datetime.fromtimestamp(al.stat().st_mtime)
+            except OSError:
+                continue
+            for line in text.splitlines():
+                m = re.match(r"(\d\d):(\d\d):(\d\d) published (\S+)", line)
+                if m:
+                    t = day.replace(hour=int(m[1]), minute=int(m[2]), second=int(m[3]), microsecond=0)
+                    if t > day + datetime.timedelta(minutes=5):
+                        t -= datetime.timedelta(days=1)
+                    pubs.append((t.astimezone(datetime.timezone.utc).timestamp(),
+                                 {"batch": "verify:" + al.parent.name, "instance": "", "db": m[4], "paid": False, "fake": False, "verify": True, "root": str(al.parent)}))
     return rec, sorted(pubs, key=lambda p: p[0])
 
 
@@ -3093,7 +3111,8 @@ def reclaim(a):
     with the server stopped and the paid commitlogs archived first."""
     guard()
     token = admin_token()
-    lines = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {REPLICAS} && for r in *; do echo \"$r $(du -sk $r | cut -f1) $(du -sk $r/clog 2>/dev/null | cut -f1) $(cut -d';' -f2 $r/db.lock 2>/dev/null | cut -d= -f2)\"; done", timeout=1800).stdout.splitlines()
+    lines = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {REPLICAS} && for r in *; do echo \"$r $(du -sk $r | cut -f1) $(du -sk $r/clog 2>/dev/null | cut -f1) $(cut -d';' -f2 $r/db.lock 2>/dev/null | cut -d= -f2) $(find $r -type f -printf '%T@\\n' | sort -n | tail -1 | cut -d. -f1)\"; done", timeout=1800).stdout.splitlines()
+    now_s = time.time()
     owner = sh("docker", "exec", CONTAINER, "spacetime", "login", "show").stdout.split()[-1]
     code, body = http(f"/v1/identity/{owner}/databases")
     live_ids = json.loads(body).get("identities", []) if code == 200 else []
@@ -3104,6 +3123,8 @@ def reclaim(a):
         r = replica_of(name, token)
         if r:
             live[r] = name
+        else:
+            sys.exit(f"refusing: the live database {name} ({ident}) cannot be mapped to its replica directory")
     rec, pubs = recorded_replicas()
     ptimes = [p[0] for p in pubs]
     rows = []
@@ -3112,8 +3133,11 @@ def reclaim(a):
         if len(parts) < 4:
             continue
         r, kb, clog_kb, lock = parts[0], int(parts[1]), int(parts[2] or 0), parts[3]
-        if r in live:
-            rows.append({"replica": r, "kb": kb, "clog_kb": clog_kb, "lock": lock, "class": "live", "what": live[r]})
+        last_write = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
+        if r in live or now_s - last_write < 15 * 60:
+            # Hosted, or written in the last 15 minutes (a world that may still be running): kept.
+            rows.append({"replica": r, "kb": kb, "clog_kb": clog_kb, "lock": lock, "class": "live",
+                         "what": live.get(r, "written in the last 15 minutes"), "last_write": last_write})
             continue
         info = rec.get(r)
         if info is None:
@@ -3121,17 +3145,24 @@ def reclaim(a):
             k = bisect.bisect_left(ptimes, t)
             near = [pubs[j] for j in (k - 1, k) if 0 <= j < len(pubs) and abs(pubs[j][0] - t) <= 40]
             info = near[0][1] if near else None
-        if info:
+        if info and info.get("verify"):
+            cls, what = "verify", info["batch"]
+        elif info:
             cls = "paid" if info["paid"] else "fake" if info["fake"] else "no-model"
             what = f"{info['batch']}/{info['instance']}"
         else:
-            cls, what = ("verify" if lock else "unknown"), ""
-        rows.append({"replica": r, "kb": kb, "clog_kb": clog_kb, "lock": lock, "class": cls, "what": what})
+            cls, what = "unknown", ""
+        rows.append({"replica": r, "kb": kb, "clog_kb": clog_kb, "lock": lock, "class": cls, "what": what,
+                     "module": (info or {}).get("module"), "root": (info or {}).get("root")})
+    action = {"live": "keep", "paid": "archive commitlog, then remove", "no-model": "archive commitlog, then remove",
+              "fake": "remove", "verify": "remove", "unknown": "hold"}
+    for x in rows:
+        x["action"] = action[x["class"]]
     tot = Counter()
     for x in rows:
         tot[x["class"]] += x["kb"]
     for x in sorted(rows, key=lambda x: (x["class"], x["what"], x["replica"])):
-        print(f"{x['class']:9} {x['replica']:>9} {x['kb'] / 1048576:7.2f} GB  clog {x['clog_kb'] / 1048576:6.2f} GB  {x['lock'][:19]}  {x['what']}")
+        print(f"{x['class']:9} {x['replica']:>9} {x['kb'] / 1048576:7.2f} GB  clog {x['clog_kb'] / 1048576:6.2f} GB  {x['lock'][:19]}  {x['action']:31} {x['what']}")
     print("totals: " + ", ".join(f"{k} {v / 1048576:.1f} GB ({sum(1 for x in rows if x['class'] == k)})" for k, v in sorted(tot.items())))
     print("nothing removed (dry run)")
     if a.json:
