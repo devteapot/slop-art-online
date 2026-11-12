@@ -1968,6 +1968,7 @@ Recommendation unchanged: 2 replicates first, about $158 (up to about $230), and
 
 - Provider capacity: about 120–140 minds on the service at once. Expect more overflow to deepseek-flash, whose input costs twice glm-flash's.
 - The switches to record: those above, plus the identity fix (body line on, `Origin::Grown`) and both sleep fixes.
+- **`think_framing` off** (today's framing: a think step starts from "# Why you are thinking now"), its default. The law comes from branch `think-framing` ([framing](FRAMING.md)). births-2 runs with it off until N2, the framing it would switch on, is measured on longing in particular. Neither the trial files nor a variant set it. Read it back from the world's `world_law` rows (no `think_framing` row, or `false`) before the batch starts, and record it with the batch.
 
 ### Not covered
 
