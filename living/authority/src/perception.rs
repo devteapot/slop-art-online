@@ -322,11 +322,113 @@ fn regard_of(sc: &Rc<Scripts>, input: RegardIn) -> Regard {
     })
 }
 
+// ---- one answer per observer and target per transaction (docs/ATTENTION.md, "Cost") -------
+
+thread_local! {
+    /// What each observer makes of each target, computed once per transaction and shared by
+    /// everyone who asks (cues, scene labels and first sights, graph filters, told lines):
+    /// whether it knows the target's name, its own know-how (as the law reads it), and the
+    /// `perceived_of` answer by distance and time. Valid for one transaction (`stamp`) and one
+    /// generation (`answers_changed`, bumped by every write that can change an answer).
+    static ANSWERS: RefCell<Answers> = RefCell::new(Answers::default());
+    /// Bumped by every write that can change who knows whose name, what anyone knows how to do
+    /// or what a skill use reveals: acquaintance, membership, know-how, reveal, a new character.
+    static ANSWERS_GEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Generation bumps since the last report (`report_answers`).
+    static ANSWERS_BUMPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[derive(Default)]
+struct Answers {
+    stamp: i64,
+    generation: u64,
+    known: HashMap<(u32, u32), bool>,
+    techniques: HashMap<u32, Rc<Vec<String>>>,
+    regard: HashMap<(u32, u32, u16, u64), Regard>,
+    /// Lookups answered, answers computed, and (while `regard_cache_check` holds) answers
+    /// compared with a fresh computation and those that differed, since the last report.
+    hits: u64,
+    computed: u64,
+    compared: u64,
+    differed: u64,
+}
+
+/// A write changed what some observer may make of some target (see `ANSWERS_GEN`).
+pub fn answers_changed() {
+    ANSWERS_GEN.with(|g| g.set(g.get() + 1));
+    ANSWERS_BUMPS.with(|b| b.set(b.get() + 1));
+}
+
+/// The transaction's answers, cleared when the transaction or the generation changed; `None`
+/// while the world's `regard_cache` law is off.
+fn with_answers<R>(ctx: &ReducerContext, f: impl FnOnce(&mut Answers, bool) -> R) -> Option<R> {
+    let laws = common::laws(ctx);
+    if !laws.regard_cache {
+        return None;
+    }
+    let (stamp, generation) = (common::stamp(ctx), ANSWERS_GEN.with(|g| g.get()));
+    Some(ANSWERS.with(|a| {
+        let mut a = a.borrow_mut();
+        if a.stamp != stamp || a.generation != generation {
+            a.stamp = stamp;
+            a.generation = generation;
+            a.known.clear();
+            a.techniques.clear();
+            a.regard.clear();
+        }
+        f(&mut a, laws.regard_cache_check)
+    }))
+}
+
+/// One log line a second while profiling or checking: the cache's lookups and, while
+/// `regard_cache_check` holds, how many answers differed from a fresh computation.
+pub fn report_answers(ctx: &ReducerContext) {
+    let check = common::laws(ctx).regard_cache_check;
+    if !check && !common::profiling() {
+        return;
+    }
+    let (h, c, n, d) = ANSWERS.with(|a| {
+        let mut a = a.borrow_mut();
+        let v = (a.hits, a.computed, a.compared, a.differed);
+        (a.hits, a.computed, a.compared, a.differed) = (0, 0, 0, 0);
+        v
+    });
+    let bumps = ANSWERS_BUMPS.with(|b| b.replace(0));
+    if h + c > 0 {
+        log::info!("regard answers: hits={h} computed={c} compared={n} differed={d} bumps={bumps}");
+    }
+}
+
+/// Whether `observer` knows `target`'s name (see [`knows_name_fresh`]), once per transaction.
+pub fn knows_name(ctx: &ReducerContext, observer: &Character, target: &Character) -> bool {
+    let key = (observer.id, target.id);
+    let cached = with_answers(ctx, |a, check| match a.known.get(&key).copied() {
+        Some(v) => {
+            a.hits += 1;
+            if check {
+                a.compared += 1;
+                if v != knows_name_fresh(ctx, observer, target) {
+                    a.differed += 1;
+                    log::error!("regard cache: knows_name({}, {}) cached {v} differs from a fresh answer", key.0, key.1);
+                }
+            }
+            v
+        }
+        None => {
+            a.computed += 1;
+            let v = knows_name_fresh(ctx, observer, target);
+            a.known.insert(key, v);
+            v
+        }
+    });
+    cached.unwrap_or_else(|| knows_name_fresh(ctx, observer, target))
+}
+
 /// Whether `observer` knows `target`'s name: itself, its parents, children and the parent of
 /// its children, its community, someone its mind has feelings about (`relation`), or
 /// someone who told it their name (`acquaintance`, which also keeps the names of its
 /// community's dead: `remember_member`).
-pub fn knows_name(ctx: &ReducerContext, observer: &Character, target: &Character) -> bool {
+fn knows_name_fresh(ctx: &ReducerContext, observer: &Character, target: &Character) -> bool {
     let (o, t) = (observer.id, target.id);
     if o == t || observer.parent_a == t || observer.parent_b == t || target.parent_a == o || target.parent_b == o {
         return true;
@@ -353,34 +455,68 @@ pub fn revealed(ctx: &ReducerContext, observer: u32, target: u32, now: u64) -> V
     v
 }
 
-/// The law's answer for `observer` looking at `target` now.
+/// The law's answer for `observer` looking at `target` now: once per transaction for each
+/// observer, target, distance (as the law reads it) and time.
 pub fn regard(ctx: &ReducerContext, observer: &Character, target: &Character, now: u64) -> Regard {
-    regard_knowing(ctx, observer, &known_techniques(ctx, observer.id), target, now)
-}
-
-/// What `observer` knows how to do, as the law receives it (sorted).
-fn known_techniques(ctx: &ReducerContext, id: u32) -> Vec<String> {
-    let mut knows = common::knows(ctx, id);
-    knows.sort();
-    knows
-}
-
-/// The law's answer with the observer's know-how already read (one observer, several targets).
-fn regard_knowing(ctx: &ReducerContext, observer: &Character, knows: &[String], target: &Character, now: u64) -> Regard {
-    let w = common::world(ctx);
     let sc = common::scripts(ctx);
-    let knows = knows.to_vec();
+    let dist = regard_dist(ctx, &sc, observer.id, target.id, now);
+    let key = (observer.id, target.id, dist, now);
+    let cached = with_answers(ctx, |a, check| a.regard.get(&key).copied().map(|v| {
+        a.hits += 1;
+        if check {
+            a.compared += 1;
+            if v != regard_fresh(ctx, observer, target, now) {
+                a.differed += 1;
+                log::error!("regard cache: regard({}, {}) cached {v:?} differs from a fresh answer", key.0, key.1);
+            }
+        }
+        v
+    }));
+    if let Some(Some(v)) = cached {
+        return v;
+    }
+    let knows = known_techniques(ctx, observer.id);
+    let v = regard_with(ctx, &sc, observer, &knows, target, now, dist, knows_name(ctx, observer, target));
+    with_answers(ctx, |a, _| {
+        a.computed += 1;
+        a.regard.insert(key, v);
+    });
+    v
+}
+
+/// The law's answer computed afresh (no shared answers): what the cache must equal.
+pub fn regard_fresh(ctx: &ReducerContext, observer: &Character, target: &Character, now: u64) -> Regard {
+    let sc = common::scripts(ctx);
+    let mut knows = common::knows(ctx, observer.id);
+    knows.sort();
+    let dist = regard_dist(ctx, &sc, observer.id, target.id, now);
+    regard_with(ctx, &sc, observer, &knows, target, now, dist, knows_name_fresh(ctx, observer, target))
+}
+
+/// What `observer` knows how to do, as the law receives it (sorted), once per transaction.
+fn known_techniques(ctx: &ReducerContext, id: u32) -> Rc<Vec<String>> {
+    let fresh = || {
+        let mut knows = common::knows(ctx, id);
+        knows.sort();
+        Rc::new(knows)
+    };
+    with_answers(ctx, |a, _| a.techniques.entry(id).or_insert_with(fresh).clone()).unwrap_or_else(fresh)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn regard_with(ctx: &ReducerContext, sc: &Rc<Scripts>, observer: &Character, knows: &[String], target: &Character, now: u64, dist: u16, known: bool) -> Regard {
+    let w = common::world(ctx);
     let input = RegardIn {
         observer_kind: observer.kind.clone(),
-        knows,
+        knows: knows.to_vec(),
         target_kind: target.kind.clone(),
-        known: knows_name(ctx, observer, target),
+        known,
         revealed: revealed(ctx, observer.id, target.id, now),
         own: observer.id == target.id,
         night: common::night(ctx, &w, now),
-        dist: regard_dist(ctx, &sc, observer.id, target.id, now),
+        dist,
     };
-    regard_of(&sc, input)
+    regard_of(sc, input)
 }
 
 /// How far `target` is from `observer` for the `perceived_of` law, in whole metres rounded up;
@@ -482,11 +618,10 @@ pub fn label(ctx: &ReducerContext, observer: &Character, id: u32, now: u64) -> S
 
 /// How `observer` refers to each of `ids`, its know-how read once.
 pub fn labels(ctx: &ReducerContext, observer: &Character, ids: &[u32], now: u64) -> Vec<String> {
-    let knows = known_techniques(ctx, observer.id);
     ids.iter()
         .map(|id| match ctx.db.character().id().find(*id) {
             Some(t) => {
-                let r = regard_knowing(ctx, observer, &knows, &t, now);
+                let r = regard(ctx, observer, &t, now);
                 if r.name {
                     t.name
                 } else {
@@ -960,6 +1095,7 @@ pub fn gone(ctx: &ReducerContext, id: u32) {
 pub fn expire(ctx: &ReducerContext, now: u64) {
     for id in ctx.db.reveal().until_ms().filter(..=now).map(|r| r.id).collect::<Vec<_>>() {
         ctx.db.reveal().id().delete(id);
+        answers_changed();
     }
 }
 
@@ -969,6 +1105,7 @@ pub fn introduce(ctx: &ReducerContext, observer: u32, known: u32, now: u64) -> b
         return false;
     }
     ctx.db.acquaintance().insert(Acquaintance { id: 0, observer, known, since_ms: now });
+    answers_changed();
     knowledge_changed(Some(observer));
     true
 }
@@ -992,9 +1129,11 @@ pub fn reveal(ctx: &ReducerContext, observer: u32, target: u32, what: &str, secs
         Some(mut r) => {
             r.until_ms = r.until_ms.max(until_ms);
             ctx.db.reveal().id().update(r);
+            answers_changed();
         }
         None => {
             ctx.db.reveal().insert(Reveal { id: 0, observer, target, what: what.into(), until_ms });
+            answers_changed();
         }
     }
 }

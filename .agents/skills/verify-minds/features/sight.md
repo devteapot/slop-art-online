@@ -41,6 +41,18 @@ Since `doing-percept` (2026-11-12; docs/PERCEPTION.md, "What someone is visibly 
   - no prompt line holds both the handle and F's name or id.
   M's `mind_act` wave at the handle reaches F (`skill_use.target`). F is placed 2 m off: a `made_out` experience joins the handle to F's id, and the next prompt names F. The shipped script is installed again at the end. Evidence: `far-figure.json`, `prompt-far.txt`, `prompt-near.txt`.
 
+## A first sight asks a thought
+
+Since `first-sight` (2026-11-12; docs/FIRST_SIGHT.md). Under the world's `first_sight_thinks` law, a first sight of someone the character cannot place asks its mind for one thought, and the reason is the first-sight line itself.
+
+- `first-sight`: M's mind runs on the fake model. The case sets `first_sight_thinks` true and `first_sight_gap_s` 0 with `set_world_law`, because M's opening thought may itself be a first sight of someone else in view. It waits 30 s (past `think_min_s`), then places U, a stranger to M, 2 m away. The first think request sent after that carries U's first-sight line ("For the first time you see a stranger, 2 tiles east, wait.") as a line of "# Why you are thinking now", word for word, with no "newcomer", "visitor", "new to you", "near your home" or "worth". Evidence `first-sight.json`, `prompt-first-sight.txt`. The laws are restored.
+- Without the gap at 0, U's sight can fall inside the 300 s gap that M's opening first sight started, and nothing is asked. That is the gap working, not a failure (the first attempt `minds-fs1` showed it).
+- The throttle, the gap, far and named figures, sleepers and cues are verify-core's ([first-sight](../../verify-core/features/first-sight.md)).
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case first-sight
+```
+
 ## A dodge told truthfully (fix-dodge-told)
 
 - `dodge-told`: the mind service runs throughout. The eye stands two tiles short of a wall, the other (a spear) beside it; the eye's graph dodges toward the wall on `doing` attack "winding up": the dash is over before the blow lands, and the eye is told "You failed to dodge: it was over before the blow came" (its `skill_use` says so). After the mind has answered the attack, a graph restarting a dodge every tick for 4 s is refused while not ready: at most one "not ready yet" line per cooldown. The prompt of a thought asked afterwards (`Run.request`, marker `dodge-told`) carries the first line, and no more "not ready yet" lines than dodges made plus one. Evidence: `eye-told.json`, `eye-told-streak.json`, `uses-early.json`, `sent-prompts.txt`, `result.json`.

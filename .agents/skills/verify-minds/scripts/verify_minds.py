@@ -1035,6 +1035,138 @@ def dodge_wall(run):
     raise RuntimeError('no wall to dodge into on this map')
 
 
+def fast_config(run, **fast):
+    """A rethink config whose `fast` section routes to the fake (`local`)."""
+    cfg = json.loads((ROOT / 'living/configs/rethink.json').read_text())
+    cfg['fast'] = {'route': 'local', 'timeout_ms': 6000, 'experiences': 12, **fast}
+    path = run.directory / 'rethink-fast.json'
+    path.write_text(json.dumps(cfg, indent=2))
+    return str(path)
+
+
+FAST_PATCH = {'patch': {'label': 'combat', 'graph': {'first': [{'do': 'dodge'}, {'wait': 0.7}]}}, 'thought': 'verify fast: I will get out of its way.'}
+COUNT_WORDS = re.compile(r'again|\btimes\b|\(×|\d+(st|nd|rd|th) time')
+
+
+@case('fast-lane')
+def fast_lane_case(run):
+    """The fast lane (docs/FAST_LANE.md) with the fake model: the other strikes at the eye with a
+    spear (heavy blow, over and over), the world's `fast_lane_on` law on.
+
+    - (e) asleep: the eye sleeps; the other's one blow issues nothing (it wakes the eye, as before).
+    - (a) a blow taken issues one fast request; its prompt holds why now (the eye's own line for
+      the blow), what has just happened, the top level and the routines, and no count or "again";
+      the reply's `combat` branch is installed through `mind_patch` (source `fast`, a `fast`
+      thought), and the eye's next deliberation is not counted as thinking (`deliberated_ms`).
+    - (g) the slow deliberation the same blow started (its compile held 5 s) installs after the
+      patch and keeps the patched `combat` branch.
+    - (b) blows inside `fast_lane_gap_s` (6 s) merge: one fast request in the first 5.5 s.
+    - (c) the next request's reply is held 2.5 s; an install in between (admin `set_behavior`)
+      changes the plan, and the reply is refused by the plan check ("refused: the plan changed
+      since it was asked"), changing nothing.
+    - (f) with `fast_lane_on` off, blows ask nothing."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    e = wall_spots(run)['open']
+    for who in (eye, other):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 1.2, e[1])
+    run.admin('grant_items', other, 'spear', 1)
+    run.admin('set_world_law', 'fast_lane_on', 'true')
+    script = {'replies': {'think': {'thought': 'Someone is hitting me.', 'intend': ['stand my ground'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'fast', 'reply': FAST_PATCH, 'times': 1},
+                        {'purpose': 'fast', 'reply': FAST_PATCH, 'delay_s': 2.5, 'times': 1},
+                        {'purpose': 'deliberate', 'delay_s': 5, 'times': -1}]}
+    run.start(model(run, script), [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run)})
+    requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
+    body = lambda x: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', []) if m.get('role') == 'user')
+    clock = lambda: run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+    fast_thoughts = lambda: [t for t in run.private(f'SELECT * FROM thought WHERE actor = {eye}', 'thoughts') if t['kind'] == 'fast']
+    # (e) asleep: one blow on a sleeper issues nothing.
+    run.admin('set_behavior', eye, json.dumps({'do': 'sleep'}))
+    run.wait(lambda: [a for a in run.private(f'SELECT * FROM activity WHERE id = {eye}', 'eye-activity') if a['skill'] == 'sleep'] or None, 'the eye asleep', 20)
+    run.admin('set_behavior', other, json.dumps({'seq': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 120}]}))
+    run.wait(lambda: [x for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'eye-told') if x['kind'] == 'attacked'] or None, 'the sleeper struck', 30)
+    time.sleep(2.0)
+    assert not requests() and not run.private(f'SELECT * FROM fast_ask WHERE actor = {eye}', 'fast-ask-asleep'), 'a sleeper was fast-laned'
+    # (a) a blow taken, and (b) the gap.
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    time.sleep(8.0)
+    t0 = clock()
+    run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 0.3}]}))
+    first = run.wait(lambda: requests() or None, 'a fast request after a blow', 30)[0]
+    patched = run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-patched') if b['source'] == 'fast' and '"wait":0.7' in b['graph'].replace(' ', '')] or None, 'the fast patch installed', 20)[0]
+    text = body(first)
+    why = text.split('# Who you are')[0]
+    blows = [x['text'] for x in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'eye-blows') if x['kind'] == 'attacked' and x['at_ms'] >= t0]
+    assert '# What has just happened' in text and '# Your top level' in text and '# Your routines' in text, text[:600]
+    assert blows and any(b in why for b in blows), {'why': why, 'blows': blows}
+    assert not COUNT_WORDS.search(why) and not COUNT_WORDS.search(text.split('# What has just happened')[1].split('# Your top level')[0]), 'a count or "again" in the fast prompt'
+    assert any('combat branch rewritten' in t['summary'] for t in fast_thoughts()), fast_thoughts()
+    time.sleep(5.5)
+    in_gap = [x for x in requests() if x['at_ms'] < first['at_ms'] + 5500]
+    assert len(in_gap) == 1, f'{len(in_gap)} fast requests inside the 6 s gap'
+    # (g) the slow deliberation the blow started lands after the patch and keeps its branch.
+    slow = run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-slow') if b['source'] == 'mind' and b['installed_ms'] > patched['installed_ms']] or None, 'the slow install after the patch', 30)[0]
+    assert '"wait":0.7' in slow['graph'].replace(' ', ''), 'the slow install dropped the fast-patched combat branch'
+    # (c) the plan check: the next reply is held; an install meanwhile changes the plan.
+    second = run.wait(lambda: requests()[1:] or None, 'a second fast request', 30)[0]
+    run.admin('set_behavior', eye, json.dumps({'wait': 30}))
+    refused = run.wait(lambda: [t for t in fast_thoughts() if t['summary'].startswith('refused: the plan changed')] or None, 'the stale reply refused', 20)
+    brain = run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-after-refusal')[0]
+    assert brain['source'] != 'fast' or brain['installed_ms'] < second['at_ms'], brain
+    # (f) the switch off.
+    run.admin('set_world_law', 'fast_lane_on', 'false')
+    time.sleep(3.0)
+    n = len(requests())
+    time.sleep(10.0)
+    assert len(requests()) == n, 'fast requests with the fast lane off'
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    (run.directory / 'fast-prompt.txt').write_text(text)
+    return {'status': 'pass', 'fast_requests': len(requests()), 'refused': [t['summary'] for t in refused][:2], 'why': why.strip()[:200]}
+
+
+@case('fast-takeover')
+def fast_takeover_case(run):
+    """(d) The controller rule (docs/FAST_LANE.md): a player's character, taken over by the minds,
+    is struck and its fast request's reply held 12 s; its person comes back meanwhile (handback):
+    the request is dropped (`fast_ask` gone) and the late reply changes nothing. Away again, the
+    minds take it over again; the reply prepared before is refused (no open request), and the
+    played body got no fast patch."""
+    people = prepare(run)
+    other = people[0]['id']
+    # Taken over 5 s after its person is gone (the `takeover_s` law), so the second takeover
+    # comes before the held reply.
+    run.admin('set_world_law', 'takeover_s', '5')
+    run.harness('player', 'join', 'FastAway')
+    me = run.sql("SELECT id FROM character WHERE name = 'FastAway'", 'player')[0]['id']
+    run.admin('set_world_law', 'fast_lane_on', 'true')
+    script = {'replies': {'think': {'thought': 'Alone now, I wait.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'fast', 'reply': FAST_PATCH, 'delay_s': 12, 'times': -1}]}
+    run.start(model(run, script), [me], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run, timeout_ms=30000)})
+    run.wait(lambda: [p for p in run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-taken') if p['ai']] or None, 'takeover', 60)
+    at = run.sql(f'SELECT x, y FROM body WHERE id = {me}', 'me-at')[0]
+    run.admin('place_at', other, at['x'] + 1.2, at['y'])
+    run.admin('grant_items', other, 'spear', 1)
+    run.admin('set_behavior', other, json.dumps({'seq': [{'do': {'skill': 'attack', 'target': {'id': me}}}, {'wait': 120}]}))
+    requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
+    run.wait(lambda: requests() or None, 'a fast request for the taken-over character', 30)
+    run.harness('player', 'move', '1', '0')
+    back = run.sql(f'SELECT * FROM character WHERE id = {me}', 'character-back')[0]
+    assert not back['ai'], back
+    assert not run.private(f'SELECT * FROM fast_ask WHERE actor = {me}', 'fast-ask-back'), 'the request outlived the handback'
+    # Away again (its connection closed): the minds take over again before the reply comes.
+    run.wait(lambda: [p for p in run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-again') if p['ai']] or None, 'takeover again', 60)
+    time.sleep(14.0)
+    brains = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-end')
+    fast = [t for t in run.private(f'SELECT * FROM thought WHERE actor = {me}', 'thoughts') if t['kind'] == 'fast']
+    assert brains and brains[0]['source'] != 'fast' and '"wait":0.7' not in brains[0]['graph'].replace(' ', ''), brains
+    assert not [t for t in fast if 'rewritten' in t['summary']], fast
+    return {'status': 'pass', 'fast_requests': len(requests()), 'fast_thoughts': [t['summary'] for t in fast]}
+
+
 @case('dodge-told')
 def dodge_told_case(run):
     """A dodge's outcome reaches the mind truthfully, and a cooldown's refusals once (fix-dodge-told;
@@ -1265,6 +1397,131 @@ def far_figure_case(run):
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
 
+
+@case('first-sight')
+def first_sight_case(run):
+    """A first sight of someone one cannot place asks for one thought (docs/FIRST_SIGHT.md, the
+    `first_sight_thinks` law), and the think request the model is sent carries the first-sight
+    line word for word under "# Why you are thinking now". M's mind runs on the fake model; once
+    its first thought has settled (past `think_min_s`), U, a stranger to M, is placed 2 m away.
+    The laws are set with `set_world_law` (the gap at 0: M's opening thought may itself be a first
+    sight of someone else in view) and restored."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    m, u = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    for who in (m, u):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    body = run.sql(f'SELECT * FROM body WHERE id = {m}', 'm-body')[0]
+
+    def place_off(who, offsets):
+        # The first offset with a free walkable tile (water, rock or a crowd may fill one).
+        for dx, dy in offsets:
+            try:
+                run.admin('place_at', who, body['x'] + dx, body['y'] + dy)
+                return (dx, dy)
+            except RuntimeError:
+                continue
+        raise RuntimeError(f'no free tile for {who} at any of {offsets}')
+    place_off(u, [(60.0, 60.0), (-60.0, 60.0), (60.0, -60.0), (-60.0, -60.0), (70.0, 0.0), (-70.0, 0.0), (0.0, 70.0), (0.0, -70.0)])
+    run.admin('set_world_law', 'first_sight_thinks', 'true')
+    # (no gap: M's opening thought may itself be a first sight of someone else in view)
+    run.admin('set_world_law', 'first_sight_gap_s', '0')
+    try:
+        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        assert laws.get('first_sight_thinks') == 'true', laws
+        script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        run.start(model(run, script), [m])
+        requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+        sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+        # Past think_min_s (20 s) of any opening thought (a first sight of someone else in view).
+        time.sleep(30.0)
+        seen_before = len(requests())
+        t0 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+        place_off(u, [(2.0, 0.0), (-2.0, 0.0), (0.0, 2.0), (0.0, -2.0), (1.5, 1.5), (-1.5, -1.5)])
+        line = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {m}', 'experiences-m')
+                                 if e['at_ms'] >= t0 and e['text'].startswith('For the first time you see') and u in (e['subject'], e['object'])], 'the first-sight line', 20)[0]['text']
+        asked = run.wait(lambda: [sent_text(e) for e in requests()[seen_before:] if line in sent_text(e)], 'a think request carrying the line', 60)[0]
+        (run.directory / 'prompt-first-sight.txt').write_text(asked)
+        why = asked.split('# Why you are thinking now\n', 1)[1].split('\n\n', 1)[0] if '# Why you are thinking now\n' in asked else ''
+        checks = {
+            'line_names_a_stranger': 'a stranger' in line,
+            'reason_section_holds_the_line_word_for_word': any(l.strip() == line or l.strip().endswith(line) for l in why.split('\n')),
+            'no_words_added_to_the_line': not any(w in why.lower() for w in ('newcomer', 'visitor', 'new to you', 'near your home', 'worth')),
+        }
+    finally:
+        run.admin('set_world_law', 'first_sight_thinks', 'false')
+        run.admin('set_world_law', 'first_sight_gap_s', '300')
+    result = {'m': m, 'u': u, 'line': line, 'why': why, 'checks': checks}
+    (run.directory / 'first-sight.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+
+TALK_THOUGHT = {'kind': 'talk', 'summary': 'verify room-address line', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
+
+
+@case('room-address')
+def room_address_case(run):
+    """How a line to the room was said reaches a mind in its own labels (speech-address,
+    `speech::room_address`). H (thought for) founds a community and welcomes K; S and U are
+    strangers to H. All four stand within a few metres. S says to the room a line naming K and U:
+    H's experience reads "A stranger said to the room, naming <K> and a stranger: …"
+    (K known, U not; no name H does not know). Then S says a line to K, and a line to the room:
+    H's experience reads "… said to the room while talking with <K>: …". H's next prompt carries
+    both lines as they were heard."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 4, True)
+    h, k, u, sp = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    for who in (h, k, u, sp):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    act = lambda who, node: run.admin('mind_act', who, [json.dumps(node)], 'verify-minds')
+    run.admin('place_near', k, h)
+    act(h, {'do': 'found', 'text': f'Verify Row {h}'})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {h}', 'h-membership'), 'community founded', 20)
+    act(k, {'do': 'join', 'target': {'id': h}})
+    run.wait(lambda: run.sql(f'SELECT * FROM join_request WHERE asker = {k}', 'join-request'), 'join request', 20)
+    act(h, {'do': 'welcome', 'target': {'id': k}})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {k}', 'k-membership'), 'K welcomed', 20)
+    body = run.sql(f'SELECT * FROM body WHERE id = {h}', 'h-body')[0]
+    for who, dx in ((k, 1.5), (u, -1.5), (sp, 2.5)):
+        run.admin('place_at', who, body['x'] + dx, body['y'] + 1.0)
+    time.sleep(1.5)
+    script = {'replies': {'think': {'thought': 'I listen.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}}}
+    run.start(model(run, script), [h])
+    kn, un = names[k], names[u]
+    say = lambda who, text, to: run.admin('mind_say', who, text, to, 'say', 0, TALK_THOUGHT)
+    say(sp, f'{kn.split()[0]}! {un.split()[0]}! Come and look at this.', 0)
+    time.sleep(2.6)
+    say(sp, f'Good morning to you, {kn.split()[0]}.', k)
+    time.sleep(2.6)
+    say(sp, 'Has anyone seen the cart?', 0)
+    time.sleep(1.5)
+    heard = [e['text'] for e in run.private(f'SELECT * FROM experience WHERE observer = {h}', 'experiences-h') if e['kind'] == 'speech' and e['subject'] == sp]
+    naming = next((t for t in heard if 'Come and look' in t), '')
+    talking = next((t for t in heard if 'seen the cart' in t), '')
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify address'}))
+    prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify address' in sent_text(e)], 'prompt after the lines', 60)[0]
+    (run.directory / 'prompt-address.txt').write_text(prompt)
+    checks = {
+        'naming_reads_known_then_stranger': naming.startswith(f'A stranger said to the room, naming {kn} and a stranger:'),
+        'no_unknown_name_in_the_detail': un not in naming.split('“')[0],
+        'talking_with_reads_the_partner': talking.startswith(f'A stranger said to the room while talking with {kn}:'),
+        'prompt_carries_both': f'naming {kn} and a stranger' in prompt and f'while talking with {kn}' in prompt,
+        'addressed_line_has_no_room_detail': not any('to the room' in t for t in heard if 'Good morning' in t),
+    }
+    result = {'h': h, 'k': kn, 'u': un, 'heard': heard, 'checks': checks}
+    (run.directory / 'room-address.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
 
 @case('health-seen')
 def health_seen_case(run):

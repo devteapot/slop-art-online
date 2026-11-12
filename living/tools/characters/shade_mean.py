@@ -39,7 +39,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from merge_primitives import read_accessor, read_glb, write_glb  # noqa: E402
 
-CLOTH = 0.30    # an outfit piece's mean lightness, linear
+CLOTH = 0.48    # an outfit piece's mean lightness, linear: above every cloth colour worn, so the client's tint only darkens (it lightens another way, which flattens a piece's darker tones)
 HAIR = 0.78     # the mean vertex colour of a hair mesh's outer surfaces (its lighter half), as stored
 OVERLAY = 0.90  # an overlay picture's mean grey over what it covers, as stored (sRGB): high, so a tint is a darkening
 LUM = np.array([0.2126, 0.7152, 0.0722])
@@ -150,7 +150,7 @@ def _pictures(j):
     seen = {}
     for m in j["materials"]:
         tex = (m.get("pbrMetallicRoughness") or {}).get("baseColorTexture")
-        if tex is None or m.get("alphaMode") != "BLEND":
+        if tex is None or m.get("alphaMode") != "BLEND" or m.get("name", "").endswith("_FACE"):  # a fixed colour is no shading mean
             continue
         ii = j["textures"][tex["index"]]["source"]
         if "bufferView" in j["images"][ii]:

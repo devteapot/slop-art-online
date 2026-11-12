@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-772c115c-0dd911",
+ "published": "2026-11-12T12:37:23+01:00",
+ "imported": "2026-11-12T12:37:23+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Tones inside a piece: hems, shoulders, patches and linings are set tones of the cloth in a person's own file and in the shared piece alike; a shared piece is shaded as it is worn; the cloth class's mean is 0.48. Measured over 38 pieces, lightness apart inside a piece fell from 2.4 to 0.5 (CIE L), all from 2.7 to 2.0; what is left is hue. And the check asked for: with the light square to the face the shade's edge is on the far cheek, not down the middle.",
+ "source": {
+  "commit": "772c115c10cbd08edd96cbc9cdf831c77c56c34e",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "d5a421c06c66ef617b49fd5d590fcd8b086e99bf86eb25b644065adf0041338f",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "piece-tones: three residents' own files beside the same residents composed from shared pieces (compose.py, tinting cloth by the client's rule read from its source), before and after, front and back, the upper body and the whole figure; shadow-square: four bare type heads with the sun 78, 84, 90, 96 and 104 degrees from the face's front, after the shadow map lost its wait below the nose. Eyes are held open by the photo tool. The vroid and blue-protocol members are the references, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-772c115c-0dd911",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "64aa7966eb65eb64066b4cf4b33d72867457eab017097a308098435ee5793c97",
+   "shots": [
+    "piece-tones",
+    "shadow-square"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "173e17689d6f0fe3b3ddaa4e4a0f5f2410b63c55f782cbf600c969ae5985593b",
+   "shots": [
+    "piece-tones",
+    "shadow-square"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "04c0e74ebdaf11063e309c002ece0f3668c1580193354e7b6151430686d67c54",
+   "shots": [
+    "piece-tones",
+    "shadow-square"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

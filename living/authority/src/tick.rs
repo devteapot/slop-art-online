@@ -60,6 +60,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // Missiles in flight are swept along their paths.
     let phase = common::span("tick.missiles");
     crate::combat::missiles(ctx, now);
+    crate::fast::tick(ctx, now);
     drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
@@ -358,6 +359,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     common::set_profiling(k.profile);
     let _timer = common::span("housekeeping");
     common::report_scenes();
+    crate::perception::report_answers(ctx);
     crate::town::refresh_weather(ctx, now);
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);
@@ -380,6 +382,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     spoil(ctx, now);
     expire_remains(ctx, now);
     crate::combat::housekeeping(ctx, now);
+    crate::fast::pump(ctx, now);
 
     // One pass over the characters: population counts for the stats row, and the living.
     let mut alive_people = 0u32;

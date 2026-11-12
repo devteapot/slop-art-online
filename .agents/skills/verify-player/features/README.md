@@ -2,6 +2,7 @@
 
 | Feature | File |
 | --- | --- |
+| A first sight asks a mind, never a player (docs/FIRST_SIGHT.md, `first_sight_thinks`): a played character gets no request and no first-sight line, and still sees a stranger as `a stranger`; a resident's first sight of the player asks its mind; a player may not set the law | [perception.md](perception.md#a-first-sight-asks-a-mind-never-a-player) |
 | Across a drop between ground levels: players above and below see each other, the one above cannot step off it or walk over it, and an arrow flies over it (`drop.py`, plan-test seed) | [drop.md](drop.md) |
 | Combat skills (`use_skill`, `release_skill`, the skill bar): use, refusals, strike, killing a person, bow, fire bolt, block, dodge, jump, committed moves (a guard pressed mid-dodge refused, a dodge still cutting in on a windup, keys waiting on a throw's windup, a world's overlay making the dodge uncommitted), breath (a run, dodge and jump costs, the refill without writes, "out of breath"), heal, wolves, death and rejoin; the strike's and the arrow's outcome told to the player as a mind is told it, its own only | [combat.md](combat.md) |
 | Dealings: the player proposes terms through the verbs' node, reads the record in `my_records`, is told it was accepted, what it owes and that it is kept; a demand on the player told, and unpaid when it falls due; `record` and `record_party` private | [dealings.md](dealings.md) |

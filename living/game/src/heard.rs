@@ -48,9 +48,40 @@ pub fn unheard(e: &Experience) -> Option<u32> {
 }
 
 /// The spoken words of a percept such as `Helper said: “Welcome!”` (the whole text otherwise).
+/// How a line to the room was said (speech-address), as the authority tells every hearer before
+/// the words: "to the room, naming Ife and a stranger", "to the room while talking with Lorcan
+/// Vane", or both; with a way's own tail ("…, from about 12 m"). Whatever follows "to the room" up
+/// to the words is the detail, so "calling" or "naming" read alike. None for a line to someone
+/// (its row names the addressee) or a room line said plainly.
+pub fn how(text: &str) -> Option<&str> {
+    let head = &text[..text.find('“')?];
+    let at = head.find("to the room")?;
+    let how = head[at..].trim_end().trim_end_matches(':').trim_end();
+    (how.len() > "to the room".len()).then_some(how)
+}
+
 pub fn words(text: &str) -> &str {
     match (text.find('“'), text.rfind('”')) {
         (Some(a), Some(b)) if b > a => &text[a + '“'.len_utf8()..b],
         _ => text,
+    }
+}
+
+#[cfg(test)]
+mod how_tests {
+    use super::{how, words};
+
+    #[test]
+    fn how_a_room_line_was_said_is_read_whatever_its_verb() {
+        let naming = "Edda Hollin said to the room, naming Ife and a stranger: “Come and look.”";
+        assert_eq!(how(naming), Some("to the room, naming Ife and a stranger"));
+        assert_eq!(words(naming), "Come and look.");
+        assert_eq!(how("A stranger said to the room, calling a stranger and you: “Here!”"), Some("to the room, calling a stranger and you"));
+        assert_eq!(how("Edda said to the room while talking with Lorcan Vane: “Yes.”"), Some("to the room while talking with Lorcan Vane"));
+        assert_eq!(how("Edda calls out to the room, naming you, from about 12 m: “Over here!”"), Some("to the room, naming you, from about 12 m"));
+        // A line to someone, or to the room said plainly: no detail.
+        assert_eq!(how("Edda said to you: “Hello.”"), None);
+        assert_eq!(how("Edda said: “Morning.”"), None);
+        assert_eq!(how("Bram said to the room: “Morning.”"), None);
     }
 }
