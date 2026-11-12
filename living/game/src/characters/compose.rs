@@ -380,6 +380,7 @@ impl Composer<'_> {
                 h
             }
         };
+        debug!("compose: material {own} takes toon {:?} (source {:?})", h.id(), source.map(|m| m.to_array()));
         self.plans.file_toons.insert(own, h.clone());
         h
     }
