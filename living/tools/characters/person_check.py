@@ -44,7 +44,10 @@ def bone_scale(name, p):
     lerp = lambda a, b, t: a + (b - a) * t
     chest = g * get("shoulders")
     side = name[8:] if name.startswith(("J_Bip_L_", "J_Bip_R_")) else None
+    # `J_Fit_Belly` takes the spine's own scale: the client's half of the body pass (2026-11-12).
+    # Before it the client gave the bone none, and what it carried was not scaled with a build.
     table = {"J_Bip_C_Hips": ("own", (g * get("hips"), 1.0, g * get("hips") ** 0.5)), "J_Bip_C_Spine": ("own", (g * lerp(1.0, get("hips"), 0.5), get("torso"), g)),
+             "J_Fit_Belly": ("own", (g * lerp(1.0, get("hips"), 0.5), get("torso"), g)),
              "J_Bip_C_Chest": ("own", (lerp(g, chest, 0.5), get("torso"), g)), "J_Bip_C_UpperChest": ("own", (chest, get("torso"), g)), "J_Bip_C_Neck": ("own", (g ** 0.8, get("neck"), g ** 0.8)),
              "J_Bip_C_Head": ("all", get("head"))}
     sides = {"Shoulder": ("own", (chest, g, g)), "UpperArm": ("own", (get("arms"), g, g)), "LowerArm": ("own", (get("arms"), g ** 0.85, g ** 0.85)), "Hand": ("all", get("hands")),
@@ -52,9 +55,11 @@ def bone_scale(name, p):
     return table.get(name) or (sides.get(side) if side else None)
 
 
-def shaped(path, want, proportions):
+def shaped(path, want, proportions, more=None):
     """A file's vertices as the client poses them at rest with a recipe's proportions (before the
-    whole figure is scaled to its height): {mesh node order: positions}, concatenated."""
+    whole figure is scaled to its height): {mesh node order: positions}, concatenated. `more`, a
+    dict, also takes `triangles` (indices into those positions) and `joints` (each named node's
+    place as posed), for a tool that cuts the posed figure (reference/body.py)."""
     j, binary = read_glb(path)
     nodes = j["nodes"]
     parent = {c: i for i, n in enumerate(nodes) for c in n.get("children", [])}
@@ -95,7 +100,7 @@ def shaped(path, want, proportions):
 
     skin_of = {n["mesh"]: n.get("skin", 0) for n in nodes if "mesh" in n}
     drawn = {n["mesh"] for sc in j["scenes"] for r in sc["nodes"] for n in walk(nodes, r) if "mesh" in n}
-    out = []
+    out, faces, count = [], [], 0
     for mi, mesh in enumerate(j["meshes"]):
         if mi not in drawn:
             continue
@@ -113,6 +118,12 @@ def shaped(path, want, proportions):
             for k in range(4):
                 sk += wt[:, k : k + 1] * np.einsum("nij,nj->ni", mats[jt[:, k]], ph)[:, :3]
             out.append(sk)
+            if more is not None and "indices" in p:
+                faces.append(np.array(read_accessor(j, binary, p["indices"])[0]).reshape(-1, 3) + count)
+            count += len(sk)
+    if more is not None:
+        more["triangles"] = np.concatenate(faces) if faces else np.zeros((0, 3), int)
+        more["joints"] = {n["name"]: world(i)[0][:3, 3].copy() for i, n in enumerate(nodes) if n.get("name") and "mesh" not in n}
     return np.concatenate(out) if out else np.zeros((0, 3))
 
 

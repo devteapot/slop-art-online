@@ -457,6 +457,83 @@ def drop_clips(files):
     return done
 
 
+def clip_file(files):
+    """Make each file a clip file: its skeleton and its clips, and nothing a clip file is not read
+    for. The meshes, skins, materials, pictures and the VRM block go (a clip file that is a whole
+    person makes the client decode and hold that person's pictures and morph targets for
+    nothing). One thing stays in their place: a mesh `Figure` of four points and no material,
+    whose bounds are the figure's the clips were baked on. The client measures a person's
+    stride against the clip file's figure from its meshes' bounds (`lookdev::figure_height`),
+    so the file must still say how tall that figure stood. Returns [(file, bytes before,
+    after)]."""
+    from array import array
+
+    from merge_primitives import append_accessor, read_accessor
+
+    out = []
+    for f in files:
+        j, binary = read_glb(f)
+        before = os.path.getsize(f)
+        nodes = j["nodes"]
+        # The figure's bounds: every near mesh's, as the client takes them (bind pose; our mesh
+        # nodes have no transform of their own).
+        lo, hi = [1e9] * 3, [-1e9] * 3
+        for n in nodes:
+            if "mesh" not in n or n.get("name", "").startswith("Far"):
+                continue
+            for pr in j["meshes"][n["mesh"]]["primitives"]:
+                acc = j["accessors"][pr["attributes"]["POSITION"]]
+                lo = [min(a, b) for a, b in zip(lo, acc["min"])]
+                hi = [max(a, b) for a, b in zip(hi, acc["max"])]
+        if hi[1] <= lo[1]:
+            raise SystemExit(f"share: {f} has no meshes to take the figure's bounds from (already a clip file?)")
+        keep = [i for i, n in enumerate(nodes) if "mesh" not in n]
+        remap = {old: new for new, old in enumerate(keep)}
+        new_nodes = []
+        for i in keep:
+            n = {k: v for k, v in nodes[i].items() if k not in ("skin", "extensions")}
+            if "children" in n:
+                n["children"] = [remap[c] for c in n["children"] if c in remap]
+                if not n["children"]:
+                    del n["children"]
+            new_nodes.append(n)
+        nj = {"asset": j["asset"], "buffers": [{"byteLength": 0}], "bufferViews": [], "accessors": [], "nodes": new_nodes}
+        nb = bytearray()
+        moved = {}
+
+        def carry(a):
+            if a not in moved:
+                values, (ct, typ, norm) = read_accessor(j, binary, a)
+                moved[a] = append_accessor(nj, nb, values, ct, typ, norm)
+                for k in ("min", "max"):
+                    if k in j["accessors"][a]:
+                        nj["accessors"][moved[a]][k] = j["accessors"][a][k]
+            return moved[a]
+
+        anims = []
+        for an in j.get("animations", []):
+            samplers = [dict(s, input=carry(s["input"]), output=carry(s["output"])) for s in an["samplers"]]
+            channels = [dict(c, target=dict(c["target"], node=remap[c["target"]["node"]])) for c in an["channels"] if c["target"].get("node") in remap]
+            anims.append(dict(an, samplers=samplers, channels=channels))
+        if not anims:
+            raise SystemExit(f"share: {f} has no clips")
+        nj["animations"] = anims
+        corners = array("f", [lo[0], lo[1], lo[2], hi[0], lo[1], hi[2], hi[0], hi[1], hi[2], lo[0], hi[1], lo[2]])
+        pos = append_accessor(nj, nb, corners, 5126, "VEC3", False, target=34962)
+        idx = append_accessor(nj, nb, array("H", [0, 1, 2, 0, 2, 3]), 5123, "SCALAR", False, target=34963)
+        nj["meshes"] = [{"name": "Figure", "primitives": [{"attributes": {"POSITION": pos}, "indices": idx}]}]
+        new_nodes.append({"name": "Figure", "mesh": 0})
+        roots = [remap[r] for sc in j.get("scenes", []) for r in sc["nodes"] if r in remap]
+        nj["scenes"] = [{"nodes": roots + [len(new_nodes) - 1], "extras": {"clip_file": {"figure_height": hi[1] - lo[1]}}}]
+        nj["scene"] = 0
+        write_glb(f, nj, nb)
+        for side in (".face.png", ".atlas.png", ".far.png"):
+            if os.path.exists(os.path.splitext(f)[0] + side):
+                os.remove(os.path.splitext(f)[0] + side)
+        out.append((f, before, os.path.getsize(f)))
+    return out
+
+
 def accessor_refs(j):
     """Every place outside animations that names an accessor: (container, key)."""
     for m in j.get("meshes", []):
@@ -511,6 +588,8 @@ def main():
     t.add_argument("--dir", default=os.path.join(ASSETS, "lookdev", "pages"))
     c = sub.add_parser("clips", help="remove each file's own clips (the game takes them from the shared clip file)")
     c.add_argument("files", nargs="+")
+    cf = sub.add_parser("clipfile", help="make a baked person a clip file: the skeleton, the clips and the figure's bounds, no meshes or pictures")
+    cf.add_argument("files", nargs="+")
     l = sub.add_parser("list", help="each file's meshes, materials and pictures")
     l.add_argument("files", nargs="+")
     a = ap.parse_args()
@@ -524,6 +603,9 @@ def main():
         print(f"share: {done} of {len(a.files)} type files put on the shared pages ({r['grid']}x{r['grid']} tiles): " + ", ".join(f"{v['file']} ({r['grid'] * v['tile'][0]} x {r['grid'] * v['tile'][1]})" for v in r["pages"].values()))
     elif a.cmd == "clips":
         print(f"share: {drop_clips(a.files)} of {len(a.files)} files had their own clips removed")
+    elif a.cmd == "clipfile":
+        for f, before, after in clip_file(a.files):
+            print(f"share: {f} is a clip file: {before / 1e6:.2f} MB to {after / 1e6:.2f} MB")
     else:
         listing(a.files)
 
