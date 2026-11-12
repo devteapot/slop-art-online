@@ -481,7 +481,66 @@ Instinct against instinct, 6 replicates per arm, 10 minutes. Medians, with the r
   - C1 (sides) reached 64–68° median coverage (range 23–80°), against the baseline's 6–20°, and was encircled 0–3% of the time;
   - C2 bit almost never (0–1 blows a run): the wolves kept 3–5 m from people who kept fleeing at 5 m.
   - Kept as evidence of walking fixtures, nothing more.
-- **`pkc2`: the fixtures at a run, and a standing-prey arm.** Results below.
+- **`pkc2` and `pkc3`: the fixtures at a run, and a standing-prey arm** (people on `{"wait": 900}`: they hold their ground and do not strike). 6 replicates each, against the close 6v6 instinct control (coverage 20°, encircled 0):
+
+| Fixture | Prey | Coverage ° | Encircled (k ≥ 3) | Differs from control (§5.5 rule) |
+|---|---|---|---|---|
+| C1r: sides assigned by us | fleeing, 3v3 / 6v6 | 94 (61–99) / 101 (34–116) | 0.13 / 0.15 | coverage and encircled, yes |
+| C1r | standing, 6v6 | **176 (125–192)**; 2 of 6 runs > 180 | **0.52** | yes |
+| C2r: Muro in today's grammar (back off when a mate is within 3 m) | fleeing, 3v3 / 6v6 | 44 / 29 (26–49) | 0.11 / 0 | coverage only |
+| C2r | standing, 6v6 | 94 (77–166) | 0 (one run 0.32) | coverage only |
+| **C3: Muro with `apart` (A5)** | fleeing, 3v3 / 6v6 | 66 / 59 (50–75) | 0 / 0.01 | coverage only |
+| **C3** | standing, 6v6 | **146 (50–210)**; 3 of 6 runs ≥ 178 | **0.76** | yes |
+
+**Reading (§5.6).**
+- **Assigned sides.** C1r nearly reaches the 180° target, but only around a target that stands: the world's steering and bite let wolves on different sides ring a person.
+- **Today's grammar.** C2r does not ring even a standing target: without a way to steer relative to its mates, a wolf can only back off. The gap is in steering, not in the physics. That is the measurement that justified A5.
+- **With A5.** C3's wolves follow only their own two rules, with nobody assigned a side. They ring a standing person as often as wolves with assigned sides do (encircled 0.76 against 0.52), though the median coverage, 146°, stays under 180°.
+- **Fleeing people.** No fixture rings instinct people, who flee any wolf within 5 m, within 10 minutes. The best is C1r's 100°.
+
+### Step 3: A5 built (`apart`); A1–A4 not built
+
+The measurement above shows the need for A5, and only A5. Nothing in steps 1–2 shows a need for A1–A4:
+- **A1, heard signals.** Instinct wolves never call. Minds already receive signals as percepts.
+- **A2, target filters.** No mind has yet asked for "the one alone" or "the hurt one".
+- **A3, facing.** Rear blows are already 86–100%, because instinct people flee.
+- **A4, counting round a target.** `apart` covers the same ground.
+
+Each waits for a paid arm, or for a mind's plan that cannot be written without it.
+
+- **What it is.** `apart` (metres, 1 to 12) on `keep_distance`, `close_in` and `circle`: how far to keep from others of one's own kind one sees while holding the intent. The same rule serves wolves and people. It says how far, never where: no side, slot or role.
+- **Data.** One column appended to the private `steer` row: `apart` f32, `#[default(0.0)]`, an automatic migration. This is the case `schema-guard` (main `ce5e09b9`, merged before the push) covers. No other table, and no view or subscription.
+- **Steering.** Each update of an intent that has it gathers the bodies within `apart` (the per-tick chunk cache) and keeps those of its own kind it sees by the one sight rule. The goal's target is left out. Each is pushed away from by how far inside `apart` it is (`steer::apart_push`). Moving, the way bends (`steer::apart_way`). Standing in its band, the body moves round the target, never in or out.
+- **Grammar.** `Spacing::apart` and `Action::apart`, checked ("`apart` is for keep_distance, close_in, circle"; "from 1 to 12"). The specs in `skills.rhai` document it, so the minds' reference does too.
+- **Bindings.** Regenerated. They also gained `heard_asleep`, which `fix-sleep-talk` had not regenerated on main.
+- **Cost.** Not measured at the gate. Per steering update of an intent with `apart`: one chunk gather within at most 12 m, and a sight test per same-kind body in it (at most a pack, in practice).
+- **Verified:**
+  - `living-check` passes;
+  - Cargo `steer::apart_tests` (4) passes;
+  - verify-core `apart`, `core-apart2-175631`: 12/12 (people 28° → 191° at 4 m → 213° at 6 m; wolves 28° → 170° → 254°; each within its band). `intents` passes 24/24 as the regression check;
+  - verify-client `client-packs-181156`: 43/43, and `steer`, new column included, still refused to clients;
+  - verify-minds `intents`, `minds-packs3-181702`: the reference documents `apart`;
+  - not run: verify-player (no player reducer changed) and the 216-character gate.
+
+## Sources
+
+### The spacing reflex, as a candidate (`pkr1`, 24 runs; decision 1)
+
+This is `instinct:wolf_bold` with one weighted desire beside each hunt (`pack_arena_trials.py` `with_reflex`): "keep apart from mates" (weight 1.2), which acts while a mate is within 3 m and the prey within 6 m, holding 3–5 m from the nearest prey at a run with `apart: 4`. Otherwise the hunt (weight 1) acts as before. It names a kind, as the instinct already does, never a creature or a role. It lives in the wolf's own graph, which its mind may rewrite. It is in the trial files only.
+
+| Arm | Coverage ° (instinct → with the reflex) | Encircled | People killed (median) | People's health lost |
+|---|---|---|---|---|
+| close 3v3, fleeing people | 7.5 → 36 (34–40) | 0 → 0 | 0 → 0 | 11.5 → 0 |
+| close 6v6, fleeing people | 20 → 40 (34–105) | 0 → 0 (0–0.20) | 1 → 0 | 123 → 14 |
+| spread 6v6, fleeing people | 114* → 37 (35–147) | – | 0.5 → 0 | 89 → 7 |
+| close 6v6, standing people (against C3) | 146 → **201 (162–239)**; 5 of 6 ≥ 186 | 0.76 → **0.68** (0.49–0.84) | 0 → **6 of 6, in about 67 s** | 8 → 557 |
+
+\*The spread baseline's 114° is from the 3 runs whose engagements began with the wolves still in their start sector.
+
+**Reading.**
+- **Standing prey.** Wolves living only by their starting instinct plus this reflex ring a target that holds its ground: median coverage 201°, the first arm to reach §5.5's 180°, and the pack kills in about a minute. Rear blows are 57%, about the random null: they come from all round, not from behind a fleeing back.
+- **Fleeing prey.** The wolves hold back at 3–5 m whenever crowded, so they bite and kill less: health lost 123 → 14 at 6v6.
+- **It meets decision 1's condition.** Without it nothing rings. But it is not shipped. It changes how dangerous wolves are, which is the owner's call. And deer flee too: on the island, under instincts, wolves have starved before (`la2`), and the reflex could slow their hunts. A free ecology check (as `stamina-1`'s: wolves and deer over two game days, with and without the reflex) should come before it goes into `instincts.json`.
 
 ### Step 4: the hidden `pack` copying, retired
 
@@ -496,6 +555,46 @@ Both sides with minds (`minds.roles`): 6 people on the default mix and 6 wolves 
 - **What a wolf mind can change in 10 minutes: little.** Wolves think at most every 240 s (`think_min_s`) and only on a salient change, so a wolf thinks once or twice in a fight.
 - **The `choose` menu cannot express spacing.** It offers flee from, hunt or attack a creature by id; keep close to the nearest of its kind; rest; roam; a call. It offers none of the movement intents. A wolf mind in `choose` mode can never hold a distance, circle or step away from a mate. On the two-call path (an impulse, then a compile against the full grammar) it can.
 - **The behaviour measures of fake runs mean nothing** (the replies are fixed), and are not reported.
+
+## 8. The paid step: plan and thresholds (committed before any paid call; not run)
+
+**Gate.** The step waits for battle-scale's fixes 1–3 on main and the owner's go-ahead for this run. The ceiling is $10, as approved.
+
+**Build.**
+- `packs` merged with main once the fixes are in.
+- The trial module and the mind rebuilt.
+- Every run records its commit and its switches.
+
+**Switches.**
+- `fast_lane_on` off;
+- `fov_on` off;
+- `force_outcomes` as shipped;
+- the howl as shipped;
+- people on the models file's default mix;
+- wolves on GLM Flash through the species map, with `LIVING_ANIMAL_MINDS=salient` (the impulse-then-compile path). `choose` is left off because its menu cannot express spacing (§7, step 5);
+- no `pack`.
+
+**Arms.** 6v6, spread start, bold wolves, 10 minutes, 4 replicates each, about 16 runs:
+
+| Arm | People | Wolves | What it asks |
+|---|---|---|---|
+| P1 | minds | instinct (shipped) | Do people with minds group and help (M4) where instinct people scatter? |
+| P2 | instinct | minds, starting from the shipped instinct | Does any wolf's own mind write spacing (`apart`, `circle`, waiting for mates), and does a ring follow (M1–M3)? |
+| P3 | minds | minds | Both sides together: the owner's "bunch of wolves against a bunch of people" |
+| P4 | minds | minds | As P3, with the island's deer left in place (the mixed arm) |
+
+**Thresholds** (§5.5's rule: an arm differs from its control when its median lies outside the control's replicate range and at least ⅔ of its replicates do). Controls are the instinct arms already run: `pkb3` spread 6v6. People's arms also compare against P2's instinct people.
+
+- **P1 / P3, people.** Cooperation from people means ΔG > 0 (they close up when the wolves appear), standing-together share above the control's 0–0, and assist rate > 0 (a person strikes a wolf that is on someone else).
+- **P2 / P3, wolves.** Cooperation from wolves means median coverage at k ≥ 3 ≥ 180°, encircled share above the control's 0, and selection index I ≥ 1.5, with M1's coordinated share read only against its control (the 3 s window is reached by charging alone, §7).
+- **Descriptive, no threshold.** The count of wolf graphs a mind wrote that use `apart`, `circle`, `keep_distance` or a wait on mates (`count` of wolves); calls to `signal`; casualties and fight length.
+- **The guards (§5.5).** Every prompt is audited for pack-tactic words outside the character's own experiences and memory. `skills.sha256` is checked against main. Nothing from the arena goes into a seed.
+
+**Cost estimate.**
+- **People.** Trials and R2 put people on stage at about $0.14–0.24 a person-hour. Six people for 10 minutes is $0.15–0.25 a run; the fake arm's call counts (about 150 people's calls a run) fit that.
+- **Wolves.** On the two-call path, about $0.005 a wolf-hour, so under $0.01 a run.
+- **Total.** 12 arms with people's minds plus 4 without: about **$3–4**.
+- **Bound.** The batch is stopped if the ledger passes $8.
 
 ## Sources
 
