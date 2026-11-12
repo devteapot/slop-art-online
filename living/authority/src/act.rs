@@ -915,11 +915,11 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             }
             "back_off" if creature => Goal::held(motion::GOAL_FLEE, target.id as u32, target.at, spacing.distance.unwrap_or(BACK_OFF_M), 0.0, sp, 0),
             "back_off" => Goal { kind: motion::GOAL_FLEE, target: 0, at: target.at, keep: spacing.distance.unwrap_or(BACK_OFF_M), speed: sp, flags: 0, pace: sp, far: 0.0 },
-            "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
+            "goto" if creature => Goal::creature(target.id as u32, target.at, r, sp, motion::FLAG_EARLY),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
             _ if aside => Goal::point(target.at, sp * common::moves_of(ctx, id, now).aside, 0),
             // Closing in on a creature: every look checks whether it is within reach.
-            _ if creature => Goal::creature(target.id as u32, (r - 0.25).max(0.4), sp, motion::FLAG_EACH),
+            _ if creature => Goal::creature(target.id as u32, target.at, (r - 0.25).max(0.4), sp, motion::FLAG_EACH),
             _ => {
                 // Aimed work (building beside, gathering from, reading a sign) stops at the
                 // edge of reach instead of walking onto the spot.

@@ -1,6 +1,10 @@
 # Movement mind: finding the way from what one knows
 
-Status: **survey and design only** (branch `research-movement`, from main `e09365be`, 2026-11-12). Nothing is built. No module was built and no model was called. The evidence below comes from reading the code on main and from scanning existing trial evidence under `~/dev/*/.local/living/trials/`. The target spread in [§4](#4-measures-the-navigation-arenas) is committed here before any arena runs.
+Status: **design, being built step by step** (designed on branch `research-movement`, from main `e09365be`, 2026-11-12). Built so far:
+- `flee-open` (main `33b50ced`): a flight takes open ground ([LIVING_CORE](LIVING_CORE.md#steering-locomotion)).
+- `pursue-last-seen`: nothing is followed out of sight; a pursuit goes to the last-seen place, a flight runs from it; `chase_lost_share` removed.
+
+Next: `known-ground` (step 3 below), then `nav-arenas` (§4). The rest of this paragraph is the design as written. Nothing else is built. No module was built and no model was called. The evidence below comes from reading the code on main and from scanning existing trial evidence under `~/dev/*/.local/living/trials/`. The target spread in [§4](#4-measures-the-navigation-arenas) is committed here before any arena runs.
 
 The owner's ask: *"general movement, how they get where they want to go. pathfinding based on memory and what they can see. real time input like a real player, low latency."*
 
@@ -35,6 +39,46 @@ Standing rules this design follows: behaviour emerges and is not hard-coded; min
   - stuck events;
   - input latency.
 - **Cost to test.** The arenas, the fake-model arms and every build step are free. A paid arm on real minds is only needed to ask whether minds use their known and told places. It would cost about **$5** ($8 ceiling), at the measured $0.15–0.17 per resident-hour.
+
+## Built: pursue-last-seen, wolves before and after (2026-11-12)
+
+**Builds.** Before: `flee-open` (`993b757d`). After: this branch on main `33b50ced`. Main's rule changes between the two are speech, earshot and owner labels, nothing that instinct-only wolves read. Trial server (2.14.1), instinct graphs only, no mind service, no model. Host load 25–55 on 20 cores from all agents.
+
+**Chases** (`scenes.py chase`, default seed, 4 chases of each kind, a bold wolf on a person going off along an open 64 m line):
+
+| | Before | After |
+|---|---|---|
+| Person running: caught | 4 of 4, median 1.2 s (0.4–2.1) | 4 of 4, median 1.2 s (0.8–1.8) |
+| Person running: first blow | median 4.8 s (3.8–5.4) | median 5.1 s (4.0–6.3) |
+| Person walking: caught | 3 of 4, median 0.4 s | 4 of 4, median 0.2 s |
+| Person walking: first blow | median 1.7 s (1.5–1.9) | median 1.9 s (1.5–2.4) |
+
+In the open the target never leaves sight, so the change does not show here, as expected.
+
+**Fights** (`scenes.py fights`, default seed, 5 of each; median and range of fights that started):
+
+| | Before | After |
+|---|---|---|
+| Person v person, dodging | 33.8 s (29.9–91.2) | 34.4 s (32.0–44.6) |
+| Person v person, trading blows | 56.6 s (17.1–94.8), 2 timed out | 25.0 s (18.0–26.9) |
+| Person v bold wolf | 24.1 s (20.6–31.6), 5 fights | 25.8 s (21.1–90.4), 3 fights, 1 timed out |
+
+How fights end shifted with the flights: after, a fight's loser more often got clear ("clear" in 5 of 5 trading fights, against 0 of 5), because a flight now runs on from where the pursuer was last seen instead of ending when it went out of sight. Five fights an arm is a small sample.
+
+**Wolf ecology** (`living/tools/wolf_ecology.py`, the hamlet with 16 deer and a bold pack of 4, the overlay of the fix-pursuit-speed check; 2 worlds an arm). The before worlds were paused for a quiet window and their clock jumped 22.7 game hours on resuming, so both arms are compared over the same first **13.6 game hours** only:
+
+| | Before | After |
+|---|---|---|
+| Resident-hours | 307 | 282 |
+| Attack episodes (per 1,000 resident-h) | 93 (303) | 94 (334) |
+| Blows begun | 628 | 690 |
+| People killed by wolves (per run) | 4 (1, 3) | 7 (4, 3) |
+| … per 1,000 resident-h | 13.0 | 24.9 |
+| Of those badly hurt / children | 4 / 1 | 7 / 2 |
+| Deer attacked / killed | 0 / 0 | 0 / 0 |
+| Wolves at 12 game hours | 4, 4 | 3, 4 (one killed by a person) |
+
+Attacks are the same; deaths are 7 against 4 of 24 residents, every victim badly hurt, worn down over several episodes. Earlier checks put this world at 2–5 dead per run in its first 12–18 game hours on either build (docs/STAMINA.md, fix-pursuit-speed), and 1, 3 against 4, 3 sits inside that spread. Two worlds an arm cannot say whether the rate moved. A reading of the mechanism: a person fleeing a wolf no longer stops when the wolf drops out of sight but runs on from where it last saw it, often away from the others, and a wolf no longer tracks through walls but goes to where it last saw its prey.
 
 ## 1. Today
 

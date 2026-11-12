@@ -64,8 +64,10 @@ python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # on an island run it also drives the told lines of `outcomes`).
 python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
-# A flight out of inside corners by open ground, never cornered (features/steering.md#flight, about 1.5 min).
+# A flight out of inside corners by open ground, from a threat standing and one walking after it, never cornered (features/steering.md#flight, about 3 min).
 python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
+# Nothing followed out of sight: a pursuit to the last-seen place, a flight from it (features/steering.md#out-of-sight-last-seen-places, about 1.5 min).
+python3 "$C/scenes.py" pursue_last_seen --run "$R" > "$E/pursue_last_seen.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
 # Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run
