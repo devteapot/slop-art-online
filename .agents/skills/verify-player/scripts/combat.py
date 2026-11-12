@@ -1059,11 +1059,17 @@ def scene_onlooker(st):
     # The feed's rows expire a few seconds after each blow: gathered while the fight goes on.
     feed_rows = {}
 
+    # The feed's rows as the database holds them too (admin), to tell a row never written from
+    # one written and not shown.
+    written = {}
+
     def gather(secs):
         end = time.time() + secs
         while time.time() < end:
             for e in seen(st):
                 feed_rows[e["id"]] = e
+            for e in sql(st, f"SELECT * FROM combat_seen WHERE actor = {a} AND target = {b}"):
+                written[e["id"]] = e
             time.sleep(0.5)
     gather(6)
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
@@ -1076,7 +1082,13 @@ def scene_onlooker(st):
     lines = [e for e in sql(st, "SELECT id, kind, text, at_ms FROM my_experience", "player") if e["kind"] == "fight" and e["at_ms"] >= t0]
     counted = sum(int(n) for n in re.findall(r"(\d+) (?:blow|shot)s? \(", " ".join(e["text"] for e in lines)))
     check(st, "the fight happened (resolved strikes)", struck, [u["outcome"] for u in struck])
-    check(st, "the per-blow feed is unchanged: a my_combat row for every blow seen", len(feed) >= len(struck) > 0, {"feed": len(feed), "struck": len(struck)})
+    to_me = [e for e in written.values() if e["kind"] in (2, 3, 4, 5) and e["at_ms"] >= t0 and e["viewer"] == feed_rows[next(iter(feed_rows))]["viewer"]] if feed_rows else []
+    # An onlooker's feed row stays in `my_combat` only `ONLOOKER_MS` (300 ms; the client reads
+    # each once), so polling twice a second sees some of them: the feed is shown to be there and
+    # to be the strikes', not counted whole.
+    check(st, "the per-blow feed is unchanged: my_combat rows of the blows seen, each a resolved strike's",
+          0 < len(feed) <= len(struck) and all(e["kind"] in (2, 4) for e in feed),
+          {"feed_rows_read": len(feed), "struck": len(struck), "written_rows_read": len(to_me)})
     check(st, "the player's experience folds the fight: every blow counted, in fewer lines than blows, without scene ids",
           lines and counted == len(struck) and (len(lines) < counted or counted == 1) and not any("(#" in e["text"] for e in lines), {"lines": [e["text"] for e in lines], "struck": len(struck)})
     code, body_ = V.http(f"/v1/database/{st['db']}/sql", "SELECT * FROM fight_seen", st.get("token"), raw=True)
