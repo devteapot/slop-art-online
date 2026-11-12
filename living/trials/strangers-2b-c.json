@@ -42,6 +42,7 @@
  },
  "variants": [
   "strangers-control",
-  "strangers-first-sight"
+  "strangers-first-sight",
+  "strangers-first-sight-hf"
  ]
 }

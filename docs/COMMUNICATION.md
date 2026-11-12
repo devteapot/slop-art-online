@@ -794,6 +794,14 @@ The general coordinator's decisions: tell the speaker the truth, and never hold 
 - **A newcomer talking to an empty yard** is the strangers trial's situation, so the room case had to be in before stage 2.
 - **The minds.** The `silence` row's words reach every prompt as before. The rethink judge's `spoke_to_without_answer` now reads "… — 2 lines to them since just now; they could not have heard you: out of earshot" when every line was unheard. When only some were, it reads "…, no answer; 1 of them could not have reached them (out of earshot)". Before, it was "…, no answer (they seemed out of earshot)". A `silence` still closes that conversation (`talk.rs` `on_speech`).
 
+**A mind's line when another spoke to its listener first** (`heard_first_rethinks`, off by default; first-sight-crowd, docs/FIRST_SIGHT.md "Crowds"):
+- **The rule.** A line a mind decided to say to someone is not said yet when, since its decision read its scene, the speaker heard another address that person.
+  - "Since its decision" means the later of the request's scene (`seen_ms`) and the start of its model calls (now less the thought's `latency_ms`). A line that arrived before the prompt was built was in front of it.
+  - It covers a deliberation's `say`, delivered by `mind_install` or by `mind_say` carrying on, and a mind plan's `say` node, counted since its install or its last line. A conversation turn's reply is not held, and neither is a routine's say.
+- **What the speaker gets.** It is told "You had not yet said “…” to <who> when you heard: <the line it heard>", an experience of kind `unsaid`. Its mind is asked to think again with that line as the reason (`perceive::ask_again`, not refused within `think_min_s`, because the decision it would protect is the one held).
+- **Not a back-off.** It may still say it; what it decides then is said as it decides.
+- **Implementation:** `speech::addressed_by_another`, `speech::held_for_another`. The check is one range of the speaker's own `experience` rows by `observer`.
+
 **A plan's queued line overtaken by a reply** (`brain.rs` `line_overtaken`). A mind plan's `say` node to someone is dropped when it comes due if the conversation has moved past it. That is, since the plan was installed (or the node last spoke):
 
 - that person spoke to the speaker: a line with `object` the speaker, or a room line the authority marked as for them (salience ≥ 0.8, the mind's own "marked");
