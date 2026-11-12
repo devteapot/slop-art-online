@@ -38,6 +38,10 @@ pub struct ToonExt {
     #[texture(103, dimension = "2d_array")]
     #[sampler(104)]
     pub detail: Option<Handle<Image>>,
+    /// The hair's greying palette (`characters/compose.rs` `HairTints`): the one hair material
+    /// composed people share has it; none elsewhere.
+    #[texture(105)]
+    pub tints: Option<Handle<Image>>,
 }
 
 /// The painted surfaces of models, in the order of `living/tools/textures/surfaces.py` (layer k
@@ -402,7 +406,7 @@ impl Style {
     pub fn kind(&self, base: StandardMaterial, kind: Kind, face: Option<Handle<Image>>) -> Toon {
         let mut params = self.params();
         params.shade.w = kind as u8 as f32;
-        Toon { base, extension: ToonExt { params, face, detail: None } }
+        Toon { base, extension: ToonExt { params, face, detail: None, tints: None } }
     }
 }
 

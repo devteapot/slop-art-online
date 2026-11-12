@@ -67,6 +67,12 @@ Names learned from a lived line, down to the memory graph ([features/names.md](f
 .agents/skills/verify-knowledge/scripts/names.py --run minds-names-$(date +%Y%m%d-%H%M%S)
 ```
 
+Someone's home, learned while they are away and recalled when they come by ([features/recall.md](features/recall.md#homes)): an overlay makes anyone past 4 m too far away to make out; a resident F puts up a house, tells the mind's character M its name and goes 40 m off; M notices the house "built by F"; the fake consolidation keeps "<F>'s house" as a place and `person:F -LIVES_AT->` it; F comes within 2 m and M's think prompt recalls it. Same environment as `names.py`:
+
+```bash
+.agents/skills/verify-knowledge/scripts/homes.py --run minds-homes-$(date +%Y%m%d-%H%M%S)
+```
+
 Two strangers stay two people in memory ([features/strangers.md](features/strangers.md)): two players the mind does not know by name say different things, the fake model folds both under one description, and the graph, recall and a later introduction keep them apart. Same environment as `names.py`, plus a `CARGO_TARGET_DIR` holding a release `living-mind` (the recall replay is built there):
 
 ```bash
