@@ -158,7 +158,7 @@ The replays' worst N1 flaw, also seen once each in T and N2, was a mind fleeing 
 |---|---|---|---|---|
 | heavy r5, t 70 | "run northeast toward the road … away from #9" | north, 9.6 m | `flee` from #9, at t 91: **21 s after the reply** | stood still (its old plan's `keep`) while #9 closed to 1.2 m |
 | heavy r5, t 223 | "run southeast along the road to the inn" | **southeast**, 12 m | `goto` the place "the inn south of the hall", at t 234 | refused while dodging, then moved southeast toward the inn, past #9 |
-| heavy r4, t 102 | "run east toward the town wall at (356,262)" | **east**, 1.2 m | `goto` the place "town wall" (run) | 2.7 m northeast, then still |
+| heavy r4, t 96 | "run east toward the town wall at (356,262)" | **east**, 1.2 m | `goto` the place "town wall" (run), at t 110 | 2.7 m northeast, then still |
 | heavy r5, t 257 | "run west toward the house at (365.5,260.5)" | southeast, 8.9 m | none found within the window | still; #9 closed to 3.3 m |
 | kiter r3, t 93 | "run west away from the shooter toward the wall cover" | east, 6.2 m | `flee` from #9 (run), at t 104 | kept chasing #9 east (its old plan's `attack`) until t 104, then ran west 8 m |
 
