@@ -1809,6 +1809,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 }
                 let c = ctx.db.community().insert(Community { id: 0, name: name.clone(), founder: me, founded_ms: now, home_x: at.0, home_y: at.1 });
                 ctx.db.membership().insert(Membership { id: 0, community: c.id, member: me, since_ms: now });
+                crate::perception::answers_changed();
                 crate::perception::knowledge_changed(None);
                 common::chronicle(ctx, now, "community", me, 0, at, format!("{my_name} founded {name}"));
                 witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} founded a community called {name}"), 0.6, &[me]);
@@ -1846,8 +1847,10 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 ctx.db.join_request().id().delete(req.id);
                 if let Some(old) = ctx.db.membership().member().find(asker) {
                     ctx.db.membership().id().delete(old.id);
+                    crate::perception::answers_changed();
                 }
                 ctx.db.membership().insert(Membership { id: 0, community: mine.community, member: asker, since_ms: now });
+                crate::perception::answers_changed();
                 crate::perception::knowledge_changed(None);
                 let cname = ctx.db.community().id().find(mine.community).map(|c| c.name).unwrap_or_default();
                 let an = common::name_of(ctx, asker);
@@ -1862,6 +1865,8 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 let m = ctx.db.membership().member().find(me).ok_or("you belong to no community")?;
                 let cname = ctx.db.community().id().find(m.community).map(|c| c.name).unwrap_or_default();
                 ctx.db.membership().id().delete(m.id);
+        crate::perception::answers_changed();
+                crate::perception::answers_changed();
                 crate::perception::knowledge_changed(None);
                 common::chronicle(ctx, now, "community", me, 0, at, format!("{my_name} left {cname}"));
                 witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} left {cname}"), 0.6, &[me]);
@@ -2252,9 +2257,11 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     crate::town::forget_guest(ctx, id);
     for a in ctx.db.acquaintance().observer().filter(id).map(|a| a.id).collect::<Vec<_>>() {
         ctx.db.acquaintance().id().delete(a);
+        crate::perception::answers_changed();
     }
     for r in ctx.db.reveal().observer().filter(id).map(|r| r.id).collect::<Vec<_>>() {
         ctx.db.reveal().id().delete(r);
+        crate::perception::answers_changed();
     }
 }
 
@@ -2619,11 +2626,13 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
         // Who shared the community knew the name at the moment of death and keeps it.
         crate::perception::remember_member(ctx, id, m.community, now);
         ctx.db.membership().id().delete(m.id);
+        crate::perception::answers_changed();
         crate::perception::knowledge_changed(None);
     }
     // What only this person knew how to do is gone unless they taught or wrote it down.
     for k in ctx.db.know_how().actor().filter(id).map(|k| k.id).collect::<Vec<_>>() {
         ctx.db.know_how().id().delete(k);
+        crate::perception::answers_changed();
     }
     // Every body is left as remains: what it carried, what its body gives (the `carcass` law by
     // kind) and its artifacts, until the `remains_s` law's time is up (`expire_remains`).

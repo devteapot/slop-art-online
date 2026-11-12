@@ -220,8 +220,10 @@ fn rename_techniques(ctx: &ReducerContext) {
         let new = renamed(&k.technique).unwrap_or_default();
         if ctx.db.know_how().by_actor_technique().filter((k.actor, new.as_str())).next().is_some() {
             ctx.db.know_how().id().delete(k.id);
+            crate::perception::answers_changed();
         } else {
             ctx.db.know_how().id().update(KnowHow { technique: new, ..k });
+            crate::perception::answers_changed();
         }
         n += 1;
     }
@@ -538,6 +540,7 @@ pub fn spawn_skirmish(ctx: &ReducerContext, n: u32, spacing: f32) -> Result<(), 
         common::inv_add(ctx, id as u64, "arrow", 40);
         common::learn(ctx, id, "wound_tending", "skirmish", now);
         ctx.db.membership().insert(Membership { id: 0, community: sides[side], member: id, since_ms: now });
+        crate::perception::answers_changed();
         let graph = format!(
             r#"{{"first":{{"label":"combat","children":[
               {{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},

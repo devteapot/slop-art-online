@@ -497,6 +497,15 @@ pub struct Laws {
     pub cue_cooldown_s: f32,
     /// A character is brought to think by its cues at most once within this many seconds.
     pub cue_gap_s: f32,
+    /// How often a character's cues are checked against what it perceives (seconds).
+    pub cue_check_s: f32,
+    /// What each observer makes of each target (name known, the `perceived_of` answer) is
+    /// computed once per transaction and shared (`perception::with_answers`). Off: every
+    /// asker computes it afresh (the same answers; for measuring the cache).
+    pub regard_cache: bool,
+    /// Diagnostic: every shared answer is also computed afresh and compared; differences are
+    /// logged and counted (`perception::report_answers`). Costs both.
+    pub regard_cache_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -580,6 +589,9 @@ impl Default for Laws {
             cues_on: false,
             cue_cooldown_s: 600.0,
             cue_gap_s: 60.0,
+            cue_check_s: 1.0,
+            regard_cache: true,
+            regard_cache_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2543,6 +2555,9 @@ impl Scripts {
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
             cue_gap_s: g("cue_gap_s", l.cue_gap_s).clamp(0.0, 3_600.0),
+            cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
+            regard_cache: flag("regard_cache", l.regard_cache),
+            regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3392,14 +3407,16 @@ mod tests {
         let shipped = Scripts::new(src).unwrap();
         let l = shipped.laws();
         assert!(!l.cues_on);
-        assert_eq!((l.cue_cooldown_s, l.cue_gap_s), (600.0, 60.0));
+        assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
+        assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
-        let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5))])).unwrap();
+        let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
         on.validate().unwrap();
         let l = on.laws();
-        assert!(l.cues_on);
-        assert_eq!((l.cue_cooldown_s, l.cue_gap_s), (30.0, 0.0));
+        assert!(l.cues_on && !l.regard_cache);
+        assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (30.0, 0.0, 0.1));
+        assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
     }
 
     #[test]

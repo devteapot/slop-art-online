@@ -841,6 +841,7 @@ pub fn communities(ctx: &ReducerContext, now: u64) {
         for id in ids {
             if ctx.db.membership().member().find(id).is_none() {
                 ctx.db.membership().insert(Membership { id: 0, community: c.id, member: id, since_ms: now });
+                crate::perception::answers_changed();
             }
         }
     }
@@ -1247,6 +1248,9 @@ pub fn spawn_creature(ctx: &ReducerContext, name: &str, kind: &str, controller: 
 
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Identity, ai: bool, at: (f32, f32), now: u64, age: f32, parents: (u32, u32)) -> u32 {
+    // A new character can make two people the parents of one child (they then know each
+    // other's names), so the shared answers start again.
+    crate::perception::answers_changed();
     let c = ctx.db.character().insert(Character {
         id: 0,
         name: name.into(),
@@ -1884,6 +1888,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
     }
     for id in &ids {
         ctx.db.membership().insert(Membership { id: 0, community: c.id, member: *id, since_ms: now });
+        crate::perception::answers_changed();
     }
     let what = if t.walled { format!("{} stands walled at ({:.0}, {:.0}) with {} people and {} gates", t.name, center.0, center.1, ids.len(), layout.gates.len()) } else { format!("the village of {} lies at ({:.0}, {:.0}) with {} people", t.name, center.0, center.1, ids.len()) };
     common::chronicle(ctx, now, "arrival", 0, 0, center, what);
@@ -2131,6 +2136,7 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
                 let late = want.0 != 0 && want.1 != 0 && (ch.parent_a == 0 || ch.parent_b == 0);
                 (ch.parent_a, ch.parent_b) = want;
                 ctx.db.character().id().update(ch);
+                crate::perception::answers_changed();
                 if late {
                     let mut u = || rng(ctx).gen::<f32>();
                     let genes = living_rules::genes::inherit(&common::genes_of(ctx, want.0), &common::genes_of(ctx, want.1), &mut u);
