@@ -181,10 +181,11 @@ enum Part {
     Lower,
 }
 
-/// An outfit style's part and layer (higher is worn over lower): `slot` and `layer` from the style
-/// file's glTF extras (char-4 writes them; the scene's, else the first node's or the asset's that
-/// carries a `slot`), else by its name until they are written. None for what gives no chip (boots,
-/// caps, an apron or a smock's bands over the clothes).
+/// An outfit style's part and layer (higher is worn over lower) from the style file's scene
+/// extras, `outfit: { piece, slot, layer, trim }` (char-4's, in every outfit file since bundle
+/// `0d54681a`): `upper` or `lower` give a chip; `feet` (boots), `head` (cap, kerchief) and a
+/// `trim` (a smock's bands, no garment of its own) give none. A file without them falls back on
+/// its name, with the same values.
 fn place(piece: &str) -> Option<(Part, i32)> {
     static CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<String, Option<(Part, i32)>>>> = std::sync::OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
@@ -192,32 +193,33 @@ fn place(piece: &str) -> Option<(Part, i32)> {
         return *p;
     }
     let part = |slot: &str| match slot {
-        "upper" | "top" | "torso" => Some(Part::Upper),
-        "lower" | "bottom" | "legs" => Some(Part::Lower),
+        "upper" => Some(Part::Upper),
+        "lower" => Some(Part::Lower),
         _ => None,
     };
     let from_file = || {
         let file = format!("{}/outfit/{piece}.glb", crate::characters::compose::STYLES);
         let j = crate::lookdev::glb_json(&file)?;
-        let scene = &j["scenes"][j["scene"].as_u64().unwrap_or(0) as usize]["extras"];
-        let nodes = j["nodes"].as_array().into_iter().flatten().map(|n| &n["extras"]);
-        let x = std::iter::once(scene).chain(nodes).chain(std::iter::once(&j["asset"]["extras"])).find(|x| x["slot"].is_string())?;
-        Some(part(x["slot"].as_str()?).map(|p| (p, x["layer"].as_i64().unwrap_or(0) as i32)))
+        let x = &j["scenes"][j["scene"].as_u64().unwrap_or(0) as usize]["extras"]["outfit"];
+        let slot = x["slot"].as_str()?;
+        Some((!x["trim"].as_bool().unwrap_or(false)).then(|| part(slot).map(|p| (p, x["layer"].as_i64().unwrap_or(0) as i32))).flatten())
     };
     let p = from_file().unwrap_or_else(|| place_by_name(piece));
     cache.lock().unwrap().insert(piece.to_string(), p);
     p
 }
 
-/// A piece's part and layer by its name's stem (`smock_58-f` → `smock`), until its file says.
+/// A piece's part and layer by its name's stem (`smock_58-f` → `smock`), for a file without its
+/// extras: char-4's values (jersey 0, smock or coat 1, apron 3; trousers 0; a smock's bands are
+/// trim).
 fn place_by_name(piece: &str) -> Option<(Part, i32)> {
     let stem = piece.trim_end_matches("-f").trim_end_matches("-m");
     let stem = stem.rsplit_once('_').filter(|(_, n)| n.chars().all(|c| c.is_ascii_digit())).map_or(stem, |(s, _)| s);
     match stem {
-        "jersey" | "jersey_smock" | "jersey_coat" => Some((Part::Upper, 1)),
-        "smock" => Some((Part::Upper, 2)),
-        "coat" => Some((Part::Upper, 3)),
-        "trousers" | "skirt" => Some((Part::Lower, 1)),
+        "jersey" | "jersey_smock" | "jersey_coat" => Some((Part::Upper, 0)),
+        "smock" | "coat" => Some((Part::Upper, 1)),
+        "apron" => Some((Part::Upper, 3)),
+        "trousers" | "skirt" => Some((Part::Lower, 0)),
         _ => None,
     }
 }
@@ -308,11 +310,12 @@ mod tests {
     /// A composed line's chips are its outermost upper and lower pieces' own colours.
     #[test]
     fn a_lines_chips_are_its_outer_pieces() {
-        assert_eq!(place_by_name("smock_58-f"), Some((Part::Upper, 2)));
-        assert_eq!(place_by_name("jersey_smock-m"), Some((Part::Upper, 1)));
-        assert_eq!(place_by_name("trousers-f"), Some((Part::Lower, 1)));
-        assert_eq!(place_by_name("apron_58-f"), None);
+        assert_eq!(place_by_name("smock_58-f"), Some((Part::Upper, 1)));
+        assert_eq!(place_by_name("jersey_smock-m"), Some((Part::Upper, 0)));
+        assert_eq!(place_by_name("trousers-f"), Some((Part::Lower, 0)));
+        assert_eq!(place_by_name("apron_58-f"), Some((Part::Upper, 3)));
         assert_eq!(place_by_name("smock_bands-f"), None);
+        assert_eq!(place_by_name("boots-f"), None);
         let person: crate::characters::compose::Person = serde_json::from_value(serde_json::json!({
             "type": "adult-f-a", "height": 1.66,
             "colors": { "outfit": { "smock_58-f": "#c8bfa8", "smock_bands-f": "#5a4a3a", "jersey_smock-f": "#3a3a3a", "apron_58-f": "#e0d8c8", "trousers-f": "#33363e" } },
@@ -320,7 +323,8 @@ mod tests {
         }))
         .unwrap();
         let r = crate::characters::Recipe { person: Some(person), ..crate::characters::Recipe::default_for("lookdev/types/adult-f-a.glb") };
-        assert_eq!(clothes(&r), (Some("#c8bfa8".into()), Some("#33363e".into())));
+        // The apron is worn over the smock (layer 3): it is the top chip.
+        assert_eq!(clothes(&r), (Some("#e0d8c8".into()), Some("#33363e".into())));
     }
 
     #[test]

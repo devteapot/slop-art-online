@@ -56,9 +56,9 @@ pub struct Line {
 #[derive(Deserialize, Default, Debug)]
 #[serde(default)]
 pub struct LookBook {
-    /// The generation this book was written in (`world.look_book` names a world's), and, where
-    /// the book lists them, every generation whose keys it holds (the field's name is to be
-    /// confirmed with dev-box; a book without it holds only its own).
+    /// The generation this book was written in (`world.look_book` names a world's), and every
+    /// generation whose keys it holds, oldest first (char-4 is adding it; a book without it holds
+    /// only its own).
     pub generation: String,
     pub generations: Vec<String>,
     pub lines: HashMap<String, Line>,

@@ -1959,14 +1959,16 @@ LOOK_BOOK = os.path.join(ROOT, "living/game/assets/characters/looks.json")
 
 def outer_piece(line, upper, outfit=None):
     """The chip `looks.rs` reads from a line: its outermost upper (or lower) piece's colour, by
-    the book's slot and layer for each outfit style (`outfit`), else the pieces' names."""
+    each outfit style's slot and layer (`style_places`), else the pieces' names with char-4's
+    values. Trim, feet and head pieces give no chip."""
     import re as _re
-    ranks = {"jersey": 1, "jersey_smock": 1, "jersey_coat": 1, "smock": 2, "coat": 3} if upper else {"trousers": 1, "skirt": 1}
+    ranks = {"jersey": 0, "jersey_smock": 0, "jersey_coat": 0, "smock": 1, "coat": 1, "apron": 3} if upper else {"trousers": 0, "skirt": 0}
     want = "upper" if upper else "lower"
     best = None
     for piece in line.get("styles", {}).get("outfit", []):
         if outfit and piece in outfit:
-            rank = outfit[piece]["layer"] if outfit[piece]["slot"] == want else None
+            o = outfit[piece]
+            rank = o["layer"] if o["slot"] == want and not o.get("trim") else None
         else:
             rank = ranks.get(_re.sub(r"_\d+$", "", piece.removesuffix("-f").removesuffix("-m")))
         if rank is not None and (best is None or rank > best[0]):
@@ -1978,8 +1980,8 @@ BANDS = {"child": 1, "youth": 2, "adult": 3, "elder": 4}
 
 
 def style_places(line):
-    """Each outfit piece's `slot` and `layer` from its style file's glTF extras (the scene's, else
-    the first node's or the asset's with a `slot`), where char-4 has written them."""
+    """Each outfit piece's place from its style file's scene extras, `outfit: {piece, slot,
+    layer, trim}` (char-4's)."""
     import struct
     out = {}
     for piece in line.get("styles", {}).get("outfit", []):
@@ -1989,10 +1991,9 @@ def style_places(line):
             j = json.loads(raw[20:20 + struct.unpack("<I", raw[12:16])[0]])
         except (OSError, ValueError):
             continue
-        cands = [(j.get("scenes") or [{}])[j.get("scene", 0)].get("extras") or {}] + [n.get("extras") or {} for n in j.get("nodes", [])] + [(j.get("asset") or {}).get("extras") or {}]
-        x = next((c for c in cands if isinstance(c.get("slot"), str)), None)
-        if x:
-            out[piece] = {"slot": x["slot"], "layer": int(x.get("layer", 0))}
+        o = ((j.get("scenes") or [{}])[j.get("scene", 0)].get("extras") or {}).get("outfit")
+        if isinstance(o, dict) and isinstance(o.get("slot"), str):
+            out[piece] = {"slot": o["slot"], "layer": int(o.get("layer", 0)), "trim": bool(o.get("trim"))}
     return out
 
 
@@ -2046,6 +2047,12 @@ def looks(run, c):
     chips = lambda key: [outer_piece(book["lines"][key]["person"], True, style_places(book["lines"][key]["person"])), outer_piece(book["lines"][key]["person"], False, style_places(book["lines"][key]["person"]))]
     wrong = [(x["id"], x.get("chips"), chips(x["look"])) for x in composed if (x.get("chips") or [None, None]) != chips(x["look"])]
     c.check(s, "chips by piece: a composed person's chips are its line's outermost upper and lower pieces' colours", composed and not wrong, f"{wrong[:3]}")
+    # The style files' extras against the book's files (a cross-check: the extras are the source).
+    files = book.get("files") or {}
+    worn = {p for x in composed for p in book["lines"][x["look"]]["person"].get("styles", {}).get("outfit", [])}
+    places = {p: v for x in composed for p, v in style_places(book["lines"][x["look"]]["person"]).items()}
+    differ = [(p, places.get(p), files.get(f"styles/outfit/{p}")) for p in sorted(worn) if f"styles/outfit/{p}" in files and (files[f"styles/outfit/{p}"].get("slot"), files[f"styles/outfit/{p}"].get("layer")) != ((places.get(p) or {}).get("slot"), (places.get(p) or {}).get("layer"))]
+    c.check(s, "every worn outfit style carries its slot and layer, as the book's files list them", worn and set(places) == worn and not differ, f"{len(places)} of {len(worn)} with extras; differing {differ[:3]}")
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     mine = by.get(me, {})
