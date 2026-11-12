@@ -2523,6 +2523,80 @@ def reasons_case(run):
     return {'status': 'pass', **out}
 
 
+@case('scene-since')
+def scene_since_case(run):
+    """A prompt's scene and its experiences describe one moment (docs/PERCEPTION.md, "One moment
+    per prompt"). What a deliberation leaves pending is handed on with a scene taken then
+    (`clear_deliberation`): before 2026-11-12 it kept the scene of when its last reason arrived,
+    and the mind (which lists experiences up to when it builds the prompt) told Gwil in fs1n "right
+    now" that a stranger stood 1.2 m away, beside his own later hail of that stranger 28 m off.
+    Here a player 2 m from M offers a trade while M's first deliberation is in its model call
+    (think held 9 s); the player is then moved some 30 m off before that call ends. The next
+    prompt, which carries the offer, must place the player where they are when the first
+    deliberation's decision is installed, not 2 m away. The case first checks that no reason
+    arrived after the move, else a merge alone would refresh the scene and the check would prove
+    nothing."""
+    people = prepare(run)
+    actor = people[0]['id']
+    run.harness('player', 'join', 'SceneSinceTrader')
+    player = run.sql("SELECT id FROM character WHERE name = 'SceneSinceTrader'", 'trader')[0]['id']
+    run.admin('place_near', player, actor)
+    run.admin('grant_items', player, 'stone', 2)
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply()},
+              'rules': [{'purpose': 'think', 'contains': 'verify scene first', 'delay_s': 9, 'times': 1},
+                        {'purpose': 'think', 'contains': 'offers you', 'delay_s': 6, 'times': 1}]}
+    models = model(run, script)
+    run.request(actor, 'scene first')
+    run.start(models, [actor])
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    pending = lambda save='pending': run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', save)
+
+    def scene_of(text):
+        head = '# What you perceive right now\n'
+        return json.loads(text.split(head, 1)[1].split('\n', 1)[0]) if head in text else {}
+
+    def entry(scene, who):
+        return next((c for c in scene.get('creatures', []) if c.get('id') == who), None)
+    run.wait(lambda: any(e['purpose'] == 'think' and 'verify scene first' in sent_text(e) for e in requests()), 'the first model call in flight', 90)
+    run.harness('player', 'act', json.dumps({'do': 'offer', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'want': 'wood', 'want_qty': 1}))
+    merged = run.wait(lambda: [d for d in pending('pending-offer') if 'offers you' in d['reason']], 'the offer merged into the request in flight', 20)[0]
+    near = entry(json.loads(merged['scene'] or '{}'), player)
+    assert near and near['dist'] <= 4.0, f'the player was not near when the offer arrived: {near}'
+    body = run.sql(f'SELECT * FROM body WHERE id = {actor}', 'm-body')[0]
+    moved = None
+    for dx, dy in [(30.0, 0.0), (-30.0, 0.0), (0.0, 30.0), (0.0, -30.0), (22.0, 22.0), (-22.0, -22.0), (22.0, -22.0), (-22.0, 22.0)]:
+        try:
+            run.admin('place_at', player, body['x'] + dx, body['y'] + dy)
+            moved = (dx, dy)
+            break
+        except RuntimeError:
+            continue
+    assert moved, 'no free tile 30 m from M'
+    moved_ms = run.sql('SELECT last_ms FROM clock', 'clock-moved')[0]['last_ms']
+    first = run.wait(lambda: [t for t in run.thoughts(actor, 'thoughts-first') if t['kind'] == 'deliberate' and 'verify scene first' in (json.loads(t['detail'] or '{}').get('reason') or '')], 'the first deliberation installed', 60)[0]
+    installed_ms = first['at_ms']
+    # The rest of the request, as handed on (its next call is held 6 s).
+    rest = run.wait(lambda: [d for d in pending('pending-rest') if 'offers you' in d['reason'] and 'verify scene first' not in d['reason']], 'the offer handed on', 20)[0]
+    arrived = [int(x) for x in (rest['arrived'] or '').split() if x]
+    after_move = [a for a in arrived if a >= moved_ms]
+    assert not after_move, f'a reason arrived after the move ({after_move}): a merge, not the hand-on, would refresh the scene'
+    asked = run.wait(lambda: [sent_text(e) for e in requests() if e['purpose'] == 'think' and 'offers you' in sent_text(e) and 'verify scene first' not in sent_text(e)], 'the next prompt, carrying the offer', 40)[0]
+    (run.directory / 'prompt-after.txt').write_text(asked)
+    there = entry(scene_of(asked), player)
+    checks = {
+        'rest_scene_taken_when_handed_on': rest['updated_ms'] >= installed_ms,
+        'rest_row_scene_not_near': (entry(json.loads(rest['scene'] or '{}'), player) or {}).get('dist', 99.0) > 10.0,
+        'next_prompt_scene_not_near': (there or {}).get('dist', 99.0) > 10.0,
+    }
+    result = {'actor': actor, 'player': player, 'moved': moved, 'merged_ms': merged['updated_ms'], 'moved_ms': moved_ms,
+              'installed_ms': installed_ms, 'rest_updated_ms': rest['updated_ms'], 'near_at_offer': near, 'in_next_prompt': there, 'checks': checks}
+    (run.directory / 'scene-since.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), result
+    return {'status': 'pass', **result}
+
+
 @case('sleeper')
 def sleeper_case(run):
     """A sleeping body's mind thinks only on what wakes it (perceive.rs `Wake`, the `slumber`

@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | A cached Jev judgment drives the graph: asked in the background, cached by `mind_judged`, read by `judged` | `jev` | [judgments.md](judgments.md) |
 | A deliberation consumes the reasons its prompt contained: plan-finished churn during model calls keeps no older reason pending, a reason arriving mid-call waits for the next deliberation only; each thought's `detail.reasons` with `carried_before` | `reasons` | [deliberation.md](deliberation.md) |
+| A prompt's scene and its experiences describe one moment: what a deliberation leaves pending is handed on with a scene taken then, and a prompt lists no experience after its scene | `scene-since` | [deliberation.md](deliberation.md) |
 | A dodge over before the blow came is told so to the mind, and a cooldown's refusals once per cooldown; the prompt carries them | `dodge-told` | [sight.md](sight.md#a-dodge-told-truthfully-fix-dodge-told) |
 | A fighting mind's prompts give its opponent's health as the band ("they look hurt"), exact ("they have 70 of 100 health") only inside its own appraisal's 20 s; never a percentage | `health-seen` | [sight.md](sight.md) |
 | A first sight asks a thought (docs/FIRST_SIGHT.md, `first_sight_thinks` with the gap at 0): the think request the model is sent carries the first-sight line word for word under "# Why you are thinking now", with no words added | `first-sight` | [sight.md](sight.md#a-first-sight-asks-a-thought) |

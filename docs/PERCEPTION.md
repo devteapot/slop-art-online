@@ -214,6 +214,26 @@ Second change. Every path by which a mind, or a behaviour graph, learns about an
 | Speech, signals, smell | hearing and scent radii | unchanged: they are not sight |
 | Resources, structures and terrain in a scene | within sight | unchanged: static world data, which a player's client also draws by chunk window ([Open](#open)) |
 
+### One moment per prompt (scene-since, 2026-11-12)
+
+A deliberation's prompt sets "# What you perceive right now" (the request's `scene`) beside the character's recent experiences. Before this change the two could describe different moments, and a mind read them as one story.
+
+- **The case.** In fs1n Gwil (resident #62) first saw the newcomer (#65) 16 tiles south at 119.5 s after the join, and walked up to them by about 125 s.
+  - His mind was then in a deliberation on a failed teach, asked at about 125 s. It decided to "greet the stranger at my elbow", and the line went out at 134.0 s. By then the newcomer was 28 m off, a far figure, and nobody heard it: "You said to someone too far away to make out: “Morning to you. Gwil Stannard, mason — new to Cullet, are you? …” (no one you saw heard it)".
+  - His first-sight reason had merged into the request during that call, so its scene was taken then, with `{"dir":"south","dist":1.2,…,"id":65,"who":"a stranger"}`. The request kept that scene when the teach deliberation consumed its own lines (`clear_deliberation`).
+  - The mind took what was left at 134.1 s. It listed experiences up to then, the unheard hail included, under a "right now" that predated the hail.
+  - The model put the two together: the stranger "I hailed from too far off has come right up to me", and it said "There you are at last — I shouted too far off, my mistake…". This was a prompt fault, not a model quirk: the prompt said both things.
+- **The fix, for every mind.**
+  - What a deliberation leaves pending is handed on with a scene taken then (`clear_deliberation` sets `scene` and `updated_ms` to now, through the same `perceive::scene_json` a new request uses). So the next prompt shows what the character perceives when its mind can next think.
+  - The mind lists no experience later than the request's `updated_ms`, the moment its scene was taken (`mind.rs` `scene_upto`, for people and animals). That covers the time between reading a request and building its prompt (recall, a held request). Later experiences are in the next prompt, beside a scene of their own time.
+  - Player memory (`mind/lived.rs`) sends no scene and is unchanged.
+  - The fast lane sends no scene either; it lists experiences up to its call.
+- **Cost.** One `scene_json` per hand-on that leaves reasons pending, the same work as a reason merging into a request. A refreshed row is re-taken by the mind as a merged one already was (`updated_ms` newer than what it saw).
+- **What it does not fix.** The hail at 134.0 s was itself decided on the 125 s scene, after a 9 s model call while both bodies moved. That is the latency of every deliberate act, and is left to the acts' own checks (here the far-figure refusal told him nobody heard).
+- **Checks.**
+  - The mind test `a_prompt_lists_no_experience_after_its_scene` holds Gwil's experiences and times.
+  - The verify-minds case `scene-since`: a player 2 m away offers a trade during a held model call and is then moved about 30 m off. The request handed on must place them where they are, not 2 m away, and no reason may arrive after the move.
+
 ### What an observer perceives of a target
 
 What one character perceives of another is not a fixed set of public columns. It is the target's full record through a law in the script, so skills and knowledge can reveal more.

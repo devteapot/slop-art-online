@@ -361,6 +361,13 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
 /// thinking at once, every few seconds). A reason the prompt contained never stays: before
 /// 2026-11-11 it did whenever anything arrived during the call, and plan-finished churn kept
 /// one feeling the reason of dozens of thoughts.
+///
+/// What stays is handed on now, so its scene is taken now: the next prompt shows what the
+/// character perceives when the mind can next think, beside the experiences up to then. Before
+/// 2026-11-12 it kept the scene of when its last reason arrived, which can be a whole model call
+/// old: Gwil in fs1n was told "right now" that a stranger stood 1.2 m away, beside his own later
+/// hail of that stranger as a far figure 28 m off, and thought the stranger had come up to him
+/// (docs/PERCEPTION.md, "One moment per prompt").
 fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: bool) {
     if let Some(mut d) = ctx.db.deliberation().actor().find(actor) {
         let rest = if d.updated_ms <= seen_ms { None } else { living_rules::reasons::consume(&d.reason, &d.arrived, seen_ms, new_plan) };
@@ -369,8 +376,11 @@ fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: 
                 ctx.db.deliberation().actor().delete(actor);
             }
             Some((reason, arrived)) => {
+                let now = common::now_ms(ctx);
                 d.reason = reason;
                 d.arrived = arrived;
+                d.scene = perceive::scene_json(ctx, actor, now);
+                d.updated_ms = d.updated_ms.max(now);
                 ctx.db.deliberation().actor().update(d);
             }
         }
