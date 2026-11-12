@@ -115,6 +115,12 @@ if __name__=="__main__":
     for start in ("close","spread"):
         arm(f"pack-minds-{start}-6v6", 6, 6, start, minds=["subject","pack"],
             about="Both sides with minds (wolves LIVING_ANIMAL_MINDS=salient,choose; people the default mix), starting from their instinct graphs; nothing in any prompt names a tactic (docs/PACK_MIND.md §5.5 guards).")
+    # The paid step's one-sided arms (docs/PACK_MIND.md §8): P1 people think, wolves on the
+    # shipped bold instinct; P2 wolves think, people on their instinct.
+    arm("pack-minds-people-spread-6v6", 6, 6, "spread", minds=["subject"],
+        about="P1: the people with minds, the wolves on the shipped bold instinct (docs/PACK_MIND.md §8).")
+    arm("pack-minds-wolves-spread-6v6", 6, 6, "spread", minds=["pack"],
+        about="P2: the wolves with minds starting from the shipped bold instinct, the people on their instinct (docs/PACK_MIND.md §8).")
     # The howl's reach as its loudness (decision 2): 16.7 times the island's 9 m hearing is
     # 150 m, the wolves' scent radius; the shipped howl is loudness 2 (18 m).
     arm("pack-minds-howl150-spread-6v6", 6, 6, "spread", minds=["subject","pack"], species={"wolf": {"signals": {"howl": {"loudness": 16.7}}}},
