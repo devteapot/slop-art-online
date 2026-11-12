@@ -145,7 +145,7 @@ DeepSeek V4.1 Flash, thinking off (the `deepseek-flash` profile), through a purp
 
 ### Blow to patch installed
 
-About 1.0 s of pipeline plus the call: **≈ 3 s p50, ≈ 5 s p90 in a good hour**, 10 s or more in a loaded one. `fast.timeout_ms` is 6,000: a reply later than that is dropped as stale, journaled as a timeout, and changes nothing.
+About 1.0 s of pipeline plus the call: **≈ 3 s p50, ≈ 5 s p90 in a good hour**, 10 s or more in a loaded one. **Measured in r2e** ([TRIALS.md](TRIALS.md), 36 installs): 1.3 s p50 and 6.1 s p90 from trigger to installed. The model took 1.0 / 2.4 s and the install 1–3 ms. The rest of the p90 is the 6 s gap: a trigger within 6 s of the character's last request waits its turn. `fast.timeout_ms` is 6,000: a reply later than that is dropped as stale, journaled as a timeout, and changes nothing.
 
 ### Against the windows
 
@@ -171,7 +171,7 @@ Measured from the journals (`cached_tokens` ÷ `prompt_tokens`, error-free calls
 | deliberate (compile) | 55–63% | 80–91% | 49–51% |
 | talk | 39–47% | 88–90% | – |
 | consolidate | 38–49% | 77–86% | 17–32% |
-| fast | not measured: no real call yet (r2e reports it) | – | – |
+| fast | 56% (r2e, 38 calls; 51% on a fight's first call) | – | – |
 
 - **The system prompts are byte-stable.** There was one hash per purpose per run in every batch read: 2,232 think calls in bi1's hamlet r1, one system text. Shared text comes first, then the character's, then the call's (`prompts.rs` `Segments`).
 - **DeepSeek caches the system prompt and almost never more.** Calls caching past it: 0–1% for think and compile, 18–25% for talk. Misses (nothing cached) are 8–20% in the towns and 33–42% in r2d's lone fighter, where calls are sparse.

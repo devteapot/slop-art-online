@@ -2419,6 +2419,209 @@ The minds now wrote the grammar's new example word (`hostile`, 8 of 17 installs)
 
 **Timings, ids, cost.** No reply cited a timing. 0 of 63 spoken lines carried an id. $0.30 for the batch ($0.15 heavy, $0.15 kiter; 165 calls in fights, 1.75 M tokens in the ledger); per 10-minute fight $0.026–0.036; think and compile p50 5.7–11.5 s per fight.
 
+### R2 with the fast lane on (`r2e`, 10 fights, $0.34)
+
+R2's arm for the [fast lane](FAST_LANE.md): r2d's fights with the world law `fast_lane_on` true. A blow taken, or the third time the subject sees the same move started at it, asks its mind for a quick re-plan of its combat branch.
+
+**Build and switches.**
+- **Build.** The trial module and `living-mind` were built from branch `trials-r2e` at `4f227894`: origin/main with prompt-cache-order (`47345077`), fast-lane (`ca14ab3e`) and fix-fast-onstage (`453c022c`), plus the `fast-lane` variant in `living/trials/variants.json`. Private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed.
+- **Switches.** In force:
+  - the `fast-lane` variant: `default`, which is glm-flash with deepseek-flash overflow, plus the world law `fast_lane_on` true;
+  - `fast.route` deepseek-flash with a 6,000 ms timeout;
+  - the shipped fast-lane laws: `seen_again_n` 3, gap 6 s, stale 8 s, rate 2/s, 4 in flight;
+  - as in r2d: `fov_on` off, `LIVING_SKILL_TIMINGS` on, `force_outcomes` on, greeting `nearest`, `cues_on` off; `LIVING_LOD` off.
+- **Run.** 2026-11-12, 15:24–15:37 UTC, 5 replicates each of `arena-heavy` and `arena-kiter`.
+  - The server was checked healthy first (ping 200). Every world was paused before its database was deleted (`delete_db`), and the server stayed up.
+  - The key was loaded from a copied `.env`, deleted after. A scan of the batch and the live journals for every key, whole and by its first and last 12 characters, found 0 matches in 332 files.
+- **Evidence.** `.local/living/trials/r2e/` (`arena_report.json`, `report.md`, the journals) in the `trials-r2e` checkout on the Spark.
+- **Each world is one fight.** The subject is the only character the lane serves in it. So the world-wide cap (4 in flight, 2 a second) never bound here; only the 6 s gap per character did.
+
+**Main measure: exposures to the first answer.**
+
+| | Heavy blow, r2e (5) | Heavy blow, r2d | Kiter, r2e (5) | Kiter, r2d |
+|---|---|---|---|---|
+| Exposures per fight | 7, 5, 3, 27, 2 (44) | 5, 5, 5, 4, 13 (32) | 1, 4, 4, 26, 2 (37) | 29, 13, 23, 10, 57 (132) |
+| First answered exposure | **3, 2, –, 3, –** | –, –, –, –, 4 | **–, 2, –, 20, 2** | 13, 12, –, –, – |
+| Answered | **19 of 44** (17 by a dodge in the windup) | 1 of 32 (no dodge in a windup) | **7 of 37** (11 dodges in windups) | 17 of 132 (8 dodges in windups) |
+| K (three answered in a row) | 3 in one fight (r4) | never | 2 in one fight (r2) | 13 in one |
+| End | the subject killed the foe in 3, was killed in 1 (r4, after 27 heavies), neither in 1 | the subject killed the foe in 4, was killed in 1 | all survived (lowest health 79–98) | all survived |
+
+- **The heavy blow: answered, by dodges timed to the windup, from the second or third heavy.** r2d had none in any of its fights.
+  - In 3 of 5 fights the first answer was a dodge during the windup, at exposure 2 or 3.
+  - **Attribution.** Each of those dodges ran under the fast lane's combat branch:
+    - r1 and r4: a fast patch's dodge on a windup (`doing`, "winding up"), under a slow install that kept the fast branch it had not yet seen (`keep_fast_branch`, the same branch byte for byte);
+    - r2: a fast install, but its branch was the switch to `stay safe`, which holds no windup dodge. That one dodge is not traced to a fast patch's condition (see the fight's timeline below).
+  - **r4.** 14 of its 27 exposures were answered: dodged or out of reach, K = 3. The subject still died. Its plan was "dodge, keep my distance, fall back toward the hall", and it gave ground where r2d's subjects traded blows in the pause and won.
+- **The kiter: the subjects left the line of fire.** The fast patches said "get out of the open", "run for the house", "get out of the line of the shot".
+  - **Fewer arrows.** In four fights the subject took 1–4 arrows in all, against r2d's 10–57.
+  - **First answers.**
+    - r2: at exposure 2, a dodge under a fast install.
+    - r4: at exposure 20, under the fourth fast install.
+    - r5: at exposure 2, a miss with no defence.
+  - **r4** took 26 arrows: 8 fast patches, each "dodge the windup, get clear".
+- **Not a controlled comparison.** The provider's hour differed:
+  - r2d had 26 capacity 429s (glm) and r2e none;
+  - GLM deliberate ran at p50 6.6 s, against 11.3 s in r2d.
+
+  So the slow path was also quicker in r2e. The attribution above is what separates the lanes.
+
+**Trigger to patch installed** (the fast thoughts' `detail`; 39 requests, 36 sent to the authority):
+
+| Step | p50 | p90 | max |
+|---|---:|---:|---:|
+| Request: trigger → picked up by the mind | 0.02 s | 4.6 s | 5.6 s |
+| … of which waiting for the turn (trigger → issued) | 0 | 4.6 s | 5.5 s |
+| … of which delivery (issued → picked up) | 13 ms | 37 ms | 50 ms |
+| Model (provider reply, DeepSeek Flash, thinking off) | 1.0 s | 2.4 s | 4.5 s |
+| Install (sent → installed) | 1 ms | 2 ms | 3 ms |
+| **Trigger → installed** | **1.3 s** | **6.1 s** | 7.9 s |
+
+- **Waits.** The waits are the 6 s gap: a blow or windup within 6 s of the character's last request waits for its gap.
+- **Model time** follows the reply's length:
+  - the first call in each fight answered in 0.73 s p50 with 39 output tokens (6 of the 10 were switches to `stay safe`);
+  - later calls answered in 1.10 s with 196.
+- **Against the slow path.** The design's estimate was about 3 s p50 and 5 s p90 in a good hour. R1 measured 8.6 s from a blow to an installed plan on the slow path.
+
+**What came back.** Of 39 requests:
+- **35 patched.**
+  - 11 switched the combat branch to the `stay safe` it already had.
+  - 23 rewrote the combat branch.
+  - 1 rewrote the routine `current plan`.
+- **1 refused** by the plan check: kiter r4 at 222 s, "the plan changed since it was asked". A slow install landed while the call was out.
+- **3 kept.**
+  - 1 timed out at 6 s (kiter r2).
+  - 2 replies had the wrong outer shape: a bare graph, or `{"combat": …}`, instead of `{"patch": {"graph": …}}`. They were kept as "no usable answer".
+
+The 25 rewrites (the refused one included):
+- **Conditions.** 22 hold a `doing` condition, every one `phase: "winding up"` (23 conditions). 8 also use `threatened`.
+- **Acts.** 21 dodge, 20 flee, 18 `back_off`, 14 `goto` (the hall, the town), 5 `say` (witnesses), 3 `keep_distance`. Few strike back: 4 `attack`, 3 `strike`, 2 `firebolt`, 2 `shoot`.
+- **Timing.** "It was over before the blow came" was never told in this batch, so nothing could move a condition toward "about to release", and none did.
+
+**Cached share** (`cached_tokens` ÷ `prompt_tokens`, error-free calls, from the journals):
+
+| Purpose, model | r2e calls | r2e cached share | r2e cost / without the cache | r2e latency p50 / p90 | r2d cached share (calls) |
+|---|---:|---:|---:|---:|---:|
+| fast, DeepSeek Flash | 38 | **0.56** (12,188 prompt tokens a call) | **$0.071 / $0.146** | 1.0 / 2.4 s | – |
+| deliberate, GLM Flash | 86 | 0.57 | $0.115 / $0.198 | 6.6 / 11.3 s | 0.31 (66) |
+| think, GLM Flash | 87 | 0.18 | $0.065 / $0.074 | 5.6 / 9.1 s | 0.09 (62) |
+| consolidate, GLM Flash | 40 | 0.12 | $0.058 / $0.061 | 20.6 / 29.4 s | 0.06 (34) |
+| reorganize, GLM Flash | 10 | 0 | $0.027 / $0.027 | 82 / 112 s | 0 (9) |
+| deliberate / think / consolidate, DeepSeek (r2d's overflow) | – | – | – | – | 0.40 (9) / 0.36 (12) / 0.35 (5) |
+
+- **Cost.** Caching halved the fast lane's cost: $0.0019 a call against $0.0038 at the full input price, $0.075 saved. Over the batch it saved $0.17 ($0.34 against $0.51).
+  - The fast prompt is large, 12.2 k tokens a call. It carries the persona, top level, routines, repertoire and 12 recent experiences.
+  - The first call in a fight was already 51% cached (the system prompt and shared text), and later calls 57%.
+- **Latency.** No effect can be separated at this size. Fast calls with half or more cached answered at 0.97 s p50 (24 calls), the rest at 1.12 s (14). But reply length differs more between them than the cache does.
+- **r2d against r2e for deliberate.** GLM deliberate's share rose from 0.31 to 0.57. prompt-cache-order changed only the fast prompt, so this is not attributed to it. r2d's hour also sent 9 deliberations to DeepSeek on overflow.
+
+**Ids.** 3 of 68 spoken lines carried an internal id, against 0 of 63 in r2d:
+- heavy r1: "That one, #9, set on me twice…" and "#9 strikes me a fourth time";
+- kiter r4: "the archer #9".
+
+All three came from deliberations. Two followed within 15 s of fast thoughts naming "#9". Ids are in every prompt as handles (`{someone=#3}`, in r2d too). The fast lane's own replies name them in their `thought`s, which a deliberation then sees. This is a lead, not a cause, and is not fixed here.
+
+**Cost.** $0.34 for the batch: $0.19 heavy, $0.15 kiter; 161 calls in fights. The fast lane was $0.071 of it (38 calls, $0.0019 a call). Per 10-minute fight $0.018–0.052.
+
+**Timelines.** Every fight's timeline is in the run record, `.local/living/trials/r2e/timelines.md`, made by `fight_timeline.py` (kept beside it). Each one lists:
+- every exposure, with the plan in force and which install wrote its combat branch;
+- the subject's combat acts and the lines it was told;
+- each fast call, with its trigger, timing and the branch it installed;
+- the slow decisions, the installs and what the subject said.
+
+Times are seconds into the trial.
+
+#### One fight from start to finish: heavy r1
+
+The first within-fight adaptation, told as it happened. Wren is the subject: a newcomer with a spear and a bow, walking to the town. The foe is a scripted stranger (Agnes Fenner, the fixture). It opens every time with `attack`: a 750 ms windup Wren can see, then 8–9 damage. Then it stands 2–3 s before its next blow.
+
+**Wren's plan at the start:** "Pick berries from the bushes beside the road, then keep walking east toward the town". It had no combat branch. **What carried the fight:** whether the combat branch in force held a dodge on a windup. Every time it did, the heavy blow was dodged; every time it did not, the blow landed.
+
+**Exposure 1, at 62.0 s: hit for 8** (health 100 → 93). No combat branch was in force. Wren's seeded reflex answered the blow with blows of its own (`attack`, hit for 8, five times to 67 s).
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call** on that line. Issued at once; the model answered in 0.7 s; installed at 63.5 s, 0.8 s after the blow.
+  - **Thought:** "A stranger just struck me for eight — I need to get clear and defend myself before anything else, the plan can wait."
+  - **Installed:** a switch to the routine `stay safe`, which it already had. That routine is the seeded one: flee or yield when hurt below 40 health. It has no dodge.
+    ```json
+    {"label": "combat", "children": [{"routine": "stay safe"}]}
+    ```
+- **The slow lane, at 78.3 s:** "Slip #9's blow, then face them with spear raised, shout for witnesses…" It said: "Back off! Everyone—this one's attacking me on the road!" It had read its request before the patch, so it kept the fast lane's combat branch.
+
+**Exposure 2, at 93.4 s: hit for 8** (93 → 86). The branch in force was fast patch 1 (`stay safe`), with no dodge on a windup.
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call:** the model answered in 1.0 s; installed at 95.2 s, 1.0 s after the blow.
+  - **Thought:** "I'm hurt and outmatched; slip the next blow, keep my distance, shout for witnesses, and get clear east toward the town."
+  - **Installed** (the combat branch as installed):
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "melee", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "dodge"}}}},
+      {"do": {"skill": "back_off", "target": "attacker", "distance": 4.0}},
+      {"do": {"skill": "face", "target": "attacker"}},
+      {"say": {"text": "Back off! Everyone—this one's attacking me!", "to": "attacker"}},
+      {"do": {"skill": "keep_distance", "target": "attacker", "qty": 6, "min": 3.0, "max": 6.0}},
+      {"do": {"skill": "flee", "target": "attacker", "run": true}}]}
+    ```
+- **The slow lane, at 108.5 s:** "Sidestep #9's blow, answer with my spear, call out for the witnesses…" It said: "They struck first and struck again — stand with me or stand clear!" Again it kept the fast branch.
+
+**Exposure 3, at 109.7 s: dodged.** The branch in force was fast patch 2. The dodge was accepted on the tick the windup began.
+- **Told:** "You dodged a stranger's attack." The `doing` condition fired again while the dodge was recovering, so it was also told once "You failed to dodge: dodge is not ready yet (0.3 s)".
+
+**Exposure 4, at 138.9 s: dodged**, under the same branch. Wren's health was 87.
+- **Perceived:** this was the third heavy it had seen started at it, so the lane fired on the move itself: "A stranger winds up an attack at you".
+- **Fast call:** the model answered in 3.7 s; installed at 142.7 s.
+  - **Thought:** "The stranger #9 is still coming at me and my dodge is spent — I need to get clear and let the hurt-in-last-5s rules answer, not trade blows while cornered."
+  - **Installed:** the switch to `stay safe` again.
+    ```json
+    {"label": "combat", "children": [{"routine": "stay safe"}]}
+    ```
+  - **This removed the dodge that had just worked twice.** The "dodge is not ready yet (0.2 s)" line had come 0.1 s before "You dodged". The mind read it as "my dodge is spent".
+- **The slow lane, at 145.1 s:** "Make my case to the crowd by the inn…" It said: "That one, #9, set on me twice on the road without a word — you all saw it…" (one of the three spoken ids).
+
+**Exposure 5, at 164.6 s: hit for 8** (87 → 79). The branch in force was fast patch 3 (`stay safe`), with no dodge on a windup.
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call:** the model answered in 0.9 s; installed at 166.3 s, 0.9 s after the blow.
+  - **Thought:** "Same stranger, third time — keep my distance, dodge what I can, and only hit back while I'm still standing."
+  - **Installed:**
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "melee", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "dodge"}}}},
+      {"if": {"cond": {"sees": {"id": 9}}, "then": {"do": {"skill": "back_off", "target": {"id": 9}, "distance": 8.0}}}},
+      {"if": {"cond": {"health": {"below": 40.0}}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
+      {"do": {"skill": "strike", "target": "attacker"}},
+      {"do": {"skill": "back_off", "target": "attacker", "distance": 4.0}}]}
+    ```
+- **The slow lane, at 179.4 s:** "Dodge #9's blow, fight back with my spear before the crowd…" It said: "There, you all see it — #9 strikes me a fourth time, unprovoked! Stand with me or stand clear!" It kept the branch.
+
+**Exposure 6, at 207.5 s: dodged**, under fast patch 4. Told: "You dodged a stranger's attack."
+- **The slow lane, at 222.7 s:** "Fight #9 with my spear, blocking as needed; break south if health falls below 50…" This decision had seen the patch, so it replaced the plan as any later decision does. Its plan had no combat branch; it guarded through its own nodes. It said to the foe: "Fourth time you've struck me! I'll not run again — come, then!"
+
+**Exposure 7, at 224.7 s: blocked, 2 got through** (80 → 78). The slow plan's guard took it.
+- **Perceived:** "A stranger attacked you (2 damage)".
+- **Fast call:** the model answered in 1.2 s; installed at 226.6 s.
+  - **Thought:** "He's landed another hit; I keep my guard up between blows and break south if I drop below half."
+  - **Installed:**
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"health": {"below": 50.0}}, "then": {"do": {"skill": "flee", "target": {"id": 9}}}}},
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "hostile", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "block", "qty": 1200}}}},
+      {"if": {"cond": {"sees": {"id": 9}}, "then": {"seq": {"children": [{"do": {"skill": "strike", "target": {"id": 9}}}, {"do": {"skill": "attack", "target": {"id": 9}}}]}}}},
+      {"do": {"skill": "goto", "target": {"place": "Inn south of the hall"}}},
+      {"think": "the fight is done or lost — what now?"}]}
+    ```
+- **Then Wren pressed in the pause.** It struck every time the strike was ready (hit for 7–8, thirteen times in 20 s, with a "not ready yet" between most). At 245.6 s Agnes Fenner died, killed by Wren, at Wren's health 79. Its last thought on the fight: "He is barely standing and my strikes keep landing; ending this now is the only way he stops hunting me." It slept at the inn's door and in the morning asked: "Anyone awake? I'm Wren — I'm looking for work and a bed, and I pay my way."
+
+**What this fight shows:**
+- **The answer.** It came at exposure 3, two exposures after the first patch with a dodge in it (exposure 2's, installed 1.0 s after the blow). It held for as long as the fast lane's branch held a dodge: 3 of 3 heavies.
+- **The fast lane both made it and broke it.** One fast call took the dodge away again: the dodge's own "not ready yet" line, told inside a successful dodge, was read as "spent". A slow decision then replaced the branch with a guard, which took the seventh blow for 2.
+- **Slow decisions mostly kept the fast branch.** Four of the five read their request before the latest patch, and the authority spliced the branch back in. The fifth, which had seen the patch, wrote its own.
+- **Nothing told it the pattern.** It had the lines it lived: hit, dodged, not ready. The `doing` condition is the grammar's, and "winding up" is the phase it perceives.
+
+The other two fights with an early answer:
+- **heavy r4** (answer at 3): the same shape for 17 exposures.
+  - Fast-patched branches with a dodge on a windup answered 14 of exposures 3–17. The one hit among them (14) came under a slow plan without a combat branch, and fast patch 7 restored the dodge by exposure 15.
+  - **From exposure 18 (393 s, 23:00 in the world) it was night.** Between blows Wren fell asleep and was woken by each one: "You woke up: A stranger is attacking you!" The fast lane serves no sleeper, by design, and the slow plans' dodges came after the blows.
+  - 10 heavies in a row landed, until Wren died at 526 s, after yielding.
+- **heavy r2** (answer at 2): one dodge at the windup's tick (79.6 s), under the `stay safe` switch, which holds no windup dodge. It is the one early answer here not traced to a fast patch's condition; it was not repeated.
+
 ### What the told outcome lines cost in a battle
 
 [`outcome_cost.py`](../living/tools/outcome_cost.py) on a scratch `verify-core` world (`core-r2cost-025725`, default seed, 186–188 people alive): 20 minded spear fighters (`spawn_crowd(20, true)`: held like a mind's, so their outcomes are told), packed 1.5 m apart, striking the nearest person, timed by `bench.py` (profiled tick spans, no subscribers) over a 22 s window per arm, each arm a fresh battle; the fighters' new experience rows were read during the window, so the lines of those who died count.
