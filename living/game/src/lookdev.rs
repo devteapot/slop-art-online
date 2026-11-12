@@ -701,11 +701,34 @@ pub fn rig(
     }
 }
 
-/// A character file's figure height (file units): the vertical span of its meshes' bounds at
-/// rest (glTF accessor `min`/`max` through the node transforms), the far model's (`Far*` nodes)
-/// left out. What `animate.py` measures the figure by; None without meshes.
+/// A character file's figure height (file units, cached): the height its scene records
+/// (`scenes[scene].extras.clip_file.figure_height`, which a stripped clip file carries, `share.py
+/// clipfile`), else the vertical span of its meshes' bounds at rest (glTF accessor `min`/`max`
+/// through the node transforms), the far model's (`Far*` nodes) left out. What `animate.py`
+/// measures the figure by; None without either. A clip file can then lose its last mesh
+/// (`Figure`, kept for these bounds) without its stride changing.
 pub fn figure_height(file: &str) -> Option<f32> {
-    let corners = figure_corners(file);
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<f32>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(file) {
+        return *v;
+    }
+    let v = glb_json(file).and_then(|j| recorded_figure_height(&j)).or_else(|| span(&figure_corners(file)));
+    cache.lock().unwrap().insert(file.to_string(), v);
+    v
+}
+
+/// The figure height a file's scene records (`extras.clip_file.figure_height`), if it is a
+/// positive number.
+fn recorded_figure_height(j: &serde_json::Value) -> Option<f32> {
+    let scene = j["scene"].as_u64().unwrap_or(0) as usize;
+    let h = j["scenes"].get(scene)?["extras"]["clip_file"]["figure_height"].as_f64()? as f32;
+    (h.is_finite() && h > 0.0).then_some(h)
+}
+
+/// The vertical span of points, None if they span nothing.
+fn span(corners: &[Vec3]) -> Option<f32> {
     let (lo, hi) = corners.iter().fold((f32::MAX, f32::MIN), |(lo, hi), c| (lo.min(c.y), hi.max(c.y)));
     (hi > lo).then_some(hi - lo)
 }
@@ -720,8 +743,15 @@ pub fn figure_corners(file: &str) -> std::sync::Arc<Vec<Vec3>> {
     if let Some(v) = cache.lock().unwrap().get(file) {
         return v.clone();
     }
-    let v = (|| {
-        let j = glb_json(file)?;
+    let v = glb_json(file).and_then(|j| corners_of(&j)).unwrap_or_default();
+    let v = Arc::new(v);
+    cache.lock().unwrap().insert(file.to_string(), v.clone());
+    v
+}
+
+/// [`figure_corners`] from a file's glTF JSON.
+fn corners_of(j: &serde_json::Value) -> Option<Vec<Vec3>> {
+    {
         let nodes = j["nodes"].as_array()?;
         let f = |v: &serde_json::Value, i: usize, d: f32| v.get(i).and_then(|x| x.as_f64()).map_or(d, |x| x as f32);
         let local = |n: &serde_json::Value| {
@@ -756,11 +786,7 @@ pub fn figure_corners(file: &str) -> std::sync::Arc<Vec<Vec3>> {
             }
         }
         Some(out)
-    })()
-    .unwrap_or_default();
-    let v = Arc::new(v);
-    cache.lock().unwrap().insert(file.to_string(), v.clone());
-    v
+    }
 }
 
 /// Whether a GLB file has any emissive material (cached per file).
@@ -1048,6 +1074,39 @@ pub fn demo(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A clip file's scene may record its figure height (`share.py clipfile`): that wins over the
+    /// meshes' bounds; without it (or with a bad value) the bounds give it, as before, the far
+    /// model left out.
+    #[test]
+    fn the_figure_height_a_scene_records_wins_over_the_bounds() {
+        let file = |extras: serde_json::Value| {
+            serde_json::json!({
+                "scene": 0,
+                "scenes": [{"nodes": [0], "extras": extras}],
+                "nodes": [
+                    {"name": "Armature", "children": [1, 2], "translation": [0.0, 0.1, 0.0]},
+                    {"name": "Figure", "mesh": 0},
+                    {"name": "FarBody", "mesh": 1}
+                ],
+                "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}, {"primitives": [{"attributes": {"POSITION": 1}}]}],
+                "accessors": [{"min": [-0.2, 0.0, -0.1], "max": [0.2, 1.62, 0.1]}, {"min": [0.0, -1.0, 0.0], "max": [0.0, 3.0, 0.0]}]
+            })
+        };
+        let bounds = |j: &serde_json::Value| span(&corners_of(j).unwrap());
+        let plain = file(serde_json::json!({}));
+        assert_eq!(recorded_figure_height(&plain), None);
+        assert!((bounds(&plain).unwrap() - 1.62).abs() < 1e-6, "the far model is left out");
+        let recorded = file(serde_json::json!({"clip_file": {"figure_height": 1.587}}));
+        assert_eq!(recorded_figure_height(&recorded), Some(1.587));
+        for bad in [serde_json::json!({"clip_file": {"figure_height": 0.0}}), serde_json::json!({"clip_file": {"figure_height": "tall"}}), serde_json::json!({"clip_file": {}})] {
+            assert_eq!(recorded_figure_height(&file(bad)), None);
+        }
+        // A clip file without meshes at all still has its recorded height.
+        let bare = serde_json::json!({"scenes": [{"extras": {"clip_file": {"figure_height": 1.6}}}], "nodes": []});
+        assert_eq!(recorded_figure_height(&bare), Some(1.6));
+        assert_eq!(corners_of(&bare).map(|c| span(&c)), Some(None));
+    }
 
     #[test]
     fn the_far_model_changes_with_a_band_so_the_edge_does_not_flicker() {
