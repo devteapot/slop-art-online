@@ -188,6 +188,30 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
+
+Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.
+- **Arms:** C (`strangers-2b-c`), L and LS (`strangers-2b`, variants `strangers-control` and `strangers-filter`), and LS + cues (`strangers-filter-cues`: `stranger_by_name` and `cues_on` on). One replicate each, about $10.
+- **The script:** the newcomer joins at 09:30 at the arrival point and stands 5 minutes there. It then walks the Strand past the Fish Steps (`walk_route`) and stands 5 minutes at the densest group.
+- **Build:** main `d18c6c0e`, worktree `~/slop-trials2b`, branch `trials-2b`.
+
+**The target, copied unchanged from stage 2's table** (STRANGERS.md, "Target spread"; one replicate, so indicative only). It is committed before the first paid request.
+
+| measure | target (L, LS) |
+|---|---|
+| in range (≤12 m during a stand) | about 10–16 |
+| asks | 1–3, Aldous among them |
+| approaches silently | 0–2 |
+| notices inwardly | 3–8 |
+| unaware | ≤6, ≤40% |
+| tells others (all residents) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | within 5 minutes |
+| `converge_60s` / `together_4m` | ≤3 / ≤2 |
+| re-asks | — |
+| guards: false replies a min, repeated lines, `led_res` − placebo | within C's spread |
+
+Results follow below once the batch has run.
+
 ## Strangers stage 2 (2026-11-12, st2)
 
 docs/STRANGERS.md section 6, stage 2: the pilot. All 63 minds think (Dory, the infant, lives by her graph). The arms are C, L and LS, 1 replicate each, run in one batch.
