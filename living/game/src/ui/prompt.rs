@@ -4,7 +4,8 @@
 //! - **The F prompt** sits beside the person or thing F acts on: "F Talk · hold F · more" on a
 //!   peaceful person (a tap of F talks, a hold lists every act), else the act a tap would do, or
 //!   "Acts" when only the list has something. It hides while typing, while a list is open and
-//!   on the death screen.
+//!   on the death screen. It never covers a note: beside the head on the right, else on the
+//!   left, else hidden while the note shows (the note wins; the prompt returns after).
 //! - **The tip** shows once a session on arrival (Settings › Play can turn tips off, or show them
 //!   again): how to talk, and (since the cluster's weapon slot) that a sheathed weapon never
 //!   strikes. "Got it" closes it; "All tips" opens Settings. It hides while a window holds the
@@ -33,6 +34,9 @@ pub struct PromptMore;
 pub struct TipCard;
 #[derive(Component)]
 pub struct TipWeapon;
+
+/// The least gap between the F prompt and a note (UI px).
+const NOTE_GAP: f32 = 8.0;
 
 /// The weapon's line of the tip shows once sheathe and draw is built (step 4).
 pub const SHEATHE: bool = true;
@@ -144,11 +148,13 @@ pub fn update(
     prefs: Res<crate::keys::Prefs>,
     ui: Res<UiPointer>,
     cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut prompt: Query<&mut Node, (With<Prompt>, Without<TipCard>)>,
+    mut prompt: Query<(&mut Node, &ComputedNode), (With<Prompt>, Without<TipCard>, Without<super::verbs::ToastRow>)>,
     mut key: Query<&mut Text, (With<PromptKey>, Without<PromptLabel>, Without<PromptMore>)>,
     mut label: Query<&mut Text, (With<PromptLabel>, Without<PromptKey>, Without<PromptMore>)>,
-    mut more: Query<(&mut Text, &mut Node), (With<PromptMore>, Without<PromptKey>, Without<PromptLabel>, Without<Prompt>, Without<TipCard>)>,
-    mut card: Query<&mut Node, (With<TipCard>, Without<Prompt>, Without<PromptMore>)>,
+    mut more: Query<(&mut Text, &mut Node), (With<PromptMore>, Without<PromptKey>, Without<PromptLabel>, Without<Prompt>, Without<TipCard>, Without<super::verbs::ToastRow>)>,
+    mut card: Query<&mut Node, (With<TipCard>, Without<Prompt>, Without<PromptMore>, Without<super::verbs::ToastRow>)>,
+    notes: Query<(&Node, &ComputedNode, &bevy::ui::UiGlobalTransform), (With<super::verbs::ToastRow>, Without<Prompt>, Without<PromptMore>, Without<TipCard>)>,
+    mut last_size: Local<Vec2>,
 ) {
     let f = binds.first(Act::Interact);
     // What F acts on, and what a tap does.
@@ -170,10 +176,21 @@ pub fn update(
         },
         _ => (String::new(), String::new()),
     };
-    // Beside their head, else beside the cursor.
-    let at = person.and_then(|a| cams.iter().find_map(|(c, t)| c.world_to_viewport(t, a.head).ok())).map(|p| p + Vec2::new(26.0, 6.0)).or_else(|| ui.pos.map(|p| p + Vec2::new(26.0, 10.0)));
+    // Beside their head (else beside the cursor), right of it, or left when a note is in the
+    // way: the prompt never covers a note (notes keep their lane above the bar). With neither
+    // side clear the note wins for its few seconds, and the prompt returns after.
+    let px = ui.scale.max(0.01);
+    let lane: Vec<Rect> = notes.iter().filter(|(n, c, _)| n.display != Display::None && c.size().x > 0.0).map(|(_, c, t)| Rect::from_center_size(t.affine().translation / px, c.size() / px).inflate(NOTE_GAP)).collect();
+    // Its size as last drawn (a hidden node measures nothing; a guess could flicker beside a note).
+    if let Some(z) = prompt.iter().map(|(_, c)| c.size() / px).find(|z| z.x > 0.0) {
+        *last_size = z;
+    }
+    let size = if last_size.x > 0.0 { *last_size } else { Vec2::new(200.0, 34.0) };
+    let clear = |p: &Vec2| lane.iter().all(|r| r.intersect(Rect::from_corners(*p, *p + size)).is_empty());
+    let beside = person.and_then(|a| cams.iter().find_map(|(c, t)| c.world_to_viewport(t, a.head).ok())).map(|p| (p, 6.0)).or_else(|| ui.pos.map(|p| (p, 10.0)));
+    let at = beside.and_then(|(p, dy)| [p + Vec2::new(26.0, dy), p + Vec2::new(-26.0 - size.x, dy)].into_iter().find(clear));
     let on = !text.is_empty() && at.is_some() && !ui.over_ui;
-    for mut n in &mut prompt {
+    for (mut n, _) in &mut prompt {
         show(&mut n, on);
         if let Some(p) = at.filter(|_| on) {
             let v = ui.val(p);

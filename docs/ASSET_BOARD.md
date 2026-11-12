@@ -41,6 +41,8 @@ The shot presets are in `living/tools/board/capture.py` (`PRESETS`). The preset'
 
 A model glows when the game's rule says so (`lookdev.rs` `has_glow`): an emissive factor, or a material named `*Glow*`.
 
+**Stills hold the eyes open.** The asset view shows people alive, and a still that catches a blink reads as a fault of the model. The capture holds every photographed character's eyes open for its stills (`living/tools/characters/hold_eyes.py`; clips are left alone), and `view_assets.sh` does the same. `LIVING_VIEW_BLINK=1` lets people blink.
+
 ## Data format
 
 All records are JSON, one file each. Two branches never edit the same file, so a track's pass and a coordinator's decision merge without conflict.

@@ -2,7 +2,8 @@
 // - lines from depth and normal discontinuities, drawn on the far side of a silhouette so thin
 //   or small things don't get thinner, fading with distance;
 // - a rim of light on the side of silhouettes facing the sun (screen-space, from depth);
-// - an anime "film" finish: a soft sky-coloured gradient from the top of the frame;
+// - an anime "film" finish: a soft sky-coloured gradient from the top of the frame, sparing dark
+//   pixels by default (post.rs `Film`);
 // - with the atmosphere (daylight.rs): fog banks lying in the low ground round you, drifting with
 //   the wind (marched through the depth along each pixel's ray), and rain: streaks in three
 //   layers at set distances, each drawn only where the scene lies beyond it.
@@ -62,6 +63,9 @@ struct Edges {
     sight_shade: vec4<f32>,
     // rgb: the style's shadow tint, a: unused.
     sight_tint: vec4<f32>,
+    // The film (post.rs `Film`): x 0 screen, 1 soft; y, z: the luminance over which soft goes
+    // from none of the film to all of it; w how much soft spares dark pixels now (1 day, 0 night).
+    film: vec4<f32>,
 }
 
 @group(0) @binding(4) var<uniform> edges: Edges;
@@ -567,8 +571,17 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         color = mix(color, vec3<f32>(dot(color, vec3<f32>(0.3, 0.5, 0.2))), 0.06 * min(edges.rain.x, 1.0));
     }
 
-    // Film finish: a soft gradient from the top (screen blend).
+    // Film finish: a soft gradient from the top (screen blend). The screen adds as much light to
+    // a dark pixel as to a light one, several times dark hair's or cloth's own; soft weighs it by
+    // the pixel's own light, so the sky and lit things take it as before and dark ones keep
+    // their colour; by night (film.w 0) it is the screen, the night's moonlit haze.
     let g = edges.grade.rgb * edges.grade.a * pow(1.0 - in.uv.y, 2.0);
-    color = 1.0 - (1.0 - color) * (1.0 - g);
+    let screened = 1.0 - (1.0 - color) * (1.0 - g);
+    if (edges.film.x < 0.5) {
+        color = screened;
+    } else {
+        let lum = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
+        color = mix(color, screened, mix(1.0, smoothstep(edges.film.y, edges.film.z, lum), edges.film.w));
+    }
     return vec4<f32>(color, 1.0);
 }

@@ -25,7 +25,7 @@ pub enum Paint {
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Lit(pub bool);
 
-fn flat(c: Color) -> BackgroundGradient {
+pub fn flat(c: Color) -> BackgroundGradient {
     BackgroundGradient::from(bevy::ui::LinearGradient::to_bottom(vec![bevy::ui::ColorStop::percent(c, 0.0), bevy::ui::ColorStop::percent(c, 100.0)]))
 }
 

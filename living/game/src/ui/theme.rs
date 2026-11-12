@@ -51,6 +51,7 @@ pub fn tone(t: super::model::Tone) -> Color {
         Good => FRIENDLY,
         Warn => Color::srgb(1.0, 0.78, 0.38),
         Bad => HOSTILE,
+        Plain => Color::srgb(0.62, 0.66, 0.72),
     }
 }
 

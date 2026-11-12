@@ -42,6 +42,10 @@ $V cleanup --run "$R"
 
 Run cleanup after a failed manual attempt too. The automatic recipe is preferred because it keeps cleanup and proof together.
 
+## Someone too far away to make out
+
+On a launched and doctored `client-*` run (any seed), `scripts/far_label.py --run "$R"` joins a player, installs an overlay that makes everyone past 4 m `far` (as Cullet's law does past 24 m), places two strangers at 2 m and 6 m, and reads the player's `seen_characters` through the SDK probe: `a stranger` near, `someone too far away to make out` far, then `a stranger` once the far one is brought close ([features/perception.md](features/perception.md)). Admin calls set the scene. It installs the shipped script again at the end; run cleanup after it.
+
 ## Check one query during triage
 
 Build the probe with the command above. On a scratch run launched and checked through the harness, subscribe to the row missing from the UI (the chronicle is private developer truth, so as the owner):

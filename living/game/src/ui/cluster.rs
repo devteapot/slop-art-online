@@ -40,32 +40,40 @@ const WEAPON: &str = "bar:Weapon";
 pub struct Cluster;
 #[derive(Component)]
 pub struct ExtraRow;
+/// Bars at most (the world's `meters()`, shown ones): health, energy, and room for stamina and
+/// mana when a world adds their rows.
+const METERS: usize = 4;
+/// The bars' colours by place (the first is the one a blow flashes: health in the shipped order).
+const METER_COLORS: [(Color, Color, Color); METERS] = [
+    (wood::ROSE2, wood::ROSE, wood::ROSE_LO),
+    (wood::TEAL2, wood::TEAL, wood::TEAL),
+    (Color::srgb(1.0, 0.83, 0.45), Color::srgb(0.93, 0.66, 0.2), Color::srgb(0.75, 0.5, 0.12)),
+    (Color::srgb(0.6, 0.78, 1.0), Color::srgb(0.36, 0.56, 0.95), Color::srgb(0.22, 0.38, 0.78)),
+];
 #[derive(Component)]
-pub struct HpFill;
+pub struct MeterBox(usize);
+#[derive(Component)]
+pub struct MeterFill(usize);
+#[derive(Component)]
+pub struct MeterText(usize);
 #[derive(Component)]
 pub struct HpGhost;
 #[derive(Component)]
 pub struct HpFlash;
 #[derive(Component)]
-pub struct HpText;
-#[derive(Component)]
-pub struct EnFill;
-#[derive(Component)]
-pub struct EnText;
-#[derive(Component)]
 pub struct StatusPill(usize);
 #[derive(Component)]
-pub struct StatusIcon(usize);
+pub struct StatusText(usize);
 
 fn down(stops: &[(Color, f32)]) -> BackgroundGradient {
     BackgroundGradient::from(LinearGradient::to_bottom(stops.iter().map(|(c, p)| ColorStop::percent(*c, *p)).collect()))
 }
 
 /// A meter: a value over its maximum, with its number on it.
-fn meter(p: &mut ChildSpawnerCommands, f: &Fonts, fill: impl Bundle, text: impl Bundle, ghost: bool) {
+fn meter(p: &mut ChildSpawnerCommands, f: &Fonts, i: usize, fill: impl Bundle, text: impl Bundle, ghost: bool) {
     let th = wood::t();
     let track = if th.serif_titles { wood::TRACK } else { wood::alpha(th.text, 0.16) };
-    p.spawn((Node { height: Val::Px(if th.serif_titles { 16.0 } else { 12.0 }), border: if th.serif_titles { wood::b(2.0) } else { UiRect::ZERO }, border_radius: BorderRadius::all(Val::Px(9.0)), overflow: Overflow::clip(), flex_grow: 1.0, ..default() }, BackgroundColor(track), BorderColor::all(th.edge), Pickable::IGNORE)).with_children(|b| {
+    p.spawn((MeterBox(i), Node { height: Val::Px(if th.serif_titles { 16.0 } else { 12.0 }), border: if th.serif_titles { wood::b(2.0) } else { UiRect::ZERO }, border_radius: BorderRadius::all(Val::Px(9.0)), overflow: Overflow::clip(), flex_grow: 1.0, ..default() }, BackgroundColor(track), BorderColor::all(th.edge), Pickable::IGNORE)).with_children(|b| {
         if ghost {
             b.spawn((HpGhost, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgba(1.0, 0.86, 0.72, 0.55)), Pickable::IGNORE));
         }
@@ -90,14 +98,17 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
                     c.spawn(wood::rim(9.0));
                     // Status (hunger, tiredness, a fight), over the meters' left end.
                     c.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(12.0), top: Val::Px(-30.0), flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), ..default() }, Pickable::IGNORE)).with_children(|row| {
+                        // The rules' statuses (`status_of`), in their words, coloured by tone.
                         for i in 0..STATUS {
-                            row.spawn((StatusPill(i), Node { width: Val::Px(26.0), height: Val::Px(26.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(2.0), border_radius: BorderRadius::all(Val::Percent(50.0)), display: Display::None, ..default() }, BackgroundColor(th.surface), BorderColor::all(th.edge), Pickable::IGNORE))
-                                .with_child((StatusIcon(i), Node { width: Val::Px(16.0), height: Val::Px(16.0), ..default() }, ImageNode::new(Handle::default()), Pickable::IGNORE));
+                            row.spawn((StatusPill(i), Node { height: Val::Px(22.0), padding: UiRect::axes(Val::Px(9.0), Val::Px(0.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(1.5), border_radius: BorderRadius::all(Val::Px(11.0)), display: Display::None, ..default() }, BackgroundColor(th.surface_hi), BorderColor::all(th.edge), Pickable::IGNORE))
+                                .with_child((StatusText(i), Text::new(""), f.body(10.5, 800), TextColor(th.text), Pickable::IGNORE));
                         }
                     });
                     c.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(10.0), align_self: AlignSelf::Stretch, ..default() }, Pickable::IGNORE)).with_children(|v| {
-                        meter(v, f, (HpFill, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, down(&[(wood::ROSE2, 0.0), (wood::ROSE, 60.0), (wood::ROSE_LO, 100.0)]), Pickable::IGNORE), HpText, true);
-                        meter(v, f, (EnFill, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, down(&[(wood::TEAL2, 0.0), (wood::TEAL, 100.0)]), Pickable::IGNORE), EnText, false);
+                        // The world's meters (`meters()`), as many as it shows.
+                        for (i, (hi, mid, lo)) in METER_COLORS.iter().enumerate() {
+                            meter(v, f, i, (MeterFill(i), Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, down(&[(*hi, 0.0), (*mid, 60.0), (*lo, 100.0)]), Pickable::IGNORE), MeterText(i), i == 0);
+                        }
                     });
                     // The extra row's slots come with the rules' bar ([`extras`]): none on a bar without extras.
                     prim::bar(c, f, &icons, &[], Some(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), padding: UiRect::bottom(Val::Px(10.0)), display: Display::None, ..default() }), ExtraRow);
@@ -221,13 +232,12 @@ pub fn fill(
 pub fn update(
     model: Res<HudModel>,
     roles: Option<Res<crate::combat::Roles>>,
-    icons: Res<Icons>,
     time: Res<Time>,
     mut ghost: Local<f32>,
-    mut texts: ParamSet<(Query<&mut Text, With<HpText>>, Query<&mut Text, With<EnText>>)>,
-    mut nodes: ParamSet<(Query<(&SlotKey, &mut Node), With<prim::SlotRoot>>, Query<&mut Node, With<ExtraRow>>, Query<&mut Node, With<HpFill>>, Query<&mut Node, With<HpGhost>>, Query<&mut Node, With<EnFill>>, Query<(&StatusPill, &mut Node)>)>,
+    mut texts: ParamSet<(Query<(&MeterText, &mut Text)>, Query<(&StatusText, &mut Text, &mut TextColor)>)>,
+    mut nodes: ParamSet<(Query<(&SlotKey, &mut Node), With<prim::SlotRoot>>, Query<&mut Node, With<ExtraRow>>, Query<(&MeterFill, &mut Node)>, Query<&mut Node, With<HpGhost>>, Query<(&MeterBox, &mut Node)>, Query<(&StatusPill, &mut Node)>)>,
     mut flash: Query<&mut BackgroundColor, (With<HpFlash>, Without<StatusPill>)>,
-    mut status_icons: Query<(&StatusIcon, &mut ImageNode)>,
+    mut pill_edges: Query<(&StatusPill, &mut BorderColor)>,
 ) {
     let none = crate::combat::Roles::default();
     let roles = roles.as_deref().unwrap_or(&none);
@@ -242,39 +252,47 @@ pub fn update(
         show(&mut n, extras);
     }
     let Some(me) = &model.me else { return };
-    let f = (me.hp / me.max_hp.max(1.0)).clamp(0.0, 1.0);
+    let share = |m: &super::model::MeterView| (m.value / m.max.max(0.0001)).clamp(0.0, 1.0);
+    // The first bar trails a ghost down after a blow, and flashes.
+    let f = me.meters.first().map_or(0.0, share);
     let dt = time.delta_secs();
     *ghost = if *ghost < f || *ghost == 0.0 { f } else { *ghost + (f - *ghost) * (1.0 - (-dt * 2.2).exp()) };
-    for mut n in &mut nodes.p2() {
-        set_width(&mut n, Val::Percent(f * 100.0));
+    for (b, mut n) in &mut nodes.p4() {
+        show(&mut n, b.0 < me.meters.len());
+    }
+    for (i, mut n) in &mut nodes.p2() {
+        if let Some(m) = me.meters.get(i.0) {
+            set_width(&mut n, Val::Percent(share(m) * 100.0));
+        }
     }
     for mut n in &mut nodes.p3() {
         set_width(&mut n, Val::Percent(*ghost * 100.0));
     }
-    for mut n in &mut nodes.p4() {
-        set_width(&mut n, Val::Percent((me.energy / me.max_energy.max(1.0)).clamp(0.0, 1.0) * 100.0));
-    }
     for mut b in &mut flash {
         set_bg(&mut b, Color::srgba(1.0, 0.95, 0.9, me.hurt * 0.35));
     }
-    for mut t in &mut texts.p0() {
-        set_text(&mut t, &super::hp_text(me.hp, me.max_hp));
-    }
-    for mut t in &mut texts.p1() {
-        set_text(&mut t, &format!("{:.0} / {:.0}", me.energy.max(0.0).round(), me.max_energy.round()));
+    for (i, mut t) in &mut texts.p0() {
+        if let Some(m) = me.meters.get(i.0) {
+            set_text(&mut t, &super::hp_text(m.value, m.max));
+        }
     }
     for (p, mut n) in &mut nodes.p5() {
         show(&mut n, p.0 < me.statuses.len());
     }
-    for (i, mut img) in &mut status_icons {
+    for (i, mut t, mut c) in &mut texts.p1() {
         if let Some(s) = me.statuses.get(i.0) {
-            let h = icons.get(Glyph::Status(s.kind));
-            if img.image != h {
-                img.image = h;
+            set_text(&mut t, &super::label(&s.text));
+            let col = theme::tone(s.tone).mix(&wood::t().text, 0.35);
+            if c.0 != col {
+                c.0 = col;
             }
-            let c = theme::tone(s.tone).mix(&wood::t().text, 0.25);
-            if img.color != c {
-                img.color = c;
+        }
+    }
+    for (p, mut b) in &mut pill_edges {
+        if let Some(s) = me.statuses.get(p.0) {
+            let col = theme::tone(s.tone);
+            if b.top != col {
+                *b = BorderColor::all(col);
             }
         }
     }

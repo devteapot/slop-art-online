@@ -129,8 +129,11 @@ def near(a, b):
     return d * 1000
 
 
-def rule(style_path, node, tid, values, fitted):
-    """A style file's mesh as the rule places it on a person of type `tid` with `values`."""
+def rule(style_path, node, tid, values, fitted, belly=0.0):
+    """A style file's mesh as the rule places it on a person of type `tid` with `values`:
+    `fitted` is True for hair and head pieces (the type's hair_fit, then the identity bones),
+    "type" for an overlay built on the type's own face (the identity bones alone), False for a
+    body piece (only the belly's bone moves it, forward by `belly` times its reach)."""
     h, hb = read_glb(style_path)
     n = next(x for x in h["nodes"] if x.get("name") == node and "mesh" in x)
     names = [h["nodes"][i]["name"] for i in h["skins"][n["skin"]]["joints"]]
@@ -138,16 +141,17 @@ def rule(style_path, node, tid, values, fitted):
     if fitted:
         hf = hair_fit.head(tid)
         mats = cage_head.bone_matrices(hf, values)
-        F = hair_fit.fit(tid)[0]
+        F = hair_fit.fit(tid)[0] if fitted is True else np.eye(4)
         off = np.array([0.0, -0.004, 1.535 - hf.chin_z])
         P = hair_fit.FILE_FROM_FORM
     for p in h["meshes"][n["mesh"]]["primitives"]:
         pos = np.array(read_accessor(h, hb, p["attributes"]["POSITION"])[0]).reshape(-1, 3)
-        if not fitted:
-            out.append(pos)
-            continue
         jt = np.array(read_accessor(h, hb, p["attributes"]["JOINTS_0"])[0]).reshape(-1, 4)
         wt = np.array(read_accessor(h, hb, p["attributes"]["WEIGHTS_0"])[0]).reshape(-1, 4)
+        if not fitted:
+            share = sum(wt[:, k] * np.array([names[i] == "J_Fit_Belly" for i in jt[:, k]]) for k in range(4))
+            out.append(pos + share[:, None] * np.array([0.0, 0.0, -belly * compose.BELLY_REACH]))
+            continue
         form = (pos @ F[:3, :3].T + F[:3, 3]) @ P - off
         ph = np.concatenate([form, np.ones((len(form), 1))], axis=1)
         acc = np.zeros((len(pos), 3))
@@ -174,8 +178,10 @@ def main():
     expect = {"Hair": [rule(hair, "Hair", tid, values, True)], "Cloth": []}
     if any(n.get("name") == "Cloth" and "mesh" in n for n in hj["nodes"]):
         expect["Cloth"].append(rule(hair, "Cloth", tid, values, True))
+    belly = float(line.get("belly", 0.0))
     for name in line["styles"]["outfit"]:
-        expect["Cloth"].append(rule(os.path.join(a.styles, "outfit", name + ".glb"), "Cloth", tid, values, name in ("cap", "kerchief")))
+        expect["Cloth"].append(rule(os.path.join(a.styles, "outfit", name + ".glb"), "Cloth", tid, values, name in ("cap", "kerchief"), belly))
+    expect["Overlay"] = [rule(os.path.join(a.styles, "overlay", tid, name + ".glb"), "Overlay", tid, values, "type") for name in line["styles"].get("overlays", [])]
     for mesh, parts in expect.items():
         if not parts:
             continue
@@ -185,14 +191,16 @@ def main():
         print(f"person_check: {mesh}: {len(got)} vertices from {len(parts)} file(s); as read against the rule: {np.sqrt((d ** 2).mean()):.3f} mm rms, {d.max():.3f} mm at most")
     # 2. Against the person's own file, both posed by the client's proportions.
     if a.own:
-        kinds = (("face skin", lambda m, mat: mat.endswith("Face_00_SKIN")), ("hair", lambda m, mat: mat.endswith("_HAIR")), ("clothes", lambda m, mat: mat.endswith("_CLOTH")), ("neck and hands", lambda m, mat: m == "Skin"))
+        # A beard in a person's own file is the face's skin pushed out and painted; composed, it is
+        # an overlay over the type's face. So the face is measured with its overlays.
+        kinds = (("face skin and overlays", lambda m, mat: mat.endswith("Face_00_SKIN") or m == "Overlay"), ("hair", lambda m, mat: m == "Hair"), ("clothes", lambda m, mat: mat.endswith("_CLOTH")), ("neck and hands", lambda m, mat: m == "Skin"))
         for kind, want in kinds:
             ca, ob = shaped(a.composed, want, line["proportions"]), shaped(a.own, want, doc["recipe"]["proportions"])
             if not len(ca) or not len(ob):
                 continue
             # The type's file keeps the whole scalp and the person's own file cuts it under the hair,
             # so the face is measured from the own file's side; the rest from the composed side.
-            d = near(ob, ca) if kind == "face skin" else near(ca, ob)
+            d = near(ob, ca) if kind.startswith("face skin") else near(ca, ob)
             print(f"person_check: {kind}: composed ({len(ca)} vertices) against the person's own file ({len(ob)}): {np.sqrt((d ** 2).mean()):.1f} mm rms, {np.percentile(d, 95):.1f} at the 95th percentile, {d.max():.1f} at most")
 
 

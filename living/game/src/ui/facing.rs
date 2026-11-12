@@ -29,6 +29,11 @@ pub struct WalkLine;
 /// The walk-speed choices' row (hidden without the admin link).
 #[derive(Component)]
 pub struct WalkChoices;
+/// The extra chip for a walk speed that is none of the choices (set elsewhere), selected.
+#[derive(Component)]
+pub struct WalkOther;
+#[derive(Component)]
+pub struct WalkOtherText;
 
 /// The lines: 0 the state, 1 the five values.
 #[derive(Component)]
@@ -81,10 +86,19 @@ pub fn spawn(mut commands: Commands, places: Query<Entity, Added<FacingSight>>, 
                 c.spawn((Line(0), Text::new("Facing sight: off"), wood::ink(f, 13.5, 800), Pickable::IGNORE));
             });
             super::settings::row(pg, f, "Walk speed", "The world's law: how fast everyone walks", |c| {
-                c.spawn((WalkChoices, Node { flex_direction: FlexDirection::Row, ..default() }, Pickable::IGNORE)).with_children(|w| {
+                c.spawn((WalkChoices, Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(8.0), ..default() }, Pickable::IGNORE)).with_children(|w| {
                     let opts: Vec<(String, String)> = crate::facing::WALK_CHOICES.iter().map(|v| (format!("{v:.1} m/s"), format!("{v:.1}"))).collect();
                     let refs: Vec<(&str, &str)> = opts.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
                     kit::seg(w, f, WALK_TAG, &refs);
+                    // A value none of the choices is (another client, an admin): one more chip,
+                    // selected; shown only then.
+                    w.spawn((WalkOther, Node { display: Display::None, ..default() }, Pickable::IGNORE)).with_children(|o| {
+                        o.spawn((Node { border: wood::b(2.0), border_radius: wood::r(9.0), overflow: Overflow::clip(), align_self: AlignSelf::FlexStart, ..default() }, BorderColor::all(wood::edge()), wood::hard_shadow(2.0, 0.4), Pickable::IGNORE))
+                            .with_children(|s| {
+                                s.spawn((Tag(format!("{WALK_TAG}:other")), kit::Paint::Choice, Lit(true), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(5.0)), ..default() }, kit::flat(wood::plain()), BorderColor::all(wood::edge())))
+                                    .with_child((WalkOtherText, Text::new(""), wood::ink(f, 13.0, 800), Pickable::IGNORE));
+                            });
+                    });
                 });
                 c.spawn((WalkLine, Text::new(""), wood::ink(f, 13.0, 700), Pickable::IGNORE));
             });
@@ -102,8 +116,9 @@ pub fn update(
     st: Option<ResMut<FovState>>,
     mut lines: Query<(&Line, &mut Text, &mut Node), (Without<Tag>, Without<WalkLine>, Without<WalkChoices>)>,
     mut switches: Query<(&Tag, &mut Node), (With<kit::Paint>, Without<Line>, Without<WalkChoices>)>,
-    mut walk_line: Query<&mut Text, (With<WalkLine>, Without<Line>)>,
-    mut walk_choices: Query<&mut Node, (With<WalkChoices>, Without<Tag>, Without<Line>)>,
+    mut walk_line: Query<(&mut Text, &mut Node), (With<WalkLine>, Without<Line>, Without<Tag>, Without<WalkChoices>, Without<WalkOther>)>,
+    mut walk_choices: Query<&mut Node, (With<WalkChoices>, Without<Tag>, Without<Line>, Without<WalkOther>)>,
+    (mut walk_other, mut walk_other_text): (Query<&mut Node, (With<WalkOther>, Without<Tag>, Without<Line>, Without<WalkChoices>)>, Query<&mut Text, (With<WalkOtherText>, Without<WalkLine>, Without<Line>)>),
 ) {
     let Some(mut st) = st else { return };
     match kit::clicked(&ui, &tags) {
@@ -112,7 +127,8 @@ pub fn update(
             crate::facing::ask(&mut st, want);
         }
         Some(t) if t.starts_with(WALK_TAG) => {
-            if let Some(v) = t.rsplit_once(':').map(|x| x.1.to_string()) {
+            // A choice's value (the extra chip is the current value: nothing to send).
+            if let Some(v) = t.rsplit_once(':').map(|x| x.1.to_string()).filter(|v| v.parse::<f32>().is_ok()) {
                 crate::facing::set_law(&mut st, crate::facing::WALK_LAW, &v);
             }
         }
@@ -124,19 +140,47 @@ pub fn update(
         if t == TAG {
             return Some(on);
         }
-        let v = t.strip_prefix(WALK_TAG)?.strip_prefix(':')?.parse::<f32>().ok()?;
-        Some(walk.is_some_and(|w| (w - v).abs() < 0.05))
+        let v = t.strip_prefix(WALK_TAG)?.strip_prefix(':')?;
+        if v == "other" {
+            return Some(true);
+        }
+        let v = v.parse::<f32>().ok()?;
+        Some(walk.and_then(crate::facing::walk_choice).is_some_and(|c| (c - v).abs() < 1e-3))
     });
+    let chips = st.can_switch && walk.is_some();
     for mut n in &mut walk_choices {
-        show(&mut n, st.can_switch && walk.is_some());
+        show(&mut n, chips);
     }
-    for mut text in &mut walk_line {
+    // The three choices, the current one selected; a value none of them is as one more chip.
+    let other = walk.filter(|w| chips && crate::facing::walk_choice(*w).is_none());
+    for mut n in &mut walk_other {
+        show(&mut n, other.is_some());
+    }
+    if let Some(w) = other {
+        for mut t in &mut walk_other_text {
+            set_text(&mut t, &format!("{w:.1} m/s"));
+        }
+    }
+    let shown: Vec<(String, bool)> = if chips {
+        let sel = walk.and_then(crate::facing::walk_choice);
+        let mut v: Vec<(String, bool)> = crate::facing::WALK_CHOICES.iter().map(|c| (format!("{c:.1} m/s"), sel.is_some_and(|s| (s - c).abs() < 1e-3))).collect();
+        v.extend(other.map(|w| (format!("{w:.1} m/s"), true)));
+        v
+    } else {
+        Vec::new()
+    };
+    if st.walk_chips != shown {
+        st.walk_chips = shown;
+    }
+    // The line beside them only when there are no chips: read-only, or not in the laws.
+    for (mut text, mut n) in &mut walk_line {
         let law = crate::facing::WALK_LAW;
         let s = match (walk, st.can_switch) {
-            (Some(w), true) => format!("{w:.1} m/s"),
+            (Some(_), true) => String::new(),
             (Some(w), false) => format!("{w:.1} m/s (read-only)"),
             (None, _) => format!("not in this world's laws ({law})"),
         };
+        show(&mut n, !s.is_empty());
         set_text(&mut text, &s);
     }
     for (t, mut n) in &mut switches {

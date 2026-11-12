@@ -1469,5 +1469,58 @@ class UsesByHolder(unittest.TestCase):
             self.assertNotIn("orbin", md.lower())
 
 
+class AssetPacksNameNoMachine(unittest.TestCase):
+    """An asset unit (the motion library) names no machine label and no host, in any file, path,
+    card or commit message, even with STORE_MACHINE set."""
+
+    def test_motion_pack_and_publish(self):
+        import socket
+        host = socket.gethostname()
+        label = "rackmount-label-07"
+        banned = [label, host, host.split(".")[0], "spark", "laptop", "dev-box", "devbox"]
+        old_m, old_c = os.environ.get("STORE_MACHINE"), os.environ.get("STORE_CONFIG")
+        old_id = store.Identity.from_runtime
+        with tempfile.TemporaryDirectory() as t:
+            lib = os.path.join(t, "library")
+            os.makedirs(lib)
+            for i in range(3):
+                with open(os.path.join(lib, f"walk_s{i}.npz"), "wb") as f:
+                    f.write(b"PK\x03\x04\x00" + bytes([i]) * 64)
+            write(lib, "batch_stats.json", json.dumps({"model": "Kimodo-SOMA-RP-v1.2", "runs": [{"name": "walk"}]}))
+            os.environ["STORE_MACHINE"] = label
+            os.environ["STORE_CONFIG"] = os.path.join(t, "absent.json")
+            store.Identity.from_runtime = classmethod(lambda cls, *a, **k: ident())
+            try:
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(store.main(["pack", "motion", lib, "--out", os.path.join(t, "packed")]), 0)
+                    self.assertEqual(store.main(["publish", "motion", lib, "--backend", "local",
+                                                 "--root", os.path.join(t, "remote")]), 0)
+            finally:
+                store.Identity.from_runtime = old_id
+                for k, v in (("STORE_MACHINE", old_m), ("STORE_CONFIG", old_c)):
+                    if v is None:
+                        os.environ.pop(k, None)
+                    else:
+                        os.environ[k] = v
+            texts = []
+            for d in ("packed", "remote"):
+                for root, _, names in os.walk(os.path.join(t, d)):
+                    for n in names:
+                        p = os.path.join(root, n)
+                        texts.append(("path " + os.path.relpath(p, t), os.path.relpath(p, t)))
+                        with open(p, "rb") as f:
+                            texts.append((os.path.relpath(p, t), f.read().decode("latin-1")))
+            card = os.path.join(os.path.dirname(os.path.abspath(store.__file__)), "store_cards", "assets.md")
+            with open(card, encoding="utf-8") as f:
+                texts.append(("assets card", f.read()))
+            with open(os.path.join(t, "packed", "motion", "MANIFEST.json")) as f:
+                self.assertNotIn("machine", json.load(f))
+            self.assertTrue(any("commits" in w for w, _ in texts))         # the commit log was searched
+            for where, text in texts:
+                for word in banned:
+                    if word:
+                        self.assertNotIn(word.lower(), text.lower(), f"{word!r} in {where}")
+
+
 if __name__ == "__main__":
     unittest.main()

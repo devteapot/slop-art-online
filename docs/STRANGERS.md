@@ -15,7 +15,17 @@ Status: **design approved 2026-11-12 with the decisions at the end; nothing buil
 | **I do not know this person's name** | **Yes.** Each person in sight carries `name` when known, else `who: "a stranger"` (`perceive.rs:431-436`). `community: "yours"` marks one's own community (`:437-438`). Both come from `perception::knows_name` (`perception.rs:315`): oneself, family, the same community, or someone who told you their name. | **No.** The filter `relation: "stranger"` (`graph.rs:412`) means "has no relation row, or a row whose label contains *stranger*" (`brain.rs:1385`). That is not the same fact. In Cullet each resident has relation rows for only 4–15 of the other 63 (the sheets), so the filter matches about 50 fellow residents. It stops matching a newcomer once a consolidation writes a relation such as "wary". The prompt still offers it as if it meant "someone I don't know" (`prompts.rs:343`). |
 | **I have never seen this person** | Only as a one-time percept: "For the first time you see a stranger, 9 tiles west, wait." (salience 0.45, `brain.rs:1170`). In a crowd (more than 6 people in sight, `skills.rhai:11`), a person with no relation row is skipped (`brain.rs:1157`). A newcomer who arrives among a crowd gets no first-sight line, and no `familiar` row is written for them. | No. |
 
-**For Cullet the name fact is enough.** "Everyone knows everyone by name and by face. A stranger has not been seen in living memory" (`bible.md:91`). All 64 residents are in one community, so the only person a resident's scene can call "a stranger" is the newcomer.
+**For Cullet the name fact is enough, but the scene's word was not (corrected 2026-11-12, `far-label`).** "Everyone knows everyone by name and by face. A stranger has not been seen in living memory" (`bible.md:91`). All 64 residents are in one community, so `knows_name` is false only for the newcomer.
+
+This section first said that the only person a resident's scene could call "a stranger" was the newcomer. That was wrong.
+- **The cause.** Cullet's `perceived_of` law gives a name only within 24 m (`known_within`). Past it, a neighbour was labelled "a stranger" too, and still carried `"community": "yours"`.
+- **The effect in stage 1** (docs/TRIALS.md, st1):
+  - Aldous thought of far neighbours as "the west strangers carrying fish" and told Neve Calloway about them.
+  - His mind wrote a relation "Tobiah Dunmore: stranger" from a far first sight ("A stranger (#19) came in from the west").
+- **The fix.** The law now marks such a sighting `far`. Someone too far away to make out is "someone too far away to make out", known or not:
+  - in the scene, with their `id` and with no `name` and no `community`;
+  - in percepts and in players' `seen_*` labels.
+  Nobody is told a first sight of them until they can be made out. A relation labelled "stranger" about someone whose name one knows is not written. Within 24 m an unknown person is "a stranger" and a known one is named, as before.
 
 **On worlds with several settlements it is not enough.** There, "a stranger" also covers the people of another settlement whom one sees every day (ar2 finding 3). The smallest truthful fact for that case would be a scene key `seen` on unnamed people: `"never before"`, or `"before, N times"` from the `familiar` row. It costs one point lookup, `by_actor_thing`. It is specified here but not proposed now: Cullet cannot test it.
 
@@ -194,3 +204,41 @@ Bands for one run, in the arms with the lives (L, LS):
 - An arm is in shape in stage 3 when 3 or more of its 4 runs fall within every band.
 - Stage 2 has one replicate per arm, so it is read against the bands as indicative only.
 - These are the owner's target written as numbers, not a pass mark. The owner judges from the inspector pages, one per arm.
+
+## Proposal: appearance as an authority fact (2026-11-12; not built)
+
+Status: proposal only. It needs dev-box, which owns the character generator, and comes after play-test 6.
+
+**The gap.** A player sees "a stranger in green and dark grey": the game names an unnamed person by the colours it draws (`living/game/src/looks.rs`). A resident sees the same person as "a stranger", and in its memory as "a stranger #77" (`fix-stranger-merge`). Two strangers in one scene are told apart by a player by their clothes, and by a mind only by an id it must never say aloud. The two controllers do not perceive the same thing.
+
+**Where the looks come from today.** Only the client has them.
+- `live::recipe_for` seeds `characters::Recipe::random_in(land_seed * k + id, folk, style)`. `folk` and `style` come from the authority's projection (`seen_characters`).
+- The draw reads ranges, palettes and style presets from the git-ignored `assets/characters/recipes.json` (`just living-game-assets`).
+- It yields:
+  - `Colors`: hair, skin, eyes, top, bottom, shoes, accent, and per-piece outfit colours;
+  - `Proportions`: legs, arms, torso, neck, head, shoulders, hips, build, hands, feet;
+  - a height and a base model.
+- `looks::colour_name` turns a colour into a plain word. The authority never sees any of this.
+
+**Which fields.** Only what someone notices at a glance and could say:
+- the top and bottom colour words (`colour_name`'s words);
+- the hair colour word;
+- a build band from `Proportions.build` and the height: slight, medium, heavy-set, tall, short.
+
+Skin and eye colours, pieces and exact numbers are left out.
+
+**How it would become an authority fact.**
+1. **One generator.** The recipe draw (palettes, ranges, the seeded RNG) moves into `living_rules` (a `looks` module), with its data in the seed or a rules data file instead of a client asset. The client and the authority then draw the same person from the same inputs. This is dev-box's part: the generator and its data.
+2. **One row per character, written once.** At birth or spawn, the authority writes a private `appearance` table: `id` as primary key, and the four words. It changes only when dress changes, which is not modelled. It is never written per tick, and it costs 64 rows in Cullet.
+3. **Perceived through the projection law.** `appearance` becomes an input of `perceived_of` (`skills.rhai`, docs/PERCEPTION.md), like `band`. The law decides which words reach which observer:
+   - the colours within sight by day;
+   - only light or dark at night or past a distance;
+   - the build always.
+   The `seen_characters` projection carries it, so the client draws its label from the authority's words and not from its own draw. The mind's scene carries it the same way.
+4. **Only for unnamed people.** `perception::label` becomes "a stranger in green and dark grey" when the name is not known. It is used in scenes, percepts ("For the first time you see a stranger in green and dark grey, 9 tiles west, wait."), memory names and the client. Named people keep their names. The #id stays for acts and memory and is never said.
+
+**Cost.**
+- About 8–12 tokens per unnamed person in a scene line or a first-sight line ("in green and dark grey, dark-haired, heavy-set").
+- In Cullet only the newcomer is unnamed, so about 10 tokens a scene.
+- On a world with several settlements, about 100–250 tokens a scene with 10–20 unnamed people in sight.
+- Authority cost: one extra point lookup per perceived person when a projection is rebuilt, and no new subscription.

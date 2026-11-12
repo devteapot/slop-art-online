@@ -141,7 +141,7 @@ TYPED = False  # the head is a face type's cage, with the identity bones in it
 # living/tools/characters/share.py puts on files that people share. `far` is the far model's
 # skin (head, neck and hands), textured with the far picture.
 MAT = dict(
-    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", line="M00_000_00_FaceEyeline_00_FACE",
+    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", line="M00_000_00_FaceEyeline_00_FACE",
     hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
 )
 FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
@@ -156,6 +156,7 @@ JOINTS = {
     "Root": (0, 0, 0),
     "J_Bip_C_Hips": (0, 0.000, 0.985),
     "J_Bip_C_Spine": (0, 0.006, 1.060),
+    "J_Fit_Belly": (0, 0.110, 1.070),  # a helper no clip keys: moved forward, it carries a belly on the clothes in front of it
     "J_Bip_C_Chest": (0, 0.012, 1.180),
     "J_Bip_C_UpperChest": (0, 0.004, 1.310),
     "J_Bip_C_Neck": (0, -0.020, 1.475),
@@ -170,7 +171,7 @@ JOINTS = {
     "J_Bip_L_ToeBase": (-0.092, 0.125, 0.022),
 }
 PARENT = {
-    "J_Bip_C_Hips": "Root", "J_Bip_C_Spine": "J_Bip_C_Hips", "J_Bip_C_Chest": "J_Bip_C_Spine",
+    "J_Bip_C_Hips": "Root", "J_Bip_C_Spine": "J_Bip_C_Hips", "J_Fit_Belly": "J_Bip_C_Spine", "J_Bip_C_Chest": "J_Bip_C_Spine",
     "J_Bip_C_UpperChest": "J_Bip_C_Chest", "J_Bip_C_Neck": "J_Bip_C_UpperChest", "J_Bip_C_Head": "J_Bip_C_Neck",
     "J_Bip_L_Shoulder": "J_Bip_C_UpperChest", "J_Bip_L_UpperArm": "J_Bip_L_Shoulder", "J_Bip_L_LowerArm": "J_Bip_L_UpperArm",
     "J_Bip_L_Hand": "J_Bip_L_LowerArm", "J_Bip_L_UpperLeg": "J_Bip_C_Hips", "J_Bip_L_LowerLeg": "J_Bip_L_UpperLeg",
@@ -732,6 +733,11 @@ def hairline(az):
     front (degrees, 0..180)."""
     r = RECEDE
     top = HF.top_z - 0.115
+    if TYPED:
+        # On a face type's head the line comes lower at the temple and in front of the ear (a
+        # sideburn to the middle of the ear) and sits close over the ear's top: the line tuned on
+        # pass 2's head left a bare temple and skin above the ear from the side.
+        return float(np.interp(abs(az), [0, 35, 60, 72, 82, 92, 104, 125, 180], [0.080 + top + r, 0.076 + top + 1.3 * r, 0.034 + 0.6 * r, 0.006, -0.014, 0.012, 0.004, -0.050, -0.078]))
     return float(np.interp(abs(az), [0, 35, 62, 80, 92, 104, 125, 180], [0.080 + top + r, 0.076 + top + 1.3 * r, 0.052 + 0.6 * r, -0.004, 0.016, 0.010, -0.050, -0.078]))
 
 
@@ -956,8 +962,14 @@ def make_face(arm, spec, atlas_path):
     m = face.mesh
     # The iris shares the eye's material (the atlas); highlights are plain colour, as the lines are.
     # The lash lines, brows, highlights and the mouth's inside are one material (plain colour).
-    fm = [dict(iris="eye", face="face", eye="eye", under="skin").get(k, "line") for k in m.fm]
-    order = [k for k in ("face", "eye", "line", "skin") if k in set(fm)]
+    # The iris is a material of its own (VRoid's name for it, `EyeIris`), with its own small
+    # picture: the client recolours a material by moving its picture's mean colour to the person's,
+    # and the tag for the eyes' colour goes to materials named so.
+    fm = [dict(iris="iris", face="face", eye="eye", under="skin").get(k, "line") for k in m.fm]
+    order = [k for k in ("face", "eye", "iris", "line", "skin") if k in set(fm)]
+    A, C0, PXI = head_mesh.ATLAS, head_mesh.IRIS_COL0, head_mesh.IRIS_PX
+    iris_verts = {v for f, k in zip(m.f, m.fm) if k == "iris" for v in f}
+    m.uv = [((u * A - C0) / PXI, 1.0 - (1.0 - v) * A / PXI) if i in iris_verts else (u, v) for i, (u, v) in enumerate(m.uv)]
     base = np.array(HEAD)[None, :]
     world = base + np.array(m.v) * HEAD_SCALE
     eye_bone = {-1: "J_Adj_L_FaceEye", 1: "J_Adj_R_FaceEye"}
@@ -980,16 +992,86 @@ def make_face(arm, spec, atlas_path):
         key.data.foreach_set("co", (world + delta * HEAD_SCALE).ravel())
         # A new key starts at 1, and the file would say every expression is on.
         key.value = float(spec.get("expression", {}).get(name, 0.0))
-    face_paint.write_png(atlas_path, face_paint.paint(HF, look))
-    img = bpy.data.images.load(atlas_path)
-    img.pack()
-    for k in ("face", "eye"):
-        mat = material(MAT[k])
-        tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
-        tex.image = img
-        bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-        mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    atlas = face_paint.paint(HF, look)
+    face_paint.write_png(atlas_path, atlas)
+    iris_path = atlas_path.replace(".atlas.png", ".iris.png")
+    face_paint.write_png(iris_path, np.ascontiguousarray(atlas[:PXI, C0 : C0 + PXI]))
+    for keys, path in ((("face", "eye"), atlas_path), (("iris",), iris_path)):
+        img = bpy.data.images.load(path)
+        img.pack()
+        for k in keys:
+            mat = material(MAT[k])
+            tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+            tex.image = img
+            bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+            mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    if OVERLAY:
+        layer = make_overlay(arm, spec, face, m, world, weights, atlas_path)
+        bpy.data.objects.remove(ob, do_unlink=True)  # the file holds the layer alone
+        return layer, face.base_pos, face.base_quads
     return ob, face.base_pos, face.base_quads
+
+
+OVERLAY = None  # the overlay style being built (--overlay): beard_<style>, stubble, lines, freckles
+OVERLAY_OUT = 0.0003  # how far an overlay lies off the skin, metres
+
+
+def make_overlay(arm, spec, face, m, world, weights, atlas_path):
+    """A detail a person has and a type does not, as a thin layer over the type's own face skin:
+    a beard (the skin under it already stands out by the beard's thickness), stubble, age lines
+    or freckles. Its picture is what the face's paint adds for that detail, as grey with an
+    alpha: the client tints grey pictures by the tag, so the layer takes the person's hair
+    colour (a beard, stubble) or skin colour (lines, freckles) and blends over the type's face.
+    It has the face's weights and expressions, so it rides the identity bones and the morphs."""
+    look = spec["look"]
+    rng = lambda: np.random.default_rng(int(look.get("seed", 0)) + 77)
+    plain = dict(look, lines=0.0, stubble=0.0, freckles=0.0, beard=None)
+    with_, _ = face_paint.paint_skin(HF, look, rng())
+    without, _ = face_paint.paint_skin(HF, plain, rng())
+    hairy = OVERLAY.startswith("beard") or OVERLAY == "stubble"
+    diff = np.abs(with_ - without).max(axis=2)
+    alpha = np.clip(diff / (0.10 if OVERLAY.startswith("beard") else 0.16), 0.0, 1.0)
+    tint = np.array(look["beard_colour"] if OVERLAY.startswith("beard") else (look["stubble_colour"] if OVERLAY == "stubble" else look["skin"]))
+    grey = np.clip((with_ @ np.array([0.3, 0.59, 0.11])) / max(float(tint @ np.array([0.3, 0.59, 0.11])), 1e-3), 0.0, 1.0)
+    rows = head_mesh.ATLAS - head_mesh.EYE_ROWS
+    pic = np.zeros((head_mesh.ATLAS, head_mesh.ATLAS, 4))
+    pic[head_mesh.EYE_ROWS :, :, :3] = grey[..., None]
+    pic[head_mesh.EYE_ROWS :, :, 3] = alpha
+    small = (np.clip(pic.reshape(head_mesh.ATLAS // 2, 2, head_mesh.ATLAS // 2, 2, 4).mean(axis=(1, 3)), 0, 1) * 255 + 0.5).astype(np.uint8)
+    path = atlas_path.replace(".atlas.png", ".overlay.png")
+    img = bpy.data.images.new("overlay", small.shape[1], small.shape[0], alpha=True)
+    img.pixels.foreach_set((small[::-1].astype(np.float32) / 255.0).ravel())
+    img.filepath_raw = path
+    img.file_format = "PNG"
+    img.save()
+    img = bpy.data.images.load(path)
+    img.colorspace_settings.name = "sRGB"
+    img.pack()
+    # The faces of the skin the detail touches, a hair's width off it.
+    uv = np.array(m.uv)
+    n = face.skin_n + len(face._extra)
+    px = np.clip((uv[:n, 0] % 1.0) * head_mesh.ATLAS, 0, head_mesh.ATLAS - 1).astype(int)
+    py = np.clip((1.0 - uv[:n, 1]) * head_mesh.ATLAS - head_mesh.EYE_ROWS, 0, rows - 1).astype(int)
+    touched = alpha[py, px] > 0.02
+    faces = [f for f in face.skin_faces if any(touched[v] for v in f)]
+    used = sorted({v for f in faces for v in f})
+    index = {v: i for i, v in enumerate(used)}
+    out = np.array(face.skin_normals)[used] * OVERLAY_OUT * HEAD_SCALE
+    name = MAT["overlay_hair" if hairy else "overlay_skin"]
+    ob = raw_object("Overlay", world[used] + out, [tuple(index[v] for v in f) for f in faces], [weights[v] for v in used], [(1.0, 1.0, 1.0)] * len(used), name, arm, uvs=[tuple(uv[v]) for v in used])
+    ob.shape_key_add(name="Basis", from_mix=False)
+    for key_name, delta in face.morphs.items():
+        key = ob.shape_key_add(name=key_name, from_mix=False)
+        key.data.foreach_set("co", (world[used] + out + delta[used] * HEAD_SCALE).ravel())
+        key.value = 0.0
+    mat = material(name)
+    mat.blend_method = "BLEND"
+    tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    bsdf = next(x for x in mat.node_tree.nodes if x.type == "BSDF_PRINCIPLED")
+    mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    mat.node_tree.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+    return ob
 
 
 def make_far_head(arm, spec, picture_path):
@@ -999,6 +1081,8 @@ def make_far_head(arm, spec, picture_path):
     look = spec["look"]
     face = head_mesh.FarFace(HF, look, keep=lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.030 or bald_depth(c) > -0.012)
     m = face.mesh
+    if OVERLAY:
+        return far_beard(arm, m, look), face.base_pos, face.base_quads
     if TYPED and cage_head.CageFace.LINES:
         cage_head.far_jaw_line(m, HF, look)
     world = np.array(HEAD)[None, :] + np.array(m.v) * HEAD_SCALE
@@ -1013,6 +1097,23 @@ def make_far_head(arm, spec, picture_path):
         bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
         mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     return ob, face.base_pos, face.base_quads
+
+
+def far_beard(arm, m, look):
+    """A beard for the far head: the far head's own faces under the beard, a few millimetres
+    out, in a plain material the hair's tag tints. No picture and no expressions: beyond the far
+    switch a beard is a patch of the hair's colour."""
+    v = np.array(m.v, float)
+    az = np.degrees(np.arctan2(-v[:, 0], v[:, 1]))
+    cover = HF.beard_cover(look.get("beard"), np.abs(v[:, 0]), v[:, 2], az) if look.get("beard") else None
+    cover = np.zeros(len(v)) if cover is None else np.asarray(cover) * (v[:, 1] > -0.03)
+    faces = [f for f, k in zip(m.f, m.fm) if k == "face" and np.mean([cover[i] for i in f]) > 0.5]
+    used = sorted({i for f in faces for i in f})
+    index = {i: k for k, i in enumerate(used)}
+    out = v[used] - np.array(head_mesh.ORIGIN)
+    out = out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9) * 0.004
+    world = np.array(HEAD)[None, :] + (v[used] + out) * HEAD_SCALE
+    return raw_object("Overlay", world, [tuple(index[i] for i in f) for f in faces], [{"J_Bip_C_Head": 1.0}] * len(used), [(0.86, 0.86, 0.86)] * len(used), MAT["far_overlay"], arm)
 
 
 def make_neck(arm):
@@ -1678,19 +1779,25 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             apron = spec["apron"]
 
             def stag(kind, k, r):
-                if apron and kind == "torso" and r == band:
-                    return 9
-                if apron and kind == "torso" and k <= 2 and r < band:
-                    return 8
                 if kind == "sleeve" and r in (3, 4):
                     return 4
                 return 0
+
+            def atag(kind, k, r):  # the apron alone: a part of its own, so it takes a colour of its own
+                if kind == "torso" and r == band:
+                    return 9
+                if kind == "torso" and k <= 2 and r < band:
+                    return 8
+                return Part.HIDE
 
             p = upper_garment(
                 Part("Smock"), 0.018, zs, hem=[(-0.004, -0.008)], cuff=(-0.655, [(-0.022, 0.004), (-0.024, -0.004)]),
                 collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, tag_fn=stag,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
+            if apron:
+                p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag).mirrored()
+                obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
         # Trousers, tucked into the boots.
         p = trousers(Part("Trousers"), 0.012).mirrored()
         obs.append(build(p, arm, MAT["cloth"], lambda tag, u, v, co, n: mottle(mix(PAL["iron"], PAL["slate"], 0.25 + 0.10 * (int(u * 44) % 2)), co, 0.08)))
@@ -1794,6 +1901,27 @@ def bake_shade(obs, strength=0.50, reach=0.11):
         attr.data.foreach_set("color", data.ravel())
 
 
+BELLY_PARTS = ("Jersey", "Coat", "Buttons", "Smock", "Apron")
+BELLY_REACH = 0.108  # metres the belly's bone moves forward for a belly of 1 (the torso's half depth)
+
+
+def belly_weights(obs):
+    """Give the clothes in front of the belly a share of `J_Fit_Belly`: the same bell by height the
+    generator's own belly has (torso_point), on the front half. With the bone at rest nothing
+    changes; moved forward by belly x BELLY_REACH it stands a belly out on any piece."""
+    for ob in obs:
+        if ob.name.split(".")[0] not in BELLY_PARTS:
+            continue
+        g = ob.vertex_groups.get("J_Fit_Belly") or ob.vertex_groups.new(name="J_Fit_Belly")
+        for v in ob.data.vertices:
+            w = math.exp(-(((v.co.z - 1.07) / 0.13) ** 2)) * smooth((v.co.y - 0.01) / 0.07) * smooth((0.24 - abs(v.co.x)) / 0.06)
+            if w < 0.01:
+                continue
+            for x in v.groups:
+                x.weight *= 1.0 - w
+            g.add([v.index], w, "REPLACE")
+
+
 def spread_head_weights(obs):
     """On a typed head, what hangs on the head (hair, headwear, the neck's top, the far head)
     follows the identity bones as the face does: each vertex's weight to `J_Bip_C_Head` is
@@ -1877,7 +2005,7 @@ def join_kinds(obs, far=False):
     groups = {}
     for ob in obs:
         name = ob.name.split(".")[0]  # Blender numbers a name that is taken (the full model's `Hair`)
-        kind = "Skin" if name in skin_parts else ("Face" if name == "Face" else ("Hair" if name == "Hair" else "Cloth"))
+        kind = "Skin" if name in skin_parts else ("Face" if name == "Face" else ("Hair" if name == "Hair" else ("Overlay" if name == "Overlay" else "Cloth")))
         groups.setdefault(kind, []).append(ob)
     if far and "Skin" in groups:
         # Hands and neck take the far picture's swatch of plain skin: their colours become
@@ -1900,7 +2028,7 @@ def join_kinds(obs, far=False):
             me.materials.clear()
             me.materials.append(material(MAT["far"]))
     out = []
-    for kind in ("Cloth", "Skin", "Face", "Hair"):
+    for kind in ("Cloth", "Skin", "Face", "Hair", "Overlay"):
         parts = groups.get(kind)
         if not parts:
             continue
@@ -2019,11 +2147,13 @@ def main():
     ap.add_argument("--bake", action="store_true", help="build the identity values into the head itself (the bones stay at rest), to compare with the same person composed by bones")
     ap.add_argument("--lod", default="near", choices=("near", "far", "both"), help="`near` the full model (the default); `far` the far model alone (about 6,000 triangles, for beyond 10 m); "
                     "`both` one file with the two on one skeleton, the far model's meshes named Far*")
-    ap.add_argument("--parts", default="all", choices=("all", "head", "face", "hair", "keep"), help="`keep`: only the parts --keep names (an outfit piece's file); "
+    ap.add_argument("--parts", default="all", choices=("all", "head", "face", "hair", "keep", "overlay"), help="`overlay`: one detail as a layer over the type's face (--overlay); "
+                    "`keep`: only the parts --keep names (an outfit piece's file); "
                     "`hair`: only the hair, near and (with --lod both) far, in neutral shades to be coloured by the client's tag: a shared hair style's file; "
                     "`head`: only what a face type's file holds (the whole head, the neck and hands, and the far head with --lod both): no hair, no clothes; "
                     "`face`: the whole head and neck alone, to photograph a type")
     ap.add_argument("--morphs", default="all", choices=("all", "client"), help=f"`client`: keep only the expressions the game drives ({', '.join(CLIENT_MORPHS)}); every expression costs each vertex of the face again")
+    ap.add_argument("--overlay", default="", help="with --parts overlay: beard_<style>, stubble, lines or freckles")
     ap.add_argument("--keep", default="", help="with --parts keep: the parts to keep, by name, comma-separated (Jersey, Coat, Buttons, Smock, Trousers, Boots, Cap, CapPeak, Kerchief, KerchiefKnot)")
     ap.add_argument("--no-lines", action="store_true", help="leave out the shell lines at the jaw, ears and mouth (cage_head.CageFace._shell_lines), to compare")
     ap.add_argument("--blend")
@@ -2049,6 +2179,9 @@ def main():
         if a.identity:
             ident = json.loads(a.identity) if a.identity.strip().startswith("{") else {k: float(v) for k, v in (x.split("=") for x in a.identity.split(",") if x)}
         spec.update(type=a.face_type or spec["type"], identity=ident, baked=bool(a.bake))
+    if a.parts in ("head", "face"):
+        # A type's own face has nothing a person adds: age lines are an overlay style, like stubble.
+        spec["look"].update(lines=0.0, stubble=0.0, freckles=0.0)
     if a.parts == "hair":
         # A shared style is coloured by the client, through the mesh tag: its own shades are
         # neutral, a little darker at the root than the tip, with no grey of its own.
@@ -2063,7 +2196,8 @@ def main():
         json.dump(dict(params=params, recipe=spec["recipe"], **({"type": spec["type"], "identity": spec["identity"], "baked": spec["baked"], "person": spec.get("person")} if spec.get("type") else {})), f, indent=1)
     g = globals()
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
-    g["WHOLE_HEAD"] = a.parts in ("head", "face")
+    g["WHOLE_HEAD"] = a.parts in ("head", "face", "overlay")
+    g["OVERLAY"] = a.overlay if a.parts == "overlay" else None
     arm = make_armature()
     obs, tris = [], {}
     for far in (False, True):
@@ -2072,7 +2206,7 @@ def main():
         g["FAR"] = far
         parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
         if a.parts != "all":
-            wanted = dict(head=TYPE_PARTS, hair=("Hair", "HairTie"), face=("Face", "Neck"), keep=tuple(x for x in a.keep.split(",") if x))[a.parts]
+            wanted = dict(head=TYPE_PARTS, hair=("Hair", "HairTie"), face=("Face", "Neck"), keep=tuple(x for x in a.keep.split(",") if x), overlay=("Overlay",))[a.parts]
             keep = [ob for ob in parts if ob.name.split(".")[0] in wanted]
             for ob in parts:
                 if ob not in keep:
@@ -2083,6 +2217,7 @@ def main():
                 if ob.data.shape_keys:
                     for key in [k for k in ob.data.shape_keys.key_blocks if k.name != "Basis" and k.name not in CLIENT_MORPHS]:
                         ob.shape_key_remove(key)
+        belly_weights(parts)
         if TYPED:
             spread_head_weights(parts)
             if spec.get("baked") and spec.get("identity"):

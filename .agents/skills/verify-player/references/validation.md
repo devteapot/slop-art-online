@@ -1,5 +1,13 @@
 # Validation record (player)
 
+## 2026-11-12 speech-truth (Spark)
+
+`speak.py` (`player-struth-speak`, trial service): 16 of 16. New: a `human_say` to the resident 30 m away is said. The player's `my_experience` then holds one `silence` row ending "they could not have heard you." (not "No answer"), and `my_act_outcomes` holds its row: kind `act`, code `reach`, not ok, `why` the same words, `other` the resident.
+
+- Rerun after the coordinator's changes, `player-struth2-speak`: 18 of 18. The addressed line out of earshot reads the fact alone. New:
+  - a room line from a spot with no one within the 9 m voice gives one `silence` row (subject 0) "Nobody was near enough to hear you." and its `my_act_outcomes` row (act, reach, not ok, other 0);
+  - with the resident placed beside the player, a room line gives no row, and `my_heard` lists the resident.
+
 ## 2026-11-12 stamina-1: breath through the player's reducers (Spark)
 
 Branch `stamina-1` with look-2 merged, trial service `slop-trials-stdb`. `player-st1b` (island):

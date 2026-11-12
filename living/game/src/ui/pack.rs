@@ -13,7 +13,7 @@
 //!   panel into the wide window; the window of step 6 replaces it.
 
 use super::hit::{Hot, Tag, UiPointer};
-use super::icons::{item_mark, Glyph, Icons};
+use super::icons::{Glyph, Icons};
 use super::kit::{self, Lit};
 use super::model::HudModel;
 use super::theme::Fonts;
@@ -217,7 +217,7 @@ pub fn update(
             show(&mut n, item.is_some());
             if let Some(it) = item {
                 // The item's icon id from the rules (goods-2), drawn by this client's marks.
-                let h = icons.get(Glyph::Item(item_mark(&rules.item_look(it).0)));
+                let h = icons.get(Glyph::Item(rules.item_glyph(it)));
                 if img.image != h {
                     img.image = h;
                 }
@@ -229,6 +229,7 @@ pub fn update(
         }
         // Over the rules' limit (gifts and grants can put one there): the count in the warning
         // rose, and said.
+        // Full when the load reaches the limit (the rules' own test: N + 0.0001 >= limit), over past it.
         let over = inv.limit > 0.0 && inv.carried > inv.limit + 1e-3;
         for (mut t, mut c) in &mut texts.p1() {
             let s = if inv.limit > 0.0 { format!("{} / {}", amount(inv.carried), amount(inv.limit)) } else { amount(inv.carried) };
@@ -249,7 +250,7 @@ pub fn update(
     }
     if let Some(item) = &carrying.item {
         for mut img in &mut ghost_icon {
-            let h = icons.get(Glyph::Item(item_mark(&rules.item_look(item).0)));
+            let h = icons.get(Glyph::Item(rules.item_glyph(item)));
             if img.image != h {
                 img.image = h;
             }

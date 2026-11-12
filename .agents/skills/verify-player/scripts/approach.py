@@ -129,11 +129,15 @@ def main():
 
     # 0. The player comes into R's sight walking, from 14 m out on that side (day sight is
     # 11 m): R's first sight of it is an experience line that says what it was doing. Once per
-    # world (R remembers the player afterwards), and not in a crowd (where strangers are not
-    # announced): no line at all is recorded as not observed; a line saying `wait` fails. Its
-    # way in may bend round something, so any walk counts here, not only `walk → person`.
+    # world (R remembers the player afterwards); since strangers-1 in a crowd too, where first
+    # sights of one look share a line ("…; and a stranger, 14 tiles west, walk → person.", the
+    # player then its subject or object): no line at all is recorded as not observed; a line
+    # saying `wait` fails. Its way in may bend round something, so any walk counts here, not
+    # only `walk → person`. Each part of a shared line is checked on its own.
     def saw():
-        return [e["text"] for e in p.sql(f"SELECT text, kind, subject FROM experience WHERE observer = {r['id']}") if e["kind"] == "saw" and e["subject"] == me]
+        rows = p.sql(f"SELECT text, kind, subject, object FROM experience WHERE observer = {r['id']}")
+        return [part.removeprefix("and ").rstrip(".") + "." for e in rows if e["kind"] == "saw" and me in (e["subject"], e.get("object"))
+                for part in e["text"].split("; ")]
     if saw():
         EVIDENCE["first_sight"] = {"skipped": "R has already seen the player in this world", "lines": saw()}
     else:

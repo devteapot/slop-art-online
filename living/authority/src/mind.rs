@@ -542,8 +542,14 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             ctx.db.persona().insert(row);
         }
     }
+    let me = ctx.db.character().id().find(actor);
     for r in update.relations.into_iter().take(32) {
-        if r.other == actor || ctx.db.character().id().find(r.other).is_none() {
+        let Some(other) = ctx.db.character().id().find(r.other).filter(|_| r.other != actor) else { continue };
+        // "Stranger" is not a feeling about someone whose name one knows (family, one's
+        // community, an introduction: `perception::knows_name`): a mind that took a neighbour
+        // too far away to make out for a stranger does not write it (far-label, docs/STRANGERS.md).
+        if r.label.to_lowercase().contains("stranger") && me.as_ref().is_some_and(|m| crate::perception::knows_name(ctx, m, &other)) {
+            log::info!("mind_update #{actor}: relation \"{}\" to #{} not written: #{actor} knows their name", r.label, r.other);
             continue;
         }
         let existing = ctx.db.relation().by_pair().filter((actor, r.other)).next();

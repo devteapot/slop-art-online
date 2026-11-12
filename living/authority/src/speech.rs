@@ -10,6 +10,7 @@
 use crate::common::{self, direction, pos};
 use crate::perceive::percept;
 use crate::tables::*;
+use living_rules::outcome::{act as code, kind};
 use living_rules::script::speech::{To, WaySpec, SAY};
 use spacetimedb::{ReducerContext, Table, ViewContext};
 
@@ -134,25 +135,28 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
         }
     }
     let hearers: Vec<&(Character, f32, (f32, f32))> = near.iter().filter(|(c, d, _)| &*c.kind == "person" && (!w.only_to || c.id == to) && carries(c.id, *d)).collect();
-    // Silence is information: calling someone out of earshot (far away, or dead) gets no answer.
-    // One the speaker sees, beyond what this way carries, is too far to hear: the speaker is
-    // told so, and which way would carry (the farthest-carrying public way), not that no one
-    // answered.
-    if to != 0 && !hearers.iter().any(|(c, _, _)| c.id == to) {
-        let seen = ctx.db.character().id().find(to).filter(|c| c.alive).and_then(|_| ctx.db.body().id().find(to)).is_some_and(|tb| {
-            let p = pos(&tb, now);
-            crate::perception::in_sight(ctx, &common::map(ctx), speaker, at, common::facing_at(&b, now), to, p, common::dist(at, p), &world, now, false)
-        });
-        let text = if seen {
-            let louder = sc.ways().iter().filter(|o| o.public() && o.carry_for(1.0) > w.carry_for(1.0) && o.needs.is_empty()).max_by(|a, b| a.carry_for(1.0).total_cmp(&b.carry_for(1.0)));
-            let how = louder.map_or("go closer".to_string(), |o| format!("{} or go closer", o.label.to_lowercase()));
-            format!("{} is too far to hear you; {how}.", common::label_cap(ctx, &me, to))
-        } else {
-            format!("No answer from {}; they don't seem to be within earshot.", common::label_for(ctx, &me, to))
-        };
-        percept(ctx, &me, now, "silence", to, speaker, at, text, 0.35);
-    }
+    // Silence is information: a line to someone who did not receive the words, or to the room
+    // when no one did. The speaker is told the fact (`speech_truth`): they could not have heard
+    // it, never a "No answer" that reads as a refusal, and no advice (what to do about it is the
+    // mind's or the player's choice; the ways' reach is in the world text). Decided from the same
+    // `hearers` the line's `audience` row lists (what `LIVING_GREET=nearest` reads).
     let laws = common::laws(ctx);
+    let unheard = if to != 0 && !hearers.iter().any(|(c, _, _)| c.id == to) {
+        Some(unheard_text(ctx, &sc, w, &me, to, at, common::facing_at(&b, now), laws.speech_truth, now))
+    } else if to == 0 && hearers.is_empty() && laws.speech_truth {
+        // A line to the room that no one received: the speaker learns that too.
+        Some(NOBODY_HEARD.to_string())
+    } else {
+        None
+    };
+    if let Some(text) = unheard {
+        let line = percept(ctx, &me, now, "silence", to, speaker, at, text.clone(), 0.35);
+        // A person playing the speaker gets the same words as an outcome of what they said.
+        if let (true, Some(line)) = (laws.speech_truth, line) {
+            let what = if to != 0 { format!("{} to {}", w.label.to_lowercase(), common::label_for(ctx, &me, to)) } else { w.label.to_lowercase() };
+            crate::outcomes::write(ctx, speaker, line, now, &crate::outcomes::Told { kind: kind::ACT, ok: false, skill: &w.name, code: code::REACH, what: &what, why: &text, other: to }, false);
+        }
+    }
     let address = laws.address_m;
     let close = hearers.iter().filter(|(_, d, _)| *d <= address).count();
     // Who received the words and how they stood toward the speaker, for the minds' turn-taking
@@ -227,6 +231,61 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
         seen.sort_by(|a, b| a.0.total_cmp(&b.0));
         ctx.db.line_heard().insert(LineHeard { line, speaker, way: w.name.clone(), hearers: seen.into_iter().map(|(_, id)| id).collect(), at_ms: now });
     }
+    Ok(())
+}
+
+/// What a speaker is told of a line to the room that no one received (`speech_truth`).
+pub const NOBODY_HEARD: &str = "Nobody was near enough to hear you.";
+
+/// What a speaker is told when `to` did not receive its words in way `w`. With `truth` (the
+/// `speech_truth` law, on by default) the fact alone: "<Who> is too far away: they could not
+/// have heard you." when the speaker sees them, "<Who> is out of earshot: they could not have
+/// heard you." when it does not (out of sight, absent or dead alike, so ids cannot be probed).
+/// No advice: what to do about it is the speaker's choice. Without it, `speech-2`'s words.
+#[allow(clippy::too_many_arguments)]
+fn unheard_text(ctx: &ReducerContext, sc: &living_rules::script::Scripts, w: &WaySpec, me: &Character, to: u32, at: (f32, f32), facing: f32, truth: bool, now: u64) -> String {
+    let world = common::world(ctx);
+    let seen = ctx.db.character().id().find(to).filter(|c| c.alive).and_then(|_| ctx.db.body().id().find(to)).is_some_and(|tb| {
+        let p = pos(&tb, now);
+        crate::perception::in_sight(ctx, &common::map(ctx), me.id, at, facing, to, p, common::dist(at, p), &world, now, false)
+    });
+    let who = common::label_cap(ctx, me, to);
+    match (truth, seen) {
+        (true, true) => format!("{who} is too far away: they could not have heard you."),
+        (true, false) => format!("{who} is out of earshot: they could not have heard you."),
+        (false, true) => {
+            let louder = sc.ways().iter().filter(|o| o.public() && o.carry_for(1.0) > w.carry_for(1.0) && o.needs.is_empty()).max_by(|a, b| a.carry_for(1.0).total_cmp(&b.carry_for(1.0)));
+            let how = louder.map_or("go closer".to_string(), |o| format!("{} or go closer", o.label.to_lowercase()));
+            format!("{who} is too far to hear you; {how}.")
+        }
+        (false, false) => format!("No answer from {}; they don't seem to be within earshot.", common::label_for(ctx, me, to)),
+    }
+}
+
+/// Whether `to` would receive the words of a line in way `w` that `speaker`, standing at `at`,
+/// says now: a living person within what the way carries for their own hearing (the rule
+/// [`speak`] gives the words by).
+pub fn within_reach(ctx: &ReducerContext, w: &WaySpec, at: (f32, f32), to: u32, now: u64) -> bool {
+    if !ctx.db.character().id().find(to).is_some_and(|c| c.alive && c.kind == "person") {
+        return false;
+    }
+    let Some(tb) = ctx.db.body().id().find(to) else { return false };
+    let world = common::world(ctx);
+    common::dist(at, pos(&tb, now)) <= w.carry_for(common::hearing_for(ctx, to, &world, now))
+}
+
+/// A plan's queued line to `to` that came due while `to` was beyond the way's reach
+/// (`speech_truth`): it is not said, and the speaker is told so in the words a spoken line
+/// gets ([`unheard_text`]), with the line it kept: a `silence` row, as for a line said out of
+/// earshot. `Err` when the way is unknown.
+pub fn unsaid(ctx: &ReducerContext, speaker: u32, to: u32, way: &str, text: &str, now: u64) -> Result<(), String> {
+    let sc = common::scripts(ctx);
+    let w = sc.way(way_name(way)).ok_or_else(|| format!("no way of speaking called `{way}`"))?;
+    let (Some(me), Some(b)) = (ctx.db.character().id().find(speaker), ctx.db.body().id().find(speaker)) else { return Ok(()) };
+    let at = pos(&b, now);
+    let why = unheard_text(ctx, &sc, w, &me, to, at, common::facing_at(&b, now), true, now);
+    let text: String = text.trim().chars().take(w.max_chars).collect();
+    percept(ctx, &me, now, "silence", to, speaker, at, format!("{why} You did not say your planned line: “{text}”."), 0.35);
     Ok(())
 }
 
