@@ -324,6 +324,14 @@ fn know_how() {
     ]
 }
 
+// The fires that burn fuel get a wheel with making and feeding in fixed directions (docs/
+// INTERFACE.md §8.3), over the shipped rows (a campfire needs no feeding: the general row).
+fn menus() {
+    let rows = [#{ on: "thing", kinds: ["hearth", "oven", "furnace", "smokehouse"], choose: "wheel", wheel: #{ n: "make", e: "feed" } }];
+    rows += base_menus();
+    rows
+}
+
 // Cullet's workplaces, after the shipped recipes (crafting, and cooking and smoking at any fire).
 // Its nets are hung with glass floats and its coats are oilskins: those two stand in the shipped
 // ones' places (docs/CULLET_RULES.md, "Where Cullet's goods come from").

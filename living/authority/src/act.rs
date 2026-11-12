@@ -1024,8 +1024,17 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64, cod
         ctx.db.mind_state().id().update(st);
     }
     let repeat = !ok && !news(ctx, a.id, &a.label, why, now);
-    // A player's own move is reported to the player (`skill_use`, `my_combat`), not the graph.
+    // With the `force_outcomes` law, how a blow or shot that resolves at its release came out
+    // is told to whoever made it, a mind or a person, in the same words and the same
+    // `act_outcome` row (a missile is told when it ends: `missile_told`). One rule for every
+    // controller (docs/COMBAT.md, "The outcome of one's own blow or shot").
+    let force = common::laws(ctx).force_outcomes && common::scripts(ctx).combat(&a.skill).is_some_and(|s| s.force && !s.missile);
+    // A player's own move is reported to the player (`skill_use`, `my_combat`), not the graph,
+    // and, for a force skill under `force_outcomes`, told as a mind's is.
     if a.node == PLAYER {
+        if force && !repeat {
+            tell(ctx, a.id, ok, &a.skill, &a.label, why, now, code, true);
+        }
         common::wake(ctx, a.id);
         return;
     }
@@ -1037,19 +1046,21 @@ fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64, cod
         return;
     }
     // Routine successes (gathering a berry, arriving somewhere) are not experiences worth
-    // recording; failures and meaningful acts are.
-    if !repeat && (!ok || catalog::skill(&a.skill).is_some_and(|k| k.notable)) {
-        tell(ctx, a.id, ok, &a.skill, &a.label, why, now, code);
+    // recording; failures and meaningful acts are, and so is every force outcome (above).
+    if !repeat && (!ok || force || catalog::skill(&a.skill).is_some_and(|k| k.notable)) {
+        tell(ctx, a.id, ok, &a.skill, &a.label, why, now, code, force);
     }
     common::wake(ctx, a.id);
 }
 
-/// Tell a character how its graph's action went, as an experience in its own log. A mind is
-/// told; so is a person playing the character when it failed (their command, refused or
-/// broken off), in the same words. Instinct-only creatures are not.
-fn tell(ctx: &ReducerContext, id: u32, ok: bool, skill: &str, what: &str, why: &str, now: u64, code: &'static str) {
+/// Tell a character how its action went, as an experience in its own log (and, for a
+/// character a person plays, its `act_outcome` row). A mind is told; so is a person playing the
+/// character when it failed (their command, refused or broken off), or for any outcome of a
+/// force skill under `force_outcomes` (`force`), in the same words. Instinct-only creatures are not.
+#[allow(clippy::too_many_arguments)]
+fn tell(ctx: &ReducerContext, id: u32, ok: bool, skill: &str, what: &str, why: &str, now: u64, code: &'static str, force: bool) {
     let Some(c) = ctx.db.character().id().find(id) else { return };
-    if !c.ai && (ok || !crate::presence::played(ctx, id)) {
+    if !c.ai && !(crate::presence::played(ctx, id) && (force || !ok)) {
         return;
     }
     let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
@@ -1057,6 +1068,57 @@ fn tell(ctx: &ReducerContext, id: u32, ok: bool, skill: &str, what: &str, why: &
     if let Some(line) = percept(ctx, &c, now, "own", id, 0, at, text.trim().to_string(), if ok { 0.08 } else { 0.35 }) {
         let told = crate::outcomes::Told { kind: living_rules::outcome::kind::OWN, ok, skill, code, what, why: if ok { "" } else { why }, other: 0 };
         crate::outcomes::write(ctx, id, line, now, &told, false);
+    }
+}
+
+/// How a missile ended, for the one who loosed it (`missile_told`).
+pub enum Far<'a> {
+    /// It reached `victim`; what the blow did ("hit for 14", "blocked, 3 got through").
+    Struck(&'a str),
+    /// It reached `victim` and killed them.
+    Killed,
+    /// `victim` dodged it.
+    Dodged,
+    /// It reached `victim`, and the rules said no to its effect (their words).
+    Refused(&'a str),
+    /// A wall, rock or shut gate stopped it.
+    Wall,
+    /// It flew its range and hit nothing.
+    Nothing,
+}
+
+/// How a missile came out, told to the one who loosed it as far as it sees where it ended (the
+/// `force_outcomes` law; docs/COMBAT_MIND.md §3.1): an `own` experience in the words a blow
+/// gets ("You finished: bowshot → a wolf. struck a wolf: hit for 14"), or that it flew out of
+/// sight. `victim` is whom it reached (0 for a wall or nothing). Whoever made it is told, a mind
+/// or a person playing the character (whose line also gets its `act_outcome` row), in the same
+/// words; never anyone else. Instinct-only creatures are not.
+pub fn missile_told(ctx: &ReducerContext, owner: u32, skill: &str, victim: u32, how: Far, at: (f32, f32), now: u64) {
+    if !common::laws(ctx).force_outcomes {
+        return;
+    }
+    let Some(c) = ctx.db.character().id().find(owner) else { return };
+    if !c.alive || !(c.ai || crate::presence::played(ctx, owner)) {
+        return;
+    }
+    let Some(eye) = ctx.db.body().id().find(owner) else { return };
+    let (w, map) = (common::world(ctx), common::map(ctx));
+    let seen = crate::perception::sees(ctx, owner, &eye, at, &w, &map, now);
+    let label = if victim != 0 { common::label_for(ctx, &c, victim) } else { String::new() };
+    let (ok, what, why) = match (seen, how) {
+        (false, _) => (false, skill.to_string(), "it flew out of your sight".to_string()),
+        (true, Far::Struck(dealt)) => (true, format!("{skill} → {label}"), format!("struck {label}: {dealt}")),
+        (true, Far::Killed) => (true, format!("{skill} → {label}"), format!("struck {label} and killed them")),
+        (true, Far::Dodged) => (false, format!("{skill} → {label}"), format!("{label} dodged it")),
+        (true, Far::Refused(why)) => (false, format!("{skill} → {label}"), format!("it reached {label}, but {why}")),
+        (true, Far::Wall) => (false, skill.to_string(), "it struck a wall".to_string()),
+        (true, Far::Nothing) => (false, skill.to_string(), "it hit nothing".to_string()),
+    };
+    let text = if ok { format!("You finished: {what}. {why}") } else { format!("You failed to {what}: {why}") };
+    if let Some(line) = percept(ctx, &c, now, "own", owner, victim, at, text, if ok { 0.08 } else { 0.2 }) {
+        let code = if ok { living_rules::outcome::act::DONE } else { living_rules::outcome::act::FAILED };
+        let t = crate::outcomes::Told { kind: living_rules::outcome::kind::OWN, ok, skill, code, what: &what, why: if ok { "" } else { &why }, other: victim };
+        crate::outcomes::write(ctx, owner, line, now, &t, false);
     }
 }
 
@@ -1088,7 +1150,7 @@ pub fn refused(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &
     }
     routine_outcome(ctx, id, revision, node, false, why, now);
     let code = refusal();
-    tell(ctx, id, false, skill, what, why, now, code);
+    tell(ctx, id, false, skill, what, why, now, code, false);
     true
 }
 

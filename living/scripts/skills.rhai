@@ -10,6 +10,11 @@ fn laws() {
         gestation_days: 1.0, bond_window_s: 120.0,
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
         repeat_failure_s: 120.0,
+        // Whoever strikes, shoots or casts is told how it came out (an `own` experience): a blow's
+        // hit, guard or kill when it lands, a missile's when it strikes, is dodged, hits a wall or
+        // nothing, or flies out of the shooter's sight (docs/COMBAT_MIND.md §3.1). Off: only
+        // notable skills (attack) and failures are told, as before 2026-11-11.
+        force_outcomes: true,
         road_speed: 1.4,
         // Steering: where bodies slow down and cut corners, and how often they look again
         // (how each creature turns and keeps apart is its `motion` law).
@@ -1633,15 +1638,37 @@ fn making_grid(skill, text) {
     if products_of(skill).len() > 0 { u.source = "products"; u.detail = "made_how"; }
     u
 }
-fn make_ui() { making_grid("make", "Making {item}") }
-fn craft_ui() { making_grid("craft", "Making {item}") }
-fn cook_ui() { making_grid("cook", "Cooking {item}") }
-fn smoke_ui() { making_grid("smoke", "Smoking {item}") }
+// Each way of making with its icon (a wheel's section, a list's row).
+fn making_look(u, icon) { u.look = #{ icon: icon }; u }
+fn make_ui() { making_look(making_grid("make", "Making {item}"), "hammer") }
+fn craft_ui() { making_look(making_grid("craft", "Making {item}"), "hammer") }
+fn cook_ui() { making_look(making_grid("cook", "Cooking {item}"), "pot") }
+fn smoke_ui() { making_look(making_grid("smoke", "Smoking {item}"), "pot") }
 // A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
 // theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
 fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
 fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+// The person wheel's acts look as they read (an icon each; what they do is their spec and check).
+fn give_ui() { #{ look: #{ icon: "give" } } }
+fn offer_ui() { #{ look: #{ icon: "trade" } } }
+fn teach_ui() { #{ look: #{ icon: "book" } } }
+fn appraise_ui() { #{ label: "Look over", look: #{ icon: "eye" } } }
+fn wave_ui() { #{ look: #{ icon: "wave" } } }
+fn nod_ui() { #{ look: #{ icon: "wave" } } }
+// A workplace's wheel (Cullet's fuel fires): feeding (making's look is with its grid above).
+fn feed_ui() { #{ look: #{ icon: "fire" } } }
+// Which places get a wheel, and its layout (docs/INTERFACE.md §8): hold F on a target, move
+// toward a section, let go. A person's social acts are pinned, so a direction learned once keeps
+// working (a refused one greys in place); anything else the rules offer is behind More. Any
+// other creature or thing gets a wheel of what the rules allow now, nothing pinned. Oneself (C)
+// keeps its list. Presentation only: what a skill may do is its spec, shape and check.
+fn menus() { [
+    #{ on: "person", kinds: ["person"], choose: "wheel", fill: false,
+       wheel: #{ n: "talk", ne: "give", e: "offer", se: "teach", s: "more", sw: "window", w: "appraise", nw: "wave" } },
+    #{ on: "person", choose: "wheel" },
+    #{ on: "thing", choose: "wheel" },
+] }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }
@@ -2752,7 +2779,7 @@ fn remains_law() {
 
 fn combat_law() {
     #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "combat_pool", "lunge", "max_hp", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
-       about: `fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). Every move takes stamina (fire and healing hands take mana instead), so a fight is paced by breath: about ten blows or five dodges from fresh, then a few seconds to get it back. While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
+       about: `fights are fast. A person's attack winds up for {windup:attack} before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). Every move takes stamina (fire and healing hands take mana instead), so a fight is paced by breath: about ten blows or five dodges from fresh, then a few seconds to get it back. While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
 }
 
 fn force_law() {
@@ -2821,6 +2848,7 @@ fn laws_about(l) {
         speech_audience: if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
+        force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,

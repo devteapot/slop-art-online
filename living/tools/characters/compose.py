@@ -111,7 +111,20 @@ def bind_world(j, binary, skin):
     return {n: np.linalg.inv(ibm[k]) for k, n in enumerate(skin["joints"])}
 
 
-def attach_hair(j, binary, style_path, out_path, colour=None, far=False):
+def attach(j, binary, style_path, out_path, colour=None, far=False, fitted=True):
+    """Put a shared style file's meshes on a type's (or a person's) file, as the client attaches
+    them: hair and head pieces with the type's `hair_fit` (`fitted`), body pieces without. Every
+    mesh node of the file whose name does or does not start `Far` (by `far`) comes across. Returns
+    the names of the bones added."""
+    h, _ = read_glb(style_path)
+    added = []
+    for n in h["nodes"]:
+        if "mesh" in n and (n.get("name") or "").startswith("Far") == far:
+            added += attach_hair(j, binary, style_path, out_path, colour if (n["name"] in ("Hair", "FarHair") or not fitted or len([m for m in h["nodes"] if "mesh" in m and (m.get("name") or "").startswith("Far") == far]) == 1) else None, far, node=n["name"], fitted=fitted)
+    return added
+
+
+def attach_hair(j, binary, style_path, out_path, colour=None, far=False, node=None, fitted=True):
     """Put a shared hair style on a type's (or a person's) file, as the client attaches one.
 
     - The style's hair mesh comes in as it is, in the standard head's space, with its weights.
@@ -125,10 +138,15 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False):
     Returns the names of the bones added."""
     h, hbin = read_glb(style_path)
     names = {n.get("name"): i for i, n in enumerate(j["nodes"])}
-    fit = np.array((j["scenes"][j.get("scene", 0)].get("extras") or {}).get("hair_fit", {}).get("matrix", np.eye(4).T.ravel().tolist())).reshape(4, 4).T
+    fit = np.array((j["scenes"][j.get("scene", 0)].get("extras") or {}).get("hair_fit", {}).get("matrix", np.eye(4).T.ravel().tolist())).reshape(4, 4).T if fitted else np.eye(4)
     tskin = j["skins"][0]
     tworld = bind_world(j, binary, tskin)
-    hnode = next(n for n in h["nodes"] if n.get("name") == ("FarHair" if far else "Hair") and "mesh" in n)
+    # Bones an earlier attach added (a style's spring chains) are at rest where their nodes put them.
+    up = {c: i for i, n in enumerate(j["nodes"]) for c in n.get("children", [])}
+    for i, n in enumerate(j["nodes"]):
+        if i not in tworld and "matrix" in n and up.get(i) in tworld:
+            tworld[i] = tworld[up[i]] @ np.array(n["matrix"]).reshape(4, 4).T
+    hnode = next(n for n in h["nodes"] if n.get("name") == (node or ("FarHair" if far else "Hair")) and "mesh" in n)
     hskin = h["skins"][hnode["skin"]]
     hworld = bind_world(h, hbin, hskin)
     hparent = {c: i for i, n in enumerate(h["nodes"]) for c in n.get("children", [])}
@@ -161,7 +179,9 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False):
         values, (ct, typ, norm) = read_accessor(h, hbin, acc)
         if scale is not None:
             v = np.array(values, dtype=np.float64).reshape(-1, 4)
-            v[:, :3] *= np.array(scale)
+            unit = {5126: 1.0, 5123: 65535.0, 5121: 255.0}[ct]
+            mean = np.maximum(v[:, :3].mean(axis=0) / unit, 1e-4)
+            v[:, :3] = np.clip(v[:, :3] * (np.array(scale) / mean), 0.0, unit)
             values = array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()])
         return append_accessor(j, binary, values, ct, typ, norm, None)
 
@@ -209,7 +229,7 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False):
     else:
         j["scenes"][j.get("scene", 0)]["nodes"].append(len(j["nodes"]) - 1)
     # The spring chains, in the file's VRM block, as the generator lists them (the game swings them).
-    hv = ((h.get("extensions") or {}).get("VRM") or {}).get("secondaryAnimation") or {}
+    hv = (((h.get("extensions") or {}).get("VRM") or {}).get("secondaryAnimation") or {}) if hnode["name"] == "Hair" else {}
     tv = ((j.get("extensions") or {}).get("VRM") or {}).setdefault("secondaryAnimation", {})
     hname = [n.get("name") for n in h["nodes"]]
     if hv.get("boneGroups") and not far:
@@ -289,6 +309,66 @@ def compare(a, b, want=KINDS[0][1]):
     return dict(vertices=len(pa), rms_mm=float(np.sqrt((d ** 2).mean()) * 1000), p95_mm=float(np.percentile(d, 95) * 1000), most_mm=float(d.max() * 1000))
 
 
+BELLY_REACH = 0.108  # metres `J_Fit_Belly` moves forward for a belly of 1 (person.py)
+TYPE_SKIN = (0.905, 0.745, 0.650)  # the skin a type's own file is painted in (person_params.from_type: tone 0.25), sRGB
+
+
+def tint_skin(j, binary, hexc):
+    """Stand in for the client's tag colour on skin: the type's skin shades, moved from the tone
+    its file is painted in to this person's."""
+    to = np.array(linear(hexc)) / np.array(linear("#" + "".join(f"{round(c * 255):02x}" for c in TYPE_SKIN)))
+    for mesh in j["meshes"]:
+        for p in mesh["primitives"]:
+            if j["materials"][p["material"]]["name"].endswith("_SKIN") and "COLOR_0" in p["attributes"]:
+                values, (ct, typ, norm) = read_accessor(j, binary, p["attributes"]["COLOR_0"])
+                n = 4 if typ == "VEC4" else 3
+                v = np.array(values, dtype=np.float64).reshape(-1, n)
+                unit = {5126: 1.0, 5123: 65535.0, 5121: 255.0}[ct]
+                v[:, :3] = np.clip(v[:, :3] * to, 0.0, unit)
+                p["attributes"]["COLOR_0"] = append_accessor(j, binary, array(COMPONENT[ct], v.ravel().tolist() if ct == 5126 else [int(round(x)) for x in v.ravel()]), ct, typ, norm, None)
+
+
+def tint_eyes(j, binary, hexc):
+    """Stand in for the client's tag colour on the iris: the iris material's own picture, redrawn
+    in shades of this person's eye colour (each pixel's lightness against the picture's mean,
+    times the colour), as the client moves a picture's mean colour to the recipe's."""
+    import io
+
+    from PIL import Image
+
+    target = np.array([int(hexc.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)])
+    done = set()
+    for mesh in j["meshes"]:
+        for p in mesh["primitives"]:
+            m = j["materials"][p["material"]]
+            tex = (m.get("pbrMetallicRoughness") or {}).get("baseColorTexture")
+            if "EyeIris" not in m["name"] or tex is None:
+                continue
+            image = j["images"][j["textures"][tex["index"]]["source"]]
+            if id(image) in done:
+                continue
+            done.add(id(image))
+            bv = j["bufferViews"][image["bufferView"]]
+            pic = np.array(Image.open(io.BytesIO(bytes(binary[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]]))).convert("RGB"), float) / 255
+            lum = pic @ np.array([0.3, 0.59, 0.11])
+            out = np.clip(target[None, None, :] * (lum / max(float(lum.mean()), 1e-3))[..., None], 0.0, 1.0)
+            # Keep what is nearly white or black as it is (the light in the eye, the pupil).
+            keep = ((pic.min(axis=2) > 0.85) | (pic.max(axis=2) < 0.12))[..., None]
+            out = np.where(keep, pic, out)
+            data = io.BytesIO()
+            Image.fromarray((out * 255 + 0.5).astype(np.uint8)).save(data, format="PNG")
+            while len(binary) % 4:
+                binary.append(0)
+            j["bufferViews"].append(dict(buffer=0, byteOffset=len(binary), byteLength=len(data.getvalue())))
+            binary.extend(data.getvalue())
+            image["bufferView"] = len(j["bufferViews"]) - 1
+
+
+def linear(hexc):
+    c = [int(hexc.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)]
+    return [((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("inp")
@@ -299,6 +379,12 @@ def main():
     ap.add_argument("--hair", help="a shared hair style's file (lookdev/styles/hair/<style>.glb) to attach, the client's way")
     ap.add_argument("--hair-colour", help="the hair's colour, `#rrggbb`, standing in for the client's mesh tag")
     ap.add_argument("--far-hair", action="store_true", help="attach the style's far mesh too (FarHair)")
+    ap.add_argument("--piece", action="append", default=[], metavar="FILE[=#rrggbb]", help="an outfit piece's file (lookdev/styles/outfit/<piece>.glb) to attach, with the colour its mean moves to; repeatable")
+    ap.add_argument("--head-piece", action="append", default=[], metavar="FILE[=#rrggbb]", help="a piece worn on the head (cap, kerchief): attached with the type's hair_fit; repeatable")
+    ap.add_argument("--overlay", action="append", default=[], metavar="FILE[=#rrggbb]", help="an overlay style's file (lookdev/styles/overlay/<type>/<name>.glb), built on this type's own face; repeatable")
+    ap.add_argument("--belly", type=float, default=0.0, help="how far a belly stands out (the person's line): moves J_Fit_Belly forward")
+    ap.add_argument("--person", help="a person's NAME.params.json: attach everything its `person` line names (type's file is INP) and pose its identity")
+    ap.add_argument("--styles", default="living/game/assets/lookdev/styles", help="where the style files are, for --person")
     ap.add_argument("--drop", default="", help="mesh nodes to leave out, by the start of their names, comma-separated (`Far`: today's client draws a file's far meshes over its near ones)")
     a = ap.parse_args()
     if a.compare:
@@ -312,15 +398,32 @@ def main():
     if a.identity:
         values.update(json.loads(a.identity) if a.identity.strip().startswith("{") else {k: float(v) for k, v in (x.split("=") for x in a.identity.split(",") if x)})
     j, binary = read_glb(a.inp)
+    if a.person:
+        line = json.load(open(a.person))["person"]
+        cols = line.get("colors", {})
+        a.hair = a.hair or os.path.join(a.styles, "hair", line["styles"]["hair"] + ".glb")
+        a.hair_colour = a.hair_colour or cols.get("hair")
+        for name in line["styles"]["outfit"]:
+            item = os.path.join(a.styles, "outfit", name + ".glb") + ("=" + cols["outfit"][name] if name in cols.get("outfit", {}) else "")
+            (a.head_piece if name in ("cap", "kerchief") else a.piece).append(item)
+        values.update(line.get("identity") or {})
+        for name in line["styles"].get("overlays", []):
+            tone = (cols.get("beard") or cols.get("hair")) if name.startswith("beard") or name == "stubble" else cols.get("skin")
+            a.overlay.append(os.path.join(a.styles, "overlay", line["type"], name + ".glb") + ("=" + tone if tone else ""))
+        a.belly = a.belly or float(line.get("belly", 0.0))
+        if cols.get("skin"):
+            tint_skin(j, binary, cols["skin"])
+        if cols.get("eyes"):
+            tint_eyes(j, binary, cols["eyes"])
     if a.hair:
-        colour = None
-        if a.hair_colour:
-            c = [int(a.hair_colour.lstrip("#")[k : k + 2], 16) / 255 for k in (0, 2, 4)]
-            colour = [((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c]
-        added = attach_hair(j, binary, a.hair, a.out, colour)
+        colour = linear(a.hair_colour) if a.hair_colour else None
+        added = attach(j, binary, a.hair, a.out, colour)
         if a.far_hair:
-            attach_hair(j, binary, a.hair, a.out, colour, far=True)
+            attach(j, binary, a.hair, a.out, colour, far=True)
         print(f"compose: {a.out}: hair from {a.hair}: {len(added)} bones added under the cranium")
+    for spec_, fitted in [(x, False) for x in a.piece] + [(x, True) for x in a.head_piece] + [(x, False) for x in a.overlay]:
+        path, _, hexc = spec_.partition("=")
+        attach(j, binary, path, a.out, linear(hexc) if hexc else None, fitted=fitted)
     for start in [x for x in a.drop.split(",") if x]:
         gone = {i for i, n in enumerate(j["nodes"]) if "mesh" in n and (n.get("name") or "").startswith(start)}
         for n in j["nodes"]:
@@ -329,6 +432,11 @@ def main():
         for sc in j["scenes"]:
             sc["nodes"] = [c for c in sc["nodes"] if c not in gone]
     moved = compose(j, values)
+    if a.belly:
+        # The belly's bone, forward (the file's -Z) by the belly times its reach, from its rest.
+        n = next(x for x in j["nodes"] if x.get("name") == "J_Fit_Belly")
+        rest = n.setdefault("extras", {}).setdefault("rest_translation", n.get("translation", [0.0, 0.0, 0.0]))
+        n["translation"] = [rest[0], rest[1], rest[2] - a.belly * BELLY_REACH]
     write_glb(a.out, j, binary)
     print(f"compose: {a.out}: {len(values)} values, {len(moved)} bones moved from rest")
 

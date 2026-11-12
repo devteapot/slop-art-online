@@ -34,6 +34,37 @@ Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trial
 - Full suite `minds-arrive-172139` (load about 15, beside the paid greeting batch): roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink-llm, dealings and parked pass. Consolidation is its known XFAIL. `animals` failed at its known gap ("nothing new: no call", the 2026-11-11 lives-2 entry). `rethink` timed out waiting 40 s for its first gate, and passed alone (`minds-arrive-rt-175042`).
 - Trials free tier: `af1`, the `arrive` trial × five variants (`arrive-control`, `-notice`, `-known`, `-wonder`, `-all`), one replicate each, 14 minutes, `--fake --fake-script living/trials/fake/latency.json`. All five ran to their duration with every `record` file written. `arrive_report.py af1` reads them (docs/TRIALS.md, "Arrivals"). The first attempt hit the trial service's file-descriptor limit (about 120 kept databases); the coordinator cleaned up and raised the limit.
 
+
+## 2026-11-12 the timing of one's own known fighting moves (mind-skill-timings, Spark)
+
+Branch `mind-skill-timings` at c6af2ff6, the trial service (port 3320), fake model. Scoped maintain-verification-skill pass on `features/deliberation.md`: its citations brought to the current lines (`perceive.rs:270`, `mind.rs:1286`, `:1812`, authority `mind.rs:360`, `:409`, `brain.rs:517`), the `timings` case and `LIVING_SKILL_TIMINGS` mapped. Live: `minds-time3-234118` `roundtrip`, `acts`, `timings` pass, `minds-time3-off-234118-roundtrip` passes with the switch off; `reasons` passed in `minds-time3-233156`, and its later attempts stopped in the suite's own `cargo test -p living-mind` on two timing tests of `llm.rs` (`a_failed_poll_keeps_the_batch…`, `unreachable_provider_holds_calls`; the file is main's) at a load average of 76 on 20 cores.
+
+## 2026-11-12 fix-takeover: the in-flight reply is the takeover's own deliberation (Fedora host)
+
+Branch `fix-takeover` (from main `8c5b8530`), own container `fixtake-stdb` (2.14.1, port 3334, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 9–53 from other work. Evidence under the worktree's `.local/living/verify/minds-fixtake-*`.
+
+- **The driver was wrong, not the authority.**
+  - At the second takeover, `presence::take_over` asks for a deliberation, then reinstalls the held graph. The reinstall (`set_graph`, source `mind`) sets `deliberated_ms`, so a `think` node stays quiet for 45 s (`brain.rs`, the settle), and `think_min_s` (20 s for people) declines a new ask once the mind has answered.
+  - The case then installed a `set_behavior` think "verify in flight" and waited for a deliberate request containing "in flight". That text only reached a request when the test graph landed before the mind sent the takeover's prompt: the prompt carries the current graph, while the think itself never fired.
+  - In `minds-fixdeal-m1` the driver's polls lagged (4 s between the last presence read and the brain read). The prompt left at 22:57:06.8, before the test graph. The mind installed its reply at :14, replacing the test graph, and nothing more was asked.
+- **Reproduced** 2 of 2 (`minds-fixtake-repro1`, `-repro2`). Each ran the old driver from a scratch copy with a 3 s sleep before its `set_behavior`. Both failures match m1: "timed out after 40s waiting for deliberation in flight", no deliberate request with the marker. The old driver passed without the lag (`minds-fixtake-base1`).
+- **Fix, in the case:**
+  - It no longer asks. It waits for the second takeover's own deliberate request in the fake log (after the requests counted at handback), checks the request carries the takeover's reason ("A quiet moment to take stock"), then returns.
+  - The fake model delays the first deliberate reply 8 s, as before, and later ones 25 s. The reply is still in flight however slowly the driver polls.
+  - The case also checks the return happened before the reply was due.
+  - With a scratch 10 s sleep before the return, the case passes (`minds-fixtake-lag10`).
+- **Results:**
+  - `takeover` passed 15 of 15 in a row (`minds-fixtake-t01`–`t15`), run beside a full suite on the same server. The return came between −0.5 and +0.7 s of the request (action-log seconds), except t12 at +6.2 s, which is close to the old 8 s reply delay.
+  - Full suite `minds-fixtake-full-003429`, exit 1. Passing: `takeover`, roundtrip, acts, conversation, prune, reject, only, reconnect, lod, sight, fov, drop, resident, night, jev, rethink, rethink-llm, dealings, parked, death-names, frame, reasons, speech, health-seen, alongside and greet. `consolidation` is its known XFAIL. `animals` hit its known gap ("a request answered by instinct"). `answers` failed (below).
+  - `answers` failed in the same suite on the ask race recipes-1 fixed in `dealings`. The mind accepted and declined 4 s after start, so the case found no pending deliberation, asked again and waited 65 s for a row that had come and gone. The case now asks only while the terms are open and takes the pending request or the terms declined. It passed 5 of 5 (`minds-fixtake-a1`–`a5`): a1–a2 found the request pending, and a3–a5 went through the ask-or-declined wait.
+- `just living-check` passes (366 s).
+- Full suite on the final code, `minds-fixtake-full2-013217`, exit 1. `takeover` and `answers` pass, and so do the other cases except these three:
+  - `consolidation` is its known XFAIL.
+  - `animals` hit its known gap.
+  - `greet` failed in its first arm (it passed in suite 1). The shared `Run.request` helper installed its `set_behavior` think for Datha at 01:23:35, while the mind's start-up deliberation for Datha was under way. Its reply installed at 01:23:48, which replaced the test graph and set the deliberation clock, so nothing was asked within the 65 s wait. This is the same race class as `takeover`, in the helper about a dozen cases share. It is not fixed here.
+- `paid_safety.py` passes (`minds-duel-safety-fixtake`).
+- **Not changed:** if the `takeover_s` law were set below `think_min_s`, the takeover's own ask could be declined (`hand_back` leaves `deliberated_ms` as the minds left it). With the default 30 s against 20 s it cannot happen, and no case sets it.
+
 ## 2026-11-12 fix-dealings: `dealings` passes again on main (dev-box)
 
 Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 4–72 from other work.

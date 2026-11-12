@@ -21,7 +21,7 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run')
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run', 'timings')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
@@ -218,6 +218,28 @@ def breath_case(run):
             'scene_stamina': scene['you']['stamina'], 'experiences': len(act)}
 
 
+# A line of `prompts::own_timings` ("- strike: winds up 350 ms …") or its heading.
+OWN_TIMING = re.compile(r'- [a-z_]+: (winds up \d|a dash at once|raised at once|takes effect at once)|How long the fighting moves you know take')
+
+
+def timings_told(run, actor, sent, fire_bolt):
+    """A mind is told the timing of the fighting moves its character knows, in its own prompt,
+    and never of one it does not know (LIVING_SKILL_TIMINGS; docs/COMBAT_MIND.md §3.7): bowshot
+    needs no technique, fire bolt needs fire_bolt. The shared system prompt states no timings."""
+    knows = {k['technique'] for k in run.private(f'SELECT * FROM know_how WHERE actor = {actor}', 'know-how')}
+    assert ('fire_bolt' in knows) == fire_bolt, knows
+    if os.environ.get('LIVING_SKILL_TIMINGS', '').strip().lower() in ('0', 'off', 'false'):
+        # The switch off: no timing line anywhere in what was sent.
+        assert sent and not any(OWN_TIMING.search(json.dumps(e['body'])) for e in sent), 'timings sent with LIVING_SKILL_TIMINGS off'
+        return
+    users = ['\n'.join(m.get('content', '') for m in e['body'].get('messages', []) if m.get('role') == 'user') for e in sent]
+    assert users and all('- bowshot: winds up 300 ms' in u and '- strike: winds up 350 ms' in u for u in users), users[0][-3000:]
+    assert all(('- firebolt: winds up 450 ms' in u) == fire_bolt for u in users), [u.count('firebolt') for u in users]
+    # The shared system prompt carries no one's own timings. (The world rules' COMBAT law says
+    # "A person's attack winds up for 0.65 s": the world's rules, from the cards' timing, not anyone's own line.)
+    assert not any(OWN_TIMING.search(system_text(e['body'])) for e in sent), 'timings in the shared system prompt'
+
+
 def run_case(run, case):
     if case in ('animals', 'night', 'jev'):
         return {'animals': animals_case, 'night': night_case, 'jev': jev_case}[case](run)
@@ -261,6 +283,9 @@ def run_case(run, case):
                                    'say': None}, 'deliberate': basic_reply()}}
     if case == 'roundtrip':
         script['replies']['think']['say'] = 'verify minds round trip speech'
+    if case == 'timings':
+        # The positive control for roundtrip's timing check: this mind knows fire_bolt.
+        run.admin('grant_know_how', actor, 'fire_bolt')
     if case == 'acts':
         run.harness('player', 'join', 'MindsReceiver')
         other = run.sql("SELECT id FROM character WHERE name = 'MindsReceiver'", 'receiver')[0]['id']
@@ -355,8 +380,14 @@ def run_case(run, case):
         # laws-2): the sections and the numbers the script's laws give, the same in every prompt.
         told = [json.dumps(e, ensure_ascii=False).replace('\\n', '\n') for e in sent]
         for part in ('SENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m',
-                     'MOVING: How creatures move', 'FOOD: berries 12, fish 16', 'SETTLEMENTS: walls block the way'):
+                     'MOVING: How creatures move', 'FOOD: berries 12, fish 16', 'SETTLEMENTS: walls block the way',
+                     # The attack's windup from the skill cards' timing (`{windup:attack}`), not a hand-written range.
+                     "COMBAT: fights are fast. A person's attack winds up for 0.65 s before it lands"):
             assert all(part in m for m in told), part
+        timings_told(run, actor, sent, fire_bolt=False)
+    elif case == 'timings':
+        sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+        timings_told(run, actor, sent, fire_bolt=True)
     elif case == 'acts':
         run.wait(lambda: any(i['item'] == 'stone' and i['qty'] == 1 for i in run.sql(
             f'SELECT * FROM inventory WHERE owner = {other}', 'receiver-inventory-after')), 'give effect')
@@ -556,8 +587,10 @@ def takeover_case(run):
     me = run.sql("SELECT id FROM character WHERE name = 'MindsAway'", 'player')[0]['id']
     script = {'replies': {'think': {'thought': 'Alone now, I wait.', 'intend': ['wait'], 'say': None},
                           'deliberate': basic_reply()},
-              # Replies take 8 s, so one can still be in flight when the person returns.
-              'rules': [{'purpose': 'deliberate', 'delay_s': 8, 'times': -1}]}
+              # The first takeover's reply takes 8 s; the second takeover's takes 25 s, so it is
+              # still in flight when the person returns, however slowly the driver polls.
+              'rules': [{'purpose': 'deliberate', 'delay_s': 8, 'times': 1},
+                        {'purpose': 'deliberate', 'delay_s': 25, 'times': -1}]}
     models = model(run, script)
     run.start(models, [me])
     # The join was an HTTP call: its connection is closed, so a takeover is pending.
@@ -584,17 +617,25 @@ def takeover_case(run):
     assert not run.private(f'SELECT * FROM act_queue WHERE actor = {me}', 'acts-back')
     kept = run.private(f'SELECT * FROM experience WHERE observer = {me}', 'experiences-back')
     assert {e['id'] for e in lived} <= {e['id'] for e in kept}, 'experiences lived under the minds must stay'
-    # Away again: the held graph is installed again; then a reply in flight is refused on return.
+    deliberations = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    asked_before = len(deliberations())
+    # Away again: the held graph is installed again, and the takeover asks for a fresh
+    # deliberation (presence.rs take_over: request, then reinstall). That deliberation is the
+    # reply in flight, refused on return. The case does not ask again itself: reinstalling the
+    # minds' graph counts as having just thought, so the rules ask nothing more for 45 s (the
+    # think node's settle) or `think_min_s`; a `set_behavior` think here only showed up when it
+    # landed before the mind sent the takeover's prompt (fix-takeover).
     run.wait(lambda: [p for p in run.private(f'SELECT * FROM presence WHERE id = {me}', 'presence-taken-2') if p['ai']], 'second takeover', 50)
     again = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-taken-2')[0]
     assert again['source'] == 'mind' and again['plan'] == 'verify minds wait' and again['graph'] == installed, again
-    run.admin('set_behavior', me, json.dumps({'think': 'I finished my plan. verify in flight'}))
-    run.wait(lambda: any(e['purpose'] == 'deliberate' for e in shared.rows(run.directory / 'fake-requests.jsonl')
-                         if 'in flight' in json.dumps(e)), 'deliberation in flight', 40)
+    in_flight = run.wait(lambda: deliberations()[asked_before:], 'the takeover deliberation in flight', 40)[0]
+    assert 'A quiet moment to take stock' in json.dumps(in_flight), in_flight['body_excerpt']
     run.harness('player', 'move', '0', '1')
-    run.wait(lambda: 'not your character' in run.log(), 'in-flight reply refused', 30)
+    assert time.time() * 1000 < in_flight['at_ms'] + 25_000, 'the person returned after the reply was due'
+    run.wait(lambda: 'not your character' in run.log(), 'in-flight reply refused', 50)
     final = run.sql(f'SELECT * FROM brain WHERE id = {me}', 'brain-final')[0]
     assert final['source'] == 'human', final
+    assert final['revision'] > again['revision'], (again, final)
     return {'status': 'pass', 'takeover_after_s': (taken['control_ms'] - pending['changed_ms']) / 1000,
             'held_graph': 'kept and reinstalled', 'in_flight': 'refused'}
 
@@ -675,9 +716,14 @@ def answers_case(run):
     models = model(run, script)
     wood0 = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {actor}', 'inventory-before')}.get('wood', 0)
     run.start(models, [actor])
-    if not run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'asked'):
-        run.request(actor, 'answers')
-    declined = run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-declined') if r['id'] == rec['id'] and r['status'] == 'declined'], 'proposal declined', 120)
+    # As in `dealings` (recipes-1): the mind may answer before the first read, its deliberation
+    # row gone once it replies. Ask again only while the terms are still open, and take either
+    # the pending request or the terms declined as the answer (fix-takeover).
+    declined_now = lambda label: [r for r in run.private('SELECT * FROM record', label) if r['id'] == rec['id'] and r['status'] == 'declined']
+    if not run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'asked') and not declined_now('records-before-request'):
+        run.admin('set_behavior', actor, json.dumps({'think': 'I finished my plan. verify answers'}))
+        run.wait(lambda: run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', 'pending-answers') or declined_now('records-while-asking'), 'authority deliberation or the terms declined', 65)
+    declined =run.wait(lambda: [r for r in run.private('SELECT * FROM record', 'records-declined') if r['id'] == rec['id'] and r['status'] == 'declined'], 'proposal declined', 120)
     inv = {r['item']: r['qty'] for r in run.sql(f'SELECT * FROM inventory WHERE owner = {actor}', 'inventory-after')}
     assert inv.get('wood', 0) == wood0 + 2, ('the named trade was taken', wood0, inv)
     assert not [o for o in run.private('SELECT * FROM trade_offer', 'trade-offer-after') if o['id'] == offer['id']], 'the accepted offer is gone'

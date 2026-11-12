@@ -476,6 +476,7 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
                 ctx.db.missile().id().delete(m.id);
                 show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at, dir: (m.dx, m.dy), ..Default::default() });
                 outcome_of(ctx, m.use_id, "struck a wall", now);
+                act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Wall, at, now);
             }
             _ => {
                 m.left -= step;
@@ -483,6 +484,7 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
                     ctx.db.missile().id().delete(m.id);
                     show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at: b, dir: (m.dx, m.dy), ..Default::default() });
                     outcome_of(ctx, m.use_id, "hit nothing", now);
+                    act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Nothing, b, now);
                 } else {
                     m.x = b.0;
                     m.y = b.1;
@@ -515,6 +517,7 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
         show(ctx, now, Seen { kind: seen::DODGED, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
         show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: 0, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
         outcome_of(ctx, m.use_id, "dodged", now);
+        act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Dodged, at, now);
         return;
     }
     let effects = match act::missile_effects(ctx, m.owner, &m.skill, victim, now) {
@@ -522,6 +525,7 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
         Err(why) => {
             show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
             outcome_of(ctx, m.use_id, &why, now);
+            act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Refused(&why), at, now);
             return;
         }
     };
@@ -535,6 +539,8 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
         }
     }
     outcome_of(ctx, m.use_id, &format!("struck {}: {dealt}", common::display(ctx, victim)), now);
+    let killed = ctx.db.character().id().find(victim).is_some_and(|v| !v.alive);
+    act::missile_told(ctx, m.owner, &m.skill, victim, if killed { act::Far::Killed } else if dealt.is_empty() { act::Far::Struck("it did no harm") } else { act::Far::Struck(&dealt) }, at, now);
 }
 
 /// A death: everyone who could see it is told, and the one who died learns who saw it.
@@ -577,6 +583,7 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
     for (skill, shape) in shapes.iter() {
         let c = living_rules::script::SkillCtx { actor: living_rules::script::ActorFacts { kind: "person".into(), stamina: 100.0, focus: 100.0, ..Default::default() }, skill: skill.to_string(), qty: shape.hold_ms, ..Default::default() };
         let missile = if shape.missile { sc.missile(skill, &c).ok() } else { None };
+        let timing = sc.timing(skill).unwrap_or_default();
         let reach = match (missile, shape.aim) {
             (Some(m), _) => m.range,
             (None, Aim::Dash) => sc.num_of(&format!("{skill}_dist"), "person", 0.0) as f32,
@@ -586,9 +593,9 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
             skill: skill.to_string(),
             slot: shapes.bar().iter().position(|b| b == skill).map_or(NOT_ON_BAR, |i| i as u8),
             cost: sc.num_of("combat_cost", skill, 0.0) as f32,
-            windup_ms: if matches!(shape.aim, Aim::Dash | Aim::Facing) { 0 } else { sc.duration_ms(skill, &c).unwrap_or(0) as u32 },
-            recover_ms: sc.num_of("combat_recover", skill, 0.0) as u32,
-            cooldown_ms: sc.num_of("combat_cooldown", skill, 0.0) as u32,
+            windup_ms: timing.windup_ms,
+            recover_ms: timing.recover_ms,
+            cooldown_ms: timing.cooldown_ms,
             reach,
             code: shape.code,
             aim: shape.aim.as_str().into(),
