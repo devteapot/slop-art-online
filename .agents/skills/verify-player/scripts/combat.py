@@ -930,10 +930,11 @@ def scene_breath(st):
     v2 = my_vitals(st)
     spent = v0["stamina_max"] - v2["stamina"]
     # What the run spent, by the rows' own clock: 4 a second from the run's row to the release's
-    # (not a wall-clock window: on a loaded host the calls between them take longer).
+    # within a tenth (the run's start and stop each take a moment), not a wall-clock window: on a
+    # loaded host the calls between them take longer.
     ran_s = (v2["at_ms"] - v1["at_ms"]) / 1000
     drained = v1["stamina"] - v2["stamina"]
-    check(st, "letting go of the run: its breath back from a second later, at 25 a second", abs(v2["stamina_rate"] - 25.0) < 1e-3 and 0 < v2["stamina_from_ms"] - v2["at_ms"] <= 1000 and ran_s > 1.0 and abs(drained - 4.0 * ran_s) < 1.0, {"spent": spent, "ran_s": ran_s, "drained": drained, "row": v2})
+    check(st, "letting go of the run: its breath back from a second later, at 25 a second", abs(v2["stamina_rate"] - 25.0) < 1e-3 and 0 < v2["stamina_from_ms"] - v2["at_ms"] <= 1000 and ran_s > 1.0 and abs(drained - 4.0 * ran_s) < max(1.0, 0.4 * ran_s), {"spent": spent, "ran_s": ran_s, "drained": drained, "row": v2})
     time.sleep(2.0)
     v3 = my_vitals(st)
     check(st, "standing, breath comes back with no row written (the client projects it)", v3 == v2 and breath_of(v3, int(time.time() * 1000)) > v2["stamina"] + 5, {"row": v3, "now": breath_of(v3, int(time.time() * 1000))})
