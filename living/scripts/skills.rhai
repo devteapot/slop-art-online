@@ -256,7 +256,7 @@ fn call_speech() {
     #{ label: "Call out", order: 2,
        about: `Call out over a distance: everyone within ${short(hearing_of_people() * call_carry())} m hears you, and animals too (a shout can startle deer or draw wolves). Short lines (80 characters), at most one every ${short(call_gap_s())} s.`,
        to: "optional", words: #{ hearing: call_carry() }, animals: "a person shouting",
-       said: "You called out", said_to: "You called out to {b}", heard: "{a} calls out from about {d} m", heard_to: "{a} calls out to {b} from about {d} m", heard_to_you: "{a} calls out to you from about {d} m",
+       said: "You called out", said_to: "You called out to {b}", heard: "{a} calls out{how} from about {d} m", heard_to: "{a} calls out to {b} from about {d} m", heard_to_you: "{a} calls out to you from about {d} m",
        gap_s: call_gap_s(), max_chars: 80 }
 }
 
