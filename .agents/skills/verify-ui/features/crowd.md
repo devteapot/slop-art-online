@@ -8,7 +8,7 @@ What a town of generated people costs in the client and whether the client draws
 - `far`: a file built with `LOD=both` holds `Far*` mesh nodes on the same skeleton. Beyond `LIVING_GAME_FAR` metres (default 10, for a 1.75 m person, scaled by height) the far meshes show and the full ones hide. A far person comes back to the full model once it is `LIVING_GAME_FAR_BAND` (default 1.5 m) nearer.
 - `identity`: a recipe's `identity` values move a type's identity bones (`characters/identity.rs`) when the scene comes in; `LIVING_GAME_PERF=…` `RUST_LOG=living_game::characters=debug` logs each bone's transform (`identity: <recipe> <bone> t … r … s …`) to compare with compose.py's nodes.
 - `rebuild`: a character's scene spawned again is fitted, shaped, dressed and bound again (`characters::on_ready`), and a file is read once (`characters::SceneOf`).
-- `compose`: with `LIVING_GAME_COMPOSE=1` a recipe with a person line (`person`, the generator's `<name>.params.json` line) is composed from its type's file and the style files it names (`characters/compose.rs`): each file loaded once, its meshes and one toon material a file shared by everyone wearing it; hair and head pieces with the type's `hair_fit`; a hair style's spring bones under `J_Id_Cranium`; outfit pieces coloured by their own name in `colors.outfit`. Off (the default) the same recipe is its whole `base` file. The far switch, outlines, identity bones, springs and shared clips work on both.
+- `compose`: with `LIVING_GAME_COMPOSE=1` a recipe with a person line (`person`, the generator's `<name>.params.json` line) is composed from its type's file and the style files it names (`characters/compose.rs`): each file loaded once, its meshes and one toon material a file shared by everyone wearing it; hair and head pieces with the type's `hair_fit`; a hair style's spring bones under `J_Id_Cranium`; outfit pieces coloured by their own name in `colors.outfit`; overlays (`styles.overlays`: beards, stubble, lines, freckles, from `lookdev/styles/overlay/<type>/`) with the type's own bind matrices, blended over the face, shut and opened with its blink and mouth (`lookdev::FaceMorphs`, `rig`'s `faces`), a beard tinted by `colors.beard`; the line's `belly` moves `J_Fit_Belly` forward by `belly` × 0.108 m. Off (the default) the same recipe is its whole `base` file. The far switch, outlines, identity bones, springs and shared clips work on both.
 - `clips`: `own-*` files (and `lookdev/types/`) take their clips from `lookdev/anim/own-clips.glb` when it is there. A file without clips of its own is given its player and bone targets (`anim::bind`). `LIVING_GAME_SHARED_CLIPS=0` plays each file's own clips.
 
 ## How to get to it
@@ -22,7 +22,7 @@ python3 living/tools/characters/share.py clips living/game/assets/lookdev/lod/an
 ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man      # lookdev/anim/own-clips.glb
 ```
 
-For `compose`, the type and style files and town people whose params carry a person line (the generator since char-4's outfits). On macOS pass the types to `gen_types.sh` (its `mapfile` needs bash 4); `CLIPS=none` skips each person's own clips, which the shared clip file replaces:
+For `compose`, the type and style files (hair, outfit and overlay) and town people whose params carry a person line (the generator since char-4's overlays). On macOS pass the types to `gen_types.sh` (its `mapfile` needs bash 4); `CLIPS=none` skips each person's own clips, which the shared clip file replaces:
 
 ```bash
 living/tools/blender/gen_types.sh $(python3 -c "import json; print(' '.join(json.load(open('living/tools/characters/types.json'))['types']))")
@@ -72,11 +72,13 @@ python3 living/tools/characters/compose_check.py <binary> .local/living/<run>/fi
 
 | Read | Pass |
 | --- | --- |
-| `fidelity.json` `control_file_units.most_mm` | 0.000 for every person and shot (79 bones): the composing rule. In metres the control differs by the height fit only (`scale_ratio` within 0.3%) |
-| `composed` | differs by the line's `build` (the girth a whole file built into its meshes): a few mm, about 2 cm at the shoulders of the heaviest (Joss Tarn, build 1.069 → 1.177) |
+| `fidelity.json` `control_file_units.most_mm` | 0.000 for every person and shot (79 bones, `J_Fit_Belly` apart): the composing rule. In metres the control differs by the height fit only (`scale_ratio` within 0.3%) |
+| `control_file_units.belly_mm` | `belly` × 108 mm × the spine's girth scale (Joss Tarn: 0.217 → 25.05 mm); 0 without a belly |
+| `composed` | differs by the line's `build` and `shoulders` (the girth a whole file built into its meshes): 1.6 to 10 mm, most on the heaviest (Joss Tarn) |
+| `composed/view.log` `rigged a VRoid model (… with N more meshes on its expressions)` | N = the overlays the person wears (Ode Pontil's beard and lines: 2) |
 | `sec_bones` | a hair style with spring chains brings the same count as the whole file (Tamsin's braid: 5 and 5) |
 | `composed/view.log` | `compose: … wears …: N meshes` once a person; no `could not be put on`, `did not load` or `joint … is neither` |
-| `stills/<name>.jpg` | hair, cap, kerchief and every piece on; no floating or missing piece; the known gaps (no beard or stubble, the type's iris colour, no lip or blush, the apron coloured with its smock) |
+| `stills/<name>.jpg` | hair, cap, kerchief, apron, beard, stubble and every piece on; the iris in the line's `eyes`; no floating or missing piece; the known limits (an overlay's one strength, no blush, far heads clean-shaven, a smock's sleeve bands taking its hue) |
 
 Cost, the town's 64 as they are, both modes interleaved (`town` is each person's whole file, `composed` the same recipes with the switch on):
 
@@ -88,9 +90,9 @@ python3 $C … --runs x:town,x:composed,x:composed,x:town --repeat 3 --game-env 
 | Line | Pass |
 | --- | --- |
 | `people ready: 65 characters (64 composed) …` | 64 composed with the switch on, 0 off |
-| `people perf: … N mesh entities shown of M` | at the game camera (all far): 406 of 1,050 composed, 210 of 658 whole |
+| `people perf: … N mesh entities shown of M` | at the game camera (all far): 422 of 1,211 composed, 210 of 722 whole (overlays included) |
 | `views: … [people …, P mesh-material pairs]` | the draws the people make once instanced: 71 composed against 210 whole at the game camera |
-| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 60 composed against 10 whole at the game camera. `LIVING_GAME_PERF=sharestyles` (colours wrong, measurement only) shows what sharing style materials would give |
+| `batches: preprocessing culling (multi-draw); opaque S sets …` | one set a material: 60 composed against 10 whole at the game camera, 97 against 84 on the full model. `LIVING_GAME_PERF=sharestyles` (colours wrong, measurement only) shows what sharing style materials would give |
 | `assets: N meshes M MiB (… morph targets …)` and `batches: … textures … MiB` | composed far below whole: mesh data and morph targets, and GPU textures |
 
 ## Gotchas

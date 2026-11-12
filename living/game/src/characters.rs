@@ -97,6 +97,9 @@ pub struct Colors {
     pub bottom: Option<String>,
     pub shoes: Option<String>,
     pub accent: Option<String>,
+    /// A composed person's beard and stubble (an overlay's `…Overlay_00_HAIR`); the hair's
+    /// without one.
+    pub beard: Option<String>,
     /// Outfit pieces' colours by slot (a missing one keeps the piece's own).
     pub outfit: BTreeMap<String, String>,
 }
@@ -284,6 +287,7 @@ impl Recipe {
             bottom: outfit(&mut r),
             shoes: outfit(&mut r),
             accent: outfit(&mut r),
+            beard: None,
             outfit: BTreeMap::new(),
         };
         let base = r.pick(&b.bases).cloned().unwrap_or_else(|| "lookdev/vroid-Vivi.glb".into());
@@ -647,6 +651,12 @@ struct ColliderDef {
     spheres: Vec<(Vec3, f32)>,
 }
 
+/// A node's rest translation in a character file (its own record of it, else its node's).
+pub fn rest_of(file: &str, node: &str) -> Vec3 {
+    let info = file_info(file);
+    info.rest_extras.get(node).or_else(|| info.rest.get(node)).copied().unwrap_or(Vec3::ZERO)
+}
+
 fn file_info(file: &str) -> Arc<FileInfo> {
     static CACHE: OnceLock<Mutex<HashMap<String, Arc<FileInfo>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
@@ -802,11 +812,13 @@ pub fn shape(
                     // bone's frame, its children don't.
                     let h = commands.spawn((Name::new("scale"), Transform::from_scale(v), ChildOf(bone))).id();
                     helpers.insert(bone, h);
-                    // Children's offsets move with the bone's length and width.
+                    // Children's offsets move with the bone's length and width. A composed person's
+                    // belly bone stands forward of its rest (compose.rs) and keeps that, widened.
                     for c in children.get(bone).into_iter().flatten() {
                         if let (Ok(cn), Ok(mut tf)) = (names.get(*c), bones.get_mut(*c)) {
                             if cn.as_str() != "J_Bip_C_Hips" {
-                                tf.translation = info.rest.get(cn.as_str()).copied().unwrap_or(tf.translation) * v;
+                                let belly = if cn.as_str() == "J_Fit_Belly" { compose::belly_offset(&ch.recipe, styled.is_some()) } else { Vec3::ZERO };
+                                tf.translation = info.rest.get(cn.as_str()).map_or(tf.translation, |r| *r + belly) * v;
                             }
                         }
                     }
@@ -893,7 +905,9 @@ pub struct Recolored;
 /// What a VRoid material is, by name.
 fn slot<'a>(material: &str, c: &'a Colors) -> Option<&'a String> {
     let m = material;
-    if m.contains("_HAIR") || m.contains("FaceBrow") {
+    if m.contains("Overlay") && m.contains("_HAIR") {
+        c.beard.as_ref().or(c.hair.as_ref())
+    } else if m.contains("_HAIR") || m.contains("FaceBrow") {
         c.hair.as_ref()
     } else if m.contains("_SKIN") {
         c.skin.as_ref()

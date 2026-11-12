@@ -15,7 +15,8 @@ The people's both-files and `<name>.params.json` (with its `person` line) are un
 lookdev/lod/ (town.py --lod both), the types and styles under lookdev/types/ and
 lookdev/styles/. Writes OUT/<arm>/ (the view's shots, joints.jsonl, view.log), OUT/fidelity.json
 (per person and shot: the largest and root-mean-square distance between the arms' bones, `J_Sec*`
-spring bones left out, in metres and in file units, and the ratio of their height scales) and
+spring bones and `J_Fit_Belly` left out, in metres and in file units, the ratio of their height
+scales, and how far the belly's bone stands from the whole file's, `belly_mm`) and
 OUT/stills/<name>.jpg (whole, composed, control side by side). It rewrites recipes.json for the
 runs and restores it after: never run it beside crowd.py. SHOTS overrides the shots, SIZE the
 frame. The control in file units is the composing rule itself: 0.000 mm when it holds.
@@ -28,7 +29,7 @@ LOOK = os.path.join(REPO, "living/game/assets/lookdev")
 SHOTS = os.environ.get("SHOTS", "idle@1.0/front,idle@1.0/0:6:0.32:0.92,walk@0.25/side,walk@0.5/three-quarter")
 
 binary, out = sys.argv[1], os.path.abspath(sys.argv[2])
-people = sys.argv[3:] or ["tamsin-hollin", "fenn-brandt", "joss-tarn", "vessa-pontil", "wick-marl"]
+people = sys.argv[3:] or ["tamsin-hollin", "fenn-brandt", "joss-tarn", "ode-pontil", "vessa-pontil", "wick-marl"]
 os.makedirs(out, exist_ok=True)
 original = open(RECIPES).read()
 book = json.loads(original)
@@ -76,7 +77,9 @@ def load(arm):
 
 def diff(a, b, units=False):
     common = sorted(set(a["joints"]) & set(b["joints"]))
-    common = [c for c in common if not c.startswith("J_Sec")]
+    # Spring bones swing; the belly's bone stands forward on a composed person by design (its
+    # whole file carries the belly in its meshes): both are reported apart.
+    common = [c for c in common if not c.startswith("J_Sec") and c != "J_Fit_Belly"]
     ds = []
     for c in common:
         pa, pb = a["joints"][c], b["joints"][c]
@@ -85,7 +88,13 @@ def diff(a, b, units=False):
         ds.append((math.dist(pa, pb) * 1000, c))
     ds.sort()
     rms = math.sqrt(sum(d * d for d, _ in ds) / max(len(ds), 1))
-    return dict(joints=len(ds), rms_mm=round(rms, 3), most_mm=round(ds[-1][0], 3) if ds else None, worst=ds[-1][1] if ds else None, scale_ratio=round(b["scale"] / a["scale"], 5))
+    belly = None
+    if "J_Fit_Belly" in a["joints"] and "J_Fit_Belly" in b["joints"]:
+        pa, pb = a["joints"]["J_Fit_Belly"], b["joints"]["J_Fit_Belly"]
+        if units:
+            pa, pb = [x / a["scale"] for x in pa], [x / b["scale"] for x in pb]
+        belly = round(math.dist(pa, pb) * 1000, 2)
+    return dict(joints=len(ds), rms_mm=round(rms, 3), most_mm=round(ds[-1][0], 3) if ds else None, worst=ds[-1][1] if ds else None, scale_ratio=round(b["scale"] / a["scale"], 5), belly_mm=belly)
 
 
 whole, composed, control = load("whole"), load("composed"), load("control")

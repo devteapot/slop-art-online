@@ -35,9 +35,18 @@
 //! `colors.outfit` (an [`super::outfit::Piece`] whose slot is the piece). A hair style's tie keeps
 //! its own colour, as compose.py leaves it.
 //!
-//! **Not here yet** (char-4's next step): beards, stubble and lines (a line's `beard` is read and
-//! not drawn), a separate apron (part of its smock, so one colour moves both), the eyes' colour
-//! by tag (the type's iris shows), bellies and strong chests (shapes the bones cannot give).
+//! **Overlays** (`styles.overlays`: beards, stubble, lines, freckles, docs/CHARACTERS.md "Overlay
+//! styles") are files of the person's own type (`lookdev/styles/overlay/<type>/<name>.glb`), thin
+//! blended layers over its face: they attach as body pieces do (the type's own inverse bind
+//! matrices, no `hair_fit`), carry the face's blink and open mouth (`lookdev::FaceMorphs`, driven
+//! with the face's), shade as the face's skin (with the shadow map beside their file) or as hair,
+//! and cast no shadow. A beard takes `colors.beard`, lines and freckles the skin's.
+//!
+//! **The belly** (`belly`, 0 to about 0.35) moves `J_Fit_Belly` forward by `belly` × 0.108 m (the
+//! file's -Z) from its rest when the scene comes in, and `shape` keeps it under the spine's girth.
+//!
+//! **Not here** (the files' limits): one strength an overlay; the belly a forward bulge only; far
+//! models carry no overlays, so a bearded man's far head is clean-shaven.
 
 use super::{Colors, Proportions, Recipe};
 use crate::lookdev::{asset_root, glb_json, Converted};
@@ -86,6 +95,22 @@ pub struct Person {
     pub colors: Colors,
     #[serde(default)]
     pub styles: Styles,
+    /// How far the belly stands out (0 to about 0.35): `J_Fit_Belly` moves forward by this ×
+    /// [`BELLY_M`].
+    #[serde(default)]
+    pub belly: f32,
+}
+
+/// How far `J_Fit_Belly` moves forward for a `belly` of 1 (metres in the file, along -Z).
+pub const BELLY_M: f32 = 0.108;
+
+/// Where a composed person's `J_Fit_Belly` stands from its rest (file units): forward by the
+/// line's `belly`. Nothing for a whole file, which carries its belly in its meshes.
+pub fn belly_offset(recipe: &Recipe, styled: bool) -> Vec3 {
+    match recipe.person.as_ref().filter(|_| styled) {
+        Some(p) => Vec3::new(0.0, 0.0, -p.belly * BELLY_M),
+        None => Vec3::ZERO,
+    }
 }
 
 /// The style files a person wears.
@@ -96,8 +121,8 @@ pub struct Styles {
     pub hair: Option<String>,
     /// `lookdev/styles/outfit/<piece>.glb`, each.
     pub outfit: Vec<String>,
-    /// Read, not drawn: beard styles are not files yet.
-    pub beard: Option<String>,
+    /// `lookdev/styles/overlay/<type>/<name>.glb`, each: beards, stubble, lines, freckles.
+    pub overlays: Vec<String>,
 }
 
 /// One style file a composed character wears.
@@ -108,6 +133,8 @@ pub struct Wear {
     pub slot: Option<String>,
     /// Attached with the type's `hair_fit` (hair and head pieces).
     pub fitted: bool,
+    /// A layer over the face (an overlay): no shadow.
+    pub overlay: bool,
     handle: Handle<Gltf>,
 }
 
@@ -150,19 +177,18 @@ pub fn prepare(recipe: &Recipe, assets: &AssetServer) -> (Recipe, Option<Styled>
         warn_once(format!("compose: no type file {base}; {} is drawn from {}", recipe.name, recipe.base));
         return (recipe.clone(), None);
     }
-    if p.styles.beard.as_deref().is_some_and(|b| b != "none") {
-        warn_once(format!("compose: beards are not style files yet; {}'s {} is not drawn", recipe.name, p.styles.beard.as_deref().unwrap_or_default()));
-    }
     let mut worn = Vec::new();
-    let hair = p.styles.hair.iter().map(|h| (format!("{STYLES}/hair/{h}.glb"), None, true));
-    let outfit = p.styles.outfit.iter().map(|o| (format!("{STYLES}/outfit/{o}.glb"), Some(o.clone()), HEAD_PIECES.contains(&o.as_str())));
-    for (file, slot, fitted) in hair.chain(outfit) {
+    let hair = p.styles.hair.iter().map(|h| (format!("{STYLES}/hair/{h}.glb"), None, true, false));
+    let outfit = p.styles.outfit.iter().map(|o| (format!("{STYLES}/outfit/{o}.glb"), Some(o.clone()), HEAD_PIECES.contains(&o.as_str()), false));
+    // An overlay is drawn on its own type's face: no fit, the type's own bind matrices.
+    let overlays = p.styles.overlays.iter().map(|o| (format!("{STYLES}/overlay/{}/{o}.glb", p.kind), None, false, true));
+    for (file, slot, fitted, overlay) in hair.chain(outfit).chain(overlays) {
         if !exists(&file) {
             warn_once(format!("compose: no style file {file} ({})", recipe.name));
             continue;
         }
         let handle = super::kept(assets, &file);
-        worn.push(Wear { file, slot, fitted, handle });
+        worn.push(Wear { file, slot, fitted, overlay, handle });
     }
     let composed = Recipe {
         name: recipe.name.clone(),
@@ -232,6 +258,9 @@ struct PlanMesh {
     bindposes: Handle<SkinnedMeshInverseBindposes>,
     /// Mesh, material name, toon material.
     prims: Vec<(Handle<Mesh>, String, Handle<Toon>)>,
+    /// Its morph targets' count and, when they are the face's, the blink's and the open mouth's
+    /// indices (an overlay's).
+    morphs: Option<(usize, Option<crate::lookdev::FaceMorphs>)>,
 }
 
 /// Plans by (type file, style file, fitted); toon materials by style file and material name.
@@ -247,6 +276,7 @@ pub struct Plans {
 
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct Composer<'w> {
+    assets: Res<'w, AssetServer>,
     gltfs: Res<'w, Assets<Gltf>>,
     nodes: Res<'w, Assets<GltfNode>>,
     skins: Res<'w, Assets<GltfSkin>>,
@@ -283,8 +313,19 @@ impl Composer<'_> {
     fn toon(&mut self, file: &str, name: &str, material: Option<&Handle<GltfMaterial>>) -> Handle<Toon> {
         let gm = material.and_then(|m| self.gmaterials.get(m)).cloned().unwrap_or_default();
         let base = bevy::pbr::gltf::standard_material_from_gltf_material(&gm);
-        // As `lookdev::convert` gives a character's meshes: hair shades as hair; clothes plain.
-        let kind = if name.contains("_HAIR") { Kind::Hair } else { Kind::Plain };
+        // As `lookdev::convert` gives a character's meshes by material name: hair as hair; a
+        // face's skin (an overlay's lines and freckles) as a face, with the shadow map beside its
+        // file, else as skin; eyes and lines as face parts; clothes plain.
+        let skin = name.ends_with("_SKIN") || name.contains("Skin");
+        let map = format!("{}.face.png", file.trim_end_matches(".glb"));
+        let face = (skin && name.contains("Face") && exists(&map)).then(|| self.assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(map));
+        let kind = match () {
+            _ if name.contains("_HAIR") => Kind::Hair,
+            _ if face.is_some() => Kind::Face,
+            _ if skin => Kind::Skin,
+            _ if name.contains("_FACE") || name.contains("_EYE") => Kind::FacePart,
+            _ => Kind::Plain,
+        };
         // One material a file and material name: recolouring keeps each material's mean colour,
         // and every piece's differs. `LIVING_GAME_PERF=sharestyles` shares one material between
         // files whose materials are the same (measurement only: every piece then recolours
@@ -293,7 +334,7 @@ impl Composer<'_> {
         if let Some(h) = self.plans.toons.get(&key) {
             return h.clone();
         }
-        let h = self.toons.add(self.style.kind(base, kind, None));
+        let h = self.toons.add(self.style.kind(base, kind, face));
         self.plans.toons.insert(key, h.clone());
         h
     }
@@ -373,7 +414,12 @@ impl Composer<'_> {
                 }
                 prims.push((p.mesh.clone(), mname, toon));
             }
-            meshes.push(PlanMesh { node: node.name.clone(), joints, bindposes, prims });
+            let morphs = morph_targets(&wear.file, &node.name).map(|t| {
+                let find = |suffix: &str| t.iter().position(|n| n.ends_with(suffix));
+                let face = find("Fcl_EYE_Close").zip(find("Fcl_MTH_A")).map(|(blink, mouth)| crate::lookdev::FaceMorphs { blink, mouth });
+                (t.len(), face)
+            });
+            meshes.push(PlanMesh { node: node.name.clone(), joints, bindposes, prims, morphs });
         }
         debug!("compose: {} on {type_file}: {} meshes, {} bones of its own", wear.file, meshes.len(), bones.len());
         Some(Plan { bones, meshes })
@@ -397,6 +443,24 @@ pub fn on_ready(
     let Ok((ch, model, styled, scene)) = chars.get(e) else { return };
     let bones: HashMap<String, Entity> = children.iter_descendants(e).filter(|d| !worn.contains(*d)).filter_map(|d| names.get(d).ok().map(|n| (n.as_str().to_string(), d))).collect();
     attach(&mut composer, &mut commands, e, &model.file, &scene.0, styled, &bones, &ch.recipe.name);
+    // The belly: J_Fit_Belly forward from its rest (`shape` keeps it under the spine's girth).
+    let belly = belly_offset(&ch.recipe, true);
+    if belly != Vec3::ZERO {
+        if let Some(&b) = bones.get("J_Fit_Belly") {
+            let rest = super::rest_of(&model.file, "J_Fit_Belly");
+            commands.entity(b).insert(Transform::from_translation(rest + belly));
+        }
+    }
+}
+
+/// A node's morph target names in a style file (its mesh's extras, else its first primitive's).
+fn morph_targets(file: &str, node: &str) -> Option<Vec<String>> {
+    let j = glb_json(file)?;
+    let mesh = j["nodes"].as_array()?.iter().find(|n| n["name"] == node)?["mesh"].as_u64()? as usize;
+    let m = &j["meshes"][mesh];
+    let names = if m["extras"]["targetNames"].is_array() { &m["extras"]["targetNames"] } else { &m["primitives"][0]["extras"]["targetNames"] };
+    let names: Vec<String> = names.as_array()?.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+    (!names.is_empty()).then_some(names)
 }
 
 /// Put a composed character's style files on its scene's bones ([`on_ready`]). `bones` are the
@@ -425,6 +489,9 @@ pub fn attach(c: &mut Composer, commands: &mut Commands, e: Entity, type_file: &
         }
         for m in &plan.meshes {
             let joints: Vec<Entity> = m.joints.iter().map(|j| bones.get(j).copied().unwrap_or(hips)).collect();
+            // A mesh with morph targets: the first primitive holds the weights, every one reads
+            // them (as Bevy's loader does with the node).
+            let mut weights: Option<Entity> = None;
             for (mesh, material, toon) in &m.prims {
                 let mut ec = commands.spawn((
                     Name::new(m.node.clone()),
@@ -443,6 +510,22 @@ pub fn attach(c: &mut Composer, commands: &mut Commands, e: Entity, type_file: &
                 if let Some(slot) = &wear.slot {
                     ec.insert(super::outfit::Piece { slot: slot.clone(), material: material.clone() });
                 }
+                if wear.overlay {
+                    ec.insert((bevy::light::NotShadowCaster, crate::lookdev::FacePart));
+                }
+                if let Some((count, face)) = m.morphs {
+                    let id = ec.id();
+                    let owner = *weights.get_or_insert(id);
+                    if owner == id {
+                        if let Ok(w) = bevy::mesh::morph::MorphWeights::new(vec![0.0; count], Some(mesh.clone())) {
+                            ec.insert(w);
+                        }
+                        if let Some(f) = face {
+                            ec.insert(f);
+                        }
+                    }
+                    ec.insert(bevy::mesh::morph::MeshMorphWeights::Reference(owner));
+                }
                 n += 1;
             }
         }
@@ -459,13 +542,15 @@ mod tests {
     fn a_person_line_reads_as_the_generator_writes_it() {
         let line = r##"{"type": "adult-f-a", "height": 1.62, "proportions": {"head": 1.0, "shoulders": 0.895, "build": 0.973},
             "identity": {"jaw_width": -0.292}, "colors": {"skin": "#e6b89c", "hair": "#4a2a1a", "outfit": {"smock_58-f": "#5d7f9a"}},
-            "styles": {"hair": "bob", "outfit": ["smock_58-f", "jersey_smock-f", "trousers-f", "boots-f"], "beard": "none"}}"##;
+            "styles": {"hair": "bob", "outfit": ["smock_58-f", "apron_58-f", "jersey_smock-f", "trousers-f", "boots-f"], "overlays": ["lines", "freckles"]}, "belly": 0.12}"##;
         let p: Person = serde_json::from_str(line).unwrap();
         assert_eq!(p.kind, "adult-f-a");
         assert_eq!(p.proportions.build, 0.973);
         assert_eq!(p.proportions.legs, 1.0);
         assert_eq!(p.colors.outfit.get("smock_58-f").map(String::as_str), Some("#5d7f9a"));
-        assert_eq!(p.styles.outfit.len(), 4);
+        assert_eq!(p.styles.outfit.len(), 5);
+        assert_eq!(p.styles.overlays, ["lines", "freckles"]);
+        assert_eq!(p.belly, 0.12);
         assert_eq!(p.styles.hair.as_deref(), Some("bob"));
     }
 
