@@ -4,7 +4,8 @@
 # - lookdev/styles/hair/<style>.glb: a hair style, alone, built once on the standard head
 #   (person_params.STYLE_HEAD): the `Hair` mesh, its tie in cloth where it has one, and on the same
 #   skeleton the far mesh `FarHair`; spring chains under J_Id_Cranium; neutral shades for the
-#   client's tag. `<style>.cap.glb` is the style as worn under a cap.
+#   client's tag. `<style>.2` and `.3` are other cuts of the style (another length, parting and
+#   fringe); `<style>.cap.glb` is the style as worn under a cap.
 # - lookdev/styles/outfit/<piece>.glb: an outfit piece, alone, built once at the standard build:
 #   the `Cloth` mesh and its far mesh `FarCloth`, skinned to the J_Bip_* bones every person has.
 #   Body pieces come as `-m` and `-f`; `cap` and `kerchief` sit on the standard head.
@@ -26,7 +27,7 @@ mkdir -p "$root/hair" "$root/outfit" "$root/overlay"
 names() {
   python3 -c "
 import sys; sys.path.insert(0, 'living/tools/blender'); sys.path.insert(0, 'living/tools/characters'); import person_params as p
-hair = ['hair/' + s for s in p.STYLES] + ['hair/' + s + '.cap' for s in p.CAPPED]
+hair = ['hair/' + s + ('' if c == 1 else '.' + str(c)) for s in p.STYLES for c in range(1, (1 if s == 'kerchief' else p.CUTS) + 1)] + ['hair/' + s + '.cap' for s in p.CAPPED]
 outfit = ['outfit/' + n + f for n in p.PIECES for f in ('-m', '-f')] + ['outfit/' + n for n in p.HEAD_PIECES]
 import face_types
 types = face_types.load()['types']
@@ -51,6 +52,7 @@ one() {
     args=(--variant "style:$n" --parts hair)
   elif [ "$kind" = overlay ]; then
     t=${n%%/*}; o=${n#*/}; lod=near
+    case "$o" in beard_*) lod=both ;; esac  # a beard has a far mesh too, for the far head
     mkdir -p "$root/overlay/$t"
     args=(--variant "overlay:$t:$o" --parts overlay --overlay "$o" --morphs client)
   else

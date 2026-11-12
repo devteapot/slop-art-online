@@ -382,6 +382,8 @@ def main():
     ap.add_argument("--piece", action="append", default=[], metavar="FILE[=#rrggbb]", help="an outfit piece's file (lookdev/styles/outfit/<piece>.glb) to attach, with the colour its mean moves to; repeatable")
     ap.add_argument("--head-piece", action="append", default=[], metavar="FILE[=#rrggbb]", help="a piece worn on the head (cap, kerchief): attached with the type's hair_fit; repeatable")
     ap.add_argument("--overlay", action="append", default=[], metavar="FILE[=#rrggbb]", help="an overlay style's file (lookdev/styles/overlay/<type>/<name>.glb), built on this type's own face; repeatable")
+    ap.add_argument("--hair-toward", type=float, metavar="YAW", help="turn every hair normal toward the asset view's camera at this yaw (degrees): a stand-in for a client without the rim light on hair, for one view")
+    ap.add_argument("--far-overlay", action="append", default=[], metavar="FILE[=#rrggbb]", help="an overlay style's far mesh (a beard's `FarOverlay`), for the far head")
     ap.add_argument("--belly", type=float, default=0.0, help="how far a belly stands out (the person's line): moves J_Fit_Belly forward")
     ap.add_argument("--person", help="a person's NAME.params.json: attach everything its `person` line names (type's file is INP) and pose its identity")
     ap.add_argument("--styles", default="living/game/assets/lookdev/styles", help="where the style files are, for --person")
@@ -424,6 +426,9 @@ def main():
     for spec_, fitted in [(x, False) for x in a.piece] + [(x, True) for x in a.head_piece] + [(x, False) for x in a.overlay]:
         path, _, hexc = spec_.partition("=")
         attach(j, binary, path, a.out, linear(hexc) if hexc else None, fitted=fitted)
+    for spec_ in a.far_overlay:
+        path, _, hexc = spec_.partition("=")
+        attach(j, binary, path, a.out, linear(hexc) if hexc else None, far=True, fitted=False)
     for start in [x for x in a.drop.split(",") if x]:
         gone = {i for i, n in enumerate(j["nodes"]) if "mesh" in n and (n.get("name") or "").startswith(start)}
         for n in j["nodes"]:
@@ -431,6 +436,14 @@ def main():
                 n["children"] = [c for c in n["children"] if c not in gone]
         for sc in j["scenes"]:
             sc["nodes"] = [c for c in sc["nodes"] if c not in gone]
+    if a.hair_toward is not None:
+        # The view turns the model by the yaw; seen from the file, its camera is at (sin, 0, -cos).
+        toward = [math.sin(math.radians(a.hair_toward)), 0.0, -math.cos(math.radians(a.hair_toward))]
+        for mesh in j["meshes"]:
+            for p in mesh["primitives"]:
+                if j["materials"][p["material"]]["name"].endswith("_HAIR"):
+                    n = j["accessors"][p["attributes"]["POSITION"]]["count"]
+                    p["attributes"]["NORMAL"] = append_accessor(j, binary, array("f", toward * n), 5126, "VEC3", False, 34962)
     moved = compose(j, values)
     if a.belly:
         # The belly's bone, forward (the file's -Z) by the belly times its reach, from its rest.
