@@ -21,7 +21,7 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 CASES = ('roundtrip', 'acts', 'conversation', 'consolidation', 'prune', 'reject', 'only', 'reconnect', 'lod',
          'takeover', 'sight', 'fov', 'drop', 'resident', 'animals', 'night', 'jev', 'rethink', 'rethink-llm', 'dealings', 'answers', 'parked',
-         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run', 'timings', 'queued',
+         'death-names', 'frame', 'reasons', 'speech', 'health-seen', 'alongside', 'greet', 'run', 'timings', 'queued', 'doing',
          'intents')
 # How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
 PLAYER_FRAME_HEAD = 'You are an AI playing the person described under # Who you are'
@@ -390,6 +390,8 @@ def run_case(run, case):
         return sight_case(run)
     if case == 'fov':
         return fov_case(run)
+    if case == 'doing':
+        return doing_case(run)
     if case == 'drop':
         return drop_case(run)
     if case == 'death-names':
@@ -988,6 +990,46 @@ def fov_case(run):
     finally:
         run.admin('set_world_law', 'fov_on', 'false')
     return {'status': 'pass', 'heard': heard, 'facing': scene.get('you', {}).get('facing'), 'noticed': [x['text'] for x in told], 'habit_turned': turned[:1], 'facing_after': round(facing, 2)}
+def doing_case(run):
+    """What someone is visibly doing reaches a mind (docs/PERCEPTION.md, "What someone is visibly
+    doing"): a resident faces another 3 m east of it who holds up a guard (`block`, held). The
+    scene of its deliberation request lists the other with `visibly` {is: block, phase: holding}
+    (`at` only as `you`, when the other's guard happens to face it), the prompt the fake model is sent carries it, and the
+    graph grammar the mind is given documents the `doing` condition."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    e = wall_spots(run)['open']
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 3.0, e[1])
+    run.admin('set_behavior', eye, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': [e[0] + 4.0, e[1]]}}}, {'wait': 300}]}))
+    run.wait(lambda: [u for u in run.private('SELECT * FROM skill_use', 'uses-face') if u['actor'] == eye and u['skill'] == 'face' and u['outcome']], 'the eye turned to the other', 20)
+    run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'block', 'qty': 5000}}]}))
+    run.wait(lambda: [f for f in run.private(f'SELECT * FROM fighter WHERE id = {other}', 'fighter-other') if f['act'] != 0], 'the guard is up', 20)
+    script = {'replies': {'think': {'thought': 'They hold up a guard.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    pending = run.request(eye, 'doing')
+    scene = json.loads(pending[0]['scene']) if pending and 'scene' in pending[0] else {}
+    (run.directory / 'scene.json').write_text(json.dumps(scene, indent=2))
+    entry = next((c for c in scene.get('creatures', []) if c.get('id') == other), {})
+    seen = entry.get('visibly') or {}
+    # A guard is aimed at nobody: `at` is 'you' only when the other happens to face the eye.
+    assert {k: v for k, v in seen.items() if k != 'at'} == {'is': 'block', 'phase': 'holding'} and seen.get('at', 'you') == 'you', entry
+    run.start(models, [eye])
+    reqs = run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] in ('think', 'deliberate')] or None, 'prompts sent to the model', 60)
+    run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'deliberate'] or None, 'the deliberate prompt', 60)
+    reqs = [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] in ('think', 'deliberate')]
+    text = {x['purpose']: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', [])) for x in reqs}
+    (run.directory / 'sent-prompts.txt').write_text('\n\n=====\n\n'.join(f'[{k}]\n{v}' for k, v in text.items()))
+    sent = '\n'.join(text.values())
+    assert re.search(r'"visibly":\s*\{[^}]*"phase":\s*"holding"', sent) and '"is":"block"' in sent.replace(' ', ''), 'the model is sent what the other visibly does'
+    grammar = text.get('deliberate', '')
+    assert '{"doing": {"who": "person", "is": "strike", "phase": "winding up"' in grammar and 'about to release' in grammar, 'the grammar documents the doing condition'
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    return {'status': 'pass', 'visibly': entry.get('visibly'), 'entry': entry, 'purposes': sorted(text)}
+
+
 def death_names_case(run):
     """A community member killed in view of a mind's character, who shares the community and
     feels something for them: the experience the authority gives that mind names the dead, and

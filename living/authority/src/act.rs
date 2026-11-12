@@ -1541,7 +1541,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                         }
                     }
                 }
-                notes.push(damage(ctx, me, victim, amount, &a.skill, at, now));
+                notes.push(damage(ctx, me, victim, amount, &a.skill, None, at, now));
             }
             Effect::Give { item, qty } => {
                 let to = a.target.id as u32;
@@ -2110,7 +2110,7 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
             dodged += 1;
         } else if t.contains("missed: you were out of reach") {
             evaded += 1;
-        } else if t.contains("blocked your blow") {
+        } else if t.contains("blocked your blow") || t.contains("blocked your shot") {
             they_blocked += 1;
         } else if t.contains("dodged your attack") {
             they_dodged += 1;
@@ -2228,9 +2228,14 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
 }
 
 /// A blow lands, from `from` (the attacker, or behind a missile), and does its damage: at 0
-/// health the victim dies. `skill` is the move that dealt it. Returns what came of it, in
+/// health the victim dies. `skill` is the move that dealt it; `missile` is what a missile is
+/// called (`Scripts::missile_called`: "an arrow"), None for a blow. A missile is told as a
+/// shot, never as an attack: by the shooter as the victim (or a witness) perceives them when it
+/// sees them ("A stranger shot you with an arrow: hit for 7"), else by the missile alone ("An
+/// arrow struck you from somewhere you could not see: hit for 7"). Returns what came of it, in
 /// words.
-pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, skill: &str, from: (f32, f32), now: u64) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, skill: &str, missile: Option<&str>, from: (f32, f32), now: u64) -> String {
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return "they are gone".into() };
     let Some(vc) = ctx.db.character().id().find(victim) else { return "they are gone".into() };
     if !vc.alive {
@@ -2261,7 +2266,12 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         }
     }
     let code = sc.shapes().code(skill);
-    let shown = |kind: u8, amount: f32| crate::combat::show(ctx, now, crate::combat::Seen { kind, actor: attacker, target: victim, skill: code, at: at_v, dir: living_rules::combat::unit(at_v.0 - from.0, at_v.1 - from.1).unwrap_or((0.0, 0.0)), amount, ..Default::default() });
+    // A missile's shooter is told to the victim only when the victim sees them (`seen_shooter`);
+    // the combat feed hides it from whoever does not (`Seen::far_actor`).
+    let seen_shooter = missile.is_none() || crate::perception::sees_creature(ctx, victim, attacker, now);
+    let shown = |kind: u8, amount: f32| crate::combat::show(ctx, now, crate::combat::Seen { kind, actor: attacker, target: victim, skill: code, at: at_v, dir: living_rules::combat::unit(at_v.0 - from.0, at_v.1 - from.1).unwrap_or((0.0, 0.0)), amount, far_actor: missile.is_some(), ..Default::default() });
+    // The victim's words for whoever dealt it, and for the blow or the missile.
+    let who = |cap: bool| if cap { common::label_cap(ctx, &vc, attacker) } else { common::label_for(ctx, &vc, attacker) };
     common::count(|k| match defense {
         Aim::Dash => k.dodged += 1,
         Aim::Facing => k.blocked += 1,
@@ -2270,14 +2280,25 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     if defense == Aim::Dash {
         return dodged(ctx, attacker, &vc, skill, from, at_v, now);
     }
+    let subject = if seen_shooter { attacker } else { 0 };
     if turned {
-        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("Your guard faced the wrong way: {}'s blow came from the side.", common::label_for(ctx, &vc, attacker)), 0.5);
+        let text = match missile {
+            Some(m) => format!("Your guard faced the wrong way: {m} came from the side."),
+            None => format!("Your guard faced the wrong way: {}'s blow came from the side.", who(false)),
+        };
+        percept(ctx, &vc, now, "combat", subject, victim, at_v, text, 0.5);
     }
     let amount = if defense == Aim::Facing {
         if let Some(ac) = ctx.db.character().id().find(attacker) {
-            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} blocked your blow.", common::label_cap(ctx, &ac, victim)), 0.5);
+            let what = if missile.is_some() { "shot" } else { "blow" };
+            percept(ctx, &ac, now, "combat", victim, attacker, at_v, format!("{} blocked your {what}.", common::label_cap(ctx, &ac, victim)), 0.5);
         }
-        percept(ctx, &vc, now, "combat", attacker, victim, at_v, format!("You blocked {}'s blow.", common::label_for(ctx, &vc, attacker)), 0.5);
+        let text = match missile {
+            Some(m) if seen_shooter => format!("You blocked {m} {} shot at you.", who(false)),
+            Some(m) => format!("You blocked {m} from somewhere you could not see."),
+            None => format!("You blocked {}'s blow.", who(false)),
+        };
+        percept(ctx, &vc, now, "combat", subject, victim, at_v, text, 0.5);
         amount * takes
     } else {
         amount
@@ -2300,22 +2321,47 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     let vn = common::display(ctx, victim);
     let by_person = ctx.db.character().id().find(attacker).map_or(false, |c| c.kind == "person");
     common::wake(ctx, victim);
-    let label = common::label_cap(ctx, &vc, attacker);
-    let felt = if yielded { format!("{label} struck you though you had yielded ({amount:.0} damage)") } else { format!("{label} attacked you ({amount:.0} damage)") };
-    percept(ctx, &vc, now, "attacked", attacker, victim, at, felt, 1.0);
+    let label = who(true);
+    let got = if defense == Aim::Facing { format!("blocked, {amount:.0} got through") } else { format!("hit for {amount:.0}") };
+    let though = if yielded { " though you had yielded" } else { "" };
+    let felt = match missile {
+        Some(m) if seen_shooter => format!("{label} shot you with {m}{though}: {got}"),
+        Some(m) => format!("{} struck you from somewhere you could not see{though}: {got}", common::capitalized(m)),
+        None if yielded => format!("{label} struck you though you had yielded ({amount:.0} damage)"),
+        None => format!("{label} attacked you ({amount:.0} damage)"),
+    };
+    percept(ctx, &vc, now, "attacked", subject, victim, at, felt, 1.0);
+    // What a witness is told: a missile as a shot by the shooter it sees, or by the missile alone.
+    let shot = |seen: &str, unseen: &str| missile.map(|m| (seen.replace("{m}", m), unseen.replace("{M}", &common::capitalized(m)).replace("{m}", m)));
+    let pleading = match missile {
+        Some(_) if seen_shooter => format!("{label} is shooting at you"),
+        Some(_) => "Someone you cannot see is shooting at you".to_string(),
+        None => format!("{label} is attacking you"),
+    };
     if yielded && !struck_since_yield {
-        common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} struck {vn}, though {vn} had yielded"));
-        witnessed(ctx, now, at, "fight", attacker, victim, "{a} struck {b}, though {b} had yielded", 0.95, &[attacker, victim]);
+        let verb = if missile.is_some() { "shot" } else { "struck" };
+        common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} {verb} {vn}, though {vn} had yielded"));
+        match shot("{a} shot {b} with {m}, though {b} had yielded", "{M} struck {b}, though {b} had yielded") {
+            Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.95, &[attacker, victim]),
+            None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} struck {b}, though {b} had yielded", 0.95, &[attacker, victim]),
+        }
         if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you, though you yielded!"), now);
+            perceive::request_deliberation(ctx, victim, &format!("{pleading}, though you yielded!"), now);
         }
     } else if first_blow {
         if vc.kind == "person" || by_person {
-            common::chronicle(ctx, now, "attack", attacker, victim, at, format!("{an} attacked {vn}"));
+            let line = match missile {
+                Some(m) => format!("{an} shot {vn} with {m}"),
+                None => format!("{an} attacked {vn}"),
+            };
+            common::chronicle(ctx, now, "attack", attacker, victim, at, line);
         }
-        witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]);
+        match shot("{a} shot {b} with {m}", "{M} struck {b}") {
+            Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.7, &[attacker, victim]),
+            None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]),
+        }
         if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{label} is attacking you!"), now);
+            perceive::request_deliberation(ctx, victim, &format!("{pleading}!"), now);
         }
     } else if !dead {
         fight_report(ctx, victim, attacker, now);
@@ -2329,7 +2375,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         }
         // The death record names the killer as the victim knew them (`perceived_of`): "killed
         // by a stranger" unless the name was known. The chronicle above keeps the real names.
-        let by = common::label_for(ctx, &vc, attacker);
+        let by = match missile {
+            Some(m) if !seen_shooter => format!("{m} from someone unseen"),
+            _ => common::label_for(ctx, &vc, attacker),
+        };
         // The killer is told whom it killed as it perceives them (a name it knows, "a stranger",
         // or the far label), read while the body is still there: the same rule as every told line.
         let seen = ctx.db.character().id().find(attacker).map(|ac| common::label_for(ctx, &ac, victim)).unwrap_or_else(|| "them".into());

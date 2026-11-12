@@ -38,9 +38,16 @@ Usage:
   scene_gate.py settle --record JSON --main SHA   after a push: drop the red-on-main entries of
                   the cases that passed in that gate run (the pushed merge is now main)
 
+The red-on-main list is shared through git: the branch `red-on-main` (one file, red-on-main.json,
+never merged into main). Every command reads it after a fetch; every change is a commit pushed to
+it without force (retried after a fetch when another writer got there first). The local file is a
+cache, read when the fetch fails (the gate says so).
+
 Environment: LIVING_GATE_STDB_CONTAINER / LIVING_GATE_STDB_URL (default the Spark's trial server
-slop-trials-stdb on http://127.0.0.1:3320), LIVING_GATE_REDS (default ~/slop-mq/red-on-main.json
-when ~/slop-mq exists, else the state folder below), LIVING_GATE_MAIN_DIR (main's checkout for
+slop-trials-stdb on http://127.0.0.1:3320), LIVING_GATE_REDS (the list's local cache; default
+~/slop-mq/red-on-main.json when ~/slop-mq exists, else the state folder below),
+LIVING_GATE_REDS_REMOTE / _BRANCH (origin, red-on-main), LIVING_GATE_REDS_REPO (the repository that
+reaches it; default this file's), LIVING_GATE_REDS_GIT=0 (the cache alone, no git), LIVING_GATE_MAIN_DIR (main's checkout for
 the main check; its build folder is <dir>-target). State: ~/.local/state/slop-merge/scene-gate/.
 Exit: 0 passed, skipped, or failed only where main fails too; 1 a case failed on the branch
 only (or could not be judged on main); 2 usage or setup error (no server, a dirty main checkout).
@@ -167,23 +174,146 @@ def spec(case, skill=None):
     return None
 
 
-def mark_red(reds_path, case, main_sha, evidence):
+# The list lives in git, so every machine's gate shares it: the branch `red-on-main` (never merged
+# into main) holds one file, red-on-main.json. Reads fetch it; writes commit to it with plumbing
+# (no checkout, from any worktree) and push without force, fetching and retrying when another
+# writer got there first. The local file (--reds) is a cache: read when the fetch fails (saying so),
+# rewritten after every good read and write.
+REDS_REPO = os.environ.get("LIVING_GATE_REDS_REPO") or str(Path(__file__).resolve().parents[2])
+REDS_REMOTE = os.environ.get("LIVING_GATE_REDS_REMOTE", "origin")
+REDS_BRANCH = os.environ.get("LIVING_GATE_REDS_BRANCH", "red-on-main")
+REDS_FILE = "red-on-main.json"
+REDS_GIT = os.environ.get("LIVING_GATE_REDS_GIT", "1") != "0"
+
+
+def rgit(*args, input=None, timeout=60):
+    return subprocess.run(["git", "-C", REDS_REPO, *args], input=input, capture_output=True, text=True, timeout=timeout)
+
+
+class RedsLock:
+    """One reader or writer of the list at a time per clone (its git dir): concurrent fetches into
+    the same remote-tracking ref fail on git's ref lock."""
+
+    def __enter__(self):
+        import fcntl
+        common = rgit("rev-parse", "--git-common-dir").stdout.strip() or ".git"
+        path = Path(common if os.path.isabs(common) else os.path.join(REDS_REPO, common)) / "scene-gate-reds.lock"
+        self.f = open(path, "w")
+        fcntl.flock(self.f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        self.f.close()
+
+
+def fetch_reds():
+    """(the list on the remote, its commit or None when the branch does not exist yet), or raise."""
+    ref = f"refs/remotes/{REDS_REMOTE}/{REDS_BRANCH}"
+    for attempt in range(3):
+        r = rgit("fetch", "-q", REDS_REMOTE, f"+refs/heads/{REDS_BRANCH}:{ref}")
+        if r.returncode == 0:
+            break
+        there = rgit("ls-remote", "--exit-code", REDS_REMOTE, f"refs/heads/{REDS_BRANCH}").returncode
+        if there == 2:
+            rgit("update-ref", "-d", ref)
+            return {}, None  # reachable, no list yet
+        if there != 0:  # unreachable (or another error): no retry
+            raise RuntimeError(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else f"git fetch exit {r.returncode}")
+        time.sleep(0.2)  # the branch appeared between the fetch and ls-remote: fetch again
+    else:
+        raise RuntimeError(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else f"git fetch exit {r.returncode}")
+    sha = rgit("rev-parse", ref).stdout.strip()
+    show = rgit("show", f"{sha}:{REDS_FILE}")
+    if show.returncode:
+        raise RuntimeError(f"{REDS_BRANCH} {sha[:10]} has no {REDS_FILE}")
+    return json.loads(show.stdout), sha
+
+
+def refresh_reds(cache):
+    """Read the list from the remote into the cache; on failure keep the cache and say so."""
+    if not REDS_GIT:
+        return load_json(cache, {})
+    try:
+        with RedsLock():
+            reds, sha = fetch_reds()
+    except Exception as e:  # unreachable remote, a timeout, a broken branch: the cache stands in
+        say(f"note: could not read the red-on-main list from {REDS_REMOTE}/{REDS_BRANCH} ({e}); using the local cache {cache}"
+            + (f" (written {time.strftime('%Y-%m-%d %H:%M', time.localtime(Path(cache).stat().st_mtime))})" if Path(cache).exists() else " (none: empty)"))
+        return load_json(cache, {})
+    save_json(cache, reds)
+    return reds
+
+
+def update_reds(cache, change, message, tries=8):
+    """Apply change(reds) -> True when it changed something, commit it to the branch and push;
+    retried on a non-fast-forward. Returns the list as now on the remote. Raises when the remote
+    cannot be written: the change is then not made anywhere (the cache is left as read)."""
     with LOCK:
-        reds = load_json(reds_path, {})
+        if not REDS_GIT:
+            reds = load_json(cache, {})
+            if change(reds):
+                save_json(cache, reds)
+            return reds
+        for attempt in range(tries):
+            with RedsLock():  # this clone's other writers wait; other machines are caught by the push
+                reds, base = fetch_reds()
+                if not change(reds):
+                    save_json(cache, reds)
+                    return reds
+                if push_reds(reds, base, message, cache):
+                    return reds
+            time.sleep(0.2 * (attempt + 1))  # another machine got there first: read again
+        raise RuntimeError(f"{REDS_REMOTE}/{REDS_BRANCH} kept moving: {tries} tries")
+
+
+def push_reds(reds, base, message, cache):
+    """Commit the list on `base` and push it without force: True when it landed, False when the
+    branch moved meanwhile; raise on any other failure."""
+    blob = rgit("hash-object", "-w", "--stdin", input=json.dumps(reds, indent=2, sort_keys=True) + "\n").stdout.strip()
+    tree = rgit("mktree", input=f"100644 blob {blob}\t{REDS_FILE}\n").stdout.strip()
+    commit = rgit("commit-tree", tree, *(["-p", base] if base else []), "-m",
+                  f"{message}\n\n(scene_gate.py on {os.uname().nodename})").stdout.strip()
+    if not (blob and tree and commit):
+        raise RuntimeError(f"could not make the commit for {REDS_BRANCH}")
+    # without force: lands only on the commit just read (a new branch only if none exists)
+    push = rgit("push", "--porcelain", REDS_REMOTE, f"{commit}:refs/heads/{REDS_BRANCH}")
+    if push.returncode == 0:
+        rgit("update-ref", f"refs/remotes/{REDS_REMOTE}/{REDS_BRANCH}", commit)
+        save_json(cache, reds)
+        return True
+    if not re.search(r"rejected|fetch first|non-fast-forward|stale info", push.stdout + push.stderr):
+        raise RuntimeError(f"git push to {REDS_REMOTE}/{REDS_BRANCH} failed: {(push.stderr or push.stdout).strip()[-300:]}")
+    return False
+
+
+def mark_red(reds_path, case, main_sha, evidence):
+    def change(reds):
         e = reds.get(case) or {"case": case, "skill": spec(case)["skill"], "owner": None, "reason": None,
                                "first_seen": now(), "first_main": main_sha}
         e.update(last_seen=now(), last_main=main_sha, last_evidence=evidence, times=e.get("times", 0) + 1)
         reds[case] = e
-        save_json(reds_path, reds)
+        return True
+    try:
+        update_reds(reds_path, change, f"red on main: {case} (main {main_sha[:10]})")
+    except Exception as e:
+        say(f"WARNING: {case} is red on main but the shared list could not be written ({e}); add it with `reds --add`")
 
 
 def drop_red(reds_path, case, why):
-    with LOCK:
-        reds = load_json(reds_path, {})
+    dropped = []
+
+    def change(reds):
         if case in reds:
-            reds.pop(case)
-            save_json(reds_path, reds)
-            say(f"{case} passes on main ({why}): dropped from the red-on-main list")
+            dropped.append(reds.pop(case))
+            return True
+        return False
+    try:
+        update_reds(reds_path, change, f"green on main: {case} ({why})")
+    except Exception as e:
+        say(f"WARNING: {case} passes on main ({why}) but the shared list could not be written ({e}); drop it with `reds --drop {case}`")
+        return
+    if dropped:
+        say(f"{case} passes on main ({why}): dropped from the red-on-main list")
 
 
 # ---------------------------------------------------------------- running scenes
@@ -526,30 +656,46 @@ def cmd_touches(a):
 
 
 def cmd_reds(a):
-    reds = load_json(a.reds, {})
-    if a.add:
-        if not spec(a.add, a.skill):
-            print(f"note: `recheck` cannot run {a.add} ({a.skill}); drop it by hand when it is green (reds --drop {a.add})")
-        e = reds.get(a.add) or {"case": a.add, "skill": a.skill or spec(a.add)["skill"], "first_seen": now(),
-                                "first_main": a.main, "last_seen": now(), "last_main": a.main, "times": 0}
-        e.update({k: v for k, v in (("owner", a.who), ("reason", a.reason), ("last_evidence", a.evidence)) if v})
-        e.setdefault("owner", None)
-        reds[a.add] = e
-        save_json(a.reds, reds)
-    if a.drop:
-        if reds.pop(a.drop, None) is None:
-            raise SystemExit(f"{a.drop} is not on the red-on-main list ({a.reds})")
-        save_json(a.reds, reds)
-    if a.owner:
-        case, who = a.owner
-        if case not in reds:
-            raise SystemExit(f"{case} is not on the red-on-main list ({a.reds})")
-        reds[case]["owner"] = who
-        save_json(a.reds, reds)
+    """Print the list (read from the branch), or change it there: --add, --drop, --owner."""
+    if a.add and not spec(a.add, a.skill):
+        print(f"note: `recheck` cannot run {a.add} ({a.skill}); drop it by hand when it is green (reds --drop {a.add})")
+    missing = []
+
+    def change(reds):
+        if a.add:
+            e = reds.get(a.add) or {"case": a.add, "skill": a.skill or spec(a.add)["skill"], "first_seen": now(),
+                                    "first_main": a.main, "last_seen": now(), "last_main": a.main, "times": 0}
+            e.update({k: v for k, v in (("owner", a.who), ("reason", a.reason), ("last_evidence", a.evidence)) if v})
+            e.setdefault("owner", None)
+            reds[a.add] = e
+        for case in [c for c in (a.drop, a.owner and a.owner[0]) if c]:
+            if case not in reds:
+                missing.append(case)
+        if missing:
+            return False
+        if a.drop:
+            reds.pop(a.drop)
+        if a.owner:
+            reds[a.owner[0]]["owner"] = a.owner[1]
+        return True
+    what = "; ".join(x for x in (a.add and f"add {a.add}", a.drop and f"drop {a.drop}",
+                                 a.owner and f"owner of {a.owner[0]}: {a.owner[1]}") if x)
+    if what:
+        try:
+            reds = update_reds(a.reds, change, f"red-on-main: {what}")
+        except Exception as e:
+            print(f"scene-gate: FAILED to change the shared list ({what}): {e}; nothing was changed", file=sys.stderr)
+            return 1
+        if missing:
+            print(f"scene-gate: {', '.join(missing)} is not on the red-on-main list; nothing was changed", file=sys.stderr)
+            return 1
+    else:
+        reds = load_json(a.reds, {})
+    where = f"{REDS_REMOTE}/{REDS_BRANCH} (cache {a.reds})" if REDS_GIT else str(a.reds)
     if a.as_json:
         print(json.dumps(reds, indent=2))
     else:
-        print(f"{a.reds}:")
+        print(f"{where}:")
         print("\n".join(reds_lines(reds)))
     return 0
 
@@ -643,6 +789,8 @@ def main(argv):
     if not getattr(a, "f", None):
         ap.print_help()
         return 2
+    if a.f in (cmd_run, cmd_recheck) or (a.f is cmd_reds and not (a.add or a.drop or a.owner)):
+        refresh_reds(a.reds)  # the shared list from git into the cache (or the cache, said so)
     return a.f(a)
 
 

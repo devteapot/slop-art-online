@@ -4,6 +4,9 @@
 
 Branch `move-intents`, the trial service, the fake model, `--no-unit-tests` (the check ran the mind's build). `minds-intents-061748`: `intents` (new) passes. The prompt documents the five intents with their arguments, m/s and "lost sight of them". The plan `keep_distance` 3–6 m is kept as the `current plan` routine `{"do":{"skill":"keep_distance","target":{"id":7},"qty":120,"min":3.0,"max":6.0}}`, and `steer` is goal 5 (keep 3, far 6, flag 128). The character backs off at its walk (3.37 m/s) when the other walks at it. Earlier attempts placed the two in town at night, where a wall hid one ("no #7 in sight"); the case now uses an open row. Not run: the other cases (the scene gate runs roundtrip, acts, dealings, conversation).
 
+## 2026-11-12 doing-percept (Spark)
+
+Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb`, the fake model, private target dir. `minds-doing-053436`: `doing` (new) passes: the pending request's scene lists the other, holding a guard 3 m in front, with `visibly` `{"is": "block", "phase": "holding"}`; the think prompt carries it; the deliberate prompt's grammar documents `{"doing": ...}`. `fov` passes alongside. The mind's non-ignored tests (105) pass. Not run: the other cases. After merging main `dd2c8569`, with the check allowing a guard's `at: you` (its drawn aim): `minds-doingm-055740` `doing` passes.
 
 ## 2026-11-12 far-label (Spark) After merging main with speech-truth (`03d32e09`, `minds-farlabel3-031420`): `roundtrip`, `queued` and `conversation` pass.
 

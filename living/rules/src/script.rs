@@ -936,6 +936,9 @@ pub struct StructureTraits {
     /// The kind it counts as wherever a kind is asked by name (`like: "storage"`: a graph's
     /// `nearest storage` finds it too); empty: only its own name.
     pub like: String,
+    /// It shows whose it is to anyone who looks (a shop's sign, a marker): its owner is named
+    /// to an observer who does not know them (`owner_shown`, `o.shows`). Off by default.
+    pub shows_owner: bool,
 }
 
 /// One product of a way of making, as a recipe grid lays it out (`Scripts::recipe_parts`): the
@@ -1571,7 +1574,7 @@ impl Scripts {
                     l
                 }
             };
-            out.insert(k.clone(), StructureTraits { warms: flag("warms")?, roof: flag("roof")?, lights, burns, holds, like });
+            out.insert(k.clone(), StructureTraits { warms: flag("warms")?, roof: flag("roof")?, lights, burns, holds, like, shows_owner: flag("shows_owner")? });
         }
         if self.has("structure_traits") {
             let legacy = self.law_map("structure_traits")?;
@@ -1591,9 +1594,29 @@ impl Scripts {
         Ok(out)
     }
 
+    /// Whether an observer is told whose a structure of `kind` is (the `owner_shown(o)` law;
+    /// owner-known): `knows`, it knows the owner's name; `shows`, the structure shows its owner
+    /// (its kind's `shows_owner`). Without the law: when it knows them or the structure shows it.
+    pub fn owner_shown(&self, knows: bool, shows: bool, kind: &str) -> bool {
+        if !self.has("owner_shown") {
+            return knows || shows;
+        }
+        let key = format!("{knows}:{shows}:{kind}");
+        if let Some(v) = self.names.borrow().get("owner_shown").and_then(|t| t.get(&key)) {
+            return v.is_some_and(|x| x != 0.0);
+        }
+        let mut o = Map::new();
+        o.insert("knows".into(), Dynamic::from(knows));
+        o.insert("shows".into(), Dynamic::from(shows));
+        o.insert("kind".into(), Dynamic::from(kind.to_string()));
+        let v = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "owner_shown", (o,)).ok().and_then(|d| d.as_bool().ok()).unwrap_or(knows || shows);
+        self.names.borrow_mut().entry("owner_shown".into()).or_default().insert(key, Some(if v { 1.0 } else { 0.0 }));
+        v
+    }
+
     /// What a kind of structure does for those near it.
     pub fn structure(&self, kind: &str) -> &StructureTraits {
-        static NONE: StructureTraits = StructureTraits { warms: false, roof: false, lights: 0.0, burns: None, holds: None, like: String::new() };
+        static NONE: StructureTraits = StructureTraits { warms: false, roof: false, lights: 0.0, burns: None, holds: None, like: String::new(), shows_owner: false };
         self.structures.get(kind).unwrap_or(&NONE)
     }
 
@@ -2242,6 +2265,15 @@ impl Scripts {
         decode_missile(&f, self.call(&f, ctx)?)
     }
 
+    /// What a missile of `skill` is to one it strikes or who sees it strike: the `called` of
+    /// `<skill>_missile(a)` ("an arrow"), "something" when the script does not say.
+    pub fn missile_called(&self, skill: &str) -> String {
+        let f = format!("{skill}_missile");
+        let ctx = SkillCtx { skill: skill.to_string(), ..Default::default() };
+        let called = if self.has(&f) { self.call(&f, &ctx).ok().and_then(|d| d.try_cast::<Map>()).and_then(|m| m.get("called").and_then(|v| v.clone().into_string().ok())) } else { None };
+        called.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "something".into())
+    }
+
     /// What the rules make of an event (`on_<event>(a)`: `on_give`, `on_store`, `on_host` after
     /// that skill was done, `on_expire` when a record falls due, `on_death`): effects on records,
     /// and what is told and seen. None when the script has no such hook.
@@ -2815,6 +2847,9 @@ fn seconds(ms: u32) -> String {
 fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
     let m = d.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
+    if m.get("called").is_some_and(|v| !v.is_string()) {
+        return Err(format!("{f}: `called` is what the missile is called, a string (\"an arrow\")"));
+    }
     Ok(crate::combat::MissileSpec { speed: g("speed")?.clamp(1.0, 120.0), range: g("range")?.clamp(0.5, 80.0), radius: g("radius")?.clamp(0.05, 3.0) })
 }
 
@@ -3719,6 +3754,21 @@ mod tests {
 
     /// The shapes the script declares classify the existing skills exactly as the name lists
     /// they replaced (2026-11-09) did.
+    #[test]
+    fn a_missile_is_called_what_its_skill_says() {
+        let s = scripts();
+        assert_eq!(s.missile_called("bowshot"), "an arrow");
+        assert_eq!(s.missile_called("firebolt"), "a bolt of fire");
+        // A skill with no missile, or a missile that does not say: "something".
+        assert_eq!(s.missile_called("strike"), "something");
+        // Every missile the shipped script has says what it is.
+        for (skill, shape) in s.shapes().iter() {
+            if shape.missile {
+                assert_ne!(s.missile_called(skill), "something", "{skill}_missile has no `called`");
+            }
+        }
+    }
+
     #[test]
     fn combat_shapes_classify_the_existing_skills_as_before() {
         use crate::combat::Aim;

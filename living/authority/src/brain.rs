@@ -919,6 +919,33 @@ impl<'a> Ev<'a> {
                 }
                 c.at_least.map_or(true, |a| n >= a) && c.at_most.map_or(true, |b| n <= b)
             }
+            // What someone in sight is visibly doing (docs/PERCEPTION.md, "What someone is visibly
+            // doing"): over the scene this evaluation already gathered (sight, field, sight line),
+            // two point lookups per creature that fits `who` and `within`; nothing else is read.
+            Cond::Doing(d) => {
+                let _span = common::span("brain.doing");
+                let (me, at, now) = (self.me.id, self.at, self.now);
+                let sc = common::scripts(self.ctx);
+                let want = d.phase.as_deref().and_then(living_rules::doing::Phase::parse);
+                self.scene();
+                let scene = self.scene.as_ref().expect("scene built");
+                for x in &scene.creatures {
+                    if d.within.is_some_and(|w| dist(at, x.pos) > w) {
+                        continue;
+                    }
+                    if let Some(f) = &d.who {
+                        if (f.kind != "creature" && *x.kind != *f.kind) || f.relation.as_deref().is_some_and(|rel| !self.relation_ok(x.id, rel)) {
+                            continue;
+                        }
+                    }
+                    let Some(v) = crate::perception::visibly(self.ctx, &sc, x.id, now) else { continue };
+                    if want.is_some_and(|p| !v.phase.fits(p)) || d.is.as_deref().is_some_and(|i| !v.is(&sc, i)) || d.at_me.is_some_and(|m| v.at(me, at, x.pos) != m) {
+                        continue;
+                    }
+                    return true;
+                }
+                false
+            }
             Cond::HealthOf(h) => {
                 let Some(r) = self.resolve(&h.target).filter(|r| r.class == 3) else { return false };
                 // As this character perceives it (its own exactly, another's band unless
@@ -1351,7 +1378,7 @@ impl<'a> Ev<'a> {
             }
             let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
             let (_, _, _, pos, dist) = structures[nearest];
-            let by = if *owner != 0 && kind != "remains" { format!(" built by {}", common::label_for(self.ctx, &self.me, *owner)) } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
+            let by = if *owner != 0 && kind != "remains" { common::owner_label(self.ctx, &self.me, *owner, kind).map(|w| format!(" built by {w}")).unwrap_or_default() } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
             // Its extent as it lies on the ground (a town gate is a block of gate tiles).
             let wide = if part.len() > 1 {
                 let (xs, ys): (Vec<f32>, Vec<f32>) = part.iter().map(|k| structures[*k].3).unzip();
@@ -1383,12 +1410,14 @@ impl<'a> Ev<'a> {
         kinds.sort_by(|a, b| b.1.cmp(&a.1));
         let res = kinds.iter().map(|(k, n)| format!("{n} {}", k.replace('_', " "))).collect::<Vec<_>>().join(", ");
         let ctx = self.ctx;
-        let structures: Vec<String> = self
-            .scene()
-            .structures
-            .iter()
-            .take(4)
-            .map(|(s, _)| if s.owner != 0 { format!("{}'s {}", common::name_of(ctx, s.owner), s.kind) } else { s.kind.clone() })
+        let near: Vec<(u32, String)> = self.scene().structures.iter().take(4).map(|(s, _)| (s.owner, s.kind.clone())).collect();
+        let structures: Vec<String> = near
+            .into_iter()
+            .map(|(owner, kind)| match common::owner_label(ctx, &self.me, owner, &kind) {
+                Some(_) if owner == self.me.id => format!("your {kind}"),
+                Some(w) => format!("{w}'s {kind}"),
+                None => kind,
+            })
             .collect();
         let map = common::map(self.ctx);
         let mut terrain = Vec::new();

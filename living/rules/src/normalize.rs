@@ -72,7 +72,7 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
 const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening", "work_hours"];
-const CONDS: &str = "hunger, energy, health, stamina, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, work_hours, raining, moving, believes, judged, chance, all, any, not";
+const CONDS: &str = "hunger, energy, health, stamina, hour, threatened, has, sees, smells, near, count, health_of, doing, hurt_within, heard_within, hailed, night, bedtime, evening, work_hours, raining, moving, believes, judged, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -796,6 +796,41 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     }
                     json!({"health_of": c})
                 }
+                "doing" | "is_doing" | "visibly" => {
+                    let o = match v {
+                        Value::String(x) => {
+                            let mut m = Map::new();
+                            m.insert("is".into(), json!(x));
+                            m
+                        }
+                        Value::Object(o) => strip_nulls(o),
+                        Value::Bool(true) => Map::new(),
+                        _ => return Err(format!("{p}: expected {{\"who\": kind, \"is\": skill or kind, \"phase\": phase, \"at_me\": true}}")),
+                    };
+                    let mut c = Map::new();
+                    for (k, x) in o {
+                        let key = match k.as_str() {
+                            "who" | "of" | "kind" => "who",
+                            "is" | "act" | "skill" | "what" | "move" => "is",
+                            "phase" | "stage" => "phase",
+                            "at_me" | "aimed_at_me" | "at_you" => "at_me",
+                            "within" | "range" | "distance" => "within",
+                            "at" | "target" if x.as_str().is_some_and(|t| matches!(t, "me" | "self" | "you")) => {
+                                c.insert("at_me".into(), json!(true));
+                                continue;
+                            }
+                            other => return Err(format!("{p}: unknown field `{other}`; use who, is, phase, at_me, within")),
+                        };
+                        let x = match (key, x) {
+                            ("who", Value::String(w)) => json!(w.to_lowercase()),
+                            ("who", Value::Object(mut w)) if w.contains_key("nearest") => w.remove("nearest").unwrap_or(Value::Null),
+                            ("phase", Value::String(ph)) => json!(ph.to_lowercase().replace('_', " ")),
+                            (_, other) => other,
+                        };
+                        c.insert(key.into(), x);
+                    }
+                    json!({"doing": c})
+                }
                 "night" => json!({"night": v.as_bool().unwrap_or(true)}),
                 "bedtime" => json!({"bedtime": v.as_bool().unwrap_or(true)}),
                 "evening" => json!({"evening": v.as_bool().unwrap_or(true)}),
@@ -845,6 +880,21 @@ mod tests {
         assert!(o.contains("at least 3 person (friend)"), "{o}");
         assert!(o.contains("health of nearest wolf < 40%"), "{o}");
         assert!(o.contains("at most 1 wolf"), "{o}");
+    }
+
+    #[test]
+    fn doing_reads_what_someone_visibly_does() {
+        let g = from_value(json!({"first": [
+            {"if": {"doing": {"who": "Person", "act": "hostile", "phase": "about_to_release", "at": "me"}},
+             "then": {"do": "dodge"}},
+            {"if": {"doing": "wave"}, "then": {"do": "wave", "target": "hailer"}}
+        ]}))
+        .unwrap();
+        let o = outline(&g.root);
+        assert!(o.contains("person in sight is about to release: hostile at me"), "{o}");
+        assert!(o.contains("someone in sight is doing wave"), "{o}");
+        let bad = from_value(json!({"if": {"doing": {"phase": "charging"}}, "then": {"do": "dodge"}}));
+        assert!(bad.unwrap_err().contains("unknown phase"));
     }
 
     #[test]

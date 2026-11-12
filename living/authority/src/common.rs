@@ -1215,6 +1215,23 @@ pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String 
     crate::perception::label(ctx, observer, id, now_ms(ctx))
 }
 
+/// Whose a structure is, as `observer` is told it (owner-known): the owner's name when the
+/// world's `owner_shown` law says so (it knows the owner's name: their label; the structure shows
+/// its owner, a sign: their name), else `None`, and the structure is just its kind.
+pub fn owner_label(ctx: &ReducerContext, observer: &Character, owner: u32, kind: &str) -> Option<String> {
+    if owner == 0 {
+        return None;
+    }
+    let t = ctx.db.character().id().find(owner)?;
+    let knows = owner == observer.id || crate::perception::knows_name(ctx, observer, &t);
+    let sc = scripts(ctx);
+    let shows = sc.structure(kind).shows_owner;
+    if !sc.owner_shown(knows, shows, kind) {
+        return None;
+    }
+    Some(if knows { label_for(ctx, observer, owner) } else { t.name })
+}
+
 /// The same, to begin a sentence with.
 pub fn label_cap(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
     capitalized(&label_for(ctx, observer, id))

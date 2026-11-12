@@ -4,6 +4,9 @@
 
 `intents.py` (new; `player-intents-060823`, the trial service, default seed): 8 of 8. The player's keys walk at 2.43 m/s and run at 4.01 (breath −4/s); the same body's `back_off` through `human_act` walks at 2.43 and its `close_in` with `run: true` runs at 4.01, draining breath; a resident's graph `back_off`/`close_in` run 4.54/2.75 = 1.65 of its own walk, the player's keys 4.01/2.43 = 1.65. Two earlier attempts failed on the scene: a `close_in` from 9 m at night refused ("no #152 in sight"), and samples arriving after a short run under machine load. It now starts within 5 m and reads the row's cruising `speed`.
 
+## 2026-11-12 fix-missile-told (Spark)
+
+Branch `fix-missile-told` from `ee8790f4`, the trial service `slop-trials-stdb`, island seed, `player-missile-052234`. `combat.py` all scenes: every check passes, the new scene `shot` 2/2: shot from 6 m, "A stranger shot you with an arrow: hit for 6" and the feed's hit names the shooter; from 19.1 m, "An arrow struck you from somewhere you could not see: hit for 6" and the feed's impact and hit carry actor 0. Admin reducers: `place_at`, `grant_items`, `set_behavior`, `kill`, `join`.
 
 ## 2026-11-12 speech-truth (Spark)
 

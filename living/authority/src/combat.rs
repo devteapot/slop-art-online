@@ -76,6 +76,9 @@ pub struct Seen {
     pub amount: f32,
     pub ms: u32,
     pub note: String,
+    /// The actor is not where it happened (a missile's shooter): each player is given the
+    /// actor only if its character sees them, else 0 (`show`).
+    pub far_actor: bool,
 }
 
 /// One feed row for a viewer (no frame bookkeeping); returns its id.
@@ -115,6 +118,14 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         return;
     }
     let w = common::world(ctx);
+    // A far actor (a missile's shooter) only to those who see them.
+    let masked = |id: u32| -> std::borrow::Cow<'_, Seen> {
+        if ev.far_actor && ev.actor != 0 && id != ev.actor && !crate::perception::sees_creature(ctx, id, ev.actor, now) {
+            std::borrow::Cow::Owned(Seen { actor: 0, ..ev.clone() })
+        } else {
+            std::borrow::Cow::Borrowed(&ev)
+        }
+    };
     let mut told: Vec<u32> = Vec::new();
     for id in [ev.actor, ev.target] {
         if id != 0 && !told.contains(&id) {
@@ -122,7 +133,7 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
                 // The one who died keeps its death for the death screen; everyone else needs a
                 // death only as it happens (the corpse).
                 let keep = if ev.kind == seen::DEATH && id == ev.actor { DEATH_SEEN_MS } else { SEEN_MS };
-                insert(ctx, id, viewer, now, &ev, ev.amount, keep);
+                insert(ctx, id, viewer, now, &masked(id), ev.amount, keep);
             }
             told.push(id);
         }
@@ -140,6 +151,7 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         }
         told.push(c.id);
         let amount = if ev.kind == seen::LAUNCH { ev.amount } else { 0.0 };
+        let ev = masked(c.id);
         if ev.kind == seen::DEATH {
             insert(ctx, c.id, viewer, now, &ev, amount, SEEN_MS);
         } else {
@@ -474,7 +486,7 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
             (_, Some(wt)) => {
                 let at = (a.0 + (b.0 - a.0) * wt, a.1 + (b.1 - a.1) * wt);
                 ctx.db.missile().id().delete(m.id);
-                show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at, dir: (m.dx, m.dy), ..Default::default() });
+                show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
                 outcome_of(ctx, m.use_id, "struck a wall", now);
                 act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Wall, at, None, now);
             }
@@ -482,7 +494,7 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
                 m.left -= step;
                 if m.left <= 0.01 {
                     ctx.db.missile().id().delete(m.id);
-                    show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at: b, dir: (m.dx, m.dy), ..Default::default() });
+                    show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at: b, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
                     outcome_of(ctx, m.use_id, "hit nothing", now);
                     act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Nothing, b, None, now);
                 } else {
@@ -514,8 +526,8 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
     let code = sc.shapes().code(&m.skill);
     // A dash that evades (a dodge) lets it pass through, but it is spent all the same.
     if ctx.db.activity().id().find(victim).is_some_and(|a| sc.combat(&a.skill).is_some_and(|s| s.evades)) {
-        show(ctx, now, Seen { kind: seen::DODGED, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
-        show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: 0, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
+        show(ctx, now, Seen { kind: seen::DODGED, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
+        show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: 0, skill: code, at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
         outcome_of(ctx, m.use_id, "dodged", now);
         act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Dodged, at, None, now);
         return;
@@ -523,22 +535,23 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
     let effects = match act::missile_effects(ctx, m.owner, &m.skill, victim, now) {
         Ok(e) => e,
         Err(why) => {
-            show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
+            show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
             outcome_of(ctx, m.use_id, &why, now);
             act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Refused(&why), at, None, now);
             return;
         }
     };
-    show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
+    show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
     // The blow comes from behind the missile's path.
     let from = (at.0 - m.dx * 2.0, at.1 - m.dy * 2.0);
     // The one struck as the shooter perceives them, read before the blow (a kill removes the body,
     // and the far label reads distance): the shooter's own record (`my_skill_uses`) and its line.
     let seen = ctx.db.character().id().find(m.owner).map(|c| common::label_for(ctx, &c, victim)).unwrap_or_else(|| "someone".into());
+    let called = sc.missile_called(&m.skill);
     let mut dealt = String::new();
     for e in effects {
         if let living_rules::script::Effect::Damage { amount } = e {
-            dealt = act::damage(ctx, m.owner, victim, amount, &m.skill, from, now);
+            dealt = act::damage(ctx, m.owner, victim, amount, &m.skill, Some(&called), from, now);
         }
     }
     outcome_of(ctx, m.use_id, &format!("struck {seen}: {dealt}"), now);

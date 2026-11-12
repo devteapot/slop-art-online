@@ -189,6 +189,17 @@ pub fn in_sight(ctx: &ReducerContext, map: &Map, observer: u32, eye: (f32, f32),
     living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, keep)
 }
 
+/// Whether character `observer` sees creature `target` where it stands now (its own sight, the
+/// light on the target, a clear line). Itself it always sees; without either body, no.
+pub fn sees_creature(ctx: &ReducerContext, observer: u32, target: u32, now: u64) -> bool {
+    if observer == target {
+        return true;
+    }
+    let (Some(eye), Some(t)) = (ctx.db.body().id().find(observer), ctx.db.body().id().find(target)) else { return false };
+    let (e, at) = (pos(&eye, now), pos(&t, now));
+    in_sight(ctx, &common::map(ctx), observer, e, common::facing_at(&eye, now), target, at, common::dist(e, at), &common::world(ctx), now, false)
+}
+
 /// Whether character `id`, its body `eye`, sees the place `at` now.
 pub fn sees(ctx: &ReducerContext, id: u32, eye: &Body, at: (f32, f32), w: &World, map: &Map, now: u64) -> bool {
     let e = pos(eye, now);
@@ -529,6 +540,58 @@ pub fn doing_of(ctx: &ReducerContext, id: u32, observer: (u32, &str, (f32, f32))
     }
 }
 
+/// What a creature is visibly doing and how far into it (docs/PERCEPTION.md, "What someone is
+/// visibly doing"): read from the rows a player's client draws it from, its `fighter` row's move
+/// (a combat move, by its timing) and else its `doing` row (a skill with an act card; a rest
+/// taken indoors is not seen from the street). `target` is whom it is aimed at (0: nobody, or a
+/// point) and `aim` the way a move faces (unit, or zero). Two point lookups; nothing is written.
+/// Whoever calls it has already decided that the observer sees the creature.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Visibly {
+    pub skill: String,
+    pub phase: living_rules::doing::Phase,
+    pub target: u32,
+    pub aim: (f32, f32),
+    pub combat: bool,
+}
+
+pub fn visibly(ctx: &ReducerContext, sc: &Scripts, id: u32, now: u64) -> Option<Visibly> {
+    use living_rules::doing;
+    if let Some(f) = ctx.db.fighter().id().find(id).filter(|f| f.act != 0) {
+        let skill = sc.shapes().name(f.act);
+        if let Some(shape) = sc.shapes().get(skill) {
+            let held = shape.aim == living_rules::combat::Aim::Facing;
+            if let Some(phase) = doing::move_phase(f.act_ms, f.release_ms, f.until_ms, held, now) {
+                return Some(Visibly { skill: skill.to_string(), phase, target: f.target, aim: (f.aim_x, f.aim_y), combat: true });
+            }
+        }
+    }
+    let d = ctx.db.doing().id().find(id).filter(|d| !d.indoors)?;
+    let phase = doing::act_phase(d.since_ms, d.until_ms, now)?;
+    let skill = sc.shows().iter().find(|(_, s)| s.code == d.code)?.0.to_string();
+    Some(Visibly { skill, phase, target: d.target, aim: (0.0, 0.0), combat: false })
+}
+
+impl Visibly {
+    /// Whether it is aimed at `me` standing at `me_at`, the doer at `at`: at me as its target,
+    /// or (a move aimed at a point) facing me within about 18°, as its drawn aim shows.
+    pub fn at(&self, me: u32, me_at: (f32, f32), at: (f32, f32)) -> bool {
+        if self.target != 0 {
+            return self.target == me;
+        }
+        let (dx, dy) = (me_at.0 - at.0, me_at.1 - at.1);
+        let d = dx.hypot(dy);
+        (self.aim.0 != 0.0 || self.aim.1 != 0.0) && d > 0.01 && (dx * self.aim.0 + dy * self.aim.1) / d >= TOWARD_COS
+    }
+
+    /// Whether a graph's `is` names it: its skill, its label or a kind word (`living_rules::doing::is`).
+    pub fn is(&self, sc: &Scripts, want: &str) -> bool {
+        let shape = if self.combat { sc.shapes().get(&self.skill) } else { None };
+        let kinds = living_rules::doing::kinds(shape, sc.shows().get(&self.skill));
+        living_rules::doing::is(want, &self.skill, sc.ui(&self.skill).map(|u| u.label.as_str()), &kinds)
+    }
+}
+
 /// The motion seen of a body moving with no activity of its own, in the style of an activity's
 /// label: `walk` or `run` (the run input), then `→ <kind>` of the nearest creature its heading
 /// points at, else the compass way it goes ("walk east").
@@ -551,7 +614,22 @@ pub fn moving_label<'a>(run: bool, at: (f32, f32), heading: f32, among: impl Int
 
 #[cfg(test)]
 mod doing_tests {
-    use super::moving_label;
+    use super::{moving_label, Visibly};
+    use living_rules::doing::Phase;
+
+    #[test]
+    fn a_move_is_at_me_by_its_target_or_its_drawn_aim() {
+        let v = |target, aim| Visibly { skill: "strike".into(), phase: Phase::WindingUp, target, aim, combat: true };
+        // Aimed at me by id, wherever it faces; at someone else, never at me.
+        assert!(v(7, (0.0, 0.0)).at(7, (5.0, 0.0), (0.0, 0.0)));
+        assert!(!v(8, (1.0, 0.0)).at(7, (5.0, 0.0), (0.0, 0.0)));
+        // At a point: facing me within about 18° is at me; off to the side or away is not.
+        assert!(v(0, (1.0, 0.0)).at(7, (5.0, 1.0), (0.0, 0.0)));
+        assert!(!v(0, (1.0, 0.0)).at(7, (5.0, 3.0), (0.0, 0.0)));
+        assert!(!v(0, (-1.0, 0.0)).at(7, (5.0, 0.0), (0.0, 0.0)));
+        // No aim (an act at nobody) is at nobody.
+        assert!(!v(0, (0.0, 0.0)).at(7, (5.0, 0.0), (0.0, 0.0)));
+    }
 
     #[test]
     fn a_walker_heading_at_someone_walks_toward_them() {
@@ -975,6 +1053,43 @@ fn projections(ctx: &ViewContext) -> impl Iterator<Item = Projected> + '_ {
 /// How the bodies in my scene move (the narrow stream): the others, as my last frame showed
 /// them (`motion_seen`, `frame.rs`). My own body is `my_body`, so my own moves and steering
 /// re-run one row, not my whole scene.
+/// Someone my character knows by name (`my_known_names`; owner-known, 2026-11-12).
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct KnownName {
+    pub id: u32,
+    pub name: String,
+}
+
+/// Whom my current character knows by name, with the name: itself, its parents, its children and
+/// their other parent, its community, and whoever told it their name (`acquaintance`, which also
+/// keeps the names of its community's dead). The same sources as `knows_name`, read by index. A
+/// client names a structure's owner from it under the world's `owner_shown` law ("Agnes
+/// Fenner's house" to one who knows her, else "a house"), as the authority tells minds.
+#[spacetimedb::view(accessor = my_known_names, public, primary_key = id)]
+pub fn my_known_names(ctx: &ViewContext) -> Vec<KnownName> {
+    let Some(me) = current(ctx) else { return Vec::new() };
+    let mut ids = std::collections::BTreeSet::new();
+    ids.insert(me.id);
+    for p in [me.parent_a, me.parent_b] {
+        if p != 0 {
+            ids.insert(p);
+        }
+    }
+    for child in ctx.db.character().parent_a().filter(me.id).chain(ctx.db.character().parent_b().filter(me.id)) {
+        ids.insert(child.id);
+        for other in [child.parent_a, child.parent_b] {
+            if other != 0 {
+                ids.insert(other);
+            }
+        }
+    }
+    ids.extend(ctx.db.acquaintance().observer().filter(me.id).map(|a| a.known));
+    if let Some(m) = ctx.db.membership().member().find(me.id) {
+        ids.extend(ctx.db.membership().community().filter(m.community).map(|x| x.member));
+    }
+    ids.into_iter().filter_map(|i| ctx.db.character().id().find(i).map(|c| KnownName { id: c.id, name: c.name })).collect()
+}
+
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
 pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
     ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving()).collect()
