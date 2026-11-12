@@ -81,11 +81,12 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
 - **Pass 3, one iris for every type** ([one iris for every type](#one-iris-for-every-type)). Every type's file names one iris picture, and a person's line carries the colour that brings its body to the person's eye colour. Composed eyes had come out about three times too light, with grey pupils on the lighter colours and stray hues from the type's own iris; the iris's body is now within 3 CIE76 of the eye colour on every type. A whole file's warm glow in a dark or a blue eye is what a composed eye still lacks.
 - **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
 - **Pass 3, the neck's and the head's joints** ([the neck's and the head's joints](#the-necks-and-the-heads-joints)). Both are at the reference's places: the neck's 1.7 cm higher, the head's 1 cm higher. Every generated file was built again on the one skeleton; no clip key changes.
+- **Pass 3, the hair pass** ([the hair pass](#the-hair-pass)). No fringe covers a brow; short styles' fronts are rounded where they were a box; the fringe is a few thick locks; single strands lift off; the seam down the back of parted styles is gone; a tail or braid is held off the back.
 - **look-1, the look book** ([the look book](#the-look-book)). A person line and its words for every look band a person can reach, under opaque keys: Cullet's 64 residents, a pool of 128 for newcomers and players, and 96 lines for background people. The client's book holds lines only; whose a line is, is in the world's data.
 - **Pass 3, the brows' place** ([the brows' place](#the-brows-place)), for the owner to judge. Measured against the reference, every type's brow sat on the head's own brow line, 0.3 of the eye's height above a large eye where the reference's sit 0.6 to 0.85 above. Each type's brow is lifted to 0.72; arch, tilt, length and thickness are unchanged. A brow now rides its own bone whole and the skin under it does not follow.
 - **Pass 3, the iris's lights** ([the iris's lights](#the-iriss-lights)). The glow, the streaks and the arc of sky in an eye are a layer of their own in fixed colours, on a disc before the iris in the lips' and blush's material, so the client's recolouring leaves them be. A composed eye is now within about 3 CIE76 of a whole file's in every eye colour; it was 10 to 14.
 - **Pass 3, the brows** ([the brows](#the-brows)). A brow is one tapered stroke, as the reference draws its own, in a material of its own under the reference's name for it, so the client's hair colour reaches it. Composed people had their type's brow colour whatever their hair.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's lifting strands and fringe (and fringes over the lifted brows), the face's painted softness, clothes and silhouette, hands.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the fringe's locks, the brows' and the glow's edges, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -1629,6 +1630,43 @@ Pass 3, 2026-11-12. The neck step left the two joints where they were and noted 
 
 **What the client needs:** nothing in code. Take the bundle whole: types, every style file, and the lines (unchanged). A type from after the move with hair or a collar from before, or the other way, sits up to 1.7 cm apart at the neck.
 
+### The hair pass
+
+Pass 3, 2026-11-12. Six things, in the order they were asked for.
+
+**1. No fringe covers a brow** (`hair.py` `fringe_line`). A fringe ended at the head's own brow line, and since [the brows' place](#the-brows-place) the brows are drawn above that: on a third of the cast's faces the fringe covered them.
+
+- **A full fringe now ends 4 mm above the top of the highest brow any face type has.** A shared style is one mesh for every type, and the types' brows sit at different heights (the highest brow's top is 1.2 cm above the lowest's), so the line is the highest's. On a type with lower brows a full fringe ends up to 1.2 cm above them.
+- **A person's own hair takes the same line,** so their own file and the composed person agree.
+- **`hair.fringe` above 1 no longer goes over the eyes:** it is held at 1.
+
+**2. Short styles' fronts are not a box** (`cap`). The front of a short cut was the fringe's level line across the forehead, with the hairline's square corner at the temple on either side. It read as a helmet's edge.
+
+- **The hem follows the hairline with its corner rounded** (the hairline averaged over 18° either way).
+- **Over the forehead the hem is lowest in the middle and rises in a curve to the temples,** uneven by up to 6 mm from side to side.
+
+**3. The fringe is a few thick locks** (`bangs`). It was six points 9 mm deep along a level line.
+
+- **Three or four locks, 14 to 22 mm deep** by the fringe's length, uneven in width.
+- **Longest in the middle and up to 12 mm shorter toward the temples.**
+
+**4. Single strands lift off the hair** (`strands`). Thin locks 10 to 16 mm wide, a little off the sheets.
+
+- **Short hair:** one or two on `short`, three on `tousled`, rising from the top and standing up at the tip.
+- **Hanging hair:** one on `bob`, two on `bob_parted`, three on `shag`, four on `long`, hanging beside the sheets' ends and flicking out. On `long` they ride the back's spring chains and keep to the back.
+
+**5. No seam down the back of parted styles** (`over`). The top of `bob`, `bob_parted`, `shag` and `long` was two sheets, one from each side of the parting, whose back edges met down the middle of the back. Two edges side by side read as a seam from behind. It is now one sheet: down one side of the parting to the crown, round behind it and back up the other.
+
+**6. A tail or a braid down the back is held off the back** (`Hair.rope_chains`; `person.py` `back_spheres`, `secondary`). On the idle clip a braid's lower part passed into the back and showed through the cloth further down.
+
+- **The back's spheres are sized for them too:** each sphere is the largest that leaves every hair joint clear at rest, and a rope's joints (its axis) are kept its own radius away, 12 mm (`ROPE_HIT`).
+- **A spring group of their own, `HairRope`,** with `hitRadius` 0.012 and the neck's, the chest's and the back's spheres, and not the head's, which the rope is tied on. Sheets on the back stay in `HairBack` (2 mm) and the rest in `Hair`.
+- **Two braids that hang in front of the shoulders** are not ropes down the back and stay as they were.
+
+**What the client needs:** nothing in code: the spring block's groups already carry their own `hitRadius` and collider groups. Take the 59 hair files. Types, outfits, overlays and lines are unchanged.
+
+**What still separates ours from the reference's hair:** the fringe's locks are even triangles where the reference's are curved and of several lengths; a full fringe ends well above the brows on the types whose brows are low; long hair's ends still dip into the back in places on the idle clip.
+
 ### The look book
 
 look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part of it). The live game drew no generated people. The look book is what lets it: a person line and its words for every look band a person can reach, under opaque keys.
@@ -2168,6 +2206,14 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 
 ## What still separates ours from the reference
+
+**After the hair pass**, judged on the board's `hair-pass-short`, `hair-pass-long`, `hair-pass-motion` and `cast-64` sheets with the reference beside ours, ordered by how much it shows:
+
+1. **Hair, what is left.** The fringe's locks are even triangles where the reference's are curved and of several lengths. A full fringe ends well above the brows on the types whose brows are low. Long hair's ends still dip into the back in places on the idle clip.
+2. **The brows' edge and the glow's edge:** the reference's brow has a soft edge and notches at its inner end, and its glow is a hard-edged flame; ours are cut geometry and soft.
+3. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top.
+4. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+5. **Clothes and silhouette, hands** (unchanged).
 
 **After the shared iris and the brows**, judged on the board's `shared-iris`, `brows` and `cast-64` sheets with the reference beside ours, ordered by how much it shows:
 
