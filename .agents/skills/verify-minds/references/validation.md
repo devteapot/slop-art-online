@@ -1,5 +1,18 @@
 # Internal mind validation
 
+## 2026-11-12 fix-sleep-thinking (Spark)
+
+Branch `fix-sleep-thinking`, the trial service `slop-trials-stdb`, the fake model, private target dir.
+
+- `sleeper` (new). The first two attempts failed on the case itself, not the change: an admin `set_behavior` before the mind started cleared the first request, so no first thought came. The case now asks it with `run.request`. `minds-sleeper3-sleeper` passes, and after merging main `49dfc2cd` `minds-sleepreg1-sleeper` passes. An offer to the sleeping actor waited in `slumber` with 0 deliberate model calls, no thought and no pending row for 15 s. The other adult's graph attack woke it, and the next thought's reason was "You woke up: Femi is attacking you!\nFemi offers you 1 stone for 1 wood. …". The percept read "You woke up: Femi is attacking you!".
+- `minds-sleepreg1` also ran `roundtrip`, `reasons` and `takeover`: all pass. The mind's non-ignored tests pass (105).
+- Measurement, fake hamlet batch `sleep1` (55 min, one game day including its night, `latency.json` fake latencies, 12 thinkers). Variant `default` ran this branch; variant `main` (`wasm_tag`) ran origin/main `49dfc2cd` with the same seed and mind. Counted from the per-character journals:
+  - main: 290 deliberations, 26.7 per resident-hour; 42 began while the resident was asleep (at the census samples on both sides).
+  - branch: 256 deliberations, 23.5 per resident-hour; 6 began while asleep.
+  - On the branch, 27 deliberations were "You woke up." requests, and only 1 "new day" was asked on its own (11 on main). The rest of those new days now wait and are asked on waking.
+  - The remaining 6 "asleep" deliberations are what 30 s census sampling cannot separate: bodies that woke, thought, and slept again between two samples.
+  - The fake's replies make "acts keep failing" the main cause in both variants (about 160), so the cut in a real-model batch should be larger. bi1 measured 23% of deliberations asked while asleep.
+
 ## 2026-11-12 doing-percept (Spark)
 
 Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb`, the fake model, private target dir. `minds-doing-053436`: `doing` (new) passes: the pending request's scene lists the other, holding a guard 3 m in front, with `visibly` `{"is": "block", "phase": "holding"}`; the think prompt carries it; the deliberate prompt's grammar documents `{"doing": ...}`. `fov` passes alongside. The mind's non-ignored tests (105) pass. Not run: the other cases. After merging main `dd2c8569`, with the check allowing a guard's `at: you` (its drawn aim): `minds-doingm-055740` `doing` passes.
