@@ -1,6 +1,6 @@
 # Battle scale: why a battle of minded fighters collapses (diagnosis and fix design, 2026-11-12)
 
-Status: **diagnosis measured, fix designed, nothing built** (branch `battle-diagnosis`, from main `b36a938c`). The only code change is diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
+Status: **fixes 1–3 built on branch `battle-scale` (2026-11-12); fix 4 (folding) held**, to be built only if 1–3 do not reach the bar. The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
 
 ## Workload
 
@@ -94,7 +94,7 @@ Status: **diagnosis measured, fix designed, nothing built** (branch `battle-diag
 4. **Writing what was seen is not the cause.** `tick.activity`, the blows and the witnessed percepts' rendering and inserts, stays at 90–100 ms/s (150 at 200 fighters) until the runaway. The rows (1,700–3,300 fight percepts a second) and the commitlog volume matter for an 8-hour run, not for the collapse.
 5. **At 200 fighters, waking alone breaks the tick:** 983 woken evaluations a second at 0.7 ms each (200 in sight) is 692 ms/s, before any runaway.
 
-## Fix design (not built)
+## Fix design (fixes 1–3 now built, fix 4 held)
 
 Sized for the contract's 200-character battle:
 - 200 fighters packed (each seeing about 200 creatures);
@@ -142,6 +142,21 @@ Four changes, each behind a law where it changes timing, each measured on its ow
 - writing: 100–150 ms/s.
 
 That gives roughly 300–450 ms/s of tick work against 1,000 available: 60 Hz with margin, if the estimates hold.
+
+## Fixes as built (`battle-scale`)
+
+1. **Familiarity forgets by age only, never what is in view** (`brain.rs`):
+   - `FAMILIAR_LIMIT` is 2,048 rows a character, up from 256.
+   - Over it, `prune_familiar` removes the oldest rows by `last_ms`. It never removes one touched within `FAMILIAR_KEEP_MS` (60 s), nor one whose thing is in the character's seen set within `SEEN_MS` (90 s). The count is checked every 64 new rows of that character.
+   - **The seen set.** The recently-seen fast path is now a per-character set (`SEEN`, thread-local, the durable `familiar` rows behind it), holding what was looked at within 2 minutes. The 96-entry list on `mind_state` is no longer written, so that row is not rewritten with it at every evaluation.
+   - **Memory.** A `familiar` row is 48 bytes in its page (u64, u32, u64, u64, u64, u32, aligned to 8), plus its entries in three btree indexes: the primary key on `id`, `actor`, and `by_actor_thing`. That is about 16–32 bytes each with node overhead, so **about 120 bytes a row**: about **240 kB a character at the 2,048 cap**, and about **480 MB at 2,000 characters if every one were at the cap**. In these runs a character held 40–80 rows on average (20k–43k rows for about 520 characters), and the fighters at the site several hundred: a few kB to about 50 kB each. The seen set adds about 30 bytes per thing looked at within 2 minutes, in the module's memory, and empties as things leave sight.
+2. **Novelty about once a second.** `noticed()` runs at most once per `NOTICE_MS` (900 ms, a little under the 1 Hz slot, since a slot can come a tick early) per character, not at every woken or combat-cadence evaluation. Cues keep their own interval (`cue_check_s`).
+3. **Bystanders woken at most once per `witness_wake_ms`** (a law, default 500; 0 means woken by each sight, as before):
+   - **Written in full.** A witnessed event's percept is written at once and in full to every onlooker (`perceive::witnessed`, `witnessed_shot` → `percept_seen`).
+   - **Parties at once.** Its subject, and the one it was done to or aimed at, are woken at once.
+   - **Bystanders coalesced.** A bystander is woken at most once per window (`common::wake_bystander`). A wake held back is delivered when the window ends, each tick before the wakes (`due_bystander_wakes`).
+   - **Remains.** A remains noticed is a bystander's sight of a death.
+4. **Deleting a busy world.** The verify harness's cleanup and `trials.py` pause a world and read the pause back before deleting it (fix-sleep-talk, fix-trials-pause). `living/tools/world_delete.py` does the same for the tools that delete scratch databases outside both: `verify_mechanics.py` and `verify_steering.py` (verify-core's Cargo checks), `gate.py`, `latency.py` and `play.py`.
 
 ## Verification it would need
 
