@@ -14,10 +14,8 @@
 //! other gap, and on a listed one that has closed (remove its entry then). `LIVING_OVERLAY_CHECK`
 //! adds overlay files outside the tracked seeds (a play scene's laws).
 //!
-//! Keys only, not values. Cullet's `senses_law` gives every shipped key, but its `reach.night`
-//! is its torch sight where the shipped law's is the larger of torch and night sight (the shipped
-//! `night_most`, a local, not a key). That is a value question for Cullet's owner (dev-box), not a
-//! gap this check reports.
+//! Keys only, not values: a replaced law may change what a key holds (Cullet's `senses_law`
+//! starts from `base_senses_law()` since f76783c4 and changes `covers`, `reach.glow` and `about`).
 
 use super::{context, ActorFacts, Scripts, SkillCtx};
 use rhai::{Dynamic, Map, Scope};
