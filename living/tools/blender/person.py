@@ -1831,16 +1831,44 @@ def jersey_colour(base):
     return colour
 
 
-def coat_colour(base, patches):
+# The tones inside a coat or a smock, as lightness against its own cloth (linear light): the hem,
+# the shoulders, the three patches (elbows, the skirt's front, the back) and the collar's lining.
+# A shared piece is grey shading that the client tints to the wearer's colour, so it can carry a
+# darker hem only as a tone, the same for every wearer. A person's own file is painted with the
+# same tones, so the two agree: mixed toward a fixed colour, as they were, a hem came out 0.58
+# to 1.37 times its cloth's lightness by the cloth (lighter on dark cloth), the shoulders 1.09
+# to 2.17, and a patch anything from 0.12 to 7.4.
+HEM_TONE, SHOULDER_TONE = 0.66, 1.15
+PATCH_TONES = (1.45, 0.78, 0.60)
+LINING_TONE = 0.45
+
+
+def lightness(c):
+    r, g, b = lin(c)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def relit(c, level):
+    """The colour c at a given lightness (linear light): its hue kept, its channels scaled."""
+    k = level / max(lightness(c), 1e-5)
+    return tuple(min(max(1.055 * (x * k) ** (1 / 2.4) - 0.055 if x * k > 0.0031308 else 12.92 * x * k, 0.0), 1.0) for x in lin(c))
+
+
+def coat_colour(base, patches, bands=False):
+    """A coat's or a smock's paint. `bands`: a smock's sleeve bands alone, which are a piece of
+    their own in their own cloth (the first patch's), not a tone of the smock's."""
+    level = lightness(base)
+
     def colour(tag, u, v, co, n):
-        c = base
-        # Wet and tarred toward the hem; salt-faded on the shoulders.
-        c = mix(c, PAL["kelp"], 0.40 * smooth((0.86 - co.z) / 0.2))
-        c = mix(c, PAL["old_lime"], 0.16 * smooth((co.z - 1.40) / 0.08))
-        if tag in (4, 5, 6):  # patches: other cloth, never matching
-            c = patches[tag - 4]
+        # Wet and tarred toward the hem; salt-faded on the shoulders: the hue leans as it did,
+        # the lightness is the cloth's own times a tone.
+        low, high = smooth((0.86 - co.z) / 0.2), smooth((co.z - 1.40) / 0.08)
+        c = mix(mix(base, PAL["kelp"], 0.40 * low), PAL["old_lime"], 0.16 * high)
+        c = relit(c, level * lerp(1.0, HEM_TONE, low) * lerp(1.0, SHOULDER_TONE, high))
+        if tag in (4, 5, 6):  # patches: other cloth, never matching, at a set tone of this one
+            c = patches[tag - 4] if bands else relit(patches[tag - 4], level * PATCH_TONES[tag - 4])
         elif tag == 7:  # collar lining
-            c = mix(PAL["kelp"], PAL["tar"], 0.3)
+            c = relit(mix(PAL["kelp"], PAL["tar"], 0.3), level * LINING_TONE)
         elif tag == 8:  # an apron
             c = mix(PAL["old_lime"], PAL["driftwood"], 0.15 + 0.25 * smooth((0.75 - co.z) / 0.3))
         elif tag == 9:  # its band
@@ -1981,7 +2009,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             # The bands round the sleeves, in another cloth: over the smock's own sleeve, a hair's
             # width out. Its own part, so a shared smock's bands are a piece with its own colour.
             p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag, neck_d=0.0148).mirrored()
-            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
+            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"], bands=True)))
             if apron:
                 p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag, neck_d=0.0158).mirrored()
                 obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
@@ -2435,6 +2463,13 @@ def main():
             continue
         g["FAR"] = far
         parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
+        shaded = False
+        if a.parts == "keep" and not a.no_shade:
+            # An outfit piece is shaded as it is worn, with the rest of the outfit and the body
+            # round it (a jersey's collar under a smock's, a smock under its apron), and then
+            # the rest is taken away. Shaded alone, the tones inside it were not its wearer's.
+            bake_shade(parts)
+            shaded = True
         if a.parts != "all":
             wanted = dict(head=TYPE_PARTS, hair=("Hair", "HairTie"), face=("Face", "Neck"), keep=tuple(x for x in a.keep.split(",") if x), overlay=("Overlay",))[a.parts]
             keep = [ob for ob in parts if ob.name.split(".")[0] in wanted]
@@ -2452,7 +2487,7 @@ def main():
             spread_head_weights(parts)
             if spec.get("baked") and spec.get("identity"):
                 bake_identity(parts, spec["identity"])
-        if not a.no_shade:
+        if not a.no_shade and not shaded:
             bake_shade(parts)
         if not far and a.parts == "all" and spec.get("person"):
             painted_pieces(parts, spec["person"])
