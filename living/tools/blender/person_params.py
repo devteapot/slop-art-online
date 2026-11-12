@@ -355,7 +355,7 @@ def resolve(p):
         hair=hair, hair_tip=hair_tip, hair_natural=natural, hair_natural_tip=natural_tip, hair_silver=silver, hair_grey=grey, brow=brow, lash=lash, lash_tip=mix(lash, (0.42, 0.20, 0.14), 0.6),
         lash_k=(0.66 + 0.74 * fem + 0.34 * child * (1 - masc) + 0.12 * child) * (1 + STYLE["lash"] * drawn), lash_wing=0.14 + 0.22 * fem + 0.06 * child, wing_lift=0.10 + 0.22 * fem,
         lashes=int(round(9 * fem + 5 * child * (1 - masc) + 2 * child * masc)), lashes_low=int(round(4 * fem + 2 * child * (1 - masc))),
-        brow_hairs=int(round(22 + 8 * masc * teen + 4 * elder)), fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
+        fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
         lower=clip(0.35 + 0.45 * fem + 0.2 * child, 0, 1), iris=colour(p["eyes"]["colour"], EYE_COLOURS, "eyes.colour"),
         white_shade=mix((0.62, 0.60, 0.68), shade, 0.25),
     )

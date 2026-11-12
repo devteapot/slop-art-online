@@ -1078,7 +1078,12 @@ def fast_lane_case(run):
               'rules': [{'purpose': 'fast', 'reply': FAST_PATCH, 'times': 1},
                         {'purpose': 'fast', 'reply': FAST_PATCH, 'delay_s': 2.5, 'times': 1},
                         {'purpose': 'deliberate', 'delay_s': 5, 'times': -1}]}
-    run.start(model(run, script), [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run)})
+    # A staged mix, as the shipped models are (compile by stage of attention): with no player in
+    # sight the eye is off stage for model routing, which must not keep the fast lane off.
+    models = model(run, script)
+    models['mixes'] = {'staged': {'deliberate': {'on_stage': 'local', 'off_stage': 'local'}, '*': 'local'}}
+    models['assign'] = {people[0]['name']: 'staged'}
+    run.start(models, [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run)})
     requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
     body = lambda x: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', []) if m.get('role') == 'user')
     clock = lambda: run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
@@ -2172,8 +2177,9 @@ def reasons_case(run):
 def sleeper_case(run):
     """A sleeping body's mind thinks only on what wakes it (perceive.rs `Wake`, the `slumber`
     table): an offer made to a sleeper starts no deliberation while it sleeps and waits in its
-    `slumber` row; an attack wakes it, and its mind deliberates on why it woke ("You woke up: …
-    is attacking you!") with the offer that waited."""
+    `slumber` row; a quiet line to it takes no talk turn and waits in `heard_asleep`; an attack
+    wakes it, and its mind deliberates on why it woke ("You woke up: … is attacking you!") with
+    the offer and the line that waited, and is told the line as heard while asleep."""
     people = prepare(run)
     actor, other = [p['id'] for p in people]
     run.admin('set_behavior', other, json.dumps({'wait': 120}))
@@ -2194,9 +2200,17 @@ def sleeper_case(run):
     run.wait(lambda: slumber('slumber-start'), 'asleep', 30)
     base = max((t['id'] for t in run.thoughts(actor, 'thoughts-asleep')), default=0)
     sent_before = len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'deliberate'])
+    talks_before = len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'talk'])
     run.admin('mind_act', other, [json.dumps({'do': 'offer', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'want': 'wood', 'want_qty': 1})], 'verify-minds')
     run.wait(lambda: any('offers you' in r['reason'] for r in slumber('slumber-offer')), 'the offer waits in slumber', 30)
+    # A quiet line to the sleeper (another's `say`): no talk turn while it sleeps; kept for its waking.
+    thought = {'kind': 'deliberate', 'summary': 'verify minds sleeper', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': 'fake', 'reference': ''}
+    run.admin('mind_say', other, 'verify quiet line to a sleeper', actor, '', 0, thought)
+    run.wait(lambda: run.private(f'SELECT * FROM heard_asleep WHERE actor = {actor}', 'heard-asleep'), 'the line waits for its waking', 15)
     time.sleep(15)
+    talks_asleep = len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'talk']) - talks_before
+    assert talks_asleep == 0, f'a sleeper took {talks_asleep} talk turns'
+    assert not [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told-asleep') if 'verify quiet line' in e['text']], 'the line was told while asleep'
     later = [t for t in run.thoughts(actor, 'thoughts-after-offer') if t['id'] > base and t['kind'] == 'deliberate']
     asked = [d for d in pending('pending-after-offer') if 'offers you' in d['reason']]
     sent_asleep = len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e.get('purpose') == 'deliberate']) - sent_before
@@ -2208,11 +2222,14 @@ def sleeper_case(run):
     run.admin('set_behavior', other, json.dumps({'wait': 120}))
     assert reason.startswith('You woke up: ') and 'attacking you' in reason.split('\n')[0], reason
     assert 'offers you' in reason, f'the offer that waited was not asked with the waking: {reason!r}'
+    assert 'While you slept, you heard: ' in reason and 'verify quiet line to a sleeper' in reason, f'the line heard asleep was not asked with the waking: {reason!r}'
     # (the test graph may put it to sleep again until the mind's reply replaces it)
     run.wait(lambda: not slumber('slumber-after'), 'awake under the mind\'s plan', 30)
     told = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'told') if e['kind'] == 'body' and e['text'].startswith('You woke up: ')]
     assert told, 'the sleeper was not told it woke'
-    return {'status': 'pass', 'model_calls_asleep': sent_asleep, 'woken_reason': reason, 'told': told[0]['text']}
+    heard = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'heard-on-waking') if e['kind'] == 'heard_asleep' and 'verify quiet line' in e['text']]
+    assert len(heard) == 1, f'the line heard asleep was not told once on waking: {heard}'
+    return {'status': 'pass', 'model_calls_asleep': sent_asleep, 'talk_turns_asleep': talks_asleep, 'woken_reason': reason, 'told': told[0]['text'], 'heard_asleep': heard[0]['text']}
 
 
 def system_text(body):

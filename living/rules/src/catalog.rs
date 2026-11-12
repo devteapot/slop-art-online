@@ -55,6 +55,9 @@ pub struct SkillSpec {
     pub moment: bool,
     /// In a graph it takes the body back from a deliberate act (a flight).
     pub reflex: bool,
+    /// How loud it is where it lands (a blow: the noise of a fight; a voice is 1): loud enough,
+    /// it wakes a sleeper near enough (the `wake_loudness` and `wake_reach` laws). 0: silent.
+    pub loudness: f32,
     /// What its target may be, by the rules' target classes (`TARGET_CLASSES`: a creature, a
     /// resource, a structure, a place); empty: any. `target_class: "creature"` in the spec.
     pub target_class: Vec<String>,

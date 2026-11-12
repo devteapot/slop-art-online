@@ -3014,6 +3014,7 @@ def sleeper(s):
     s.graph(b, {"wait": 120})
     s.graph(a, {"wait": 120})
     sleeper_cue(s)
+    sleeper_sounds(s)
 
 
 def sleeper_cue(s):
@@ -3053,6 +3054,104 @@ def sleeper_cue(s):
         s.graph(o, {"wait": 300})
         # (off the open line, so a later scene's cues and sight see no one of this one)
         off_the_line(s, line, [o, n], dy=56)
+
+
+def sleeper_sounds(s):
+    """What wakes a sleeper by sound (perceive::wakes): a sound at least `wake_loudness` loud (its
+    spec's `loudness`: a way of speaking, a signal, a blow) within `wake_reach` metres, whoever
+    plays the sleeper and whoever made the sound. A baby's cry wakes its parent and a stranger at
+    the same distance; a quiet line does not wake, a called name does, and the quiet line is told
+    on waking as heard while asleep; a fight 3 m away wakes, one beyond the reach does not.
+    Needs a world with an infant (the infant fixture)."""
+    babies = [c for c in s.rows("SELECT * FROM character WHERE stage = 0", "babies") if c["alive"] and c["kind"] == "person"]
+    s.expect("a world with an infant (the infant fixture)", bool(babies), len(babies))
+    baby = babies[0]
+    parent = baby["parent_a"]
+    line = open_line(s, 40)
+    x0, y = line[0]
+    park = lambda who, k: s.call("place_at", who, line[30 + k][0], y)
+    adults = s.people(6)
+    speaker, z_line, f1, f2, z_near, z_far = adults
+    stranger = adults[0]
+    for who in [baby["id"], parent] + adults:
+        s.graph(who, {"wait": 120})
+    for k, who in enumerate(adults):
+        park(who, k)
+    slumber = lambda who: s.rows(f"SELECT * FROM slumber WHERE actor = {who}")
+    def sleep(who):
+        s.graph(who, {"seq": [{"do": "sleep"}]})
+        s.wait(lambda: slumber(who), seconds=20)
+    def woke(who, words, seconds=60):
+        def found():
+            told = [e for e in s.rows(f"SELECT text FROM experience WHERE observer = {who} AND kind = 'body'") if e["text"].startswith("You woke up: ") and words in e["text"]]
+            return told
+        try:
+            return s.wait(found, seconds=seconds, every=1)
+        except TimeoutError:
+            return []
+    # A parent 3 m from its crying baby wakes.
+    s.call("place_at", baby["id"], x0, y)
+    s.call("place_at", parent, x0 + 3, y)
+    sleep(parent)
+    s.graph(baby["id"], {"do": {"skill": "signal", "item": "cry"}})
+    told = woke(parent, "crying")
+    s.graph(baby["id"], {"wait": 120})
+    s.expect("a parent 3 m from its crying baby wakes, told why", bool(told), told)
+    s.graph(parent, {"wait": 120})
+    s.call("place_at", parent, line[36][0], y)
+    # A stranger at the same distance wakes too (the cry comes again after 45 s at most).
+    s.call("place_at", stranger, x0 + 3, y)
+    sleep(stranger)
+    s.graph(baby["id"], {"do": {"skill": "signal", "item": "cry"}})
+    told = woke(stranger, "crying", seconds=75)
+    s.graph(baby["id"], {"wait": 120})
+    s.expect("a stranger 3 m from someone else's crying baby wakes too", bool(told), told)
+    s.graph(stranger, {"wait": 120})
+    park(stranger, 0)
+    s.call("place_at", baby["id"], line[38][0], y)
+    # A quiet line does not wake; a called name does, and the quiet line is then told as heard asleep.
+    names = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM character")}
+    s.call("place_at", z_line, x0 + 3, y)
+    s.call("place_at", speaker, x0, y)
+    sleep(z_line)
+    quiet = f"{names[z_line]}, are you awake? verify quiet line"
+    s.call("mind_say", speaker, quiet, z_line, "", 0, THOUGHT)
+    time.sleep(2.2)
+    # A quiet line to the room that names the sleeper: kept too, with how it was said
+    # (speech-address) in the sleeper's own labels.
+    s.call("mind_say", speaker, f"{names[z_line]}, the boat is in. verify room line", 0, "", 0, THOUGHT)
+    time.sleep(4)
+    kept = s.rows(f"SELECT * FROM heard_asleep WHERE actor = {z_line}", "heard-asleep")
+    told_now = [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {z_line}") if "verify quiet line" in e["text"]]
+    s.expect("a quiet line to a sleeper does not wake it", bool(slumber(z_line)) and not woke(z_line, "", seconds=1), slumber(z_line))
+    s.expect("the line waits for its waking, untold", any("verify quiet line" in r["text"] for r in kept) and not told_now, {"kept": kept, "told": told_now})
+    s.call("mind_say", speaker, f"{names[z_line]}!", z_line, "call", 0, THOUGHT)
+    told = woke(z_line, "calls out", seconds=15)
+    s.expect("a called name wakes the sleeper, told why", bool(told), told)
+    heard = [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {z_line}", "heard-on-waking") if "verify quiet line" in e["text"]]
+    s.expect("on waking, the quiet line is told as heard while asleep", len(heard) == 1 and heard[0]["kind"] == "heard_asleep" and heard[0]["text"].startswith("While you slept, you heard: "), heard)
+    room = [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {z_line}", "heard-room-on-waking") if "verify room line" in e["text"]]
+    s.expect("a line to the room heard asleep is told with how it was said, in the sleeper's labels", len(room) == 1 and room[0]["kind"] == "heard_asleep" and "to the room, naming you" in room[0]["text"], room)
+    s.expect("nothing is left waiting", not s.rows(f"SELECT * FROM heard_asleep WHERE actor = {z_line}"))
+    for who in (speaker, z_line):
+        s.graph(who, {"wait": 120})
+    park(speaker, 1); park(z_line, 2)
+    # A fight 3 m away wakes; one beyond the reach (wake_reach, 8 m by default) does not.
+    s.call("place_at", f1, x0, y)
+    s.call("place_at", f2, x0 + 1, y)
+    s.call("place_at", z_near, x0 + 4, y)
+    s.call("place_at", z_far, x0 + 13, y)
+    sleep(z_near)
+    sleep(z_far)
+    s.graph(f1, {"do": "attack", "target": {"nearest": "person"}})
+    told = woke(z_near, "fight", seconds=30)
+    time.sleep(3)
+    s.graph(f1, {"wait": 120})
+    s.graph(f2, {"wait": 120})
+    s.expect("a fight 3 m away wakes a sleeper", bool(told), told)
+    s.expect("a fight 12 m away (beyond the reach) does not", bool(slumber(z_far)) and not woke(z_far, "", seconds=1), slumber(z_far))
+    # (off the open line, so a later scene finds no one of this one on it)
+    off_the_line(s, line, adults + [baby["id"], parent], dy=56)
 
 
 def world_tiles(s):
