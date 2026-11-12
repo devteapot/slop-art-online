@@ -135,6 +135,9 @@ fn described(s: &Scripts) -> Result<(), String> {
     if let Some(f) = asked.iter().find(|f| !declared.contains(f.as_str())) {
         return Err(format!("install refused: the law `{f}` has no description (declare `{f}_law()` with `about`, or list it in another law's `covers`)"));
     }
+    if let Some(e) = s.laws_about_error() {
+        return Err(format!("install refused: the world constants' words could not be read ({e})"));
+    }
     if s.has("laws") {
         let about = s.laws_about();
         for k in s.law_names() {
