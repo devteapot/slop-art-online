@@ -17,7 +17,7 @@ python3 living/tools/trials.py run --batch dry1 wolves --replicates 1 --minutes 
 python3 living/tools/trials.py clean --batch dry1
 ```
 
-- `--fake` starts the shared [fake model server](../../verify-llm/scripts/fake_llm.py), keeps the variant's models file with its routing but points every profile at that server, named `fake-<model>` (so the journal shows where each call was routed), and blanks the provider keys in the mind's environment. `fake-requests.jsonl` in the batch directory holds every request.
+- `--fake` starts the shared [fake model server](../../verify-llm/scripts/fake_llm.py), keeps the variant's models file with its routing but points every profile at that server, named `fake-<model>` (so the journal shows where each call was routed), and blanks the provider keys in the mind's environment. `fake-requests.jsonl` in the batch directory holds every request. A variant with `LIVING_RETHINK=jev` also has its gate's Jev judge pointed at the fake server's `/v1/systemone` (`LIVING_RETHINK_URL`, with a placeholder `TYPESAFE_API_KEY`), so a gated arm runs free too. The fake answers every gate question 0.1, so every non-urgent request is held (`glf2`, docs/GATE_LIVE.md).
 - Each instance's `actions.log` shows every reducer call with its HTTP status; `events.jsonl` shows every timeline step and trigger as it fired, and any refused call.
 - `samples.jsonl` advances every 2 s from the start; `summary.json` exists for every instance, including failed ones (`stopped_by` says why).
 - `journal/` in the instance directory is a copy of the mind's journal (`.local/living/journal/<db>/`), with the actual requests and replies.

@@ -2067,7 +2067,7 @@ def pack_batch(src, out_dir, scrubber, name=None, machine=None):
            "files": [{k: r[k] for k in ("path", "bytes", "status", "reason")} |
                      {"path": scrubber.publish_path(r["path"]),
                       "redactions": {c: v["count"] for c, v in r["findings"].items()}} for r in rows],
-           "models": _model_counts(calls),
+           "models": _model_counts(calls) | dict((analysis_batch(src) or {}).get("models_in_outputs") or {}),
            "held": [{"path": scrubber.publish_path(r["path"]), "reason": r["reason"]}
                     for r in rows if r["status"] in ("excluded", "held", "review", "refused")],
            "self_name_ambiguous": len([d for d in scrubber.ambiguous
@@ -2481,10 +2481,31 @@ def installed_sha_problems(rows, data):
     return out
 
 
+def analysis_batch(src):
+    """An analysis record (batch.json `"kind": "analysis"`): files made from other batches' evidence
+    (replays, judge items and labels), with no instances of its own. It declares, in
+    `models_in_outputs`, the models whose words it carries, so the model gate still applies."""
+    try:
+        with open(os.path.join(src, "batch.json"), encoding="utf-8") as f:
+            b = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return b if isinstance(b, dict) and b.get("kind") == "analysis" else None
+
+
 def check_batch_complete(src):
-    """A batch is complete when batch.json exists and every instance has its summary.json."""
+    """A batch is complete when batch.json exists and every instance has its summary.json.
+    An analysis record is complete when every file its batch.json lists is present."""
     if not os.path.exists(os.path.join(src, "batch.json")):
         raise Refused(f"{tilde(src)}: no batch.json")
+    a = analysis_batch(src)
+    if a is not None:
+        if not isinstance(a.get("models_in_outputs"), dict):
+            raise Refused(f"{tilde(src)}: an analysis record must declare models_in_outputs")
+        missing = [f["path"] for f in a.get("files") or [] if not os.path.exists(os.path.join(src, f["path"]))]
+        if not a.get("files") or missing:
+            raise Refused(f"{tilde(src)}: analysis record incomplete: {', '.join(missing[:3]) or 'no files listed'}")
+        return []
     insts = [d for d in sorted(os.listdir(src)) if os.path.isdir(os.path.join(src, d))
              and os.path.exists(os.path.join(src, d, "cast.json"))]
     if not insts:

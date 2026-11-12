@@ -357,6 +357,34 @@ pub fn unsaid(ctx: &ReducerContext, speaker: u32, to: u32, way: &str, text: &str
     Ok(())
 }
 
+/// The latest line someone other than `speaker` said to `to` that `speaker` heard after
+/// `since_ms` (first-sight-crowd): its experience row, the way's kind, the other speaker its
+/// subject and `to` (or the handle `speaker` knows them by) its object.
+pub fn addressed_by_another(ctx: &ReducerContext, speaker: u32, to: u32, since_ms: u64) -> Option<Experience> {
+    let sc = common::scripts(ctx);
+    let kinds: Vec<&str> = sc.ways().iter().map(|w| w.kind.as_str()).collect();
+    let real = crate::far::resolve(ctx, speaker, to);
+    ctx.db
+        .experience()
+        .observer()
+        .filter(speaker)
+        .filter(|e| e.at_ms > since_ms && (e.object == to || e.object == real) && e.subject != 0 && e.subject != speaker && e.subject != to && e.subject != real && kinds.contains(&e.kind.as_str()))
+        .max_by_key(|e| e.at_ms)
+}
+
+/// A mind's line to `to` that comes due after the speaker heard another address them since its
+/// decision (`heard_first_rethinks`, docs/FIRST_SIGHT.md "Crowds"): it is not said yet. The
+/// speaker is told, with the line it heard, and its mind is asked to think again with that in
+/// front of it; what it decides then is said as it decides.
+pub fn held_for_another(ctx: &ReducerContext, speaker: u32, to: u32, text: &str, heard: &Experience, now: u64) {
+    let (Some(me), Some(b)) = (ctx.db.character().id().find(speaker), ctx.db.body().id().find(speaker)) else { return };
+    let who = common::label_for(ctx, &me, crate::far::resolve(ctx, speaker, to));
+    let text = text.trim();
+    let line = format!("You had not yet said “{text}” to {who} when you heard: {}", heard.text.trim());
+    percept(ctx, &me, now, "unsaid", to, heard.subject, pos(&b, now), line.clone(), 0.5);
+    crate::perceive::ask_again(ctx, speaker, &line, now);
+}
+
 /// The most similar line this speaker said within the last 90 s, when nearly the same
 /// (word-set Jaccard >= 0.6): seconds ago and the words.
 fn said_recently(ctx: &ReducerContext, speaker: u32, text: &str, now: u64) -> Option<(u64, String)> {

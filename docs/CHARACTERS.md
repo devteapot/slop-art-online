@@ -1802,7 +1802,7 @@ Nothing in `living/game` was edited in step 3, and every file loads in today's c
 
 **What the client does now** (`characters/compose.rs`), against the files of char-4's hair finish (Cullet's 64 wear 95 shared files, 36.4 MB):
 
-- **The switch.** `LIVING_GAME_COMPOSE=1` composes every recipe that carries a person line (`person` in a recipe: the generator's `<name>.params.json` line). Off, the default, the same recipe is its whole `base` file, as before.
+- **The switch.** `LIVING_GAME_COMPOSE=1` composes every recipe that carries a person line (`person` in a recipe: the generator's `<name>.params.json` line). Off, the default, the same recipe is its whole `base` file, as before. Since compose-client-2 composing is the default and `LIVING_GAME_COMPOSE=0` turns it off ([below](#the-client-since-compose-client-2-2026-11-12)).
 - **A recipe's `person`** is read as the generator writes it: type, height, proportions, identity, colours (`outfit` by piece name, `beard`, `eyes`), styles (`hair`, `outfit`, `overlays`) and `belly`. A composed character is spawned from `lookdev/types/<type>.glb` with the line's numbers; identity, proportions, height, recolouring, the far switch, springs and the shared clips then run as for any generated person.
 - **Attaching**, when the type's scene comes in and before the person is first fitted (the height is measured over the styles), by `compose.py`'s rule for every file worn:
   - every mesh node of the file comes across, its `Far*` meshes too, each primitive an entity under the person's root;
@@ -1908,6 +1908,56 @@ Nothing in `living/game` was edited in step 3, and every file loads in today's c
 - the dev-box's GPU.
 
 **Evidence:** `.local/living/compose-1/` in the laptop's main checkout: the shared-materials set's `colour5/` (`colour.json`, `worst.jpg`, every arm's shots and plates), `counts5/` (`compose: material … takes toon …`), `cost5/` and `logs5/` (`cost5.log` records the load and the machine's state around each set); the hair finish's `fidelity3/` (the three cuts and Ode Pontil: `fidelity.json`, `stills/`, each arm's shots, `joints.jsonl` and log), `far3/` (Ode Pontil's far model), `cost4/` (`crowd*.json`, the logs and per-frame records of each set's last run) and `logs3/`; the overlays pass's `fidelity2/`, `talk/`, `cost3/` and `logs2/`; the first pass's `fidelity/`, `cost/`, `cost2/` and `logs/`.
+
+### The client since compose-client-2 (2026-11-12)
+
+For composed people on char-4's bundle `9207d6a8` (main `42ca0b67`: the shared iris, its lights, brows coloured by the hair, the neck step and the tones), checked against whole files generated from the same commit (the bundle's 64 lines are identical to this branch's own, its style files the same primitives, vertex counts and bounds, its pages identical but for the tint page's one level; ten types' face skin differs by two vertices along a seam, bounds identical).
+
+- **Composing is the default** (`compose::enabled`): every recipe with a person line is composed unless `LIVING_GAME_COMPOSE=0`, which draws its whole file. It changes nothing in live play today: `live::recipe_for` gives every resident and the player a VRoid recipe without a person line, so only look-dev crowds, the asset view and named town recipes compose ([look](LOOK.md) brings lines to live play).
+- **Greying lock by lock** (`characters/compose.rs` `ATTRIBUTE_GREY`, `HairTints`; `characters.rs` `grey_tag`; `toon.wesl` `recolor`).
+  - The glTF loader reads a hair file's `_GREY` (main.rs, as `_OUTLINE_NORMAL`). Composing copies it once a shared mesh into its second UVs, which Bevy's own vertex path brings to the fragment shader; the vertex shader turns the second UVs only for a face's skin, so hair's pass as they are.
+  - **The hair stays one material.** The shared hair toon holds a small palette (`ToonExt::tints`, 256 × 2 texels: natural colours, silvers, each once). A greying person's hair meshes carry in their tag their two places on it and their `grey` (8 bits each), bit 24 set and bit 26 the palette's, bit 25 clear so the wind's sway never takes hair. The shader mixes `mix(hair_natural, hair_silver, clamp(grey × _GREY, 0, 1))` in sRGB values and recolours by it as it does by `colors.hair`. A person without `grey`, hair without `_GREY`, or a colour with no room on the palette keeps the one tint.
+  - **Checked:** a person given a pure red natural colour and a pure green silver at `grey` 0.4 shows green and red locks through a short and a long style (`.local/living/compose-1/c2/redgreen.jpg`); Cullet's greying people (25 of 64, `grey` 0.07 to 0.9) mostly sit high, where most locks are already near silver.
+- **Spring blocks:** `rig_springs` takes every bone group and collider group a worn file names, found by name on the person, as it was built to: `long` brings `Hair` and `HairBack` and all 28 spheres, those on `J_Bip_C_Chest` and `J_Bip_C_Spine` included (20 spring joints on Runa Sarro). Nothing changed in the code.
+- **`.collar` cuts** come by the name in the line (`styles.hair` → `lookdev/styles/hair/<name>.glb`): four of Cullet's 64 wear one. Nothing in the client lists hair files.
+- **The types' shared pages:** a type's far head and lip layer are drawn by `lookdev::convert`, which already makes one material for each distinct content, so with the pages every type's `…Body_01_SKIN` and `…FaceTint_00_FACE` are one material each. Nothing changed in the code.
+- **Brows** (`…FaceBrow_00_FACE`, char-4 `76ec3f5b`) are the one `…_FACE` material that takes a tag, the hair's colour (`slot`); plain colour, the same for every type, so one material.
+- **The shared iris** (`9e8a8a87`) is one material for every type (`LIVING_GAME_PERF=diag,matnames`: `M00_000_00_EyeIris_00_EYE ×1` composed on the full model, against one a person for whole files), and its lights (`42ca0b67`, a disc on each eye's bone inside `…FaceTint_00_FACE`) add no material and no draw. `HUE_SPREAD` and `SHARED_IRIS_SOURCE` in the generator mirror the client's recolour (`characters.rs`, by `HUE_SPREAD`); `eye_colours.py --check` catches a changed source.
+
+**Cost** (`crowd.py`, Cullet's 64 as they are, 1600×900, uncapped, 30 s a run, interleaved). At the game camera (22 m, 28° down) from `cost9` on the neck files, which the iris and brows do not change there (the same 26 materials, 17 batch sets and 104 pairs on `d82e7762`); on the full model (`LIVING_GAME_FAR=1000`) from `cost11` on `9207d6a8`, six runs a mode. Every run with no other game client and no build or play session holding a slot; load average 5.8 to 8.2; each set's runs within 0.4 ms.
+
+| Cullet's 64 | Whole, game camera | Composed, game camera | Whole, full model | Composed, full model |
+|---|---|---|---|---|
+| Mesh entities on people: shown (all) | 210 (786) | 460 (1,342) | 658 (850) | 964 (1,406) |
+| Mesh-material pairs in view (instanced draws) | 210 | **104** | 658 | **244** |
+| Materials on people in view (17 the look-dev player's) | 20 | 26 | 157 | **90** |
+| Opaque batch sets, main pass | 10 | 17 | 84 | **53** |
+| Frame interval p50, median of runs | 4.75 ms | 5.01 ms | 8.33 ms | **7.32 ms** |
+| Frame interval p99, median of runs | 5.53 ms | 5.69 ms | 9.33 ms | **8.28 ms** |
+| Mesh data in the main world, people (morph targets) | 290 MiB (168) | **41 MiB (10)** | same | same |
+| Textures on the GPU, people | 419 MiB | **202 MiB** | same | same |
+| Ready, median | 0.98 s | 0.81 s | 1.01 s | 0.89 s |
+
+- **At the game camera** composed people cost 0.26 ms more than whole files: 9 materials of their own against the whole files' 3, and 17 batch sets against 10.
+- **On the full model** they are 1.0 ms faster: the shared iris and brows took the full model from 106 materials to 90 and from 69 batch sets to 53.
+- **Memory:** a seventh as much mesh data and a tenth of the morph targets, half the people's textures.
+
+**Colour** (`colour_check.py`, all 64, `PERSON_LINES` the bundle's lines; `.local/living/compose-1/colour12b`): composed against whole, by band, CIE76 ΔE of the band's mean.
+
+| Band | Median | 90th percentile | Most |
+|---|---|---|---|
+| Face (close-up) | 1.2 | 2.2 | 4.5 |
+| Head | 2.3 | 6.8 | 15.3 |
+| Torso | 1.5 | 4.7 | 12.3 |
+| Legs | 1.6 | 3.2 | 4.7 |
+
+- **Sharing changes nothing** (`colour11`, on `d82e7762`; the iris lights add no material): composed against one material a file differs in a median 0.007% of pixels, within two runs of the same thing (0.03%).
+- **The eyes** (the eye close-up, the iris found by a run with every person's eyes pure green): composed and whole each sit about 22 ΔE from the line's eye colour (22.8 and 22.4 at the median), which is the lighting and the lights' glow over the iris, the same for both. Composed against whole is 5.5 at the median once each whole close-up is laid onto its composed one (`align`: the close-up is framed by each arm's own figure, a few pixels apart). The largest (Wick Marl 24, Dory Tarn 32) are framings the shift does not find: a child's close-up at 0.93 of her height is in her hair. By eye the irises match, the warm crescent and highlights in place: blue (Amara Okoro) and brown (Marit Sedge, Bram Calloway), `.local/living/compose-1/eyes12/stills`, `eyes12b/stills`.
+- **Where colours still move, by eye** (`s10/stills`):
+  - **Hue within a piece:** a coat's pale elbow patches, red back patches, brown buttons and olive collar take the coat's colour composed. A shared piece keeps only `HUE_SPREAD` (0.4) of its picture's own hue spread round the line's colour; a whole file paints each part its own. Tilly Dunlin's jersey stripes match since the tones.
+  - **Lines and freckles** are heavier composed on every age: a whole file paints age lines into its own atlas by age (none at 35, faint at 58), while a type's one `lines` overlay has one strength for 35 to 70. A graded overlay or a strength in the tag is char-4's to choose.
+  - **Hair:** a whole file's hair is drawn from the person's own numbers, a composed person's is the shared cut (by design, [what a shared style gives up](#hair-as-shared-style-files)).
+
 
 ## Motions on generated people
 

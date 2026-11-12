@@ -681,8 +681,16 @@ const TOWARD_COS: f32 = 0.95;
 /// on `activity`, `steer` and `body` only; nothing is written.
 pub fn doing_of(ctx: &ReducerContext, id: u32, observer: (u32, &str, (f32, f32)), seen: &[NearCreature], now: u64) -> Option<String> {
     let a = ctx.db.activity().id().find(id);
-    if a.as_ref().is_some_and(|a| a.skill != "wait") {
-        return a.map(|a| a.label);
+    if let Some(a) = a.as_ref().filter(|a| a.skill != "wait") {
+        // Whom it is going to (a creature target): named as the observer perceives them
+        // (first-sight-crowd, docs/PERCEPTION.md): "follow → Neve Calloway", "goto → a stranger",
+        // "follow → you", or the far label; the activity's own label names only the kind.
+        if a.target.class == 3 {
+            if let Some((head, _)) = a.label.rsplit_once(" → ") {
+                return Some(format!("{head} → {}", toward_label(ctx, observer.0, a.target.id as u32, now)));
+            }
+        }
+        return Some(a.label.clone());
     }
     let st = ctx.db.steer().id().find(id).filter(|s| s.goal == crate::motion::GOAL_DIRECTION);
     let b = st.as_ref().and_then(|_| ctx.db.body().id().find(id)).filter(|b| b.vx != 0.0 || b.vy != 0.0);
@@ -690,11 +698,42 @@ pub fn doing_of(ctx: &ReducerContext, id: u32, observer: (u32, &str, (f32, f32))
         (Some(st), Some(b)) => {
             let dt = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
             let (x, y, heading) = living_rules::steer::pose(b.x, b.y, b.heading, b.vx.hypot(b.vy), b.turn, b.turn_s, dt);
-            let among = std::iter::once((observer.1, observer.2)).filter(|_| observer.0 != id).chain(seen.iter().filter(|c| c.id != id).map(|c| (&*c.kind, c.pos)));
-            Some(moving_label(st.flags & crate::motion::FLAG_RUN != 0, (x, y), heading, among))
+            let among = std::iter::once((observer.0, observer.1, observer.2)).filter(|_| observer.0 != id).chain(seen.iter().filter(|c| c.id != id).map(|c| (c.id, &*c.kind, c.pos)));
+            let run = st.flags & crate::motion::FLAG_RUN != 0;
+            Some(match moving_ahead((x, y), heading, among) {
+                Some((who, _)) => format!("{} → {}", if run { "run" } else { "walk" }, toward_label(ctx, observer.0, who, now)),
+                None => moving_label(run, (x, y), heading, std::iter::empty()),
+            })
         }
         _ => a.map(|a| a.label),
     }
+}
+
+/// Whom someone is going to, as `observer` perceives them: "you", their label (a name it knows,
+/// "a stranger", the far label), or the creature's kind for an animal.
+fn toward_label(ctx: &ReducerContext, observer: u32, target: u32, now: u64) -> String {
+    if target == observer {
+        return "you".into();
+    }
+    match ctx.db.character().id().find(observer) {
+        Some(o) => label(ctx, &o, target, now),
+        None => "someone".into(),
+    }
+}
+
+/// The nearest of `among` (id, kind, position) that a mover at `at` heading `heading` walks
+/// toward (within about 18° of its line), if any.
+pub fn moving_ahead<'a>(at: (f32, f32), heading: f32, among: impl IntoIterator<Item = (u32, &'a str, (f32, f32))>) -> Option<(u32, &'a str)> {
+    let (hx, hy) = (heading.cos(), heading.sin());
+    among
+        .into_iter()
+        .filter_map(|(id, kind, p)| {
+            let (dx, dy) = (p.0 - at.0, p.1 - at.1);
+            let d = dx.hypot(dy);
+            (d > 0.3 && (dx * hx + dy * hy) / d >= TOWARD_COS).then_some((d, id, kind))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, id, kind)| (id, kind))
 }
 
 /// What a creature is visibly doing and how far into it (docs/PERCEPTION.md, "What someone is
@@ -755,15 +794,7 @@ impl Visibly {
 pub fn moving_label<'a>(run: bool, at: (f32, f32), heading: f32, among: impl IntoIterator<Item = (&'a str, (f32, f32))>) -> String {
     let gait = if run { "run" } else { "walk" };
     let (hx, hy) = (heading.cos(), heading.sin());
-    let ahead = among
-        .into_iter()
-        .filter_map(|(kind, p)| {
-            let (dx, dy) = (p.0 - at.0, p.1 - at.1);
-            let d = dx.hypot(dy);
-            (d > 0.3 && (dx * hx + dy * hy) / d >= TOWARD_COS).then_some((d, kind))
-        })
-        .min_by(|a, b| a.0.total_cmp(&b.0));
-    match ahead {
+    match moving_ahead(at, heading, among.into_iter().map(|(k, p)| (0, k, p))) {
         Some((_, kind)) => format!("{gait} → {kind}"),
         None => format!("{gait} {}", common::direction(at, (at.0 + 2.0 * hx, at.1 + 2.0 * hy))),
     }

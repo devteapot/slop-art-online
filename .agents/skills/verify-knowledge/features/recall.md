@@ -32,3 +32,7 @@ After checking projection, the helper requests a new thought about `knowledge_ma
 - `LIVING_GROUNDS` is off by default. The real mind in this proof runs without it, so recall here never follows `GROUNDS`; `grounds_link_stories_and_lessons` covers both settings in the store.
 - `LIVING_LESSONS=1` changes the consolidation system prompt; the fake model ignores it. Only a paid lab shows its effect.
 - Prompt proof includes the entire user prompt. A cue repeated in a reason is not sufficient by itself; the helper also checks the graph, projections and authored-memory prefix.
+
+## Homes
+
+Since 2026-11-12 (house-owner-label; docs/IDEAS_AUDITS.md §2: minds already keep homes as places and free `LIVES_AT` edges, and recall brings them back). `scripts/homes.py` drives it with the real mind, the fake model and Neo4j. Asserted: M's notice line names F while F is too far away to make out; M's `place` rows hold "<F>'s house" at the house; Neo4j holds `person:<F> -LIVES_AT-> place:verify_home_f`; with F in sight, the think prompt's "# What comes to mind" has the `LIVES_AT` line naming F and the house. Evidence: `homes.json`, `prompt-homes.txt`, `neo4j-lives-at.txt`, `homes-overlay.rhai`. The fake model's consolidation writes the home, so this proves the store, the projection and recall, not that a model would keep it.
