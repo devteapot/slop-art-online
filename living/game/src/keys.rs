@@ -52,6 +52,8 @@ pub enum Act {
     Interact,
     Talk,
     Address,
+    /// Change the way of speaking in the open box (the world's ways, `speech_card`).
+    Way,
     Wave,
     Nod,
     LookOver,
@@ -68,7 +70,7 @@ impl Act {
     pub fn all() -> Vec<Act> {
         let mut v = vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Weapon, Act::Primary, Act::Secondary, Act::Skill1, Act::Skill2, Act::Skill3];
         v.extend((0..EXTRA).map(Act::Extra));
-        v.extend([Act::Interact, Act::Talk, Act::Address, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log, Act::Glance]);
+        v.extend([Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log, Act::Glance]);
         v
     }
 
@@ -159,6 +161,7 @@ impl Binds {
         set(Act::Interact, vec![K(KeyF)]);
         set(Act::Talk, vec![K(Enter)]);
         set(Act::Address, vec![K(Tab)]);
+        set(Act::Way, vec![K(ArrowUp)]);
         set(Act::Wave, vec![K(KeyG)]);
         set(Act::Nod, vec![K(KeyB)]);
         set(Act::LookOver, vec![K(KeyV)]);

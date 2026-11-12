@@ -337,7 +337,7 @@ fn dump(
         "top": ws.top().map(|w| w.name()),
         "menu": ws.menu,
         "acts": verbs.menu.as_ref().map(|m| serde_json::json!({"title": m.title, "group": m.group, "rows": m.rows().iter().map(|r| r.label()).collect::<Vec<_>>()})),
-        "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone()), "told": talk.as_ref().and_then(|t| t.told.as_ref()).map(|t| serde_json::json!({"text": t.text, "ways": t.ways})), "tab": talk.as_ref().and_then(|t| t.tabbed.as_ref().map(|(p, e, c, by)| serde_json::json!({"prev": p, "earshot": e, "chose": c, "authority": by})))})),
+        "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone()), "way": talk.as_ref().and_then(|t| t.card.as_ref()).map(|c| serde_json::json!({"name": c.name, "label": c.label, "max_chars": c.max_chars, "gap_ms": c.gap_ms, "needs_to": c.needs_to})), "told": talk.as_ref().and_then(|t| t.told.as_ref()).map(|t| serde_json::json!({"text": t.text, "ways": t.ways})), "tab": talk.as_ref().and_then(|t| t.tabbed.as_ref().map(|(p, e, c, by)| serde_json::json!({"prev": p, "earshot": e, "chose": c, "authority": by})))})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
         // Speech bubbles over heads: whose, and their words only (speech-detail-1).
