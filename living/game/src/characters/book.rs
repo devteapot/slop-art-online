@@ -39,13 +39,12 @@ pub fn band_of_type(kind: &str) -> Option<u8> {
     }
 }
 
-/// One line: the person as compose reads it, and the words the generator wrote for it (kept as
-/// the book has them; `living_rules::look::phrase` reads them once the authority half lands).
+/// One line: the person as compose reads it, and the words the generator wrote for it
+/// (`living_rules::look::LookWords`, read by [`LookBook::words`]).
 #[derive(Deserialize, Clone, Debug)]
 pub struct Line {
     pub person: Person,
     #[serde(default)]
-    #[allow(dead_code)]
     pub words: serde_json::Value,
 }
 
@@ -122,7 +121,19 @@ impl LookBook {
             return None;
         }
         fit.sort_by(|a, b| a.0.cmp(b.0));
-        Some(fit[(mix(seed) % fit.len() as u64) as usize])
+        // The authority's pick (`living_rules::look::pool_pick`), on the person's own seed.
+        living_rules::look::pool_pick(seed, 0, fit.len()).map(|i| fit[i])
+    }
+
+    /// What a glance can say of the person wearing `key` (`living_rules::look::phrase`'s
+    /// inputs): the line's words and its band by its type (an infant wears a child's type, and
+    /// the far phrase says "child" for both). None for a key the book lacks or words that do not
+    /// read.
+    pub fn words(&self, key: &str) -> Option<(living_rules::look::LookWords, living_rules::look::LookBand)> {
+        let line = self.lines.get(key)?;
+        let words = serde_json::from_value(line.words.clone()).ok()?;
+        let band = living_rules::look::LookBand::from_code(band_of_type(&line.person.kind)?)?;
+        Some((words, band))
     }
 
     /// The lines a character can wear (every line but the decor), in key order.
@@ -165,11 +176,12 @@ fn cover(mut want: Vec<(&str, BTreeSet<String>)>) -> Vec<String> {
     out
 }
 
-/// The book, read on first use; None (one warning) when there is none.
+/// The book, read on first use; None (one warning) when there is none. `LIVING_GAME_LOOK_BOOK=<path>`
+/// reads another (a test's copy: a line left out, another generation).
 pub fn book() -> Option<&'static LookBook> {
     static BOOK: OnceLock<Option<LookBook>> = OnceLock::new();
     BOOK.get_or_init(|| {
-        let path = std::path::Path::new(&crate::lookdev::asset_root()).join(FILE);
+        let path = std::env::var("LIVING_GAME_LOOK_BOOK").ok().filter(|p| !p.is_empty()).map(std::path::PathBuf::from).unwrap_or_else(|| std::path::Path::new(&crate::lookdev::asset_root()).join(FILE));
         match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|s| LookBook::parse(&s)) {
             Ok(b) => {
                 bevy::log::info!("looks: {} lines ({} decor), generation {}", b.lines.len(), b.decor.len(), b.generation);
@@ -234,20 +246,12 @@ fn missing_file(key: &str, p: &Person) -> Option<String> {
     m
 }
 
-/// SplitMix64's finaliser: a background person's seed spread over the decor pool.
-fn mix(seed: u64) -> u64 {
-    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn line(kind: &str, hair: &str, outfit: &[&str]) -> serde_json::Value {
-        serde_json::json!({ "person": { "type": kind, "height": 1.6, "styles": { "hair": hair, "outfit": outfit } }, "words": { "colour": "green" } })
+        serde_json::json!({ "person": { "type": kind, "height": 1.6, "styles": { "hair": hair, "outfit": outfit } }, "words": { "form": "woman", "girth": 2, "height": 1, "hair": "dark-haired", "top": "a green smock", "bottom": "dark trousers" } })
     }
 
     fn sample() -> LookBook {
@@ -293,6 +297,16 @@ mod tests {
         // A character never wears a decor line.
         assert_eq!(b.wearable().iter().map(|(k, _)| *k).collect::<Vec<_>>(), vec!["lk_00000000000000a1"]);
         assert_eq!((band_of_type("youth-f-b"), band_of_type("elder-m-a"), band_of_type("giant")), (Some(2), Some(4), None));
+    }
+
+    #[test]
+    fn a_keys_words_say_what_phrase_says() {
+        let b = sample();
+        let (w, band) = b.words("lk_00000000000000a1").unwrap();
+        assert_eq!(band, living_rules::look::LookBand::Adult);
+        assert_eq!(living_rules::look::phrase(&w, living_rules::look::LookSeen::Full, band), "a woman in a green smock and dark trousers, dark-haired, heavy-set");
+        assert_eq!(living_rules::look::phrase(&w, living_rules::look::LookSeen::Far, band), "a figure in a green smock and dark trousers, heavy-set");
+        assert!(b.words("lk_ffffffffffffffff").is_none());
     }
 
     #[test]

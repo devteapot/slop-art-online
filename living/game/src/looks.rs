@@ -3,10 +3,12 @@
 //! - **A name only when the rules give it:** the projection's `name` from `seen_characters`
 //!   (empty until my character knows it: kin, community, or someone who told it their name,
 //!   docs/PERCEPTION.md). The client never shows a name from anywhere else.
-//! - **Strangers by looks only:** the projection's own label ("a stranger", "a child", "an old
-//!   stranger", "a baby") with the colour of their clothes as this client draws them
-//!   (`live::recipe_for`: their look's line, else the VRoid recipe seeded by the land and their
-//!   id), "a child in red". A line's chips are its pieces' own colours ([`clothes`]). When two strangers shown read alike, the second colour tells them apart
+//! - **Strangers by looks only:** someone drawn from their look's line (`live::recipe_for`) by
+//!   its words as `living_rules::look::phrase` says them, the words a mind is told: "a woman in
+//!   a green smock and dark trousers, dark-haired". Someone drawn as a VRoid recipe (no look) by
+//!   the projection's own label ("a stranger", "a child", "an old stranger", "a baby") with the
+//!   colour of their clothes as this client draws them, "a child in red". A line's chips are its
+//!   pieces' own colours ([`clothes`]). When two strangers shown read alike, the second colour tells them apart
 //!   ("a stranger in blue and brown"). No role and no place.
 //! - Animals keep the projection's label ("a wolf").
 //! - **Too far to make out** (far-label: beyond the world's recognising range, Cullet's
@@ -37,6 +39,9 @@ pub struct Looks {
     /// The look key each one's colours were read from (empty: a VRoid recipe), so a new look
     /// reads them again.
     drawn_from: HashMap<u32, String>,
+    /// For someone drawn from a line: what a glance says of them made out and from afar
+    /// (`living_rules::look::phrase`, the words a mind is told too). None for a VRoid recipe.
+    phrases: HashMap<u32, Option<(String, String)>>,
     /// When a name first arrived for someone (they were a stranger to me before).
     pub named: Vec<(u32, String)>,
     known: HashMap<u32, bool>,
@@ -237,6 +242,7 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
     let seed = island.as_ref().map(|i| i.land.seed);
     let seen: Vec<SeenCharacter> = conn.db.seen_characters().iter().filter(|c| Some(c.id) != me).collect();
     let mut base: Vec<(u32, String, Option<String>, Option<String>)> = Vec::with_capacity(seen.len());
+    let mut phrased: HashMap<u32, (String, String)> = HashMap::new();
     for c in &seen {
         if !c.name.trim().is_empty() {
             let was = looks.known.insert(c.id, true);
@@ -261,13 +267,21 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
         let (top, bottom) = match (looks.colours.get(&c.id).filter(|_| fresh), seed) {
             (Some(k), _) => k.clone(),
             (None, Some(s)) => {
-                let k = clothes(&crate::live::recipe_for(crate::characters::book::book(), s, c));
+                let recipe = crate::live::recipe_for(crate::characters::book::book(), s, c);
+                let k = clothes(&recipe);
+                // Drawn from the line: its words, as `phrase` says them.
+                let words = recipe.person.as_ref().and_then(|_| crate::characters::book::book()?.words(&key));
+                let ph = words.map(|(w, band)| (living_rules::look::phrase(&w, living_rules::look::LookSeen::Full, band), living_rules::look::phrase(&w, living_rules::look::LookSeen::Far, band)));
                 looks.colours.insert(c.id, k.clone());
+                looks.phrases.insert(c.id, ph);
                 looks.drawn_from.insert(c.id, key);
                 k
             }
             (None, None) => (None, None),
         };
+        if let Some(Some(p)) = looks.phrases.get(&c.id) {
+            phrased.insert(c.id, p.clone());
+        }
         base.push((c.id, c.label.clone(), top, bottom));
     }
     // "a child in red"; a second colour where two read alike. Someone too far away to make out
@@ -279,6 +293,23 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
         None => shown(l),
     }).collect();
     for (i, (id, l, t, b)) in base.iter().enumerate() {
+        // Someone drawn from a line is named by its words: "a woman in a green smock and dark
+        // trousers, dark-haired" made out; too far to make out, the projection's words, and for
+        // plates and hover "a tall figure in a green smock" (no sex, hair or beard).
+        if let Some((full, from_afar)) = phrased.get(id) {
+            let label = if far(l) { l.clone() } else { full.clone() };
+            if far(l) {
+                if looks.plates.get(id) != Some(from_afar) {
+                    looks.plates.insert(*id, from_afar.clone());
+                }
+            } else {
+                looks.plates.remove(id);
+            }
+            if looks.labels.get(id) != Some(&label) {
+                looks.labels.insert(*id, label);
+            }
+            continue;
+        }
         let twin = t.is_some() && first.iter().enumerate().any(|(j, f)| j != i && *f == first[i]);
         let dressed = match (twin, t.as_deref().and_then(colour_name), b.as_deref().and_then(colour_name)) {
             (true, Some(a), Some(c)) if a != c => format!("{} in {a} and {c}", shown(l)),

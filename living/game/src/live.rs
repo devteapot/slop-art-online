@@ -611,7 +611,7 @@ fn bodies(
     // when it is not the book's, and one when the world has no looks.
     if !live.looks_checked && conn.db.world().iter().next().is_some() {
         live.looks_checked = true;
-        let generation = crate::characters::seen::world_generation();
+        let generation = crate::characters::seen::world_generation(conn);
         crate::characters::book::set_world(Some(generation.clone()));
         if generation.is_empty() {
             info!("looks: this world was made before looks; its people are drawn as VRoid bases");

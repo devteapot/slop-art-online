@@ -1997,99 +1997,88 @@ def style_places(line):
     return out
 
 
-def shim_key(book, cid, band):
-    """The test shim's key for a person (`characters/seen.rs`): a line characters wear (not
-    decor) of the band's type, by id."""
-    fit = sorted(k for k, v in book["lines"].items() if k not in book.get("decor", []) and BANDS.get(v["person"]["type"].split("-")[0]) == band)
-    return fit[(cid * 2_654_435_761) % 2**64 % len(fit)] if fit else ""
+def look_rows(run):
+    """The authority's truth (owner SQL on the private `look` table): each person's line key."""
+    return {r["id"]: r["line"] for r in sql(run, "SELECT id, line FROM look")}
 
 
-@scenario("looks")
+def book_copy(out, book, name, drop=(), generation=None):
+    """A test's copy of the look book (`LIVING_GAME_LOOK_BOOK`): lines left out, another generation."""
+    b = json.loads(json.dumps(book))
+    for k in drop:
+        b["lines"].pop(k, None)
+    b["decor"] = [k for k in b.get("decor", []) if k not in drop]
+    if generation:
+        b["generation"], b["generations"] = generation, [generation]
+    os.makedirs(out, exist_ok=True)
+    path = os.path.join(out, f"{name}.looks.json")
+    json.dump(b, open(path, "w"))
+    return path
+
+
+@scenario("looks", cullet=True)
 def looks(run, c):
-    """look-1 (docs/LOOK.md §5): residents are drawn from their projected look key. Until the
-    authority projects looks the key comes from the client's test shim
-    (`LIVING_GAME_LOOK_SHIM`, `characters/seen.rs`) over the look book on disk. Three residents
-    beside the player: A has a key (composed from its line, chips by piece), B has none and C
-    has a key the book lacks (both drawn as VRoid bases, one warning line each, in a world with
-    looks; a world made before looks falls back quietly, one line at connect). A then grows a
-    band and is redrawn in place: drawn in every frame through it, crossfaded. My own look comes
-    from my own row. A second drive gives the world a generation the book does not hold (one
-    warning at connect), and a look-dev island run draws background people from the book's decor
-    lines only."""
+    """look-1 (docs/LOOK.md §5, §7) on a Cullet world, whose genesis gives every resident a look
+    row: everyone drawn from their projected key, each key the authority's own (`look.line`), and
+    my own character from my own row. Two residents beside me (`sync:scene`): A drawn from its
+    line, B's line left out of the client's book (a test copy, `LIVING_GAME_LOOK_BOOK`), so B is
+    a VRoid base with one warning line. Chips by the style files' slot and layer. A second drive
+    with a book of another generation (one warning at connect), and a look-dev island tour whose
+    background people wear decor lines only."""
     s = "looks"
     if not os.path.exists(LOOK_BOOK):
         c.check(s, "a look book is on disk", False, LOOK_BOOK)
         return
     book = json.load(open(LOOK_BOOK))
-    a, b, d = residents(run, 3)
-    # The shim's clock starts with its first look (at connect); the burst of dumps runs from about
-    # 15.5 s to 25 s after it, so the redraw falls inside it.
-    grow_s = 19
-    env = {"LIVING_GAME_LOOK_SHIM": f"on;none={b};missing={d};grow={a}@{grow_s}"}
-    burst = "".join(f"dump:s{i:02d};wait:0.15;" + (f"shot:s{i:02d};" if i % 6 == 0 else "") for i in range(48))
-    # `sync:scene` places the three (drive.py's --place-free); a sync name runs once, so the
-    # second hold has its own; the cursor on screen keeps the pick's `seen` list.
-    plan = f"ready;sync:scene;cursor:0.5,0.5;wait:4;dump:00;shot:00_drawn;wait:5;sync:hold;wait:0.5;{burst}wait:2;dump:02;shot:02_grown;quit"
-    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0", f"{d}:0.5:2.2"], syncs=["hold=refree"], env=env)
+    world = (sql(run, "SELECT look_book FROM world") or [{}])[0].get("look_book", "")
+    rows = look_rows(run)
+    c.check(s, "the world has looks the book holds", world and (world == book["generation"] or world in book.get("generations", [])) and rows and all(k in book["lines"] for k in rows.values()),
+            f"world {world!r}, book {book['generation']!r}; {len(rows)} look rows, {sum(1 for k in rows.values() if k not in book['lines'])} not in the book")
+    a, b = residents(run, 2)
+    ev = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    test_book = book_copy(ev, book, "looks-without-b", drop=[rows.get(b, "")])
+    plan = "ready;sync:scene;cursor:0.5,0.5;wait:5;dump:00;shot:00_drawn;quit"
+    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], env={"LIVING_GAME_LOOK_BOOK": test_book})
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     d0 = dump(out, "00") or {}
     seen0 = {x["id"] for x in d0.get("seen") or []}
-    c.check(s, "scene: the three residents are in view", {a, b, d} <= seen0, f"{a}, {b}, {d} in view {sorted(seen0)}")
+    c.check(s, "scene: both residents are in view", {a, b} <= seen0, f"{a}, {b} in view {sorted(seen0)}")
+    rows = look_rows(run)
     by = {x["id"]: x for x in d0.get("looks") or []}
-    la, lb, ld = by.get(a, {}), by.get(b, {}), by.get(d, {})
-    # The residents are grown (stage 2): the shim gives them an adult line, and a grown band an elder's.
-    c.check(s, "a resident with a key is composed from its line", la.get("composed") is True and la.get("look") == shim_key(book, a, 3), json.dumps(la))
+    held = json.load(open(test_book))["lines"]
+    la, lb = by.get(a, {}), by.get(b, {})
+    c.check(s, "a resident is drawn from the line its row names", la.get("composed") is True and la.get("look") == rows.get(a), f"{json.dumps(la)}; row {rows.get(a)}")
+    wrong = [(x["id"], x.get("look"), rows.get(x["id"])) for x in by.values() if x.get("look") != rows.get(x["id"], "")]
+    c.check(s, "every person drawn carries the key the authority holds for them", by and not wrong, f"{len(by)} drawn; differing {wrong[:3]}")
+    c.check(s, "every key the book holds is drawn composed, every other as a VRoid base", all(x.get("composed") == (x.get("look") in held) for x in by.values()), json.dumps([x for x in by.values() if x.get("composed") != (x.get("look") in held)][:3]))
+    c.check(s, "a key the book lacks: a VRoid base, one warning line", lb.get("composed") is False and lb.get("look") == rows.get(b) and L.count(f"looks: {rows.get(b)} is not in the look book") == 1, f"{json.dumps(lb)}; {L.count('is not in the look book')} warnings")
+    c.check(s, "no warning for people without a key, nor for the generation", "people without a look key" not in L and "was made with look generation" not in L)
     composed = [x for x in by.values() if x.get("composed")]
-    c.check(s, "every composed person's key is in the book, and every person with a key the book holds is composed",
-            all(x["look"] in book["lines"] for x in composed) and all(x.get("composed") for x in by.values() if x.get("look") in book["lines"]), f"{len(composed)} of {len(by)} composed")
-    c.check(s, "no key: drawn as a VRoid base", lb.get("look") == "" and lb.get("composed") is False, json.dumps(lb))
-    c.check(s, "a key the book lacks: drawn as a VRoid base", ld.get("look") == "lk_ffffffffffffffff" and ld.get("composed") is False, json.dumps(ld))
-    c.check(s, "one warning line each for no key and for a key the book lacks",
-            L.count("looks: people without a look key in a world with looks") == 1 and L.count("looks: lk_ffffffffffffffff is not in the look book") == 1,
-            f"{L.count('people without a look key')} and {L.count('lk_ffffffffffffffff is not in')}")
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me_id = sc.get("me")
     chips = lambda key: [outer_piece(book["lines"][key]["person"], True, style_places(book["lines"][key]["person"])), outer_piece(book["lines"][key]["person"], False, style_places(book["lines"][key]["person"]))]
-    me_id = (json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}).get("me")
     # My own chips are not kept (the labels are for others).
-    wrong = [(x["id"], x.get("chips"), chips(x["look"])) for x in composed if x["id"] != me_id and (x.get("chips") or [None, None]) != chips(x["look"])]
-    c.check(s, "chips by piece: a composed person's chips are its line's outermost upper and lower pieces' colours", composed and not wrong, f"{wrong[:3]}")
-    # The style files' extras against the book's files (a cross-check: the extras are the source).
+    off = [(x["id"], x.get("chips"), chips(x["look"])) for x in composed if x["id"] != me_id and (x.get("chips") or [None, None]) != chips(x["look"])]
+    c.check(s, "chips by piece: a composed person's chips are its line's outermost upper and lower pieces' colours", composed and not off, f"{off[:3]}")
     files = book.get("files") or {}
     worn = {p for x in composed for p in book["lines"][x["look"]]["person"].get("styles", {}).get("outfit", [])}
     places = {p: v for x in composed for p, v in style_places(book["lines"][x["look"]]["person"]).items()}
     differ = [(p, places.get(p), files.get(f"styles/outfit/{p}")) for p in sorted(worn) if f"styles/outfit/{p}" in files and (files[f"styles/outfit/{p}"].get("slot"), files[f"styles/outfit/{p}"].get("layer")) != ((places.get(p) or {}).get("slot"), (places.get(p) or {}).get("layer"))]
     c.check(s, "every worn outfit style carries its slot and layer, as the book's files list them", worn and set(places) == worn and not differ, f"{len(places)} of {len(worn)} with extras; differing {differ[:3]}")
-    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
-    me = sc.get("me")
-    mine = by.get(me, {})
-    c.check(s, "my own look comes from my own row", mine.get("composed") is True and mine.get("look") == shim_key(book, me, 3), f"me {me}: {json.dumps(mine)}")
-    # The band change, redrawn in place.
-    burst_d = [dump(out, f"s{i:02d}") or {} for i in range(48)]
-    in_view = [any(x["id"] == a for x in bd.get("seen") or []) for bd in burst_d]
-    swapping = [next((x.get("swapping") for x in bd.get("looks") or [] if x["id"] == a), None) for bd in burst_d]
-    feet = [next((x["feet"] for x in bd.get("seen") or [] if x["id"] == a), None) for bd in burst_d]
-    jumps = [round(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5) for p, q in zip(feet, feet[1:]) if p and q]
-    d2 = {x["id"]: x for x in (dump(out, "02") or {}).get("looks") or []}.get(a, {})
-    c.check(s, "a band change (a new key) redraws the person from the new line", f"looks: #{a} redrawn for a new look" in L and d2.get("composed") is True and d2.get("swapping") is False
-            and d2.get("look") == shim_key(book, a, 4) != la.get("look"), f"{la.get('look')} → {json.dumps(d2)}")
-    c.check(s, "the redraw is in place: drawn in every dump through it, never jumping on screen", any(swapping) and all(in_view) and jumps and max(jumps) <= 60,
-            f"swapping in {sum(1 for w in swapping if w)} of 48 dumps; in view {sum(in_view)} of 48; largest step {max(jumps) if jumps else None} px")
-    c.check(s, "no generation warning when the world's generation is the book's", "looks: the world was made with look generation" not in L)
-    # 2. A world whose generation the book does not hold.
-    out2, code2, text2 = drive(run, "looks-generation", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_SHIM": "on;generation=c4-not-this-book"})
+    mine = by.get(me_id, {})
+    c.check(s, "my own look comes from my own row", mine.get("composed") is True and mine.get("look") == rows.get(me_id), f"me {me_id}: {json.dumps(mine)}; row {rows.get(me_id)}")
+    # Labels by the line's words (`phrase`): A's plate or label names it as a mind is told.
+    names = [t for k, t in d0.get("naming") or [] if k in ("plate", "hover")]
+    c.check(s, "labels by the line's words, no name", not any(n and n in " ".join(names) for n in seed_names(run)) if names else True, f"{names[:4]}")
+    # 2. A book of another generation.
+    other = book_copy(ev, book, "looks-other-generation", generation="c4-not-this-book")
+    out2, code2, text2 = drive(run, "looks-generation", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_BOOK": other})
     L2 = log(out2)
-    c.check(s, "a world generation the book does not hold: one warning at connect", code2 == 0 and L2.count("looks: the world was made with look generation c4-not-this-book") == 1, text2[-200:])
-    # 2b. A world made before looks: everyone falls back quietly, one line at connect.
-    out2b, code2b, text2b = drive(run, "looks-old", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_SHIM": "old"})
-    L2b = log(out2b)
-    olds = {x["id"]: x for x in (dump(out2b, "00") or {}).get("looks") or []}
-    per_person = [l for l in L2b.splitlines() if "looks:" in l and "WARN" in l and "test shim" not in l]
-    c.check(s, "a world made before looks: VRoid bases, one line at connect and no warning per person",
-            code2b == 0 and olds and not any(x.get("composed") for x in olds.values()) and L2b.count("looks: this world was made before looks") == 1 and not per_person,
-            f"{len(olds)} drawn, {sum(1 for x in olds.values() if x.get('composed'))} composed; {L2b.count('made before looks')} connect lines; warnings {per_person[:2]}")
-    # 3. Background people on the look-dev island: from the decor pool only.
+    c.check(s, "a world generation the book does not hold: one warning at connect", code2 == 0 and L2.count(f"looks: the world was made with look generation {world}") == 1, text2[-200:])
+    # 3. Background people on the look-dev island: from the decor lines only.
     decor_lines = set(book.get("decor", []))
-    pool_lines = set(book["lines"]) - decor_lines
+    wearable = set(book["lines"]) - decor_lines
     tour = os.path.join(ROOT, ".local/living/verify", run, "ui", "looks-decor")
     os.makedirs(tour, exist_ok=True)
     client = os.path.join(os.environ.get("CARGO_TARGET_DIR", os.path.join(ROOT, ".local/target")), "release/living-game")
@@ -2097,10 +2086,67 @@ def looks(run, c):
               RUST_LOG="info,wgpu=warn,naga=warn,living_game::island=debug")
     with open(os.path.join(tour, "client.log"), "w") as f:
         r3 = subprocess.run([client], env=e3, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT, timeout=600)
-    L3 = log(tour)
-    drawn = re.findall(r"looks: background person \S+ drawn from decor (lk_[0-9a-f]{16})", L3)
-    c.check(s, "background people are drawn from the decor lines, never a line a character wears", r3.returncode == 0 and drawn and set(drawn) <= decor_lines and not set(drawn) & pool_lines,
+    drawn = re.findall(r"looks: background person \S+ drawn from decor (lk_[0-9a-f]{16})", log(tour))
+    c.check(s, "background people are drawn from the decor lines, never a line a character wears", r3.returncode == 0 and drawn and set(drawn) <= decor_lines and not set(drawn) & wearable,
             f"{len(drawn)} drawn, {len(set(drawn))} lines; outside decor {sorted(set(drawn) - decor_lines)[:3]}")
+
+
+@scenario("looks-old")
+def looks_old(run, c):
+    """look-1 on a world made without looks (the island seed: no `looks`, so no look rows and an
+    empty `world.look_book`): everyone drawn as a VRoid base, quietly, with one line at connect."""
+    s = "looks-old"
+    world = (sql(run, "SELECT look_book FROM world") or [{}])[0].get("look_book", "")
+    c.check(s, "the world has no looks", world == "" and not look_rows(run), f"look_book {world!r}")
+    out, code, text = drive(run, s, "ready;cursor:0.5,0.5;wait:5;dump:00;quit")
+    L = log(out)
+    by = {x["id"]: x for x in (dump(out, "00") or {}).get("looks") or []}
+    warned = [l for l in L.splitlines() if "looks:" in l and "WARN" in l]
+    c.check(s, "everyone a VRoid base without a key, one line at connect, no warning", code == 0 and by and not any(x.get("composed") or x.get("look") for x in by.values()) and L.count("looks: this world was made before looks") == 1 and not warned,
+            f"{len(by)} drawn; {L.count('made before looks')} connect lines; warnings {warned[:2]}")
+
+
+@scenario("looks-band", cullet=True)
+def looks_band(run, c):
+    """A band change redrawn in place, on a Cullet world at a lab pace (`looks_seed.py RUN`, then
+    launch with its seed: a year every 20 s). Three residents whose bands change in the first
+    minute are held beside me; a burst of dumps 0.2 s apart for 70 s. Each key change seen is
+    the authority's new line, composed before and after, drawn in every dump through it and
+    never jumping on screen."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("looks_seed", os.path.join(HERE, "looks_seed.py"))
+    ls = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ls)
+    s = "looks-band"
+    w = (sql(run, "SELECT life_pace, year_days, look_book FROM world") or [{}])[0]
+    c.check(s, "the world runs at the lab pace", abs(w.get("life_pace", 0) - ls.PACE) < 1e-6 and w.get("year_days") == 1, f"{w}; make it with looks_seed.py {run}")
+    if abs(w.get("life_pace", 0) - ls.PACE) >= 1e-6:
+        return
+    people = {r["name"]: r["id"] for r in sql(run, "SELECT id, name, alive FROM character WHERE kind = 'person'") if r.get("alive")}
+    ids = [people[n] for n in ls.CHANGERS if n in people][1:4]
+    before = look_rows(run)
+    burst = "".join(f"dump:b{i:03d};wait:0.2;" + (f"shot:b{i:03d};" if i % 10 == 0 else "") for i in range(350))
+    plan = f"ready;sync:scene;cursor:0.5,0.5;wait:1;{burst}quit"
+    out, code, text = drive(run, s, plan, free=[f"{ids[0]}:-2.5:1.0", f"{ids[1]}:2.0:-1.0", f"{ids[2]}:0.5:2.2"])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    after = look_rows(run)
+    L = log(out)
+    dumps = [dump(out, f"b{i:03d}") or {} for i in range(350)]
+    changes = []
+    for pid in ids:
+        keys = [next((x for x in d.get("looks") or [] if x["id"] == pid), None) for d in dumps]
+        for i in range(1, len(keys)):
+            if keys[i] and keys[i - 1] and keys[i]["look"] != keys[i - 1]["look"]:
+                changes.append((pid, i, keys[i - 1]["look"], keys[i]["look"]))
+    c.check(s, "a band change seen: a resident beside me took a new key", changes, f"{len(changes)} changes among {ids}; rows changed {[k for k in ids if before.get(k) != after.get(k)]}")
+    for pid, i, old, new in changes:
+        lo, hi = max(0, i - 10), min(len(dumps), i + 15)
+        win = dumps[lo:hi]
+        looks_w = [next((x for x in d.get("looks") or [] if x["id"] == pid), {}) for d in win]
+        feet = [next((x["feet"] for x in d.get("seen") or [] if x["id"] == pid), None) for d in win]
+        steps = [round(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5) for p, q in zip(feet, feet[1:]) if p and q]
+        c.check(s, f"#{pid} redrawn in place for its new line", new == after.get(pid) and all(x.get("composed") for x in looks_w) and all(feet) and steps and max(steps) <= 60 and f"looks: #{pid} redrawn for a new look ({old} → {new})" in L,
+                f"{old} → {new} (row {after.get(pid)}); composed {[x.get('composed') for x in looks_w].count(True)}/{len(looks_w)}; in view {sum(1 for f in feet if f)}/{len(feet)}; largest step {max(steps) if steps else None} px")
 
 
 def main():
