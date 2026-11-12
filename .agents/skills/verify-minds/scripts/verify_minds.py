@@ -1266,6 +1266,67 @@ def far_figure_case(run):
     return {'status': 'pass', **result}
 
 
+@case('first-sight')
+def first_sight_case(run):
+    """A first sight of someone one cannot place asks for one thought (docs/FIRST_SIGHT.md, the
+    `first_sight_thinks` law), and the think request the model is sent carries the first-sight
+    line word for word under "# Why you are thinking now". M's mind runs on the fake model; once
+    its first thought has settled (past `think_min_s`), U, a stranger to M, is placed 2 m away.
+    The laws are set with `set_world_law` (the gap at 0: M's opening thought may itself be a first
+    sight of someone else in view) and restored."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    m, u = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    for who in (m, u):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    body = run.sql(f'SELECT * FROM body WHERE id = {m}', 'm-body')[0]
+
+    def place_off(who, offsets):
+        # The first offset with a free walkable tile (water, rock or a crowd may fill one).
+        for dx, dy in offsets:
+            try:
+                run.admin('place_at', who, body['x'] + dx, body['y'] + dy)
+                return (dx, dy)
+            except RuntimeError:
+                continue
+        raise RuntimeError(f'no free tile for {who} at any of {offsets}')
+    place_off(u, [(60.0, 60.0), (-60.0, 60.0), (60.0, -60.0), (-60.0, -60.0), (70.0, 0.0), (-70.0, 0.0), (0.0, 70.0), (0.0, -70.0)])
+    run.admin('set_world_law', 'first_sight_thinks', 'true')
+    # (no gap: M's opening thought may itself be a first sight of someone else in view)
+    run.admin('set_world_law', 'first_sight_gap_s', '0')
+    try:
+        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        assert laws.get('first_sight_thinks') == 'true', laws
+        script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        run.start(model(run, script), [m])
+        requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+        sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+        # Past think_min_s (20 s) of any opening thought (a first sight of someone else in view).
+        time.sleep(30.0)
+        seen_before = len(requests())
+        t0 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+        place_off(u, [(2.0, 0.0), (-2.0, 0.0), (0.0, 2.0), (0.0, -2.0), (1.5, 1.5), (-1.5, -1.5)])
+        line = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {m}', 'experiences-m')
+                                 if e['at_ms'] >= t0 and e['text'].startswith('For the first time you see') and u in (e['subject'], e['object'])], 'the first-sight line', 20)[0]['text']
+        asked = run.wait(lambda: [sent_text(e) for e in requests()[seen_before:] if line in sent_text(e)], 'a think request carrying the line', 60)[0]
+        (run.directory / 'prompt-first-sight.txt').write_text(asked)
+        why = asked.split('# Why you are thinking now\n', 1)[1].split('\n\n', 1)[0] if '# Why you are thinking now\n' in asked else ''
+        checks = {
+            'line_names_a_stranger': 'a stranger' in line,
+            'reason_section_holds_the_line_word_for_word': any(l.strip() == line or l.strip().endswith(line) for l in why.split('\n')),
+            'no_words_added_to_the_line': not any(w in why.lower() for w in ('newcomer', 'visitor', 'new to you', 'near your home', 'worth')),
+        }
+    finally:
+        run.admin('set_world_law', 'first_sight_thinks', 'false')
+        run.admin('set_world_law', 'first_sight_gap_s', '300')
+    result = {'m': m, 'u': u, 'line': line, 'why': why, 'checks': checks}
+    (run.directory / 'first-sight.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 
 TALK_THOUGHT = {'kind': 'talk', 'summary': 'verify room-address line', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
 
