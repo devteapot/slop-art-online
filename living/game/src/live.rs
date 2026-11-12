@@ -62,12 +62,23 @@ const LOTS_PER_FRAME: usize = 6;
 const MOVING: f32 = crate::anim::MOVING;
 
 /// Walking or running clips for every person ([`crate::gait::Family`]): the one place it is
-/// decided. When the authority's rows say whether a body runs (stamina-1's `running`), that word
-/// goes here, per body, ahead of the split; until then the laws' split ([`law_split`]), else the
-/// clips' own.
-fn family(split: Option<f32>) -> crate::gait::Family {
-    split.map_or(crate::gait::Family::Clips, crate::gait::Family::Split)
+/// decided. The authority's word first: a body's row says whether it runs (`Moving::running`,
+/// stamina-1: a run under way with breath, whoever controls it). `run_w` is that body's running
+/// weight, eased toward the word over [`RUN_EASE_S`] so a switch crossfades the two families
+/// instead of popping. Without a row, the laws' split ([`law_split`]), else the clips' own.
+fn family(running: Option<bool>, run_w: &mut f32, dt: f32, split: Option<f32>) -> crate::gait::Family {
+    match running {
+        Some(r) => {
+            let step = dt / RUN_EASE_S;
+            *run_w = (*run_w + if r { step } else { -step }).clamp(0.0, 1.0);
+            crate::gait::Family::Mix(*run_w).settled()
+        }
+        None => split.map_or(crate::gait::Family::Clips, crate::gait::Family::Split),
+    }
 }
+
+/// A body's switch between walking and running clips crossfades over this (s).
+const RUN_EASE_S: f32 = 0.25;
 
 /// The speed between walking and running by the world's laws (m/s, a grown person off a road):
 /// the geometric mean of a rested grown person's walking speed (`move_speed`) and running speed
@@ -215,6 +226,9 @@ struct Shown {
     rest_at: Option<Vec2>,
     /// The drawn speed before any move under way (a jump's dash speeds the body up).
     calm_speed: f32,
+    /// How far the body's gaits are the running family's (0–1), eased toward its row's
+    /// `running` ([`family`]).
+    run_w: f32,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -505,7 +519,7 @@ fn bodies(
         info!("gait: walk/run split {split:?} m/s by the laws (script revision {})", rules.revision);
         live.walk_run = Some((rules.revision, split));
     }
-    let family = family(live.walk_run.and_then(|w| w.1));
+    let split = live.walk_run.and_then(|w| w.1);
     // Bodies that left sight fade out where they were, then go.
     // A faint figure goes at once when its body is sent again, else fades out after a moment.
     live.leaving.retain_mut(|(e, t, id, ghost)| {
@@ -622,11 +636,12 @@ fn bodies(
             if mine {
                 commands.entity(entity).insert(crate::gait::Feet);
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0 });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 } });
             live.heights.insert(id, height);
             continue;
         }
         let s = live.shown.get_mut(&id).unwrap();
+        let family = family(row.as_ref().map(|r| r.running), &mut s.run_w, dt, split);
         // A person's clip file: its directional, turn, start and jump takes (`gait.rs`,
         // `takes.rs`), and its pace and stride as drawn last frame.
         let (gaits, pace, stride) = match q.get(s.entity) {
@@ -924,7 +939,11 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
             }
             roam.pos = p;
             roam.moving = speed > MOVING;
-            roam.running = live.walk_run.and_then(|w| w.1).is_some_and(|v| speed > v);
+            // The authority's word, as for the clips; the laws' split without a row.
+            roam.running = match net.conn.as_ref().and_then(|c| crate::net::find_motion(c, id)) {
+                Some(m) => m.running,
+                None => live.walk_run.and_then(|w| w.1).is_some_and(|v| speed > v),
+            };
             roam.speed = speed;
             target.0 = Some(Vec3::new(p.x, island.height(p.x, p.y), p.y));
         }
