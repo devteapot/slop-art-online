@@ -735,12 +735,30 @@ class Player:
         self.call("human_move", 0.0, 0.0, False)
         return members
 
+    def walk_route(self, points, name, per_point_s=45):
+        """Walk through `points` (world metres) in turn, a `goto` to each as the client's
+        click-to-walk sends it, on to the next once within 3 m or after `per_point_s`; silent. A
+        `human_route` event marks the start and the end, with where the player was."""
+        inst = self.inst
+        inst.emit("events", {"t": inst.t(), "human_route": {"name": name, "from_ms": inst.now_ms(), "points": points, "at": [round(x, 1) for x in (self.me() or (0, 0))]}})
+        for p in points:
+            self.act({"do": "goto", "target": {"at": [round(p[0], 1), round(p[1], 1)]}})
+            end = time.time() + per_point_s
+            while time.time() < end:
+                here = self.me()
+                if here and dist(here, p) <= 3.0:
+                    break
+                time.sleep(2.0)
+        self.call("human_move", 0.0, 0.0, False)
+        inst.emit("events", {"t": inst.t(), "human_route_end": {"name": name, "to_ms": inst.now_ms(), "at": [round(x, 1) for x in (self.me() or (0, 0))]}})
+
     def stands_session(self, spec):
         """The strangers trial (docs/STRANGERS.md section 6; `script: arrive` with `stands` a list): a newcomer
         who says and does nothing. It joins (`newcomer`) at the arrival point, then stands
         silent at each of `stands` in turn: `{"at": "arrival", "s": 300}` where it is (the arrival
         point, as at a gate), `{"at": "group", "s": 300}` after walking to the densest group of
-        residents (`approach_group`). Then it stays where it is to the end of the run. It never
+        residents (`approach_group`); an entry `{"walk": [[x, y], ...], "name": ...}` walks through
+        the town instead (`walk_route`, stage 2b: along the Strand past the Fish Steps). Then it stays where it is to the end of the run. It never
         speaks, gestures or names itself, so it stays a stranger. Each stand is a `human_stand`
         event (from/to ms, who was within 12 m at its start) for arrive_report.py; `human_walk`
         marks the arrival (its join) and each walk."""
@@ -750,6 +768,10 @@ class Player:
                 self.join_newcomer(inst.trial["newcomer"])
             avoid = ()
             for k, st in enumerate(spec.get("stands") or []):
+                if st.get("walk"):
+                    # A walk through the town, as a player clicks along a street: no stand.
+                    self.walk_route(st["walk"], st.get("name", "a walk"), per_point_s=st.get("per_point_s", 45))
+                    continue
                 inst.emit("events", {"t": inst.t(), "human_walk": {"stand": k, "from_ms": inst.now_ms(), "to": st.get("at")}})
                 members = self.approach_group(seconds=spec.get("walk_s", 150), within=spec.get("within_m", 5.0), avoid=avoid) if st.get("at") == "group" else []
                 near = [(round(d, 1), c["id"], c["name"]) for d, c in self.residents_near(12)]
@@ -1760,7 +1782,9 @@ class Instance:
                         ("skill_use", f"SELECT * FROM skill_use WHERE actor = {S}"), ("deliberation", f"SELECT * FROM deliberation WHERE actor = {S}"),
                         ("structure", f"SELECT * FROM structure WHERE owner = {S}"), ("chronicle", "SELECT * FROM chronicle"),
                         ("character", "SELECT * FROM character WHERE " + " OR ".join(f"id = {i}" for ids in self.roles.values() for i in ids)),
-                        ("stats", "SELECT * FROM stats")):
+                        ("stats", "SELECT * FROM stats"),
+                        # Every attention cue in the world (at most 8 per character; docs/ATTENTION.md).
+                        ("cue", "SELECT * FROM cue")):
             try:
                 snap[name] = self.rows(q)
             except RuntimeError as e:

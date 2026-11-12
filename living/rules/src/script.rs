@@ -490,6 +490,13 @@ pub struct Laws {
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
     pub stranger_by_name: bool,
+    /// Attention cues (docs/ATTENTION.md): what a mind wrote it should be brought to think
+    /// about, matched against what its character perceives. Off: nothing is matched.
+    pub cues_on: bool,
+    /// A cue fires at most once per thing it matched within this many seconds.
+    pub cue_cooldown_s: f32,
+    /// A character is brought to think by its cues at most once within this many seconds.
+    pub cue_gap_s: f32,
     /// A sound heard but not seen is near within this, close within the next (metres), and
     /// lingers this long after it was last heard (seconds).
     pub heard_near_m: f32,
@@ -556,6 +563,9 @@ impl Default for Laws {
             longing_food: 0.0,
             fov_on: false,
             stranger_by_name: false,
+            cues_on: false,
+            cue_cooldown_s: 600.0,
+            cue_gap_s: 60.0,
             heard_near_m: 5.0,
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
@@ -1350,7 +1360,7 @@ impl Scripts {
                 continue;
             }
             let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
-            const KNOWN: &[&str] = &["aim", "timed", "rooted", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
+            const KNOWN: &[&str] = &["aim", "timed", "rooted", "committed", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
             if let Some(k) = m.keys().find(|k| !KNOWN.contains(&k.as_str())) {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", KNOWN.join(", ")));
             }
@@ -1372,6 +1382,7 @@ impl Scripts {
                 aim,
                 timed: flag("timed")?,
                 rooted: flag("rooted")?,
+                committed: flag("committed")?,
                 hostile: flag("hostile")?,
                 reflex: flag("reflex")?,
                 // A dash evades unless it says otherwise; nothing else does.
@@ -2509,6 +2520,9 @@ impl Scripts {
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
+            cues_on: flag("cues_on", l.cues_on),
+            cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
+            cue_gap_s: g("cue_gap_s", l.cue_gap_s).clamp(0.0, 3_600.0),
             heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
             heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
             heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),
@@ -3344,6 +3358,24 @@ mod tests {
 
     /// How far a walker's facing may turn from its way toward a held look is the world's law:
     /// 75 degrees shipped, a world's own value taken (and kept within 0..180).
+    /// Attention cues (docs/ATTENTION.md): off by default, with their cooldown and gap as laws
+    /// a world may set (`set_world_law`), clamped to sane bounds.
+    #[test]
+    fn attention_cues_are_the_world_s_laws() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        let l = shipped.laws();
+        assert!(!l.cues_on);
+        assert_eq!((l.cue_cooldown_s, l.cue_gap_s), (600.0, 60.0));
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5))])).unwrap();
+        on.validate().unwrap();
+        let l = on.laws();
+        assert!(l.cues_on);
+        assert_eq!((l.cue_cooldown_s, l.cue_gap_s), (30.0, 0.0));
+    }
+
     #[test]
     fn the_walking_look_limit_is_the_world_s_law() {
         let src = include_str!("../../scripts/skills.rhai");
@@ -3790,6 +3822,9 @@ mod tests {
         assert_eq!(with(|x| x.missile), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.aim == Aim::Point), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.rooted), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot"]));
+        // Committed (combat minds §3.2, committed-moves): every windup and the dashes, the same for
+        // every controller.
+        assert_eq!(with(|x| x.committed), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot", "throw", "dodge", "jump"]));
         assert_eq!(with(|x| x.hostile), sorted(vec!["attack", "throw", "shoot", "threaten", "strike", "bowshot", "firebolt"]));
         assert_eq!(with(|x| x.force), sorted(vec!["attack", "throw", "shoot", "yield", "strike", "bowshot", "firebolt"]));
         assert_eq!(with(|x| x.dares), sorted(vec!["attack", "seize", "strike"]));
@@ -3873,6 +3908,21 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
     /// past that with the same words as before; a world's own kind of store holds its own and is
     /// found wherever a storage is asked for by name (`like`). Cullet's four stores hold theirs,
     /// and a crate anyone builds there is the shipped storage again.
+    #[test]
+    fn a_world_switches_committed_per_skill_in_its_own_laws() {
+        // A world's laws (an overlay through `floors::compose`, as a seed's `laws_file` is
+        // installed) may make one skill uncommitted without touching code; the others keep theirs.
+        let src = include_str!("../../scripts/skills.rhai");
+        let w = Scripts::new(&crate::floors::compose(src, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }").unwrap()).unwrap();
+        let sh = w.shapes();
+        assert!(!sh.get("dodge").unwrap().committed);
+        assert!(sh.get("jump").unwrap().committed && sh.get("strike").unwrap().committed && sh.get("throw").unwrap().committed);
+        // The rest of the dodge's shape is the shipped one, and no `base_dodge` skill appears.
+        assert_eq!(sh.get("dodge").unwrap().aim, crate::combat::Aim::Dash);
+        assert!(sh.get("dodge").unwrap().evades && sh.get("base_dodge").is_none());
+        assert!(scripts().shapes().get("dodge").unwrap().committed);
+    }
+
     #[test]
     fn a_store_holds_what_its_kind_holds() {
         let shipped = scripts();

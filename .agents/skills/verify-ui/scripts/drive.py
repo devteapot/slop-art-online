@@ -37,7 +37,7 @@
 
 Exit code: the client's, or 1 when an expectation fails or the client never joined.
 """
-import argparse, json, os, re, subprocess, sys, time
+import argparse, signal, json, os, re, subprocess, sys, time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 STDB = os.path.join(ROOT, "living/tools/stdb")
@@ -192,6 +192,31 @@ def run_client(a, db, out, client, env, places, syncs, free_places=()):
     log = open(log_path, "w")
     p = subprocess.Popen([client], env=env, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT)
     print(f"client pid {p.pid}; evidence {out}", flush=True)
+    # Whatever ends this drive (a scene's error, a SIGTERM or SIGHUP from whoever ran it), the
+    # client goes with it, by its own pid (`stop`); a SIGKILL cannot be caught, and the client
+    # then quits by itself once its parent is gone (live.rs, `parent_pid`).
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda n, _f: sys.exit(128 + n))
+    try:
+        return drive_client(a, db, out, client, p, log_path, places, syncs, free_places)
+    finally:
+        stop(p)
+
+
+def stop(p):
+    """End the client this drive started, by its pid: a terminate, then a kill after 10 s."""
+    if p.poll() is not None:
+        return
+    print(f"stopping the client (pid {p.pid})", flush=True)
+    p.terminate()
+    try:
+        p.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.wait()
+
+
+def drive_client(a, db, out, client, p, log_path, places, syncs, free_places):
     scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "snaps": {}, "client": client, "admin_link": a.admin_link}
     me, placed, t0, ident, last_at = None, False, time.time(), None, None
     while p.poll() is None:

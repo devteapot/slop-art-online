@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      scenarios: field windows talk items themes film pick turns look-walk bar offers wheel wheel-workplace grid support (default: all but support, wheel-workplace and grid, which need a Cullet world)
+  check.py --run RUN [SCENARIO ...]      default: every scenario but those that need a Cullet world
+  check.py --list                        the scenarios, in the order they are defined (* needs Cullet)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
 Each scenario drives the real client headless through drive.py (one client run per scenario),
@@ -19,6 +20,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
 V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 W, H = 1600, 900
+
+
+# The scenarios, by name, in the order they are defined below: each registers itself with
+# @scenario. CULLET: those the default run leaves out, because they need a Cullet world.
+SCENARIOS = {}
+CULLET = set()
+
+
+def scenario(name, cullet=False):
+    def register(function):
+        assert name not in SCENARIOS, f"scenario {name} registered twice"
+        SCENARIOS[name] = function
+        if cullet:
+            CULLET.add(name)
+        return function
+    return register
 
 
 def sql(run, q):
@@ -131,6 +148,7 @@ def apart(d):
     return True
 
 
+@scenario("windows")
 def windows(run, c):
     s = "windows"
     plan = ("ready;wait:2;shot:01_explore;dump:01;click:@menu;wait:0.4;shot:02_menu;dump:02;click:@menu:Settings;wait:0.5;shot:03_settings;dump:03;"
@@ -156,6 +174,7 @@ def windows(run, c):
     c.check(s, "Esc again opens Menu (and frees the cursor)", d["12"] and d["12"]["menu"] and "Esc with nothing open: Menu, cursor freed" in log(out))
 
 
+@scenario("talk")
 def talk(run, c):
     s = "talk"
     a, b = residents(run)
@@ -264,6 +283,7 @@ def talk(run, c):
     c.check(s, "every act toward them (More…) leaves out face: a player faces where it looks (play-test 5)", len(more) > 3 and not any(r == "face" or r.startswith("face ") for r in more), str(more))
 
 
+@scenario("items")
 def items(run, c):
     s = "items"
     a, b = residents(run)
@@ -317,6 +337,7 @@ THEMES = ["glass", "clear", "night", "linen", "walnut"]  # F4's order (`ui::wood
 
 
 
+@scenario("themes")
 def themes(run, c):
     s = "themes"
     n = len(THEMES)
@@ -347,6 +368,7 @@ def themes(run, c):
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
 
 
+@scenario("film")
 def film(run, c):
     """The film (`post::Film`, Settings › Play › Film): a fresh settings file starts in Soft and
     saves no choice; Settings sets Full and None and the file keeps the last; the next start reads
@@ -382,6 +404,7 @@ def act(actor, a):
     return "mind_act|%d|%s|\"verify-ui\"" % (actor, json.dumps([inner]))
 
 
+@scenario("offers")
 def offers(run, c):
     """A resident's swap and terms, offered to the player (admin `mind_act`, as a mind decides):
     each a card in the maker's window; its buttons are the rules' skills on `offer` (Accept,
@@ -468,6 +491,7 @@ SUPPORTS = [
 AWAY = (540.5, 766.5)
 
 
+@scenario("support", cullet=True)
 def support(run, c):
     """What I stand on or step onto never fades (the owner's Cullet walk: the flight dithered away
     while climbing it). Needs a Cullet world (`--seed cullet`) and the cutaway's debug log."""
@@ -509,6 +533,7 @@ def support(run, c):
     c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
 
 
+@scenario("pick")
 def pick(run, c):
     """Two people overlapping on screen: the cursor on the one in front (its chest, with the one
     behind standing where the cursor's ground point falls) names, hovers and addresses that one.
@@ -551,6 +576,7 @@ def pick(run, c):
     c.check(s, "two bodies asked onto one spot, overlapping on screen: the same one every frame, the nearest the camera under the cursor", len(set(unders)) == 1 and unders[0] in (a, b) and all(front(x) == unders[0] for x in st), f"under {unders}, front of those under the cursor {[front(x) for x in st]}")
 
 
+@scenario("bar")
 def bar(run, c):
     """The cluster on the rules' bar (`bar_places`): sheathed, the hostile slots are greyed with
     their reason and X draws; a press the rules refuse is noted in their words and flashes its
@@ -603,6 +629,7 @@ def ground(d):
     return ((d or {}).get("extra") or {}).get("cursor_ground")
 
 
+@scenario("turns")
 def turns(run, c):
     """The cursor while the view turns or zooms (Cullet walk 1, the owner: a pan turned the view
     and carried the cursor off with it). A two-finger pan, a pinch either way and a left drag,
@@ -788,6 +815,7 @@ def compare_fov(snap, dumps, me):
     return out
 
 
+@scenario("field")
 def field(run, c):
     """Facing sight (`fov_on`): off, the client draws no field (its dumps have no facing); on (F5
     through the admin link), the field and its readout appear, and at four looks the authority's
@@ -1258,6 +1286,7 @@ def look_walk_others(run, c):
         json.dump({"other": other, "twist_median": tw, "legs_off_median": legs, "frames": len(walking), "authority": row}, open(os.path.join(out, "others.json"), "w"), indent=1)
 
 
+@scenario("look-walk")
 def look_walk(run, c):
     """`look-walk` (play-test 5, item 2): every preset, or `LOOK_WALK_PRESETS=chest,head`;
     `LOOK_WALK_REUSE=1` checks the last drives' feet logs again, `LOOK_WALK_RECORD=1` also records
@@ -1286,6 +1315,7 @@ def look_walk(run, c):
     c.check(s, "the settings file keeps it", saved == "head", str(saved))
 
 
+@scenario("wheel")
 def wheel(run, c):
     """The wheel (docs/INTERFACE.md §8): hold F on a resident, the held cursor picks a section,
     letting go chooses; Esc and the hub send nothing; a flick opens it with its direction; a
@@ -1332,6 +1362,7 @@ def wheel(run, c):
         c.check(s, f"after closing ({k}) the cursor is where it was (1 px)", bool(ok), str((x0, x1)))
 
 
+@scenario("wheel-workplace", cullet=True)
 def wheel_workplace(run, c):
     """A fuel fire's wheel on Cullet (a furnace, oven, hearth or smokehouse with no one by it):
     Make pinned north and Feed east; with the fire out, Make
@@ -1369,6 +1400,7 @@ def wheel_workplace(run, c):
     c.check(s, "and the authority's words are noted", len((d["04"] or {}).get("notes") or []) > 0, str((d["04"] or {}).get("notes")))
 
 
+@scenario("grid", cullet=True)
 def grid(run, c):
     """A recipe grid (recipes-1, docs/INTERFACE.md example 4), on Cullet: at a cold hearth the
     wheel's Make opens the grid, every cell greyed with the rules' reason; fed (Feed › wood) it
@@ -1413,6 +1445,7 @@ def grid(run, c):
     c.check(s, "the authority made it: ash in the pack", first != "ash" or got >= 1, f"ash {got}")
 
 
+@scenario("walk-law")
 def walk_law(run, c):
     """Settings › Play › Walk speed (stamina-1 made walk_base live): the row reads the world's
     `walk_base` law from the installed script and, through a play scene's admin link, writes it
@@ -1443,6 +1476,7 @@ def walk_law(run, c):
     c.check(s, "2.6 chosen again: three chips", len(chips("06")) == 3 and sel("06") == ["2.6 m/s"], str(chips("06")))
 
 
+@scenario("pools")
 def pools(run, c):
     """stamina-1's pools on the bar: the focus bar ("Mana", `while_short`) shows only while short;
     a slot whose pool is short of its cost greys in the rules' own words (`short_of`: "not enough
@@ -1470,6 +1504,7 @@ def pools(run, c):
     c.check(s, "refilled to its max again, the mana bar goes", "focus" not in ms("02"), str(list(ms("02"))))
 
 
+@scenario("own")
 def own(run, c):
     """mind-act-outcome-far (force_outcomes): my own strikes, shots and casts get an `own`
     act_outcome row and experience line. The client takes notes and Log events only from `act`
@@ -1501,6 +1536,7 @@ def own(run, c):
 UNHEARD_SPOT = (300.0, 330.0)
 
 
+@scenario("unheard")
 def unheard(run, c):
     """speech-truth (`speech_truth`, on by default): a line nobody could hear gets the authority's
     truthful `silence` row and a `reach` act outcome. The client shows those words once, as a
@@ -1573,6 +1609,7 @@ FAR = "someone too far away to make out"
 FAR_LAW = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
 
 
+@scenario("far")
 def far(run, c):
     """far-label in the client: someone too far away to make out keeps the authority's words in
     the talk target (and the Log), while their plate and hover read "someone in blue" from the
@@ -1612,6 +1649,44 @@ def far(run, c):
     c.check(s, "what I send carries my words and their id, no colour words", re.search(rf'say: "{re.escape(line)}" to #{b}\b', L) is not None and said and not any("someone in" in x.get("text", "") for x in said) and not re.search(r'(say|act)[^\n]*someone in ', L), f"{len(said)} said rows")
     c.check(s, "close again: a stranger in their colours", bool(near5) and near5.startswith("a stranger"), f"{near5!r}")
     notes_clear(c, s, out)
+
+
+@scenario("committed")
+def committed(run, c):
+    """committed-moves in the client: a windup or a dash, once started, runs its whole course.
+    A fire bolt (R) cast at the ground and W pressed during its windup: the authority keeps the
+    windup (the bolt goes) and holds the walk, which follows once it ends; the client draws no
+    movement meanwhile (the dump's `me_at`: drawn, and the authority's row). Then a dodge (`dodge:D`)
+    and the guard (Q) pressed mid-dodge: the rules' refusal ("in the middle of a dodge") once,
+    quietly, as a note; the dodge completes; the guard is sent but not predicted (client.log)."""
+    s = "committed"
+    cards = {r["skill"]: r for r in sql(run, "SELECT skill, windup_ms, recover_ms FROM skill_card")}
+    wb = (cards.get("firebolt") or {}).get("windup_ms", 600) / 1000.0
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}"]
+    plan = ("ready;sync:noon;sync:spot;wait:2;key:KeyX:tap;wait:0.6;cursor:0.5,0.3;wait:0.3;dump:a0;"
+            f"key:KeyR:down;wait:0.08;key:KeyW:down;wait:0.05;dump:a1;wait:{max(wb / 2 - 0.13, 0.05):.2f};dump:a2;wait:{wb / 2 + 0.2:.2f};key:KeyR:up;dump:a3;"
+            "wait:1.2;dump:a4;key:KeyW:up;wait:1.8;dump:b0;dodge:D;wait:0.06;key:KeyQ:down;wait:0.12;dump:b1;key:KeyQ:up;wait:1.0;shot:02_dodged;dump:b2;quit")
+    out, code, text = drive(run, s, plan, syncs=syncs)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("a0", "a1", "a2", "a3", "a4", "b0", "b1", "b2")}
+    at = lambda k, w: ((d[k].get("me_at") or {}).get(w))
+    pos = lambda k, w: (lambda v: (v["x"], v["y"]) if isinstance(v, dict) else (tuple(v) if v else None))(at(k, w))
+    dist = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 if a and b else None
+    still = [dist(pos("a0", w), pos(k, w)) for k in ("a1", "a2") for w in ("body", "drawn")]
+    c.check(s, "W pressed in the windup: neither the authority's body nor the drawn one moves", all(x is not None and x < 0.1 for x in still), f"windup {wb:.2f} s; moved {still}")
+    after = dist(pos("a0", "body"), pos("a4", "body"))
+    c.check(s, "the walk follows once the windup ends (held, then resumed)", after is not None and after > 0.5, f"{after}")
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    bolts = [r for r in (sql(run, f"SELECT id, kind, skill, why FROM act_outcome WHERE observer = {me}") if me else []) if r.get("skill") == "firebolt"]
+    c.check(s, "the authority kept the windup: the bolt went (its outcome told)", bool(bolts), str(bolts)[:200])
+    notes = [n for k in ("a1", "a2", "a3", "a4") for n in d[k].get("notes") or []]
+    c.check(s, "no note of a cancel while walking was held", not any("moved" in n.lower() or "broke off" in n.lower() for n in notes), str(notes))
+    mid = [n for k in ("b1", "b2") for n in d[k].get("notes") or [] if "middle of a dodge" in n]
+    c.check(s, "the guard mid-dodge: the rules' words, once, as a note", len(set(mid)) == 1 and all(n.count("middle of a dodge") == 1 for n in mid), str([d[k].get("notes") for k in ("b1", "b2")]))
+    dodged = dist(pos("b0", "body"), pos("b2", "body"))
+    c.check(s, "the dodge completes", dodged is not None and dodged > 1.5, f"{dodged}")
+    c.check(s, "the guard was sent but not predicted", "pressed during my dodge: sent, not predicted" in log(out), "client.log")
 
 
 def seed_names(run):
@@ -1683,6 +1758,7 @@ def naming_of(out):
     return texts, given
 
 
+@scenario("names", cullet=True)
 def names(run, c):
     """perceived-names-1's guard: a fresh player on a world from a named seed (Cullet) points at
     residents, opens their wheel, the talk box, the Log and its People, and a person's window. No
@@ -1712,6 +1788,7 @@ def names(run, c):
     c.check(s, "no person or place is named by a seed name the player was not given", not hits, f"{hits[:6]}; given {sorted(given)[:8]}")
 
 
+@scenario("death")
 def death(run, c):
     """The death screen names no one it should not (perceived-names-1). An admin's `kill` whose
     cause names a resident (code `other`) says "You died", not the cause; killed by a stranger
@@ -1752,6 +1829,7 @@ def death(run, c):
     c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and words[0].startswith("Killed by a stranger") and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}")
 
 
+@scenario("houses")
 def houses(run, c):
     """owner-known in the client: a structure is named by its kind, "{name}'s {kind}" only once
     my character knows the owner by name (`my_known_names`), "your {kind}" when mine. The scene
@@ -1798,6 +1876,7 @@ def houses(run, c):
     c.check(s, "a house of mine: your house", aim("03") == ["your house"], str(aim("03")))
 
 
+@scenario("shot")
 def shot(run, c):
     """fix-missile-told in the client: an arrow on me is told as a shot, by the shooter as my
     character perceives them when it sees them, else by the arrow alone; the weapon's note is
@@ -1843,19 +1922,22 @@ def shot(run, c):
     c.check(s, "the shooter's name is nowhere", not any(sname in t for k in d for _, t in d[k].get("naming") or []), sname)
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death, "houses": houses, "shot": shot}
-
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", required=True)
+    ap.add_argument("--run")
+    ap.add_argument("--list", action="store_true", help="print the registered scenarios, one per line (* needs a Cullet world), and exit")
     ap.add_argument("scenarios", nargs="*")
     a = ap.parse_args()
+    if a.list:
+        print("\n".join(n + (" *" if n in CULLET else "") for n in SCENARIOS))
+        return
+    if not a.run:
+        ap.error("--run is required")
     if not f"verify-{a.run}".startswith("verify-ui-"):
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
-    # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
-    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace", "grid", "names")]:
+    # The Cullet scenarios need a Cullet world (`--seed cullet`), the others the island's residents.
+    for name in a.scenarios or [k for k in SCENARIOS if k not in CULLET]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)

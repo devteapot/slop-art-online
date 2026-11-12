@@ -243,6 +243,19 @@ Skin and eye colours, pieces and exact numbers are left out.
 - On a world with several settlements, about 100–250 tokens a scene with 10–20 unnamed people in sight.
 - Authority cost: one extra point lookup per perceived person when a projection is rebuilt, and no new subscription.
 
+## Stage 2b (prepared 2026-11-12; not run)
+
+One replicate of each of four arms, about $10. It runs only after fix-far-silence, far-handle and attention-cues are on main.
+- **The arms:** C (`strangers-2b-c`), L and LS (`strangers-2b`, control and filter), and LS + cues (variant `strangers-filter-cues`: `stranger_by_name` and `cues_on` on).
+- **The newcomer's walk.** It is player behaviour, not a fixture: after the stand at the arrival point, the newcomer walks the Strand (`walk_route`, a `goto` to each point as a player clicks along a street). It goes down from the Counting House yard to the quay and west along it, past the Fish Steps, where Ingrid Morrow mends, about 6 m off. Then it stands at the densest group as before.
+- **Silent approaches** count only a `goto` or `follow` aimed at the newcomer, a wave or nod at them, or a path that bent toward them and stayed within 4 m for 6 s (`arrive_spread.py` `bent_toward`). Turning to face them is not one. A resident whose own routine only passes within 4 m is counted as `passed_by`.
+  - Recomputed on stage 2's runs: approaches C 6→2, L 13→1, LS 6→2; passed by 4, 12, 3.
+- **The cues arm** is a stub until attention-cues lands: today `set_world_law cues_on` is refused ("`cues_on` is not a law of this world") and the instance does not start.
+- **Fake 5-minute pass** (`st2bf`, main `49dfc2cd` plus this branch):
+  - C, L and LS ran to duration; the walk took about 35 s.
+  - Ingrid got a first-sight line for the newcomer in all three ("For the first time you see a stranger, 8 tiles east, goto → (490,779)."), closest 0.6–3.5 m.
+  - The cues arm was refused as above.
+
 ## Far handles (far-handle, 2026-11-12; built)
 
 Stage 2 showed that the far label alone did not stop a mind from naming far figures (docs/TRIALS.md, "Strangers stage 2"):
@@ -277,3 +290,7 @@ The general coordinator decided on a handle of the sighting.
 - The prompt shows a far figure under a handle, the line tagged with that handle, and no line tying the handle to F's name or id.
 - A wave at the handle reaches F.
 - Brought within 2 m, F is made out (the handle is joined to F's id), and the scene names F.
+
+**Measure change (2026-11-12, st2b analysis).**
+- "In range" now includes the newcomer's walks (`human_route`), not only its stands. Anyone it passes within 12 m on the Strand is classed (`arrive_report.WALKS`; `arrive_spread.py --stands-only` gives the old measure).
+- The target's "about 10–16 in range" was written for the stands. Re-scored, st2b has 18–24 in range.

@@ -12,9 +12,11 @@ Branch `fix-unseen-killer-id` from `7729fc9b`, the trial service `slop-trials-st
 
 Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-owner4-050631`: 42/42 (`land_plan` private; `my_known_names` returns only the caller's own known names). An earlier run, `client-owner-043942`, failed "own mind and player effects" once: the first identity's `{"wait":30}` command had ended (28 s passed before the effects probe on a loaded machine) and its plan was back to "waiting for you"; on rerun the gap was 7 s and it passed. That is a harness timing gap, not this change; the drive's 30 s command is short for a slow machine.
 
-## 2026-11-12 far-label (Spark) After merging main (`03d32e09`, `client-far3-031340`): `far_label.py` 3/3.
+## 2026-11-12 far-label (Spark)
 
 Branch `far-label` (`2095a272`/`18b7754b`), the trial service `slop-trials-stdb`. `run.py` fixed suite, `client-farlabel-023653`: exit 0. New `far_label.py`, `client-far2-024145`: 3/3 (through the SDK probe the player's `seen_characters` labels a stranger at 2 m "a stranger", one at 6 m "someone too far away to make out", neither named; the far one brought to 2 m becomes "a stranger"). The first attempt (`client-far-024057`) read the probe's events wrongly (the rows were right); the script now reads `tables`.
+
+After merging main (`03d32e09`, `client-far3-031340`): `far_label.py` 3/3.
 
 ## 2026-11-12 stamina-1 (Spark)
 
@@ -76,12 +78,12 @@ Branch `lives-3` (four columns appended with defaults to the private `rhythm` ta
 
 ## 2026-11-11 rules-offers: `my_offers` (Spark)
 
-Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. The driver's view inventory and own-state set gained `my_offers`, and the probe reads it. A new offers step runs after `in-sight` ([perception.md](../features/perception.md)). `client-offers-20261111-184207` (scoped): 34 rows, all PASS. `client-offers-open-20261111-184616` (open): `my_offers` PASS, but "combat feed scoped to its viewer" FAILED: player-2's `my_combat` rows (kept 4 s) were gone before its probe, while a cargo build ran beside the suite. `client-offers-open2-20261111-184926` (open, rerun alone): all PASS but the known open-build `experience` XFAIL.
+Branch `rules-offers` (from main `74a6d8a`, then `35c0717` merged), on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Every scratch database answered 404 after cleanup. The driver's view inventory and own-state set gained `my_offers`, and the probe reads it. A new offers step runs after `in-sight` ([perception.md](../../features/perception.md)). `client-offers-20261111-184207` (scoped): 34 rows, all PASS. `client-offers-open-20261111-184616` (open): `my_offers` PASS, but "combat feed scoped to its viewer" FAILED: player-2's `my_combat` rows (kept 4 s) were gone before its probe, while a cargo build ran beside the suite. `client-offers-open2-20261111-184926` (open, rerun alone): all PASS but the known open-build `experience` XFAIL.
 
 ## 2026-11-11 eye-2: tile classes a client receives; presence timing (dev-box)
 
 Branch `eye-2` (from main `eead7a29`), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup.
-- Tile classes (new, [game-client.md](../features/game-client.md#tile-classes), `scripts/tile_classes.py`): every `terrain_chunk` of an island world through the probe (16,384 chunks). `client-eye2-tiles1` (drop-1's hosting): 4,116 drop and 61 low tiles, the rules' counts. `client-eye2v-tiles` (eye-2): 4,116 drop, 9,153 low and 35,161 wall tiles, the rules' counts.
+- Tile classes (new, [game-client.md](../../features/game-client.md#tile-classes), `scripts/tile_classes.py`): every `terrain_chunk` of an island world through the probe (16,384 chunks). `client-eye2-tiles1` (drop-1's hosting): 4,116 drop and 61 low tiles, the rules' counts. `client-eye2v-tiles` (eye-2): 4,116 drop, 9,153 low and 35,161 wall tiles, the rules' counts.
 - Fixed suite: `client-eye2v` and `client-eye2v2` each failed one check, "presence counts each open connection" (1 → 1 → 0, then 1 → 2 → 0; the dev-box was at load 45). The probe's holds counted from its own start, so the first connection closed before or right after the second opened. Presence is unchanged on this branch. The driver now waits up to 15 s for each expected count and holds the connections 30 s and 6 s (features/presence.md). `client-eye2v3`: 30 PASS, presence 1 → 2 → 1.
 
 ## 2026-11-11 goods-1 (dev-box)
@@ -120,6 +122,7 @@ Own scratch container `scale-verify` (image `v2.14.1`, port 3427) named by `LIVI
 - `client-scale-open-011435` (`LIVING_PERCEPTION=open`): 30 PASS and the known XFAIL (anonymous `experience` in the open build).
 - After merging main `fe6ec66` (megacity-1, soak-1): `client-scale-merge-scoped-091456` 30 of 30; private table visibility 63 tables; permission matrix 206 calls, 0 mismatches. The run before it stopped at the reducer inventory: megacity's `create_floor` (admin only, now in `ADMIN`) and `genesis_step` (scheduled only, now in `SCHEDULED` with `tick` and `housekeeping`) were not listed on main either.
 - The two runs before stopped at the driver's inventories: the four new private tables, and `judged` (table) and `mind_judged` (reducer) from the harness merge, which the driver did not list. Both inventories now name them; `mind_judged` is called with one judgment for the caller's own character and refused for others'.
+
 ## 2026-11-10 `guest`, and harness-1's `judged` and `mind_judged` (Mac)
 
 On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
@@ -153,7 +156,7 @@ Own scratch container `slop-townlife-stdb` (image `v2.14.1`) through a `docker` 
 The dev-box ran its own scratch container `slop-live-stdb` (image `v2.14.1`, own volume, `/wasm` from the worktree) through a `docker` name shim. The other worktrees' containers were not touched. The worktree was `c5a2c00`, with uncommitted `living/game` changes (the connected game client); the authority, rules and bindings were unchanged. Evidence was copied to the dev-box's `~/live-evidence/` before the worktree was removed.
 
 - **`client-live-suite`** (`run.py`, default seed) exited 0, with 13 PASS and the two known XFAILs. The base subscription received 685 body and 4 stats updates. The permission matrix made 164 calls with 0 mismatches. Reconnect recorded 1 drop and 2 connections.
-- **`client-live-1`** (`--seed island`) ran [game-client.md](../features/game-client.md):
+- **`client-live-1`** (`--seed island`) ran [game-client.md](../../features/game-client.md):
   - The real game client ran headless nine times. Every run logged `world kind: Land` and `digests match` (tiles `9d1884118850c39c`, heights `f860069dd92e1341`, layout `f59dcf9649678035`), with the land regenerated in 1.4 to 1.5 s.
   - It joined at the arrival point (512.5, 174.5), walked into the town through `goto` and `human_move`, and spoke. It received a line from the harness player (heard bubble and chat log), and after an admin `kill` showed the death screen, rejoined and played a new character.
   - Through the probe, `controller = :sender` returned only the player's character. The character ⋈ body join with `OR`ed chunk ranges returned 72 characters for 72 bodies.
@@ -245,7 +248,7 @@ These are real Rust SDK WebSocket observations after `on_applied`. Admin SQL doe
 | Anonymous experience privacy | XFAIL, KNOWN ISSUE. 3,374 received perceptions for 260 observers | `privacy-experience.json` |
 | Anonymous thought privacy | XFAIL, KNOWN ISSUE. Twelve thoughts for three actors, including scripted raw-detail markers | `privacy-thought.json` |
 
-Both XFAILs track [LIVING_HANDOFF.md, Still open](../../../../docs/LIVING_HANDOFF.md). `living/authority/src/tables.rs:417` makes `experience` public and `tables.rs:588` makes `thought` public. Both privacy assertions still require denial. They become XPASS and make the driver exit 1 when access is fixed. Missing foreign fixtures or a transport failure remains FAIL. Product code was unchanged.
+Both XFAILs track [LIVING_HANDOFF.md, Still open](../../../../../docs/LIVING_HANDOFF.md). `living/authority/src/tables.rs:417` makes `experience` public and `tables.rs:588` makes `thought` public. Both privacy assertions still require denial. They become XPASS and make the driver exit 1 when access is fixed. Missing foreign fixtures or a transport failure remains FAIL. Product code was unchanged.
 
 ## Identity-scoped deliberations
 

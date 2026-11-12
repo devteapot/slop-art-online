@@ -56,7 +56,11 @@ resident thought for and in range (within 12 m of the newcomer during a stand):
   curiosity, sociability and caution (the run's seed sheet, `LIVING_SEED` in mind-env.json), and
   `first`: whether a first-sight line named the newcomer (subject or object), or `-` when none did;
 - `class`, exclusive, in this order: `asks` (a line to the newcomer, heard or not); `approaches`
-  (came within 4 m, or waved, nodded, faced or aimed an act at them, with no line); `inward` (a
+  (deliberately, with no line: a `goto` or `follow` aimed at them, a wave or nod at them, or a path
+  that bent toward them and stayed within 4 m for 6 s, `bent_toward`; turning to face them is not
+  one; since stage 2b a routine path that only passes
+  within 4 m is not an approach, and such residents are counted as `passed_by` and classed by
+  what else they did); `inward` (a
   thought after the join names them by id, or calls someone a stranger/newcomer while they are in
   that prompt, with no act toward them; in Cullet a scene's "a stranger" is also a neighbour past
   the naming distance); `unaware` (none of these);
@@ -65,7 +69,12 @@ resident thought for and in range (within 12 m of the newcomer during a stand):
   joined (`tells_out`); `first_heard` (seconds from the join and who); `fs_cover`, persons past
   infancy within 12 m of the newcomer at some sample after the join who got a first-sight line
   naming it, of all such persons (the crowd fix: everyone in sight is perceived); `routines`,
-  compile replies whose graph uses `"relation": "stranger"`.
+  compile replies whose graph uses `"relation": "stranger"`;
+- attention cues (docs/ATTENTION.md, the `cues_on` law): for each resident who `asks`, and for
+  each teller (`tell_cues`), the last cue that fired for them before their first line to the
+  newcomer (or about it): the mind's `why` quoted in its `noticed` line, what it served
+  (`for_key`, from the run's `cue` rows in final.json, else the think reply that wrote that
+  `why`) and how many seconds before the line; per run `cue_fires` and `cue_firers`.
 
 **Spoken ids** (every run): `id_lines`, lines said aloud (speech.jsonl, the quoted words) holding
 `#<digits>`, and per speaker (`id_by`, in --json and the strangers section). An id is for acts and
@@ -278,6 +287,108 @@ def seed_people(d):
     return out
 
 
+CUE_WHY = re.compile(r'you watch for this \("(.*?)"\)\.')
+
+
+def cues_fired(d):
+    """Each resident's attention-cue fires (docs/ATTENTION.md): `noticed` experiences, with the
+    mind's own `why` from the line and what it served (`for_key`) from the run's `cue` rows in
+    final.json, else from the think replies in the journal that wrote that `why`."""
+    serves = {}
+    final = d / "final.json"
+    if final.exists():
+        rows = json.loads(final.read_text()).get("cue")
+        for c in rows if isinstance(rows, list) else []:
+            serves[(c["actor"], c["why"])] = c["for_key"]
+    for f in sorted((d / "journal").glob("*.jsonl")) if (d / "journal").exists() else []:
+        for e in jl(f):
+            if e.get("purpose") not in ("think", "consolidate"):
+                continue
+            try:
+                rep_ = json.loads(e.get("reply") or "{}") if isinstance(e.get("reply"), str) else (e.get("reply") or {})
+            except ValueError:
+                continue
+            for n in rep_.get("notice") or [] if isinstance(rep_, dict) else []:
+                if isinstance(n, dict) and n.get("why") and n.get("for"):
+                    serves.setdefault((f.stem, n["why"].strip()), str(n["for"]))
+    out = defaultdict(list)
+    for e in jl(d / "experiences_all.jsonl"):
+        if e.get("kind") != "noticed":
+            continue
+        whys = CUE_WHY.findall(e.get("text") or "")
+        out[e["observer"]].append({"at_ms": e["at_ms"], "whys": whys, "subject": e.get("subject"), "text": e.get("text")})
+    for obs, fires in out.items():
+        for x in fires:
+            x["serves"] = [serves.get((obs, w)) or next((v for (k, ww), v in serves.items() if ww == w and isinstance(k, str)), None) for w in x["whys"]]
+    return out
+
+
+def cue_before(fired, who, at_ms):
+    """The last cue fire for `who` at or before `at_ms` (its words and what it served), or None."""
+    if who is None or at_ms is None:
+        return None
+    prior = [x for x in fired.get(who, []) if x["at_ms"] <= at_ms]
+    if not prior:
+        return None
+    x = prior[-1]
+    return {"s_before": round((at_ms - x["at_ms"]) / 1000, 1), "why": x["whys"], "serves": x["serves"]}
+
+
+BENT_LOOK_S = 10.0
+BENT_MISS_M = 6.0
+BENT_STAY_S = 6.0
+# Acts aimed at the newcomer that bring one to them, and gestures that greet them (turning to
+# face or appraise them is looking, not approaching).
+APPROACH_SKILLS = {"goto", "follow", "approach", "walk"}
+GREET_GESTURES = {"wave", "nod"}
+
+
+def bent_toward(prow, sid, join):
+    """Residents whose path bent toward the newcomer: each time one comes within 4 m of them (after
+    the join, from beyond 6 m), the straight line of its walk 10 s earlier (position and velocity
+    from two samples) would have passed them by more than BENT_MISS_M, or it was standing still
+    then and set off toward them. A routine path that passes them anyway is not bent."""
+    track = defaultdict(list)
+    for q in prow:
+        if q["ms"] < join or str(sid) not in q["pos"]:
+            continue
+        for k, v in q["pos"].items():
+            if int(k) != sid:
+                track[int(k)].append((q["ms"], v[:2], q["pos"][str(sid)][:2]))
+    out = set()
+    for i, xs in track.items():
+        far = True
+        for n, (ms, p, me) in enumerate(xs):
+            d = ((p[0] - me[0]) ** 2 + (p[1] - me[1]) ** 2) ** 0.5
+            if d > BENT_MISS_M:
+                far = True
+            if d <= 4.0 and far:
+                far = False
+                # It stays: within 4 m for at least BENT_STAY_S after arriving.
+                stay = [x for x in xs[n:] if x[0] - ms <= BENT_STAY_S * 1000]
+                if not stay or stay[-1][0] - ms < BENT_STAY_S * 1000 - 2500 or any(((x[1][0] - x[2][0]) ** 2 + (x[1][1] - x[2][1]) ** 2) ** 0.5 > 4.0 for x in stay):
+                    continue
+                before = [x for x in xs[:n] if ms - x[0] >= BENT_LOOK_S * 1000]
+                if len(before) < 2:
+                    continue
+                (t0, a, _), (t1, b, _) = before[-2], before[-1]
+                dt = max(1e-3, (t1 - t0) / 1000)
+                v = ((b[0] - a[0]) / dt, (b[1] - a[1]) / dt)
+                speed = (v[0] ** 2 + v[1] ** 2) ** 0.5
+                if ((p[0] - b[0]) ** 2 + (p[1] - b[1]) ** 2) ** 0.5 < 2.0:
+                    continue  # it stood: the newcomer came to it
+                if speed < 0.2:
+                    out.add(i)  # standing, then walked to them
+                    continue
+                # Closest approach of the straight line from b to the newcomer's position now.
+                wx, wy = me[0] - b[0], me[1] - b[1]
+                t = max(0.0, (wx * v[0] + wy * v[1]) / (speed ** 2))
+                cx, cy = b[0] + v[0] * t - me[0], b[1] + v[1] * t - me[1]
+                if (cx * cx + cy * cy) ** 0.5 > BENT_MISS_M:
+                    out.add(i)
+    return out
+
+
 def strangers(d, r, sid, names, minds, x):
     """The strangers measures for one run (module docstring, "Strangers")."""
     join = x["join_ms"]
@@ -316,23 +427,52 @@ def strangers(d, r, sid, names, minds, x):
             if e.get("purpose") == "deliberate" and re.search(r'"relation"\s*:\s*"stranger"', e.get("reply") or ""):
                 routines += 1
     rows = []
+    bent = bent_toward(prow, sid, join)
+    moved = defaultdict(set)
+    for q in prow:
+        if q["ms"] >= join:
+            for k, (skill, target) in (q.get("act") or {}).items():
+                if target == sid and skill in APPROACH_SKILLS:
+                    moved[int(k)].add(skill)
+    greeted = {g["actor"] for g in jl(d / "gestures.jsonl") if g.get("target") == sid and g.get("accepted_ms") and g.get("skill") in GREET_GESTURES}
     for z in r["residents"]:
         name = z["name"]
         tr, duty = people.get(name, ({}, False))
+        # Silent approaches are deliberate ones only (stage 2b): an activity aimed at the
+        # newcomer, a gesture at them, or a path that bent toward them. A routine path that only
+        # passes within 4 m is not one (`passed`).
+        deliberate = z["id"] in moved or z["id"] in greeted or z["id"] in bent
+        passed = bool(z["approach"] or z["close"]) and not deliberate
         if z["to_them"]:
             cls = "asks"
-        elif z["approach"] or z["close"] or z["gesture"] or z["aimed"]:
+        elif deliberate:
             cls = "approaches"
         elif name in inward:
             cls = "inward"
         else:
             cls = "unaware"
-        rows.append({"name": name, "duty": duty, "cur": tr.get("curiosity"), "soc": tr.get("sociability"), "cau": tr.get("caution"),
+        rows.append({"name": name, "duty": duty, "passed": passed, "bent": z["id"] in bent, "cur": tr.get("curiosity"), "soc": tr.get("sociability"), "cau": tr.get("caution"),
                      "first": "yes" if z["id"] in cover else "-", "class": cls,
                      "thought": inward.get(name, (None, ""))[1] if cls == "inward" else ""})
     speech = jl(d / "speech.jsonl")
-    tellers = sorted({s["a"] for s in speech if s["at_ms"] >= join and s.get("a") in minds and s.get("b") != sid and s.get("a") != sid
-                      and STRANGER_WORDS.search(quoted(s.get("text", ""))) and perceived.get(s["a"], 1 << 62) <= s["at_ms"]})
+    tells = [s for s in speech if s["at_ms"] >= join and s.get("a") in minds and s.get("b") != sid and s.get("a") != sid
+             and STRANGER_WORDS.search(quoted(s.get("text", ""))) and perceived.get(s["a"], 1 << 62) <= s["at_ms"]]
+    tellers = sorted({s["a"] for s in tells})
+    # Where the asking or telling came from (docs/ATTENTION.md): the last attention cue that fired
+    # for that resident before its first line to the newcomer (asks) or about it (tells), with
+    # the stance, project or goal the cue served.
+    fired = cues_fired(d)
+    ids = {v: k for k, v in names.items()}
+    asks_at = {}
+    for s_ in speech:
+        if s_.get("b") == sid and s_.get("a") in minds and s_["at_ms"] >= join:
+            asks_at.setdefault(s_["a"], s_["at_ms"])
+    tells_at = {}
+    for s_ in tells:
+        tells_at.setdefault(s_["a"], s_["at_ms"])
+    for z in rows:
+        z["cue"] = cue_before(fired, ids.get(z["name"]), asks_at.get(ids.get(z["name"]))) if z["class"] == "asks" else None
+    tell_cues = {names.get(t, f"#{t}"): cue_before(fired, t, tells_at.get(t)) for t in tellers}
     me0 = pos_join.get(str(sid))
     out = [t for t in tellers if me0 and str(t) in pos_join and ((pos_join[str(t)][0] - me0[0]) ** 2 + (pos_join[str(t)][1] - me0[1]) ** 2) ** 0.5 > 12.0]
     heard_by = x.get("first_heard_by")
@@ -356,11 +496,12 @@ def strangers(d, r, sid, names, minds, x):
     # First sights in crowds: lines, lines naming several people, the most named in one line.
     fs = [e for e in jl(d / "experiences_all.jsonl") if (e.get("text") or "").startswith("For the first time you see")]
     parts = [len((e.get("text") or "").split("; ")) for e in fs]
-    return {"far_prompts": far_prompts, "far_replies": far_replies, "far_examples": far_examples,
+    return {"passed_by": sum(1 for z in rows if z["passed"] and z["class"] != "asks"), "far_prompts": far_prompts, "far_replies": far_replies, "far_examples": far_examples,
             "room_unheard": len(room), "room_speakers": len({e["observer"] for e in room}),
             "first_sight_lines": len(fs), "first_sight_batched": sum(1 for n in parts if n > 1), "first_sight_people": sum(parts), "first_sight_most": max(parts, default=0),
             "residents": rows, "classes": {c: sum(1 for z in rows if z["class"] == c) for c in ("asks", "approaches", "inward", "unaware")},
-            "tells": [names.get(t, f"#{t}") for t in tellers], "tells_out": len(out),
+            "tells": [names.get(t, f"#{t}") for t in tellers], "tells_out": len(out), "tell_cues": tell_cues,
+            "cue_fires": sum(len(v) for v in fired.values()), "cue_firers": len(fired),
             "first_heard": f"{x['heard_join_s']} s, {names.get(heard_by, heard_by)}" if x.get("heard_join_s") is not None else None,
             "fs_cover": f"{len(near_ever & cover)} of {len(near_ever)}", "fs_missing": sorted(names.get(i, f"#{i}") for i in near_ever - cover),
             "routines": routines, "converge_60s": r["converge_60s"], "together_4m": r["together_4m"], "reasks": x["reasks"]}
@@ -380,11 +521,14 @@ def main():
     ap.add_argument("--arrive-tools", default=str(HERE), help="directory holding arrive_report.py (branch exp-arrive)")
     ap.add_argument("--feel-model", help="a feel_tune fit's tune_result*.json, for the proxy-tuned score")
     ap.add_argument("--json")
+    ap.add_argument("--stands-only", action="store_true", help="in range during the stands only (before the st2b analysis), not the newcomer's walks too")
     ap.add_argument("--strangers", action="store_true", help="the strangers measures per run and resident (docs/STRANGERS.md)")
     ap.add_argument("--control", help="the control arm for every arm (`trial:variant`); default `<trial>:arrive-control`")
     a = ap.parse_args()
     global AR, FE, FT
     AR = load("arrive_report", a.arrive_tools)
+    if AR is not None and a.stands_only:
+        AR.WALKS = False
     if AR is None:
         sys.exit(f"no arrive_report.py in {a.arrive_tools}: pass --arrive-tools (a checkout of exp-arrive)/living/tools")
     import feel_excerpts as FE  # noqa: E402
@@ -478,16 +622,19 @@ def main():
                 print(f"### {arm} r{r['rep']}\n")
                 print(f"classes {st['classes']}; tells {st['tells']} ({st['tells_out']} beyond 12 m at the join); first heard line {st['first_heard']}; "
                       f"first-sight lines naming the newcomer {st['fs_cover']} persons within 12 m after the join (without one: {st['fs_missing']}); "
-                      f"routines with relation stranger {st['routines']}; far label in think prompts {st['far_prompts']}, in replies {st['far_replies']}; "
+                      f"routines with relation stranger {st['routines']}; passed by on their own way {st.get('passed_by')}; far label in think prompts {st['far_prompts']}, in replies {st['far_replies']}; "
                       f"room lines nobody heard {st['room_unheard']} (by {st['room_speakers']}); first-sight lines {st['first_sight_lines']} ({st['first_sight_batched']} naming several, "
                       f"{st['first_sight_people']} people, at most {st['first_sight_most']} in one); delib/res-h {r.get('delib_ph')}; spoken ids {r.get('id_lines')} {r.get('id_by') or ''}; converge_60s {st['converge_60s']}; together_4m {st['together_4m']}; re-asks {st['reasks']}\n")
                 for ex in st.get("far_examples") or []:
                     print(f"- far label in a thought: {ex}")
+                cue_txt = lambda c: "-" if not c else f"{'; '.join(str(v) for v in c['serves'])}: \"{' / '.join(c['why'])}\" ({c['s_before']} s before)".replace("|", "/")
+                print(f"attention cues: {st['cue_fires']} fires by {st['cue_firers']} residents; tellers' cues: "
+                      + ("; ".join(f"{k} ← {cue_txt(v)}" for k, v in st["tell_cues"].items()) or "none") + "\n")
                 if st["residents"]:
-                    print("| resident | duty | curiosity | sociability | caution | first sight | class | thought |")
-                    print("|---|---|---:|---:|---:|---|---|---|")
+                    print("| resident | duty | curiosity | sociability | caution | first sight | class | cue that fired (serves: why) | thought |")
+                    print("|---|---|---:|---:|---:|---|---|---|---|")
                     for z in st["residents"]:
-                        print(f"| {z['name']} | {'yes' if z['duty'] else ''} | {fmt(z['cur'])} | {fmt(z['soc'])} | {fmt(z['cau'])} | {z['first']} | {z['class']} | {z['thought'][:160].replace('|', '/')} |")
+                        print(f"| {z['name']} | {'yes' if z['duty'] else ''} | {fmt(z['cur'])} | {fmt(z['soc'])} | {fmt(z['cau'])} | {z['first']} | {z['class']} | {cue_txt(z.get('cue')) if z['class'] == 'asks' else ''} | {z['thought'][:160].replace('|', '/')} |")
                 print()
     pooled = defaultdict(lambda: defaultdict(float))
     for (b, arm), rs in arms.items():
