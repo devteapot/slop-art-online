@@ -508,6 +508,8 @@ def main():
             tint_eyes(j, binary, cols["eyes"], a.out)
         if cols.get("hair"):
             tint_brows(j, binary, cols["hair"])
+    if a.hair_colour and not a.person:
+        tint_brows(j, binary, a.hair_colour)  # the brows take the hair's colour, as in the client
     if a.hair:
         colour = linear(a.hair_colour) if a.hair_colour else None
         added = attach(j, binary, a.hair, a.out, colour)

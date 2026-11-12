@@ -1405,6 +1405,96 @@ def far_figure_case(run):
     return {'status': 'pass', **result}
 
 
+@case('house-owner')
+def house_owner_case(run):
+    """Whose a house is reaches a mind's prompt whatever its owner is doing (house-owner-label,
+    docs/PERCEPTION.md "Whose a thing is"). M and its neighbour F share a community; X is a
+    stranger to M. F has a house, X a house and a storage. An overlay makes anyone past 4 m too far
+    away to make out (as Cullet's `perceived_of` past 24 m) and lets a storage show its owner
+    (`shows_owner`). With F and X 30 m off, M's think prompt shows F's house with F's name
+    (`home_of`, `by`), X's house with no owner, X's storage with X's name (it shows its owner), and
+    no structure labelled by a far figure. What M notices of F's house and X's storage names them
+    and is tagged with their ids (`{F=#id}`), never a far figure's handle; X's house is noticed
+    with no tag (an owner the line does not name is not tied to it)."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 3, True)
+    m, f, x = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    for who in (m, f, x):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    act = lambda who, node: run.admin('mind_act', who, [json.dumps(node)], 'verify-minds')
+    run.admin('place_near', f, m)
+    act(m, {'do': 'found', 'text': f'Verify Row {m}'})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {m}', 'm-membership'), 'community founded', 20)
+    act(f, {'do': 'join', 'target': {'id': m}})
+    run.wait(lambda: run.sql(f'SELECT * FROM join_request WHERE asker = {f}', 'join-request'), 'join request', 20)
+    act(m, {'do': 'welcome', 'target': {'id': f}})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {f}', 'f-membership'), 'neighbour welcomed', 20)
+    shipped = (ROOT / 'living/scripts/skills.rhai').read_text()
+    overlay = shipped.replace('fn perceived_of(p)', 'fn base_perceived_of(p)', 1).replace('fn structures()', 'fn base_structures()', 1) + \
+        '\nfn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }\n' + \
+        'fn structures() { let l = base_structures(); for i in 0..l.len() { if l[i].name == "storage" { l[i].shows_owner = true; } } l }\n'
+    (run.directory / 'house-overlay.rhai').write_text(overlay)
+    subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db, str(run.directory / 'house-overlay.rhai')], check=True, cwd=ROOT, capture_output=True, timeout=120)
+    try:
+        body = run.sql(f'SELECT * FROM body WHERE id = {m}', 'm-body')[0]
+        bx, by = body['x'], body['y']
+        # Offsets toward the middle of the map (a body near an edge has no room the other way).
+        dy = 40.0 if by < 200 else -40.0
+        dx = 30.0 if bx < 200 else -30.0
+        # M away while the houses go up, so it first sees them with their owners gone.
+        run.admin('place_at', m, bx, by + dy)
+        run.admin('place_at', f, bx - 3.0, by)
+        run.admin('place_structure', f, 'house')
+        run.admin('place_at', x, bx + 3.0, by)
+        run.admin('place_structure', x, 'house')
+        run.admin('place_at', x, bx + 3.0, by + 2.0)
+        run.admin('place_structure', x, 'storage')
+        st = {(s['owner'], s['kind']): s['id'] for s in run.sql('SELECT * FROM structure', 'structures') if s['owner'] in (f, x)}
+        run.admin('place_at', f, bx + dx, by - 3.0)
+        run.admin('place_at', x, bx + dx, by + 3.0)
+        t0 = run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+        run.admin('place_at', m, bx, by + 1.0)
+        time.sleep(2.0)
+        script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        run.start(model(run, script), [m])
+        requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+        sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+        run.request(m, 'house')
+        prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify house' in sent_text(e)], 'prompt with the houses', 60)[0]
+        (run.directory / 'prompt-house.txt').write_text(prompt)
+        entries, dec = {}, json.JSONDecoder()
+        for at in [mm.start() for mm in re.finditer(r'\{"at":', prompt)]:
+            try:
+                o, _ = dec.raw_decode(prompt, at)
+            except ValueError:
+                continue
+            if o.get('kind') in ('house', 'storage'):
+                entries[o.get('id')] = o
+        fh, xh, xs = entries.get(st.get((f, 'house'))), entries.get(st.get((x, 'house'))), entries.get(st.get((x, 'storage')))
+        # The mind integrates its experience rows; what it noticed is read from what it was sent.
+        everything = '\n'.join(sent_text(e) for e in shared.rows(run.directory / 'fake-requests.jsonl'))
+        noticed = sorted(set(re.findall(r'You notice a (?:house|storage)[^"\\\n]*', everything)))
+        checks = {
+            'neighbour_away_house_named': bool(fh) and fh.get('home_of') == names[f] and fh.get('by') == names[f],
+            'stranger_house_unnamed': bool(xh) and 'home_of' not in xh and 'by' not in xh,
+            'shows_owner_storage_named': bool(xs) and xs.get('by') == names[x],
+            'no_structure_by_a_far_figure': not [o for o in entries.values() if FAR in json.dumps(o)],
+            'noticed_house_built_by_neighbour_tagged_by_id': any(f'house built by {names[f]}' in t and f'{{{names[f]}=#{f}}}' in t for t in noticed),
+            'noticed_storage_built_by_x_tagged_by_id': any(f'storage built by {names[x]}' in t and f'{{{names[x]}=#{x}}}' in t for t in noticed),
+            'stranger_house_noticed_untagged': any(t.startswith('You notice a house,') and '=#' not in t for t in noticed),
+            'no_notice_line_tagged_by_a_far_handle': not [t for t in noticed if FAR in t],
+        }
+    finally:
+        subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db], cwd=ROOT, capture_output=True, timeout=120)
+    result = {'m': m, 'f': names[f], 'x': names[x], 'entries': list(entries.values()), 'noticed': noticed, 'checks': checks}
+    (run.directory / 'house-owner.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('first-sight')
 def first_sight_case(run):
     """A first sight of someone one cannot place asks for one thought (docs/FIRST_SIGHT.md, the

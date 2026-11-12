@@ -58,7 +58,13 @@ pub struct Talk {
     /// What the box says of them: "Say to a stranger", "Say — nobody in earshot".
     pub label: String,
     /// People within earshot now, nearest first (Tab's order); empty before the rules are known.
+    /// With the authority's earshot (the `earshot` law: `my_earshot`), its `say` list; else the
+    /// client's own reckoning ([`earshot`]).
     pub earshot: Vec<u32>,
+    /// The authority's earshot row while it has one: its sentence, in my own labels ("Within
+    /// earshot if you say it: ...; a whisper would reach no one; a call would also reach: ..."),
+    /// and each way's hearers. None with the law off.
+    pub told: Option<Told>,
     /// A left tap on a peaceful person (`combat.rs`): open the box to them, or, open, address them.
     pub open_to: Option<u32>,
     /// Tab in the box (`ui/say.rs`).
@@ -75,7 +81,7 @@ pub struct Talk {
     room_unheard: Option<u64>,
     /// The last Tab, for the UI dump: whom it came from, the earshot it went by (refreshed every
     /// `ASK_S`, so a later dump's list can differ) and whom it chose before the perceived check.
-    pub tabbed: Option<(Option<u32>, Vec<u32>, Option<u32>)>,
+    pub tabbed: Option<(Option<u32>, Vec<u32>, Option<u32>, bool)>,
     /// Whom the open box addresses has been worked out this opening (the window can follow).
     pub resolved: bool,
     /// Addressed on purpose from their window (its box, Introduce yourself): kept even when
@@ -110,6 +116,28 @@ fn hearing(sc: &living_rules::script::Scripts, c: &SeenCharacter, hour: f32) -> 
             None
         }
     }
+}
+
+/// The authority's earshot for me (`my_earshot`, the `earshot` law): who would hear a line said
+/// now at each way, people I can see only, and its sentence in my own labels.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Told {
+    pub text: String,
+    /// (way, hearers): say, call, whisper.
+    pub ways: Vec<(String, Vec<u32>)>,
+}
+
+impl Told {
+    /// Who would hear a line said `way`'s way.
+    pub fn hearers(&self, way: &str) -> Option<&[u32]> {
+        self.ways.iter().find(|(w, _)| w == way).map(|(_, h)| h.as_slice())
+    }
+}
+
+/// My row of the authority's earshot, if the world's `earshot` law writes one.
+pub fn earshot_row(conn: &DbConnection, me: u32) -> Option<Told> {
+    let r = conn.db.my_earshot().id().find(&me)?;
+    Some(Told { text: r.text, ways: r.ways.into_iter().map(|w| (w.way, w.hearers)).collect() })
 }
 
 /// The people within earshot of me, nearest first.
@@ -188,7 +216,16 @@ fn address(
     talk.was_open = true;
     if fresh || now >= talk.next_ask {
         talk.next_ask = now + ASK_S;
-        talk.earshot = earshot(conn, &scene, &rules, me, at, clock.hour(), &town, &combat);
+        // The authority's own list when it gives one (the box can only say: its `say` way; whisper
+        // and call have no place here yet), else the client's reckoning, as before.
+        let told = earshot_row(conn, me);
+        talk.earshot = match told.as_ref().and_then(|t| t.hearers("say")) {
+            Some(h) => h.to_vec(),
+            None => earshot(conn, &scene, &rules, me, at, clock.hour(), &town, &combat),
+        };
+        if talk.told != told {
+            talk.told = told;
+        }
     }
     let perceived = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind == "person");
     let prefer = talk.prefer.take();
@@ -214,7 +251,9 @@ fn address(
         };
     }
     if tab {
-        talk.tabbed = Some((prev, talk.earshot.clone(), talk.to));
+        // Whether the list it went by was the authority's (`my_earshot`) or the client's own.
+        let authority = talk.told.as_ref().is_some_and(|t| t.hearers("say").is_some());
+        talk.tabbed = Some((prev, talk.earshot.clone(), talk.to, authority));
     }
     // Someone I no longer perceive: back to the room.
     if !talk.pinned && talk.to.is_some_and(|id| !perceived(id)) {

@@ -156,6 +156,24 @@ The frontier, cheapest first:
 
 ## Evidence
 
+**The store's run record: `gq1`** (an analysis batch, `"kind": "analysis"` in its `batch.json`; docs/STORE.md). It is at `~/dev/slop-gate-live/.local/living/trials/gq1/` on the Spark, so the store's manifest scans it.
+- **What it holds:** the replays and their gate journals, `points.jsonl`, the samples, the re-asked replies, the judge rubrics, items, labels and key, `curve.json`, and a copy of this page. `batch.json` lists every file with its sha256, the sources, the switches and the spend.
+- **The models whose words it carries** (`models_in_outputs`):
+
+  | Model | Count |
+  |---|---:|
+  | `zai-glm-5-3-flash` | 2,158 |
+  | `deepseek-v4-1-flash-1017` | 315 |
+  | `mistral-small-latest` | 223 (the newcomer runs' recorded thinks) |
+  | `jev-1.14.0` | 1,198 |
+  | `claude-opus-5-5` | 768 (judge labels) |
+
+- **Publishing is held, and nothing was uploaded.** The store's model gate holds three of these until the owner reads their terms: `mistral-small-latest` (as for b1–b3), `jev-1.14.0` and `claude-opus-5-5`.
+- **Checked 2026-11-12:**
+  - `store.py scrub --dry-run`: 77 files ok; the only redactions are home paths (3,850).
+  - `store.py pack batch` to `~/store-dryrun-2026-11-12/gq1-pack` (8.7 MB).
+  - A grep of the record and of the pack for every 12-character window of the three key values in the `.env` used, and for key-like patterns: **0 found**.
+
 `~/slop-evidence/gate-quality-20261112/` on the Spark:
 - `out/`: replays, `points.jsonl`, the re-asked replies, the samples, `judge-key.jsonl`, `curve.json`;
 - `judge/`: the items as each judge saw them, and the labels.

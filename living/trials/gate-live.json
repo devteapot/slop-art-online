@@ -1,0 +1,12 @@
+{
+ "extends": "strangers-2b-c",
+ "title": "The live gate check: the rethink gate off against Jev at 0.3, both with think on DeepSeek, on stage 2b's Cullet script",
+ "about": "docs/GATE_LIVE.md. Stage 2b's arm C (strangers-2b-c: the newcomer's stand at the arrival point, its walk along the Strand, its stand at the densest group; 63 minds; 20 minutes) in two arms that differ only in LIVING_RETHINK: `gate-off-ds` and `gate-jev-ds`.",
+ "variants": [
+  "gate-off-ds",
+  "gate-jev-ds"
+ ],
+ "budget": {
+  "tokens": 30000000
+ }
+}
