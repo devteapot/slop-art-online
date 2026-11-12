@@ -1425,6 +1425,14 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
+**After the hair finish**, judged on the board's `20261112-334790f0-…` version with the reference beside ours and hair normals turned to the camera, ordered by how much it shows:
+
+1. **The eyes' drawing:** thin lash lines and a plainer iris. Step 6, next.
+2. **Hair is locks of one thickness.** The fringe, the ends and the temple are mended, and the reference's hair is still another drawing: broad smooth sheets that end in a few points, a highlight band, a dark edge. Ours is many waved ribbons, and from the exact side a full `bob` or `long` hides the face. Under the client's rim light today it also still washes out; that is the client's (`hair-rim-1`).
+3. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+4. **Lips and blush are painted into the skin.** Step 6.
+5. **Clothes and silhouette, hands** (unchanged).
+
 **After the hair step**, the list below stands, with its first item split: the wash and the half-transparent look are the client's rim light and film gradient ([hair styles](#hair-styles)), and the hair's finish (a blocky fringe, ragged ends, gaps at the temple) is ours and was not changed in this step, which made hair shared, not better.
 
 **After pass 3's fifth step (lines)**, judged on the board with the reference beside ours, ordered by how much it shows:
