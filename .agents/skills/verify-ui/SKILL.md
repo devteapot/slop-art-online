@@ -68,11 +68,11 @@ Facing sight (`check.py field`, [features/field.md](features/field.md)): drive.p
 
 - Settings: `settings:page:play|controls`, `settings:theme:glass|clear|night|linen|walnut`, `settings:look_walk:head|chest|loose`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
 
-Scenes: `--place ID:DX:DY` puts a resident beside the player and holds them still when the plan reaches `sync:scene`; `--sync NAME='reducer|arg;…'` makes other admin calls at `sync:NAME`. Both are scene setup through admin reducers, never player acts; name them in a report.
+Scenes: `--sync NAME='player|REDUCER|ARG|…'` acts as verify.py's player identity (`$V player join`), a second player beside mine (look-walk's others case). `--place ID:DX:DY` puts a resident beside the player and holds them still when the plan reaches `sync:scene`; `--sync NAME='reducer|arg;…'` makes other admin calls at `sync:NAME`. Both are scene setup through admin reducers, never player acts; name them in a report.
 
 ## Evidence
 
-Each drive writes `.local/living/verify/<run>/ui/<name>/`: the photographs (`shot:`), dumps (`dump:`), `client.log`, the feet log when `LIVING_GAME_FEET` names one (`look-walk` does: every frame's feet, gaits, the legs', hips', chest's and head's yaw, the twist asked, the look, and the authority's heading and segment), `plan.txt`, `scene.json` (the player's id and the admin calls) and `settings.json` (the run's own settings file: `LIVING_GAME_SETTINGS`, so the owner's `~/.config/slop-art-online/game.json` is never touched). `check.py` writes `ui/checks.json`. A proof of a UI change holds:
+Each drive writes `.local/living/verify/<run>/ui/<name>/`: the photographs (`shot:`), dumps (`dump:`), `client.log`, the feet log when `LIVING_GAME_FEET` names one (also the body `LIVING_GAME_FEET_ID` names, each line with its `id`; `look-walk` does: every frame's feet, gaits, the legs', hips', chest's and head's yaw, the twist asked, the look, and the authority's heading and segment), `plan.txt`, `scene.json` (the player's id and the admin calls) and `settings.json` (the run's own settings file: `LIVING_GAME_SETTINGS`, so the owner's `~/.config/slop-art-online/game.json` is never touched). `check.py` writes `ui/checks.json`. A proof of a UI change holds:
 
 - **the action:** the plan (`plan.txt`) and the client log's lines for it (`ui: window Pack opened at Right`, `say: "…" to #57`, `verbs: berries let go on #57: give berries`);
 - **the state:** the dumps before and after, and for anything sent, the authority's rows (`$V sql`: `experience` `said` rows, `inventory`);
