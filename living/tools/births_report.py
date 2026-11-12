@@ -35,8 +35,18 @@ Per run:
                infant = rows x census_s / 60); infant_cover: share of infant census rows with a
                grown person within 4 m
   couples      distinct parent pairs among the run's births; kin_births: births whose parents
-               share a parent or are parent and child (census `parents`); gen2_births: births with
-               a parent who was born in the run
+               are close kin (parent, child, sibling, uncle or aunt, niece or nephew: census
+               `parents` and the seed sheets' relation labels, `Kin` below); gen2_births: births
+               with a parent who was born in the run
+  attempts     every conceive act in deliberation and talk replies, classed toward the actor's
+               partner, toward close kin, or other; close_kin_share; cands_at_kin and cands_at_all:
+               the mean number of unrelated, unpaired adults the actor could have asked at that
+               moment (paired = co-parent of a living child, or a seed sheet's wife, husband or
+               partner label: the worlds record no other agreement); zero_cand_attempts; each
+               attempt is printed (* marks an actor born in the run), and the free adults over
+               time (`unpaired/adults~mean candidates per adult`)
+  born_*       the run-born generation: how many grew up, tried to conceive, became parents, and
+               their couples (with their births and close-kin couples in the printed line)
   conceive_acts  conceive acts in grown and young minds' replies, by whether the actor was seeded
                or born in the run; conceive_refused: why the body refused them, as each mind was
                told next (one per actor and game minute)
@@ -111,7 +121,7 @@ def life_table(d):
     life = dict(json.loads(species.read_text())["person"]["life"])
     life.update(((seed.get("species") or {}).get("person") or {}).get("life") or {})
     life = life_years(life, seed, roots, d)
-    return life, seed.get("year_days", 8), seed.get("life_pace", 1.0), env
+    return life, seed.get("year_days", 8), seed.get("life_pace", 1.0), env, seed
 
 
 AGES = ("infant", "child", "elder", "old_age", "gestation", "interbirth")
@@ -155,7 +165,7 @@ def run_dir(d, args):
         return None
     s = json.loads((d / "summary.json").read_text()) if (d / "summary.json").exists() else {"partial": True}
     day_ms = s.get("day_ms") or 720_000
-    life, year_days, pace, env = life_table(d)
+    life, year_days, pace, env, seed = life_table(d)
     span_days = life["years"] * year_days * pace
     first, last = census[0], census[-1]
     t0_ms = first["now_ms"] - int((first["t"] or 0) * 1000)
@@ -274,7 +284,8 @@ def run_dir(d, args):
         inf_cov += sum(1 for i in infants if any(dist(g["pos"], i["pos"]) <= NEAR_M for g in grown))
     census_s = (census[1]["now_ms"] - census[0]["now_ms"]) / 1000 if len(census) > 1 else 0
 
-    extra = lineage(census, persons, seeded, t0_ms, rows, args)
+    extra = lineage(census, persons, seeded, t0_ms, rows, args, seed)
+    extra |= attempts(census, persons, seeded, t0_ms, rows, seed, args)
 
     share = lambda c, k: round(c[k] / c["all"], 3) if c["all"] else None  # noqa: E731
     return extra | {
@@ -296,7 +307,209 @@ FOOD_ITEMS = {"berries", "fish", "cooked_fish", "smoked_fish", "meat", "cooked_m
 REFUSED = re.compile(r"\[(?:\d+\] )?day (\d+) (\d+:\d+)\]? (?:What you had decided did not work out: |You failed to )conceive → [^:\n]+: ([^.\n]+)")
 
 
-def lineage(census, persons, seeded, t0_ms, rows, args):
+# Kinship. Close kin: parent, child, sibling, uncle or aunt, niece or nephew. Grandparents,
+# grandchildren, cousins and in-laws are named but are not close kin.
+CLOSE = {"parent", "child", "sibling", "uncle/aunt", "niece/nephew"}
+# A seed sheet's relation label, as what the named person is to the sheet's owner. In-laws first:
+# "brother-in-law" is not a brother.
+LABELS = [
+    (re.compile(r"in-law|in law", re.I), "in-law"),
+    (re.compile(r"\bgrand(father|mother|parent|pa|ma)\b", re.I), "grandparent"),
+    (re.compile(r"\bgrand(son|daughter|child)\b", re.I), "grandchild"),
+    (re.compile(r"\b(mother|father|parent)\b", re.I), "parent"),
+    (re.compile(r"\b(son|daughter|child)\b", re.I), "child"),
+    (re.compile(r"\b(brother|sister|sibling)\b", re.I), "sibling"),
+    (re.compile(r"\b(uncle|aunt)\b", re.I), "uncle/aunt"),
+    (re.compile(r"\b(nephew|niece)\b", re.I), "niece/nephew"),
+    (re.compile(r"\bcousin\b", re.I), "cousin"),
+]
+INVERSE = {"parent": "child", "child": "parent", "sibling": "sibling", "uncle/aunt": "niece/nephew", "niece/nephew": "uncle/aunt",
+           "grandparent": "grandchild", "grandchild": "grandparent", "cousin": "cousin", "in-law": "in-law"}
+SPOUSE = re.compile(r"\b(wife|husband|partner|spouse)\b", re.I)
+
+
+def seed_residents(seed):
+    for t in (seed.get("towns") or []) + (seed.get("villages") or []):
+        yield from t.get("residents") or []
+
+
+class Kin:
+    """Who is kin to whom: parent links (the census `parents`, seeded and run-born alike) and,
+    for seeded people, their seed sheets' relation labels (Cal Reed is Sefa's "uncle" by her late
+    father, who is not in the world). Siblings share a parent; an uncle or aunt is a parent's
+    sibling; a cousin a parent's sibling's child. `spouses` are the sheets' wife, husband or
+    partner labels: the only recorded agreement to be a couple the worlds keep."""
+
+    def __init__(self, persons, seed):
+        self.persons = persons
+        self.parents = {i: {q for q in (p.get("parents") or ()) if q} for i, p in persons.items()}
+        ids = {p["name"]: i for i, p in persons.items()}
+        self.label, self.spouses = {}, set()
+        for r in seed_residents(seed):
+            a = ids.get(r.get("name"))
+            for rel in ((r.get("sheet") or {}).get("relations") or []) if a else []:
+                b, lab = ids.get(rel.get("name")), str(rel.get("label") or "")
+                if not b or b == a:
+                    continue
+                if SPOUSE.search(lab) and "in-law" not in lab.lower():
+                    self.spouses.add(frozenset((a, b)))
+                    continue
+                for rx, what in LABELS:
+                    if rx.search(lab):
+                        # `what` is what b is to a.
+                        self.label.setdefault((a, b), what)
+                        self.label.setdefault((b, a), INVERSE[what])
+                        break
+        self.memo = {}
+
+    def par(self, a):
+        return self.parents.get(a, set()) | {b for (x, b), w in self.label.items() if x == a and w == "parent"}
+
+    def sibs(self, a):
+        by_parent = {c for c, ps in self.parents.items() if c != a and ps & self.par(a)}
+        return by_parent | {b for (x, b), w in self.label.items() if x == a and w == "sibling"}
+
+    def of(self, a, b):
+        """What b is to a, or None."""
+        k = (a, b)
+        if k in self.memo:
+            return self.memo[k]
+        pa, pb = self.par(a), self.par(b)
+        if b in pa:
+            w = "parent"
+        elif a in pb:
+            w = "child"
+        elif pa & pb or b in self.sibs(a):
+            w = "sibling"
+        elif any(b in self.sibs(p) for p in pa):
+            w = "uncle/aunt"
+        elif any(a in self.sibs(p) for p in pb):
+            w = "niece/nephew"
+        elif any(b in self.par(p) for p in pa):
+            w = "grandparent"
+        elif any(a in self.par(p) for p in pb):
+            w = "grandchild"
+        elif any(q in self.sibs(p) for p in pa for q in pb):
+            w = "cousin"
+        else:
+            w = self.label.get((a, b))
+        self.memo[k] = w
+        return w
+
+    def close(self, a, b):
+        return self.of(a, b) in CLOSE
+
+
+def census_at(census, ms):
+    """The census row in force at wall time `ms` (the last taken at or before it)."""
+    lo, hi = 0, len(census) - 1
+    if ms <= census[0]["now_ms"]:
+        return census[0]
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if census[mid]["now_ms"] <= ms:
+            lo = mid
+        else:
+            hi = mid - 1
+    return census[lo]
+
+
+def attempts(census, persons, seeded, t0_ms, rows, seed, args):
+    """Every conceive act the minds decided (deliberation and talk replies alike): who, toward
+    whom, what the target is to the actor, and how many others the actor could have asked at that
+    moment: `candidates`, adults alive at the census in force who are not the actor's close kin and
+    not paired. Paired: co-parent of a child alive at that census (census parent links), or a
+    seed sheet's wife, husband or partner label to someone alive (the only recorded agreement;
+    the worlds keep no other). Each attempt is classed `partner` (the target is paired with the
+    actor), `close_kin`, or `other`. Per run: attempts, the share toward close kin, and the mean
+    candidates the actor had at close-kin attempts against all attempts; `cand_series`, the
+    unpaired adults and each adult's mean unrelated unpaired candidates every --every minutes; and
+    the run-born generation: how many grew up, tried to conceive, toward whom, became parents, and
+    their births."""
+    k = Kin(persons, seed)
+    at = lambda ms: round((ms - t0_ms) / 60_000, 1)  # noqa: E731
+    born_ids = {i for i in persons if i not in seeded}
+
+    def pairs_at(c):
+        alive = {p["id"] for p in c["people"] if p["alive"]}
+        out = {frozenset(s) for s in k.spouses if s <= alive}
+        for p in c["people"]:
+            ps = tuple(q for q in (p.get("parents") or ()) if q)
+            if p["alive"] and len(ps) == 2 and set(ps) <= alive:
+                out.add(frozenset(ps))
+        return out
+
+    def state(c):
+        adults = [p["id"] for p in c["people"] if p["kind"] == "person" and p["alive"] and p["stage"] == 2]
+        pairs = pairs_at(c)
+        paired = {i for s in pairs for i in s}
+        return adults, pairs, paired
+
+    memo = {}
+
+    def cands(c, actor):
+        key = (c["now_ms"], actor)
+        if key not in memo:
+            adults, _, paired = state(c)
+            memo[key] = sum(1 for b in adults if b != actor and b not in paired and not k.close(actor, b))
+        return memo[key]
+
+    out = []
+    for r in rows:
+        if r.get("error") or r.get("purpose") not in ("deliberate", "talk"):
+            continue
+        for a in life_share.reply(r).get("acts") or []:
+            if not isinstance(a, dict) or a.get("do") != "conceive":
+                continue
+            tgt = (a.get("target") or {}).get("id") if isinstance(a.get("target"), dict) else None
+            ms = r.get("at_ms") or 0
+            c = census_at(census, ms)
+            actor = r["_id"]
+            _, pairs, paired = state(c)
+            rel = k.of(actor, tgt) if tgt in persons else None
+            cls = "partner" if frozenset((actor, tgt)) in pairs else "close_kin" if rel in CLOSE else "other"
+            out.append({"t": at(ms), "actor": actor, "target": tgt, "rel": rel, "cls": cls, "purpose": r.get("purpose"),
+                        "cands": cands(c, actor), "actor_paired": actor in paired, "born": actor in born_ids})
+    out.sort(key=lambda x: x["t"])
+    name = lambda i: persons[i]["name"] if i in persons else f"#{i}"  # noqa: E731
+    lines = [f"{x['t']}m {name(x['actor'])}{'*' if x['born'] else ''} -> {name(x['target']) if x['target'] else '?'} "
+             f"[{x['cls']}{': ' + x['rel'] if x['rel'] else ''}] candidates {x['cands']} ({x['purpose']})" for x in out]
+
+    series, nxt = [], 0
+    for c in census:
+        if (c["t"] or 0) >= nxt:
+            adults, _, paired = state(c)
+            free = [a for a in adults if a not in paired]
+            per = [cands(c, a) for a in adults]
+            series.append(f"{round((c['t'] or 0) / 60)}m:{len(free)}/{len(adults)}~{statistics.mean(per):.1f}" if adults else f"{round((c['t'] or 0) / 60)}m:0/0")
+            nxt += args.every * 60
+
+    # The run-born generation.
+    grown = {p["id"] for c in census for p in c["people"] if p["id"] in born_ids and p["stage"] >= 2}
+    kids = [p for i, p in persons.items() if i in born_ids]
+    gen_parents = {q for p in kids for q in (p.get("parents") or ()) if q in born_ids}
+    gen_pairs = Counter(frozenset(q for q in p["parents"] if q) for p in kids if any(q in born_ids for q in p.get("parents") or ()))
+    gen = {
+        "grown": len(grown), "tried": len({x["actor"] for x in out if x["born"]}),
+        "attempts": Counter(x["cls"] for x in out if x["born"]),
+        "toward_seeded": sum(1 for x in out if x["born"] and x["target"] in seeded),
+        "parents": len(gen_parents), "couples": len(gen_pairs), "births": sum(gen_pairs.values()),
+        "couples_close_kin": sum(1 for s in gen_pairs if len(s) == 2 and k.close(*s)),
+    }
+    n = len(out)
+    ck = [x for x in out if x["cls"] == "close_kin"]
+    return {
+        "attempts": n, "to_partner": sum(x["cls"] == "partner" for x in out), "to_close_kin": len(ck),
+        "close_kin_share": round(len(ck) / n, 3) if n else None,
+        "cands_at_kin": round(statistics.mean(x["cands"] for x in ck), 1) if ck else None,
+        "cands_at_all": round(statistics.mean(x["cands"] for x in out), 1) if out else None,
+        "zero_cand_attempts": sum(x["cands"] == 0 for x in out),
+        "born_grown": gen["grown"], "born_tried": gen["tried"], "born_parents": gen["parents"], "born_couples": gen["couples"],
+        "_gen": gen, "_attempts": lines, "_cands": series,
+    }
+
+
+def lineage(census, persons, seeded, t0_ms, rows, args, seed):
     """Who had the children, whether the run's own children had any, what refused the minds'
     conceive acts, how many grown people had no mind (the `minds.max` cap), hunger by stage, and
     the food in each store as the residents' scenes showed it."""
@@ -306,11 +519,8 @@ def lineage(census, persons, seeded, t0_ms, rows, args):
     born = sorted((p for i, p in persons.items() if i not in seeded), key=lambda p: p["born_ms"])
     pairs = Counter(frozenset(parents[p["id"]]) for p in born)
 
-    def kin(a, b):
-        pa, pb = set(parents.get(a, ())) - {0}, set(parents.get(b, ())) - {0}
-        return bool(pa & pb) or a in pb or b in pa
-
-    kin_births = [p for p in born if len(parents[p["id"]]) == 2 and kin(*parents[p["id"]])]
+    k = Kin(persons, seed)
+    kin_births = [p for p in born if len(parents[p["id"]]) == 2 and k.close(*parents[p["id"]])]
     gen2 = [p for p in born if any(q in persons and q not in seeded for q in parents[p["id"]])]
     events = [f"{at(p['born_ms'])}m {p['name']} <- {' + '.join(name(q) for q in parents[p['id']])}" for p in born]
     events += [f"{at(p['died_ms'])}m {p['name']} died ({p['cause']})" for p in persons.values() if not p["alive"] and p["died_ms"] and p["died_ms"] >= t0_ms]
@@ -394,6 +604,7 @@ def main():
     ap.add_argument("--root", type=Path, default=OUT)
     ap.add_argument("--every", type=float, default=30.0, help="population every so many real minutes")
     ap.add_argument("--examples", type=int, default=2)
+    ap.add_argument("--attempts", type=int, default=1000, help="print at most so many conceive attempts per run")
     ap.add_argument("--stores", action="store_true", help="food in each store over time, from the storage contents in residents' scenes (slow)")
     a = ap.parse_args()
     rows = []
@@ -426,6 +637,12 @@ def main():
             print(f"   {r['run']} population: {' '.join(r['_series'])}")
             print(f"   {r['run']} old age due (real min, name): {r['_due']}")
             print(f"   {r['run']} births and deaths: {'; '.join(r['_events'])}")
+            print(f"   {r['run']} unpaired/adults~candidates per adult: {' '.join(r['_cands'])}")
+            g = r["_gen"]
+            print(f"   {r['run']} run-born: grown {g['grown']}, tried {g['tried']} (attempts {dict(g['attempts'])}, toward seeded {g['toward_seeded']}), "
+                  f"parents {g['parents']}, couples {g['couples']} (close kin {g['couples_close_kin']}), births {g['births']}")
+            for x in r["_attempts"][:a.attempts]:
+                print(f"   attempt: {x}")
             for sid, ser in r["_stores"].items():
                 print(f"   {r['run']} store #{sid} food (latest scene within 15 min): {ser}")
             for k, xs in r["_ex"].items():
