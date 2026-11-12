@@ -64,6 +64,9 @@ pub const LINES_MS: u64 = 100;
 /// A player's senses (`my_senses`) are asked again at most this often (ms): a change shows
 /// within this of nightfall or of picking up a torch.
 pub const SENSES_MS: u64 = 250;
+/// A player's earshot (`my_earshot`) is asked again at most this often (ms): someone stepping
+/// into or out of a way's reach shows within this.
+pub const EARSHOT_MS: u64 = 250;
 
 /// The key of a viewer's `motion_seen` row of a creature.
 pub fn key(viewer: u32, body: u32) -> u64 {
@@ -91,11 +94,14 @@ struct Viewer {
     /// When its senses were last asked, and the row last written (`None`: read it first).
     senses_ms: u64,
     senses: Option<CharacterSenses>,
+    /// When its earshot was last asked, and the row last written (`None`: read it first).
+    earshot_ms: u64,
+    earshot: Option<CharacterEarshot>,
 }
 
 impl Viewer {
     fn new(who: Identity) -> Self {
-        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None }
+        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None }
     }
 }
 
@@ -315,6 +321,10 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
         v.senses_ms = now;
         show_senses(ctx, id, v, now);
     }
+    if now.saturating_sub(v.earshot_ms) >= EARSHOT_MS {
+        v.earshot_ms = now;
+        show_earshot(ctx, id, v, now);
+    }
     v.last_ms = now;
 }
 
@@ -336,6 +346,34 @@ fn show_senses(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
             let row = CharacterSenses { at_ms: now, ..new };
             v.senses = Some(ctx.db.character_senses().insert(row));
         }
+    }
+}
+
+/// Bring a player's `character_earshot` row up to date: whom a line said now would reach, at
+/// each way, among the creatures of its scene (`earshot::reach`), in its own labels. Written
+/// only when the people or the words changed.
+fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
+    let (Some(scene), Some(me), Some(b)) = (v.scene.as_ref(), ctx.db.character().id().find(id), ctx.db.body().id().find(id)) else { return };
+    if &*me.kind != "person" {
+        return;
+    }
+    if v.earshot.is_none() {
+        v.earshot = ctx.db.character_earshot().id().find(id);
+    }
+    // Off (the `earshot` law): no row; one written while it was on goes.
+    if !common::laws(ctx).earshot {
+        if v.earshot.take().is_some() {
+            ctx.db.character_earshot().id().delete(id);
+        }
+        return;
+    }
+    let ways = crate::earshot::reach(ctx, id, common::pos(&b, now), |x| scene.contains(&x), now);
+    let text = crate::earshot::words(&ways, |x| common::label_for(ctx, &me, x));
+    let row = CharacterEarshot { id, ways, text, at_ms: now };
+    match v.earshot.as_ref() {
+        Some(old) if old.ways == row.ways && old.text == row.text => {}
+        Some(_) => v.earshot = Some(ctx.db.character_earshot().id().update(row)),
+        None => v.earshot = Some(ctx.db.character_earshot().insert(row)),
     }
 }
 

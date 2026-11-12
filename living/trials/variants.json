@@ -210,6 +210,14 @@
    "first_sight_thinks": true
   }
  },
+ "strangers-earshot": {
+  "about": "Strangers control + earshot (docs/COMMUNICATION.md §17): the `earshot` law on (set_world_law after the laws guard): a person's scene says whom a line said now would reach, at each way, among the people they see (\"who would hear you now\"). Everything else as `strangers-control`.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "earshot": true
+  }
+ },
   "fast-lane": {
     "about": "The fast lane on (docs/FAST_LANE.md): `default` with the world law `fast_lane_on` true, so a blow taken or a move seen started at the subject `seen_again_n` times asks its mind for a quick re-plan (rethink.json `fast.route`, deepseek-flash). R2 arm r2e.",
     "models": {},

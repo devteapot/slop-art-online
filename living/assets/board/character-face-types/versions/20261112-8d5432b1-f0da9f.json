@@ -1,0 +1,61 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-8d5432b1-f0da9f",
+ "published": "2026-11-12T14:48:54+01:00",
+ "imported": "2026-11-12T14:48:54+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "FOR THE OWNER TO JUDGE: the brows' place. Measured the same way on the reference and on ours (reference/brow.py), the reference's brows sit 0.60 and 0.85 of the eye's height above the eye; ours sat 0.30 above a large eye, on the head's own brow line. Each type's brow is lifted to 0.72; arch, tilt, length and thickness are unchanged. Hair is unchanged, so a long fringe now covers the brows on the lifted types: see cast-64's faces-before-after.",
+ "source": {
+  "commit": "8d5432b124007afb7bbc76fca27f38bf95dbe93f",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "640ab0c7171bf3cc217f0d32e23ef38673613ec4b03196e32d70d35106afbaf2",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "brow-place: four bare type heads coloured by the game client itself with four hair colours through a recipe, before and after each type's brow is lifted, from the front and at 35 degrees, cropped to the eyes, brows and lower forehead. Eyes are held open by the photo tool. The vroid member is the reference's brows through the same client; blue-protocol is for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-8d5432b1-f0da9f",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "f0e458ccda84746fa105b72155afb74877bfdee4b0ee055f54117b8f7582acbb",
+   "shots": [
+    "brow-place"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "e47359da93430de5a3be1af655e4bf790ed0e6a26d5f1aafb9a9e198340e27bf",
+   "shots": [
+    "brow-place"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "595a74a6d48daf8b3482d9f7a77455e43c8f4641c2452afd5a23c732b9a68d89",
+   "shots": [
+    "brow-place"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
