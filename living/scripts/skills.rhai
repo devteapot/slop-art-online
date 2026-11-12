@@ -222,6 +222,22 @@ fn senses_law() {
     }
 }
 
+// The words a speaker uses for someone by their relation to them (docs/COMMUNICATION.md §19):
+// "Mother" said by a child names that child's parent, and a line said to someone else that uses it
+// names the parent for every hearer (the naming detail, and a named hearer's turn). What the one
+// named is to the speaker: parent, child, sibling, grandparent, grandchild or partner (the father
+// or mother of one's child). The rules have no sex, so each word names anyone in that relation.
+fn kin_terms() {
+    #{
+        parent: ["mother", "father", "mum", "mam", "mama", "mummy", "ma", "dad", "da", "papa", "daddy", "pa"],
+        child: ["son", "daughter"],
+        sibling: ["brother", "sister"],
+        grandparent: ["gran", "granny", "grandmother", "grandma", "grandfather", "grandpa", "grandad", "granddad", "nan", "nana"],
+        grandchild: ["grandson", "granddaughter"],
+        partner: ["husband", "wife"],
+    }
+}
+
 // ---- ways of speaking (read once per script revision; the speech primitive applies them) ----
 // Each `<way>_speech()` is a way to say a line (docs/COMMUNICATION.md). Speech is not a skill: it
 // never interrupts what the body is doing. The engine reads these maps when the script compiles
@@ -2559,8 +2575,8 @@ fn rework_spec() {
        gives: "that way replaced by your new version (or dropped); how it goes starts counting afresh" }
 }
 
-fn wave_spec() { #{ target: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
-fn nod_spec() { #{ target: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
+fn wave_spec() { #{ target: true, on_the_move: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
+fn nod_spec() { #{ target: true, on_the_move: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
 fn appraise_spec() { #{ target: true, target_class: "creature", reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
 fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
 fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
@@ -2568,6 +2584,12 @@ fn keep_spec() { #{ about: "Keep your post a while (a stall, a workshop, a gate,
 fn play_spec() { #{ about: "Play a little while where you are (run about, skip, make up a game).", takes: "4 seconds, not a baby", gives: "a little fun; tires a little" } }
 
 // ---- gestures and town life (docs/TOWN_LIFE.md) ---------------------------------------
+// What one is told when moving broke off something one was doing before it was done (a skill
+// without `on_the_move`, for every controller): the act by its noun.
+fn moved_off(skill) {
+    let noun = switch skill { "appraise" => "look", "step_aside" => "step aside", _ => { let n = skill; n.replace("_", " "); n } };
+    `the ${noun} stopped: you moved off before it was done`
+}
 // A gesture is seen, not heard: its target must be in sight within the gesture's reach.
 // `hail` lets the one it is made at see that it was made at them (they may answer).
 fn gesture_check(a, reach) {

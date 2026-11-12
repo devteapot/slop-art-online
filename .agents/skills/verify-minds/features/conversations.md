@@ -114,3 +114,26 @@ The `say-way` case (`verify_minds.py --case say-way`) puts H (thought for) on a 
 4. **A line in "shout",** a way the world lacks. It is said aloud: B reads "A stranger said to you: …".
 
 It also checks that the think prompt names `"way": "say" or "whisper" or "call" (optional; default "say")`. Evidence: `say-way.json`, `prompt-say-way.txt`.
+
+## Talk turns (play-test 6)
+
+Since `talk-turns` (2026-11-12, docs/COMMUNICATION.md §19).
+
+- **A named hearer's turn.** A line said to someone else whose hearer's row reads ", naming … you" (the authority's words: by name or by a kin word) is collected for 300 ms (`NAMED_PICK_MS`, `talk.rs` `named_pick`). The nearest named hearer by the line's `audience` row then takes one turn as if addressed (`hear(e, true)`), when free (`in_other_open`: an exchange settled with someone else does not count). The turn's prompt says how the line came under the answered line ("… said to …, naming you.").
+- **The turn budget and open matters.** `Conversation::open`: the line asks something, a plan or promise was made in the last two turns (`promised`: a settled outcome, or an act toward the other, `act_toward`), or the exchange was reopened on something settled and has had under two turns. Then the stamina gate lets the turn through, and the prompt says "You have said about as much as you usually do." instead of "make this your last word".
+- **The transcript ends before the answered line.** It is given once, under "What you are answering".
+
+`named-turn` (`verify_minds.py --case named-turn`): three spawned people A, B and C, thought for, and a player. B first settles an exchange with A. The player then says to A a line naming B and C by their given names. B stands 2 m from the player and C 5 m. Checks:
+
+- B's and C's rows name them;
+- only B takes a turn;
+- the turn's prompt reads "A stranger said to a stranger, naming you and a stranger." (B does not know C's name).
+
+`sissly-scene` (`verify_minds.py --case sissly-scene`): the play-test scene on the island seed. Sissly Fenner and Agnes Fenner are thought for; S, a spawned stranger, stands in for the owner, and the lines are paraphrased markers. It checks:
+
+- the plan's queued line ("Verify stale …", from a deliberate step the fake model holds 7 s while S asks and Sissly answers alongside) is not said;
+- turn 3, a question, is not told to be the last word, and states the plain fact;
+- the answered line appears once in that prompt;
+- Agnes's row of Sissly's "… ask Mother first." reads ", naming you", and Agnes takes a turn.
+
+Evidence: `sissly-scene.json`, `prompt-turn3.txt`, `prompt-agnes.txt`, `named-turn.json`, `prompt-named.txt`.

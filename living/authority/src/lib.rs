@@ -705,8 +705,10 @@ pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(
     if dir.is_some() {
         // Taking the controls: what was going on stops (a raised guard walks along), and the
         // plan becomes "wait".
-        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait" && !(guard(a) && a.node == act::PLAYER)) {
-            act::cancel(ctx, a, now, Some("you moved"));
+        // A skill done on the move (`on_the_move`: a wave, a nod) carries on as one walks.
+        let on_the_move = |a: &Activity| living_rules::catalog::skill(&a.skill).is_some_and(|k| k.on_the_move);
+        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait" && !(guard(a) && a.node == act::PLAYER) && !on_the_move(a)) {
+            act::cancel_moved(ctx, a, now);
         }
         player_controls(ctx, me.id, now)?;
     }
