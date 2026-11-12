@@ -15,10 +15,12 @@ This applies that rule to each type's iris for each eye colour a person can have
 (`person_params.EYE_COLOURS`) and compares the result, in CIE76, with:
 
   body    the eye colour itself against the iris's body: the texels a whole file paints in
-          nearly the eye colour alone (no glow, rim, pupil or lid's shade). A whole file's own
+          nearly the eye colour alone (no rim, pupil or lid's shade, and no light over them). A whole file's own
           body is not exactly its colour either; that figure is printed beside it.
   whole   the iris a whole file has in that colour (`face_paint.paint_iris`), in blocks of
-          8 x 8 texels over the disc: how alike the two pictures are
+          8 x 8 texels over the disc: how alike the two pictures are. Both have the iris's
+          lights over them (`face_paint.iris_lights`, a layer the client does not recolour,
+          laid on in linear light)
   eye     the two discs' means: the eye's colour as a whole
   pupil   the lightest value at the pupil's middle, linear: above about 0.02 it reads grey
 
@@ -134,14 +136,30 @@ def source_mean(pic, uv):
     return cells[cy, cx].mean(axis=0)
 
 
+def lights(n):
+    """The iris's lights, the layer every eye has over its iris (`face_paint.iris_lights`):
+    colour in linear light and alpha, `n` square."""
+    import face_paint
+
+    a = face_paint.iris_lights()
+    assert a.shape[0] == n, f"an iris of {n}, lights of {a.shape[0]}"
+    return linear(a[..., :3]), a[..., 3:]
+
+
+def lit(pic):
+    """An iris with its lights over it, as the client lays them: in linear light."""
+    rgb, alpha = lights(pic.shape[0])
+    return pic + (rgb - pic) * alpha
+
+
 def whole(colour, n):
-    """The iris a whole file has in this colour (sRGB 0..1), as a linear picture `n` square."""
+    """The iris a whole file has in this colour (sRGB 0..1), as a linear picture `n` square,
+    without its lights."""
     import face_paint
 
     p = face_paint.paint_iris(None, dict(iris=tuple(colour), light_side=1.0), np.random.default_rng(face_paint.SHARED_IRIS_SEED))
     p = np.round(np.clip(p, 0, 1) * 255) / 255
-    if p.shape[0] != n:
-        p = np.asarray(Image.fromarray((p * 255).astype(np.uint8)).resize((n, n), Image.LANCZOS), float) / 255
+    assert p.shape[0] == n
     return linear(p)
 
 
@@ -171,6 +189,7 @@ def main():
     n = face_paint.IRIS_PX
     probe = [face_paint.paint_iris(None, dict(iris=c, light_side=1.0), np.random.default_rng(face_paint.SHARED_IRIS_SEED)) for c in ((0.3, 0.3, 0.3), (0.5, 0.5, 0.5))]
     body = ((probe[1] - probe[0]).mean(-1) / 0.2 > 0.9) & ((probe[1] - probe[0]).mean(-1) / 0.2 < 1.1)
+    body &= lights(n)[1][..., 0] < 0.02  # and where no light lies over it
     d = lambda a, b: float(np.linalg.norm(lab(a) - lab(b), axis=-1).mean())
     rows, shown, off = [], {}, []
     for f in sorted(glob.glob(os.path.join(folder, "*.glb"))):
@@ -189,8 +208,8 @@ def main():
         for c, s in eyes.items():
             line = s if nominal else np.array(person_params.eye_line_colour(tuple(s)))
             line = np.round(line * 255) / 255
-            out = recolor(pic.copy(), mean, linear(line))
-            own = whole(s, h)
+            bare = recolor(pic.copy(), mean, linear(line))
+            out, own = lit(bare), lit(whole(s, h))
             shown[name].append(out)
             rows.append(dict(
                 type=name, colour=c, line="#%02x%02x%02x" % tuple(int(x) for x in np.round(line * 255)),
@@ -198,6 +217,7 @@ def main():
                 whole=d(blocks(out, disc), blocks(own, disc)),
                 eye=d(out[disc].mean(0)[None], own[disc].mean(0)[None]),
                 pupil=float(out[h // 2 - 4 : h // 2 + 4, w // 2 - 4 : w // 2 + 4].max()),
+                bare=d(blocks(bare, disc), blocks(whole(s, h), disc)),
                 source=[float(x) for x in mean],
             ))
 
@@ -229,7 +249,7 @@ def main():
             dr.text((x + 42, 8), c, fill=(0, 0, 0))
         for r, name in enumerate(pick + ["a whole file"]):
             dr.text((6, 30 + r * (s + pad) + s // 2), name, fill=(0, 0, 0))
-            tiles = shown[name] if name in shown else [None] + [whole(v, n) for v in eyes.values()]
+            tiles = shown[name] if name in shown else [None] + [lit(whole(v, n)) for v in eyes.values()]
             for k, t in enumerate(tiles):
                 if t is not None:
                     im.paste(tile(t), (left + k * (s + pad), 30 + r * (s + pad)))
