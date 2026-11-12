@@ -225,6 +225,7 @@ class Hair:
         self.comb = Comb(hf, body)
         self.rng = random.Random(f"hair/{spec.get('seed', 0)}")
         self.v, self.f, self.col, self.uv, self.nrm, self.chain, self.along = [], [], [], [], [], [], []
+        self.hang_chains = set()  # the chains of sheets that lie on the back (their joints are on the hair, not inside its arc)
         self.chains = []
         self.locks = []
         self.sheets = []  # sheets' own records; their columns are walked with the locks
@@ -621,8 +622,8 @@ class Hair:
         drop = 0.03
         # Broad sheets down the back that end in a few long points.
         # Gathered behind the shoulders, lying close down the back, the ends turned a little in.
-        self.curtain(z, points=5, depth=0.060, back_drop=drop, chain=chain, gather=15.0, tip_out=-0.014, front_end=-0.100)
-        self.over(z + 0.02, points=4, depth=0.060, back_drop=drop, chain=chain, gather=15.0, tip_out=-0.014, front_end=-0.105, back_th=88.0)
+        self.curtain(z, points=5, depth=0.060, back_drop=drop, chain=chain, gather=15.0, tip_out=-0.005, front_end=-0.100)
+        self.over(z + 0.02, points=4, depth=0.060, back_drop=drop, chain=chain, gather=15.0, tip_out=-0.005, front_end=-0.105, back_th=88.0)
         mode = "curtain" if abs(self.parting) < 0.3 else "swept"
         self.bangs(mode, points=6)
         # The locks at the ears' front stop at the jaw: hanging on to the chest they lay in front of
@@ -1031,6 +1032,8 @@ class Hair:
             ch = cols[jj][0]["chain"]
             self.chain += [ch] * nr
             if ch >= 0:
+                if sp.get("hang"):
+                    self.hang_chains.add(ch)
                 # Free from where it last touches the head.
                 head_on = ON[jj] & (C[jj][:, 2] > -0.11)
                 free_from = S[jj][np.nonzero(head_on)[0].max()] if head_on.any() else 0.0
@@ -1077,14 +1080,21 @@ class Hair:
                         self.chain[i] = -1
                 continue
             m = int(np.clip(round(reach / 0.09), 1, 4))
-            joints = []
+            rows = []
             for j in range(m + 1):
                 at = reach * j / m
                 ps = []
                 for pts, s, f, _, _ in locks:
                     q = min(f + at, s[-1])
                     ps.append([np.interp(q, s, pts[:, k]) for k in range(3)])
-                joints.append(np.mean(ps, axis=0))
+                rows.append(np.array(ps))
+            joints = [r.mean(axis=0) for r in rows]
+            if ci in self.hang_chains:
+                # Hair that lies on the back: the joints are one of its own columns, the one
+                # nearest the mean. The mean of an arc of columns lies inside the arc, in the
+                # body, and the game holds the joints, not the surface, out of the body's spheres.
+                mid = int(np.argmin(sum(np.linalg.norm(r - c, axis=1) for r, c in zip(rows, joints))))
+                joints = [r[mid] for r in rows]
             self.chains[ci]["joints"] = joints
             self.chains[ci]["step"] = reach / m
             for (pts, s, f, a, b) in locks:

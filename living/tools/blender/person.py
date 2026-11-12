@@ -1352,6 +1352,8 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     base = len(verts)
     # The far model's hair follows the bones the full model's hair added, when both are built.
     names = add_spring_bones(arm, h.chains) if bones is None else {i: bones.get(i) for i, c in enumerate(h.chains) if bones.get(i)}
+    if bones is None:
+        back_spheres(h, back, thick, names)
     for p_, c_, uv_, ch, al in zip(h.v, h.col, h.uv, h.chain, h.along):
         verts.append(hw(p_))
         cols.append(tuple(c_))
@@ -1435,6 +1437,55 @@ def orient_islands(ob, skip=0):
             bmesh.ops.reverse_faces(bm, faces=island)
     bm.to_mesh(me)
     bm.free()
+
+
+BACK_SPHERES = []  # (bone, centre, radius): the back that hair lying on it must not sink into, for the file's spring block
+HIT = 0.002  # a hair joint's own radius against the spheres: less than the hair's own distance off the cloth it was combed over
+
+
+BACK_ROOTS = set()  # the first bones of the chains that lie on the back
+OFF_CLOTH = 0.007  # how far behind the cloth the spheres' backs stand: a joint is the hair's core, and held at the cloth itself the sheet round it is half in the cloth
+
+
+def back_spheres(h, back, thick, names):
+    """Spheres on the chest's bones whose backs are the garment's back, for hair that lies on
+    it (`Hair.hang_chains`). Combed close to the back, such hair is a few millimetres off the
+    cloth at rest; it hangs from the head, so when the head tips or the chest leans the hair
+    would pass into the back. The game holds each hair joint out of these spheres. Each is
+    made no larger than leaves every joint clear of it at rest, so they do not move the hair
+    as it was combed."""
+    BACK_SPHERES.clear()
+    BACK_ROOTS.clear()
+    pts = []
+    for ci in sorted(h.hang_chains):
+        js = [np.array(hw(p)) for p in (h.chains[ci].get("joints") or [])]
+        # Only the chains behind the body: one beside the neck hangs in front of the back's
+        # plane, inside any sphere large enough to be the back, and keeps the spheres it had.
+        if len(js) >= 2 and names.get(ci) and float(np.mean([p[1] for p in js])) < -0.06:
+            BACK_ROOTS.add(names[ci][0])
+            pts += js + [js[-1] + (js[-1] - js[-2]) / max(np.linalg.norm(js[-1] - js[-2]), 1e-9) * 0.07]  # a leaf's tail, as the game places it
+    if not pts:
+        return
+    pts = np.array(pts)
+    half_w, R = 0.182 * GIRTH + 0.035, 0.25
+    for z in (1.50, 1.44, 1.37, 1.29, 1.21, 1.13):
+        bone = "J_Bip_C_UpperChest" if z >= 1.31 else ("J_Bip_C_Chest" if z >= 1.18 else "J_Bip_C_Spine")
+        deep = (float(np.interp(z, back[0], back[1])) + thick) * GIRTH
+        for x in (-0.11, -0.04, 0.04, 0.11):
+            # The sphere's back point is OFF_CLOTH behind the cloth. Its radius is the largest that leaves every
+            # joint clear at rest: a smaller sphere through the same point clears a joint above
+            # or beside it (at the nape, the hair is nearer than the back below is).
+            b = np.array([x, -deep * math.sqrt(1 - (x / half_w) ** 2) - OFF_CLOTH, z])
+            clear = lambda r: float(np.linalg.norm(pts - (b + np.array([0.0, r, 0.0])), axis=1).min()) - r - HIT - 0.0005
+            lo, hi = 0.0, R
+            if clear(hi) < 0:
+                for _ in range(24):
+                    mid = 0.5 * (lo + hi)
+                    lo, hi = (mid, hi) if clear(mid) >= 0 else (lo, mid)
+                hi = lo
+            if hi > 0.03:
+                BACK_SPHERES.append((bone, tuple(b + np.array([0.0, hi, 0.0])), hi))
+    print(f"PERSON hair: {len(BACK_SPHERES)} spheres on the back for {len(h.hang_chains)} chains, radius {min(s[2] for s in BACK_SPHERES):.3f} to {max(s[2] for s in BACK_SPHERES):.3f} of {R}: " + " ".join(f"{s[2]:.3f}" for s in BACK_SPHERES) if BACK_SPHERES else "PERSON hair: no back spheres")
 
 
 def add_spring_bones(arm, chains):
@@ -2143,16 +2194,24 @@ def secondary(nodes, springs):
     # Smaller than the head, neck and shoulders themselves: the hair at rest lies on those, and
     # a sphere that reached it would push it off them.
     hc = HEAD + Vector((0, -0.010, 0.012)) * HEAD_SCALE
+    k = 0.010 - HIT  # these were sized for a joint radius of 10 mm, and reach as far with the smaller one
     colliders = [
-        {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.074 * HEAD_SCALE), sphere("J_Bip_C_Head", hc + Vector((0, 0.014, -0.070)) * HEAD_SCALE, 0.046 * HEAD_SCALE)]},
-        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.040)]},
-        {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055),
-                                                             sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055)]},
+        {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.074 * HEAD_SCALE + k), sphere("J_Bip_C_Head", hc + Vector((0, 0.014, -0.070)) * HEAD_SCALE, 0.046 * HEAD_SCALE + k)]},
+        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.040 + k)]},
+        {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH + k), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055 + k),
+                                                             sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055 + k)]},
     ]
     # Stiff enough to settle within half a second of a jump in pose (the asset view photographs
     # 0.6 s after posing), loose enough to swing in a walk.
-    groups = [{"comment": "Hair", "stiffiness": 2.0, "gravityPower": 0.10, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.5, "center": -1, "hitRadius": 0.010,
-               "bones": [nodes[chain[0]] for chain in springs], "colliderGroups": [0, 1, 2]}]
+    by_bone = {}
+    for bone, at, r in BACK_SPHERES:
+        by_bone.setdefault(bone, []).append(sphere(bone, at, r))
+    colliders += [{"node": nodes[bone], "colliders": spheres} for bone, spheres in by_bone.items() if bone in nodes]
+    group = lambda comment, chains, n: {"comment": comment, "stiffiness": 2.0, "gravityPower": 0.10, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": 0.5, "center": -1, "hitRadius": HIT,
+                                        "bones": [nodes[chain[0]] for chain in chains], "colliderGroups": list(range(n))}
+    on_back = [c for c in springs if c[0] in BACK_ROOTS]
+    groups = [group("Hair", [c for c in springs if c[0] not in BACK_ROOTS], 3)] + ([group("HairBack", on_back, len(colliders))] if on_back else [])
+    groups = [g for g in groups if g["bones"]]
     return {"boneGroups": groups, "colliderGroups": colliders}
 
 
