@@ -95,6 +95,12 @@ living-web-dist:
 living-test:
     cargo test --manifest-path living/Cargo.toml -p living-rules
 
+# The goods audit (docs/GOODS.md): every item and structure kind of the island and of Cullet,
+# where it comes from and what it is for, read from the rules and the seeds; writes the
+# generated tables into docs/GOODS.md. The same audit is a rules test (`the_goods_come_from_the_world`).
+living-goods:
+    cargo test --manifest-path living/Cargo.toml -p living-rules --lib goods_audit::tests::write_goods_audit -- --ignored --exact
+
 # Everything that must keep compiling after any change: authority (wasm), mind, the native
 # and browser observer, the game client, and the rules tests. Run before every commit.
 # living/tools/check.py runs these six steps (docs/TOOLING.md): the five cargo steps and the

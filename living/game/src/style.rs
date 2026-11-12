@@ -535,3 +535,23 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         };
     }
 }
+
+/// Give a mesh its outline's directions unless its file brought them (`_OUTLINE_NORMAL`, which
+/// the generator writes smoothed across a person's meshes, so the outline closes between them).
+/// Returns whether they were generated here.
+pub fn outline_normals(mesh: &mut Mesh) -> bool {
+    use bevy_mod_outline::OutlineMeshExt;
+    use std::sync::atomic::Ordering::Relaxed;
+    // `LIVING_GAME_PERF=genoutlines`: generate them anyway (to compare with the file's).
+    if mesh.contains_attribute(bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL) && !crate::perf::has("genoutlines") {
+        OUTLINE_NORMALS.1.fetch_add(1, Relaxed);
+        return false;
+    }
+    let _ = mesh.generate_outline_normals(&Default::default());
+    OUTLINE_NORMALS.0.fetch_add(1, Relaxed);
+    true
+}
+
+/// Meshes whose outline directions were generated, and meshes that brought their own (the
+/// `assets:` diag line, perf.rs).
+pub static OUTLINE_NORMALS: (std::sync::atomic::AtomicUsize, std::sync::atomic::AtomicUsize) = (std::sync::atomic::AtomicUsize::new(0), std::sync::atomic::AtomicUsize::new(0));

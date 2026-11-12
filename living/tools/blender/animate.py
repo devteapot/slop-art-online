@@ -1996,12 +1996,14 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
     if "hop" in spec:
         # The path's flight window, in clip seconds (the rules' jump).
         info["hop"] = [round(spec["hop"][0] - i / FPS, 3), round(spec["hop"][1] - i / FPS, 3)]
+    if loco and kind == "loop":
+        # The gait family (walk, run, sneak): the game picks its forward gaits by it and their
+        # natural speeds, not by name.
+        info["locomotion"] = loco
     if "travel_deg" in spec:
         # Where the take travels from its facing (the game's sense), and where its hips faced on
         # average once its travel was turned there (degrees, the same sense).
         info["travel_deg"] = spec["travel_deg"]
-        if loco:
-            info["locomotion"] = loco
         info["facing_deg"] = round(-math.degrees(sum(map(float, w["heading"])) / len(w["heading"])), 1)
         if kind == "loop":
             info["cycle_m"] = round(speed * n / FPS, 3)

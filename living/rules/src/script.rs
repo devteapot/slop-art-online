@@ -997,6 +997,11 @@ pub const MAX_SOURCE: usize = 256 * 1024;
 /// At about 600 WASM instructions per operation, a call that runs into it costs about 1.2 M
 /// instructions (about 0.1 ms in the module).
 pub const MAX_OPERATIONS: u64 = 2_000;
+/// The most operations a function read once when the script compiles may take (its data tables,
+/// skills' specs, ways, laws' descriptions and the interface's declarations): they grow with a
+/// world's content (a description lists every recipe) and run once per install, not while the
+/// world runs; the engine's calls keep [`MAX_OPERATIONS`] (goods-3).
+pub const COMPILE_OPERATIONS: u64 = 20_000;
 /// Distinct states whose rates are kept before the memo starts over.
 const NEEDS_MEMO: usize = 4_096;
 /// Minutes in a game day: `daylight` is read at each.
@@ -1133,6 +1138,7 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
     add("spoil_per_h", &items);
     add("spoil_rate", &items);
     add("nutrition", &items);
+    add("carry_of", &items);
     add("regrow_per_h", &resources);
     add("regrow", &resources);
     add("planted_max", &resources);
@@ -1198,6 +1204,8 @@ impl Scripts {
                 return Err(format!("script must define `{f}(a)`"));
             }
         }
+        // What is read once here may take more than a call of the running world (above).
+        s.engine.set_max_operations(COMPILE_OPERATIONS);
         // The world constants in force, for `law(name)`.
         let laws = s.laws_map();
         s.tables.borrow_mut().laws = laws;
@@ -1227,6 +1235,7 @@ impl Scripts {
         s.ui = s.read_ui();
         // The body's meters: never fail the compile either (`meter_errors`, refused at install).
         s.body = s.read_body();
+        s.engine.set_max_operations(LIMITS.operations);
         Ok(s)
     }
 
@@ -1235,6 +1244,22 @@ impl Scripts {
     /// not provide or exceeds the engine's limits. Returns the operations each function took.
     pub fn validate(&self) -> Result<Report, String> {
         check::validate(self, LIMITS)
+    }
+
+    /// The operations a function of no arguments takes (a law's description, a spec), with no
+    /// limit, for measuring (goods-3).
+    #[cfg(test)]
+    pub(crate) fn ops_of(&self, f: &str) -> u64 {
+        let count = Rc::new(std::cell::Cell::new(0u64));
+        let mut engine = engine_with(Limits { operations: 10_000_000, ..LIMITS }, &self.tables);
+        register_day(&mut engine, self.hour_ms);
+        let c2 = count.clone();
+        engine.on_progress(move |n| {
+            c2.set(n);
+            None
+        });
+        let _ = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ());
+        count.get()
     }
 
     /// The fields a law is called with (all of them when the analysis cannot say).
@@ -1692,6 +1717,12 @@ impl Scripts {
         let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (name.to_string(),)).ok()?.try_cast::<Map>()?;
         let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
         Some(ItemLook { icon: text("icon"), label: text("label"), group: text("group") })
+    }
+
+    /// A yes-or-no law of one name (`fire_kind("hearth")`); false when the script has none, it
+    /// fails or it is not a yes or no.
+    pub fn yes_of(&self, f: &str, arg: &str) -> bool {
+        self.unary.contains(f) && self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok().and_then(|d| d.as_bool().ok()).unwrap_or(false)
     }
 
     /// A yes-or-no law of a context (`theft(a)`); false when the script has none or it fails.
@@ -3513,7 +3544,7 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         eprintln!("heaviest: shipped {:?}, cullet {:?}; calls {} / {}", base.heaviest(), r.heaviest(), base.calls, r.calls);
         let listed = |s: &Scripts, k: &str| s.skills().get(k).unwrap().listed;
         assert!(!listed(&shipped, "feed") && !listed(&shipped, "make") && listed(&s, "feed") && listed(&s, "make"));
-        assert_eq!(s.skills().get("make").unwrap().items, ["ash", "glass", "smoked_fish", "smoked_meat", "baked_roots", "lamp_oil"]);
+        assert_eq!(s.skills().get("make").unwrap().items, ["ash", "glass", "pane", "float", "bottle", "mark", "pot", "crucible", "mould", "smoked_fish", "smoked_meat", "baked_roots", "lamp_oil"]);
         assert!(s.skills().resources.iter().any(|k| k.name == "peat_bank" && k.traits["yields"] == "peat"));
         assert_eq!(s.structure("furnace").burns.as_ref().map(|b| (b.fuel.as_str(), b.rate, b.holds)), Some(("fuel", 3.0, Some(40.0))));
         assert!(s.structure("hearth").fire() && s.structure("campfire").fire() && !s.structure("house").fire() && !s.structure("storage").fire());
@@ -3536,23 +3567,28 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         assert!(go(&at_fire("hearth", false, 0.0, &[("kelp", 4)], &[], "make", "ash", 0)).unwrap_err().contains("is out: feed it first"));
         assert!(go(&at_fire("hearth", true, 3.0, &[("kelp", 3)], &[], "make", "ash", 0)).unwrap_err().starts_with("ash takes 4 kelp (kelp: gather it at a kelp_bed"));
         // Glass: an alkali and sand at a burning furnace, with a unit of its fuel, by those who
-        // know glassmaking.
-        let glass = at_fire("furnace", true, 3.0, &[("ash", 1), ("sand", 3)], &["glassmaking"], "make", "glass", 0);
+        // know glassmaking, melted in a crucible they keep (goods-3).
+        let glass = at_fire("furnace", true, 3.0, &[("ash", 1), ("sand", 3), ("crucible", 1)], &["glassmaking"], "make", "glass", 0);
         assert_eq!(go(&glass).unwrap(), vec![Effect::Remove { item: "ash".into(), qty: 1 }, Effect::Remove { item: "sand".into(), qty: 2 }, Effect::Burn { units: 1.0 }, Effect::Add { item: "glass".into(), qty: 1 }, Effect::Vitals { hp: 0.0, hunger: 0.0, energy: -1.0 }]);
         assert!(go(&SkillCtx { target: TargetFacts { fuel: 0.5, ..glass.target.clone() }, ..glass.clone() }).unwrap_err().contains("too little fuel left"));
         assert!(go(&SkillCtx { target: TargetFacts { lit: false, fuel: 0.0, ..glass.target.clone() }, ..glass.clone() }).unwrap_err().contains("is out"));
         assert_eq!(go(&SkillCtx { target: TargetFacts { kind: "hearth".into(), ..glass.target.clone() }, ..glass.clone() }).unwrap_err(), "glass is made at a furnace");
         assert!(go(&SkillCtx { actor: ActorFacts { knows: vec![], ..glass.actor.clone() }, ..glass.clone() }).unwrap_err().starts_with("you don't know how to make glass"));
-        assert_eq!(s.text_of("source_of", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it (knowing glassmaking)");
+        assert_eq!(s.text_of("source_of", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it, using a crucible (knowing glassmaking)");
+        // Without the crucible, refused naming it and how one is come by.
+        assert_eq!(go(&SkillCtx { actor: ActorFacts { inv: vec![("ash".into(), 1), ("sand".into(), 3)], ..glass.actor.clone() }, ..glass.clone() }).unwrap_err(), "glass is made with a crucible in your pack, not used up (crucible: make it at an oven from 3 clay and 0.5 fuel from it (knowing toolmaking))");
         // Any alkali serves: a world's soda is used like ash, by the trait alone.
         let overlay = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"sand\", icon: \"sand\", label: \"sand\", group: \"material\" },", "#{ name: \"sand\", icon: \"sand\", label: \"sand\", group: \"material\" }, #{ name: \"soda\", alkali: true },");
         let soda = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &overlay).unwrap()).unwrap();
-        let c = at_fire("furnace", true, 3.0, &[("soda", 2), ("sand", 2)], &["glassmaking"], "make", "glass", 0);
+        let c = at_fire("furnace", true, 3.0, &[("soda", 2), ("sand", 2), ("crucible", 1)], &["glassmaking"], "make", "glass", 0);
         assert_eq!(soda.check("make", &c).and_then(|_| soda.done("make", &c)).unwrap()[0], Effect::Remove { item: "soda".into(), qty: 1 });
         // Turning an item by its trait: fish smoked over peat at a smokehouse, roots baked.
         assert_eq!(go(&at_fire("smokehouse", true, 4.0, &[("fish", 2)], &["smoking"], "make", "smoked_fish", 0)).unwrap()[..3], [Effect::Remove { item: "fish".into(), qty: 1 }, Effect::Burn { units: 0.5 }, Effect::Add { item: "smoked_fish".into(), qty: 1 }]);
         assert_eq!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "baked_roots", 0)).unwrap()[..3], [Effect::Remove { item: "roots".into(), qty: 1 }, Effect::Burn { units: 0.25 }, Effect::Add { item: "baked_roots".into(), qty: 1 }]);
-        assert!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "glass_beads", 0)).unwrap_err().starts_with("no one makes glass_beads here"));
+        assert_eq!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "glass_beads", 0)).unwrap_err(), "no one makes glass_beads at a workplace");
+        assert_eq!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "spear", 0)).unwrap_err(), "no one makes spear at a workplace (spear: craft it (1 stone, 2 wood))");
+        // A lamp burns oil for light and is no fire to cook at (goods-3).
+        assert_eq!(go(&at_fire("lamp", true, 4.0, &[("fish", 1)], &["cooking"], "cook", "fish", 1)).unwrap_err(), "cooking needs a campfire");
         // Cooking works at a burning hearth as at a campfire, not at an out one.
         assert!(go(&at_fire("hearth", true, 1.0, &[("fish", 1)], &["cooking"], "cook", "fish", 1)).is_ok());
         assert!(go(&at_fire("hearth", false, 0.0, &[("fish", 1)], &["cooking"], "cook", "fish", 1)).unwrap_err().contains("is out"));
@@ -3577,7 +3613,7 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         assert_eq!(island.products_of("cook"), ["cooked_fish", "cooked_meat"]);
         assert_eq!(island.products_of("smoke"), ["smoked_fish", "smoked_meat"]);
         assert!(island.products_of("make").is_empty() && island.products_of("eat").is_empty());
-        assert_eq!(c.products_of("make"), ["ash", "glass", "smoked_fish", "smoked_meat", "baked_roots", "lamp_oil"]);
+        assert_eq!(c.products_of("make"), ["ash", "glass", "pane", "float", "bottle", "mark", "pot", "crucible", "mould", "smoked_fish", "smoked_meat", "baked_roots", "lamp_oil"]);
         assert_eq!(c.products_of("cook"), island.products_of("cook"), "Cullet's people cook as the island's do");
         assert_eq!((island.making_item("cook", "cooked_meat"), island.making_item("craft", "arrow"), c.making_item("make", "smoked_fish")), (Some("meat"), Some("arrow"), Some("smoked_fish")));
         assert_eq!(island.making_item("cook", "spear"), None);
@@ -3587,7 +3623,12 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
             (p.name.as_str(), p.qty, p.any_of.clone())
         }
         assert_eq!(glass.takes.iter().map(part).collect::<Vec<_>>(), [("alkali", 1, vec!["ash".to_string()]), ("sand", 2, vec!["sand".to_string()])]);
-        assert_eq!((glass.at.as_str(), glass.lit, glass.fuel, glass.knows.as_str(), glass.ms, glass.makes, glass.tools.len()), ("furnace", true, 1.0, "glassmaking", 15000, 1, 0));
+        assert_eq!((glass.at.as_str(), glass.lit, glass.fuel, glass.knows.as_str(), glass.ms, glass.makes), ("furnace", true, 1.0, "glassmaking", 15000, 1));
+        // What it is made with and keeps (goods-3): by name, or by trait (any vessel).
+        assert_eq!(glass.tools.iter().map(part).collect::<Vec<_>>(), [("crucible", 1, vec!["crucible".to_string()])]);
+        let oil = c.recipe_parts("make", "lamp_oil").unwrap();
+        assert_eq!(oil.tools.iter().map(part).collect::<Vec<_>>(), [("vessel", 1, vec!["bottle".to_string(), "pot".to_string()])]);
+        assert_eq!((oil.tools[0].look.label.as_str(), c.recipe_parts("make", "float").unwrap().tools[0].look.label.as_str()), ("vessel", "blowpipe"));
         assert_eq!((glass.look.label.as_str(), glass.takes[1].look.label.as_str()), ("glass", "sand"));
         let cook = island.recipe_parts("cook", "cooked_fish").unwrap();
         assert_eq!((cook.item.as_str(), cook.takes.iter().map(part).collect::<Vec<_>>(), cook.at.as_str(), cook.lit, cook.knows.as_str(), cook.ms), ("fish", vec![("fish", 1, vec!["fish".to_string()])], "fire", true, "cooking", 4000));
@@ -3595,7 +3636,8 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         assert_eq!((arrow.makes, arrow.at.as_str(), arrow.lit, arrow.ms, arrow.look.group.as_str()), (3, "", false, 8000, "weapon"));
         assert_eq!(island.text_of("made_how", "cooked_fish").unwrap(), "cook it at a fire from 1 fish (knowing cooking)");
         assert_eq!(island.text_of("made_how", "spear").unwrap(), "craft it from 1 stone, 2 wood (knowing spear)");
-        assert_eq!(c.text_of("made_how", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it (knowing glassmaking)");
+        assert_eq!(c.text_of("made_how", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it, using a crucible (knowing glassmaking)");
+        assert_eq!(c.text_of("made_how", "lamp_oil").unwrap(), "make it at a fire from 2 fish, using a vessel");
         // The grids are declared: each way's cells are its products, described in its words.
         for (w, s) in [("island", &island), ("cullet", &c)] {
             for skill in ["craft", "cook", "smoke"] {
@@ -3612,9 +3654,15 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
                 for p in s.products_of(skill) {
                     let r = s.recipe_parts(skill, p).unwrap();
                     let at = match r.at.as_str() { "" | "fire" => "campfire", k => k };
-                    let have: Vec<(&str, u32)> = r.takes.iter().map(|t| (t.any_of[0].as_str(), t.qty)).collect();
+                    let takes: Vec<(&str, u32)> = r.takes.iter().map(|t| (t.any_of[0].as_str(), t.qty)).collect();
+                    let have: Vec<(&str, u32)> = takes.iter().cloned().chain(r.tools.iter().map(|t| (t.any_of[0].as_str(), t.qty))).collect();
                     let without = s.check(skill, &at_fire(at, true, 6.0, &[], &know, skill, &r.item, 1)).unwrap_err();
                     assert!(!without.is_empty() && !without.contains("{"), "{w}: {skill} {p} without its inputs: {without:?}");
+                    // Without its tools, refused in the way's words naming the tool (goods-3).
+                    if let Some(t) = r.tools.first() {
+                        let no_tool = s.check(skill, &at_fire(at, true, 6.0, &takes, &know, skill, &r.item, 1)).unwrap_err();
+                        assert!(no_tool.contains(&format!("a {}", t.name)) && !no_tool.contains("{"), "{w}: {skill} {p} without its tool: {no_tool:?}");
+                    }
                     s.check(skill, &at_fire(at, true, 6.0, &have, &know, skill, &r.item, 1)).unwrap_or_else(|e| panic!("{w}: {skill} {p} with its inputs: {e}"));
                 }
             }
@@ -3626,6 +3674,8 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         let bare = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), "fn recipes() { [#{ name: \"ash\", at: \"fire\", lit: true, takes: #{ wood: 2 } }] }").unwrap()).unwrap();
         assert!(bare.products_of("cook").is_empty() && !bare.skills().get("cook").unwrap().listed && !bare.skills().get("craft").unwrap().listed);
         assert_eq!(bare.products_of("make"), ["ash"]);
+        // Building is recipes too (goods-3): such a world builds nothing either.
+        assert!(!bare.skills().get("build").unwrap().listed);
     }
 
     /// Every item says how a client shows it (`icon`, `label`, `group`), as data no rule reads;
@@ -3693,7 +3743,7 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         for t in s.skills().techniques.iter() {
             assert!(b.contains(&t.name), "{} is not in {b}", t.name);
         }
-        assert!(b.contains("toolmaking (axe, pick), glassmaking (glass from ash and sand at the furnace). Others may know"), "{b}");
+        assert!(b.contains("toolmaking (axe, pick; pots, crucibles and drop moulds of fired clay), glassmaking (glass from ash and sand at the furnace, and panes, floats, bottles and drops). Others may know"), "{b}");
     }
 
     /// Others see someone making at a workplace or feeding a fire, players and minds alike;

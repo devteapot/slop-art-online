@@ -99,9 +99,9 @@ impl Plugin for UiPlugin {
             // Connected play: the game UI's input, its windows and the live source.
             app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
-                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
-                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows).chain().in_set(UiWork).before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows, facing::pill).chain().in_set(UiWork).before(UiSystems::Prepare))
                 // Light text gets the theme's drop the frame it is spawned (Glass).
                 .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(kit::paint).after(UiWork).before(UiSystems::Prepare));
             if perf_on() {
@@ -334,7 +334,7 @@ fn dump(
         "top": ws.top().map(|w| w.name()),
         "menu": ws.menu,
         "acts": verbs.menu.as_ref().map(|m| serde_json::json!({"title": m.title, "group": m.group, "rows": m.rows().iter().map(|r| r.label()).collect::<Vec<_>>()})),
-        "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone())})),
+        "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone())})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
         // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.
@@ -371,6 +371,7 @@ pub struct DumpExtra<'w, 's> {
     fov: Option<Res<'w, crate::facing::FovState>>,
     heard: Option<Res<'w, crate::heardmark::HeardMarks>>,
     edge: Option<Res<'w, crate::sightedge::SightEdge>>,
+    mouths: Option<Res<'w, crate::mouth::Mouths>>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -395,7 +396,9 @@ impl DumpExtra<'_, '_> {
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
-            "facing_sight": fov, "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name())})
+            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()),
+            // Each speaking body's mouth now (`mouth.rs`), by character id.
+            "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())})
     }
 }
 

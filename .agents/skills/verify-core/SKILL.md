@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), first sights in a crowd, what a graph's "stranger" means (the stranger_by_name law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs, the world's data tables of goods, structures, resources and recipes, building as recipes, tools on recipes, the carry count, the goods audit, fires that eat fuel, and the world's records, hooks and stances), needs, the body's meters and statuses (the meters and status_of laws, bodily alarms), life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm and working hours, starting ways by trade, places, weather, gestures), life tables (the `life_years` law), regrowth by season (`regrow_by_season`) and store capacity by kind (`holds`, `like`), sight that depends on facing (the fov_on law, set_world_law), first sights in a crowd, what a graph's "stranger" means (the stranger_by_name law), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
 ---
 
 # Verify the core rules and loop
@@ -127,7 +127,7 @@ python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.t
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
 
-# Goods, fires that eat fuel and recipes over Cullet's goods (about 9 min), and a seeded
+# Goods, fires that eat fuel and recipes over Cullet's goods (about 11 min), and a seeded
 # fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).
 G=$R-goods
 mkdir -p ".local/living/verify/$G"
@@ -136,6 +136,8 @@ python3 "$C/scenes.py" goods --run "$G" > ".local/living/verify/$G/goods.txt" 2>
 python3 "$C/scenes.py" stock --run "$G" > ".local/living/verify/$G/stock.txt" 2>&1
 # Crafting, cooking and smoking as recipes, by acts and by an old graph (features/goods.md).
 python3 "$C/scenes.py" making --run "$G" > ".local/living/verify/$G/making.txt" 2>&1
+# A hearth built from stone and clay, and a recipe that needs a tool held (goods-3).
+python3 "$C/scenes.py" workplace --run "$G" > ".local/living/verify/$G/workplace.txt" 2>&1
 python3 "$V" cleanup --run "$G" > ".local/living/verify/$G/cleanup.txt" 2>&1
 
 # A world's own day and laws (about 30 min; it waits for the world's own night):

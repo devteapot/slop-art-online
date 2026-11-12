@@ -32,7 +32,6 @@ use crate::style::{outline, Outlined, Style};
 use crate::world::{hash, rgb, scale, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
-use bevy_mod_outline::OutlineMeshExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::f32::consts::{PI, TAU};
@@ -46,6 +45,9 @@ pub struct EnvPart;
 #[derive(Component)]
 pub struct Occluder {
     pub height: f32,
+    /// The cutaway has it open now (faded for standing between the camera and me, or with the
+    /// eye inside it): what stands inside it is shown (`live::indoors`).
+    pub open: bool,
 }
 
 /// A landmark (Cullet's Cone, Watchglass, Counting House…): it is never faded for standing
@@ -608,7 +610,7 @@ pub fn cutaway(
     target: Res<crate::controls::Target>,
     time: Res<Time>,
     cam: Query<&Transform, (With<Camera3d>, Without<Occluder>)>,
-    mut q: Query<(Entity, &Transform, &Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>, Has<Landmark>)>,
+    mut q: Query<(Entity, &Transform, &mut Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>, Has<Landmark>)>,
     mut held: Local<std::collections::HashMap<Entity, f32>>,
     mut under: Local<std::collections::HashSet<Entity>>,
     others: Query<(Entity, &Transform, &Model, &Fitted), Without<Occluder>>,
@@ -621,7 +623,7 @@ pub fn cutaway(
     let eye = cam.translation;
     let points = [me + Vec3::Y * 1.6, me + Vec3::Y * 1.05, me + Vec3::Y * 0.25];
     let feet = support_probes(me);
-    for (e, t, o, mut fade, model, fitted, landmark) in &mut q {
+    for (e, t, mut o, mut fade, model, fitted, landmark) in &mut q {
         // Models stay hidden until fitted (look-dev fit shows them).
         if model.is_some() && fitted.is_none() {
             continue;
@@ -639,6 +641,9 @@ pub fn cutaway(
         if supports(&feet.map(local), half) {
             if fade.target != 0.0 {
                 fade.target = 0.0;
+            }
+            if o.open {
+                o.open = false;
             }
             held.remove(&e);
             // For checks (`RUST_LOG=living_game::envs=debug`): once each time I come onto it.
@@ -665,6 +670,9 @@ pub fn cutaway(
         }
         let keep = held.get(&e).is_some_and(|t| now - t < CUT_HOLD_S);
         let to = if want > 0.0 { want } else if keep { fade.target } else { 0.0 };
+        if o.open != (to > 0.0) {
+            o.open = to > 0.0;
+        }
         if fade.target != to {
             // For captures and checks (`RUST_LOG=living_game::envs=debug`): what fades, and why.
             if fade.target == 0.0 {
@@ -921,7 +929,7 @@ pub fn switch(
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, pl.yaw);
                 commands.entity(e).insert(EnvPart);
                 if pl.height >= 3.0 {
-                    commands.entity(e).insert((Occluder { height: pl.height }, crate::fade::Fade::shown()));
+                    commands.entity(e).insert((Occluder { height: pl.height, open: false }, crate::fade::Fade::shown()));
                 }
                 continue;
             }
@@ -941,7 +949,7 @@ pub fn switch(
                     e.insert(crate::lookdev::NoShadow);
                 }
                 if pl.height >= 3.0 {
-                    e.insert((Occluder { height: pl.height }, crate::fade::Fade::shown()));
+                    e.insert((Occluder { height: pl.height, open: false }, crate::fade::Fade::shown()));
                 }
                 drop(e);
                 if let Some((light, l_tf)) = local_light(&slot.kind, slot.glow, pl.height, k) {
@@ -954,14 +962,14 @@ pub fn switch(
                 .entry((slot.kind.clone(), variant))
                 .or_insert_with(|| {
                     let (mut b, g) = placeholder(&slot.kind, variant * 17 + si as u32);
-                    let _ = b.generate_outline_normals(&Default::default());
+                    crate::style::outline_normals(&mut b);
                     (meshes.add(b), g.map(|g| meshes.add(g)))
                 })
                 .clone();
             let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(pl.yaw)).with_scale(Vec3::splat(pl.height));
             let mut e = commands.spawn((EnvPart, Mesh3d(body), MeshMaterial3d(palette.vertex.clone()), tf, crate::style::stencil()));
             if pl.height >= 3.0 {
-                e.insert((Occluder { height: pl.height }, crate::fade::Fade::shown()));
+                e.insert((Occluder { height: pl.height, open: false }, crate::fade::Fade::shown()));
             }
             let light = local_light(&slot.kind, slot.glow, pl.height, k);
             if slot.height[1] > 1.5 && !matches!(slot.kind.as_str(), "cave_wall" | "tree") {

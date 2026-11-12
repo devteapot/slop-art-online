@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-2c79242a-4bfb0e",
+ "published": "2026-11-12T01:06:50+01:00",
+ "imported": "2026-11-12T01:06:50+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 5: lines where the form turns. Shell lines under the jaw and chin, round the ears and along the upper lip, in the face's line primitive; a 16 mm jaw line on the far head; per-vertex outline width written into the files. Close up the jaw's line reads lightly; at the game camera it does not on the near head.",
+ "source": {
+  "commit": "2c79242a69c769cf1d5c249d7ea2924ebcdede4b",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "d27b70ca3a6a9dc0bfe61be749b32afe2b58c025010d76bdfdfd071c13e3e1fc",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "lines-on-the-type: two bare type heads with and without the shell lines from five sides; lines-close: four presets close up, step 4b above step 5; lines-game-camera: the head at the game camera, each screen pixel enlarged, near and far models with and without lines; the vroid member is the reference in the same views; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-2c79242a-4bfb0e",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "ebc331b44cb5eddaf3ad1e6739f88f68848b6d3b91f9a1af94f339ff1199bd99",
+   "shots": [
+    "lines-close",
+    "lines-game-camera",
+    "lines-on-the-type"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "c865249291f38a3162428e33b22bc2829bedf57983dd267e9d87852ffeb3746f",
+   "shots": [
+    "lines-close",
+    "lines-game-camera",
+    "lines-on-the-type"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "1f4c58d1376f3a4465a52d5245cc13de8c76d1db09edda99b2b36573ca2c1037",
+   "shots": [
+    "lines-close",
+    "lines-game-camera",
+    "lines-on-the-type"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

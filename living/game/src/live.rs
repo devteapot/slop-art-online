@@ -58,9 +58,29 @@ const LOT_DROP: f32 = 220.0;
 /// Building spawns per frame, so a window move doesn't hitch.
 const LOTS_PER_FRAME: usize = 6;
 /// Speeds (m/s): below `MOVING` a body stands (idle or talk; above it `anim.rs` blends its
-/// gaits), and above `RUNNING` you count as running (`Roam::running`).
+/// gaits; whether it walks or runs is [`family`]'s).
 const MOVING: f32 = crate::anim::MOVING;
-const RUNNING: f32 = 3.3;
+
+/// Walking or running clips for every person ([`crate::gait::Family`]): the one place it is
+/// decided. When the authority's rows say whether a body runs (stamina-1's `running`), that word
+/// goes here, per body, ahead of the split; until then the laws' split ([`law_split`]), else the
+/// clips' own.
+fn family(split: Option<f32>) -> crate::gait::Family {
+    split.map_or(crate::gait::Family::Clips, crate::gait::Family::Split)
+}
+
+/// The speed between walking and running by the world's laws (m/s, a grown person off a road):
+/// the geometric mean of a rested grown person's walking speed (`move_speed`) and running speed
+/// (`motion`'s `run` times it). None without the laws or with speeds that don't make sense.
+fn law_split(sc: &living_rules::script::Scripts) -> Option<f32> {
+    let ctx = living_rules::script::SkillCtx {
+        actor: living_rules::script::ActorFacts { kind: "person".into(), stage: "adult".into(), hp: 100.0, energy: 100.0, ..Default::default() },
+        ..Default::default()
+    };
+    let walk = sc.move_speed(&ctx).ok()?;
+    let run = walk * sc.moves(&ctx).ok()?.run;
+    (walk > 0.1 && run > walk * 1.01).then(|| (walk * run).sqrt())
+}
 /// A line counts as being spoken for this long (s).
 const TALKING_S: f64 = 4.0;
 
@@ -85,9 +105,29 @@ impl Plugin for LivePlugin {
                     .after(me)
                     .run_if(island),
             )
-            .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island));
+            .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island))
+            // After sight, which sets every thing's visibility each frame: what stands inside a
+            // closed building is hidden over it.
+            .add_systems(Update, indoors.in_set(Phase::Camera).after(crate::sight::update).run_if(island));
         if let Some(s) = Script::from_env() {
             app.insert_resource(s).add_systems(Update, script.in_set(Phase::Input).before(crate::controls::movement).before(crate::ui::UiInput));
+        }
+    }
+}
+
+/// What stands inside a planned lot's building ([`crate::world::Indoors`]: a household's hearth
+/// and store on its house's floor) is hidden while that building is drawn closed, or not drawn at
+/// all; while the cutaway has it open, it is drawn as sight says (`sight::update`, which runs
+/// first and sets every thing's visibility each frame), and a kit model once it is fitted.
+fn indoors(live: Res<Live>, lots: Query<&crate::envs::Occluder>, mut q: Query<(&crate::world::Indoors, &mut Visibility)>, mut was: Local<HashMap<u32, bool>>) {
+    for (inside, mut vis) in &mut q {
+        let open = live.lots.get(&inside.0).and_then(|es| es.first()).and_then(|e| lots.get(*e).ok()).is_some_and(|o| o.open);
+        if was.insert(inside.0, open) != Some(open) {
+            // For checks (`RUST_LOG=living_game::live=debug`): once each time a building opens or closes.
+            debug!("indoors: lot {} {}", inside.0, if open { "open: what stands inside it is drawn" } else { "closed: what stands inside it is hidden" });
+        }
+        if !open && *vis != Visibility::Hidden {
+            *vis = Visibility::Hidden;
         }
     }
 }
@@ -214,6 +254,8 @@ const STAND_TURN_OFF: f32 = 6.0 * PI / 180.0;
 #[derive(Resource, Default)]
 pub struct Live {
     building: Option<Arc<Mutex<Option<Result<Built, String>>>>>,
+    /// The laws' walk/run split ([`law_split`]) and the script revision it was read under.
+    walk_run: Option<(u32, Option<f32>)>,
     /// Whether all three digests matched (None until compared).
     pub digests_ok: Option<bool>,
     /// The tiles as the authority hosted them at world creation, to find later edits.
@@ -457,6 +499,13 @@ fn bodies(
     };
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
+    // Walking or running clips: the laws' split, read again when the installed script changes.
+    if live.walk_run.map(|w| w.0) != Some(rules.revision) {
+        let split = rules.scripts.as_ref().and_then(law_split);
+        info!("gait: walk/run split {split:?} m/s by the laws (script revision {})", rules.revision);
+        live.walk_run = Some((rules.revision, split));
+    }
+    let family = family(live.walk_run.and_then(|w| w.1));
     // Bodies that left sight fade out where they were, then go.
     // A faint figure goes at once when its body is sent again, else fades out after a moment.
     live.leaving.retain_mut(|(e, t, id, ghost)| {
@@ -630,7 +679,7 @@ fn bodies(
         // track from where it was, then stays there until it moves again (`takes::stop_for`).
         let seg = scene.speeds.get(&id).copied().unwrap_or(0.0);
         if let (Some(g), Ok(an), true) = (gaits.as_ref(), anims.get(s.entity), s.stop.is_none() && s.walked && s.along && seg <= 0.0 && action.is_none() && s.speed > MOVING) {
-            if let Some((clip, rate, from)) = crate::takes::stop_for(g, an.clip_phase(), s.speed / pace.max(0.5) / stride.max(0.05), s.speed) {
+            if let Some((clip, rate, from)) = crate::takes::stop_for(g, an.clip_phase(), s.speed / pace.max(0.5) / stride.max(0.05), family, s.speed) {
                 s.stop = Some(crate::takes::Playing { clip, start_ms: scene.now_ms, rate, from, cut: None, yaw0: s.yaw, gait: false });
                 s.stop_at = s.drawn;
             }
@@ -689,7 +738,7 @@ fn bodies(
         // the legs face now, so a sudden turn of the travel sidesteps until they have come round.
         let look_at = aimed.or(look);
         let walking = s.person && s.speed > MOVING;
-        let takes = |t: f32, legs: f32| gaits.as_ref().is_some_and(|g| g.blend_toward(s.speed / pace.max(0.5), stride, living_rules::steer::wrap(t - legs), |_| 1.0).is_some());
+        let takes = |t: f32, legs: f32| gaits.as_ref().is_some_and(|g| g.blend_toward(s.speed / pace.max(0.5), stride, family, living_rules::steer::wrap(t - legs), |_| 1.0).is_some());
         // The travel from the legs for the directional takes, when they play.
         let mut toward_t = None;
         // A turn take playing: the legs follow its curve until it ends; walking or a move breaks
@@ -848,6 +897,7 @@ fn bodies(
         motion.eyes = eyes;
         motion.aim = person && look_at.is_some();
         motion.travel = travel;
+        motion.family = family;
         motion.freeze = motion.action.is_some_and(|a| a.clip == crate::jump::CLIP) && crate::jump::airborne(&motion) > 0.05;
         // On a road the rules speed a body up (`road_speed`, by the share of road ahead): the
         // gait is chosen at its own pace, so walking onto a road doesn't break into a run.
@@ -874,7 +924,7 @@ fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, liv
             }
             roam.pos = p;
             roam.moving = speed > MOVING;
-            roam.running = speed > RUNNING;
+            roam.running = live.walk_run.and_then(|w| w.1).is_some_and(|v| speed > v);
             roam.speed = speed;
             target.0 = Some(Vec3::new(p.x, island.height(p.x, p.y), p.y));
         }
@@ -1455,5 +1505,44 @@ fn script(
         s.at += 1;
         s.since = 0.0;
         s.frames = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A structure inside a house is hidden while the house is drawn closed, or not drawn, and
+    /// shown while the cutaway has it open; a kit model waits for its fit.
+    #[test]
+    fn what_stands_indoors_shows_only_while_its_house_is_open() {
+        let mut app = App::new();
+        // A stand-in for `sight::update`, which sets every thing's visibility each frame first.
+        let sight = |mut q: Query<&mut Visibility, With<crate::world::Indoors>>| {
+            for mut v in &mut q {
+                *v = Visibility::Inherited;
+            }
+        };
+        app.init_resource::<Live>().add_systems(Update, (sight, indoors).chain());
+        let house = app.world_mut().spawn(crate::envs::Occluder { height: 9.0, open: false }).id();
+        app.world_mut().resource_mut::<Live>().lots.insert(7, vec![house]);
+        let hearth = app.world_mut().spawn((crate::world::Indoors(7), Visibility::Inherited)).id();
+        let elsewhere = app.world_mut().spawn((crate::world::Indoors(8), Visibility::Inherited)).id();
+        let vis = |app: &App, e: Entity| *app.world().get::<Visibility>(e).unwrap();
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Hidden, "closed");
+        assert_eq!(vis(&app, elsewhere), Visibility::Hidden, "its house is not drawn");
+        app.world_mut().get_mut::<crate::envs::Occluder>(house).unwrap().open = true;
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Inherited, "open");
+        app.world_mut().get_mut::<crate::envs::Occluder>(house).unwrap().open = false;
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Hidden, "closed again");
+        // A kit model not fitted yet is hidden too while its house is closed (no flash at its
+        // unfitted size).
+        let model = crate::lookdev::Model { vrm: false, file: "envs/k/hearth/hearth.glb".into(), height: 0.0, ground_y: 0.0, glow: None };
+        let unfitted = app.world_mut().spawn((crate::world::Indoors(7), model, Visibility::Inherited)).id();
+        app.update();
+        assert_eq!(vis(&app, unfitted), Visibility::Hidden, "unfitted, its house closed");
     }
 }

@@ -1,0 +1,82 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-1fc23e0d-b70164",
+ "published": "2026-11-12T00:48:29+01:00",
+ "imported": "2026-11-12T00:48:29+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 4b: after the general coordinator's read of step 4 (hard geometric patches). The face is flat until about 55 degrees; the nose's wedge comes in at 56 and is smaller; the far side at 60; no lit island inside the shade; every edge blurred by 1.4 mm; eyes held open in every sheet.",
+ "source": {
+  "commit": "1fc23e0dcde4616c5cb20b2b0aa6ac9961fe475a",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/characters/face_shadow.py",
+  "generator_sha256": "43359e2b014c99b85dcc2a14a9a6d90ba3de6814ff990f41294ebc023a96ae9f",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game) for the sweeps; the shapes sheets are drawn by face_shadow.py --sheet",
+  "commit": "",
+  "key": "asset-view (the game) for the sweeps; the shapes sheets are drawn by face_shadow.py --sheet",
+  "preset": "",
+  "note": "sweep-close, sweep-game-camera and turned-from-the-light: step 4 above step 4b for the woman, the man, the boy and the elder, on clip-free copies with the blink's morph renamed so the eyes stay open, the sun moved by LIVING_GAME_HOUR; shapes-*: the shade drawn at each light angle and the map's shade between them; the vroid member is the reference under the same sweep, eyes held open; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-1fc23e0d-b70164",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "cbff4f1faa14cac644b0be7a36b1ab06ce6b844597af812f5c0574ef188c476f",
+   "shots": [
+    "shapes-adult-f-b",
+    "shapes-adult-m-b",
+    "shapes-all-types",
+    "shapes-child-u-b",
+    "shapes-elder-m-c",
+    "sweep-close",
+    "sweep-game-camera",
+    "turned-from-the-light"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "e7b2b422c6c39c2537241735d69b6d68915c36851dd501ac5a62cdd9410480e4",
+   "shots": [
+    "shapes-adult-f-b",
+    "shapes-adult-m-b",
+    "shapes-all-types",
+    "shapes-child-u-b",
+    "shapes-elder-m-c",
+    "sweep-close",
+    "sweep-game-camera",
+    "turned-from-the-light"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "1fcc64dd2f844bd67bd5ad1c5db2ca037aca615d24e934b4d2873f19c6fae3f6",
+   "shots": [
+    "shapes-adult-f-b",
+    "shapes-adult-m-b",
+    "shapes-all-types",
+    "shapes-child-u-b",
+    "shapes-elder-m-c",
+    "sweep-close",
+    "sweep-game-camera",
+    "turned-from-the-light"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

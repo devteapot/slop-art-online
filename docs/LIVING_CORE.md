@@ -577,7 +577,7 @@ The session ends when the client exits, whether you close the window or it crash
 - **Runs tool 1's report** (`living/tools/play_report.py`), when that file exists. While a session runs, the report tool's recorder keeps the authority's rows, and the client gets `LIVING_GAME_RECORD`.
 
 **Builds stop while you play.** While a game is open, the launcher holds the laptop's build lock, `.local/build-slots/session/{pid,since}` in the main checkout, and `build-slot` starts no new heavy job while that pid lives.
-- **Order.** First, if heavy jobs already hold slots, the launcher lists them and waits for them to finish, printing a progress line every minute. It does not hold the lock while waiting, and nothing paid runs. `--now` opens the game anyway, and the frame rate may suffer. The world and the minds start next. The lock is taken only when the client starts.
+- **Order.** First, if heavy jobs already hold slots, the launcher lists them (slot, label, how long each has run, pid, start time) and waits for them to finish, printing a progress line every minute. It does not hold the lock while waiting, and nothing paid runs. `--now` opens the game anyway, and the frame rate may suffer. The world and the minds start next. The lock is taken only when the client starts.
 - **Tests.** Set `PLAY_BUILD_SLOTS` to a scratch directory, so the session lock is `<it>/session`, or set `PLAY_SESSION_LOCK` to name the lock directly. Only the owner's sessions use the real lock, which stops every heavy job on the laptop.
 - **Release.** The lock is removed in the same teardown that pauses the world. A killed launcher's lock is ignored by `build-slot`, because its pid is dead, unless the warden has taken it over to cover a game that is still running.
 

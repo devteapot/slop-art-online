@@ -1,0 +1,467 @@
+{
+ "schema": 1,
+ "family": "character:heavy-man",
+ "id": "20261112-2c79242a-01afdb",
+ "published": "2026-11-12T01:15:06+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 5 (lines): the same person with shell lines under the jaw and chin, round the ears and along the upper lip, and step 4b's shadows (the face flat until about 55 degrees). Clips baked again with main's animate.py; marker_check passed.",
+ "source": {
+  "commit": "2c79242a69c769cf1d5c249d7ea2924ebcdede4b",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "d27b70ca3a6a9dc0bfe61be749b32afe2b58c025010d76bdfdfd071c13e3e1fc",
+  "generator_state": "committed",
+  "params": {
+   "variant": "heavy"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "2c79242a69c769cf1d5c249d7ea2924ebcdede4b",
+  "dirty": false,
+  "key": "2c79242a",
+  "env": "",
+  "hours": {
+   "day": 15.0
+  },
+  "weather": "clear",
+  "day_curve": false,
+  "preset": "d0e43de0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-05f9f777-df1cdb09f45efb80"
+ },
+ "preset": "character",
+ "media": "media/character-heavy-man/20261112-2c79242a-01afdb",
+ "members": [
+  {
+   "name": "heavy",
+   "role": "subject",
+   "token_kind": "recipe",
+   "token": "recipe:cullet-heavy",
+   "recipe": {
+    "name": "cullet-heavy",
+    "base": "lookdev/own-heavy.glb",
+    "height": 1.88,
+    "proportions": {
+     "shoulders": 1.034,
+     "build": 1.087
+    }
+   },
+   "sha256": "8abec86103a3b571ed5cd7c03341e3d2cd501bba0afafff4fcef477bb66c6499",
+   "stats": {
+    "file": "own-heavy.glb",
+    "sha256": "8abec86103a3b571ed5cd7c03341e3d2cd501bba0afafff4fcef477bb66c6499",
+    "bytes": 4841660,
+    "triangles": 23214,
+    "vertices": 14760,
+    "parts": {
+     "Cloth": 10120,
+     "Face": 5262,
+     "Hair": 3296,
+     "Skin": 4536
+    },
+    "nodes": 85,
+    "bones": 80,
+    "spring_bones": 0,
+    "materials": [
+     "M00_001_01_Cloth_01_CLOTH",
+     "M00_000_00_Face_00_SKIN",
+     "M00_000_00_Eye_00_EYE",
+     "M00_000_00_FaceEyeline_00_FACE",
+     "M00_000_00_Body_00_SKIN",
+     "M00_000_Hair_00_HAIR"
+    ],
+    "textures": 2,
+    "texture_bytes": 226582,
+    "morph_targets": 15,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [
+     "idle",
+     "idle_look",
+     "walk",
+     "walk_brisk",
+     "run",
+     "run_fast",
+     "sneak",
+     "talk",
+     "talk_explain",
+     "listen",
+     "wave",
+     "point",
+     "nod",
+     "shake_head",
+     "sit_down",
+     "sit_idle",
+     "stand_up",
+     "gather",
+     "eat",
+     "sword_slash",
+     "sword_overhead",
+     "sword_thrust",
+     "block",
+     "dodge",
+     "hit",
+     "death",
+     "cast",
+     "attack",
+     "bow_shoot"
+    ],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#9c988c",
+      "share": 0.3667
+     },
+     {
+      "hex": "#2b2420",
+      "share": 0.1652
+     },
+     {
+      "hex": "#2b2d33",
+      "share": 0.1463
+     },
+     {
+      "hex": "#353841",
+      "share": 0.0559
+     },
+     {
+      "hex": "#43372e",
+      "share": 0.0479
+     },
+     {
+      "hex": "#cc987d",
+      "share": 0.0398
+     },
+     {
+      "hex": "#ffffff",
+      "share": 0.0282
+     },
+     {
+      "hex": "#8c8879",
+      "share": 0.0256
+     },
+     {
+      "hex": "#806f68",
+      "share": 0.0227
+     },
+     {
+      "hex": "#0f0d0c",
+      "share": 0.0158
+     },
+     {
+      "hex": "#b8876e",
+      "share": 0.0145
+     },
+     {
+      "hex": "#614035",
+      "share": 0.0139
+     },
+     {
+      "hex": "#231912",
+      "share": 0.0102
+     },
+     {
+      "hex": "#6b5f5a",
+      "share": 0.009
+     },
+     {
+      "hex": "other",
+      "share": 0.0385
+     }
+    ]
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "face",
+    "face-three-quarter",
+    "face-side",
+    "hands",
+    "sit-three-quarter",
+    "sit-side",
+    "game",
+    "game-walk",
+    "elbow",
+    "knee",
+    "shoulder",
+    "hip"
+   ],
+   "clips": [
+    {
+     "name": "idle-tq",
+     "file": "clips/idle-tq.mp4",
+     "frames": 48,
+     "fps": 12,
+     "loop": 1
+    },
+    {
+     "name": "walk-tq",
+     "file": "clips/walk-tq.mp4",
+     "frames": 15,
+     "fps": 15,
+     "loop": 4
+    },
+    {
+     "name": "walk-side",
+     "file": "clips/walk-side.mp4",
+     "frames": 15,
+     "fps": 15,
+     "loop": 4
+    },
+    {
+     "name": "run-tq",
+     "file": "clips/run-tq.mp4",
+     "frames": 14,
+     "fps": 24,
+     "loop": 6
+    },
+    {
+     "name": "run-side",
+     "file": "clips/run-side.mp4",
+     "frames": 14,
+     "fps": 24,
+     "loop": 6
+    },
+    {
+     "name": "sword_slash-tq",
+     "file": "clips/sword_slash-tq.mp4",
+     "frames": 37,
+     "fps": 15,
+     "loop": 1
+    },
+    {
+     "name": "sit_down-tq",
+     "file": "clips/sit_down-tq.mp4",
+     "frames": 45,
+     "fps": 15,
+     "loop": 1
+    },
+    {
+     "name": "sit_idle-tq",
+     "file": "clips/sit_idle-tq.mp4",
+     "frames": 24,
+     "fps": 12,
+     "loop": 1
+    }
+   ],
+   "view": {
+    "size_m": [
+     2.070631265640259,
+     1.8799999952316284,
+     0.42339539527893066
+    ],
+    "triangles": 23214,
+    "vertices": 14760,
+    "meshes": 7,
+    "materials": [
+     "M00_001_01_Cloth_01_CLOTH",
+     "M00_000_00_Face_00_SKIN",
+     "M00_000_00_Eye_00_EYE",
+     "M00_000_00_FaceEyeline_00_FACE",
+     "M00_000_00_Body_00_SKIN",
+     "M00_000_Hair_00_HAIR"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "recipe",
+   "token": "recipe:shino",
+   "recipe": {
+    "name": "shino",
+    "base": "lookdev/vroid-Sendagaya_Shino.glb",
+    "height": 1.75
+   },
+   "sha256": "b98e12d335c4f6d4ef59422f9568a439f8bec5076d1a986e3f9a3d46d4712aa8",
+   "stats": {
+    "file": "vroid-Sendagaya_Shino.glb",
+    "sha256": "b98e12d335c4f6d4ef59422f9568a439f8bec5076d1a986e3f9a3d46d4712aa8",
+    "bytes": 20163628,
+    "triangles": 31211,
+    "vertices": 43595,
+    "parts": {
+     "Face": 3150,
+     "Body": 11645,
+     "Hair001": 16416
+    },
+    "nodes": 153,
+    "bones": 148,
+    "spring_bones": 16,
+    "materials": [
+     "F00_000_00_FaceMouth_00_FACE",
+     "F00_000_00_EyeWhite_00_EYE",
+     "F00_000_00_FaceEyeline_00_FACE",
+     "F00_000_00_FaceEyelash_00_FACE",
+     "F00_000_00_FaceBrow_00_FACE",
+     "F00_000_00_EyeIris_00_EYE",
+     "F00_000_00_EyeHighlight_00_EYE",
+     "F00_000_00_Face_00_SKIN",
+     "F00_000_00_EyeExtra_01_EYE",
+     "F00_001_01_Body_00_SKIN",
+     "F00_001_01_Tops_01_CLOTH",
+     "F00_001_01_AccessoryNeck_01_CLOTH",
+     "F00_001_01_Bottoms_01_CLOTH",
+     "F00_001_01_Shoes_01_CLOTH",
+     "F00_000_HairBack_00_HAIR",
+     "F00_000_Hair_00_HAIR_01",
+     "F00_000_Hair_00_HAIR_02"
+    ],
+    "textures": 30,
+    "texture_bytes": 10950015,
+    "morph_targets": 41,
+    "spring_groups": 17,
+    "vertex_colours": false,
+    "clips": [
+     "idle",
+     "idle_look",
+     "walk",
+     "walk_brisk",
+     "run",
+     "run_fast",
+     "sneak",
+     "talk",
+     "talk_explain",
+     "listen",
+     "wave",
+     "point",
+     "nod",
+     "shake_head",
+     "sit_down",
+     "sit_idle",
+     "stand_up",
+     "gather",
+     "eat",
+     "sword_slash",
+     "sword_overhead",
+     "sword_thrust",
+     "block",
+     "dodge",
+     "hit",
+     "death",
+     "cast",
+     "attack",
+     "bow_shoot"
+    ],
+    "glow": true,
+    "glow_triangles": 16610,
+    "palette": null
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "face",
+    "face-three-quarter",
+    "face-side",
+    "hands",
+    "sit-three-quarter",
+    "sit-side",
+    "game",
+    "game-walk",
+    "elbow",
+    "knee",
+    "shoulder",
+    "hip"
+   ],
+   "clips": [
+    {
+     "name": "idle-tq",
+     "file": "clips/idle-tq.mp4",
+     "frames": 48,
+     "fps": 12,
+     "loop": 1
+    },
+    {
+     "name": "walk-tq",
+     "file": "clips/walk-tq.mp4",
+     "frames": 16,
+     "fps": 15,
+     "loop": 4
+    },
+    {
+     "name": "walk-side",
+     "file": "clips/walk-side.mp4",
+     "frames": 16,
+     "fps": 15,
+     "loop": 4
+    },
+    {
+     "name": "run-tq",
+     "file": "clips/run-tq.mp4",
+     "frames": 15,
+     "fps": 24,
+     "loop": 6
+    },
+    {
+     "name": "run-side",
+     "file": "clips/run-side.mp4",
+     "frames": 15,
+     "fps": 24,
+     "loop": 6
+    },
+    {
+     "name": "sword_slash-tq",
+     "file": "clips/sword_slash-tq.mp4",
+     "frames": 37,
+     "fps": 15,
+     "loop": 1
+    },
+    {
+     "name": "sit_down-tq",
+     "file": "clips/sit_down-tq.mp4",
+     "frames": 45,
+     "fps": 15,
+     "loop": 1
+    },
+    {
+     "name": "sit_idle-tq",
+     "file": "clips/sit_idle-tq.mp4",
+     "frames": 24,
+     "fps": 12,
+     "loop": 1
+    }
+   ],
+   "view": {
+    "size_m": [
+     1.4721405506134033,
+     1.75,
+     0.36202746629714966
+    ],
+    "triangles": 31211,
+    "vertices": 95830,
+    "meshes": 18,
+    "materials": [
+     "F00_000_00_FaceMouth_00_FACE",
+     "F00_000_00_EyeWhite_00_EYE",
+     "F00_000_00_FaceEyeline_00_FACE",
+     "F00_000_00_FaceEyelash_00_FACE",
+     "F00_000_00_FaceBrow_00_FACE",
+     "F00_000_00_EyeIris_00_EYE",
+     "F00_000_00_EyeHighlight_00_EYE",
+     "F00_000_00_Face_00_SKIN",
+     "F00_000_00_EyeExtra_01_EYE",
+     "F00_001_01_Body_00_SKIN",
+     "F00_001_01_Tops_01_CLOTH",
+     "F00_001_01_AccessoryNeck_01_CLOTH",
+     "F00_001_01_Bottoms_01_CLOTH",
+     "F00_001_01_Shoes_01_CLOTH",
+     "F00_000_HairBack_00_HAIR",
+     "F00_000_Hair_00_HAIR_01",
+     "F00_000_Hair_00_HAIR_02"
+    ],
+    "glow": false,
+    "vertex_colours": false
+   }
+  }
+ ],
+ "delivered": []
+}

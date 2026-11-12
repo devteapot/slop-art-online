@@ -53,9 +53,15 @@ struct Edges {
     // metres, w 1 when it holds a field.
     sight_field: vec4<f32>,
     // x: how not seen now is drawn (sightedge::Look: 0 grey, 1 wash, 2 lantern, 3 shadows,
-    // 4 hatch, 5 memory), y: how light the scene is (0 night, 1 day), z: 1 when the memory
-    // texture is current.
+    // 4 hatch, 5 memory, 6 shade), y: how light the scene is (0 night, 1 day), z: 1 when the
+    // memory texture is current.
     sight_extra: vec4<f32>,
+    // The scene's shadow tone, as the toon shader makes it (style.rs, daylight.rs): x the target
+    // hue (the sky fill's, else the style's), y how far hues move toward it, z the saturation
+    // factor, w how much a shadow darkens.
+    sight_shade: vec4<f32>,
+    // rgb: the style's shadow tint, a: unused.
+    sight_tint: vec4<f32>,
 }
 
 @group(0) @binding(4) var<uniform> edges: Edges;
@@ -78,6 +84,109 @@ fn behind(xz: vec2<f32>) -> f32 {
     }
     let seen = textureSampleLevel(field_texture, field_sampler, uv, 0.0).r;
     return 1.0 - smoothstep(0.2, 0.8, seen);
+}
+
+// The sight field at a ground point, filtered: 1 seen, 0 behind something or outside my field
+// of view; 1 outside the texture (the radius covers that).
+fn seen_at(xz: vec2<f32>) -> f32 {
+    if (edges.sight_field.w < 0.5) {
+        return 1.0;
+    }
+    let uv = (xz - edges.sight_field.xy) * edges.sight_field.z;
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+        return 1.0;
+    }
+    return textureSampleLevel(field_texture, field_sampler, uv, 0.0).r;
+}
+
+fn hsv_of(c: vec3<f32>) -> vec3<f32> {
+    let mx = max(c.r, max(c.g, c.b));
+    let mn = min(c.r, min(c.g, c.b));
+    let d = mx - mn;
+    var h = 0.0;
+    if (d > 1e-5) {
+        if (mx == c.r) {
+            h = (c.g - c.b) / d + select(0.0, 6.0, c.g < c.b);
+        } else if (mx == c.g) {
+            h = (c.b - c.r) / d + 2.0;
+        } else {
+            h = (c.r - c.g) / d + 4.0;
+        }
+        h = h / 6.0;
+    }
+    return vec3(h, select(0.0, d / mx, mx > 1e-5), mx);
+}
+
+fn rgb_of(c: vec3<f32>) -> vec3<f32> {
+    let k = vec3(1.0, 2.0 / 3.0, 1.0 / 3.0);
+    let p = abs(fract(vec3(c.x) + k) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, vec3(0.0), vec3(1.0)), c.y);
+}
+
+// How deep the shade goes (the lit value's share, linear light) by day and by night, and how
+// far it cools by night.
+const SHADE_DAY: f32 = 0.30;
+const SHADE_NIGHT: f32 = 0.22;
+const SHADE_NIGHT_COOL: f32 = 0.5;
+// By night, how much brighter it is round me, and out to where (m).
+const NIGHT_LIFT: f32 = 1.6;
+const NIGHT_LIFT_M: f32 = 3.0;
+
+// Shade (the default since play-test 5: "more similar to the shadows than this grey overlay"):
+// what I don't see lies in shadow, in the scene's own shadow tone (the toon shader's hue shift,
+// saturation and depth, toward the sky fill's hue), with no grey. Every edge is a gradient: the
+// field is averaged over a footprint across and along the line from my eye that widens with
+// distance, like a penumbra (about 0.7 m by me, 3 m at 30 m), so sight shadows and facing
+// sight's zones (focal, side, near) fade in rather than band; the radius fades over 6 m. By
+// night, when the scene's shadows are already dark, the shade darkens less and leans to the
+// cool hue, so unseen ground still reads as shadow rather than black.
+// How far in shade this pixel is (the shade look), for the fog banks laid over it after.
+var<private> shade_amount: f32 = 0.0;
+
+// The darkening the shade gives at this light (linear share of the lit value).
+fn shade_depth(light: f32) -> f32 {
+    return mix(SHADE_NIGHT, SHADE_DAY, light);
+}
+
+fn look_shade(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, ground: f32, light: f32) -> vec3<f32> {
+    let d = p.xz - edges.sight.xy;
+    let dl = max(length(d), 1e-3);
+    let along = d / dl;
+    let across = vec2<f32>(-along.y, along.x);
+    let w = 0.35 + 0.09 * dl;
+    var seen = 0.0;
+    var total = 0.0;
+    for (var i = -2; i <= 2; i++) {
+        for (var j = -1; j <= 1; j++) {
+            let k = (3.0 - f32(abs(i))) * (2.0 - f32(abs(j)));
+            seen = seen + seen_at(p.xz + across * (f32(i) * 0.5 * w) + along * (f32(j) * 0.5 * w)) * k;
+            total = total + k;
+        }
+    }
+    let hid = 1.0 - smoothstep(0.05, 0.95, seen / total);
+    let s = max(hid, smoothstep(r - 2.0, r + 4.0, reach)) * ground;
+    shade_amount = s;
+    if (s <= 0.001) {
+        return color;
+    }
+    var hsv = hsv_of(color);
+    // The toon shadow's own move (`shadow_of`): hues toward the shadow hue by the style's shift
+    // (reds and oranges less), its saturation kept, so unseen ground takes the tone the scene's
+    // cast shadows have (measured on Brackenford's paving: rosy brown, green dropping most).
+    // Deeper than a cast shadow, as asked: to about 0.3 of the lit value in linear light, which
+    // is 0.55-0.6 on screen, so the pool I see reads as the lit place. No grey over it: a grey
+    // laid over the distance fog read as a haze. By night, when everything is already dark, a
+    // little less deep but clearly cooler, so the pool still reads as where I see.
+    let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
+    let shift = edges.sight_shade.y * (1.0 - 0.75 * red);
+    var dh = edges.sight_shade.x - hsv.x;
+    dh = dh - round(dh);
+    hsv.x = fract(hsv.x + dh * shift);
+    hsv.y = clamp(hsv.y * edges.sight_shade.z, 0.0, 1.0);
+    hsv.z = hsv.z * shade_depth(light);
+    var shade = rgb_of(hsv) * edges.sight_tint.rgb;
+    shade = mix(shade, vec3<f32>(0.62, 0.74, 1.1) * luma(shade), SHADE_NIGHT_COOL * (1.0 - light));
+    return mix(color, shade, s);
 }
 
 // How recently a ground point was seen (memory look): 1 now, 0 long ago, never, or outside.
@@ -395,6 +504,13 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
             color = look_shadows(color, p, reach, r, ground, light);
         } else if (edges.sight.w < 1.5 && look == 4) {
             color = look_hatch(color, p, n0, t0, d0, light);
+        } else if (edges.sight.w < 1.5 && look == 6) {
+            color = look_shade(color, p, reach, r, ground, light);
+            // By night, a little more light round where I stand (my body and the ground at my
+            // feet), so I'm the easiest thing to find in my pool. Presentation only: nothing
+            // is lit for the world.
+            let near = (1.0 - smoothstep(0.6, NIGHT_LIFT_M, length(p.xz - edges.sight.xy))) * ground * (1.0 - light);
+            color = color * (1.0 + NIGHT_LIFT * near);
         } else if (edges.sight.w < 1.5 && look == 5) {
             color = look_memory(color, p, t0, ground, edge * edges.line.a * fade, light);
         } else if (edges.sight.w < 1.5) {
@@ -428,7 +544,10 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         }
         let thick = acc / f32(steps) * len * 0.045 * edges.bank.x;
         let a = (1.0 - exp(-thick)) * 0.85;
-        color = mix(color, edges.bank_color.rgb, a);
+        // Mist over unseen ground lies in the same shade (the shade look): a bright bank over it
+        // read as a haze, not as shadow.
+        let bank = edges.bank_color.rgb * mix(1.0, shade_depth(edges.sight_extra.y), shade_amount);
+        color = mix(color, bank, a);
     }
 
     // Rain: four layers at set distances, near ones larger, faster and brighter, far ones finer
