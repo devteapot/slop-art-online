@@ -412,7 +412,7 @@ The island seed: its about 310 residents, all AI, and no mind service. Fighters 
   - A refill now appears 30 m off (`--refill-from`) at a random bearing, one at a time, at most one every 0.5 s (`--refill-gap`).
   - It walks in, and is given the fight within 9 m of the site.
   - A 3-minute test with 40 fighters (`minds-loadgen-*`): 43 refills arrived one by one as fighters fell, 1–5 walking in at any moment, 33–40 fighting throughout.
-- **An offset between builds.** Idle, the `battle-scale` world ticks 61.5 times a second and the other two 59.5, with no tick over budget. The tick interval (16,667 µs) and `bench.py` are the same in both, so it lies in how the ticks are scheduled, not in the work. To be looked at.
+- **An offset between worlds, not builds: the measurement.** Idle, the `battle-scale` world measured 61.5 ticks a second and the other two 59.5, with no tick over budget. `bench.py` took its counts from the `stats` row, which housekeeping writes once a second with its stamp, but divided them by the wall time around two SQL calls. So a window could gain or lose one second's ticks, about ±2 a second over 30 s. Windows every 60 s keep one phase to housekeeping, so a world kept its offset for the whole run; `battle-cheap` alone, in another run, measured 62.3. Since `battle-cheap`, `bench.py` divides the counts by the stamps' interval. The acceptance tables above carry that error: each run's ticks per second within about ±3% (±1 at 30, ±2 at 60). Ticks over 16.7 ms and p99 come from the tick log and do not.
 
 ## Verification it would need
 
