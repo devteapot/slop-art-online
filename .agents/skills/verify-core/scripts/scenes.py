@@ -2983,6 +2983,9 @@ def sleeper_cue(s):
     finally:
         set_law(s, "cues_on", False, check=False)
         set_cues(s, o, [])
+        s.graph(o, {"wait": 300})
+        # (off the open line, so a later scene's cues and sight see no one of this one)
+        off_the_line(s, line, [o, n], dy=56)
 
 
 def world_tiles(s):
