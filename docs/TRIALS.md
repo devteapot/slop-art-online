@@ -203,7 +203,7 @@ The `earshot` law (docs/COMMUNICATION.md §17; MIND_RESEARCH_IDEAS #4), approved
 
   Also reported: the stage 2 measures, the lines to the newcomer (`lines_to`, `far`, `reasks`, `heard_join_s`), and the guards. "Silence means trouble" readings are counted in the residents' thoughts with the regex `\b(silent|silence|won't answer|doesn't answer|not answering|ignor\w*|no answer)\b`, with examples quoted.
 
-**Baseline** (st2b's control-like arms, C and L, one replicate each, re-read with the new columns): `said_all` 569 and 570. `far_all` 128 and 140 (22% and 25%). `far_seen` 62 and 76, `far_unseen` 54 and 53, `far_room` 12 and 11. Lines to the newcomer 3 and 4, of which out of earshot 1 and 0. The other two st2b arms (LS, LS + cues) had `far_seen` 67 and 102.
+**Baseline** (st2b's control-like arms, C and L, one replicate each, re-read with the new columns): `said_all` 569 and 570. `far_all` 128 and 140 (22% and 25%). `far_seen` 62 and 76, `far_unseen` 54 and 53, `far_room` 12 and 11. Lines to the newcomer 3 and 4, of which out of earshot 2 and 0 (corrected on `earshot-stage`; first written 1 and 0, see the st2b correction below). The other two st2b arms (LS, LS + cues) had `far_seen` 67 and 102.
 
 **Target spread** (earshot against control in the same batch; 2 replicates, so indicative):
 
@@ -230,6 +230,62 @@ Main `b02661f9`, worktree `~/slop-trials2b` (branch `earshot-smoke`), the trial 
   - earshot: 18 scene prompts, 8 with it. For example: "Within earshot if you say it: Lumi Pontil (#3), Aldous Quill (#9), Mirren Quill (#10), Pim Hollin (#7), Edda Hollin (#6); a whisper would reach no one; a call would reach no one more."
 - **The 10 without it** are the start-up think requests, sent at 16:10:42–46. They answer deliberations requested while the world was made, before the law was set, and a deliberation keeps the scene from its request. Every person's scene prompt from 16:11:10 on has it, and the newcomer joins at 183 s. So in the paid run, the arm's first start-up thoughts are without the fact. That is before the join, outside every stage measure.
 - **Cleanup:** each run deleted its database at its end through `delete_db`, the world paused first; `trials.py clean --batch es1s` removed the two Neo4j minds. Evidence: `.local/living/trials/es1s`, journals under `.local/living/journal/verify-trial-es1s-*`.
+
+### Results (batch `es1`, 2026-11-12 16:23–16:44 UTC)
+
+**Build and switches.**
+- Main `ce5e09b9` (module `trial-cullet-ef7bcfee`, as in the smoke), worktree `~/slop-trials2b`, branch `earshot-stage`. The target above was on main (`b02661f9`) before the first paid request.
+- `earshot` on in the earshot arm only (`world_laws.json`); control has no world laws.
+- Laws as main ships them, in both arms: `stranger_by_name`, `cues_on`, `first_sight_thinks`, `fov_on` and `fast_lane_on` off; `speech_truth`, `speech_audience` and `force_outcomes` on.
+- `LIVING_GREET`, `LIVING_PARK` and `LIVING_SKILL_TIMINGS` unset (main's defaults: nearest, concurrent, on). 63 minds, `LIVING_CONCURRENCY` 64, the people mix (glm-5-3-flash, deepseek-v4-1-flash) at the real provider.
+- All four runs stopped by duration (20 minutes). Each deleted its database at its end with the world paused first (`delete_db`); `trials.py clean --batch es1` removed the Neo4j minds.
+
+**Cost:** $9.48 for the batch, under the $12 stop: control $2.30 and $2.38, earshot $2.42 and $2.37. Key fragments in the batch's evidence and journals, `es1s` included: 0 matches (3 keys, 45 fragments, 975 files).
+
+**The fact reached the prompts:** 860 of 870 and 793 of 803 scene prompts in the earshot arm carry "who would hear you now"; the 10 without it in each run are the start-up thoughts (as in the smoke). Control: none.
+
+**Against the target spread** (`arrive_spread.py --strangers`, with this branch's fix; r1/r2):
+
+| measure | control | earshot | target if the fact works | read |
+|---|---|---|---|---|
+| `far_seen` | 79 / 83 | 90 / 75 | at most half of control's | **no effect** (within 25%) |
+| `far_room` | 8 / 12 | 14 / 12 | at most control's | not met |
+| `far_all` ÷ `said_all` | 26.0% / 24.3% | 25.4% / 24.6% | down 5 points or more | **no effect** (within 2 points) |
+| `far_unseen` | 65 / 56 | 75 / 64 | within 30% of control | met |
+| `said_all` | 584 / 621 | 705 / 614 | within 25% of control | met |
+| lines to the newcomer (out of earshot) | 2 (2) / 0 | 4 (2) / 2 (2) | reported | — |
+| re-asks; first heard line | 0, none / 0, none | 0, 691 s (Nan Fenwick) / 0, none | reported | — |
+| "silence means trouble" readings (thoughts after the join) | 12 / 6 | 11 / 8 | fewer hoped | no change |
+| `converge_60s` / `together_4m` | 2, 1 / 2, 2 | 2, 0 / 2, 2 | at most control's + 2 | met |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.25, 0.00, −0.03 / 0.71, 0.05, +0.14 | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | within control's spread | `rep_res` 0.08 just above control's 0.05 |
+| cost per run | $2.30 / $2.38 | $2.42 / $2.37 | within 20% | met |
+
+Also per run (control r1/r2, earshot r1/r2):
+- in range: 24, 19, 24, 27;
+- asks: 2, 0, 3, 2;
+- approaches silently: 1, 4, 0, 2;
+- notices inwardly: 0, 2, 2, 0;
+- unaware: 21, 13, 19, 23;
+- tells others: 0, 0, 1 (Roos Achterberg), 0.
+
+**Why there was no effect** (free, from the journals; `es1_why.py` in the session scratchpad, matching each unheard line to the model reply that wrote it). The earshot arm's unheard lines (any wording; 202 and 173) break down as:
+- **The person was within a said line in the scene, and gone by the time the line was said: 73 and 65.** The median gap between a deliberation's request and its line is 8.1 and 7.6 s (the model's time), and people move in it. The fact was true when told.
+- **Only a call would have reached them: 33 and 22.** A deliberation's (think or deliberate) reply cannot choose a way: its `say` is always said (`mind_install` takes `say` and `say_to`, no way). Only a talk reply names a way, or a graph's `say` node. Ingrid Morrow's scene read "a call would also reach: Magda Tarn (#24), …", and she said her line to Magda.
+- **Not listed at all (beyond a call, or unseen): 15 and 16.**
+- **Talk turns: 42 and 34.** A talk prompt has no scene, so no fact.
+- **Repeats** merged in `speech.jsonl`: 37 and 34.
+
+Control's 163 and 167 split the same way (deliberation 108 and 109, talk 36 and 30).
+
+**Recommendation.**
+1. **Let a deliberation's `say` name a way,** as a talk reply already can: `mind_install` takes it and `speak` applies the same rules. Without it, "a call would also reach" tells a mind of a way it cannot take in that reply.
+2. **The late line is the larger share.** It is out of the fact's reach by design: the fact is what one perceives when one thinks. A direct line is always said (the general coordinator's decision on `speech-truth`). What could change it is act semantics, which the owner decides:
+   - a `say` to a named person walks into their hearing first, as `give` walks into reach (MIND_RESEARCH_IDEAS #4, its second arm);
+   - or the speaker is told at once, as now, and the mind may say it again.
+3. **Talk turns would need the fact from the authority at the turn,** for example with the line they answer. Leave this until 1 and 2 are read: talk lines are a fifth of the unheard ones.
+4. **Keep the `earshot` law off until then.** It costs about 55 tokens a prompt and changed nothing here.
+
+**Evidence:** `.local/living/trials/es1` and `.local/living/journal/verify-trial-es1-*` in `~/slop-trials2b`.
 
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
@@ -286,6 +342,8 @@ Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.
 | re-asks | 0 | 2 (Nan asked three more times) | 0 | 0 | — |
 | guards: false replies a min, repeated lines, `led_res` − placebo | 0.10, 0.07, −0.03 | 0.46, 0.00, +0.22 | 0.80, 0.00, −0.26 | 1.06, 0.03, +0.28 | within C's spread |
 | deliberations per resident-hour | 18.2 | 18.5 | 19.3 | 23.1 | (ar2: 24) |
+
+**Correction (2026-11-12, branch `earshot-stage`).** `arrive_spread.py` counted a line to the newcomer as out of earshot only when the speaker's `silence` row had the newcomer as its subject. When the newcomer is too far away to make out (past 24 m in Cullet), that row names them by the speaker's far handle instead (far-handle), so those lines counted as heard. Re-read with the fix: in C, Roos Achterberg's line at 57 s was out of earshot. C's lines to the newcomer out of earshot are 2, not 1, and its first heard line came at 892 s, not 57 s. L, LS and LS + cues are unchanged. The table above keeps the first figures.
 
 - **Not in shape.** No arm reaches the inward band or the unaware band, Aldous asked in no arm, and the cue arm has no asker.
 - **Aldous.** He was in range only in LS, classed unaware. He thought 4–6 times after the join in each arm, and stranger or arrival words came up only about other things ("me with a blank arrivals line waiting on names", LS + cues).
