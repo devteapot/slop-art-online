@@ -999,6 +999,8 @@ def make_far_head(arm, spec, picture_path):
     look = spec["look"]
     face = head_mesh.FarFace(HF, look, keep=lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.030 or bald_depth(c) > -0.012)
     m = face.mesh
+    if TYPED and cage_head.CageFace.LINES:
+        cage_head.far_jaw_line(m, HF, look)
     world = np.array(HEAD)[None, :] + np.array(m.v) * HEAD_SCALE
     ob = raw_object("FarHead", world, m.f, [{"J_Bip_C_Head": 1.0}] * len(m.v), m.col, MAT["far"], arm, uvs=m.uv)
     face_paint.write_png(picture_path, face_paint.paint_far(HF, look))
@@ -2018,8 +2020,11 @@ def main():
     ap.add_argument("--parts", default="all", choices=("all", "head", "face"), help="`head`: only what a face type's file holds (the whole head, the neck and hands, and the far head with --lod both): no hair, no clothes; "
                     "`face`: the whole head and neck alone, to photograph a type")
     ap.add_argument("--morphs", default="all", choices=("all", "client"), help=f"`client`: keep only the expressions the game drives ({', '.join(CLIENT_MORPHS)}); every expression costs each vertex of the face again")
+    ap.add_argument("--no-lines", action="store_true", help="leave out the shell lines at the jaw, ears and mouth (cage_head.CageFace._shell_lines), to compare")
     ap.add_argument("--blend")
     a = ap.parse_args(argv)
+    if a.no_lines:
+        cage_head.CageFace.LINES = False
     bpy.ops.wm.read_factory_settings(use_empty=True)
     given = person_params.given_from_args(a)
     if not given:

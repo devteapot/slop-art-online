@@ -14,6 +14,10 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - A dodge dashes about 2.6 m and the blow winding up misses or is dodged.
 - A jump (the bar's seventh place, Space in the game) hops about 1.6 m like a dash but does not evade (`jump_combat()`'s `evades: false`): a blow winding up as you jump toward its striker lands or misses by reach, never `DODGED` (scene `jump`).
 - Heal mends yourself.
+- Breath (since `stamina-1`, docs/STAMINA.md; scene `breath`), read through the player's own `my_vitals`:
+  - **A run.** `human_move` with run goes the `run_share` law times the walk and drains 4 breath a second. The row's rate comes from its anchor, and a held run writes no further row. Letting go writes the refill from a second later at 25 a second. Standing, breath comes back with no row written.
+  - **Costs.** A dodge takes 20 and a jump 10.
+  - **Refusal.** Dodging on without a pause is refused "out of breath", in the use's outcome and as a `my_combat` REFUSED row.
 - The seed's bold pack attacks a healthy adult player.
 - In the game client (since 2026-11-11), a left tap on a person who is not hostile to the player sends no `use_skill`; it opens the text box to them (and a `face` act). A held press, and a tap on an animal or a hostile person, strike as before. The reducers are unchanged, so `combat.py` still drives `use_skill` directly.
 - The character dies through the vitals and death rules ("killed by …"), the dead player is told of the death and who saw it, and `join` makes a new character with only the newcomer's kit.
@@ -35,8 +39,8 @@ $V cleanup --run $R
 - A dummy is an adult (`stage` 2 or more). Until 2026-11-10 it was the first living person with half its health, on the island resident 17, a child, whose strike the rules refuse ("too young to fight"): the block, dodge and heal scenes then saw no blow at all (5 of 25 failing on `origin/main` too). Since then a refusal at the start is told (`You failed to strike → …: too young to fight` in the attacker's `experience`), so look there first when an attacker never strikes.
 - The block scene places the attacker first, reads where it stands, and raises the guard toward it (or away from it); a guard aimed at a fixed point east met a blow from the side when `place_at` put the attacker on the next walkable tile.
 - The block, dodge and heal scenes give the attacker 4 s to land its blow. On 2026-11-09 one full run on a host also running the mind suite and a headless game client failed all three with no blow at all; two reruns (and the scenes run alone) passed. Rerun on a quieter host before calling it a regression.
-- The `kill` scene takes about ten strikes at 2 energy each; with `--scene all`, use `--fresh` so later scenes are not refused "too tired". The dummy resident is set to a wait graph, so it neither flees nor strikes back.
-- Energy is a real requirement: a character worn out by earlier scenes is refused "too tired". Use `--fresh`.
+- The `kill` scene takes about ten strikes at 10 breath each (since `stamina-1` combat spends breath, not energy): a strike refused "out of breath" waits 3 s for it to come back and goes on. The dummy resident is set to a wait graph, so it neither flees nor strikes back.
+- Breath is a real requirement, and comes back by itself within seconds; energy no longer refuses a move. `--fresh` still starts a new character (an energy below 70 does it anyway).
 - Since `fix-place-free` (2026-11-11) `place_at` puts a body on the nearest walkable tile no other body stands on (within 6 m), so near the busy arrival spot a dummy asked for 1.2 m east could land 2.2 m away, out of a strike's reach (1.6 m plus the 0.6 m lunge): 16 to 19 of 26 checks failed with "out of reach", and the jump found "no room to jump". `dummy()` now stages on a tile `free_spots()` finds free (walkable, no body on it, the offset's distance within 0.6 m, and for the jump 2 m of open ground beyond) and reads the body back. `living/tools/combat_scene.py` uses the same helper.
 - The jump scene waits 1 s after the hop for the attacker's blow; one of six runs on 2026-11-11 saw no blow in that window (windup and hop fine). Rerun before calling it a regression.
 - Place a dummy before setting its graph: a teleport drops an approach its graph already started.

@@ -38,7 +38,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from merge_primitives import append_accessor, read_accessor, read_glb, write_glb  # noqa: E402
 
 NAME = "_OUTLINE_NORMAL"
+WIDTH = "_OUTLINE_WIDTH"
 WELD = 2e-5  # metres: vertices nearer than this are one point
+# How heavy the outline is at a vertex, as a multiple of the figure's own width (the client's
+# `outline_people`, in pixels). 1 is the standard line.
+W_NONE, W_HAIR, W_JAW = 0.0, 0.7, 1.6
 
 
 def primitives(j):
@@ -87,13 +91,65 @@ def outline(j, binary):
     return out
 
 
+def nearest(a, b):
+    """Each point of a's distance to the nearest of b's."""
+    if not len(b):
+        return np.full(len(a), 1e6)
+    out = np.empty(len(a))
+    for i in range(0, len(a), 512):
+        out[i : i + 512] = np.sqrt(((a[i : i + 512, None, :] - b[None, :, :]) ** 2).sum(axis=2)).min(axis=1)
+    return out
+
+
+def ease(a, b, x):
+    t = np.clip((x - a) / (b - a), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def widths(j, binary):
+    """The outline's weight at every vertex: {id(primitive): (n,) array}.
+
+    - Eyes, lashes, brows, the painted lines and the shell lines: none. A line round a lash
+      floats, and a line needs no line.
+    - A face's skin: none at the lids' edges, easing to the standard 8 mm away; heavier along
+      the jaw, where the face stands over the neck.
+    - The skin under the jaw: heavier at the jaw line, easing to the standard.
+    - Hair: lighter. Everything else: the standard."""
+    mats = j["materials"]
+    prims = [(m, p, mats[p["material"]].get("name", "") if "material" in p else "") for m, p in primitives(j)]
+    pos = {id(p): np.array(read_accessor(j, binary, p["attributes"]["POSITION"])[0], dtype=np.float64).reshape(-1, 3) for _, p, _ in prims}
+    cat = lambda sel: np.concatenate([pos[id(p)] for m, p, n in prims if sel(m, n)] or [np.zeros((0, 3))])
+    eyes = cat(lambda m, n: n.endswith("_EYE"))
+    face = cat(lambda m, n: n.endswith("Face_00_SKIN"))
+    under = cat(lambda m, n: m.get("name") == "Face" and n.endswith("Body_00_SKIN"))
+    # The jaw line: where the face's skin and the skin under the jaw share points.
+    jaw = under[nearest(under, face) < 1e-4] if len(under) and len(face) else np.zeros((0, 3))
+    out = {}
+    for m, p, n in prims:
+        q = pos[id(p)]
+        if n.endswith("_EYE") or n.endswith("_FACE"):
+            w = np.full(len(q), W_NONE)
+        elif n.endswith("Face_00_SKIN"):
+            w = ease(0.003, 0.008, nearest(q, eyes)) * (1.0 + (W_JAW - 1.0) * (1 - ease(0.004, 0.014, nearest(q, jaw))))
+        elif m.get("name") == "Face" and n.endswith("Body_00_SKIN"):
+            w = 1.0 + (W_JAW - 1.0) * (1 - ease(0.004, 0.014, nearest(q, jaw)))
+        elif "_HAIR" in n:
+            w = np.full(len(q), W_HAIR)
+        else:
+            w = np.ones(len(q))
+        out[id(p)] = w
+    return out
+
+
 def write(j, binary):
-    """Add the attribute to every triangle primitive. Returns (primitives, vertices)."""
+    """Add the two attributes to every triangle primitive. Returns (primitives, vertices)."""
     dirs = outline(j, binary)
+    wide = widths(j, binary)
     n = 0
     for _, p in primitives(j):
         d = dirs[id(p)]
         p["attributes"][NAME] = append_accessor(j, binary, array("f", d.astype(np.float32).ravel().tolist()), 5126, "VEC3", False, 34962)
+        p["attributes"][WIDTH] = append_accessor(j, binary, array("f", wide[id(p)].astype(np.float32).tolist()), 5126, "SCALAR", False, 34962)
         n += len(d)
     return len(dirs), n
 
@@ -112,7 +168,11 @@ def check(path):
             turn.append(np.degrees(np.arccos(np.clip((o * nrm).sum(axis=1), -1, 1))))
     t = np.concatenate(turn) if turn else np.zeros(1)
     print(f"outline_normals: {path}: {have} of {total} vertices carry {NAME}; from the shading normal {np.median(t):.1f} degrees at the median, {np.percentile(t, 95):.1f} at the 95th percentile")
-    return have == total
+    ws = [np.array(read_accessor(j, binary, p["attributes"][WIDTH])[0]) for _, p in primitives(j) if WIDTH in p["attributes"]]
+    if ws:
+        w = np.concatenate(ws)
+        print(f"outline_normals: {path}: {len(w)} vertices carry {WIDTH}: {int((w < 0.05).sum())} with no line, {int((w > 1.05).sum())} heavier than standard (up to {w.max():.2f}), {int(((w >= 0.05) & (w < 0.95)).sum())} lighter")
+    return have == total and sum(len(x) for x in ws) == total
 
 
 def main():
@@ -126,6 +186,7 @@ def main():
     j, binary = read_glb(a.inp)
     for _, p in primitives(j):
         p["attributes"].pop(NAME, None)
+        p["attributes"].pop(WIDTH, None)
     prims, verts = write(j, binary)
     write_glb(a.out or a.inp, j, binary)
     print(f"outline_normals: {a.out or a.inp}: {verts} vertices in {prims} primitives")

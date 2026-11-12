@@ -15,6 +15,7 @@ pub mod outcome;
 pub mod sight;
 pub mod map;
 pub mod nav;
+pub mod pools;
 pub mod city;
 pub mod genes;
 pub mod life;

@@ -40,3 +40,15 @@ R=minds-deliberation-$(date +%Y%m%d-%H%M%S)
 - Needs remain in the graph. The fixture weights its waiting intent at 1.5, above ordinary needs in this scene.
 - `mind_act` acceptance alone does not prove a completed interaction. Check the effect or its failure experience.
 - A thought is an audit record of reported model output. It is not hidden chain-of-thought or proof of autonomous reasoning.
+
+## Running
+
+Since `stamina-1` (docs/STAMINA.md), the case `run` checks a mind's running (`breath_case`):
+
+- **The walk.** It measures the person's walk with an admin `goto` graph.
+- **The act.** It has the fake model decide `{"do": "goto", "target": {"at": [x, y]}, "run": true}`. The body runs at the `run_share` law times that walk, and the `vitals` row has a negative `stamina_rate` from its anchor.
+- **The prompt.** The prompt documents `"run": true` and the `{"stamina": {"below": 30}}` condition.
+- **The scene.** The scene's `you` has `stamina`, and `you.slowed` when the rules slow the body (the `slowed` law; the words are checked in Cargo).
+- **The felt body.** The felt body adds "out of breath" below 20 breath (`prompts::tests::the_body_is_felt_in_words`).
+
+Evidence: `sent-prompt-run.txt`, `running-body.json`, `running-vitals.json`.

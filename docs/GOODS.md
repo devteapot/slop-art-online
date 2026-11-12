@@ -8,7 +8,7 @@
 - nothing in the engine is there for tests;
 - decay and upkeep are wanted.
 
-This note covers the audit, the general rules it led to, and what changed for the island. Cullet's own content and the reasons for each choice are in [Cullet's rules](CULLET_RULES.md#where-cullets-goods-come-from-goods-3). Two rule changes for every world are proposed, not built, in [goods proposals](GOODS_PROPOSALS.md).
+This note covers the audit, the general rules it led to, what changed for the island, and a [trial spec](#trial-do-residents-use-the-goods) for whether residents use the goods. Cullet's own content and the reasons for each choice are in [Cullet's rules](CULLET_RULES.md#where-cullets-goods-come-from-goods-3). Two rule changes for every world are proposed, not built, in [goods proposals](GOODS_PROPOSALS.md).
 
 ## The audit
 
@@ -197,6 +197,155 @@ The recipe grid shows a recipe that needs a tool, a workplace or a lit fire from
 - N = Σ qty × `Scripts::num_of("carry_of", item, 1.0)`. It is cached by argument and may be fractional: 5 arrows are 0.5.
 - limit = `num_of("carry_limit", kind, 0.0)` plus the largest `tables().number("items", item, "room")` among the items carried. A basket adds 20.
 - The client today shows `carry_limit` without the basket. The rules count the pack as full at N + 0.0001 ≥ limit.
+
+## Trial: do residents use the goods
+
+**Status:** a spec for a Spark trial on Cullet with real minds, to be routed after play-test 6. Nothing here is built. The rules tests and the verify-core scenes prove that each recipe, tool and build *can* happen. This trial asks whether Cullet's 64 residents *do* make, build, cast and run short, left to their own minds, and whether the peat holds.
+
+### Setup
+
+- **The world:** a fresh Cullet from its seed (`living/seeds/cullet.json`, its laws composed as created). Use the Spark's own trial server (`slop-trials-stdb`), not a reference world.
+- **The minds:** the mind service with the model profile the general coordinator chooses, every resident a mind, no players.
+- **No scripted events or nudges.** Nothing is granted and no admin act is made after creation. The setup is only to see the world as seeded.
+- **What the residents start with:**
+  - Tools: blowpipes with Vessa Pontil, Corvin Hollin, Imre Sarro and Halvard Dunmore; crucibles with the first three; the mould with Aldous Quill; a pot with Livia Faro.
+  - Money: 377 drops (`mark`) among the residents.
+  - Peat: 1,684 in the stores, packs and the fires' first fill.
+- **Who knows what matters:** glassmaking 7 people, toolmaking 2 (Otto Brandt, Bram Calloway), masonry 1 (Gwil Stannard), carpentry 6, basketry 2, smoking 1. A build or recipe nobody knows is not a finding about goods.
+
+### How to read the authority
+
+Read every table as the world's owner, with the admin token, as `verify.py sql` does. `structure`, `resource_node` and `world` are public. In the default `scoped` build, `inventory`, `experience`, `chronicle`, `clock`, `character` and `know_how` are private developer truth. Four sources, at three cadences:
+
+| Source | What it gives | Cadence | Why that cadence |
+| --- | --- | --- | --- |
+| `experience` rows with `id` above the last read | each resident's own acts, as lines in their log | every 10 real seconds | The mind service deletes the lines it has consolidated (`mind_consolidated`), and each log keeps at most 400. Lines read late are gone |
+| `structure` (every row), and `inventory` summed by `owner` and `item` | what stands, its owner, `built_ms`, `lit_until_ms`; what every pack and store holds | every game hour (2 real minutes on the 48-minute day) | Durable rows, so an hourly census shows the daily curves with 24 points a day |
+| `chronicle` rows with `id` above the last read | the story feed: `kind = "build"`, "{name} built a {kind}" | every 5 real minutes | Bounded at 4,000 rows. It is a cross-check on builds, not the count |
+| `world` (`day_ms`, epoch), `clock` | game day and hour of each sample | with each sample | To put every count on game days |
+
+The act lines a resident is told, and how to count them:
+
+- **Success, a deliberate act:** "You did what you had decided: {act} ({notes})." Notes such as "+2 pane" or "+4 mark" say what was made.
+- **Success, a graph's action:** "You finished: {act}. {notes}". Residents act mostly through their graphs, the town-life routines.
+- **Refusal:** "What you had decided did not work out: {act}: {why}." for a deliberate act, or "You failed to {act}: {why}" for a graph's. `why` is the rules' own words.
+- **A repeated failure** within the `repeat_failure_s` law of the last is not told again. Count refusals as **episodes**: one per resident, recipe and reason, with a new episode after a told success or after `repeat_failure_s`. Do not count them as attempts.
+- **Building a structure:** a new `structure` row whose `id` is above the highest at creation. Its `owner` is the builder and its `built_ms` the time. "{name} built a {kind}" is in `chronicle`.
+
+Keep the raw samples (JSON lines per source) with the trial's evidence, so every number below can be recomputed.
+
+### The measures
+
+**1. What gets built, by kind and by whom, over game days**
+
+- **Read:** new `structure` rows by `kind`, `owner` and the game day of `built_ms`. Exclude `remains` (deaths) and `sign` (writing). Check against `chronicle` `build` rows. Count refusals of `build` by reason: "you don't know how to build a {kind}", "need {n} {k} for a {kind}", "cannot build here".
+- **Report:**
+  - a table of kind by game day;
+  - the builders, with what they knew;
+  - the stone, clay, wood and panes the builds took (from each kind's recipe, `tables().entry("recipes", kind)`) against what was gathered and made.
+- **Pass:** at least one fire, workplace or store kind is built by a resident who chose to, with materials they gathered or got from others.
+- **Concern:**
+  - nothing built in the whole trial;
+  - builds refused for want of masonry while Gwil Stannard is alive and nobody asks him to teach;
+  - stone running out: the wild boulders are Cullet's only stone (`resource_scale` 0.4), and the Cone alone takes 24.
+
+**2. Drops cast, by whom, and in circulation**
+
+- **Read:**
+  - Casting: success lines with "+4 mark" from a `make` at the furnace, by observer.
+  - In circulation: Σ `inventory.qty` of `mark` over every owner, packs and stores, each census. Split into packs (owners below `1 << 40`) and stores (`structure` owners, `owner & ~(1 << 40)`). Count the distinct residents holding any.
+  - Moving: give and trade lines that name drops, and agreements paid in them, from the `experience` lines of `give`, `accept` and `offer_terms` outcomes.
+- **Report:**
+  - drops cast per game day, and by whom;
+  - the total against the starting 377;
+  - holders over time;
+  - who holds the mould at each census: inventory rows with `item = "mould"`. Another mould fired at the oven shows up here too.
+- **Pass:** drops change hands for goods or work, the total moves only by casting, and casting happens when someone wants it, through the custom the bible gives or around it.
+- **Concern:**
+  - drops cast in bulk with no use for them: the total climbing with nothing bought;
+  - no drop ever changing hands;
+  - the mould unused for the whole trial while its keeper is asked for drops.
+
+**3. Tool shortages**
+
+- **Read:** refusal episodes whose `why` names a missing tool.
+  - `make`: "{product} is made with a {tool} in your pack, not used up ({tool}: …)".
+  - `craft`: "need a {tool} in your pack to make a {product}, not used up".
+  - Report them by tool and by recipe: `crucible` for glass; `blowpipe` for float and bottle; `mould` for mark; `vessel` for lamp_oil.
+  - Also track who holds each tool at each census (inventory rows for `crucible`, `blowpipe`, `mould`, `pot`, `bottle`).
+  - Track new crucibles, pots and moulds made: "+1 crucible" etc. from `make` at the oven.
+- **Report:**
+  - episodes by tool, recipe and resident per game day;
+  - each tool's holders over time;
+  - the time from a resident's first tool refusal to that resident next holding the tool, or to the recipe being made by someone who holds it.
+- **Pass:** shortages are met by people: a crucible fired by the pot maker, a tool lent or given, the work moved to someone who holds the tool.
+- **Concern:**
+  - the same resident refused for the same tool over more than a game day with nobody responding;
+  - every blowpipe lost, for example by a death whose remains rot, so that no float or bottle can be made again. Blowpipes are seed-only, so report their count every census.
+
+**4. Peat: the stores against the burn**
+
+- **Read, each census:**
+  - peat held by the Store (`store`), the peat barn (`peat_barn`), the Cone yard (`yard_store`) and the 22 house stores (`house_store`), as inventory rows with owner `(1 << 40) | structure.id`;
+  - peat carried in packs;
+  - each fire's fuel left, `(lit_until_ms − now) × rate`, from its kind's `burns.rate` and the world's `day_ms` (`StructureTraits::fire_state`);
+  - the burn: the fall in fuel left across fires between censuses, plus the units fed. A feed is told as "fed the {kind} with {n} peat: it burns about … more hours", or "lit the {kind} …" when it was out.
+  - The cut: "+1 peat" from gathering at a `peat_bank`.
+- **Report:** peat a game day (cut, burnt, the total heap) against `goods_minerals.py`'s figures: 101 cut a growing day at most by regrowth and none in winter; 144 burnt a day at the design burn, 154 at the evenings burn, 384 all lit.
+  - Under today's rule, the 1,684 at the start run out on game day 28 at the design burn, 24 at evenings and 7 all lit.
+  - Report which burn the residents actually run at, and the day the heap would run out at that rate.
+  - Report each household's own store and whether its hearth is lit on winter nights.
+- **Pass:** the heap's fall matches the predicted fall for the observed burn, and the residents' choices respond to it: cutting more in growing days, laying by before winter, letting fires out by day, or the Cone's firing decided by someone.
+- **Concern:**
+  - a household's store at 0 with its hearth out on a winter night while the barn holds peat;
+  - the heap falling faster than the all-lit rate, which would mean a burn the model does not know;
+  - cutting never reaching what regrowth allows (101 a growing day) while the heap falls.
+
+**5. Panes, floats and bottles made and used**
+
+- **Read:**
+  - Made: "+2 pane", "+2 float" and "+1 bottle" from `make` at the furnace.
+  - Used: panes go into builds (lamp 4, hall 8, inn 6, workshop 2: the builds of measure 1); floats into nets, from "+1 net" by `craft`, 2 floats each.
+  - Bottles are kept as vessels: the holders at each census.
+  - Glass made, "+1 glass", against glass used by these recipes and by drops.
+  - The stocks of `pane`, `float`, `bottle` and `glass` over all owners at each census.
+- **Report:** made, used and held per game day, for each of the four.
+- **Pass:** glass goes to a use: panes built into something, floats into nets, bottles used for oil.
+- **Concern:**
+  - glass or panes piling up with no use made;
+  - no glass made in the whole trial while the Cone burns. The furnace burns 3 peat an hour whether anyone melts or not.
+
+**6. Lamp oil without a vessel**
+
+- **Read:**
+  - Refusal episodes "lamp_oil is made with a vessel in your pack, not used up (vessel: …)" by resident.
+  - Successes "+1 lamp_oil" and who made them, and whether they held a pot or a bottle at the census before.
+  - The lamps' fuel (`lit_until_ms` of the 7 `lamp` structures), and the feed lines "fed the lamp with {n} lamp_oil", or "lit the lamp …" when it was out.
+- **Report:** refusal episodes against oil made per game day, and the lamps lit at each night's census.
+- **Pass:** oil is rendered by someone holding a vessel (Livia Faro's pot, or a bottle or pot made later), and the lamps are fed.
+- **Concern:**
+  - repeated refusals by residents who never get a vessel;
+  - every lamp dark through a night with fish in the stores.
+
+### How long the trial must run
+
+| Measure | Needs | Game days | Real hours on the 48-minute day |
+| --- | --- | ---: | ---: |
+| Builds, drops, tools, glass, oil | several working days, to see a choice made, a shortage met or not, a use found | 4 | 3.2 |
+| Peat through a winter | a whole year: 6 growing days and 2 winter days (YEAR_DAYS 8), and the next spring's first day to see the recovery | 9 | 7.2 |
+| Peat run-out at today's rule | the predicted day the heap is empty at the observed burn (design 28, evenings 24, all lit 7) | up to 28 | up to 22.4 |
+
+The trial should run **9 game days** (7.2 real hours), which covers every measure but the run-out. If the burn at day 9 says the heap would empty within about 3 years, extend to the predicted day only if the coordinator wants the run-out itself seen. Otherwise report the prediction from the observed rate. A burn near the all-lit rate empties the heap by day 7 inside the 9-day run.
+
+### Measures that wait for stores counting `carry`
+
+Stores still count things (`holds`), while packs count by `carry`. Until a store counts by `carry` too, these measures would mislead and are left out:
+
+- **Drops kept in stores against a store's room.** A drop is a tenth of a thing in a pack but a whole thing in a store, so a household that banks its drops fills its 150-thing store ten times as fast as its pack would. Store-full refusals while storing drops or arrows are an artefact of that, not a shortage of room.
+- **What a household can lay by.** The room left in a store for food and peat, when part of it holds drops or arrows, has the same artefact.
+- **Comparing what is carried with what is stored.** For example, whether people carry their money or bank it.
+
+Peat, food, glass and the tools all count 1 either way, so measures 1 to 6 are unaffected.
 
 ## Data paths and costs
 

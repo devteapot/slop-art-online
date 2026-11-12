@@ -1,5 +1,16 @@
 # Client protocol validation
 
+## 2026-11-12 stamina-1 (Spark)
+
+Branch `stamina-1` with look-2 merged; trial service `slop-trials-stdb`, scoped build. `client-st1c`: **42 of 42**. The new checks:
+
+- **`my_vitals`.** It carries breath and focus (`stamina`, `stamina_max`, `stamina_rate`, `stamina_from_ms`, the same four for `focus`) for the caller's character only, and none to an anonymous client.
+- **`skill_card.pool`.** It names each cost's pool (dodge: stamina, 20; firebolt: focus).
+- **`running`.** `my_body` and `seen_bodies` rows (`Moving`) carry it as a bool.
+
+The driver's `SCOPED` gained `audience`. That table came from main (exp-greet), and the inventory check had stopped on it (`client-st1b`).
+
+
 ## 2026-11-11 look-2 (dev-box)
 
 Branch `look-2` (from main `017286a1`, `origin/main` `1b1414a3` merged as `d609819d`) on the dev-box, own container `look2-stdb` (2.14.1, port 3330, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped` unless named, no model calls. Evidence under the worktree's `.local/living/verify/`.

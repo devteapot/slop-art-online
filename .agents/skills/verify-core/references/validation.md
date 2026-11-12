@@ -19,6 +19,29 @@ Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14
 - `living/rules/examples/corner_census.rs` on start-state dumps of fresh worlds (default, island, Cullet): every changed line goes from hidden to seen (0.44%, 0.77% and 0.65% of the lines near walls; 1, 1 and 0 of the resident lines within 30 m), none from seen to hidden, and no pair is seen one way only any more (9,896, 551,139 and 34,521 one-way pairs before).
 - Not changed: missiles (`combat.rs` `wall_along` samples the line and may stop at a corner point; docs/PERCEPTION.md), `Low`/`Drop` tiles and models' `eye_solid` (decided at hosting, upstream of the walk).
 
+## 2026-11-12 stamina-1 after merging main df98c680 (Spark)
+
+- **`core-st1l`, `stamina`: 26 of 26.** `core-st1k` had failed one check: a fast runner (5.49 m/s, its genes) reached the 64 m line's end 0.45 s into its second run, and the sampled rows missed that drain. The scene's drain is now 14 a second, not 10.
+- **Other surfaces on the same tree.** verify-player `player-st1c` 35 of 35, verify-client `client-st1d` 42 of 42, verify-minds `minds-st1c --case run` pass.
+
+## 2026-11-12 stamina-1: breath, focus, running, fight length (Spark)
+
+Branch `stamina-1`, with look-2 merged (304f90d7 and later). Trial service `slop-trials-stdb` (2.14.1, port 3320); `scoped`; no minds.
+
+- **`core-st1i`, `stamina`: 26 of 26.** The run is the `run_share` law times the walk. It drains from the row's anchor, walks out of breath, and runs again 2.2 s later at 30. `body.running` is true at the run and false walking out of breath. The other checks:
+  - the refill writes no row;
+  - a dodge takes 20, and "out of breath" refuses it;
+  - the tiredness cap gives 75;
+  - three or four bolts go, then "not enough mana";
+  - a guard drains 4 a second;
+  - `walk_base` 3.0 changes the walk;
+  - a wolf charges at 1.5 times its walk and a deer flees at a run.
+- **`core-st1i`, `moves`: pass.** A flight with `run: false` goes 1.15 times the walk; by default it runs at `run_share`.
+- **The stamina scene found a bug, now fixed.** `core-st1g` failed: its `stamina_max` 15 window left bodies at 15 breath with rate 0, and they never refilled (`breath::settle` now always gives a non-draining pool its refill). Its chase therefore had wolves standing out of breath. It was rerun on fresh worlds.
+- **Fights and chases.** `core-st1j` (run 1.65) and `core-st1h` (1.85) ran `chase` and `fights`; main's baseline ran on `core-st1b2` and `core-st1b-fights` from a worktree at 4b76ef41. The numbers are in docs/STAMINA.md ("Measured"). The facing limit (look-2) changed no fight or chase number beyond the run-to-run spread.
+- **In-place update.** `core-st1mig`: main 23771d59 was published fresh, then this branch's module was published with its data kept. The evidence is in that run's folder.
+
+
 ## 2026-11-11 who heard a line (exp-greet, Spark)
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`. New scene `audience` (`features/laws.md`), run `core-audience-150613`: all 8 checks pass. Law off: no row. Law on: one row, the two hearers within the shipped 9 m and not the one at 13 m, distances about 1 and 4 m, both ahead of the speaker. A line 61 s later deleted the first row. Only `speak` changed in the authority (`speech_audience`, off by default). The other scenes were not rerun.

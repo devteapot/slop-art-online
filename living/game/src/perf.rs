@@ -34,7 +34,10 @@
 //! - `rebuild=S`: S seconds after the first load's cover lifts, every character's scene is
 //!   spawned again, as a changed scene asset would make Bevy do (`characters::force_rebuild`), to
 //!   check that they are fitted, shaped and animated again; `nokeep` skips that (what happened
-//!   before rebuild-keep, for comparison).
+//!   before rebuild-keep, for comparison);
+//! - `genoutlines`: generate every mesh's outline directions, ignoring those a file brings
+//!   (`style::outline_normals`); `keeppixels`: character pictures keep their pixels on the CPU
+//!   (`characters::thumb_pictures`). Both are the way before types-1, for comparison.
 //!
 //! The frame is often limited by neither the GPU nor one system but by the render world's
 //! per-batch work: every distinct material and mesh slab is a batch set per view and pass, and
@@ -158,7 +161,7 @@ fn log_assets(
     let px: usize = images.iter().map(|(_, i)| i.data.as_ref().map_or(0, |d| d.len())).sum();
     let curves: usize = clips.iter().map(|(_, c)| c.curves().values().map(|v| v.len()).sum::<usize>()).sum();
     info!(
-        "assets: {} meshes {:.1} MiB (vertices {:.1}, indices {:.1}, morph targets {:.1}); {} images {:.1} MiB; {} clips ({curves} curves); {} graphs; {} glTF files",
+        "assets: {} meshes {:.1} MiB (vertices {:.1}, indices {:.1}, morph targets {:.1}); {} images {:.1} MiB; {} clips ({curves} curves); {} graphs; {} glTF files; outline directions generated for {} meshes, brought by {}",
         meshes.len(),
         mib(vb + ib + mb),
         mib(vb),
@@ -168,7 +171,9 @@ fn log_assets(
         mib(px),
         clips.len(),
         graphs.len(),
-        gltfs.len()
+        gltfs.len(),
+        crate::style::OUTLINE_NORMALS.0.load(std::sync::atomic::Ordering::Relaxed),
+        crate::style::OUTLINE_NORMALS.1.load(std::sync::atomic::Ordering::Relaxed)
     );
 }
 

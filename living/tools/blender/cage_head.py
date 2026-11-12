@@ -842,6 +842,56 @@ def bone_matrices(hf, values):
 # The face's mesh on the cage.
 
 
+def line_colour(look):
+    """The shell lines' colour: the skin's own line colour taken halfway to a dark brown, so a
+    line reads on every skin tone without being black."""
+    return tuple(0.5 * a + 0.5 * b for a, b in zip(look["skin_line"], (0.30, 0.17, 0.14)))
+
+
+FAR_LINE = 0.016  # the far head's jaw line, metres: about a pixel at the game camera (22 m), two at the 10 m where the far model takes over
+
+
+def far_jaw_line(m, hf, look):
+    """The far head's line under the jaw (head_mesh.FarFace's mesh): its down-facing skin between
+    chin and neck, turned inside out and pushed out along the jaw's edge by FAR_LINE. At the game
+    camera a face is a dozen pixels and the near head's lines are a tenth of one; this one is
+    sized for that distance."""
+    v = np.array(m.v, float)
+    faces = [f for f, k in zip(m.f, m.fm) if k == "face"]
+    chin_z = (0.0 - ZC) * hf.H + ORIGIN[2]
+    pick = []
+    for f in faces:
+        q = v[list(f)]
+        n = np.cross(q[1] - q[0], q[2] - q[0])
+        n /= max(np.linalg.norm(n), 1e-12)
+        c = q.mean(axis=0)
+        if n[2] < -0.3 and chin_z - 0.035 < c[2] < chin_z + 0.045 and c[1] > -0.03:
+            pick.append(f)
+    if not pick:
+        return
+    chosen = set(pick)
+    edge = {i for f in faces if f not in chosen for i in f}
+    used = sorted({i for f in pick for i in f})
+    index = {i: k for k, i in enumerate(used)}
+    pos = v[used]
+    nrm = np.zeros_like(pos)
+    for f in pick:
+        q = v[list(f)]
+        n = np.cross(q[1] - q[0], q[2] - q[0])
+        for i in f:
+            nrm[index[i]] += n
+    nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+    out = nrm + np.array([0.0, 0.6, 0.0])  # a little forward too, so it shows from above
+    out /= np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-12)
+    w = np.array([FAR_LINE if i in edge else 0.0 for i in used]) * hf.H / H_FILE
+    m.add(pos + out * w[:, None], line_colour(look), [head_mesh.SWATCH_UV] * len(used), [tuple(reversed([index[i] for i in f])) for f in pick], "face")
+
+
+def _smooth(a, b, x):
+    t = np.clip((np.asarray(x, float) - a) / (b - a), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
 class CageFace(head_mesh.Face):
     """A head's skin from the cage, with the parts head_mesh.Face lays on a head (lash lines and
     lashes, brows, the mouth's inside, ears) and the eye the reference's way: the iris a flat
@@ -956,7 +1006,63 @@ class CageFace(head_mesh.Face):
         shade = tuple(a + (b - a) * 0.25 for a, b in zip(look["skin"], look["skin_shade"]))
         base = m.add(skin[used], shade, None, [tuple(index[v] for v in f) for f in self.under_faces], "under")
         self.under_neck = [base + index[v] for v in used if v in self.neck_ring]
+        if self.LINES:
+            self._shell_lines(m, skin)
         return m
+
+    # Shell lines: where the form overhangs, a line is drawn by geometry, as an inverted hull is
+    # for a whole figure but only there (Blue Protocol keeps shells for the jaw, mouth and ears).
+    # Widths are metres on the file's head; the heaviest is under the chin.
+    LINES = True
+    LINE_CHIN, LINE_JAW, LINE_EAR, LINE_MOUTH = 0.0019, 0.0010, 0.0007, 0.00032
+
+    def _ears(self, m):
+        first = len(m.f)
+        super()._ears(m)
+        self._ear_faces = (first, len(m.f))
+
+    def _shell_lines(self, m, skin):
+        colour = line_colour(self.look)
+        scale = self.hf.H / H_FILE
+        # 1. The jaw and chin. The skin under the jaw turns away from anyone looking at the face,
+        # so its first ring of faces, pushed out along the jaw line and turned inside out, shows
+        # as a dark edge exactly where the jaw stands over the neck: nothing from below, where
+        # the skin itself is seen. It is pinned to the skin on its lower edge, heaviest under the
+        # chin and gone before the ear.
+        back = {int(self.skin_n + i): int(v) for i, v in enumerate(self._extra)}
+        face_verts = {back.get(v, v) for f in self.skin_faces for v in f}
+        jaw = {v for f in self.under_faces for v in f} & face_verts
+        ring = [f for f in self.under_faces if any(v in jaw for v in f)]
+        used = sorted({v for f in ring for v in f})
+        index = {v: i for i, v in enumerate(used)}
+        pos = skin[used]
+        reach = max(abs(float(skin[v][0])) for v in jaw)
+        t = np.abs(pos[:, 0]) / max(reach, 1e-6)
+        width = (self.LINE_CHIN + (self.LINE_JAW - self.LINE_CHIN) * _smooth(0.0, 0.55, t)) * _smooth(1.0, 0.82, t) * scale
+        width = np.where([v in jaw for v in used], width, 0.0)
+        m.add(pos + self.skin_normals[used] * width[:, None], colour, None, [tuple(reversed([index[v] for v in f])) for f in ring], "shell")
+        # 2. The ears: the whole ear inside out, a hair's width larger, so its rim has a line
+        # against the head from every side.
+        first, last = self._ear_faces
+        faces = m.f[first:last]
+        used = sorted({v for f in faces for v in f})
+        index = {v: i for i, v in enumerate(used)}
+        pos = np.array([m.v[v] for v in used], float)
+        nrm = self._normals(pos, [tuple(index[v] for v in f) for f in faces])
+        m.add(pos + nrm * self.LINE_EAR * scale, colour, None, [tuple(reversed([index[v] for v in f])) for f in faces], "shell")
+        # 3. The mouth: a thread along the upper lip's edge, a little heavier at the corners. It
+        # rides the upper lip, so it holds when the mouth opens.
+        up = sorted(set(self.mouth_up), key=lambda v: skin[v][0])
+        if len(up) >= 3:
+            p = skin[up]
+            n = self.skin_normals[up]
+            half = max(abs(float(p[0][0])), abs(float(p[-1][0])), 1e-6)
+            w = self.LINE_MOUTH * scale * (1.0 + 0.9 * _smooth(0.45, 1.0, np.abs(p[:, 0]) / half))
+            lift = np.array([0.0, 0.0, 1.0])
+            top = p + n * 0.00025 + lift * (w[:, None] * 1.2)
+            bot = p + n * 0.00025 - lift * (w[:, None] * 0.8)
+            k = len(up)
+            m.add(np.concatenate([top, bot]), colour, None, [(i, i + 1, k + i + 1, k + i) for i in range(k - 1)], "shell", facing=head_mesh.FORWARD)
 
     def _eye(self, m, skin, side, state):
         hf, look = self.hf, self.look

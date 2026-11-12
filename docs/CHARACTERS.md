@@ -2,7 +2,7 @@
 
 The game's people are made by our own tool: a set of parameters goes in, a rigged, painted, animated character file comes out. This replaces VRoid Studio bases (decision 2 of [the small city](SMALL_CITY.md)). The owner's bar is VRoid's quality close up, from a parameterized tool of our own.
 
-**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows):**
+**Status (2026-11-11, branch `char-4`, pass 3 of the track: step 1, crowd cost; step 2, types and rig as data; step 3, the cage head for each type with the rig in it; step 4, designed shadows; step 5, lines where the form turns):**
 
 - **The bar is the reference character:** the VRoid model the game has used so far (`lookdev/vroid-Sendagaya_Shino.glb`; the asset board's control `vroid=recipe:shino`), close up included. The owner accepted pass 1 as the base and said of it: "a step up … but still far away from the reference model we have been using so far. That is kind of what we want to get to".
 - **Pass 1 (`char-2`):** faces and the parameter model. A seed or a parameter file gives a repeatable person of any sex and age from 1 to about 80, with real eye openings, a mouth that opens, 15 expressions under VRoid's names, stubble and six beard styles, age lines and freckles. One command makes a household or a whole town and its check page.
@@ -34,10 +34,15 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Every value end, alone and in pairs, is a valid head on every type** (60,648 of 60,648) after nine ranges were trimmed.
   - **Lips and blush do not survive the client's one-colour recolour of a shared skin texture;** the lid's shade does. They are to become their own small meshes or overlay styles ([what the client needs for types](#what-the-client-needs-for-types)).
 - **Pass 3, step 4: designed shadows** ([designed shadows](#designed-shadows)). The straight split down the middle of the face and the dark band along the jaw are gone.
-  - **The shadow map is drawn, not derived.** For each type a script draws the shade at 16 light angles from the type's landmarks (the side plane, the nose's wedge, the socket, the cheek triangle, the jaw), turns each drawing into a distance field and interpolates them into one threshold map, `lookdev/types/<type>.face.png`.
+  - **The shadow map is drawn, not derived.** For each type a script draws the shade at 18 light angles from the type's landmarks (the side plane, the nose's wedge, the socket, the jaw; flat until about 55°, after step 4b), turns each drawing into a distance field and interpolates them into one threshold map, `lookdev/types/<type>.face.png`.
   - **The face's normals come from a planar proxy** laid out from the same landmarks, and the skin under the jaw is one plane looking down.
   - **The map's format is unchanged,** so today's client draws it as it is.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the eyes' drawing, how the hair is finished, lines where the form turns, the face's painted softness, clothes and silhouette, hands.
+- **Pass 3, step 5: lines where the form turns** ([lines](#lines-where-the-form-turns)).
+  - **Shell lines in the files:** an edge under the jaw and chin, round the ears and along the upper lip, as geometry in the face's line primitive; a heavier one under the jaw of the far head.
+  - **Per-vertex outline width in the files** (`_OUTLINE_WIDTH`: none on lids, lashes and lines, heavier along the jaw, lighter on hair), beside the outline normals, which stay separate from the lighting normals.
+  - **Close up the jaw's line reads; at the game camera it does not** on the near head, and is one darker pixel row on the far head. A line that holds its width on screen needs the client's outline pass; the exact need is written there.
+  - Cost: 496 triangles and 37 kB a type file (4%).
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: how the hair is finished, the eyes' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -111,6 +116,8 @@ A pass is also published through the asset board, the record of which version th
 - Pass 3's third step (the cage head) is their versions `20261111-26c98cc2-…`: the six presets on their types' heads beside step 1's and the control, `cast-64` with identity in bones, and `character:face-types` with every type as a bare head, three people drawn from each close up and at the game camera, one person composed against baked, the skin-tone sheet and the children's heads beside the adults' at one scale, with the VRoid and Blue Protocol rows.
 
 - Pass 3's fourth step (designed shadows) is their versions `20261112-1fa6fc0f-…`: the six presets and `cast-64` under the board's fixed light beside step 3's, and `character:face-types` with the drawn shapes at every angle, the light sweeping across four faces close up and at the game camera, before and after, and the reference under the same sweep.
+
+- Step 4b is `character:face-types` `20261112-1fc23e0d-b70164` (step 4 above 4b under the sweep, eyes held open). Pass 3's fifth step (lines) is the versions `20261112-2c79242a-…`: the lines on bare type heads, four presets close up before and after, the head at the game camera near and far, the six presets and `cast-64`.
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -637,17 +644,17 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 
 **The threshold map** is made the way anime face maps are authored ([the survey](CHARACTER_RESEARCH.md), §3): draw the shade for each of N light angles, turn each drawing into a signed distance field, interpolate.
 
-- **16 angles** from 24° to 180°, light from the face's right; the left is the mirror. Each drawing is the one before plus more, so a texel goes dark once.
-- **Drawn in the face's front view** at half a millimetre a pixel, from the landmarks:
-  1. the far side plane, from the silhouette in to the cheek's corner line (24° to 42°);
-  2. the edge crossing the front as the corner line scaled toward the middle, so it follows the cheek's own contour; it passes the middle at 90°;
-  3. between the brow and the nose's base the far half fills sooner (50° to 66°), the edge running ahead to the bridge: the socket's shade;
-  4. below the nose the far half waits about 24°, so the mouth and chin keep their light and the edge leaves the nose's wing and runs out to the jaw;
-  5. the nose's wedge on the far cheek from 30°, lengthening with the angle;
-  6. a band along the far jaw from 30°, and the near jaw's from 100°;
-  7. the cheek triangle under the far eye holds its light until 92°, shrinking toward its top edge;
-  8. the nose's near side holds its light from 90° to 150°.
-- **Interpolated** between each pair of drawings by their distance fields, then blurred by about a millimetre so the edge the shader cuts is a clean line.
+- **18 angles** from 55° to 180°, light from the face's right; the left is the mirror. Each drawing is the one before plus more, so a texel goes dark once.
+- **The face is flat until about 55°,** as the reference's is. Step 4 drew a nose wedge from 30° and a lit triangle inside the shaded cheek; close up they read as hard patches, not form, and step 4b (2026-11-12) moved every onset later and took the islands out.
+- **Drawn in the face's front view** at half a millimetre a pixel, from the landmarks. The onsets are named numbers at the top of `face_shadow.py`:
+  1. the nose's wedge on the far cheek from 56° (`WEDGE_ON`), small, taken in by the far side's shade soon after;
+  2. the far side plane, from the silhouette in to the cheek's corner line (60° to 72°, `SIDE_ON`, `SIDE_FULL`);
+  3. the edge crossing the front as the corner line scaled toward the middle, so it follows the cheek's own contour; it reaches the middle at 96° (`MIDDLE`, `CROSS`);
+  4. between the brow and the nose's base the edge runs half the way ahead toward the bridge (72° to 86°, `SOCKET_ON`, `SOCKET`): the socket's shade;
+  5. below the nose the far half waits 20° (`WAIT`), so the mouth and chin keep their light and the edge leaves the nose's wing and runs out to the jaw;
+  6. a band along the far jaw from 60° (`JAW_ON`), and the near jaw's later.
+- **Nothing holds its light inside the shade:** no cheek triangle, no bright near side of the nose.
+- **Interpolated** between each pair of drawings by their distance fields, then blurred by 1.4 mm (`SOFT_MM`), so every edge is a pixel or two soft at close range.
 - **Baked into the face's UV space** at 512 × 512. Where the skin turns from the front (behind the cheek, the skull), the drawn picture gives way to the plain rule of a round head.
 - **One map a type:** `lookdev/types/<type>.face.png`, 21 files, about 40 kB each. A person's own file gets the same map beside it, because the client looks there.
 - About 7 seconds a file.
@@ -658,11 +665,75 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 2. **The face's shade and the neck's are two tones** (`face_shadow` 1.25 on a face; the plain skin depth on the neck), so the jaw line shows where both are in shade, as on the reference.
 3. **The sun's height is not in the map.** The shapes answer the horizontal angle only, so the planes under the nose and lip cannot answer a high sun. The map's blue channel is free for a second threshold if that is wanted.
 
-**What the board shows** (`character:face-types`): the drawings at every angle for four types and the map's shade at three angles for all 21; the light sweeping across the woman, the man, the boy and the elder from 24° to 71°, close up and at the game camera, with step 3 above step 4; turned from the light; and the reference under the same sweep.
+**What the board shows** (`character:face-types`): the drawings at every angle for four types and the map's shade at three angles for all 21; the light sweeping across the woman, the man, the boy and the elder from 24° to 71°, close up and at the game camera, with step 3 above step 4 (version `ac12a5`) and step 4 above step 4b (the version after it), eyes held open; turned from the light; and the reference under the same sweep.
 
 - The sweep's heads are copies without clips, held straight: the idle clip turns the head, and with it the angle of the light, so the later shapes did not show.
 - **At the game camera a face is about a dozen pixels across.** The shapes do not read there; only which half is darker does. They are a close-up matter.
 - **Turned from the light** the camera sees the lit side, so the edge past the middle is mostly out of view; the sheets of the drawings show it.
+
+### Lines where the form turns
+
+Pass 3's fifth step (2026-11-12). A figure's outline today is its silhouette: the client draws each mesh's hull pushed out by a width in pixels (`bevy_mod_outline`, `style.rs` `outline`), and a line never falls inside the figure. So nothing marks where the jaw stands over the neck, which is where depth reads in a drawn face. Blue Protocol keeps shell geometry for exactly that: the jaw, the mouth and the ears ([the survey](CHARACTER_RESEARCH.md), §3).
+
+**Shell lines, in the files** (`cage_head.CageFace._shell_lines`; `person.py --no-lines` leaves them out). They are faces of the `Face` mesh's line primitive (the lashes' and brows' material, unshaded), so they add no mesh and no material, and they are built on each expression's cage, so they ride the morphs and the identity bones.
+
+| Line | How | Width on the file's head |
+|---|---|---|
+| Jaw and chin | the first ring of the skin under the jaw, pushed out along the jaw line and turned inside out; pinned to the skin on its lower edge | 1.9 mm under the chin, 1.0 mm along the jaw, gone before the ear |
+| Ears | the whole ear inside out, a little larger | 0.7 mm |
+| Mouth | a thread along the upper lip's edge, heavier at the corners; it rides the upper lip, so it holds when the mouth opens | 0.6 to 1.2 mm |
+| Jaw, far head | the far head's down-facing skin between chin and neck, inside out (`cage_head.far_jaw_line`) | 16 mm |
+
+- **Why inside out.** A hull's faces are seen only where the surface they copy faces away from the viewer. The skin under the jaw faces away from anyone looking at the face, so its hull shows as a dark edge exactly where the jaw stands over the neck, and not from below, where the skin itself is seen.
+- **The colour** is the skin's own line colour taken halfway to a dark brown (`cage_head.line_colour`), so it reads on every skin tone.
+- **Widths are metres, not pixels.** That is the limit of a line made of geometry: 1.9 mm is a few pixels in a close-up and a tenth of a pixel at the game camera, where a face is a dozen pixels across.
+- **The far head's line is sized for the game camera:** 16 mm is about a pixel at 22 m and two at the 10 m where the far model takes over. It reads as one darker pixel row under the chin, and under a beard not at all.
+
+**Cost** (`adult-f-b`, built both ways):
+
+| | Without lines | With lines | |
+|---|---|---|---|
+| Triangles, near head (`Face`) | 5,840 | 6,184 | +344 |
+| Triangles, far head (`FarSkin`) | 1,964 | 2,116 | +152 |
+| Triangles, the type file | 12,340 | 12,836 | +4.0% |
+| Vertices | 7,607 | 7,974 | +367 |
+| File size | 994 kB | 1,031 kB | +37 kB (3.7%) |
+
+- The 21 type files are 21.7 MB together (1.01 to 1.06 MB each). They were 19.6 MB at step 3; the rest of the growth is the designed normals (step 4) and the width attribute, 4 bytes a vertex (about 32 kB a type file).
+- A whole person gains the near head's 344 triangles: the `woman` preset goes from 30,692 to 31,036.
+- `face_normals.py` and `face_shadow.py` append a normal accessor each time they are run on a file and leave the old one in it. A file made once by `gen_types.sh` or `gen_person.sh` has no such waste; a file run through them again by hand grows by about 28 kB a run.
+
+**Per-vertex outline width, in the files.** `outline_normals.py` writes a second attribute beside `_OUTLINE_NORMAL`: `_OUTLINE_WIDTH`, one float a vertex, a multiple of the figure's own outline width. Nothing reads it yet.
+
+| Where | Width |
+|---|---|
+| Eyes, lashes, brows, painted lines, shell lines | 0 (a line round a lash floats; a line needs no line) |
+| A face's skin at the lids' edges | 0, easing to 1 by 8 mm from the opening |
+| A face's skin and the skin under the jaw, along the jaw line | 1.6, easing to 1 by 14 mm |
+| Hair | 0.7 |
+| Everything else | 1 |
+
+- **Outline normals stay separate from lighting normals.** `NORMAL` on a face is the planar proxy's (step 4); `_OUTLINE_NORMAL` is the smoothed geometric direction, welded across meshes and materials (step 3). The shell lines' own vertices carry both, and width 0.
+
+**What the client needs for a line that holds its width on screen** (for the laptop coordinator; nothing in `living/game` was edited). Two changes, the first one line, the second a patch to the outline crate (`bevy_mod_outline` 0.14.0, the version pinned):
+
+1. **Draw people's hulls at their true depth:** add `OutlineMode::ExtrudeReal` to the bundle `style.rs` `outline` returns for `Outlined::Person` (scenery's stencils use it already). As the code reads, a person's hulls are flattened to one depth today (`outline` adds no `OutlineMode`, and the crate's default is `ExtrudeFlat`), and all of a person's meshes share an origin, so the face's hull is never in front of the neck. This was read, not tested: nothing in `living/game` was built differently. At true depth the jaw's hull shows over the neck in screen pixels, at any distance. It also shows every other inner contour (hair over the face, a collar over the neck, the lids), which is why the second change belongs with it.
+2. **Per-vertex width in the outline pass:**
+   - register the attribute with the glTF loader, as `_OUTLINE_NORMAL` was: `add_custom_vertex_attribute("OUTLINE_WIDTH", ATTRIBUTE_OUTLINE_WIDTH)` with `ATTRIBUTE_OUTLINE_WIDTH = MeshVertexAttribute::new("Outline_Width", <an id of our own>, VertexFormat::Float32)` (the gltf crate turns `_X` into `Extras("X")`);
+   - `pipeline.rs`, where the vertex layout is built (`buffer_attrs`, beside the push of `ATTRIBUTE_OUTLINE_NORMAL` at location 1): when `layout.0.contains(ATTRIBUTE_OUTLINE_WIDTH)`, push it at shader location 3 and add the shader def `VERTEX_WIDTH`;
+   - `outline.wesl`, `struct Vertex`: `@if(VERTEX_WIDTH) @location(3) outline_width: f32,`;
+   - `outline.wesl`, `fn vertex`, the line `let ndc_delta = offset * corrected_norm * view_uniform.scale_clip_from_logical * clip_pos.w;`: multiply by the vertex's width in the volume pass only (`@if(VERTEX_WIDTH && VOLUME)` use `offset * vertex.outline_width`), so the stencil is untouched. A vertex with width 0 then draws no line.
+   - The shader normalises the outline normal before use, so the width cannot be carried in the normal's length: it needs the attribute.
+3. With both in, the shell lines can stay for close-ups or be dropped (`--no-lines`); the far head's 16 mm line should then go, since the pass draws the same edge at the right width.
+
+**Blue Protocol's inner lines as a post-process: what the generator would have to write.** Not built. Their lines come mostly from a screen pass over depth, normals and an inner-line ID ([the survey](CHARACTER_RESEARCH.md), §3). For that the files would carry:
+
+- **A line ID a vertex** (`_LINE_ID`, an unsigned byte): one number for each part a line should separate. On a head: the face, the skin under the jaw, the neck, each ear, the nose, the upper and the lower lip, each eye's socket; on a body: each garment piece, each hand; on hair: each lock group. The pass draws a line where neighbouring pixels' IDs differ. The generator knows every one of these today as a material kind, a cage row or a part's name, so this is bookkeeping, not modelling.
+- **A line weight a vertex,** which `_OUTLINE_WIDTH` already is.
+- **A mask for lines that must not draw** (between the lids and the eye, between a lash and the skin): width 0 covers it.
+- The client's side would be a G-buffer target for the ID and a pass like the one scenery's edges use, reading it. That pass costs the same for 64 people as for one, where shells cost triangles a head.
+
+**On the board** (`character:face-types` and the six presets): the lines on two bare type heads from five sides; four presets close up with step 4b above step 5; the head at the game camera pixel for pixel, near and far, with and without; the reference beside each.
 
 ### Type files
 
@@ -687,11 +758,11 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 
 ### What the client needs for types
 
-Nothing in `living/game` was edited in step 3, and every file loads in today's client. For the laptop coordinator, in the order they unlock things:
+Nothing in `living/game` was edited in step 3, and every file loads in today's client. For the laptop coordinator, in the order they unlock things. 1 to 3 are done in the client since types-1 ([below](#the-client-since-types-1-2026-11-12)); 4 waits for the style files.
 
 **1. Outline normals from the file** (`lookdev.rs`, `convert` and the scenery path). Small.
 
-- Name the attribute to the glTF loader: `GltfPlugin::default().add_custom_vertex_attribute("_OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL)`.
+- Name the attribute to the glTF loader: `GltfPlugin::default().add_custom_vertex_attribute("OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL)`, without the underscore: the gltf crate names a custom attribute `_X` as `Semantic::Extras("X")` (types-1 found the name with the underscore never matches).
 - Skip `generate_outline_normals` for a mesh that already has `ATTRIBUTE_OUTLINE_NORMAL`.
 - It saves the generation at load for every person and closes the outline between a person's meshes. Per-vertex line width (step 5) will ride the same path.
 
@@ -715,6 +786,40 @@ Nothing in `living/game` was edited in step 3, and every file loads in today's c
 
 - A hair style's spring chains hang under `J_Id_Cranium`; a type's file has none of its own.
 - The far switch and clips once are as in [what the client needs](#what-the-client-needs).
+
+### The client since types-1 (2026-11-12)
+
+**What the client does now:**
+
+- **Outline directions from the file.**
+  - `main.rs` names `_OUTLINE_NORMAL` to the glTF loader, as `OUTLINE_NORMAL`. Every place that gave a mesh outline directions now calls `style::outline_normals`, which keeps a mesh's own and generates them only for a mesh without.
+  - The `assets:` diag line counts both. A type's or a new person's meshes bring theirs (21 of 21 in a run of the three people below); pass 3's town files predate `outline_normals.py` and are generated as before.
+  - `LIVING_GAME_PERF=genoutlines` generates every mesh's, to compare.
+- **Identity** (`characters/identity.rs`, `characters.rs` `set_identity`).
+  - A recipe's `identity` (values by name) moves the identity bones by compose.py's rule, ported line for line. The rig comes from `characters/types.json` under the asset folder when there is one, else from the copy compiled in (`living/tools/characters/types.json`).
+  - **It is set when the person's scene comes in** (the `WorldInstanceReady` observer, which also runs for a scene spawned again), not in `shape`. Bevy 0.20 takes a skinned mesh's bounds from its joints, and `fit` sizes the person by those bounds. Set in `shape`, a person was fitted on the type's rest head and came out about a pixel larger than the same person composed in the file.
+  - A file whose identity bones are already moved (`gen_person.sh`'s people, through compose.py) starts from the rest its nodes record (`extras.rest_translation`), so values given again change nothing.
+  - **The proof:**
+    - `characters::identity::tests` holds the port to compose.py's own `transforms` for three sets of values (every value at 1, every value at -1, a generated person's 38): 81 bone changes (`living/tools/characters/identity_cases.py` writes them).
+    - In the client, a person whose identity bones were put back to rest, given the same values in its recipe, ends with all 27 bones at compose.py's transforms: translation within 5×10⁻⁹ m, scale 1×10⁻⁷, rotation 3×10⁻⁹.
+    - Photographed with the idle clip held, that person, the same person composed by compose.py and the same person baked (`IDENTITY=bake`) show the same face. Their pixels differ by 0.05 to 1% between any two, the composed and baked pair included, from the pose's run-to-run settling (foot IK, the head on the hips).
+  - **A type's file can't be a character by itself yet:** it is a head, neck and hands, and `fit` sizes a person by its meshes, so it would stretch the head to the person's height. That waits for the style files (4).
+- **Colours without pictures held on the CPU** (`characters.rs` `thumb_pictures`, `Thumbs`).
+  - The tag colour was already applied per fragment (mode 3 in `toon.wesl`). The CPU read a picture only for the mean colour of the texels a mesh uses, and for that kept every picture's pixels.
+  - Now each picture of a character file (`lookdev/…`) keeps a 64×64 summary of its colours, and its usage becomes the render world's alone, so Bevy drops the main world's copy once it is uploaded. The means are taken from the summary, so a page shared by 16 people serves the ones that spawn later.
+  - `LIVING_GAME_PERF=keeppixels` keeps the pixels, to compare.
+  - **Measured** (the `assets:` line, laptop, at the game camera):
+
+    | | Pixels kept (before) | Pixels dropped (types-1) |
+    |---|---|---|
+    | Cullet's 64 (both-files, paged) | 525.9 MiB of images | 9.2 MiB |
+    | 64 VRoid bases (recoloured) | 182.4 MiB | 9.2 MiB |
+
+    The 9.2 MiB left are the scene's own pictures. The recoloured VRoid crowd draws the same either way: 0.13% of pixels differ, from the idle loops' timing.
+- **The shared clip file again.** `lookdev/anim/own-clips.glb` is baked from today's `man` preset, 1.803 m with the cage head. Stride against it still gives each of three of Cullet's people their own metres a cycle to 1 mm in every forward gait (walk 1.408 against 1.409 m at most).
+- **Morphs:** the client drives `Fcl_EYE_Close` (the blink) and `Fcl_MTH_A` (the mouth, only for look-dev's `talk`) and no other, so `--morphs client` loses nothing.
+- **Not done here:** step 4's optional shading (the shadow lookup along the head's forward vector, the face and neck shade blended at the jaw, the sun's height in the map's blue channel) and the far head's own round normals; type files as characters with styles (4).
+- **Evidence:** `.local/living/types-1/` (`view/identity-held`, `view/outline-*`, `mem/`, `identity-transforms.json`).
 
 ## Motions on generated people
 
@@ -976,12 +1081,20 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
+**After pass 3's fifth step (lines)**, judged on the board with the reference beside ours, ordered by how much it shows:
+
+1. **Hair.** Close up it looks washed out and half transparent in every shot, and its finish is as it was: a blocky fringe, ragged ends, gaps at the temple on the new head. Next.
+2. **The eyes' drawing:** thin lash lines and a plainer iris. Step 6.
+3. **The jaw's line does not hold at a distance.** Close up the shell line marks the jaw, the chin and the ears, lightly; at the game camera it is gone on the near head and a single darker pixel row on the far one, where the reference's whole figure is carried by its outline. A line in screen pixels is the client's ([lines](#lines-where-the-form-turns)).
+4. **Lips and blush are painted into the skin.** Step 6.
+5. **Clothes and silhouette, hands** (unchanged).
+
 **After pass 3's fourth step (designed shadows)**, judged on the board's `20261112-1fa6fc0f-…` versions with the reference beside ours, ordered by how much it shows:
 
 1. **The eyes' drawing:** thin lash lines and a plainer iris against the reference's heavy upper lash and two-tone iris. Step 6.
 2. **How the hair is finished** (unchanged), and how it sits on the new head at the temple.
 3. **No lines where the form turns** (jaw, chin, mouth). Step 5.
-4. **Ours shows more shade than the reference at the same angle.** The reference's face stays clean until the light is well round to the side and then splits; ours draws a nose wedge from 30° and a cheek triangle from 56°. They are drawn shapes now and read as such, but how early and how large is a matter of taste: the onset angles are single numbers in `face_shadow.py`.
+4. **The nose's wedge is still a shape the reference does not draw.** After step 4b the face is flat until about 55° and nothing is lit inside the shade, which is near the reference; the small wedge beside the nose from 56° is ours. Its onset and the others are single numbers in `face_shadow.py`.
 5. **Lips and blush are painted into the skin.** Step 6.
 6. **Clothes and silhouette, hands** (unchanged).
 
@@ -1046,7 +1159,9 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 2. **Types and rig, as data and a page before any mesh.** Done in pass 3's second step ([types and rig](#types-and-rig)): which bones, their ranges, what a type fixes and a person varies, three face types for each band, and the client's format. Left for the cage: trimming the value ranges that fail in pairs, the age direction inside a band, the belly and chest bones, and how details a person has (beard, lines, freckles) are carried.
 3. **The cage head for each type, with the rig in it.** Done in pass 3's third step ([the cage head](#the-cage-head)): 21 types from one script, accepted against the reference's measured sections, with its eye depths, outline normals, the trimmed ranges and the type files. Left from it: lips and blush out of the skin texture (with step 6's paint), the style files for hair and outfits, the age direction inside a band, and a second look at bindless colours with the laptop.
 4. **Designed shadows.** Done in pass 3's fourth step ([designed shadows](#designed-shadows)): a planar proxy's normals and a threshold map from script-drawn shapes at 16 light angles, one map a type, in the client's existing format. Left from it: the far head still shades by its own round normals, and the shapes' onset angles wait on the owner's eye.
-5. **Lines where the form turns:** shell lines at the jaw, chin, mouth and ears; per-vertex line width needs a client outline shader, to be written up for the laptop.
-6. **Later:** hair finish and the face's paint (pass 2's items 1 and 2), the game turning the eyes, clothes as slots with cloth that swings, women's silhouettes, children's own garments, hands.
+5. **Lines where the form turns.** Done in pass 3's fifth step ([lines](#lines-where-the-form-turns)): shell lines at the jaw, chin, ears and mouth in the files, per-vertex outline width in the files, the client's need written out, and the data a post-process inner line would take.
+6. **Hair,** ahead of the eyes (the dev-box coordinator's order, 2026-11-12): why it looks washed out and half transparent close up (alpha, normals or shading), and hair as shared style files (`lookdev/styles/hair/<style>.glb`), so a person can be spawned from a type file. Outfit style files follow.
+7. **The eyes' drawing, lips and blush** (the face's paint; lips and blush out of the skin texture).
+8. **Later:** the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
 
 Each pass page sets two references beside ours: the VRoid control, and a still from Blue Protocol's published character material (one of the owner's named art references), for comparison only. The stills are kept outside the repository, in `~/archive/asset-board/references/blue-protocol/`, with their sources.

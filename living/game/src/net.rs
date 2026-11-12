@@ -276,6 +276,7 @@ pub fn body_of(conn: &DbConnection, m: Moving) -> Body {
         face_off: m.face_off,
         face_turn: m.face_turn,
         face_turn_s: m.face_turn_s,
+        running: m.running,
     }
 }
 

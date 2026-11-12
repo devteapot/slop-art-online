@@ -650,6 +650,21 @@ def cost_line(t, label):
 # ---------------------------------------------------------------- the build lock
 
 
+def age_of(since, now=None):
+    """How long a job has run, from build-slot's `since` (HH:MM:SS, local time today; a time
+    later than now was yesterday): "14 min", "1 h 05 min", or "?" when unreadable."""
+    try:
+        h, m, sec = (int(x) for x in since.split(":"))
+    except ValueError:
+        return "?"
+    now = now or time.localtime()
+    s = (now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec) - (h * 3600 + m * 60 + sec)
+    if s < 0:
+        s += 24 * 3600
+    m = s // 60
+    return f"{m // 60} h {m % 60:02d} min" if m >= 60 else f"{m} min"
+
+
 def held_slots():
     """Heavy jobs running now: build-slot's slot-N directories whose pid lives."""
     out = []
@@ -661,7 +676,7 @@ def held_slots():
         if alive(pid):
             label = (d / "label").read_text().strip() if (d / "label").is_file() else "?"
             since = (d / "since").read_text().strip() if (d / "since").is_file() else "?"
-            out.append(f"{d.name}: {label} (pid {pid}, since {since})")
+            out.append(f"{d.name}: {label} ({age_of(since)}, pid {pid}, since {since})")
     return out
 
 
