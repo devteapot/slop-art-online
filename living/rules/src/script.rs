@@ -507,6 +507,10 @@ pub struct Laws {
     pub first_sight_thinks: bool,
     /// First sights bring a character to think at most once within this many seconds.
     pub first_sight_gap_s: f32,
+    /// A mind's line to someone, coming due after another was heard addressing them since the
+    /// scene the decision read, is not said yet: the speaker is told so and asked to think
+    /// again with that line in front of it (first-sight-crowd, docs/FIRST_SIGHT.md). Off: said.
+    pub heard_first_rethinks: bool,
     /// How often a character's cues are checked against what it perceives (seconds).
     pub cue_check_s: f32,
     /// What each observer makes of each target (name known, the `perceived_of` answer) is
@@ -603,6 +607,7 @@ impl Default for Laws {
             cue_gap_s: 60.0,
             first_sight_thinks: false,
             first_sight_gap_s: 300.0,
+            heard_first_rethinks: false,
             cue_check_s: 1.0,
             regard_cache: true,
             regard_cache_check: false,
@@ -2573,6 +2578,7 @@ impl Scripts {
             cue_gap_s: g("cue_gap_s", l.cue_gap_s).clamp(0.0, 3_600.0),
             first_sight_thinks: flag("first_sight_thinks", l.first_sight_thinks),
             first_sight_gap_s: g("first_sight_gap_s", l.first_sight_gap_s).clamp(0.0, 3_600.0),
+            heard_first_rethinks: flag("heard_first_rethinks", l.heard_first_rethinks),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
@@ -3457,6 +3463,21 @@ mod tests {
         assert_eq!(l.first_sight_gap_s, 3_600.0);
         let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
         assert!(about["first_sight_thinks"].contains("brings you to think"), "{about:?}");
+    }
+
+    /// A line overtaken by someone else's (first-sight-crowd): off by default, a world may set it.
+    #[test]
+    fn heard_first_rethinks_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(!shipped.laws().heard_first_rethinks);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["heard_first_rethinks"].contains("said when it comes due"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("heard_first_rethinks".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().heard_first_rethinks);
+        let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
+        assert!(about["heard_first_rethinks"].contains("think again"), "{about:?}");
     }
 
     #[test]

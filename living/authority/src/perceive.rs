@@ -502,6 +502,13 @@ pub fn ask_to_think(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bo
     request(ctx, id, reason, now, false, None)
 }
 
+/// Ask the mind again about a decision of its own that could not be carried out as decided (a
+/// line held because another spoke first, `speech::held_for_another`): not refused within
+/// `think_min_s`, since the decision it would protect is the one being undone. A sleeper's waits.
+pub fn ask_again(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bool {
+    request(ctx, id, reason, now, true, None)
+}
+
 fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool, wake: Option<Wake>) -> bool {
     let Some(c) = ctx.db.character().id().find(id) else { return false };
     if !c.alive {
