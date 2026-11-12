@@ -114,6 +114,61 @@ Totals, harm: R 2 of 47, T 3, **N1 8**, N2 4.
 
   A live arm against today's, at Cullet with `first_sight_thinks` off, would show those.
 
+## Ordinary thinks, today against N2 (2026-11-12)
+
+The general coordinator asked whether N2 changes the thinks that make up most of a mind's day.
+- **The prompts:** `framing_replay.py collect-ordinary`, seed 13. Prompts whose only reason is a finished plan ("I finished my plan."), a quiet moment ("A quiet moment to take stock of how things are going.") or a felt need ("You feel something: …": restless, lonely, a longing for a child, being the last to know a craft).
+- **The sample:** 20 of each, from bi1 (44) and st2b (16). r2d had none with a single such reason.
+- **The arms:** recorded (R), today's framing sent again (T, the noise floor) and N2. Same models and bodies as recorded.
+- **Judging:** the same blind method: four fresh Claude subagents, rubric [ORDINARY.md](../living/tools/framing_judge/ORDINARY.md), 179 items (one recorded reply was empty).
+  - **One field added**, `abandons`: does the reply drop a plan that was still under way, with a reason the situation gives, or without one?
+  - **Agreement on 21 doubly judged items:** `matters` 18, `addressed` 21, `abandons` 21, `harm` 20.
+
+| Reason | Arm | n | matters | addressed when it matters | abandons the plan, with reason | without reason | harm |
+|---|---|---:|---:|---:|---:|---:|---:|
+| plan finished | R | 20 | 20 | 20 of 20 | 0 | 0 | 2 |
+| plan finished | T | 20 | 20 | 19 of 20 | 0 | 0 | 3 |
+| plan finished | N2 | 20 | 20 | 20 of 20 | 0 | 0 | 2 |
+| quiet moment | R | 20 | 1 | 1 of 1 | 1 | 1 | 0 |
+| quiet moment | T | 20 | 1 | 1 of 1 | 1 | 2 | 1 |
+| quiet moment | N2 | 20 | 1 | 1 of 1 | 2 | 1 | 0 |
+| felt need | R | 20 | 16 | 15 of 16 | 3 | 0 | 0 |
+| felt need | T | 19 | 15 | 14 of 15 | 2 | 0 | 1 |
+| felt need | N2 | 20 | 14 | **11 of 14** | 5 | 0 | 1 |
+
+Totals: harm R 2 of 60, T 5, N2 3; abandons without reason R 1, T 2, N2 1.
+
+- **Finished plans and quiet moments: no difference** beyond the noise floor. A mind walks away from an unfinished plan for nothing the situation shows 1–2 times in 20 quiet moments in every arm.
+- **Felt needs are addressed less under N2:** 11 of the 14 that mattered, against 14 of 15 (T) and 15 of 16 (R).
+  - **What the three did:**
+    - a restless child goes to her gran and on to the yard;
+    - the last carpenter keeps walking to her reading lesson;
+    - a longing for a child is noticed ("this pull toward a child") with nothing decided.
+  - **None was judged harmful.** This is what the neutral framing invites: a feeling is one thing among others, not the subject of the thought. It is also where N2 changes behaviour.
+- **N2 set aside a plan "with reason" more often for a need:** 5 against 2–3. That is the feeling given as the reason.
+- **No new harm.**
+- **Cost:** $0.16 (T $0.082, N2 $0.079; 120 calls, no errors). The judges are Claude subagents. Key: 9 fragments of 3 values searched in the evidence, the branch and the logs. Count: 0; the `.env` copy was deleted.
+- **Evidence:** `~/slop-evidence/framing-ordinary-20261112/`: `set.jsonl`, `asked-T.jsonl`, `asked-N2.jsonl`, `judge/`, `key.jsonl`, `score.json`.
+
+## "Fled toward the attacker": the act or the mind? (2026-11-12)
+
+The replays' worst N1 flaw, also seen once each in T and N2, was a mind fleeing toward its attacker. Replies in a replay are never carried out, so five real flights were traced in r2d's journals instead. `living/tools/flee_trace.py` follows each from the reply to the plan the compile installed (the `current plan` routine in `mind_rows.jsonl`), the subject's activity (`samples.jsonl`) and its body (`positions.jsonl`):
+
+| Run, reply | The mind said | Foe #9 at the reply | The plan installed | What the body did |
+|---|---|---|---|---|
+| heavy r5, t 70 | "run northeast toward the road … away from #9" | north, 9.6 m | `flee` from #9, at t 91: **21 s after the reply** | stood still (its old plan's `keep`) while #9 closed to 1.2 m |
+| heavy r5, t 223 | "run southeast along the road to the inn" | **southeast**, 12 m | `goto` the place "the inn south of the hall", at t 234 | refused while dodging, then moved southeast toward the inn, past #9 |
+| heavy r4, t 102 | "run east toward the town wall at (356,262)" | **east**, 1.2 m | `goto` the place "town wall" (run) | 2.7 m northeast, then still |
+| heavy r5, t 257 | "run west toward the house at (365.5,260.5)" | southeast, 8.9 m | none found within the window | still; #9 closed to 3.3 m |
+| kiter r3, t 93 | "run west away from the shooter toward the wall cover" | east, 6.2 m | `flee` from #9 (run), at t 104 | kept chasing #9 east (its old plan's `attack`) until t 104, then ran west 8 m |
+
+**Reading:**
+- **The flee act moved the right way whenever it ran:** kiter r3, west, away from the shooter.
+- **The wrong-way moves have two other causes:**
+  1. **The mind names a place on the attacker's side** ("the inn" south past #9, "the town wall" just beyond #9). The compile carries that out faithfully as `goto`/`flee` to the place. Where the mind gave only a direction, the compile chose `flee` from the attacker, which drops the mind's wrong direction.
+  2. **The new plan takes effect 10–21 s after the reply.** Until then the body keeps its old plan: standing (`keep`) or chasing the foe (`attack`).
+- **So it is the mind's choice of target, and decision latency, not the flee act.** r2d ran before flee-open, so flee-open itself is not exercised in these traces.
+
 ## Cost and evidence
 
 - **Replays:** $0.29 (T $0.094, N1 $0.098, N2 $0.096; 249 calls, no errors), against the $5 cap.
@@ -125,4 +180,4 @@ Totals, harm: R 2 of 47, T 3, **N1 8**, N2 4.
   - `asks.json`;
   - `judge/` (the items as each judge saw them, `RUBRIC.md`, the labels);
   - `key.jsonl`, `score.json`.
-- **Tool:** [framing_replay.py](../living/tools/framing_replay.py) (`collect`, `ask`, `asks`, `items`, `score`). Rubric: [ADDRESSED.md](../living/tools/framing_judge/ADDRESSED.md).
+- **Tools:** [framing_replay.py](../living/tools/framing_replay.py) (`collect`, `collect-ordinary`, `ask`, `asks`, `items`, `score`); [flee_trace.py](../living/tools/flee_trace.py). Rubrics: [ADDRESSED.md](../living/tools/framing_judge/ADDRESSED.md), [ORDINARY.md](../living/tools/framing_judge/ORDINARY.md).
