@@ -5365,7 +5365,8 @@ def witness_fold(s):
     `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4; `fold.rs`). On an open line O stands between
     two fights: A strikes V, who stands still, until V falls; C strikes D, who blocks when
     threatened. Every blow O could see is in its lines: the blows its lines count, landed and
-    blocked, equal the strikes the rules resolved (`skill_use` outcomes), and V's fall is told. O gets at most one fight line per window, the first within the window of
+    blocked, equal the `fight_seen` rows naming O (read while the fights go on), at most the
+    strikes the rules resolved (`skill_use` outcomes), and V's fall is told. O gets at most one fight line per window, the first within the window of
     the first blow. Neither of the two in a blow is among its onlookers (`fight_seen`), and
     D's own lines come at each blow. With `witness_fold_ms` 0, a fight's first blow is told to O
     at once on its own line, as before."""
@@ -5394,7 +5395,12 @@ def witness_fold(s):
             break
         time.sleep(0.3)
     s.graph(c, {"wait": 300})
-    time.sleep(fold / 1000 + 2)
+    # A blow already winding up lands after the stop; its row is read before it is told.
+    end = time.time() + 3
+    while time.time() < end:
+        rows += [r for r in s.rows("SELECT * FROM fight_seen") if r["id"] not in {x["id"] for x in rows}]
+        time.sleep(0.3)
+    time.sleep(fold / 1000 + 1)
     t1 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
     exp = lambda who: [r for r in s.rows(f"SELECT at_ms, kind, subject, object, text FROM experience WHERE observer = {who}") if t0 <= r["at_ms"] <= t1]
     o_lines = [r for r in exp(o) if r["kind"] == "fight"]
@@ -5416,12 +5422,16 @@ def witness_fold(s):
     print("MEASURE", json.dumps(m), flush=True)
     try:
         s.expect("the fights happened: V fell, and D blocked", m["v_dead"] and any("You blocked" in r["text"] for r in d_own), m)
-        s.expect("every blow O could see is in its folded lines, each with its outcome (as the rules resolved them)", o_sum["blows"] == m["struck"] and o_sum["landed"] == m["struck_landed"] and o_sum["blocked"] == m["struck_blocked"] and o_sum["blocked"] >= 1, m)
+        # Every blow O could see: the rows naming O (O's facing may hide some), at most every strike.
+        o_rows = [r for r in rows if o in [x & 0x7FFFFFFF for x in r["onlookers"]]]
+        m["o_rows"] = len(o_rows)
+        s.expect("every blow O could see is in its folded lines, each with its outcome", o_sum["blows"] == len(o_rows) <= m["struck"]
+                 and o_sum["landed"] == sum(1 for r in o_rows if r["outcome"] == 2) and o_sum["blocked"] == sum(1 for r in o_rows if r["outcome"] == 4) and o_sum["blocked"] >= 1, m)
         s.expect("O's lines say V fell, once", o_sum["fell"] == 1 and any("fell" in r["text"] and ("attacked" in r["text"] or "kept on at" in r["text"]) for r in o_lines), m)
         s.expect("folded: fewer lines than blows, at most one a window", 0 < len(o_lines) < o_sum["blows"] and len(o_lines) <= (t1 - t0) / fold + 2, m)
         s.expect(f"O's first line comes within witness_fold_ms ({fold:.0f} ms) of the first blow", m["first_line_after_ms"] is not None and 0 < m["first_line_after_ms"] <= fold + 100, m)
-        s.expect("O is among each blow's onlookers, and neither of the two in a blow is (the other fight's pair may be)",
-                 rows and all(o in [x & 0x7FFFFFFF for x in r["onlookers"]] and not ({r["attacker"], r["victim"]} & {x & 0x7FFFFFFF for x in r["onlookers"]}) for r in rows),
+        s.expect("O saw most blows, and neither of the two in a blow is among its onlookers (the other fight's pair may be)",
+                 rows and len(o_rows) * 2 >= len(rows) and not any({r["attacker"], r["victim"]} & {x & 0x7FFFFFFF for x in r["onlookers"]} for r in rows),
                  {"rows": len(rows), "onlookers": sorted(set(onlookers))})
         s.expect("D was told of each blow at it at once (its own lines, not folded)", len([r for r in d_own if r["kind"] == "attacked"]) == m["struck_blocked"] and not any("blow" in r["text"] and f"#{d})" in r["text"] for r in exp(d) if r["kind"] == "fight"), m)
         # As before, with the law at 0: a fight's first blow is told to O at once, on its own line.

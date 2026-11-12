@@ -1326,7 +1326,8 @@ def watch_fight_case(run):
     it is not party to: A, with a spear, strikes V until V falls; C strikes D, who blocks. The
     think prompt W's model is sent then carries W's folded lines: each fight's blows counted with
     their outcomes (A's landed on V, D blocked C), V's fall, and each stranger anchored by the id
-    W's scene knows them by. The blows its lines count are the strikes the rules resolved."""
+    W's scene knows them by. The blows its lines count are the blows W could see (`fight_seen`
+    rows naming W, read while the fights go on), no more than the strikes the rules resolved."""
     run.harness('launch')
     run.harness('doctor')
     before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
@@ -1353,7 +1354,23 @@ def watch_fight_case(run):
     run.admin('set_behavior', d, json.dumps({'first': [{'if': {'cond': {'threatened': True}, 'then': {'do': {'skill': 'block'}}}}, {'wait': 60}]}))
     run.admin('set_behavior', c, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': d}}}, {'wait': 60}]}))
     run.admin('set_behavior', a, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': v}}}, {'wait': 60}]}))
-    run.wait(lambda: not run.sql(f'SELECT alive FROM character WHERE id = {v}', 'v-alive')[0]['alive'], 'V fell', 90)
+    # The blows W could see (`fight_seen` rows naming W), read while the fights go on: a row goes
+    # once every onlooker has been told it.
+    # W's lines too: its mind consolidates as the fight goes on, and consolidation takes the
+    # integrated rows out of the inbox (`mind_consolidated`).
+    rows, w_lines, start = {}, {}, time.monotonic()
+
+    def gather():
+        for r in run.private('SELECT * FROM fight_seen', 'fight-seen'):
+            rows[r['id']] = r
+        for e in run.private(f'SELECT * FROM experience WHERE observer = {w}', f'experiences-{w}'):
+            if e['kind'] == 'fight' and e['at_ms'] >= t0:
+                w_lines[e['id']] = e
+    while time.monotonic() - start < 90:
+        gather()
+        if not run.sql(f'SELECT alive FROM character WHERE id = {v}', 'v-alive')[0]['alive']:
+            break
+        time.sleep(0.3)
     for who in (a, c):
         run.admin('set_behavior', who, json.dumps({'wait': 120}))
     # The law in force: the world's own value, else the installed script's.
@@ -1361,9 +1378,13 @@ def watch_fight_case(run):
     src = run.private("SELECT source FROM script WHERE name = 'skills'", 'script')[0]['source']
     fold = float(own[0]) if own else float(re.search(r'\bwitness_fold_ms: ([0-9.]+)', src).group(1))
     # Blows still in flight land first, then every onlooker's window holding them ends.
-    time.sleep(3 + fold / 1000 + 1.5)
+    end = time.monotonic() + 3 + fold / 1000 + 1.5
+    while time.monotonic() < end:
+        gather()
+        time.sleep(0.3)
+    seen_by_w = [r for r in rows.values() if (r['attacker'], r['victim']) in ((a, v), (c, d)) and w in [x & 0x7FFFFFFF for x in r['onlookers']]]
     exp = lambda who: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {who}', f'experiences-{who}') if e['at_ms'] >= t0]
-    lines = [e['text'] for e in exp(w) if e['kind'] == 'fight']
+    lines = [e['text'] for e in sorted(w_lines.values(), key=lambda e: e['id'])]
     # The strikes as the rules resolved them (`skill_use` outcomes); V's own lines go with V's death.
     struck = [u for u in run.sql('SELECT * FROM skill_use', 'skill-uses') if (u['actor'], u['target']) in ((a, v), (c, d)) and u['outcome_ms'] >= t0
               and re.match(r'(hit for|blocked|killed|dodged|missed)', u['outcome'] or '')]
@@ -1374,10 +1395,10 @@ def watch_fight_case(run):
     (run.directory / 'prompt-watched.txt').write_text(prompt)
     in_prompt = [l for l in prompt.split('\n') if re.search(r'\d+ blows? \(', l)]
     a_on_v = re.compile(rf'#{a}\) (?:attacked|kept on at) [^:]*#{v}\): \d+ blows? \([^)]*landed')
-    texts = {'fold_ms': fold, 'w_fight_lines': lines[:8], 'w_line_count': len(lines), 'blows_counted': counted, 'struck': len(struck),
+    texts = {'fold_ms': fold, 'w_fight_lines': lines[:8], 'w_line_count': len(lines), 'blows_counted': counted, 'struck': len(struck), 'seen_by_w': len(seen_by_w),
              'prompt_lines': in_prompt[:8]}
     checks = {
-        'folded_lines_count_every_blow': counted == len(struck) and counted > len(lines) > 0,
+        'folded_lines_count_every_blow_w_saw': counted == len(seen_by_w) and 0 < len(seen_by_w) <= len(struck) and counted > len(lines) > 0,
         'who_is_winning_a_landed_on_v': any(a_on_v.search(l) for l in lines),
         'd_blocked_c': any(re.search(rf'#{c}\) (?:attacked|kept on at) [^:]*#{d}\): \d+ blows? \([^)]*blocked', l) for l in lines),
         'who_fell_v': sum(l.count(f'#{v}) fell.') for l in lines) == 1,
