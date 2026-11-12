@@ -1,0 +1,40 @@
+{
+ "_doc": "pictures.py's classes (docs/CHARACTERS.md, 'Pictures as KTX2'). format: ktx2 or png (keep the class as the generator wrote it). mips: box (an area average in linear light) or coverage (alpha-coverage preservation for the marks, the texels whose alpha is above threshold: thin lines, freckles, the iris lights; the rest is averaged as by box). by_name: an overlay's own mips by its file's name (stubble is a haze: its look at distance is its mean). zstd: the level of each mip's zstd frame. Tint is box: with coverage the iris lights (alpha up to 0.78) glowed as yellow specks in the eyes at 7.5 m, where the 4x-supersampled reference keeps the eyes dark (docs/CHARACTERS.md, 'Pictures as KTX2'). Plain box everywhere was the nearest to that reference; overlays keep coverage so freckles and lines hold at distance.",
+ "zstd": 19,
+ "classes": {
+  "atlas": {
+   "format": "ktx2",
+   "mips": "box"
+  },
+  "face": {
+   "format": "ktx2",
+   "mips": "box"
+  },
+  "overlay": {
+   "format": "ktx2",
+   "mips": "coverage",
+   "threshold": 0.5,
+   "by_name": {
+    "stubble": {
+     "mips": "box"
+    }
+   }
+  },
+  "far": {
+   "format": "ktx2",
+   "mips": "box"
+  },
+  "tint": {
+   "format": "ktx2",
+   "mips": "box"
+  },
+  "iris": {
+   "format": "ktx2",
+   "mips": "box"
+  },
+  "strands": {
+   "format": "ktx2",
+   "mips": "box"
+  }
+ }
+}

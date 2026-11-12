@@ -88,6 +88,9 @@ const PERCEIVED: &[&str] = &[
     // Who would hear me now at each way, and its sentence (the `earshot` law; no row while it
     // is off): `talk.rs`, the box's hint line.
     "SELECT * FROM my_earshot",
+    // The world's ways of speaking (label, order, whether a line needs someone, reach, limits):
+    // the talk box's way chip (`talk.rs`).
+    "SELECT * FROM speech_card",
     "SELECT * FROM my_records",
     // What I hear but don't see (rows only while the world's `fov_on` law is on): `heardmark.rs`.
     "SELECT * FROM heard_sounds",

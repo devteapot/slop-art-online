@@ -7,6 +7,8 @@ A player's character sleeps through its own command (`human_act` with `sleep`). 
 - A quiet line (`say`, loudness 1) does not wake it and is not in its log; a called name (`call`, loudness `call_carry()`, 2.5) wakes it, and the quiet line follows in its log as heard while asleep.
 - Someone else's baby crying (the `cry` signal, loudness 2.5 in `species.json`) about 3 m away wakes it.
 - A fight (a blow from a skill with `loudness: 2.0`) about 12 m away does not wake it; the same fight about 3 m away does ("You woke up: the noise of a fight, …").
+- Struck by a resident, its own `human_act` sleep is refused: its log gets "You failed to sleep: you cannot sleep: you were struck moments ago" (the rules' `sleep_check`, laws `alert_after_hit_s` and `alert_while_attacker_near`; verify-core's [needs.md](../../verify-core/features/needs.md#sleep-in-a-fight)).
+- With both alert laws off (`set_world_law`, restored after), a sleeping player is woken by a fight's second blow as well as its first (`perceive::wake_struck`).
 
 ## Driving it
 
@@ -17,7 +19,7 @@ $V launch --run $R --seed $PWD/.agents/skills/verify-core/scripts/infant
 $V cleanup --run $R
 ```
 
-Admin calls set the scene only: `place_at`, `set_behavior`, and `mind_say` for the residents' lines (as their minds would say them). The player's command is a run of sleeps (`{"seq": [{"do": "sleep"}, ...]}`), since a rested body's single sleep lasts only 5 s.
+Admin calls set the scene only: `place_at`, `set_behavior`, `mind_say` for the residents' lines (as their minds would say them), and `set_world_law` for the alert laws. The player's command is a run of sleeps (`{"seq": [{"do": "sleep"}, ...]}`), since a rested body's single sleep lasts only 5 s.
 
 ## Gotchas
 

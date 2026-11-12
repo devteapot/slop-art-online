@@ -86,8 +86,22 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     }
     let sc = common::scripts(ctx);
     let w = sc.way(way_name(way)).ok_or_else(|| format!("no way of speaking called `{way}`"))?;
-    let text: String = text.chars().take(w.max_chars).collect();
     let Some(me) = ctx.db.character().id().find(speaker) else { return Err("no speaker".into()) };
+    // The `#<id>` handles a mind is shown people by are not words anyone hears: each is said as
+    // the speaker refers to that one (a name it knows, "that stranger"; a far figure's handle as
+    // the one it saw). An id that names no one is left as written.
+    let written: String = text.chars().take(w.max_chars).collect();
+    let text = living_rules::normalize::spoken_without_ids(text, |id| {
+        let real = crate::far::resolve(ctx, speaker, id);
+        if real == 0 || ctx.db.character().id().find(real).is_none() {
+            None
+        } else if real == speaker {
+            Some(me.name.clone())
+        } else {
+            Some(common::label_for(ctx, &me, real))
+        }
+    });
+    let text: String = text.chars().take(w.max_chars).collect();
     let Some(b) = ctx.db.body().id().find(speaker) else { return Err("no body".into()) };
     // A line to a figure the speaker's mind names by its sighting's handle (far-handle).
     let to = crate::far::resolve(ctx, speaker, to);
@@ -119,6 +133,11 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     // memory (docs/PLAYER_MEMORY.md), a mind's are in its experience like anyone's.
     let said = format!("{}: “{}”", fill(ctx, if to != 0 { &w.said_to } else { &w.said }, &me, speaker, to, 0.0), text);
     let said_id = percept(ctx, &me, now, "said", speaker, to, at, said, 0.5);
+    // A line whose ids were said as words: the speaker keeps what it wrote beside what was said
+    // (`spoken_as`; a mind journals it, trials.py counts them), and hearers get only the words.
+    if written != text {
+        percept(ctx, &me, now, "spoken_as", speaker, to, at, format!("Your line was said as “{text}”: you wrote “{written}”, and #ids are not words anyone hears."), 0.2);
+    }
     if let Some((ago_s, said)) = echo {
         let when = if ago_s < 5 { "just now".to_string() } else { format!("{ago_s} s ago") };
         percept(ctx, &me, now, "repeat", speaker, to, at, format!("You said almost the same thing {when}: “{said}”."), 0.3);
