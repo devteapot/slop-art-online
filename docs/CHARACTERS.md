@@ -80,10 +80,12 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
 - **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris was left a type's own then, and is one picture for every type since [one iris for every type](#one-iris-for-every-type).
 - **Pass 3, one iris for every type** ([one iris for every type](#one-iris-for-every-type)). Every type's file names one iris picture, and a person's line carries the colour that brings its body to the person's eye colour. Composed eyes had come out about three times too light, with grey pupils on the lighter colours and stray hues from the type's own iris; the iris's body is now within 3 CIE76 of the eye colour on every type. A whole file's warm glow in a dark or a blue eye is what a composed eye still lacks.
 - **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
+- **Pass 3, the neck's and the head's joints** ([the neck's and the head's joints](#the-necks-and-the-heads-joints)). Both are at the reference's places: the neck's 1.7 cm higher, the head's 1 cm higher. Every generated file was built again on the one skeleton; no clip key changes.
 - **look-1, the look book** ([the look book](#the-look-book)). A person line and its words for every look band a person can reach, under opaque keys: Cullet's 64 residents, a pool of 128 for newcomers and players, and 96 lines for background people. The client's book holds lines only; whose a line is, is in the world's data.
+- **Pass 3, the brows' place** ([the brows' place](#the-brows-place)), for the owner to judge. Measured against the reference, every type's brow sat on the head's own brow line, 0.3 of the eye's height above a large eye where the reference's sit 0.6 to 0.85 above. Each type's brow is lifted to 0.72; arch, tilt, length and thickness are unchanged. A brow now rides its own bone whole and the skin under it does not follow.
 - **Pass 3, the iris's lights** ([the iris's lights](#the-iriss-lights)). The glow, the streaks and the arc of sky in an eye are a layer of their own in fixed colours, on a disc before the iris in the lips' and blush's material, so the client's recolouring leaves them be. A composed eye is now within about 3 CIE76 of a whole file's in every eye colour; it was 10 to 14.
 - **Pass 3, the brows** ([the brows](#the-brows)). A brow is one tapered stroke, as the reference draws its own, in a material of its own under the reference's name for it, so the client's hair colour reaches it. Composed people had their type's brow colour whatever their hair.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's lifting strands and fringe, the brows' place, the face's painted softness, clothes and silhouette, hands.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's lifting strands and fringe (and fringes over the lifted brows), the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -151,7 +153,7 @@ python3 living/tools/characters/media.py .local/cap .local/page .local/town .loc
 python3 living/tools/characters/page.py .local/page
 ```
 
-**Photograph a person through a recipe, not the raw file.** `lookdev/own-<name>.glb` is the builder's own output; the game draws the copy under `lookdev/anim/`, which `gen_person.sh` gives the clips, the face's designed normals and its shadow map. The raw file shown by itself shades with a straight split down the face, and the animated copy shown as a plain file (no `recipe:`) is drawn without its hair and face shading. `town.py` and the board go through recipes.
+**Photograph a person through a recipe.** `gen_person.sh` writes two copies: `lookdev/own-<name>.glb`, the builder's own, and `lookdev/anim/own-<name>.glb` with the clips, which is what a recipe draws. Both are finished the same way since the brows' place step (merged primitives, the face's designed normals and shadow map, the outline's normals, the person's identity on the bones); before that the builder's copy was left raw, and shown by itself it shaded with a straight split down the face and had the type's face. A file with clips shown as a plain file (no `recipe:`) is still drawn without its hair and face shading: that is the view's rule for plain animated files. `town.py` and the board go through recipes.
 
 A pass is also published through the asset board, the record of which version the owner accepted (`docs/ASSET_BOARD.md` and `living/tools/board/board.py`). Its records are in `living/assets/board/`.
 
@@ -189,6 +191,8 @@ A pass is also published through the asset board, the record of which version th
 - One iris for every type is `character:face-types` `20261112-83b3b0e7-…` (`shared-iris`: three types' eyes in the seven eye colours through the client, with a type's own iris and the eye colour in the line, with the shared iris and the line's new colour, and as a whole file paints them; the same by the client's rule in `eye_colours.py`; `shared-iris-people`: four residents composed before and now above their own files). The six preset families and `cast-64` are whole files, whose paint this step does not change (one preset built again: the same iris and atlas, texel for texel), so they have no new version.
 - The brows are `character:face-types` `20261112-46a90cae-…` (`brows`: four types coloured by the client with four hair colours, before and after, from the front and at 35 degrees; `brows-people`: four residents composed before and now above their own files), the six preset families' `20261112-46a90cae-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-46a90cae-…` (the 64 built again whole, with `faces-before-after`).
 - The iris's lights are `character:face-types` `20261112-d6ba3fba-…` (`iris-lights`: three types' eyes in the seven eye colours through the client, composed before and now and as a whole file's now and before; `iris-lights-people`: four residents composed before and now above their own files as the game draws them), the six preset families' `20261112-d6ba3fba-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-d6ba3fba-…` (the 64 built again whole, with `faces-before-after`: they should look the same).
+- The brows' place, for the owner to judge, is `character:face-types` `20261112-8d5432b1-…` (`brow-place`: four types in four hair colours through the client, before and after, from the front and at 35 degrees), the six preset families' `20261112-8d5432b1-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-8d5432b1-…` (the 64 built again whole, through recipes, with `faces-before-after` and `game-before-after`).
+- The neck's and the head's joints are `character:face-types` `20261112-46074f0d-…` (`head-joints`, `head-joints-2`: four residents composed and posed in turns, nods and a tilt from three sides, before and after), the six preset families' `20261112-46074f0d-…` (rebaked with clips: every key the same; `marker_check` passed) and `cast-64` `20261112-46074f0d-…` (the 64 built again whole, with `lineup-before-after`).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -1558,7 +1562,72 @@ Pass 3, 2026-11-12. The reference draws a brow as one tapered stroke in the hair
 - **A composer that keys a type's materials by its file** can key `M00_000_00_FaceBrow_00_FACE` by content: it is plain colour with no picture, the same for every type.
 - **Take the 21 type files again.** Lines are unchanged.
 
-**What still separates ours from the reference's brows:** theirs sit higher above the eye (by eye on the board's sheets, the gap from the lash to the brow is about 0.4 of the eye's height on the reference and about 0.2 on ours), and have a soft edge from a picture's alpha where ours is cut geometry. The height is each type's `brow.above_eye`, designed and not measured; it was not changed here, since it moves every face's expression.
+**What still separated ours from the reference's brows at this step:** theirs sit higher above the eye, and have a soft edge from a picture's alpha where ours is cut geometry. The height was measured and moved next ([the brows' place](#the-brows-place)).
+
+### The brows' place
+
+Pass 3, 2026-11-12. For the owner to judge: it changes every face's expression.
+
+**Measured** with `living/tools/characters/reference/brow.py`, the same way on the reference and on ours: the eye's opening is the open loop in the face's skin; the brow is its material where it shows (on the reference's card, the texels whose alpha is over a half). The gap is the brow's lower edge above the opening's top, over the middle third of the opening.
+
+| | Gap, in H | Gap, in heights of the opening | The opening's height, H |
+|---|---|---|---|
+| The reference (Shino, Vivi) | 0.098, 0.091 | 0.85, 0.60 | 0.115, 0.150 |
+| Ours before: `adult-f-a`, `youth-f-a`, `child-u-a` | 0.041, 0.041, 0.040 | 0.31, 0.31, 0.30 | 0.133, 0.133, 0.136 |
+| Ours before: `adult-m-b`, `elder-m-b` | 0.041, 0.045 | 0.54, 0.72 | 0.075, 0.063 |
+| Ours after: `adult-f-a`, `child-u-a` | 0.097, 0.099 | 0.73, 0.73 | |
+| Ours after: `adult-m-b`, `elder-m-b` | 0.055, 0.046 | 0.74, 0.73 | |
+
+Every type's brow sat about 0.041 H above the eye, whatever the eye's size: on the head's own brow line, where the form has its ridge. The reference draws its brows well above its ridge, on the forehead, at 0.6 to 0.85 of the eye's height above it.
+
+**What changed:**
+
+- **Each type has a brow lift** (`types.json` `brow.lift`, in H; `face_types.brow_lift`): what brings its brow's lower edge to 0.72 openings above the eye (`BROW_GAP`, between the reference's two faces), and never below the head's brow line. It is 0.055 to 0.058 H (14 to 15 mm) on the large-eyed types (`adult-f-a`, `youth-f-a`, `child-u-a`), 0.033 to 0.037 and 0.020 to 0.022 on their `b` and `c` lines, 0.043 to 0.005 on the boys' and men's, 0.033 and 0.011 on `elder-f-a` and `-b`, and nothing on `elder-m-b`, `elder-m-c` and `elder-f-c`, whose narrow eyes already had their brows that far above in the eye's own measure.
+- **The arch, the tilt, the length and the thickness are unchanged.** The whole stroke moves up.
+- **The head's form is unchanged:** `above_eye` is still the form's brow line. Hair's fringe and the forehead's lines are still set by it.
+- **A brow rides its own bone whole, and the skin under it does not follow.** `J_Id_Brow_L` and `_R` sit at the drawn brow (`cage_head.rig_pivots`), a brow's vertices are theirs alone (`person.py`), and the skin has no share of them (`cage_head.identity_weights`). Before, the skin round the brow line followed the brow's bone, so `brow_thickness` and `brow_length` scaled a patch of forehead with the brow, and a brow lifted off its bone would have slid when either changed. The reference's brows are cards that move alone too. On the far head, whose brows are painted on its skin, that skin still follows.
+- **`brow_height` now moves the drawn brow only,** in a head built from landmarks as on the bones (`face_types.apply`). `rig_check.py` for the four brow values: the skin moves 0.00 mm either way. `face_types.py check`: every type valid, 60,648 of 60,648 value ends valid.
+- **Hair is not changed.** A fringe still ends at the head's brow line by its `fringe` value, so on the lifted types a long fringe now covers the brows. Whether fringes should follow the brows up is for the hair pass.
+
+**What the client needs:** nothing in code. Take the bundle: the types (their brows, the brow bones' places and the skin's weights), and every hair, outfit and overlay file (what hangs on a head no longer follows the brow bones). Lines are unchanged.
+
+
+### The neck's and the head's joints
+
+Pass 3, 2026-11-12. The neck step left the two joints where they were and noted that the neck's was lower than the reference's. They are now at the reference's places.
+
+**Measured** (`reference/neck.py`): each joint's height from the chin in H, and how far behind the face's front it lies in widths of the head.
+
+| | `J_Bip_C_Head` above the chin | behind the front | `J_Bip_C_Neck` below the chin | behind the front |
+|---|---|---|---|---|
+| The reference (Shino, Vivi) | 0.143, 0.128 H | 0.53, 0.54 | 0.173, 0.162 H | 0.57, 0.59 |
+| Ours before | 0.098 H | 0.53 to 0.59 | 0.234 H | 0.58 to 0.64 |
+| Ours after | 0.137 H | 0.50 to 0.56 | 0.168 H | 0.54 to 0.60 |
+
+- **The neck's joint was 1.7 cm too low and the head's 1 cm too low.** A head nodded about a point 2.5 cm above the chin and a neck bent from 6 cm below it, inside the collar.
+- **`person.py` `JOINTS`:** `J_Bip_C_Neck` from (0, -0.020, 1.475) to (0, -0.012, 1.492), and `J_Bip_C_Head` from (0, -0.010, 1.560) to (0, -0.003, 1.570), in the generator's frame (metres, +Y forward, +Z up). No mesh and no weight changed: the same skin turns about other points.
+- **One skeleton, so the depth is the types' middle:** a type's front lies where its own face puts it.
+
+**What had to be built again:** every file with the body's skeleton in it, which is every generated file: the 21 types, the 159 style files, and whole people. A set mixed from before and after would put a head, its hair or a collar up to 1.7 cm apart.
+
+- **`skeleton_check.py LOOKDEV`** compares every `J_Bip_*` bone's rest place across the types, the style files, whole people and the shared clip file, and fails on a tenth of a millimetre. The bundle runs it.
+- **`pose.py`** turns the neck and the head in a file (a turn, a nod, a tilt; the neck takes 0.4 of each), to photograph a pose the view has no control for.
+
+**The clips.** A baked clip keys 52 bones' rotations and the hips' translation. It keys no bone's place but the hips', so no key holds the neck's or the head's joint.
+
+- **Rebaked on the new skeleton, every key is the same.** The `man` preset's 29 clips before and after (`clips_compare.py`): 52 rotation tracks with the largest difference 0.00°, and the hips' translation 0.0 cm, in every clip. `marker_check` passes on the seven presets and the control.
+- **By eye** (the board's `head-joints`): the difference is small. A nod or a turn carries the chin and the back of the head a little less far, and the collar's gap changes less.
+
+**What the laptop redoes for the shared clip file,** `lookdev/anim/own-clips.glb`:
+
+1. Bake it again from this generator with its own clip library, as it was made: `ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man` (with `KIMODO_DIR` at the library).
+2. Run `python3 living/tools/characters/skeleton_check.py living/game/assets/lookdev`. It reads `anim/own-clips.glb` with the rest and must print 0.
+
+- **Why, when no key changes:** the shared clip file is a character file, the `man` preset with the clips, and it has the body's skeleton at rest in it. An old one would be the one file with the two joints at their old places. The client binds clips to bones by name, so it would still play; the check exists so that a set never holds two skeletons.
+- **`share.py` needs no change.**
+- **It is not in the bundle:** this machine holds 30 of the library's 86 clips, so its bake is not the laptop's file.
+
+**What the client needs:** nothing in code. Take the bundle whole: types, every style file, and the lines (unchanged). A type from after the move with hair or a collar from before, or the other way, sits up to 1.7 cm apart at the neck.
 
 ### The look book
 
@@ -1568,11 +1637,12 @@ look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part 
 
 | File | What it holds | Who reads it |
 |---|---|---|
-| `living/game/assets/characters/looks.json` (git-ignored) | `generation`; `lines`: `{"lk_…": {person: the line as the composer reads it, words: LookWords}}`; `decor`: line keys for the island's background people; `files`: every shared file the lines name, with how many lines use it and an outfit piece's slot and layer | the client |
+| `living/game/assets/characters/looks.json` (git-ignored) | `generation`, the one it was written in; `generations`, every one it holds, oldest first; `lines`: `{"lk_…": {person: the line as the composer reads it, words: LookWords}}`; `decor`: line keys for the island's background people; `files`: every shared file the lines name, with how many lines use it and an outfit piece's slot and layer | the client |
 | `living/seeds/worlds/cullet/looks.json` (tracked) | `looks`: `{generation, people: {lp: {band: lk}}, words: {lk: LookWords}, pool: [lp]}`; `residents`: `{the seed's name: lp}` | the authority's seed tools; never shipped to a client |
 
 - **The book does not say whose a line is.** No people, no pool, no names: a client cannot tell a resident's line from a newcomer's, or link one person's lines across ages. That is in the world's data only.
-- **Now:** generation `c4-…`, 887 lines: Cullet's 64 residents in 151 (1 infant, 11 child, 17 youth, 58 adult, 64 elder), 128 pool people in five bands each (640), 96 decor lines. The book is 1.8 MB, the world's data 0.2 MB.
+- **The book is append-only.** Writing it keeps the lines of the book already at that path, so a released world's keys stay drawable, and adds its generation to `generations` (`--fresh` starts again). The world's data is the newest generation alone.
+- **Now:** generation `c4-aa393793`, 887 lines: Cullet's 64 residents in 151 (1 infant, 11 child, 17 youth, 58 adult, 64 elder), 128 pool people in five bands each (640), 96 decor lines. The book is 1.8 MB, the world's data 0.2 MB.
 
 **Keys.**
 
@@ -1610,7 +1680,7 @@ look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part 
 
 **An unbuilt line's outfit colours.** A line's outfit colours are the colours as painted ("the line's colour is the painted colour" under [one shading mean a class](#one-shading-mean-a-class)), which a built file is measured for. A later band and a pool person have no built file. Their pieces' colours are their cloths' taken to what they would be painted: the value ratio, saturation ratio and turn of hue that the built residents' pieces of that kind have at the median (`paint_rule`). Against the built colours of Cullet's 293 pieces that is 0.5 CIE76 at the median, 3.2 at the 95th percentile and 3.7 at most.
 
-**Slot and layer.** Each outfit style file says where its piece is worn and how far out, in its scene's extras: `"outfit": {"piece": "smock_58-f", "slot": "upper", "layer": 1}` (`person_params.PIECE_WEAR`; `gen_styles.sh` writes it). The book's `files` carries the same.
+**Slot and layer.** Each outfit style file says where its piece is worn and how far out, in its scene's extras: `"outfit": {"piece": "smock_58-f", "slot": "upper", "layer": 1}` (`person_params.PIECE_WEAR`; `gen_styles.sh` writes it; `look_lines.py wear --check` fails if a file lacks it, and the bundle runs that). The book's `files` carries the same.
 
 | Piece | Slot | Layer |
 |---|---|---|
@@ -2103,7 +2173,7 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 1. **Hair.** Short styles' hairlines cut straight across the forehead in a box. The reference's hair has single strands lifting off at the ends and a fringe in a few thick locks; ours is smoother and plainer. A seam runs down the back of parted styles.
 2. **The eye's glow on composed people** was a lighter tone of the eye's own colour. Mended after this ([the iris's lights](#the-iriss-lights)).
-3. **The brows' place:** the reference's sit higher above the eye ([the brows](#the-brows)).
+3. **The brows' place:** the reference's sat higher above the eye. Moved after this ([the brows' place](#the-brows-place)); on the lifted types a long fringe now covers the brows.
 4. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top.
 5. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
 6. **Clothes and silhouette, hands** (unchanged).
