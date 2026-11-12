@@ -30,7 +30,8 @@
 //! - `recipe:<name>` or `recipe:<folk>:<seed>` in `LIVING_GAME_VIEW` shows a character recipe
 //!   (`assets/characters/recipes.json`; folks `adult`, `giant`, `small`) at its own height; a
 //!   recipe with a person line is composed from shared files unless `LIVING_GAME_COMPOSE=0`
-//!   (`characters/compose.rs`), as in the game.
+//!   (`characters/compose.rs`), as in the game. `look:<lk_…>` shows a line from the look book
+//!   (`characters/book.rs`), as the game draws someone with that key.
 //! - `LIVING_GAME_VIEW_PLATE=1`: after each photograph, a second of the same view and pose with
 //!   the model hidden (`NN-<shot>.plate.png`): the background alone, to tell the model's pixels
 //!   from it (`colour_check.py`).
@@ -176,8 +177,9 @@ fn requested() -> Vec<String> {
     let root = PathBuf::from(asset_root());
     let mut files = Vec::new();
     for part in std::env::var("LIVING_GAME_VIEW").unwrap_or_default().split(',').map(str::trim).filter(|p| !p.is_empty()) {
-        // A character recipe (characters.rs): `recipe:<name>` or `recipe:<folk>:<seed>`.
-        if part.starts_with("recipe:") {
+        // A character recipe (characters.rs): `recipe:<name>` or `recipe:<folk>:<seed>`; a look
+        // book line: `look:<lk_…>`.
+        if part.starts_with("recipe:") || part.starts_with("look:") {
             files.push(part.to_string());
             continue;
         }
@@ -289,6 +291,16 @@ pub fn setup(
             crate::characters::Recipe::parse(r).unwrap_or_else(|| {
                 warn!("view: no recipe {r}");
                 crate::characters::Recipe::random(0, "adult")
+            })
+        });
+        // `look:<lk_…>`: a line from the look book, as the game draws someone with that key.
+        let recipe = recipe.or_else(|| {
+            token.strip_prefix("look:").map(|k| match crate::characters::book::book().ok_or(crate::characters::book::Miss::NoBook).and_then(|b| b.recipe(k)) {
+                Ok(r) => r,
+                Err(m) => {
+                    warn!("view: {}", m.warning());
+                    crate::characters::Recipe::random(0, "adult")
+                }
             })
         });
         // A person line composes the person from shared files when the switch is on.
