@@ -28,7 +28,7 @@ Design: [docs/COMMUNICATION.md](../../../../docs/COMMUNICATION.md). Source: `liv
   - `human_say(text, to)` is the `say` way;
   - `human_speak(text, to, way)` takes any way ("" is `say`);
   - `mind_say(actor, say, say_to, way, seen_ms, thought)`;
-  - `mind_install`'s say is `say`;
+  - `mind_install_way(actor, graph, plan, say, say_to, way, seen_ms, thought)` (since `mind-say-way`, the mind service's) says a decision's line in its way; a refused line is told to the speaker (`unsaid`, "You did not say “…”: <the rules' words>.") and the decision stands. A deliberation's `mind_say` tells a refusal the same way; a talk turn's is the reducer's error, as before. `mind_install`'s say is `say`, and its refusals are dropped as they always were: it is to be retired, kept for an older mind service and the admin harness (`scenes.py` say-by-id and `heard_first`);
   - a graph's `say` node takes an optional `way` (normalizer: `{"say": "...", "way": "whisper"}`, the `do` forms too). The node waits out the way's limits (`too_soon_to_speak`) and is refused as a failed leaf for an unknown way.
 - **`speech_card`** (public, one row per way, rewritten at install): `name`, `label`, `order`, `about`, `needs_to`, `reach_m`, `carry_m` (for the world's ordinary hearing), `requires`, `needs_sight`, `private` (only_to), `max_chars` and `gap_ms`. The shipped rows on the island (9 m hearing) are:
 

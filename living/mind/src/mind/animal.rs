@@ -16,7 +16,7 @@
 //!   harder to a hunt, a nervous deer to fleeing).
 //!
 //! The rules are not touched: what the animal can do is what its species' skills allow, and
-//! every graph goes through the same `mind_install` as before.
+//! every graph goes through the same `mind_install_way` (with no line) as a person's.
 
 use living_bindings::*;
 use serde_json::{json, Value};
@@ -313,7 +313,7 @@ impl super::Minds {
         let (g, pruned) = living_rules::graph::from_value_for(v["graph"].clone(), sp).map_err(|e| anyhow::anyhow!(e))?;
         detail["pruned"] = json!(pruned);
         log::info!("{} the {} feels: {feeling} → {impulse} ({strength}, weight {w})", c.name, c.kind);
-        self.install(actor, g.to_json(), impulse.to_string(), String::new(), 0, d.updated_ms, t(format!("{feeling} → {impulse}"), detail)).await
+        self.install(actor, g.to_json(), impulse.to_string(), String::new(), 0, String::new(), d.updated_ms, t(format!("{feeling} → {impulse}"), detail)).await
     }
 }
 

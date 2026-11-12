@@ -287,6 +287,37 @@ Control's 163 and 167 split the same way (deliberation 108 and 109, talk 36 and 
 
 **Evidence:** `.local/living/trials/es1` and `.local/living/journal/verify-trial-es1-*` in `~/slop-trials2b`.
 
+## Ways stage (planned, not run) — target, written before any paid call
+
+Approved by the general coordinator at about $2.5: one Cullet arm, once `mind-say-way` (a decision's line names its way, docs/COMMUNICATION.md §18) and the laptop's talk box on `human_speak` are both on main. The talk box does not enter the trial (the newcomer is scripted), so this measures the minds' side alone. Nothing below has been run.
+
+- **Trial and arm:** `strangers-earshot` (stage 2b's script) with the `strangers-earshot` variant: the `earshot` law on, so a decision's scene still says "a call would also reach …". 1 run, 20 minutes, 63 minds.
+- **Compared with:** es1's earshot runs (r1/r2, the same arm on main `ce5e09b9`, where a decision could not call) and its control (r1/r2).
+- **Stop rule:** stop the run if spend passes $3.50 (es1's runs cost $2.30–2.42).
+- **Command:** `python3 living/tools/trials.py run --batch ew1 strangers-earshot --variants strangers-earshot --replicates 1`. Before it, a free fake smoke (`ew1s`, `--fake --fake-script living/trials/fake/strangers.json --minutes 3`): it starts, and `world_laws.json` has `earshot` true.
+- **Build and switches, to record at the run:** the main commit; `earshot` on; every other law and `LIVING_*` switch as main has it then.
+- **Measures:**
+  - `unheard_why.py` (the split by what wrote each unheard line);
+  - `arrive_spread.py --strangers`;
+  - from the chronicle: the decisions' lines by way (`"<name> (call) to …"`, `"(whisper)"`);
+  - from the experiences: refused lines (`unsaid`, "You did not say …").
+
+**Target spread** (one run, so indicative):
+
+| measure | es1 earshot r1 / r2 | expected if the way is used | read as no effect |
+|---|---|---|---|
+| `deliberation: only a call` (`unheard_why`) | 33 / 22 | at most 10 | 20 or more |
+| decisions' lines that call | 0 / 0 (impossible then) | some; reported with examples | 0 |
+| `deliberation: in reach then` (late lines) | 73 / 65 | unchanged: the next target, out of this change's reach | — |
+| `far_seen` | 90 / 75 | about 15–25 fewer than es1's earshot runs | within es1's spread |
+| `far_all` ÷ `said_all` | 25.4% / 24.6% | down 2–4 points | within es1's spread |
+| refused decided lines (`unsaid` "You did not say …") | — | reported; a few whispers without an addressee are possible | — |
+| `said_all` | 705 / 614 | within 25% of es1's | — |
+| `converge_60s` / `together_4m` | 2, 0 / 2, 2 | at most es1's + 2 | — |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | within es1's spread (both arms) | — |
+| animals startled by calls (`signal` "a person shouting" rows to animals) | reported | reported | — |
+| cost | $2.42 / $2.37 | within 20% | — |
+
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
 Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.

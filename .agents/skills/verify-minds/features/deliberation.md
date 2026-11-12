@@ -4,7 +4,7 @@
 
 - `mind-request`: an AI adult controlled by `world.admin` receives a real `deliberation` row through `perceive::request_deliberation`, `living/authority/src/perceive.rs:270`.
 - `mind-think`: the think reply supplies intention and speech; the compiler receives the decision, `living/mind/src/mind.rs:1286`.
-- `mind-install`: `mind_install` installs a graph with source `mind`, increases revision, logs a thought, clears the request and speaks, `living/authority/src/mind.rs:360`.
+- `mind-install`: the service installs through `mind_install_way` (since `mind-say-way`; `mind_install`, to be retired, has the same install path) and installs a graph with source `mind`, increases revision, logs a thought, clears the request and speaks, `living/authority/src/mind.rs:360`.
 - `mind-routines`: the reply's intent becomes the `current plan` routine through `mind_routines`, `living/mind/src/mind.rs:1812`.
 - `mind-activity`: the authority starts a wait from the installed plan.
 - `mind-act`: one reply queues give, offer and an impossible give through `mind_act`, `living/authority/src/mind.rs:409`. Recipient inventory, `trade_offer`, and failure experience prove the outcomes.
