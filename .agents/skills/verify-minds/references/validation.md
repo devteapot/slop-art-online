@@ -1,5 +1,10 @@
 # Internal mind validation
 
+## 2026-11-12 attention-cues: a mind's cue through memory to a thought (Spark)
+
+After merging main `c67bb6e1` (move-intents, births-2-prep): `minds-cuesm-071859` `cues_mind.py` 6/6.
+
+Branch `attention-cues` (origin/main `49dfc2cd` merged), the trial service with `slop-trials-neo4j`, the release mind and the fake model. `cues_mind.py` (new; features/cues.md): `minds-cuesf-064543` 6/6 on the merged build (the cue projected through `mind_update` in the reply's words; a player W does not know at 3 m gives one `noticed` line; the next think request, 0.4 s after it, carries it as its reason; `# What you watch for` lists the cue as having made W think). Two earlier attempts found product bugs, fixed before the pass (`minds-cues-062519`): the compile step dropped the think decision's `notice` (`keep` now carries it), and a fire 2 s after the last thought was recorded although the authority refused the request within `think_min_s` (a fire now waits for the request to be taken: 22.8 s after the previous think here). Mind tests `cue_examples_name_no_one`, `notice_is_kept_on_what_it_serves`. The `resident` case's `mind_update` now passes `cues` (not re-run: the suite's other cases were not run on this branch).
 ## 2026-11-12 committed-moves, second pass (Spark)
 
 With origin/main `a07f5919` merged and `throw` committed: `minds-commit5-071222` `acts` passes.
@@ -21,6 +26,7 @@ The first attempt failed only because F's graph room line was never said; F now 
 ## 2026-11-12 move-intents (Spark)
 
 Branch `move-intents`, the trial service, the fake model, `--no-unit-tests` (the check ran the mind's build). `minds-intents-061748`: `intents` (new) passes. The prompt documents the five intents with their arguments, m/s and "lost sight of them". The plan `keep_distance` 3–6 m is kept as the `current plan` routine `{"do":{"skill":"keep_distance","target":{"id":7},"qty":120,"min":3.0,"max":6.0}}`, and `steer` is goal 5 (keep 3, far 6, flag 128). The character backs off at its walk (3.37 m/s) when the other walks at it. Earlier attempts placed the two in town at night, where a wall hid one ("no #7 in sight"); the case now uses an open row. Not run: the other cases (the scene gate runs roundtrip, acts, dealings, conversation).
+
 
 ## 2026-11-12 doing-percept (Spark)
 
