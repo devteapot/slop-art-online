@@ -248,6 +248,108 @@ Beside them, each arm records the raw count: the most residents who came within 
 - each arm's laws were read back as set;
 - the fake's first-sight thoughts came 5–7 s after the first sight (Lark Morrow, Tobiah Dunmore), the line their only reason; C had none.
 
+### Results (fs1, 2026-11-12 12:58–13:40): stopped by the crowding rule after two arms
+
+**What ran.**
+- **Batches.** The sub-batches are `fs1c` and `fs1f`, not `fs1-c` and `fs1-f` as the target above says: the runner takes only lowercase letters and digits. A first start as `fs1-c` was refused at once, with no call made.
+- **Two arms:** C at 12:58:30–13:19:12, then C + first sight at 13:19:20–13:40. One after another, on main `dc45c259` in `~/slop-trials-fs1`.
+- **The stop rule tripped on C + first sight** (`converge_60s` 6), so LS + cues + first sight (`fs1l`) did not run.
+- **Both runs** stopped by duration (20.0 minutes). There were no runaways and one mind start each, and no outages: both started after the trial server's 12:53 restart, and it stayed up throughout.
+- **Housekeeping on the server:**
+  - C's world was paused at 19.7 minutes by a watcher, because its runner predated the pause-before-delete fix. That cut the last 20 s or so.
+  - C + first sight's runner (`trials.py` with `72801824`, branch `fix-trials-pause`) paused its own world before deleting it.
+  - No `verify-trial-fs1*` database is left.
+
+**Cost:** $5.14 of the $13 approved.
+- C: $2.48 (glm-5-3-flash 1,329 calls $1.94; deepseek-v4-1-flash 332 calls $0.54).
+- C + first sight: $2.66 (1,397 calls $2.02; 398 calls $0.64).
+
+**Switches,** as written in the target: `first_sight_thinks` off in C and on in C + first sight (read back from `world_law`); far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | C | C + first sight | target |
+|---|---|---|---|
+| in range (stands and the walk) | 18 | 22 | about 18–24 |
+| asks | 1 (Bram Calloway) | **11** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0–2 |
+| notices inwardly | 2 | 8 (Aldous among them) | 3–8 |
+| unaware | 12 (67%) | 3 (14%) | ≤6, ≤40% |
+| tells others (all residents) | 0 | 6 (Neve Calloway, Magda Tarn, Ingrid Morrow, Hana Sato, Ren Sato, Nan Fenwick) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | 91.6 s | 42.5 s (Lark Morrow) | within 5 minutes |
+| `converge_60s` / `together_4m` | 2 / 2 | **6** / 2 | ≤3 / ≤2 |
+| raw 4 m convergence (any reason, within 60 s) | 5 | 7 | — |
+| lines to the newcomer / out of earshot | 1 / 0 | 21 / 2 | — |
+| residents heard by it / re-asks | 1 / 0 | 9 / 7 | — |
+| first sights of it → think requests carrying the line | 22 → 0 | 24 → 20 (19 alone, 1 merged) | — |
+| false replies a min / group talk a min (main's rule) | 0.45 / 0.05 | 0.55 / 0.10 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | — |
+| spoken `#id` lines | 0 | 0 | 0 |
+| tick mean / p99 / > 10 ms / > 25 ms / > 50 ms | 0.88 ms / ≤ 5 ms / 28 / 2 / 0 | 0.82 ms / ≤ 5 ms / 14 / 1 / 0 | — |
+
+- **Out of shape:** asks (11, past the "5 or more" mark) and `converge_60s` (6, the stop rule).
+- **In shape:** inward, unaware and the first heard line. Tells are over the band (6 against 1–4).
+- **Aldous** thought about the newcomer 7 s after its join: "new faces are rare enough in Cullet that a tally keeper notices. Not my business to challenge…". He said nothing, so he is classed inward.
+- **Ingrid** asked, and told others.
+- **First-sight thoughts** came 0.4–27 s after the first sight. The median was 0.5 s to the request and 4–15 s to the reply.
+- **Cost:** deliberations rose 8% (20.4 against 18.9 per resident-hour) and money 7% ($2.66 against $2.48). The design forecast +4–5%, from lines alone; the talk that followed adds the rest.
+
+### The 314–322 s cluster (C + first sight)
+
+The newcomer walked the Strand from 293 s, toward and through Neve Calloway's fishing party going east. Every first sight below asked one thought. Distances are in tiles (metres).
+- **First sight:** when the resident's look first told them of the newcomer, and from how far.
+- **Line:** the resident's next line after the thought, its time and its distance from the newcomer.
+
+| resident | first sight (s, m) | think asked → replied (s) | the thought, in part | line (s, m from the newcomer) |
+|---|---|---|---|---|
+| Neve Calloway | 308.7, 23 | 309.2 → 314.2 | "A stranger walking east toward the very water we're bound for — not alarming, but I'd as soon know whose steps…" | 320.0, 18.9, to Magda: "Then keep pace — I've a lad to teach the count…" |
+| Tobiah Dunmore | 309.7, 18 | 310.1 → 314.4 | "Neve's walking us east to show the line proper…" | 319.5, 19.3, to Neve: "…Mind the east, someone's walking in fr…" |
+| Joss Tarn | 308.8, 22 | 311.3 → 315.7 | "A stranger walks toward the east water where our folk are gathering — nobody's said welcome or warning yet…" | 324.1, 29.4, to Neve: "Neve — someone coming up from the east, past the hall. Not Cullet…" |
+| Lorcan Vane | 311.9, 21 | 312.9 → 316.4 | "A stranger walking straight into the town at midday…" | **320.7, 9.7, to the newcomer:** "Morning to you, stranger — you've found Cullet. Lorcan Vane's my name…" |
+| Ingrid Morrow | 313.0, 20 | 314.0 → 317.9 | "A stranger walking east through the town, and I don't know the face — that's worth a hail…" | **320.9, 6.4, to the newcomer:** "You there, east-walker! I don't know your face…" |
+| Magda Tarn | 309.7, 19 | 314.6 → 319.7 | "A stranger walking northeast toward the same east water…" | 323.7, 30.1, to the room: "You there, walking east — stranger or neighbour? I'm Magda Tarn…" |
+| Davin Vane | 316.9, 17 | 317.4 → 322.3 | "A stranger standing easy at the east road, watching Cullet folk pass…" | **326.9, 16.2, to the newcomer:** "Morning to you. Waiting on someone, or new to Cullet?" |
+
+Then, in the plots:
+
+| resident | first sight (s, m) | think asked → replied (s) | the thought, in part | line (s, m from the newcomer) |
+|---|---|---|---|---|
+| Oswin Greave | 338.1, 13 | 338.5 → 346.9 | "A stranger walking north through the plots…" | 349.2, 2.1, to the newcomer |
+| Hobb Fenwick | 338.2, 12 | 338.6 → 343.5 | "A stranger walks north of the plots toward the Readers' yard…" | 347.8, 4.5, to the newcomer |
+| Nan Fenwick | 337.1, 24 | 364.1 → 377.1 | "…Oswin has already had to ask twice who they are…" | 382.4, 12.2, to the newcomer |
+
+The 60 s window behind `converge_60s` 6 holds five lines to the newcomer (Lorcan, Ingrid, Davin, Hobb and Oswin, 320.7–349.2 s) and Magda's wave at it. Neve, Tobiah and Joss spoke about it to each other. All of these residents first saw the newcomer within 8 s of one another (308.7–316.9 s), as it walked into their group.
+
+**What each thinker perceived** (each think request's scene; `fs1_cluster.py`):
+- **Approaching: no.**
+  - When Oswin and Hobb thought (338.5 s), Lorcan and Davin were walking to the newcomer (`goto` at it). Oswin's scene shows "Lorcan Vane, 22.1 south, goto → person".
+  - An activity's label names its target by kind only (`act.rs` `label`: "→ person"). No scene in the cluster said that anyone was walking toward the newcomer.
+- **Who is near the newcomer: only by arithmetic.** At Lorcan's and Ingrid's thoughts, 9 residents stood within 8 m of the newcomer. Their scenes give each person's distance and direction from the thinker alone, and nothing relates one person to another.
+- **Speaking to it: yes, once heard.**
+  - At the cluster's thoughts nobody had yet spoken to the newcomer within earshot: the 4 earlier speakers had hailed it at the arrival point minutes before.
+  - Nan, who thought at 364 s, had 3 heard lines to the newcomer in her prompt, and her thought says so ("Oswin has already had to ask twice").
+  - A heard line carries its room detail as main writes it.
+
+**Does a thought started at first sight go stale? Yes.** Three of the six lines said to the newcomer in the cluster came after another resident had just addressed it, within the speaker's hearing, and after the speaker's decision had been made without that fact:
+- **Ingrid** decided at 317.9 s. Lorcan spoke at 320.7 s, 3.3 m from her, and her line followed 0.2 s later.
+- **Davin** decided at 322.3 s, on a prompt built at 317.4 s, before either had spoken. His line came 6 s after both, from within 4 m of the newcomer.
+- **Oswin's** line came 1.4 s after Hobb's.
+
+The gap from a reply to its line was 2.4–5.3 s, because a think reply's `say` is spoken at install, after the compile. `speech_truth`'s `line_overtaken` drops a queued line only when the speaker's own exchange with the addressee has moved on. Someone else addressing the same person is not counted.
+
+**Where to soften such a cluster, without hiding anything and without traits or roles.** Two perception facts, each the same for every controller:
+1. **Whom a walker or follower is going to, in the observer's own words.** "goto → a stranger", "follow → Neve Calloway", "follow → you", or the far label. That is what a player sees drawn on screen: someone heading at someone. A mind's scene would then show who is already on their way.
+2. **The act is checked against what changed since it was chosen.** When a mind's line to someone comes due, and since the scene its decision read the speaker has heard another address that person, the line is not said yet. The speaker is told so, and its mind is asked to think again with the heard line in front of it. It may still speak; nothing tells it to.
+
+Whether they spread the cluster is for a re-run to show. `first_sight_thinks` stays off (the general coordinator, 2026-11-12).
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1c`, `fs1f`, `fs1s` and the journals `verify-trial-fs1*`, all in the archive `~/archive/trials/fs1-20261112.tar.gz` (38 MB, 1,045 files). The archive also holds:
+- the spread reports (`fs1c-spread.md`, `fs1f-spread.md`);
+- the measures (`fs1c-m.json`, `fs1f-m.json`) and the cluster (`fs1f-cluster.json`);
+- the tick table (`fs1-ticks.md`) and the metrics samples;
+- the spend logs and the tools (`~/slop-strangers-logs/tools`: `fs1_measures.py`, `fs1_cluster.py`, `fs1_ticks.py`).
+
+**Security check:** 9 fragments of the 3 API keys were searched for in the batch directories, the journals and the logs. Count: 0.
+
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
 Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.
