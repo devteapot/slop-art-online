@@ -312,6 +312,13 @@ fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &S
     if spec.target != wants_target {
         return None;
     }
+    // Only toward a target of a class its spec takes (`target_class`, `living_rules::ui::
+    // offered_toward`): looking over is for creatures, not a bush.
+    if let (true, Some(t), Some(k)) = (wants_target, target, sc.skills().get(skill)) {
+        if !k.takes_class(&t.class) {
+            return None;
+        }
+    }
     let checked = has_check(sc, skill);
     let on_thing = matches!(aim, Aim::Thing { .. });
     let my_kind = target.is_some_and(|t| t.class == "creature" && t.kind == me.actor.kind);
@@ -1681,6 +1688,18 @@ mod tests {
         // Out.
         let (lit, fuel, offered) = glass(999_000);
         assert!(!lit && fuel == 0.0 && !offered, "lit {lit} fuel {fuel} offered {offered}");
+    }
+
+    #[test]
+    fn only_skills_that_take_a_things_class_are_offered_toward_it() {
+        // `offered_toward`: a spec's `target_class` (appraise: creature) keeps it off a bush.
+        let sc = Scripts::new(SKILLS).unwrap();
+        let (aim, t) = bush();
+        let full = me(&[("berries", 3), ("wood", 2)], &["fire"]);
+        for c in choices(&sc, &full, &aim, Some(&t), &skills_of(&sc)) {
+            assert!(sc.skills().get(&c.skill).is_none_or(|k| k.takes_class("resource")), "{} offered toward a bush", c.skill);
+        }
+        assert!(sc.skills().get("appraise").is_some_and(|k| !k.takes_class("resource")), "appraise is for creatures");
     }
 
     #[test]
