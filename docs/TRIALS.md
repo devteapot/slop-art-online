@@ -438,6 +438,63 @@ Tick time per arm: `spacetime_reducer_plus_query_duration_sec`, reducer `tick` (
 - `~/slop-trials2b/.local/living/trials/st2b`, `st2bs`, and the journals under `.local/living/journal/verify-trial-st2b-*`;
 - the archive at `~/archive/trials/st2b-20261112.tar.gz` (51 MB, 1,356 files), which includes the metrics samples, the analyses (`st2b-spread.md`, `st2b-cues.md`, `st2b-cue-fires.md`, `st2b-ticks.md`) and the spend log.
 
+### False replies under one definition (2026-11-12, branch `strangers-measures`; free)
+
+The general coordinator approved a new definition. It is in `greet_report.py` `reply_kind`, with the self-test `python3 living/tools/greet_report_selftest.py`:
+- a **false reply** is a conversation turn answering a line that names someone else, either addressed by id to another person or saying another's name;
+- a line that names the answerer, or is addressed to them, is never false;
+- a remark to the room that names no one, when answered, is **`group_talk`**, counted apart;
+- only the player is left out: the joined newcomer where a trial has one, else the subject (the greeting and arrival trials' player). Aldous, the strangers trials' subject, is now counted.
+
+**Tool versions:**
+- **Old:** `greet_report.py` at main `ef9c3ae5`, the rule every earlier record used. A room line said within 60 s of its speaker's exchange with another was false. A line naming the answerer could be false. The trial's subject was always skipped.
+- **New:** this branch.
+- **Check:** recomputed here, the old tool gives the recorded numbers exactly (ar2's pooled 3/2/3/0/0/3/0, stage 2's 0.20/1.05/0.35, st2b's 0.10/0.46/0.80/1.06).
+
+Per run: `~/slop-strangers-logs/rescore.md`, from ar2 (`~/dev/slop-runs-arrive`, read-only), st2 (`~/slop-stage2`) and st2b (`~/slop-trials2b`).
+
+
+#### ar2
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| arrive-answer-arrive-all | 4 | 0 (0.00) | 1 (0.02) | 0 (0.00) |
+| arrive-answer-arrive-control | 4 | 3 (0.05) | 0 (0.00) | 2 (0.04) |
+| arrive-arrive-all | 4 | 0 (0.00) | 1 (0.02) | 0 (0.00) |
+| arrive-arrive-control | 4 | 3 (0.05) | 3 (0.05) | 3 (0.05) |
+| arrive-arrive-known | 4 | 2 (0.04) | 1 (0.02) | 1 (0.02) |
+| arrive-arrive-notice | 4 | 3 (0.05) | 3 (0.05) | 0 (0.00) |
+| arrive-arrive-wonder | 4 | 0 (0.00) | 0 (0.00) | 2 (0.04) |
+
+#### st2
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| C | 1 | 4 (0.20) | 8 (0.40) | 1 (0.05) |
+| L | 1 | 21 (1.06) | 11 (0.55) | 1 (0.05) |
+| LS | 1 | 7 (0.35) | 12 (0.60) | 1 (0.05) |
+
+#### st2b
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| C | 1 | 2 (0.10) | 2 (0.10) | 0 (0.00) |
+| L | 1 | 9 (0.45) | 9 (0.45) | 0 (0.00) |
+| LS + cues | 1 | 21 (1.06) | 14 (0.70) | 3 (0.15) |
+| LS | 1 | 16 (0.80) | 13 (0.65) | 3 (0.15) |
+
+
+**Reading it:**
+- **ar2** barely moves: 0–3 false replies an arm either way.
+- **st2:** stage 2's L falls from 1.06 to 0.55 a minute. C and LS rise (0.20 → 0.40 and 0.35 → 0.60), because the old rule missed room lines naming someone else when they fell outside its 60 s exchange window.
+- **st2b:** the rise is smaller, 0.10 → 0.45 → 0.65 → 0.70 against the old 0.10 → 0.45 → 0.80 → 1.06.
+- **What every new false reply is:** in both strangers batches, a room line calling other people by name, answered by a bystander. Examples: Lumi, “Edda! Ife! Wait for me — I'm coming to the yard!”, answered by Pim; Chidi, “Neve — the whole shore's fished thin…”, answered by Joss Tarn. None is a line addressed by id to someone else.
+- **Aldous is now counted:** one false reply in stage 2's LS.
+- **Group talk** is 0–3 a run.
+- **The guards** in stage 2 and st2b ("within C's spread") are re-read with these numbers. Stage 2's L is no longer the outlier. st2b's LS and LS + cues stay above C (0.65 and 0.70 against 0.10), with one replicate each.
+
+**In range:** the band is restated in STRANGERS.md ("Target spread"). It is now about 18–24, with the walk along the Strand counted; it was about 10–16 for the stands only. The change and its reason are recorded beside it. The outcome bands are unchanged.
+
 ### Analysis of st2b (2026-11-12, branch `st2b-analysis`; free, no model calls)
 
 #### (a) Why false replies rise by arm (0.10 → 0.46 → 0.80 → 1.06 a minute)
