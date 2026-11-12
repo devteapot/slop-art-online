@@ -206,6 +206,75 @@ The re-run of C + first sight after first-sight-crowd (docs/FIRST_SIGHT.md, "Cro
 
 **Switches:** as fs1, plus `heard_first_rethinks` on and the naming fix.
 
+### Results (fs1h, 2026-11-12 16:46–17:07): the crowding rule tripped again (`converge_60s` 10)
+
+**What ran.**
+- **Commit:** main `5eeb2566` (first-sight-crowd), in `~/slop-trials-fs1` at `8318143e`.
+- **Smoke:** a free fake run first (`fs1hs`, 6 minutes). It ran to duration with no runaways and read both laws back. Its prompts carried the naming fix ("→ you", "→ Edda Hollin", the far label). A thinker's own `you.doing` keeps "→ person", as designed.
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. Both laws were read back from `world_law`.
+- **Cleanup:** the runner paused the world before deleting it.
+
+**Cost:** $2.73 (glm-5-3-flash 1,412 calls $2.12; deepseek-v4-1-flash 371 calls $0.60).
+
+**Switches:**
+- `first_sight_thinks` on, the gap at 300 s;
+- `heard_first_rethinks` on;
+- the naming fix (whom someone goes to, in the observer's words: always on since first-sight-crowd);
+- otherwise as fs1: far-handle on, `fov_on` off, `regard_cache` on, `earshot` off; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | fs1 C | fs1f (C + first sight) | **fs1h (C + first sight + the crowd fixes)** | target |
+|---|---|---|---|---|
+| in range | 18 | 22 | 22 | about 18–24 |
+| asks | 1 | 11 | **12** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 3–8 |
+| unaware | 12 (67%) | 3 (14%) | 2 (9%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 (Amara Okoro, Oswin Greave) | 1–4 |
+| first heard line after the join | 91.6 s | 42.5 s | 88.9 s (Ren Sato) | within 5 minutes |
+| `converge_60s` / `together_4m` | 2 / 2 | 6 / 2 | **10** / 2 | ≤3 / ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | — |
+| lines to the newcomer / out of earshot (the authority's `silence` verdict) / reached it | 1 / 0 / 1 | 21 / 7 / 14 | 21 / **12** / 9 | — |
+| residents who spoke to it / re-asks | 1 / 0 | 11 / 7 | 12 / 6 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 (all alone) | — |
+| false replies a min / group talk a min | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 |
+| tick mean / > 10 ms / > 25 ms | 0.88 ms / 28 / 2 | 0.82 ms / 14 / 1 | 0.82 ms / 18 / 0 | — |
+
+**The out-of-earshot counts** are the authority's own verdict: the speaker's `silence` row within 1.5 s of the line ("They are too far away / out of earshot: they could not have heard you"). `arrive_spread`'s `far` gave 2 in both first-sight arms, because it misses main's current silence wording. **Correction to the fs1 table:** fs1f's lines out of earshot were 7 of 21, not 2.
+
+**The crowd this time was mostly called from afar.** The minute behind `converge_60s` 10 (295–356 s, the Strand walk and the plots) holds lines to the newcomer from Eamon, Neve, Ingrid, Magda, Petra, Joss, Nan and Oswin.
+- **Distances:** 6 of those lines were said from 18–70 m and none of them reached the newcomer. Neve, Nan and Oswin, at 0.5–3 m, reached it.
+- **Why:** each first sight asked one thought (24 did), and the thought said its line from where the resident stood. A line out of earshot still counts in `converge_60s` (arrive_report counts lines, heard or not).
+- **Bodies:** stayed apart: `together_4m` 2.
+- **What it points at:** the `earshot` law, "who would hear you now" (docs/COMMUNICATION.md §17), the next stage, addresses exactly this.
+
+**Held lines** (`heard_first_rethinks`; `fs1_held.py`): **38 lines held, from 20 speakers.**
+- **Only 1 was to the newcomer:** Oswin's, after Nan hailed it.
+- **The other 37 were among residents,** mostly in the children's and the lesson's group talk. Pim held 6 times, Lumi and Juno 4 each.
+- **After the re-think, in the next 120 s:**
+  - **15 said the held words again** (word-set overlap ≥ 0.6);
+  - **17 said another line to the same person;**
+  - **5 spoke to someone else instead;**
+  - **1 said nothing** (Lumi Pontil, 78.5 s).
+- **The re-thinks name the new line and change course:**
+  - **Oswin** (354 s, to the newcomer): "Nan has already hailed this stranger at arm's length from me, so I'll give my own name plain and ask his business". He then said "You there — Oswin Greave, head grower on this ground. I'll have your name…" instead of "Morning to you, lad!…".
+  - **Sabine** (58 s): "Alder is already fetching tablet and cloth to the west window, so my witness is settled before I asked". She turned to Alder.
+  - **Lumi** (374 s): "Edda's said plain: a held seat is no head start … so the sneak-out is off". Her next line conceded it.
+  - **Imre** (58 s): answered Halvard instead of repeating his morning to Vessa.
+  - **Eamon** (464 s): changed "Neve — a word, while the crowd's not on us…" to "Neve — quiet, between us: I want a family with you."
+- **Cost of the holds:** deliberations rose to 22.1 per resident-hour (fs1f 20.4, C 18.9). The holds' re-thinks are part of that.
+
+**Reading** (one replicate, so indicative):
+- **What didn't work:** the crowd fixes did not soften the newcomer's reception. Asks stayed out of shape (12) and convergence rose (10), driven by lines called from out of earshot, which neither fix addresses.
+- **What did:** `heard_first_rethinks` worked as designed. Minds used the fresh fact: 22 of 38 held lines ended in a different line or addressee, 15 in the same words.
+- **Who it touched:** in this world it acts mostly on residents' group talk, not on the newcomer. Group talk per minute rose (0.30 against 0.10) and false replies fell (0.35 against 0.55).
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1h` and `fs1hs` and the journals `verify-trial-fs1h*`, archived in `~/archive/trials/fs1h-20261112.tar.gz` (15 MB, 363 files). The archive also holds `fs1h-spread.md`, `fs1h-m.json`, `fs1h-held.json` (every held line, its re-think and what followed), `fs1h-ticks.md`, the metrics and spend logs, and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
 ## First sight fs1 (2026-11-12) — target, written before any paid call
 
 The paid stage of docs/FIRST_SIGHT.md, approved by the owner (2026-11-12) at about $13. It runs on main `dc45c259` (first-sight merged), worktree `~/slop-trials-fs1`, branch `trials-fs1`.
