@@ -4207,6 +4207,92 @@ def owners(s):
     if fellow:
         scene, entry, _ = scene_of(fellow, "fellow")
         s.expect("someone of the owner's community is told whose it is, by name", entry is not None and owner_name in (entry.get("home_of"), entry.get("by")), {"entry": entry, "owner": owner_name})
+    owners_away(s, house, owner, owner_name, fellow, newcomer)
+
+
+FAR = "someone too far away to make out"
+
+
+def owners_away(s, house, owner, owner_name, fellow, newcomer):
+    """Where the owner stands never matters (house-owner-label, docs/PERCEPTION.md "Whose a thing
+    is"): whether one can make someone out is about the person in sight, never their house. An
+    overlay of the world's script makes anyone past 4 m too far away to make out (as Cullet's
+    `perceived_of` does past 24 m) and lets a storage show its owner (`shows_owner`). With the owner
+    50 m off: the fellow's scene still names the house's owner (`home_of`, `by`); a campfire the
+    owner built is noticed by the fellow as "built by <owner>" and by the newcomer with no owner;
+    the owner's storage, which shows its owner, is named to the newcomer too; and the newcomer's
+    theft from it is witnessed by the fellow as taken "from <owner>'s storage". Those lines carry
+    the owner by id (never a far figure's handle), and a line that does not name the owner does not
+    carry them (subject 0). The world's own script is installed again at the end."""
+    if not fellow:
+        s.expect("someone of the owner's community, for the away checks", False, "no fellow in the owner's community")
+    base = s.rows("SELECT source FROM script")[0]["source"]
+    far_law = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
+    shows = 'fn structures() { let l = base_structures(); for i in 0..l.len() { if l[i].name == "storage" { l[i].shows_owner = true; } } l }'
+    overlay = base.replace("fn perceived_of(p)", "fn base_perceived_of(p)", 1).replace("fn structures()", "fn base_structures()", 1) + "\n" + far_law + "\n" + shows + "\n"
+    (s.out / f"{s.name}-overlay.rhai").write_text(overlay)
+    hx, hy = house["x"], house["y"]
+    try:
+        s.call("install_script", overlay)
+        for who in (owner, fellow, newcomer):
+            s.graph(who, {"wait": 300})
+        # The two onlookers far apart, so neither notices the owner's new things before its turn.
+        s.call("place_at", fellow, hx + 1.5, hy - 40.0)
+        s.call("place_at", newcomer, hx + 1.5, hy + 40.0)
+        s.call("place_at", owner, hx + 1.5, hy + 1.5)
+        time.sleep(1.0)
+        s.call("place_structure", owner, "campfire")
+        s.call("grant_items", owner, "berries", 3)
+        s.call("place_at", owner, hx + 1.5, hy + 4.0)
+        s.call("place_structure", owner, "storage")
+        mine = {r["kind"]: r for r in sorted(s.rows(f"SELECT * FROM structure WHERE owner = {owner}", "owner-structures"), key=lambda r: r["id"])}
+        fire, store = mine.get("campfire"), mine.get("storage")
+        s.expect("the owner's new campfire and storage", fire and store, list(mine))
+        s.act(owner, {"do": "store", "item": "berries", "qty": 3, "target": {"id": store["id"]}})
+        s.wait(lambda: [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {owner}") if e["kind"] == "act" and "stored 3 berries" in e["text"]], seconds=30)
+        s.call("place_at", owner, hx + 50.0, hy)
+        time.sleep(1.5)
+        ob = s.rows(f"SELECT * FROM body WHERE id = {owner}")[0]
+        s.expect("the owner is far from its house (50 m)", abs(ob["x"] - hx) > 40, ob)
+
+        def scene_at(who, marker, x, y):
+            since = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+            s.call("place_at", who, x, y)
+            time.sleep(1.5)
+            s.call("set_behavior", who, json.dumps({"think": f"I finished my plan. verify owners {marker}"}))
+            row = s.wait(lambda: s.rows(f"SELECT * FROM deliberation WHERE actor = {who}"), seconds=60, every=2)[0]
+            (s.out / f"{s.name}-scene-{marker}.json").write_text(row["scene"] + "\n")
+            s.call("set_behavior", who, json.dumps({"wait": 300}))
+            rows = [e for e in s.rows(f"SELECT at_ms, kind, subject, object, text FROM experience WHERE observer = {who}") if e["at_ms"] >= since]
+            (s.out / f"{s.name}-lines-{marker}.json").write_text(json.dumps(rows, indent=1) + "\n")
+            scene_at.rows = rows
+            return json.loads(row["scene"]), [e["text"] for e in rows]
+
+        scene, lines = scene_at(fellow, "fellow-away", hx + 1.5, hy + 2.5)
+        by_id = {x.get("id"): x for x in scene.get("structures", [])}
+        h = by_id.get(house["id"], {})
+        s.expect("owner away: the fellow's scene still names the house's owner", h.get("home_of") == owner_name and h.get("by") == owner_name, h)
+        s.expect("owner away: no structure in the fellow's scene is labelled by a far figure", not [x for x in scene.get("structures", []) if FAR in json.dumps(x)], [x for x in scene.get("structures", []) if FAR in json.dumps(x)])
+        s.expect("owner away: the fellow notices the owner's campfire as built by them, by name", any(f"campfire built by {owner_name}" in t for t in lines), [t for t in lines if "campfire" in t])
+        s.expect("the fellow's notice line is about the owner by id, not a far figure's handle", [e["subject"] for e in scene_at.rows if "campfire built by" in e["text"]] == [owner], [e for e in scene_at.rows if "campfire" in e["text"]])
+        # The newcomer, a stranger to the owner, beside the fellow: it watches the theft too.
+        scene, lines = scene_at(newcomer, "newcomer-away", hx + 2.0, hy + 3.5)
+        by_id = {x.get("id"): x for x in scene.get("structures", [])}
+        s.expect("a stranger's house stays unnamed to the newcomer", "home_of" not in by_id.get(house["id"], {}) and "by" not in by_id.get(house["id"], {}), by_id.get(house["id"]))
+        s.expect("the newcomer notices the campfire with no owner", any("campfire" in t for t in lines) and not any(f"campfire built by" in t for t in lines), [t for t in lines if "campfire" in t])
+        s.expect("an owner the line does not name is not tied to it (subject 0)", [e["subject"] for e in scene_at.rows if e["text"].startswith("You notice a campfire")] == [0], [e for e in scene_at.rows if "campfire" in e["text"]])
+        s.expect("a storage that shows its owner (shows_owner) names the owner to the newcomer", by_id.get(store["id"], {}).get("by") == owner_name, by_id.get(store["id"]))
+        s.expect("the newcomer notices the storage as built by the owner, by name", any(f"storage built by {owner_name}" in t for t in lines), [t for t in lines if "storage" in t])
+        since = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        s.call("place_at", fellow, hx + 2.0, hy + 6.5)
+        s.act(newcomer, {"do": "take", "item": "berries", "qty": 1, "target": {"id": store["id"]}})
+        seen = s.wait(lambda: [e["text"] for e in s.rows(f"SELECT at_ms, kind, text FROM experience WHERE observer = {fellow}") if e["at_ms"] >= since and e["kind"] == "took"], seconds=40)
+        (s.out / f"{s.name}-theft-seen.json").write_text(json.dumps(seen, indent=1) + "\n")
+        s.expect("owner away: the fellow sees the berries taken from the owner's storage, by name", any(f"from {owner_name}'s storage" in t for t in seen), seen)
+        took = [e for e in s.rows(f"SELECT at_ms, kind, subject, object, text FROM experience WHERE observer = {fellow}", "theft-rows") if e["at_ms"] >= since and e["kind"] == "took"]
+        s.expect("the theft line's object is the owner by id, not a far figure's handle", took and all(e["object"] == owner for e in took), took)
+    finally:
+        s.call("install_script", base, check=False)
 
 
 SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}

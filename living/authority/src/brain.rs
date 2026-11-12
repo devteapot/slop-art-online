@@ -1692,7 +1692,8 @@ impl<'a> Ev<'a> {
             }
             let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
             let (_, _, _, pos, dist) = structures[nearest];
-            let by = if *owner != 0 && kind != "remains" { common::owner_label(self.ctx, &self.me, *owner, kind).map(|w| format!(" built by {w}")).unwrap_or_default() } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
+            let whose = if *owner != 0 && kind != "remains" { common::owner_label(self.ctx, &self.me, *owner, kind) } else { None };
+            let by = if let Some(w) = &whose { format!(" built by {w}") } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
             // Its extent as it lies on the ground (a town gate is a block of gate tiles).
             let wide = if part.len() > 1 {
                 let (xs, ys): (Vec<f32>, Vec<f32>) = part.iter().map(|k| structures[*k].3).unzip();
@@ -1702,7 +1703,12 @@ impl<'a> Ev<'a> {
                 String::new()
             };
             let text = format!("You notice a {kind}{wide}{by}, {dist:.0} tiles {}.", direction(at, pos));
-            percept(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 });
+            if kind == "remains" {
+                percept(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, 0.8);
+            } else {
+                // Whose it is, only as the line names them (house-owner-label).
+                crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
+            }
         }
     }
 

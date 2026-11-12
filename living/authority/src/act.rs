@@ -1638,7 +1638,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 notes.push(format!("took {qty} {item}"));
                 // Whether taking it is theft is the `theft(a)` law's to say.
                 if let Some(s) = ctx.db.structure().id().find(a.target.id).filter(|_| common::scripts(ctx).holds("theft", sctx)) {
-                    witnessed(ctx, now, at, "took", me, s.owner, &format!("{{a}} took {qty} {item} from {{b}}'s {}", s.kind), 0.5, &[me]);
+                    crate::perceive::witnessed_owned(ctx, now, at, "took", me, s.owner, &s.kind, &format!("{{a}} took {qty} {item} from {{b}}'s {}", s.kind), 0.5, &[me]);
                 }
             }
             Effect::Bond => {
