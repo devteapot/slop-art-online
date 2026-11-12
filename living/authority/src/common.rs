@@ -81,7 +81,6 @@ pub fn note_scene(n: usize) {
     }
 }
 
-/// While profiling, once a second: what graph scenes saw since the last report, one log line.
 thread_local! {
     /// Diagnostic counts while profiling (docs/BATTLE_SCALE.md): percepts by kind and how many
     /// woke their observer, onlookers per witnessed event, requests to think by reason, graph
@@ -106,6 +105,7 @@ pub fn report_diag() {
     }
 }
 
+/// While profiling, once a second: what graph scenes saw since the last report, one log line.
 pub fn report_scenes() {
     if PROFILE.with(|p| p.get()) {
         let (b, t, m) = SCENES.with(|s| s.replace((0, 0, 0)));
@@ -1332,6 +1332,60 @@ pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at:
         }
     }
     ctx.db.chronicle().insert(Chronicle { id: 0, at_ms: now, kind: kind.into(), a, b, x: at.0, y: at.1, text });
+}
+
+thread_local! {
+    /// Bystanders' wakes (docs/BATTLE_SCALE.md, fix 3): when each was last woken by what it saw,
+    /// and when a wake held back since is due.
+    static BYSTANDER: RefCell<std::collections::HashMap<u32, (u64, Option<u64>)>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// Wake `id`, a bystander of what it just saw (not party to it): at once unless it was woken by
+/// what it saw within `witness_wake_ms`, else when that window ends (`due_bystander_wakes`). A
+/// party to the event is woken by `wake`, at once.
+pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
+    let ms = laws(ctx).witness_wake_ms as u64;
+    if ms == 0 {
+        wake(ctx, id);
+        return;
+    }
+    let now_wake = BYSTANDER.with(|b| {
+        let mut b = b.borrow_mut();
+        let e = b.entry(id).or_insert((0, None));
+        if e.0 == 0 || now.saturating_sub(e.0) >= ms {
+            *e = (now, None);
+            true
+        } else {
+            e.1.get_or_insert(e.0 + ms);
+            false
+        }
+    });
+    if now_wake {
+        wake(ctx, id);
+    } else {
+        diag(|| "wake:deferred".into(), 1);
+    }
+}
+
+/// The bystanders whose held-back wake is due: woken now (each tick, before the wakes).
+pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
+    let due: Vec<u32> = BYSTANDER.with(|b| {
+        let mut b = b.borrow_mut();
+        let mut out = Vec::new();
+        b.retain(|id, (last, pending)| {
+            if pending.is_some_and(|t| t <= now) {
+                out.push(*id);
+                *last = now;
+                *pending = None;
+            }
+            pending.is_some() || now.saturating_sub(*last) < 60_000
+        });
+        out
+    });
+    for id in due {
+        diag(|| "wake:due".into(), 1);
+        wake(ctx, id);
+    }
 }
 
 pub fn wake(ctx: &ReducerContext, id: u32) {

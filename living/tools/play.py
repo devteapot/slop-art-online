@@ -50,6 +50,8 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import world_delete  # noqa: E402  (pause a world before deleting it)
 
 TOOLS = Path(__file__).resolve().parent
 REPORT = TOOLS / "play_report.py"
@@ -456,10 +458,12 @@ class World:
     def delete(self, db):
         if not self.s.db_ok(db):
             raise Refuse(f"refusing to delete {db}: not this scene's database pattern {self.s.db_pattern}")
-        self.cli("delete", "-s", "local", db, "-y", check=False, timeout=120)
+        # Paused and read back as paused before the delete (world_delete.py: a busy world's delete
+        # can take SpacetimeDB 2.14.1 down); a world that cannot be paused is not deleted.
+        deleted, why = world_delete.cli_pause_and_delete(lambda *a: self.cli(*a, check=False, timeout=120), db)
         code, _ = self.http("POST", f"/v1/database/{db}/sql", b"SELECT 1 FROM world")
-        if code != 404:
-            raise Refuse(f"{db} still answers SQL (HTTP {code}) after delete")
+        if not deleted or code != 404:
+            raise Refuse(f"{db}: {why} (HTTP {code})")
 
 
 # ---------------------------------------------------------------- Neo4j

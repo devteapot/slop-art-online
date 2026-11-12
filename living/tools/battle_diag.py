@@ -229,14 +229,8 @@ def main():
         head["status"] = f"fail: {type(error).__name__}: {error}"
     finally:
         state["stop"] = True
-        # Pause the world and let its queue drain before it is deleted: SpacetimeDB 2.14.1
-        # panicked deleting a database still running 35-54 ms ticks ("local durability: actor
-        # vanished", 2026-11-12), which took down the whole trial server.
-        try:
-            run.admin("set_paused", True)
-            time.sleep(10)
-        except Exception:
-            pass
+        # The harness pauses the world and reads it back as paused before deleting it
+        # (living/tools/world_delete.py).
         run.finish_cleanup()
         (run.directory / "diag-result.json").write_text(json.dumps(head, indent=1))
         print(json.dumps(head), flush=True)

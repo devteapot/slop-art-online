@@ -12,6 +12,14 @@ const WINDOW: usize = 400;
 
 /// Write an experience row for `observer`; its id, or `None` when nobody would read it.
 pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
+    percept_seen(ctx, observer, now, kind, subject, object, at, text, salience, true)
+}
+
+/// `percept` for what `observer` saw of an event: written at once and in full either way; a
+/// salient one wakes a party to it (`party`: its subject or object, the one it was done or aimed
+/// at) at once, and a bystander at most once per `witness_wake_ms` (`common::wake_bystander`).
+#[allow(clippy::too_many_arguments)]
+pub fn percept_seen(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32, party: bool) -> Option<u64> {
     // Only minds and human players consume percepts. Infants have no mind yet to form
     // memories; a benchmark crowd's bodies (`common::instinct_only`) have no reader.
     if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
@@ -62,7 +70,11 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
     common::diag(|| format!("percept:{kind}"), 1);
     if salience >= 0.6 {
         common::diag(|| format!("woke:{kind}"), 1);
-        common::wake(ctx, observer.id);
+        if party {
+            common::wake(ctx, observer.id);
+        } else {
+            common::wake_bystander(ctx, observer.id, now);
+        }
     }
     Some(row.id)
 }
@@ -108,7 +120,10 @@ pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, sub
         let text = rendered(template, &a, &b, object != 0 && c.id == object);
         // Animals notice people's and other species' affairs less keenly than their own kind's.
         let sal = if &*c.kind != "person" && !template.contains("{a}") { salience * 0.5 } else { salience };
-        percept(ctx, &c, now, kind, subject, object, at, text, sal);
+        // Woken at once if party to it (its subject or the one it was done to), else as a
+        // bystander (`witness_wake_ms`); told at once and in full either way.
+        let party = c.id == subject || (object != 0 && c.id == object);
+        percept_seen(ctx, &c, now, kind, subject, object, at, text, sal, party);
         common::diag(|| format!("onlookers:{kind}"), 1);
     }
     common::diag(|| format!("witnessed:{kind}"), 1);
@@ -134,7 +149,8 @@ pub fn witnessed_shot(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str
         let (a, b) = if sees_shooter { (named.next().unwrap_or_default(), named.next().unwrap_or_default()) } else { (String::new(), named.next().unwrap_or_default()) };
         let text = rendered(template, &a, &b, object != 0 && c.id == object);
         let sal = if &*c.kind != "person" { salience * 0.5 } else { salience };
-        percept(ctx, &c, now, kind, if sees_shooter { subject } else { 0 }, object, at, text, sal);
+        let party = c.id == subject || (object != 0 && c.id == object);
+        percept_seen(ctx, &c, now, kind, if sees_shooter { subject } else { 0 }, object, at, text, sal, party);
         common::diag(|| format!("onlookers:{kind}_shot"), 1);
     }
     common::diag(|| format!("witnessed:{kind}_shot"), 1);

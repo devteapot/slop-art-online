@@ -504,6 +504,10 @@ pub struct Laws {
     pub first_sight_gap_s: f32,
     /// How often a character's cues are checked against what it perceives (seconds).
     pub cue_check_s: f32,
+    /// A bystander, one who sees an event it is not party to, is woken by what it sees at most
+    /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
+    /// full. 0: woken by each, as before.
+    pub witness_wake_ms: f32,
     /// What each observer makes of each target (name known, the `perceived_of` answer) is
     /// computed once per transaction and shared (`perception::with_answers`). Off: every
     /// asker computes it afresh (the same answers; for measuring the cache).
@@ -597,6 +601,7 @@ impl Default for Laws {
             first_sight_thinks: false,
             first_sight_gap_s: 300.0,
             cue_check_s: 1.0,
+            witness_wake_ms: 500.0,
             regard_cache: true,
             regard_cache_check: false,
             fast_lane_on: false,
@@ -2565,6 +2570,7 @@ impl Scripts {
             first_sight_thinks: flag("first_sight_thinks", l.first_sight_thinks),
             first_sight_gap_s: g("first_sight_gap_s", l.first_sight_gap_s).clamp(0.0, 3_600.0),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
+            witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
@@ -3418,6 +3424,7 @@ mod tests {
         assert!(!l.cues_on);
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
+        assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
@@ -3426,6 +3433,7 @@ mod tests {
         assert!(l.cues_on && !l.regard_cache);
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (30.0, 0.0, 0.1));
         assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
+        assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a

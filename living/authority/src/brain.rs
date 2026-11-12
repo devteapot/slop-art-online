@@ -24,6 +24,17 @@ const ROOT_MARK: u16 = u16::MAX - 1;
 const FAIL_MARK: u16 = u16::MAX - 2;
 pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
 thread_local! {
+    /// What each character looked at lately (docs/BATTLE_SCALE.md, fix 1): the fast path in front
+    /// of `familiar`, keyed as `recently_seen` keys things (a creature's id, `0x4000_0000 | a
+    /// structure`, `0x8000_0000 | a region`, `FAR_MARK | a figure too far to make out`), with when.
+    /// Sized to what it sees, not capped at 96 (it thrashed in a battle), and kept off `mind_state`
+    /// so the row is not rewritten with it at every evaluation. Lost on a module update: then the
+    /// durable `familiar` rows answer.
+    static SEEN: std::cell::RefCell<std::collections::HashMap<u32, std::collections::HashMap<u32, u64>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Familiarity rows each character has added since its count was last checked.
+    static FAMILIAR_NEW: std::cell::RefCell<std::collections::HashMap<u32, u32>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// When each character last looked for what is new to it (`noticed`, fix 2).
+    static NOTICED_AT: std::cell::RefCell<std::collections::HashMap<u32, u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// Attention cues (`Ev::cues`), per character: when its cues were last checked, and the
     /// (cue, thing) pairs that have fired or were held back by the cooldown and have matched at
     /// every check since, so a cue fires when a thing begins to match, not while it goes on
@@ -72,7 +83,19 @@ const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
 /// Something heard near and out of sight (only while sight has a field).
 const SOUND_NEAR: u32 = 1 << 10;
-const FAMILIAR_LIMIT: usize = 256;
+/// Familiarity rows kept per character (docs/BATTLE_SCALE.md, fix 1): above what can be in sight
+/// in the densest place (a 200-character battle among its remains), so it is never what is in
+/// view that is forgotten. Over it, the oldest unseen rows go: never one seen within
+/// `FAMILIAR_KEEP_MS`, nor one whose thing is in the character's seen set (in view lately).
+const FAMILIAR_LIMIT: usize = 2_048;
+/// A familiarity row touched this recently is not pruned (twice its 30 s touch period).
+const FAMILIAR_KEEP_MS: u64 = 60_000;
+/// Something looked at within this long counts as still in view (the seen set's horizon).
+const SEEN_MS: u64 = 90_000;
+/// What is new to a character is looked for about once a second (fix 2): at most once per this,
+/// a little under the 1 Hz slot, since a slot can come a tick early (a strict 1,000 ms skipped
+/// every other second).
+const NOTICE_MS: u64 = 900;
 /// Marks at 0xC000 | node: when a desire last began to act.
 const DESIRE_MARK: u16 = 0xC000;
 /// Set when the current plan's routine completes; cleared by the next install.
@@ -1388,6 +1411,41 @@ impl<'a> Ev<'a> {
         CUE_HELD.with(|m| m.borrow_mut().insert(me, (now, held)));
     }
 
+    /// Over `FAMILIAR_LIMIT`, forget the oldest familiarity by age only (fix 1): never a row
+    /// touched within `FAMILIAR_KEEP_MS`, nor one whose thing is in the seen set (in view lately:
+    /// its row is touched only every 30 s, so its `last_ms` can trail while it stays in view).
+    fn prune_familiar(&mut self) {
+        let (me, now) = (self.me.id, self.now);
+        let mut all: Vec<(u64, u64, u64)> = self.ctx.db.familiar().actor().filter(me).map(|f| (f.last_ms, f.id, f.thing)).collect();
+        if all.len() <= FAMILIAR_LIMIT {
+            return;
+        }
+        all.sort_unstable();
+        let mut over = all.len() - FAMILIAR_LIMIT;
+        for (last, id, thing) in all {
+            if over == 0 {
+                break;
+            }
+            if now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) {
+                continue;
+            }
+            common::diag(|| "familiar:evict".into(), 1);
+            self.ctx.db.familiar().id().delete(id);
+            over -= 1;
+        }
+    }
+
+    /// The seen-set key of a familiarity row's thing (as `noticed` looks things up), if any.
+    fn seen_key(&self, thing: u64) -> Option<u32> {
+        let id = (thing & ((1 << 40) - 1)) as u32;
+        match thing & !((1 << 40) - 1) {
+            FAM_CREATURE => Some(id),
+            FAM_STRUCTURE => Some(0x4000_0000 | (id & 0x3fff_ffff)),
+            FAM_REGION => Some(0x8000_0000 | id),
+            _ => None,
+        }
+    }
+
     /// Look up (and refresh) bodily familiarity; returns the previous record, if any.
     fn familiarity(&mut self, thing: u64) -> Option<Familiar> {
         common::diag(|| "familiar:lookup".into(), 1);
@@ -1402,16 +1460,17 @@ impl<'a> Ev<'a> {
             }
             None => {
                 common::diag(|| "familiar:insert".into(), 1);
-                let row = self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
-                if row.id % 16 == 0 {
-                    let mut all: Vec<(u64, u64)> = self.ctx.db.familiar().actor().filter(self.me.id).map(|f| (f.last_ms, f.id)).collect();
-                    if all.len() > FAMILIAR_LIMIT {
-                        all.sort_unstable();
-                        for (_, id) in &all[..all.len() - FAMILIAR_LIMIT] {
-                            common::diag(|| "familiar:evict".into(), 1);
-                            self.ctx.db.familiar().id().delete(*id);
-                        }
-                    }
+                self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
+                // Every 64 new rows of this character, its count is checked against the limit.
+                let me = self.me.id;
+                let check = FAMILIAR_NEW.with(|n| {
+                    let mut n = n.borrow_mut();
+                    let c = n.entry(me).or_insert(0);
+                    *c += 1;
+                    *c % 64 == 0
+                });
+                if check {
+                    self.prune_familiar();
                 }
             }
         }
@@ -1421,33 +1480,60 @@ impl<'a> Ev<'a> {
     /// Seen too far away to make out less than `FAR_RECHECK_MS` ago (its mark is dropped once due).
     fn far_wait(&mut self, id: u32) -> bool {
         let now = self.now;
-        let Some(k) = self.st.seen.iter().position(|s| s.id == FAR_MARK | id) else { return false };
-        if now.saturating_sub(self.st.seen[k].at_ms) < FAR_RECHECK_MS {
+        let Some(at) = self.seen_at(FAR_MARK | id) else { return false };
+        if now.saturating_sub(at) < FAR_RECHECK_MS {
             return true;
         }
-        self.st.seen.remove(k);
+        self.seen_drop(FAR_MARK | id);
         false
+    }
+
+    /// When this character last looked at `key` (its seen set), if lately.
+    fn seen_at(&self, key: u32) -> Option<u64> {
+        let me = self.me.id;
+        SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&key).copied()))
+    }
+
+    fn seen_set(&mut self, key: u32, at: u64) {
+        let me = self.me.id;
+        SEEN.with(|s| {
+            s.borrow_mut().entry(me).or_default().insert(key, at);
+        });
+    }
+
+    fn seen_drop(&mut self, key: u32) {
+        let me = self.me.id;
+        SEEN.with(|s| {
+            if let Some(m) = s.borrow_mut().get_mut(&me) {
+                m.remove(&key);
+            }
+        });
+    }
+
+    /// A figure not to be looked at again for `FAR_RECHECK_MS`: too far away to make out, or
+    /// unplaced by a sleeper (its own mark, since a seen mark stays alive while it is in sight).
+    fn far_mark(&mut self, id: u32) {
+        self.seen_drop(id);
+        let now = self.now;
+        self.seen_set(FAR_MARK | id, now);
     }
 
     /// Recently checked (fast path that avoids familiarity lookups every second).
     fn recently_seen(&mut self, key: u32) -> bool {
         common::diag(|| "seen:check".into(), 1);
         let now = self.now;
-        if let Some(s) = self.st.seen.iter_mut().find(|s| s.id == key) {
-            if now.saturating_sub(s.at_ms) < 90_000 {
-                if now.saturating_sub(s.at_ms) > 45_000 {
-                    s.at_ms = now;
+        if let Some(at) = self.seen_at(key) {
+            if now.saturating_sub(at) < SEEN_MS {
+                if now.saturating_sub(at) > SEEN_MS / 2 {
+                    self.seen_set(key, now);
                 }
                 return true;
             }
-            s.at_ms = now;
+            self.seen_set(key, now);
             return false;
         }
         common::diag(|| "seen:miss".into(), 1);
-        self.st.seen.push(Seen { id: key, at_ms: now });
-        if self.st.seen.len() > 96 {
-            self.st.seen.remove(0);
-        }
+        self.seen_set(key, now);
         false
     }
 
@@ -1539,7 +1625,14 @@ impl<'a> Ev<'a> {
             return;
         }
         let _span = common::span("brain.noticed");
-        self.cues();
+        common::diag(|| "noticed".into(), 1);
+        // The seen set keeps what was looked at within its horizon (and far marks), no more.
+        let (me, now) = (self.me.id, self.now);
+        SEEN.with(|s| {
+            if let Some(m) = s.borrow_mut().get_mut(&me) {
+                m.retain(|_, at| now.saturating_sub(*at) < SEEN_MS + 30_000);
+            }
+        });
         let now = self.now;
         let at = self.at;
         let day = self.w.day_ms.max(1);
@@ -1582,7 +1675,7 @@ impl<'a> Ev<'a> {
                 // Only a first sight that still fits this look's line goes on; the rest are left
                 // for the next look, untouched (neither marked seen nor made familiar).
                 let fits = kin && firsts.len() < FIRST_SIGHTS_PER_LINE;
-                let recent = self.st.seen.iter().any(|s| s.id == c.id && now.saturating_sub(s.at_ms) < 90_000);
+                let recent = self.seen_at(c.id).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
                 if !fits || recent || self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().is_some() {
                     continue;
                 }
@@ -1605,11 +1698,7 @@ impl<'a> Ev<'a> {
                 if due && crate::perception::regard(self.ctx, &self.me, &ch, now).far {
                     // Not "seen": a far figure is looked at again in 5 s (its own mark, since
                     // `recently_seen` keeps a mark alive while someone stays in sight).
-                    self.st.seen.retain(|s| s.id != c.id);
-                    self.st.seen.push(Seen { id: FAR_MARK | c.id, at_ms: now });
-                    if self.st.seen.len() > 96 {
-                        self.st.seen.remove(0);
-                    }
+                    self.far_mark(c.id);
                     continue;
                 }
             }
@@ -1624,11 +1713,7 @@ impl<'a> Ev<'a> {
                 && self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().is_none()
                 && *asleep.get_or_insert_with(|| crate::perceive::asleep(self.ctx, self.me.id))
             {
-                self.st.seen.retain(|s| s.id != c.id);
-                self.st.seen.push(Seen { id: FAR_MARK | c.id, at_ms: now });
-                if self.st.seen.len() > 96 {
-                    self.st.seen.remove(0);
-                }
+                self.far_mark(c.id);
                 continue;
             }
             let prev = self.familiarity(FAM_CREATURE | c.id as u64);
@@ -1712,7 +1797,9 @@ impl<'a> Ev<'a> {
                 String::new()
             };
             let text = format!("You notice a {kind}{wide}{by}, {dist:.0} tiles {}.", direction(at, pos));
-            percept(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 });
+            // Remains are a death seen again, as what it left: their observer is a bystander of it
+            // (woken at most once per `witness_wake_ms`, docs/BATTLE_SCALE.md), told at once.
+            crate::perceive::percept_seen(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 }, false);
         }
     }
 
@@ -1818,7 +1905,14 @@ impl<'a> Ev<'a> {
                 self.set_mark(REFLECT_MARK);
                 self.deliberate("A quiet moment to take stock of how things are going.");
             }
-            self.noticed();
+            // Cues keep their own interval (`cue_check_s`); what is new is looked for at most
+            // once a second per character (fix 2), not at every woken or combat evaluation.
+            self.cues();
+            let (me, now) = (self.me.id, self.now);
+            if NOTICED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
+                NOTICED_AT.with(|n| n.borrow_mut().insert(me, now));
+                self.noticed();
+            }
         }
         if result != St::Run && !self.running.is_some_and(act::held) {
             self.status = match result {
@@ -1845,7 +1939,9 @@ impl<'a> Ev<'a> {
         let mut marks: Vec<Mark> = self.st.marks.iter().filter(|m| m.node < 0xD000 || m.node >= REFLECT_MARK).cloned().collect();
         marks.extend(cur.marks.iter().filter(|m| m.node >= 0xD000 && m.node < REFLECT_MARK).cloned());
         cur.marks = marks;
-        cur.seen = self.st.seen.clone();
+        // The seen marks live in the per-character seen set now (`SEEN`); the row's own list
+        // stays empty, so it is not rewritten at every evaluation.
+        cur.seen = Vec::new();
         cur.alerts = self.st.alerts;
         if self.st.last != self.orig.last && cur.last == self.orig.last {
             cur.last = self.st.last.clone();

@@ -64,6 +64,8 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
+    // Bystanders' wakes held back by `witness_wake_ms` whose window has ended.
+    common::due_bystander_wakes(ctx, now);
     let mut done = HashSet::new();
     for _ in 0..3 {
         let wakes: Vec<u32> = ctx.db.wake().iter().map(|w| w.id).collect();
