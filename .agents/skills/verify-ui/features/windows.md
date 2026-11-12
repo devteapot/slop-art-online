@@ -1,14 +1,14 @@
 # Windows
 
-Floating walnut-and-parchment windows on two anchors (left: a person, the log, later the character; right: the pack), one per anchor, so at most two narrow windows are open at 1600×900. Skills and Settings are wide, in the centre, and close the others. A window moves by its title bar and snaps to the nearer anchor; if another window holds it, they change places. With nothing open, Esc opens Menu and frees the system cursor.
+Floating windows, drawn in the current theme (Glass by default; walnut and parchment is Walnut, one of five: [themes.md](themes.md)), on two anchors (left: a person, the log, later the character; right: the pack), one per anchor, so at most two narrow windows are open at 1600×900. Skills and Settings are wide, in the centre, and close the others. A window moves by its title bar and snaps to the nearer anchor; if another window holds it, they change places. A dragged wide window goes back to the centre. With nothing open, Esc opens Menu and frees the system cursor.
 
 ## Sub-features
 
 - `open-home`: a window opens on its home anchor and replaces what holds it.
 - `open-wide`: Skills and Settings open in the centre and close the others; opening a narrow one closes a wide one.
-- `drag-snap`: a title-bar drag moves the window; letting go snaps it left or right; a held anchor swaps.
+- `drag-snap`: a title-bar drag moves the window; letting go snaps a narrow one left or right (a wide one back to the centre); a held anchor swaps.
 - `close`: ✕, the window's own key (I, L, K), or Esc for the top window.
-- `esc-order`: the list of acts (sub-list first), the Menu list, the words being typed with their window, the top window; then Menu opens and the cursor is freed.
+- `esc-order` (`win.rs`): the recipe grid, the wheel (both close without sending), the list of acts (sub-list first), the Menu list, the words an act is composing, the words being typed with their window, the top window; then Menu opens and the cursor is freed.
 - `menu`: the Menu button and its list (Character, Skills and know-how, Log and people, Settings, Leave the world: asked twice).
 - `compass`: the needle follows the view; the place's name shows only from `my_places`.
 

@@ -62,6 +62,9 @@ pub struct ActorFacts {
     /// Who last hurt the actor, and how long ago (ms; none when never).
     pub hurt_by: u32,
     pub hurt_ago: Option<f32>,
+    /// The one who last hurt the actor is alive and within the `wake_reach` law of it, and the
+    /// fight is still on (struck within the authority's fight window, `act::FIGHT_MS`).
+    pub hurt_by_near: bool,
     /// How long ago the actor yielded (ms; none when it has not).
     pub yielded_ago: Option<f32>,
     /// Creatures the actor senses (in sight, or smelled for a species with a scent) by kind;
@@ -279,7 +282,14 @@ pub struct Regard {
     /// is, and whose community they belong to, cannot be told. A person is then "someone too far
     /// away to make out", known or not (docs/STRANGERS.md, far-label).
     pub far: bool,
+    /// How much of the target's look a mind is told (docs/LOOK.md §3): `Full` for oneself and
+    /// whoever is made out, `Far` for someone too far away to make out (a law's `far`), as a
+    /// law's `look` ("full", "far", "none") says otherwise. The look's key reaches a player's
+    /// client whenever the target is seen, whatever this is.
+    pub look: LookSeen,
 }
+
+pub use crate::look::LookSeen;
 
 impl Regard {
     /// The rule without a `perceived_of` law: names when known (animals know their own kind's),
@@ -287,7 +297,7 @@ impl Regard {
     pub fn default_for(p: &RegardIn) -> Self {
         let name = p.own || p.known || (p.observer_kind != "person" && p.observer_kind == p.target_kind);
         let health = if p.own || p.revealed.iter().any(|r| r == "health") { Precision::Exact } else { Precision::Band };
-        Self { name, health, far: false }
+        Self { name, health, far: false, look: LookSeen::Full }
     }
 }
 
@@ -491,6 +501,12 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// A body struck this many seconds ago cannot fall asleep (the script's `sleep_check`, the
+    /// same for every controller).
+    pub alert_after_hit_s: f32,
+    /// A body cannot fall asleep while the one who last struck it, in a fight still on, is within
+    /// `wake_reach` (the fact `hurt_by_near`).
+    pub alert_while_attacker_near: bool,
     /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
@@ -622,6 +638,8 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            alert_after_hit_s: 15.0,
+            alert_while_attacker_near: true,
             stranger_by_name: false,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -1905,7 +1923,7 @@ impl Scripts {
         let Some(i) = context::ACTOR.iter().position(|f| *f == field) else { return false };
         ["_check", "_duration", "_done"].iter().any(|p| {
             let f = format!("{skill}{p}");
-            self.has(&f) && self.plan(&f).actor & (1 << i) != 0
+            self.has(&f) && self.plan(&f).actor & (1u64 << i) != 0
         })
     }
 
@@ -2229,6 +2247,49 @@ impl Scripts {
             }
         }
         Ok(l)
+    }
+
+    /// The world's look bands (docs/LOOK.md §4): the `look_bands()` law's `youth` and `adult`
+    /// ages in years (shipped `#{ youth: 12.0, adult: 18.0 }`); without the law, or with one that
+    /// fails (an install refuses it: `look_bands_law`), those defaults.
+    pub fn look_bands(&self) -> crate::look::LookBands {
+        self.look_bands_law().unwrap_or_default()
+    }
+
+    /// The `look_bands()` law's thresholds, or what is wrong with them: numbers of years, with
+    /// youth no later than adulthood.
+    pub fn look_bands_law(&self) -> Result<crate::look::LookBands, String> {
+        let d = crate::look::LookBands::default();
+        if !self.has("look_bands") {
+            return Ok(d);
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "look_bands", ()).map_err(|e| format!("look_bands: {e}"))?;
+        let out = out.try_cast::<rhai::Map>().ok_or("look_bands must return a map: #{ youth: 12.0, adult: 18.0 }")?;
+        if let Some(k) = out.keys().find(|k| !["youth", "adult"].contains(&k.as_str())) {
+            return Err(format!("look_bands: unknown key `{k}` (the keys are youth and adult)"));
+        }
+        let get = |k: &str, v: f32| -> Result<f32, String> { out.get(k).map_or(Ok(v), |d| number(d).map(|x| x as f32).ok_or(format!("look_bands: {k} must be a number of years"))) };
+        let b = crate::look::LookBands { youth: get("youth", d.youth)?, adult: get("adult", d.adult)? };
+        if !(b.youth >= 0.0 && b.adult >= b.youth) {
+            return Err(format!("look_bands: youth ({}) and adult ({}) must be ages in years, youth no later than adult", b.youth, b.adult));
+        }
+        Ok(b)
+    }
+
+    /// Whom a mind's scene describes by look (docs/LOOK.md §3): the `appearance_in_scene()` law,
+    /// "unnamed" (shipped and without the law: strangers and far figures), "all" or "none".
+    pub fn appearance_in_scene(&self) -> crate::look::AppearanceInScene {
+        self.appearance_in_scene_law().unwrap_or_default()
+    }
+
+    /// The `appearance_in_scene()` law's value, or what is wrong with it.
+    pub fn appearance_in_scene_law(&self) -> Result<crate::look::AppearanceInScene, String> {
+        if !self.has("appearance_in_scene") {
+            return Ok(Default::default());
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "appearance_in_scene", ()).map_err(|e| format!("appearance_in_scene: {e}"))?;
+        let v = out.into_string().map_err(|_| "appearance_in_scene must return \"unnamed\", \"all\" or \"none\"".to_string())?;
+        crate::look::AppearanceInScene::parse(&v).ok_or_else(|| format!("appearance_in_scene must return \"unnamed\", \"all\" or \"none\", not \"{v}\""))
     }
 
     /// How dark it is at `hour`, in the steps laws see it (`SkillCtx::dark`).
@@ -2614,6 +2675,8 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
+            alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
@@ -3080,8 +3143,16 @@ fn decode_regard(r: Dynamic, p: &RegardIn) -> Result<Regard, String> {
         None => false,
         Some(v) => v.as_bool().map_err(|_| "perceived_of: `far` must be true or false")?,
     };
+    let look = match r.get("look").map(|v| v.clone().into_string()) {
+        None if far && !p.own => LookSeen::Far,
+        None => LookSeen::Full,
+        Some(Ok(l)) if l == "full" => LookSeen::Full,
+        Some(Ok(l)) if l == "far" => LookSeen::Far,
+        Some(Ok(l)) if l == "none" => LookSeen::None,
+        Some(_) => return Err("perceived_of: `look` is \"full\", \"far\" or \"none\"".into()),
+    };
     // Someone too far to make out is never named.
-    Ok(Regard { name: name && !far, health, far })
+    Ok(Regard { name: name && !far, health, far, look })
 }
 
 /// A record's parties: a map of role → character id (or community party).
@@ -3687,12 +3758,12 @@ mod tests {
         let sc = scripts();
         let base = RegardIn { observer_kind: "person".into(), target_kind: "person".into(), ..Default::default() };
         // A stranger: a label, and health only as a band.
-        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band, far: false });
+        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band, far: false, look: LookSeen::Full });
         // Known by name; an appraisal shows exact health while it holds.
-        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band, far: false });
-        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact, far: false });
+        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band, far: false, look: LookSeen::Full });
+        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact, far: false, look: LookSeen::Full });
         // Oneself: everything. Animals know their own kind by name, and not people's.
-        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact, far: false });
+        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact, far: false, look: LookSeen::Full });
         let wolf = RegardIn { observer_kind: "wolf".into(), target_kind: "wolf".into(), ..Default::default() };
         assert!(sc.perceived_of(&wolf).name);
         assert!(!sc.perceived_of(&RegardIn { target_kind: "person".into(), ..wolf }).name);
@@ -3701,12 +3772,41 @@ mod tests {
             assert_eq!(sc.perceived_of(&p), Regard::default_for(&p));
         }
         let blind = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: true, health: \"none\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
-        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None, far: false });
+        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None, far: false, look: LookSeen::Full });
         // A law may say someone is too far away to make out: never named then, known or not.
         let far = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: p.target.known, far: p.dist > 20.0 }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
         let known_at = |dist: u16| RegardIn { known: true, dist, ..base.clone() };
         assert_eq!((far.perceived_of(&known_at(30)).name, far.perceived_of(&known_at(30)).far), (false, true));
         assert_eq!((far.perceived_of(&known_at(10)).name, far.perceived_of(&known_at(10)).far), (true, false));
+        // The look (docs/LOOK.md §3): made out, in full; too far away to make out, the far words;
+        // a law may say otherwise (a foggy world).
+        assert_eq!(far.perceived_of(&known_at(10)).look, LookSeen::Full);
+        assert_eq!(far.perceived_of(&known_at(30)).look, LookSeen::Far);
+        let fog = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ far: p.dist > 20.0, look: if p.dist > 10.0 {{ \"none\" }} else {{ \"full\" }} }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert_eq!(fog.perceived_of(&known_at(15)).look, LookSeen::None);
+        assert_eq!(fog.perceived_of(&known_at(5)).look, LookSeen::Full);
+        let bad = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ look: \"shade\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert!(bad.validate().unwrap_err().contains("`look` is"), "a look the engine does not know is refused at install");
+    }
+
+    #[test]
+    fn look_laws_are_read_and_checked() {
+        let sc = scripts();
+        assert_eq!(sc.look_bands(), crate::look::LookBands { youth: 12.0, adult: 18.0 });
+        assert_eq!(sc.appearance_in_scene(), crate::look::AppearanceInScene::Unnamed);
+        let with = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai").replace("fn look_bands()", "fn look_bands_old()").replace("fn appearance_in_scene()", "fn appearance_in_scene_old()")));
+        let late = with("fn look_bands() { #{ youth: 14.0, adult: 21.0 } }\nfn appearance_in_scene() { \"all\" }").unwrap();
+        assert_eq!(late.look_bands(), crate::look::LookBands { youth: 14.0, adult: 21.0 });
+        assert_eq!(late.appearance_in_scene(), crate::look::AppearanceInScene::All);
+        assert!(late.validate().is_ok());
+        for (bad, says) in [
+            ("fn look_bands() { #{ youth: 20.0, adult: 18.0 } }\nfn appearance_in_scene() { \"none\" }", "youth no later than adult"),
+            ("fn look_bands() { #{ youth: 12.0, adult: 18.0, elder: 60.0 } }\nfn appearance_in_scene() { \"none\" }", "unknown key `elder`"),
+            ("fn look_bands() { #{ youth: 12.0, adult: 18.0 } }\nfn appearance_in_scene() { \"strangers\" }", "not \"strangers\""),
+        ] {
+            let e = with(bad).unwrap().validate().unwrap_err();
+            assert!(e.contains(says), "{e}");
+        }
     }
 
     #[test]

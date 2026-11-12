@@ -275,6 +275,8 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     let Some(mut row) = ctx.db.character().id().find(c.id) else { return };
     row.stage = stage;
     ctx.db.character().id().update(row);
+    // The look follows in the same transaction (a new band at a stage change: docs/LOOK.md §4).
+    crate::look::refresh(ctx, c.id, now, "grew");
     if stage != 0 {
         ctx.db.infant_cry().infant().delete(c.id);
     }
@@ -445,6 +447,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             grew(ctx, &c, stage, now);
         }
     }
+    // Looks whose band changes now by age alone (12 and 18 years): an index range of the due
+    // rows only, after the stage changes above have rewritten theirs.
+    crate::look::due(ctx, now);
 
     // Births.
     let due: Vec<Expecting> = ctx.db.expecting().due_ms().filter(..=now).collect();

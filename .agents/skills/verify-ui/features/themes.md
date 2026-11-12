@@ -1,6 +1,6 @@
 # Themes
 
-The interface's look is a theme (`living/game/src/ui/wood.rs`): Glass (smoked translucent panels with a gradient, light text with a drop under it, smaller windows; the default since play-test 5), Clear (light neutral, flat), Night (dark translucent), Linen (warm flat) and Walnut (design D's walnut, brass and parchment). F4 cycles it and a note names it; Settings › Play › Look sets it; the settings file keeps it. A change rebuilds the UI and keeps the open windows where they were.
+The interface's look is a theme (`living/game/src/ui/wood.rs`): Glass (smoked translucent panels with a gradient, light text with a drop under it, smaller windows; the default since play-test 5), Clear (light neutral, flat), Night (dark translucent), Linen (warm flat) and Walnut (design D's walnut, brass and parchment). F4 cycles it (not while the text box is open) and a note names it; Settings › Play › Look sets it; the settings file keeps it. A change rebuilds the UI and keeps the open windows where they were.
 
 ## Sub-features
 
@@ -9,7 +9,7 @@ The interface's look is a theme (`living/game/src/ui/wood.rs`): Glass (smoked tr
 - `choose`: Settings › Play › Look.
 - `keep`: the settings file's `theme` (`LIVING_GAME_SETTINGS`; a drive's own `settings.json`).
 - `rebuild`: open windows stay open on their anchors through a change.
-- `start`: `LIVING_GAME_THEME=<name>` starts in a theme (captures), over the settings file.
+- `start`: `LIVING_GAME_THEME=<name>` starts in a theme (captures), over the settings file. The log names the theme at start: `ui: theme <Label>` (`ui: theme Glass`).
 
 ## How to get to it (user POV)
 
@@ -20,7 +20,7 @@ The interface's look is a theme (`living/game/src/ui/wood.rs`): Glass (smoked tr
 
 Preconditions: baseline.
 
-- **Default.** `check.py themes` first drives `themes-default` with its settings file deleted: `extra.theme == "glass"` (skipped when `LIVING_GAME_THEME` is set).
+- **Default.** `check.py --run $R themes` first drives `themes-default` with its settings file deleted: `extra.theme == "glass"` (skipped when `LIVING_GAME_THEME` is set).
 - **Cycle.** `key:KeyL:tap;key:KeyI:tap;dump:01;key:F4:tap;dump:02;…` through all five → `extra.theme` advances in `check.py`'s `THEMES` order (`ui::wood::Name::ALL`) in each dump; the log has `ui: Theme: Night  ·  F4 changes it`; `windows` stay `Log` Left and `Pack` Right.
 - **Choose.** `click:@menu;click:@menu:Settings;click:@settings:theme:linen` → `extra.theme == "linen"`; the drive's `settings.json` has `"theme": "linen"`.
 - **Stills per theme.** `LIVING_GAME_THEME=night check.py --run $R windows talk items` → `ui/<scenario>-night/` photographs.

@@ -91,7 +91,10 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            # Whom each player's line said now would reach, per way (earshot); read through my_earshot.
            'character_earshot',
            # How each player's acts and death came out, in codes; read through my_act_outcomes.
-           'act_outcome']
+           'act_outcome',
+           # A person's look and the world's look lines (docs/LOOK.md): a client gets only the
+           # `lk_` key on its seen_characters rows.
+           'look', 'look_line']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
@@ -132,6 +135,8 @@ ADMIN = {
     'stop_genesis': [], 'resume_genesis': [],
     # Change a law on a running world (fov-1, admin only).
     'set_world_law': ['fov_on', 'false'],
+    # Move a live world to its seed's looks (look-1, admin only).
+    'relook': ['probe'],
 }
 
 

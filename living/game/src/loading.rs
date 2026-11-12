@@ -146,12 +146,46 @@ fn status(
 
 /// Spawn the prewarm characters once the island is there, packed round its arrival point (in the
 /// camera's view and its shadow cascades).
-fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<crate::island::Island>>, mut loading: ResMut<Loading>) {
+///
+/// With them, composed people for the looks the first view will show, so no composed material or
+/// mesh layout is first drawn when someone comes into sight: the fewest lines that wear every type
+/// and style file of the keys perceived when the cover is up (connected: `seen_characters`,
+/// waiting up to [`LOOKS_WAIT_S`] for the rows; offline and in look-dev: the book's decor, which
+/// the island's background people wear). Not the whole book: every file a prewarm loads stays
+/// resident for the session (`characters::kept`), and the whole book's (64 people, 101 files)
+/// held 140 MiB more GPU textures and peaked 700 MiB higher (look-1, Cullet).
+/// `LIVING_GAME_PERF=nolooks` leaves them out, to measure the first-sight hitch.
+fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<crate::island::Island>>, mut loading: ResMut<Loading>, net: Option<NonSend<crate::net::Net>>, time: Res<Time>, mut since: Local<Option<f32>>) {
     if loading.prewarm.is_some() || loading.done || !crate::characters::available() {
         return;
     }
     let Some(island) = island else { return };
-    let recipes = crate::characters::Recipe::every_piece();
+    let book = crate::characters::book::book().filter(|_| crate::characters::compose::enabled() && !crate::perf::has("nolooks"));
+    let conn = net.as_ref().and_then(|n| n.conn.as_ref());
+    let keys: Vec<String> = match conn {
+        Some(conn) => {
+            use living_bindings::*;
+            use spacetimedb_sdk::Table;
+            let mut keys: Vec<String> = conn.db.seen_characters().iter().map(|c| c.look).filter(|k| !k.is_empty()).collect();
+            keys.sort();
+            keys.dedup();
+            // The rows come with the subscription; a world without looks has none to wait for.
+            let started = *since.get_or_insert(time.elapsed_secs());
+            let looks_world = !crate::characters::seen::world_generation(conn).is_empty();
+            if book.is_some() && looks_world && keys.is_empty() && time.elapsed_secs() - started < LOOKS_WAIT_S {
+                return;
+            }
+            keys
+        }
+        None => book.map(|b| b.decor.clone()).unwrap_or_default(),
+    };
+    let mut recipes = crate::characters::Recipe::every_piece();
+    let looks: Vec<crate::characters::Recipe> = match book {
+        Some(b) if !keys.is_empty() => b.covering(&keys).iter().filter_map(|k| b.recipe(k).ok()).collect(),
+        _ => Vec::new(),
+    };
+    let n_looks = looks.len();
+    recipes.extend(looks);
     let at = island.start;
     let spawned = recipes
         .iter()
@@ -162,9 +196,12 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
             crate::characters::spawn(&mut commands, &assets, r, Vec3::new(p.x, island.height(p.x, p.y), p.y), a)
         })
         .collect::<Vec<_>>();
-    info!("loading: {} prewarm characters wear every outfit piece", spawned.len());
+    info!("loading: {} prewarm characters wear every outfit piece ({n_looks} composed, every type and style file of the {} looks perceived)", spawned.len(), keys.len());
     loading.prewarm = Some(spawned);
 }
+
+/// How long the prewarm waits for perceived people's looks before it goes without them (s).
+const LOOKS_WAIT_S: f32 = 5.0;
 
 /// Lift the cover once the first view is in and pipelines have gone quiet.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
