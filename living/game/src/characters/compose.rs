@@ -332,7 +332,8 @@ fn wants_face_map(name: &str) -> bool {
 /// as a face, else skin as skin; `…_FACE` and `…_EYE` as face parts, unshaded and in the file's
 /// own colours (lips and blush, `…FaceTint_00_FACE`; lines and freckles,
 /// `…FaceOverlay_00_FACE`); everything else plain. Which are tinted is `recolor`'s, by the same
-/// names: no `…_FACE` material takes a tag.
+/// names (`slot`): the brows (`…FaceBrow_00_FACE`, on a type's file) are the one `…_FACE`
+/// material that takes a tag, the hair's colour.
 fn kind_of(name: &str, face_map: bool) -> Kind {
     let skin = name.ends_with("_SKIN") || name.contains("Skin");
     match () {
@@ -737,6 +738,9 @@ mod tests {
         let colors = Colors { skin: Some("#e8bca3".into()), hair: Some("#332217".into()), beard: Some("#c7c7c2".into()), ..Default::default() };
         assert_eq!(super::super::slot(lines, &colors), None);
         assert_eq!(super::super::slot("M00_000_00_FaceTint_00_FACE", &colors), None);
+        // The brows are a face part coloured by the hair (char-4's brows, `76ec3f5b`).
+        assert!(matches!(kind_of("M00_000_00_FaceBrow_00_FACE", false), Kind::FacePart));
+        assert_eq!(super::super::slot("M00_000_00_FaceBrow_00_FACE", &colors).map(String::as_str), Some("#332217"));
         assert_eq!(super::super::slot("M00_000_00_Overlay_00_HAIR", &colors).map(String::as_str), Some("#c7c7c2"));
         assert_eq!(super::super::slot("M00_000_00_FarOverlay_00_HAIR", &colors).map(String::as_str), Some("#c7c7c2"));
     }
