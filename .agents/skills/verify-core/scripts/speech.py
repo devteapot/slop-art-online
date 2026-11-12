@@ -452,14 +452,25 @@ def channels(s):
     time.sleep(6.5)
     # Silence that tells the truth (`speech_truth`, on by default; docs/COMMUNICATION.md §15):
     # e is seen (by day) but beyond the voice; d is out of sight.
-    seen_far = "A stranger is too far away: they could not have heard you. Call out or go closer."
+    seen_far = "A stranger is too far away: they could not have heard you."
     unseen = "A stranger is out of earshot: they could not have heard you."
     r, got, t = line_by(a, "Can you hear me, e?", e, "say", "silence")
     sil = [x["text"] for x in got[a] if x["kind"] == "silence"]
-    s.expect(f"silence: {'e, seen but beyond the voice, is too far away (call out or go closer)' if not night else 'at night e is not seen: out of earshot'}", sil == [seen_far if not night else unseen], sil, fatal=False)
+    s.expect(f"silence: {'e, seen but beyond the voice, is too far away (the fact, no advice)' if not night else 'at night e is not seen: out of earshot'}", sil == [seen_far if not night else unseen], sil, fatal=False)
     time.sleep(GAP)
     r, got, t = line_by(a, "Can you hear me, d?", d, "say", "silence-unseen")
     s.expect("silence: d, out of sight, is out of earshot (never `No answer`)", [x["text"] for x in got[a] if x["kind"] == "silence"] == [unseen], got[a], fatal=False)
+    time.sleep(GAP)
+    # A line to the room: from d (10 m beyond e, 13 m beyond the player, more beyond the rest),
+    # nobody is near enough, and d is told so; from a (b at 1 m), no such row.
+    r, got, t = line_by(d, "Is anyone out here?", 0, "say", "room-nobody")
+    hearers_d = [w for w in at if w not in (d, deer) and any("anyone out here" in x["text"] for x in got[w])]
+    s.expect("room: a line to the room that nobody receives gives the speaker `Nobody was near enough to hear you.`",
+             r.returncode == 0 and not hearers_d and [(x["subject"], x["text"]) for x in got[d] if x["kind"] == "silence"] == [(0, "Nobody was near enough to hear you.")], (hearers_d, got[d]), fatal=False)
+    time.sleep(GAP)
+    r, got, t = line_by(a, "Good evening, all of you.", 0, "say", "room-heard")
+    s.expect("room: a line to the room that someone receives gives no `silence` row",
+             r.returncode == 0 and any("Good evening, all" in x["text"] for x in got[b]) and not [x for x in got[a] if x["kind"] == "silence"], got[a], fatal=False)
     time.sleep(GAP)
     # A player who speaks to someone out of earshot gets the same words, and an act outcome
     # (code `reach`) its client can draw a note from.
@@ -486,6 +497,9 @@ def channels(s):
     # The law off: speech-2's words, and the queued line said into the air.
     s.call("set_world_law", "speech_truth", "false")
     try:
+        r, got, t = line_by(d, "Anyone at all? (law off)", 0, "say", "room-off")
+        s.expect("law off: a room line nobody receives gives no row", not [x for x in got[d] if x["kind"] == "silence"], got[d], fatal=False)
+        time.sleep(GAP)
         r, got, t = line_by(a, "Can you hear me, d? (law off)", d, "say", "silence-off")
         s.expect("law off: d out of sight gives speech-2's `No answer`", [x["text"] for x in got[a] if x["kind"] == "silence"] == ["No answer from a stranger; they don't seem to be within earshot."], got[a], fatal=False)
         time.sleep(GAP)

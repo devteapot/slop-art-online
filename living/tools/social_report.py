@@ -25,8 +25,8 @@ from journal_io import restore  # noqa: E402
 
 # The speaker's `silence` row: the one a line was said to could not have heard it. Its words since
 # `speech_truth` ("Bram is too far away: they could not have heard you.", "… is out of earshot: …",
-# a planned line not said), speech-2's ("… is too far to hear you; …") and the first ("No answer from …").
-UNHEARD = re.compile(r"^No answer from|could not have heard you|is too far to hear you")
+# a planned line not said, and "Nobody was near enough to hear you." for a line to the room), speech-2's ("… is too far to hear you; …") and the first ("No answer from …").
+UNHEARD = re.compile(r"^No answer from|could not have heard you|^Nobody was near enough to hear you|is too far to hear you")
 
 OUT = Path(__file__).resolve().parents[2] / ".local/living/trials"
 ASK = {

@@ -41,7 +41,8 @@ pub fn heard(e: &Experience) -> Option<(u32, u32)> {
     (e.kind == "speech").then_some((e.subject, e.object))
 }
 
-/// A `silence` row ("… could not have heard you."): the one addressed, who did not hear me.
+/// A `silence` row ("… could not have heard you."): the one addressed, who did not hear me (0: a
+/// line to the room no one heard, "Nobody was near enough to hear you.").
 pub fn unheard(e: &Experience) -> Option<u32> {
     (e.kind == "silence").then_some(e.subject)
 }

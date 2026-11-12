@@ -13,6 +13,13 @@ Branch `speech-truth` (origin/main `a221a78e` merged). Trial service `slop-trial
   - `set_world_law speech_truth false`: speech-2's "No answer" and the queued line said into the air.
 - **`speech.py ways`** (`core-struth-ways`): passes.
 
+- **Coordinator's changes** (same branch, origin/main merged):
+  - the outcome states only the fact ("A stranger is too far away: they could not have heard you.", no "Call out or go closer.");
+  - a room line no one receives gives "Nobody was near enough to hear you." (subject 0).
+- Results:
+  - `regress` (`core-struth2-regress`) against `core-struth-base`: the same single intended difference over 75 rows;
+  - `channels` (`core-struth2-channels`) and `ways` (`core-struth2-ways`): every check passes. New: the room line from d with no person within 9 m gives the row; a's room line, heard by b, gives none; with the law off, d's room line gives no row.
+
 ## 2026-11-12 goods-3: building as recipes, tools on recipes, the carry count, the goods audit (laptop host)
 
 Branch `goods-3`, own container `goods3-stdb` (2.14.1, port 3333), `scoped`, no minds, private `CARGO_TARGET_DIR` under `.local/goods3/`.

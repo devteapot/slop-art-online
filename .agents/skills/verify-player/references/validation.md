@@ -4,6 +4,10 @@
 
 `speak.py` (`player-struth-speak`, trial service): 16 of 16. New: a `human_say` to the resident 30 m away is said. The player's `my_experience` then holds one `silence` row ending "they could not have heard you." (not "No answer"), and `my_act_outcomes` holds its row: kind `act`, code `reach`, not ok, `why` the same words, `other` the resident.
 
+- Rerun after the coordinator's changes, `player-struth2-speak`: 18 of 18. The addressed line out of earshot reads the fact alone. New:
+  - a room line from a spot with no one within the 9 m voice gives one `silence` row (subject 0) "Nobody was near enough to hear you." and its `my_act_outcomes` row (act, reach, not ok, other 0);
+  - with the resident placed beside the player, a room line gives no row, and `my_heard` lists the resident.
+
 ## 2026-11-11 speech with the `speech_audience` law off (exp-greet, Spark)
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (port 3320). `player-1111-152137`, the speech part of `player-character.md`, passed. An addressed and an unaddressed `human_say` gave the same chronicle lines and listener experiences as before ("A stranger said to you: …", salience 0.9; the unaddressed line was also 0.9, because the listener was the only one close by). No `audience` row was written. `set_paused` and `install_script` were refused to the player ("admin only"), and the player's SQL on `audience` was refused (a private table). The other recipes were not rerun.

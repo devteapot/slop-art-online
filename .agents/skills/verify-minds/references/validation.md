@@ -18,6 +18,8 @@ Branch `speech-truth` with origin/main merged. Trial service `slop-trials-stdb` 
 - `privacy.py --way say` (`minds-struth-privacy-say`): pass, no violations, 0 Neo4j nodes left.
 - Maintain pass: no `maintain-verification-skill` subagents were run. The map was updated by hand for this change: `conversations.md` (`queued`, `speech_truth`) and the case list in SKILL.md. No table, reducer, view or subscription changed.
 
+- Rerun after the coordinator's changes (fact-only outcome text, room lines), `minds-struth11-queued`: pass. Law off: reply at 3.68 s, queued line at 6.44 s (gap 2.76 s). Law on: the reply alone (4.02 s), no `silence` row. Mind unit tests 100 pass.
+
 ## 2026-11-12 fix-dealings: `dealings` passes again on main (dev-box)
 
 Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 4–72 from other work.

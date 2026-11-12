@@ -777,17 +777,19 @@ The general coordinator's decisions: tell the speaker the truth, and never hold 
 
 `laws().speech_truth` in `living/scripts/skills.rhai` (`Laws::speech_truth`), settable with `set_world_law speech_truth false` or a seed's `rules`. It is **on by default** because it replaces a false "No answer", which reads as a refusal for a line that was never heard. Off, `speech-2`'s words and behaviour come back exactly.
 
-**One rule for a line no one addressed could hear.** When the addressee (`to` ≠ 0) is not among those who received the words, the speaker's `silence` row (0.35) says so. "Those who received the words" is the same `hearers` list the line's `audience` row lists, which is what `LIVING_GREET=nearest` reads. The words:
+**One rule for a line no one could hear.** The speaker's `silence` row (0.35) says so in two cases: when the addressee (`to` ≠ 0) is not among those who received the words, and when a line to the room (`to` = 0) reached no person at all. "Those who received the words" is the same `hearers` list the line's `audience` row lists, which is what `LIVING_GREET=nearest` reads. Animals that hear a voice do not count. The row states the fact and gives no advice. The world text already gives each way's reach, and what to do about it is the mind's choice or the player's; advice in feedback would steer it (the general coordinator, 2026-11-12). The words:
 
 | Case | `speech_truth` on | Off (`speech-2`) |
 | --- | --- | --- |
-| The speaker sees them (the sight rule) | "Bram is too far away: they could not have heard you. Call out or go closer." | "Bram is too far to hear you; call out or go closer." |
-| The way used already carries farthest | "… could not have heard you. Go closer." | "…; go closer." |
+| The speaker sees them (the sight rule) | "Bram is too far away: they could not have heard you." | "Bram is too far to hear you; call out or go closer." (or "…; go closer.") |
 | Not seen: out of sight, absent or dead alike | "Bram is out of earshot: they could not have heard you." | "No answer from Bram; they don't seem to be within earshot." |
+| A line to the room that no one received (subject 0) | "Nobody was near enough to hear you." | nothing |
 
-- The remedy is still the farthest-carrying public way that needs no technique, by its label.
+- A first version on this branch added "Call out or go closer." or "Go closer." to the seen case. The general coordinator had it dropped.
 - Absent, dead and out of sight read alike, so ids cannot be probed.
-- **A player** who speaks to someone out of earshot gets the same row in `my_experience`. They also get an `act_outcome` row keyed by it (`my_act_outcomes`): kind `act`, code `reach`, `ok` false, `skill` the way, `what` "say to Bram", `why` the same words, `other` the addressee. A client can draw its note from the code, not the English.
+- **A player** who speaks to someone out of earshot, or to an empty room, gets the same row in `my_experience`. They also get an `act_outcome` row keyed by it (`my_act_outcomes`): kind `act`, code `reach`, `ok` false, `skill` the way, `what` "say to Bram" (or "say" for the room), `why` the same words, `other` the addressee (0 for the room). A client can draw its note from the code, not the English.
+- **The game client** already reads a `silence` row by its kind. With subject 0 it marks the player's own room line at that moment as unheard and shows the words as a toast (`heard.rs` `unheard`, `ui/people.rs`, `talk.rs`). Its own room note after a wait ("No one in earshot heard you. …") is unchanged.
+- **A newcomer talking to an empty yard** is the strangers trial's situation, so the room case had to be in before stage 2.
 - **The minds.** The `silence` row's words reach every prompt as before. The rethink judge's `spoke_to_without_answer` now reads "… — 2 lines to them since just now; they could not have heard you: out of earshot" when every line was unheard. When only some were, it reads "…, no answer; 1 of them could not have reached them (out of earshot)". Before, it was "…, no answer (they seemed out of earshot)". A `silence` still closes that conversation (`talk.rs` `on_speech`).
 
 **A plan's queued line overtaken by a reply** (`brain.rs` `line_overtaken`). A mind plan's `say` node to someone is dropped when it comes due if the conversation has moved past it. That is, since the plan was installed (or the node last spoke):
@@ -804,7 +806,9 @@ Details:
 
 **A queued line whose addressee is beyond reach when it comes due.** The root: a graph's `say` node runs whenever its plan reaches it, wherever the body has walked by then (after a `goto`, or after a `wait` while the addressee moved). Before, the line was said, nobody heard it, and the speaker was told only "No answer". Now, with the law on, a graph's `say` to someone who would not receive its words (`speech::within_reach`, the rule `speak` gives the words by) is not said. The speaker gets a `silence` row with the same words, and the line it kept:
 
-> A stranger is too far away: they could not have heard you. Call out or go closer. You did not say your planned line: “Queued words for e.”.
+> A stranger is too far away: they could not have heard you. You did not say your planned line: “Queued words for e.”.
+
+A planned line whose addressee has left is like any planned act whose target is gone: it does not happen, and the mind is told. Direct lines are always said (the general coordinator, 2026-11-12).
 
 - The node counts as done, so the plan goes on.
 - A way with a reach of its own (a whisper) still refuses in its check's words ("too far to whisper: step closer").
@@ -830,4 +834,4 @@ There is no schema change: no table, column, reducer, view or subscription was a
 
 ### Tools
 
-`inspector.py`, `social_report.py`, `feel_excerpts.py` and `arrive_spread.py` found unheard lines by the "No answer from" (or "earshot") text. They now match all three wordings (`UNHEARD`: "No answer from", "could not have heard you", "is too far to hear you"). `arrive_spread.py`, which counts every `silence` row to the newcomer as a line said out of earshot, leaves out a planned line that was not said ("You did not say your planned line"): it has no chronicle line and is no line said. `life_feel.py` counts by the `silence` kind and needed no change. exp-arrive's `arrive_report.py`, on its own branch, is not changed here.
+`inspector.py`, `social_report.py`, `feel_excerpts.py` and `arrive_spread.py` found unheard lines by the "No answer from" (or "earshot") text. They now match every wording (`UNHEARD`: "No answer from", "could not have heard you", "Nobody was near enough to hear you", "is too far to hear you"). `arrive_spread.py` counts every `silence` row to the newcomer as a line said out of earshot. It reads only rows whose subject is the newcomer, so room lines are not counted. It also leaves out a planned line that was not said ("You did not say your planned line"): that has no chronicle line and is no line said. `life_feel.py` counts by the `silence` kind and needed no change. exp-arrive's `arrive_report.py`, on its own branch, is not changed here.
