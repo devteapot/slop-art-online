@@ -13,6 +13,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     if ctx.sender() != ctx.database_identity() {
         return Err("tick is scheduled only".into());
     }
+    // The outgoing module's last call after an update: no table is touched (common::schema_moved).
+    if common::schema_moved("tick") {
+        return Ok(());
+    }
     let w = common::world(ctx);
     if w.paused {
         return Ok(());
@@ -361,6 +365,9 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
 pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     if ctx.sender() != ctx.database_identity() {
         return Err("housekeeping is scheduled only".into());
+    }
+    if common::schema_moved("housekeeping") {
+        return Ok(());
     }
     let w = common::world(ctx);
     if w.paused {

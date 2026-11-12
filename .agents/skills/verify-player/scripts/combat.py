@@ -180,6 +180,41 @@ def free_spots(st, near, dx, dy, skip=(), room=0.0):
     return sorted(out, key=lambda c: math.dist(c, want))
 
 
+
+def open_ground(st, cid, east=16.0, south=4.0, search=40):
+    """Stand the player where it has its own ground for a scene's moves: a tile from which
+    `east` metres east and `south` metres south (a run east, a dodge south) are walkable with
+    0.3 m to spare either side and no body on them, nearest where it stands now. The scenes that
+    run or dash measure breath and distance, and a run that meets a wall stops draining: they
+    must not depend on where the earlier scenes left the player. Returns where it stands."""
+    p = body(st, cid)
+    t = tiles(st, (p[0] - search, p[0] + search + east), (p[1] - search, p[1] + search + south))
+    walk = lambda x, y: t.get((math.floor(x), math.floor(y)), 4) not in WALK_BLOCKED
+    taken = {(math.floor(r["x"]), math.floor(r["y"])) for r in sql(st, "SELECT id, x, y FROM body") if r["id"] != cid}
+    def clear(x, y, dx, dy, m):
+        for k in range(0, int(m * 4) + 1):
+            for side in (-0.3, 0.0, 0.3):
+                qx, qy = x + dx * k / 4 + dy * side, y + dy * k / 4 + dx * side
+                if not walk(qx, qy) or (math.floor(qx), math.floor(qy)) in taken:
+                    return False
+        return True
+    spots = sorted(((tx + .5, ty + .5) for ty in range(math.floor(p[1] - search), math.floor(p[1] + search)) for tx in range(math.floor(p[0] - search), math.floor(p[0] + search))), key=lambda c: math.dist(c, p))
+    for c in spots:
+        if clear(c[0], c[1], 1.0, 0.0, east) and clear(c[0], c[1], 0.0, 1.0, south):
+            call(st, "place_at", [cid, c[0], c[1]], "admin")
+            time.sleep(0.5)
+            return body(st, cid)
+    raise RuntimeError(f"no open ground within {search} m of {p}")
+
+
+def at_rest(v):
+    """The breath the row held when its refill began (a needs settle may re-anchor the row once
+    breath is coming back, so `stamina` alone can already include some of the refill)."""
+    if v["stamina_rate"] > 0 and v["stamina_from_ms"] < v["at_ms"]:
+        return v["stamina"] - v["stamina_rate"] * (v["at_ms"] - v["stamina_from_ms"]) / 1000
+    return v["stamina"]
+
+
 OPAQUE = {4, 7}  # rock, wall (living_rules::map::Terrain): a building where it is solid at eye height; a drop (8) and a low or open thing (9: a cart, an open stall, a well, a building's overhang) are see-through
 
 
@@ -707,7 +742,8 @@ def scene_jump(st):
     p = body(st, cid)
     a = attacker(st, cid, p, 1.1, room=2.0)  # the hop (1.6 m) lands on open ground
     strike = code_of(st, "strike")
-    t = time.time() + 3
+    # The attacker's graph starts its strike at its next evaluation: give it 6 s on a loaded server.
+    t = time.time() + 6
     started = False
     while time.time() < t:
         f = sql(st, f"SELECT act, release_ms FROM fighter WHERE id = {a}")
@@ -738,6 +774,17 @@ def full_breath(st, secs=12.0):
     return False
 
 
+def dodge_then_guard(st, p):
+    """A dodge 3 m south, and a guard pressed while it is under way (the dash takes a third of a
+    second at 9 m/s). The guard is sent 80 ms after the dodge, not after the dodge's own reply,
+    which on a loaded server can come after the dash is over."""
+    import threading
+    guard = threading.Timer(0.08, lambda: call(st, "use_skill", ["block", 0, p[0] + 1.0, p[1]]))
+    guard.start()
+    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+    guard.join()
+
+
 def scene_committed(st):
     """A committed move runs its course for a player as for a graph (committed-moves, the
     `committed` trait of `<skill>_combat()`): a guard pressed in the middle of a dodge is refused
@@ -754,11 +801,10 @@ def scene_committed(st):
         time.sleep(1.5)
     full_breath(st)
     cid = me(st)
-    p = body(st, cid)
+    p = open_ground(st, cid)
     ready(st, "dodge")
     ready(st, "block")
-    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
-    call(st, "use_skill", ["block", 0, p[0] + 1.0, p[1]])
+    dodge_then_guard(st, p)
     time.sleep(1.0)
     p2 = body(st, cid)
     moved = p2 and math.dist(p, p2)
@@ -825,14 +871,11 @@ def scene_committed(st):
     try:
         code_, body_ = call(st, "install_script", [inst.compose_laws(shipped, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }")], "admin")
         time.sleep(1.0)
-        call(st, "place_at", [cid, p[0], p[1]], "admin")
-        time.sleep(0.3)
-        p = body(st, cid)
+        p = open_ground(st, cid)
         ready(st, "dodge")
         ready(st, "block")
         full_breath(st)
-        call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
-        call(st, "use_skill", ["block", 0, p[0] + 1.0, p[1]])
+        dodge_then_guard(st, p)
         time.sleep(1.0)
         call(st, "release_skill", ["block"])
         p2 = body(st, cid)
@@ -863,7 +906,7 @@ def scene_breath(st):
     with no time to get it back is refused "out of breath" (`my_combat` REFUSED, the use's
     outcome). Everything is read through the player's own `my_vitals` view."""
     cid = me(st)
-    home = body(st, cid)
+    home = open_ground(st, cid)
     time.sleep(2.5)
     v0 = my_vitals(st)
     check(st, "my_vitals carries breath and focus, rested and full", v0 and v0["stamina_max"] > 0 and abs(breath_of(v0, int(time.time() * 1000)) - v0["stamina_max"]) < 1.0 and v0["focus_max"] > 0, v0)
@@ -900,7 +943,7 @@ def scene_breath(st):
     call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
     wait_outcome(st, "dodge", 3)
     vd = my_vitals(st)
-    check(st, "a dodge takes 20 breath", abs(full - vd["stamina"] - 20.0) < 0.6, {"before": full, "row": vd})
+    check(st, "a dodge takes 20 breath", abs(full - at_rest(vd) - 20.0) < 0.6, {"before": full, "row": vd})
     time.sleep(1.5)
     p = body(st, cid)
     before = breath_of(my_vitals(st), int(time.time() * 1000))
@@ -908,7 +951,7 @@ def scene_breath(st):
     call(st, "use_skill", ["jump", 0, p[0] + 2.0, p[1]])
     wait_outcome(st, "jump", 3)
     vj = my_vitals(st)
-    check(st, "a jump takes 10 breath", abs(before - vj["stamina"] - 10.0) < 0.6, {"before": before, "row": vj})
+    check(st, "a jump takes 10 breath", abs(before - at_rest(vj) - 10.0) < 0.6, {"before": before, "row": vj})
     # Dodging on with no pause to get it back (cooldown 0.9 s, the refill starts 1 s after):
     # the sixth or so is refused.
     trail = []
