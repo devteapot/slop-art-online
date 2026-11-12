@@ -455,7 +455,7 @@ def arm_w(x):
     return blend(("J_Bip_L_Shoulder", sh), ("J_Bip_L_UpperArm", (1 - sh) * (1 - lower)), ("J_Bip_L_LowerArm", lower * (1 - hand)), ("J_Bip_L_Hand", lower * hand))
 
 
-def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None):
+def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None, neck_d=None):
     """The left half of a torso-and-arms garment at offset d from the body.
 
     zs: ring heights from the hem up to the armpit ring (exclusive of it); hem / cuff / collar
@@ -523,12 +523,17 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
             part.f(q, ((k / NT, r), ((k + 1) / NT, r), ((k + 1) / NT, r + 1), (k / NT, r + 1)), tag_fn("torso", k, r))
     # Yoke: from the yoke line up to the neck base.
     def neck_point(k, dz=0.0, dr=0.0):
+        # The neck hole lies NECK_EASE off the neck itself (it was 6.6 cm from the axis whatever
+        # the neck: round a neck 3.2 cm in radius that is a collar twice the neck's width).
+        # `neck_d`: the garment's distance off the body at its neck hole, where a thick coat or
+        # a loose smock closes in on the neck.
+        base = NECK_R + NECK_EASE + (d if neck_d is None else neck_d)
         phi = 2 * PI * k / NT
         if front and k == 1:
-            phi = math.asin(min(front(1.5) / (0.066 + d + dr), 1.0))
+            phi = math.asin(min(front(1.5) / (base + dr), 1.0))
         s, c = math.sin(phi), math.cos(phi)
         z = 1.488 + 0.016 * smooth(k / 5.0) + dz
-        return Vector((-(0.066 + d + dr) * s, -0.018 + (0.072 + d + dr) * c, z))
+        return Vector((-(base + dr) * s, cage_head.NECK_Y - 0.002 + (base * 1.08 + dr) * c, z))
 
     prev = rowT
     for step in (1, 2, 3):
@@ -1213,18 +1218,25 @@ def far_beard(arm, m, look):
     return raw_object("Overlay", world, [tuple(index[i] for i in f) for f in faces], [{"J_Bip_C_Head": 1.0}] * len(used), [(0.86, 0.86, 0.86)] * len(used), MAT["far_overlay"], arm)
 
 
+NECK_R = 0.0316  # the neck's radius (head_form.neck_radius), set for the person in configure
+NECK_EASE = 0.004  # how far off the neck a garment's neck hole lies, before the garment's own distance off the body
+
+
 def make_neck(arm):
     part = Part("Neck")
+    # A column of the neck's own radius (head_form.neck_radius), a little wider at its foot.
+    n, y = NECK_R, cage_head.NECK_Y
     stations = [
-        (1.440, -0.024, 0.060, blend(("J_Bip_C_UpperChest", 0.7), ("J_Bip_C_Neck", 0.3))),
-        (1.490, -0.022, 0.054, {"J_Bip_C_Neck": 1.0}),
-        (1.540, -0.019, 0.051, blend(("J_Bip_C_Neck", 0.75), ("J_Bip_C_Head", 0.25))),
-        (1.590, -0.016, 0.050, blend(("J_Bip_C_Neck", 0.2), ("J_Bip_C_Head", 0.8))),
-        (1.630, -0.012, 0.046, {"J_Bip_C_Head": 1.0}),
+        (1.440, y - 0.006, n * 1.14, blend(("J_Bip_C_UpperChest", 0.7), ("J_Bip_C_Neck", 0.3))),
+        (1.490, y - 0.003, n * 1.02, {"J_Bip_C_Neck": 1.0}),
+        (cage_head.NECK_RING_Z, y, n, blend(("J_Bip_C_Neck", 0.85), ("J_Bip_C_Head", 0.15))),
+        (1.540, y + 0.001, n * 0.95, blend(("J_Bip_C_Neck", 0.75), ("J_Bip_C_Head", 0.25))),
+        (1.590, y + 0.004, n * 0.93, blend(("J_Bip_C_Neck", 0.2), ("J_Bip_C_Head", 0.8))),
+        (1.630, y + 0.008, n * 0.86, {"J_Bip_C_Head": 1.0}),
     ]
     if TYPED:
         # A typed head brings the neck's top with it: the tube ends where the head's ring begins.
-        stations = stations[:2]
+        stations = stations[:3]
     prev = None
     for i, (z, cy, r, w) in enumerate(stations):
         cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), r, r * 1.04, 10, w)
@@ -1378,11 +1390,13 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     # behind the body's, by height, plus 4 mm). A person's own hair is combed over what they wear;
     # a shared style's figure wears a smock, or a coat for the style's `.collar` file.
     wears = spec["coat"]  # a shared style's figure wears a smock, or a coat for its `.collar` file
-    collar = dict(coat=0.090, smock=0.068).get(wears, 0.064)
-    cone = dict(coat=((1.47, 1.50, 1.54, 1.570), (0.104, 0.106, 0.118, 0.124)), smock=((1.47, 1.50, 1.530), (0.094, 0.096, 0.096))).get(wears, ((1.47, 1.50, 1.565), (0.081, 0.081, 0.079)))
-    back = ((0.95, 1.10, 1.20, 1.30, 1.35, 1.40, 1.44, 1.47, 1.50, 1.53), (0.123, 0.110, 0.110, 0.120, 0.125, 0.126, 0.119, 0.115, 0.103, 0.085))
+    # Measured again after the neck was made the reference's width (2026-11-12): the collars
+    # stand 5 to 8 cm from the neck's axis where they stood 8 to 12, and end below the chin.
+    collar = dict(coat=0.076, smock=0.064).get(wears, 0.056)
+    cone = dict(coat=((1.47, 1.50, 1.53, 1.550), (0.082, 0.076, 0.077, 0.079)), smock=((1.47, 1.50, 1.528), (0.076, 0.066, 0.064))).get(wears, ((1.47, 1.50, 1.530), (0.068, 0.060, 0.056)))
+    back = ((0.95, 1.10, 1.20, 1.30, 1.35, 1.40, 1.44, 1.47, 1.50, 1.53), (0.123, 0.110, 0.110, 0.120, 0.125, 0.126, 0.119, 0.115, 0.062, 0.052))
     thick = dict(coat=0.015, smock=0.014).get(wears, 0.0)
-    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(-0.018 - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
+    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(cage_head.NECK_Y - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
                 half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE,
                 collar=(np.array([hd(z) for z in cone[0]]), np.array(cone[1]) / HEAD_SCALE), back=(np.array([hd(z) for z in back[0]]), (np.array(back[1]) + thick) * GIRTH / HEAD_SCALE))
     h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body, detail=0.4 if FAR else 1.0)
@@ -1872,6 +1886,14 @@ def configure(spec):
         HAIR=look["hair"], HAIR_TIP=look["hair_tip"], RECEDE=spec["recede"], BALD=spec["bald"], LIMB_K=spec["limb"], GIRTH=spec["girth"], BELLY=spec["belly"], CHEST=spec["chest"], LONG=spec["hair_length"],
         TORSO=WOMAN_TORSO if spec["woman_torso"] else MAN_TORSO,
     )
+    # The neck's radius: the type's own, so the head's ring and the neck's tube meet. An outfit
+    # piece is built for a man's or a woman's neck, whatever head its figure stands under.
+    if spec.get("piece"):
+        g["NECK_R"] = head_form.neck_radius(0.0 if spec["woman_torso"] else 1.0)
+    elif typed:
+        g["NECK_R"] = cage_head.neck_radius_of(face_types.load()["types"][spec["type"]])
+    else:
+        g["NECK_R"] = head_form.neck_radius(spec["masc"], spec["child"])
     # The chin stays where the neck expects it, whatever the face's length.
     g["HEAD"] = Vector((0, -0.004, 1.535 - HF.chin_z * HEAD_SCALE))
 
@@ -1909,7 +1931,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
         p = upper_garment(
             Part("Jersey"), 0.008, [0.975, 1.01, 1.08, 1.16, 1.24, 1.32],
             hem=[(-0.030, 0.003), (-0.034, -0.006)], cuff=(-0.700, [(-0.012, 0.003), (-0.026, 0.003), (-0.028, -0.004)]),
-            collar=[(0.022, -0.004, blend(("J_Bip_C_Neck", 0.8), ("J_Bip_C_UpperChest", 0.2))), (0.050, -0.002, neck), (0.058, -0.006, neck), (0.050, -0.012, neck)], tag_fn=jtag,
+            collar=[(0.011, -0.002, blend(("J_Bip_C_Neck", 0.8), ("J_Bip_C_UpperChest", 0.2))), (0.022, -0.002, neck), (0.026, -0.005, neck), (0.020, -0.009, neck)], tag_fn=jtag,
         ).mirrored()
         obs.append(build(p, arm, MAT["cloth"], jersey_colour(spec["jersey"])))
         chest = blend(("J_Bip_C_UpperChest", 0.75), ("J_Bip_C_Neck", 0.25))
@@ -1927,8 +1949,8 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
 
             p = upper_garment(
                 Part("Coat"), 0.024, [0.70, 0.79, 0.88, 0.97, 1.06, 1.15, 1.24, 1.32],
-                hem=[], cuff=(-0.640, [(-0.030, 0.006)]), collar=[(0.028, 0.012, chest), (0.060, 0.026, chest)],
-                front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag,
+                hem=[], cuff=(-0.640, [(-0.030, 0.006)]), collar=[(0.020, 0.004, chest), (0.042, 0.009, chest)],
+                front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag, neck_d=0.019,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"]), solid=0.006))
             if not FAR:
@@ -1953,15 +1975,15 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
 
             p = upper_garment(
                 Part("Smock"), 0.018, zs, hem=[(-0.004, -0.008)], cuff=(-0.655, [(-0.022, 0.004), (-0.024, -0.004)]),
-                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0,
+                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, neck_d=0.014,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
             # The bands round the sleeves, in another cloth: over the smock's own sleeve, a hair's
             # width out. Its own part, so a shared smock's bands are a piece with its own colour.
-            p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag).mirrored()
+            p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag, neck_d=0.0148).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
             if apron:
-                p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag).mirrored()
+                p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag, neck_d=0.0158).mirrored()
                 obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
         # Trousers, tucked into the boots.
         p = trousers(Part("Trousers"), 0.012).mirrored()
@@ -2269,7 +2291,7 @@ def secondary(nodes, springs):
     k = 0.010 - HIT  # these were sized for a joint radius of 10 mm, and reach as far with the smaller one
     colliders = [
         {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.074 * HEAD_SCALE + k), sphere("J_Bip_C_Head", hc + Vector((0, 0.014, -0.070)) * HEAD_SCALE, 0.046 * HEAD_SCALE + k)]},
-        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.040 + k)]},
+        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, cage_head.NECK_Y, 1.50), NECK_R + 0.004 + k)]},
         {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH + k), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055 + k),
                                                              sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055 + k)]},
     ]
@@ -2390,6 +2412,7 @@ def main():
         # A shared style is coloured by the client, through the mesh tag: its own shades are
         # neutral, a little darker at the root than the tip, with no grey of its own.
         spec["look"].update(hair=(0.86, 0.86, 0.86), hair_tip=(1.0, 1.0, 1.0), hair_natural=(0.86, 0.86, 0.86), hair_natural_tip=(1.0, 1.0, 1.0), hair_grey=0.0)
+    spec["piece"] = a.parts == "keep"  # an outfit piece's file: its neck hole is a man's or a woman's
     configure(spec)
     out = os.path.abspath(a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)

@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261112-4c89b344-a6a3c4",
+ "published": "2026-11-12T11:57:58+01:00",
+ "imported": "2026-11-12T11:57:58+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Cullet's cast built again whole with the neck at the reference's width, collars close round it, and no wait in the shadow map: no collar shows through a neck, and no lit patch is left on a lower face.",
+ "source": {
+  "commit": "4c89b3449fa662940f0297609e148089644bd933",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "3975d0069ac5944822417956a52f50245dfe311070c5cd07620a01421cbfdd66",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close, on a frame of the idle clip, eyes held open by the photo tool; faces-before-after: twelve of them from the version before above this one; neck-named: the four faces named on the last sheet (grey patches at the neck, a lit patch on the lower face) before and after; game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261112-4c89b344-a6a3c4",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "3e8e3522a545d1ad360d6c976df746c66503e81b7a02480ba1d1f3eb5334ca6e",
+   "shots": [
+    "faces",
+    "faces-24",
+    "faces-before-after",
+    "game",
+    "lineup",
+    "neck-named"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/index.html",
+   "from": ".local/town14/index.html"
+  }
+ ]
+}
