@@ -149,6 +149,9 @@ PART_GAIN = 1.3
 # pigment to read as that on screen.
 FRECKLE_OVERLAY = (5.0, 0.92, 1.5)
 LINE_OVERLAY = (3.6, 0.90, 1.25)
+# The seed of the iris every face type shares (person_params.SHARED_IRIS): its streaks are one
+# drawing for everyone.
+SHARED_IRIS_SEED = 7
 LIP_PIGMENT = (0.56, 0.16, 0.17)
 BLUSH_PIGMENT = (0.70, 0.26, 0.22)
 
@@ -375,6 +378,11 @@ def paint_iris(hf, look, rng):
     return img + (np.clip(body, 0, 1) - img) * disc
 
 
+def shared_iris(colour, hf=None):
+    """The iris every face type shares: `paint_iris` in `colour` (person_params.SHARED_IRIS)."""
+    return paint_iris(hf, dict(iris=tuple(colour), light_side=1.0), np.random.default_rng(SHARED_IRIS_SEED))
+
+
 def paint(hf, look, layer=None):
     """The face's atlas. With `layer` (a dict to fill), lips and blush are left out of the skin
     and come back as their own layer (see `paint_skin`)."""
@@ -387,6 +395,10 @@ def paint(hf, look, layer=None):
         c0 = 0 if side < 0 else EYE_COLS
         out[:EYE_ROWS, c0 : c0 + EYE_COLS] = paint_white(hf, look, side)
     out[:EYE_ROWS, IRIS_COL0 : IRIS_COL0 + IRIS_PX] = paint_iris(hf, look, rng)
+    if look.get("iris_shared"):
+        # A face type's iris: the one picture every type shares, in the colour given. Painted
+        # after the type's own, so the rest of the face's paint draws the numbers it always drew.
+        out[:EYE_ROWS, IRIS_COL0 : IRIS_COL0 + IRIS_PX] = shared_iris(look["iris_shared"], hf)
     return (np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8)
 
 

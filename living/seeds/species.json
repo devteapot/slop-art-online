@@ -8,7 +8,8 @@
         "heard": "{name}, a baby, is crying",
         "kin_only": true,
         "range": 12,
-        "salience": 0.8
+        "salience": 0.8,
+        "loudness": 2.5
       }
     },
     "names": [],
