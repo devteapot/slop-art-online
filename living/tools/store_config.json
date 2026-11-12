@@ -23,12 +23,13 @@
     "~/kimodo-test"
   ],
   "decisions": {
-    "_doc": "The owner's decisions (2026-11-11, relayed by the coordinator). Values: include, exclude/redact (replaced), hold (not published, the unit still is), undecided (the unit waits).",
+    "_doc": "The owner's decisions (2026-11-11, relayed by the coordinator). Values: include, exclude/redact (replaced), hold (not published, the unit still is), undecided (the unit waits). jev_pricing (2026-11-12, general coordinator): exclude until the owner confirms TypeSafe's pricing may be shown.",
     "model_exchanges": "include",
     "owner_lines": "exclude",
     "owner_first_name": "redact",
     "owner_notes": "hold",
-    "session_media": "hold"
+    "session_media": "hold",
+    "jev_pricing": "exclude"
   },
   "repos": {
     "runs": "slop-art-online-runs",
@@ -49,12 +50,16 @@
     "verified": {
       "zai-glm-5-3-flash": "Z.ai GLM-5.3-Flash served by Mistral: open weights MIT (huggingface.co/zai-org/GLM-5.3-Flash, LICENSE read 2026-11-11; Mistral's id matched to it by name); Mistral Commercial Terms s.3.1: the customer owns Output",
       "deepseek-v4-1-flash-1017": "DeepSeek-V4.1-Flash-1017 served by Mistral: MIT (huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017, card and LICENSE read 2026-11-11); Mistral Commercial Terms s.3.1",
-      "fake-*": "the verification fake model server: no provider, no model output"
+      "fake-*": "the verification fake model server: no provider, no model output",
+      "mistral-small-latest": "Mistral Small 4 (mistral-small-2603, Apache 2.0) served by Mistral: docs.mistral.ai/models/mistral-small-4-0-26-03, read 2026-11-12; Mistral Commercial Terms s.3.1 (docs/STORE.md, Model terms)",
+      "ministral-*-latest": "Ministral 3 (ministral-{3b,8b,14b}-2512, Apache 2.0) served by Mistral: the -latest aliases on docs.mistral.ai/models/ministral-3-*-25-12, read 2026-11-12; Mistral Commercial Terms s.3.1",
+      "ministral-*-2512": "Ministral 3, the releases the -latest aliases name (Apache 2.0); as ministral-*-latest",
+      "jev*": "TypeSafe Jev through TypeSafe's API: MCA s.4.2 assigns Output to the customer, s.2.3(b) forbids distilling it (read 2026-11-12); the runs card asks readers not to train models on it; its pricing is scrubbed (decision jev_pricing)",
+      "claude-opus-5-5": "Claude Opus 5.5 as Claude Code subagents on a Claude Max plan: Consumer Terms s.4 assigns Outputs to the user, s.3 forbids using them to train competing models (read 2026-11-12); the runs card asks readers not to train models on them"
     },
     "unverified": {
-      "ministral-*-latest": "which Ministral release '-latest' serves was not established (Ministral 3 is Apache-2.0; Ministral-8B-2410 is the Mistral Research License)",
-      "mistral-small-latest": "the release and licence behind Mistral's '-latest' alias were not read",
-      "gpt-6-luna": "a private endpoint's model; its provider terms were not read"
+      "ministral-*-2410": "Ministral 3B/8B 2410: Mistral Research License, not read for outputs; retired by Mistral; no calls in our records",
+      "gpt-6-luna": "GPT-6 Luna through the owner's proxy codex.carlid.dev: terms depend on the upstream OpenAI account (API key or ChatGPT sign-in), which the coordinator is asking the owner (2026-11-12); held"
     }
   }
 }

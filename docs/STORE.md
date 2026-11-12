@@ -11,7 +11,7 @@ Status: **published** (2026-11-11, branch `tool-store-2`, from the Spark).
 - **Fetch-backs.** `l9` came back byte-identical to the local pack. Unpacked, all 170 files equal the scrubbed source byte for byte. Play-test 2 came back byte-identical to its scrubbed tree (38 of 38 files). The motion library, as first published on 2026-11-11, came back with every sha256 matching: 626 takes byte-identical, and `batch_stats.json` equal as JSON (one trailing newline added by the scrubber).
 - **Viewer.** It converted all six tables (`instances` 527, `calls` 212,758, `rows` 935,249, `prompts` 1,192, `session_calls` 133, `session_prompts` 5): row counts equal to the packs' manifests, nothing failed, and the previews, search and filter are on (checked 22:03). The first conversion of `calls` had failed ("Couldn't cast array of type string to null") because `hm1`'s `error` column is null throughout. The card now declares every column's type (`dataset_info`). The assets dataset has the viewer off, since its takes are binary.
 - **Held.**
-  - `b1`–`b3`: calls from `mistral-small-latest` and `gpt-6-luna`, unverified in the gate. Their terms were read on 2026-11-12 ([Model terms](#model-terms-who-may-publish-whose-words-read-2026-11-12)); Luna waits on the owner.
+  - `b2`, `b3`: calls from `gpt-6-luna`, held until the owner says which account the proxy uses. `b1` has no Luna call: see [Model terms](#model-terms-who-may-publish-whose-words-read-2026-11-12), Decisions.
   - `aborted` in `~/dev/slop-trials-cb`: no `batch.json`.
   - Play-test 2's 22 non-record files (rule A, listed in its `MANIFEST.json`).
   - Play-tests 3 and 4 are on the laptop.
@@ -127,7 +127,7 @@ README.md                    the card; configs: instances, calls, rows, prompts,
   - `check_batch_complete` accepts it without instances.
   - The declared models go into its manifest's `models`, so the same model gate holds it.
   - Its files sit under `analysis/…` and pack into `files.tar.gz`; the four tables stay empty.
-  - First use: `gq1`, the rethink gate's quality test (docs/GATE_QUALITY.md). It is held: `mistral-small-latest`, `jev-1.14.0` and `claude-opus-5-5` are not yet read terms.
+  - First use: `gq1`, the rethink gate's quality test (docs/GATE_QUALITY.md). Its models are verified since 2026-11-12, and its Jev pricing is scrubbed. It is prepared for upload but not uploaded ("Model terms", Decisions).
 - **Round trip.** `store.py fetch batch <name> --unpack` rebuilds the `trials.py` evidence layout, scrubbed (the self-test checks it file by file). Running `trial_evidence.py` or `trials.py report` on a fetched batch has not been tried yet.
 - **Format.** JSON Lines with gzip is used because it needs no dependencies. Parquet, the Hub's recommended format, can replace it later without changing the layout.
 
@@ -204,6 +204,23 @@ board/<family>/<version>/       asset board photographs and pages (from the lapt
 | `private-ip` | 10/8, 172.16/12, 192.168/16, Tailscale 100.64/10 (octets checked; 127.0.0.1 and public addresses stay) | `[private-ip]` |
 | `hostname` | This machine's name, `~/.ssh/config` hosts, `STORE_HOSTNAMES`, `*.ts.net`, `*.local`/`*.lan`, Mac default names | `[host]` |
 
+**Jev's pricing** (`jev-pricing`; decision `jev_pricing`, anything but `include` applies it; `jev_strip` and `jev_text` in `store.py`). TypeSafe's Master Customer Agreement s.14.1 counts "all pricing information" as its Confidential Information.
+- **JSON and JSON Lines.** In a Jev object, every key naming cost, usd, price or spend is dropped, at any depth. A Jev object is one whose `model`, `profile`, `arm`, `gate`, `url` or `provider` names Jev or `typesafe.ai`, or that sits under a key naming Jev. So these go:
+  - a Jev journal entry's `cost_usd`;
+  - `input_usd_per_m` in `rethink.json` and `judgments.json` copies;
+  - `points.jsonl`'s `jev.cost_usd`;
+  - the Jev replay's `judged.cost_usd`;
+  - a Jev gate's `usd_per_trigger` and `cost_vs_off` in `curve.json`;
+  - `by_model`/`by_purpose_model` Jev cost fields in a summary.
+- **Totals.** Under a cost key, a part named for Jev is dropped and a sibling `total` is recomputed without it (`gq1`'s `spend_usd`: 0.765 becomes 0.685).
+- **Text.** These become `[removed: Jev pricing]`:
+  - in a table row naming Jev, the cells of cost columns;
+  - in a line about Jev (it names Jev, or sits under a list item or lead-in paragraph that does), dollar amounts and the percentages of clauses about cost or savings;
+  - elsewhere, a cost clause that repeats a percentage removed from a Jev row;
+  - in a text naming Jev, the dollar amounts of spend and total lines.
+- **Kept.** Other models' costs: GLM gate calls, think and compile calls, `deliberation_cost_usd`, the gate-off and GLM-gate rows.
+- **Over-removal.** A cost clause that also carries a harm figure loses it too. "9.2%" in "Jev 0.3 with GLM is 9.2%" stays only because a comma separates it from the cost.
+
 **Refused whole:**
 - files in never-touch folders, or with `sao-living` in the path;
 - **credential files, never opened** (`is_secret_path`, fbc37c32 review A4):
@@ -221,7 +238,7 @@ Known binaries (`.npz`, images, video, `.glb`) are scanned as bytes for literal 
 
 No identity is in the repository: the scrubber reads it at run time, and the tests plant fake values. The owner's identifiers are not hard-coded either.
 
-**Self-test** (`just living-store-selftest`, 19 tests, about 0.1 s):
+**Self-test** (`just living-store-selftest`, 62 tests on 2026-11-12, under a second):
 
 - planted secrets in every format above, including a bare Mistral-style key, `LIVING_TOKEN` in shell and JSON form, `NEO4J_AUTH`, a SpacetimeDB-style JWT and URL credentials;
 - the owner's email, name, first name and login;
@@ -233,7 +250,8 @@ No identity is in the repository: the scrubber reads it at run time, and the tes
 - batch pack → local publish → fetch → unpack, equal to the scrubbed source;
 - the motion round trip with sha256 checks;
 - the manifest on a fake home;
-- the publish gate.
+- the publish gate;
+- Jev's pricing (`JevPricing`): each kind of record `gq1` holds, with distinctive planted figures. Each Jev figure is gone from every packed file, the manifest included. Other models' costs stay, `spend_usd`'s total is recomputed, the report shows no figure, and `jev_pricing: include` keeps everything.
 
 ### Dry runs (2026-11-11; reports in `~/store-dryrun-2026-11-11/` on the Spark, not in git)
 
@@ -259,6 +277,7 @@ The owner agreed to publish, publicly, under the personal namespace `carlid`, on
 | `owner_first_name` | **redact** | Replaced by `Player` (`player`, `PLAYER` to match the case), in file names too. |
 | `owner_notes` | **hold** | Not published; the rest of the unit still is. |
 | `session_media` | **hold** | Not published. |
+| `jev_pricing` (2026-11-12, general coordinator) | **exclude** | TypeSafe Jev's price, per-call costs and share of totals are removed (below), until the owner confirms they may be shown. |
 | Models' words in world rows | **kept** | – |
 | Licence of both cards | **MIT** | – |
 
@@ -509,7 +528,19 @@ The owner allowed model exchanges in published runs (`model_exchanges: include`)
 | Claude Opus 5.5 (Claude Code, Max) | allowed | label as AI-generated; we may not train competing models on it |
 | GPT-6 Luna (owner's proxy) | allowed under either OpenAI terms | **depends on the upstream account**; a ChatGPT sign-in makes the calls themselves out of terms |
 
-The gate is unchanged. On the reading above, `mistral-small-latest` and `ministral-*-latest` could move to `verified`, and `jev*` and `claude-opus-5-5` could be added. `gpt-6-luna` waits on the owner's answer about the upstream. Each of these is a decision for the owner and a separate change.
+#### Decisions (2026-11-12, general coordinator; branch `store-gate-2`)
+
+1. **Jev's pricing is scrubbed until the owner confirms.** Its price, every Jev per-call `cost_usd` and Jev's share of any total are removed from published records. Totals are recomputed without Jev, or dropped where Jev is mixed in and cannot be separated. Other models' costs are kept. This is decision `jev_pricing: exclude` and the scrubber rule above, applied to every unit. No published unit carried Jev calls: of the 62 published batches none has one; only `gq1` and the fake `glf2` do. The code repository is public and still carries Jev's price (`living/configs/rethink.json`, `judgments.json`: `input_usd_per_m`) and Jev-mixed costs (`docs/GATE_QUALITY.md`). This decision does not cover those.
+2. **Card note.** The runs card asks readers not to train models on the Jev answers or the Claude judge labels, as the assets card does for the Kimodo takes.
+3. **Gate.**
+   - Now `verified` in `store_config.json`: `mistral-small-latest`, `ministral-*-latest` and `ministral-*-2512` (Ministral 3), `jev*` and `claude-opus-5-5`, each with the card note.
+   - The older `ministral-*-2410` releases (Mistral Research License, not read) stay unverified, so the pattern is not a bare `ministral-*`.
+4. **Luna is held.** `gpt-6-luna` stays unverified while the coordinator asks the owner which account the proxy uses.
+   - Batches with Luna calls: `b2` (472 calls, variant `luna`) and `b3` (2 calls, overflow), in `~/dev/slop-trials/.local/living/trials` on the Spark. Neither is published.
+   - `b1` has no Luna call. Its instances' `models.json` lists `luna` as an overflow profile that was never used. The gate counts calls, so `b1` now passes it. The coordinator should decide whether a config mention counts as carrying Luna.
+   - `gq1` does not contain the string `gpt-6-luna`.
+   - No other trial root on the Spark has Luna calls. Laptop sessions were not scanned.
+5. **`gq1`** is prepared, not uploaded (below).
 
 ## Fetch and publish
 
