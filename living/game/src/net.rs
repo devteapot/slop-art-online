@@ -86,6 +86,9 @@ const PERCEIVED: &[&str] = &[
     "SELECT * FROM my_records",
     // What I hear but don't see (rows only while the world's `fov_on` law is on): `heardmark.rs`.
     "SELECT * FROM heard_sounds",
+    // My senses as the authority reckons them (one row; written when a value changes): the
+    // edge of sight and its field draw from it (`sightedge.rs`).
+    "SELECT * FROM my_senses",
     "SELECT * FROM skill_card",
     // What residents are seen doing is named by `act_card` (17 rows); `weather` is one row.
     "SELECT * FROM act_card",

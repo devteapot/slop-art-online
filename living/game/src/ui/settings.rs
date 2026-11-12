@@ -1,7 +1,7 @@
 //! Settings (interface D): a wide window in the centre, opened from Menu (or Menu after Esc with
 //! nothing open), with two pages.
 //!
-//! - **Play:** the interface's theme (Clear, Night, Linen, Walnut; F4 cycles it), the control scheme (facing the cursor, or where you walk; F3 switches it too),
+//! - **Play:** the interface's theme (Glass, Clear, Night, Linen, Walnut; F4 cycles it), the control scheme (facing the cursor, or where you walk; F3 switches it too),
 //!   how the body looks aside while walking (a look-walk preset, `twist.rs`),
 //!   how the edge of sight is drawn (not seen now, limited view, fade; F2 cycles it too), how
 //!   unseen ground looks (memory by default, grey, wash, lantern, shadows, hatch), facing sight

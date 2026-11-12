@@ -38,7 +38,6 @@ use crate::style::Style;
 use crate::world::{rgb, MeshBuf, Palette};
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
-use bevy::world_serialization::WorldAssetRoot;
 use std::path::{Path, PathBuf};
 
 pub fn enabled() -> bool {
@@ -292,14 +291,16 @@ pub fn setup(
         // the procedural rig (`vrm: false`), so their own animation plays.
         let turn = Quat::from_rotation_y(if is_vrm && !file.contains("VRMC") { std::f32::consts::PI } else { 0.0 });
         let model = Model { vrm: is_vrm && (clips.is_empty() || recipe.is_some()), file: file.clone(), height: recipe.as_ref().map_or(height, |r| r.height), ground_y: 0.0, glow: None };
-        let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+        // The root alone: the clips' load of it below must not read the file a second time
+        // (`characters::SceneOf`).
+        let handle = assets.load::<Gltf>(file.clone());
         let wanted: Vec<String> = std::env::var("LIVING_GAME_VIEW_CLIP").unwrap_or_default().split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
         let shown: Vec<usize> = if wanted.is_empty() { (0..clips.len().min(4)).collect() } else { clips.iter().enumerate().filter(|(_, c)| wanted.contains(&c.0)).map(|(i, _)| i).collect() };
         let spec = std::env::var("LIVING_GAME_VIEW_SHOTS").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "views,clips".into());
         let shots = parse_shots(&spec, &clips, &shown, file);
         let first_clip = shown.first().copied().unwrap_or(0);
         let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(clip_src.clone()), vec![], Entity::PLACEHOLDER));
-        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn }, WorldAssetRoot(handle), Transform::from_rotation(turn), Visibility::Hidden));
+        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn }, crate::characters::SceneOf(handle), Transform::from_rotation(turn), Visibility::Hidden));
         if let Some(r) = recipe {
             // A recipe's character: rigged for its face, shaped, recoloured and sprung.
             e.insert(crate::characters::Character { recipe: r, stride: 1.0 });

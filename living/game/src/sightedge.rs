@@ -29,9 +29,11 @@
 //! mode (headless captures).
 //!
 //! **Looks** (from branch `sight-look`): how "not seen now" draws what my character doesn't see
-//! (`edges.wesl`). Memory is the default (fov-client, 2026-11-11); the others stay selectable in
-//! Settings › Play ("Unseen ground", kept in the settings file) and by
-//! `LIVING_SIGHT_LOOK=grey|wash|lantern|shadows|hatch|memory`; not in F2's cycle. The live
+//! (`edges.wesl`). Shade is the default (play-test 5, 2026-11-11: "more similar to the shadows
+//! than this grey overlay"): unseen ground in the scene's own shadow tone, every edge a soft
+//! gradient. The others stay selectable in Settings › Play ("Unseen ground", kept in the
+//! settings file) and by `LIVING_SIGHT_LOOK=shade|memory|grey|wash|lantern|shadows|hatch`; not in
+//! F2's cycle. The live
 //! script's `sightlook:NAME` step switches it for captures (`sightlook:grey` is the old grey).
 //!
 //! **Facing sight:** while the world's `fov_on` law is on, `senses(a)` also gives a `field`
@@ -120,10 +122,11 @@ pub enum Look {
     Lantern,
     Shadows,
     Hatch,
-    /// The default since fov-client (2026-11-11, the coordinator's choice from the sight-look
-    /// comparison).
-    #[default]
     Memory,
+    /// The default since play-test 5 (2026-11-11): unseen ground in the scene's own shadow
+    /// tone, every edge a gradient.
+    #[default]
+    Shade,
 }
 
 impl Look {
@@ -135,12 +138,13 @@ impl Look {
             "shadows" | "shadow" => Some(Look::Shadows),
             "hatch" | "hatching" => Some(Look::Hatch),
             "memory" => Some(Look::Memory),
+            "shade" | "shadow-tone" => Some(Look::Shade),
             _ => None,
         }
     }
 
     /// Every look, in Settings' order (the default first).
-    pub const ALL: [Look; 6] = [Look::Memory, Look::Grey, Look::Wash, Look::Lantern, Look::Shadows, Look::Hatch];
+    pub const ALL: [Look; 7] = [Look::Shade, Look::Memory, Look::Grey, Look::Wash, Look::Lantern, Look::Shadows, Look::Hatch];
 
     /// Its name in the settings file, `LIVING_SIGHT_LOOK` and Settings' tags.
     pub fn name(self) -> &'static str {
@@ -151,6 +155,7 @@ impl Look {
             Look::Shadows => "shadows",
             Look::Hatch => "hatch",
             Look::Memory => "memory",
+            Look::Shade => "shade",
         }
     }
 
@@ -163,6 +168,7 @@ impl Look {
             Look::Shadows => "Shadows",
             Look::Hatch => "Hatch",
             Look::Memory => "Memory",
+            Look::Shade => "Shade",
         }
     }
 
@@ -175,6 +181,7 @@ impl Look {
             Look::Shadows => 3.0,
             Look::Hatch => 4.0,
             Look::Memory => 5.0,
+            Look::Shade => 6.0,
         }
     }
 }
@@ -217,6 +224,8 @@ pub struct SightEdge {
     /// My senses now by the rules (`senses(a)`): with a `field` while the world's `fov_on` law
     /// is on, and the keep margin (`keep_seen_m`) for someone already seen.
     pub senses: Option<Senses>,
+    /// Where they came from.
+    pub source: Option<Source>,
     pub keep_m: f32,
     /// The script revision `keep_m` was read for.
     keep_rev: Option<u32>,
@@ -232,7 +241,7 @@ impl Default for SightEdge {
     fn default() -> Self {
         let mode = std::env::var("LIVING_SIGHT_EDGE").ok().and_then(|v| Mode::parse(&v)).unwrap_or_default();
         let look = std::env::var("LIVING_SIGHT_LOOK").ok().and_then(|v| Look::parse(&v)).unwrap_or_default();
-        Self { mode, look, radius: 11.0, want: None, senses: None, keep_m: 1.0, keep_rev: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
+        Self { mode, look, radius: 11.0, want: None, senses: None, source: None, keep_m: 1.0, keep_rev: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
     }
 }
 
@@ -266,7 +275,35 @@ impl Plugin for SightEdgePlugin {
 /// My senses now by the world's rules (`senses(a)`: sight, hearing and, while the world's
 /// `fov_on` law is on, the `field` with its five values), or none before the script and my
 /// character are known.
-fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<Senses> {
+///
+/// The authority's own answer comes first: `my_senses` (one row for my living character, the
+/// `senses` law over all of its facts, written when a value changes), so the field drawn is the
+/// field the authority sees by. While that row is missing (before it arrives, or while the
+/// world's minds hold my character) the client asks the installed script itself for my sight,
+/// with no field: facing sight shows only as the authority reports it.
+fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<(Senses, Source)> {
+    let (conn, me) = (net.conn.as_ref()?, net.my_id?);
+    if let Some(r) = conn.db.my_senses().id().find(&me) {
+        return Some((senses_of_row(&r), Source::Authority));
+    }
+    local_sight(net, rules, hour).map(|s| (Senses { field: None, ..s }, Source::Local))
+}
+
+/// Where my senses came from: the authority's `my_senses` row, or the client's own ask.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    Authority,
+    Local,
+}
+
+/// My senses as the `my_senses` row has them.
+pub fn senses_of_row(r: &CharacterSenses) -> Senses {
+    let field = r.field.then_some(living_rules::sight::Field { focal_deg: r.focal_deg, side_deg: r.side_deg, side_share: r.side_share, near_m: r.near_m, margin_deg: r.margin_deg });
+    Senses { sight: r.sight, hearing: r.hearing, field }
+}
+
+/// The installed script's `senses(a)` for my character, by the client's own facts.
+fn local_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<Senses> {
     let (conn, me, sc) = (net.conn.as_ref()?, net.my_id?, rules.scripts.as_ref()?);
     let c = conn.db.my_characters().id().find(&me)?;
     let mut inv: Vec<(String, u32)> = Vec::new();
@@ -321,7 +358,11 @@ pub fn update(
     edge.next_ask -= dt;
     if edge.next_ask <= 0.0 {
         edge.next_ask = ASK_S;
-        if let Some(s) = my_sight(&net, &rules, clock.hour()) {
+        if let Some((s, source)) = my_sight(&net, &rules, clock.hour()) {
+            if edge.source != Some(source) {
+                info!("sight edge: my senses from {}", if source == Source::Authority { "the authority (my_senses)" } else { "the client's own ask (no my_senses row: no field)" });
+                edge.source = Some(source);
+            }
             let r = s.sight;
             if edge.senses.map(|o| o.field) != Some(s.field) {
                 match s.field {
@@ -399,7 +440,7 @@ fn far(mut edge: ResMut<SightEdge>, target: Res<crate::controls::Target>, draw: 
 }
 
 /// Feed the finishing pass (after `post::update` writes the rest of its settings).
-fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>, target: Res<crate::controls::Target>, atmo: Option<Res<crate::daylight::Atmo>>, mut cams: Query<&mut crate::post::Edges>) {
+fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>, target: Res<crate::controls::Target>, atmo: Option<Res<crate::daylight::Atmo>>, style: Res<crate::style::Style>, mut cams: Query<&mut crate::post::Edges>) {
     let Ok(mut e) = cams.single_mut() else { return };
     let me = target.0.filter(|_| edge.want.is_some());
     let mode = if me.is_some() { edge.mode.code() } else { 0.0 };
@@ -407,7 +448,7 @@ fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>
     e.sight = Vec4::new(at.x, at.z, edge.radius, mode);
     e.sight_look = Vec4::new(BAND_IN, BAND_OUT, DIM, DESATURATE);
     let sky = crate::camera::SKY.to_linear();
-    let fog = atmo.filter(|a| a.active).map_or(Vec3::new(sky.red, sky.green, sky.blue), |a| a.fog);
+    let fog = atmo.as_deref().filter(|a| a.active).map_or(Vec3::new(sky.red, sky.green, sky.blue), |a| a.fog);
     e.sight_fog = Vec4::new(fog.x, fog.y, fog.z, FLATTEN);
     e.sight_far = Vec4::new(LIMIT, SHADOW_FOG, 0.0, 0.0);
     e.sight_field = match field.as_deref().filter(|f| f.valid) {
@@ -416,10 +457,45 @@ fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>
     };
     // The look, how light the scene is (the fog's luminance: 0 at night, 1 by day), and whether
     // the memory texture is current (it shares the field's corner).
-    let light = ((fog.dot(Vec3::new(0.2126, 0.7152, 0.0722)) - 0.02) / 0.3).clamp(0.0, 1.0);
-    let light = light * light * (3.0 - 2.0 * light);
+    let light = light_of(fog);
     let memory = field.as_deref().is_some_and(|f| f.valid && f.memory_live);
     e.sight_extra = Vec4::new(edge.look.code(), light, if memory { 1.0 } else { 0.0 }, 0.0);
+    // The scene's shadow tone, as `toon_light.wesl`'s `scene()` and `shadow_of` take it: the
+    // hue of the sky's fill while the atmosphere drives the scene (and the fill has a hue), else
+    // the style's own.
+    let hue = atmo.as_deref().filter(|a| a.active).and_then(|a| hue_of(a.fill)).unwrap_or(style.shadow_hue);
+    e.sight_shade = Vec4::new(hue, style.hue_shift, style.shadow_saturation, style.shadow_depth);
+    let [r, g, b] = style.shadow_tint;
+    e.sight_tint = Vec4::new(r, g, b, 0.0);
+}
+
+/// How light the scene is (0 night, 1 day), from the fog's luminance, as the finishing pass takes it.
+pub fn light_of(fog: Vec3) -> f32 {
+    let l = ((fog.dot(Vec3::new(0.2126, 0.7152, 0.0722)) - 0.02) / 0.3).clamp(0.0, 1.0);
+    l * l * (3.0 - 2.0 * l)
+}
+
+/// The same from the atmosphere (day when it isn't driving the scene).
+pub fn scene_light(atmo: Option<&crate::daylight::Atmo>) -> f32 {
+    atmo.filter(|a| a.active).map_or(1.0, |a| light_of(a.fog))
+}
+
+/// The hue (0..1) of a colour with some saturation (over 0.02), as the toon shader's
+/// `rgb_to_hsv` gives it.
+fn hue_of(c: Vec3) -> Option<f32> {
+    let (mx, mn) = (c.max_element(), c.min_element());
+    let d = mx - mn;
+    if mx <= 1e-5 || d / mx <= 0.02 {
+        return None;
+    }
+    let h = if mx == c.x {
+        (c.y - c.z) / d + if c.y < c.z { 6.0 } else { 0.0 }
+    } else if mx == c.y {
+        (c.z - c.x) / d + 2.0
+    } else {
+        (c.x - c.y) / d + 4.0
+    };
+    Some(h / 6.0)
 }
 
 #[cfg(test)]
@@ -435,10 +511,31 @@ mod tests {
         assert_eq!(Mode::parse("unseen"), Some(Mode::Unseen));
         assert_eq!(Mode::parse(" Limited "), Some(Mode::Limited));
         assert_eq!(Mode::parse("other"), None);
-        assert_eq!(Look::default(), Look::Memory, "memory is the default look");
+        assert_eq!(Look::default(), Look::Shade, "shade is the default look");
+        assert_eq!(Look::parse("shade"), Some(Look::Shade));
+        assert!(Look::ALL.iter().all(|l| Look::parse(l.name()) == Some(*l)));
         assert_eq!(Look::parse("Lantern"), Some(Look::Lantern));
         assert_eq!(Look::parse(""), Some(Look::Grey));
         assert_eq!(Look::parse("other"), None);
+    }
+
+    /// The authority's `my_senses` row gives the field exactly; a row with `field` false none.
+    #[test]
+    fn senses_from_the_authoritys_row() {
+        let mut r = CharacterSenses { id: 1, sight: 11.0, hearing: 9.0, field: true, focal_deg: 70.0, side_deg: 110.0, side_share: 0.3333, near_m: 3.0, margin_deg: 10.0, at_ms: 0 };
+        let s = senses_of_row(&r);
+        assert_eq!((s.sight, s.hearing), (11.0, 9.0));
+        assert_eq!(s.field, Some(living_rules::sight::Field { focal_deg: 70.0, side_deg: 110.0, side_share: 0.3333, near_m: 3.0, margin_deg: 10.0 }));
+        r.field = false;
+        assert_eq!(senses_of_row(&r).field, None);
+    }
+
+    #[test]
+    fn the_shadow_hue_is_the_fills() {
+        assert!((hue_of(Vec3::new(0.2, 0.2, 0.6)).unwrap() - 2.0 / 3.0).abs() < 1e-4, "blue");
+        assert!((hue_of(Vec3::new(0.6, 0.2, 0.2)).unwrap()).abs() < 1e-4, "red");
+        assert_eq!(hue_of(Vec3::splat(0.3)), None, "grey has no hue: the style's is used");
+        assert_eq!(hue_of(Vec3::ZERO), None);
     }
 
     /// The radius is the shipped law's answer: day, night, and a torch at night.

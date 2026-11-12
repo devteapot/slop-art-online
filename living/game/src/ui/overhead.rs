@@ -80,15 +80,15 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>) {
                         b.spawn((
                             BubbleBody(i),
                             Node { max_width: Val::Px(272.0), flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(6.0), Val::Px(8.0)), border_radius: BorderRadius::all(Val::Px(13.0)), ..default() },
-                            BackgroundColor(theme::BUBBLE),
+                            BackgroundColor(bubble().0),
                             BoxShadow::new(Color::srgba(0.0, 0.0, 0.05, 0.3), Val::ZERO, Val::Px(3.0), Val::ZERO, Val::Px(10.0)),
                         ))
                         .with_children(|body| {
-                            body.spawn((BubbleName(i), Text::new(""), f.body(12.0, 800), TextColor(Color::srgb(0.24, 0.43, 0.62))));
-                            body.spawn((BubbleText(i), Text::new(""), f.body(14.5, 600), TextColor(theme::BUBBLE_TEXT), TextLayout::new(Justify::Left, LineBreak::WordBoundary)));
+                            body.spawn((BubbleName(i), Text::new(""), f.body(12.0, 800), TextColor(bubble().3)));
+                            body.spawn((BubbleText(i), Text::new(""), f.body(14.5, 600), TextColor(bubble().1), TextLayout::new(Justify::Left, LineBreak::WordBoundary)));
                         });
-                        b.spawn((BubbleTail(i), Node { width: Val::Px(11.0), height: Val::Px(11.0), margin: UiRect::top(Val::Px(-6.0)), ..default() }, UiTransform::from_rotation(Rot2::degrees(45.0)), BackgroundColor(theme::BUBBLE)));
-                        b.spawn((BubbleLeader(i), Node { width: Val::Px(2.0), height: Val::Px(0.0), border_radius: BorderRadius::all(Val::Px(1.0)), ..default() }, BackgroundColor(theme::with_alpha(theme::BUBBLE, 0.7))));
+                        b.spawn((BubbleTail(i), Node { width: Val::Px(11.0), height: Val::Px(11.0), margin: UiRect::top(Val::Px(-6.0)), ..default() }, UiTransform::from_rotation(Rot2::degrees(45.0)), BackgroundColor(bubble().0)));
+                        b.spawn((BubbleLeader(i), Node { width: Val::Px(2.0), height: Val::Px(0.0), border_radius: BorderRadius::all(Val::Px(1.0)), ..default() }, BackgroundColor(theme::with_alpha(bubble().0, 0.7))));
                     });
             }
         });
@@ -288,30 +288,36 @@ pub fn bubbles(
             if n.height != hgt {
                 n.height = hgt;
             }
-            set_bg(&mut c, theme::with_alpha(theme::BUBBLE, 0.75 * alpha));
+            set_bg(&mut c, theme::with_alpha(bubble().0, 0.75 * alpha));
         }
     }
     for (bb, mut c) in &mut body_bg {
         if let Some((_, _, _, alpha, _)) = slot_of[bb.0] {
-            set_bg(&mut c, theme::with_alpha(theme::BUBBLE, alpha));
+            set_bg(&mut c, theme::with_alpha(bubble().0, alpha));
         }
     }
     for (bt, mut c) in &mut tails {
         if let Some((_, _, _, alpha, _)) = slot_of[bt.0] {
-            set_bg(&mut c, theme::with_alpha(theme::BUBBLE, alpha));
+            set_bg(&mut c, theme::with_alpha(bubble().0, alpha));
         }
     }
     for (bn, mut t, mut c) in &mut names {
         if let Some((_, _, _, alpha, b)) = slot_of[bn.0] {
             set_text(&mut t, &super::label(&b.name));
-            let col = if b.mine { Color::srgb(0.62, 0.43, 0.12) } else { Color::srgb(0.24, 0.43, 0.62) };
+            let col = if b.mine { bubble().2 } else { bubble().3 };
             set_color(&mut c, theme::with_alpha(col, alpha));
         }
     }
     for (bt, mut t, mut c) in &mut texts {
         if let Some((_, _, _, alpha, b)) = slot_of[bt.0] {
             set_text(&mut t, &b.text);
-            set_color(&mut c, theme::with_alpha(theme::BUBBLE_TEXT, alpha));
+            set_color(&mut c, theme::with_alpha(bubble().1, alpha));
         }
     }
+}
+
+/// A head bubble's ground, words, my name and another's name: the theme's (Glass: dark glass),
+/// else the cream bubble that matches the toon look.
+fn bubble() -> (Color, Color, Color, Color) {
+    super::wood::t().bubble.unwrap_or((theme::BUBBLE, theme::BUBBLE_TEXT, Color::srgb(0.62, 0.43, 0.12), Color::srgb(0.24, 0.43, 0.62)))
 }

@@ -7,9 +7,10 @@
 //!   `side_deg`, `side_share`, `near_m` and `margin_deg`. `sightedge.rs` asks the law;
 //!   `sightfield.rs` draws its three zones (focal, side at `side_share` of sight, near all
 //!   round) in the unseen-ground look. Off (the shipped default), nothing changes.
-//! - **The readout:** when the field changes (on, off, or a value), a note says "Facing sight on"
-//!   or "off", and a second gives the five values; both fade after a few seconds (the toasts,
-//!   `ui/verbs.rs`). Settings › Play shows them for as long as it is on (`ui/facing.rs`).
+//! - **The readout:** when the field changes (on, off, or a value), a small pill at the top
+//!   centre, under the target plate and away from my character, says "Facing sight on" or "off"
+//!   for [`NOTE_S`] (`ui/facing.rs`). The five values are in Settings › Play for as long as it is
+//!   on, and in the developer panel (F1, `hud.rs`), never over the play view.
 //! - **The switch:** `set_world_law("fov_on", …)` is admin only; a player's connection can't
 //!   call it, and the rules give players no such right. The play launcher (`living/tools/play.py`,
 //!   a scene's `"law_toggle": true`) hands the client the world admin's token in a file
@@ -30,6 +31,9 @@ use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::sight::Field;
 use std::sync::{Arc, Mutex};
+
+/// How long the note after a change shows (s).
+pub const NOTE_S: f64 = 3.0;
 
 /// The key that asks the world's `fov_on` law to switch (with the admin link only).
 pub const KEY: KeyCode = KeyCode::F5;
@@ -58,6 +62,8 @@ pub struct FovState {
     pub last: Option<String>,
     /// The last answer per law name, for Settings.
     pub answers: std::collections::HashMap<String, String>,
+    /// The note shown at the top centre after a change, and when it began (s of app time).
+    pub note: Option<(String, f64)>,
     /// The world's walking speed law ([`WALK_LAW`]) as the installed script has it, if it has it.
     pub walk: Option<f32>,
     /// The script revision `walk` was read for.
@@ -138,14 +144,10 @@ fn watch(mut st: ResMut<FovState>, edge: Res<crate::sightedge::SightEdge>, rules
     let note = if s.field.is_some() { "Facing sight on" } else { "Facing sight off" };
     let readout = s.field.map(|f| values(&f));
     info!("facing: {note}{}", readout.as_deref().map(|r| format!(" — {r}")).unwrap_or_default());
-    if let Some(v) = verbs.as_deref_mut() {
-        let at = time.elapsed_secs_f64();
-        v.toasts.retain(|t| !t.text.starts_with("Facing sight") && !t.text.starts_with("Focal ±"));
-        v.toasts.push(crate::verbs::Toast { text: format!("{note}  ·  {}", if st.can_switch { "F5 switches it" } else { "the world's law" }), ok: None, at });
-        if let Some(r) = readout {
-            v.toasts.push(crate::verbs::Toast { text: r, ok: None, at });
-        }
-    }
+    // A short pill at the top centre (`ui/facing.rs`), away from my character; the five values
+    // stay in Settings › Play and the developer panel (F1).
+    st.note = Some((format!("{note}  ·  {}", if st.can_switch { "F5 switches it" } else { "the world's law" }), time.elapsed_secs_f64()));
+    let _ = verbs.as_deref_mut();
 }
 
 /// F5 asks for the switch.
@@ -248,7 +250,18 @@ fn link(mut admin: NonSendMut<AdminLink>, mut st: ResMut<FovState>, net: NonSend
         info!("laws: asking set_world_law(\"{name}\", \"{value}\")");
         let inbox = admin.inbox.clone();
         let (n, v) = (name.clone(), value.clone());
-        let r = conn.reducers.set_world_law_then(name, value, move |_, r| {
+        // In the session's action log (`actions.rs`) like every other call: the law and its
+        // value, never the admin token (it is the connection's, not an argument).
+        let sent = crate::actions::sent("set_world_law", "law", || serde_json::json!({"name": name, "value": value, "link": "admin"}));
+        let r = conn.reducers.set_world_law_then(name, value, move |ctx, r| {
+            if let Some(s) = sent {
+                let reply = match &r {
+                    Ok(Ok(())) => crate::actions::Reply::Ok,
+                    Ok(Err(e)) => crate::actions::Reply::Refused(e.clone()),
+                    Err(e) => crate::actions::Reply::Failed(e.to_string()),
+                };
+                crate::actions::replied(s, reply, Some(ctx.event.timestamp.to_micros_since_unix_epoch()));
+            }
             let r = match r {
                 Ok(o) => o,
                 Err(e) => Err(e.to_string()),
@@ -256,6 +269,9 @@ fn link(mut admin: NonSendMut<AdminLink>, mut st: ResMut<FovState>, net: NonSend
             inbox.lock().unwrap().push(Signal::Reply(n, v, r));
         });
         if let Err(e) = r {
+            if let Some(s) = sent {
+                crate::actions::not_sent(s, e.to_string());
+            }
             warn!("laws: set_world_law could not be sent: {e}");
         }
     }

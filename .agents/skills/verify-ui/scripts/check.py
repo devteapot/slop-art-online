@@ -212,21 +212,34 @@ def items(run, c):
     c.check(s, "and both reached them (their gift experiences)", len(gifts) == 2, f"{len(gifts)} gifts")
 
 
+THEMES = ["glass", "clear", "night", "linen", "walnut"]  # F4's order (`ui::wood::Name::ALL`)
+
+
 def themes(run, c):
     s = "themes"
-    plan = ("ready;wait:2;key:KeyL:tap;wait:0.3;key:KeyI:tap;wait:0.5;dump:01;shot:01_first;key:F4:tap;wait:0.8;shot:02_next;dump:02;key:F4:tap;wait:0.8;shot:03_next;dump:03;key:F4:tap;wait:0.8;shot:04_next;dump:04;"
-            "click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;click:@settings:theme:linen;wait:0.8;shot:05_linen;dump:05;quit")
+    n = len(THEMES)
+    # A fresh settings file and no LIVING_GAME_THEME: the client starts in the default, Glass.
+    if not THEME:
+        out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "themes-default")
+        st0 = os.path.join(out0, "settings.json")
+        if os.path.exists(st0):
+            os.remove(st0)
+        out0, code0, text0 = drive(run, "themes-default", "ready;wait:2;key:KeyI:tap;wait:0.5;dump:01;shot:01_default;quit")
+        c.check(s, "a fresh settings file starts in Glass", ((dump(out0, "01") or {}).get("extra") or {}).get("theme") == "glass", str(((dump(out0, "01") or {}).get("extra") or {}).get("theme")))
+    keys = [f"{i + 1:02d}" for i in range(n)]
+    steps = ";".join(f"key:F4:tap;wait:0.8;shot:{k}_next;dump:{k}" for k in keys[1:])
+    plan = (f"ready;wait:2;key:KeyL:tap;wait:0.3;key:KeyI:tap;wait:0.5;dump:01;shot:01_first;{steps};"
+            f"click:@menu;wait:0.3;click:@menu:Settings;wait:0.6;click:@settings:theme:linen;wait:0.8;shot:{n + 1:02d}_linen;dump:{n + 1:02d};quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05"]}
-    names = [((d[k] or {}).get("extra") or {}).get("theme") for k in ["01", "02", "03", "04"]]
-    order = ["clear", "night", "linen", "walnut"]
+    d = {k: dump(out, k) for k in keys + [f"{n + 1:02d}"]}
+    names = [((d[k] or {}).get("extra") or {}).get("theme") for k in keys]
     first = names[0]
-    want = [order[(order.index(first) + i) % 4] for i in range(4)] if first in order else []
-    c.check(s, "F4 cycles the themes in order", names == want, str(names))
-    c.check(s, "each change is named on screen", len(re.findall(r"ui: Theme: \w+  ·  F4 changes it", log(out))) >= 3)
-    c.check(s, "windows stay where they were through a change", all(sorted(wins(d[k])) == [("Log", "Left"), ("Pack", "Right")] for k in ["01", "02", "03", "04"]), str([wins(d[k]) for k in ["01", "02", "03", "04"]]))
-    c.check(s, "Settings › Play › Look sets it", ((d["05"] or {}).get("extra") or {}).get("theme") == "linen")
+    want = [THEMES[(THEMES.index(first) + i) % n] for i in range(n)] if first in THEMES else []
+    c.check(s, "F4 cycles every theme in order", names == want, str(names))
+    c.check(s, "each change is named on screen", len(re.findall(r"ui: Theme: \w+  ·  F4 changes it", log(out))) >= n - 1)
+    c.check(s, "windows stay where they were through a change", all(sorted(wins(d[k])) == [("Log", "Left"), ("Pack", "Right")] for k in keys), str([wins(d[k]) for k in keys]))
+    c.check(s, "Settings › Play › Look sets it", ((d[f"{n + 1:02d}"] or {}).get("extra") or {}).get("theme") == "linen")
     st = os.path.join(out, "settings.json")
     saved = json.load(open(st)).get("theme") if os.path.exists(st) else None
     c.check(s, "the settings file keeps it", saved == "linen", str(saved))
@@ -535,11 +548,21 @@ def fov_within(sight, f, off, dist, glow, kept):
 
 
 def heading_at(b, now_ms):
-    """The authority's heading_at on a body row."""
+    """The authority's heading_at on a body row (the travel heading)."""
     if not b.get("turn") or b.get("turn_s", 0) <= 0:
         return wrap(b["heading"])
     t = max(0, min(now_ms, b["next_ms"]) - b["t_ms"]) / 1000.0
     return wrap(b["heading"] + b["turn"] * min(t, b["turn_s"]))
+
+
+def facing_at(b, now_ms):
+    """The authority's facing_at: the travel heading plus the facing offset (look-2's
+    `face_off`, eased by `face_turn` over `face_turn_s`), the one facing sight reads."""
+    t = max(0, min(now_ms, b["next_ms"]) - b["t_ms"]) / 1000.0
+    off = b.get("face_off") or 0.0
+    if b.get("face_turn") and (b.get("face_turn_s") or 0) > 0:
+        off += b["face_turn"] * min(max(t, 0.0), b["face_turn_s"])
+    return wrap(heading_at(b, now_ms) + off)
 
 
 def field_dumps(d):
@@ -586,11 +609,16 @@ def compare_fov(snap, dumps, me):
     meta, pix = prior[-1]
     fc = meta["facing"]
     sight, f = fc["sight"], fc
-    h_auth = heading_at(mine, at)
+    h_auth = facing_at(mine, at)
     eye = (mine["x"], mine["y"])
-    out = {"heading_client": math.degrees(fc["heading"]), "heading_authority": math.degrees(h_auth), "dump": meta["n"], "same": [], "differ": [], "margin": []}
+    out = {"heading_client": math.degrees(fc["heading"]), "heading_authority": math.degrees(h_auth), "dump": meta["n"], "same": [], "differ": [], "margin": [], "moving": []}
     for bid, b in bodies.items():
         if bid == me:
+            continue
+        # A body under way: its row is where its segment began, not where it is now, and the
+        # authority's sweep saw it somewhere between. Standing bodies only are compared.
+        if b.get("next_ms", 0) < (1 << 63):
+            out["moving"].append(bid)
             continue
         d = math.hypot(b["x"] - eye[0], b["y"] - eye[1])
         if d > 15.0:
@@ -626,18 +654,18 @@ def field(run, c):
     # Off at the start: the law as shipped (a re-run starts from it again).
     subprocess.run([sys.executable, V, "call", "--run", run, "--as-admin", "set_world_law", '["fov_on", "false"]'], capture_output=True, text=True)
     changes0 = sql(run, "SELECT id FROM law_change")
-    snap = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};sql|SELECT key, target, bearing, band FROM heard WHERE listener = {{me}}"
-    body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy FROM body WHERE id = {{me}}"
+    snap = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, face_off, face_turn, face_turn_s FROM body;sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};sql|SELECT key, target, bearing, band FROM heard WHERE listener = {{me}}"
+    body = lambda n: f"{n}=sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy, face_off, face_turn, face_turn_s FROM body WHERE id = {{me}}"
     # By day (`{epoch_at:12}`, a scratch fixture): at night side vision is left out of the
     # comparison for the lights the client can't know, and a day lasts 12 minutes.
-    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on"
+    plan = "ready;frame:0;yaw:0;wait:1.5;sync:noon;sync:scene;wait:2;dump:01_off;shot:01_off;key:F5:tap;wait:2.5;dump:02_on;shot:02_on;sync:senses"
     for deg in FOV_LOOKS:
         plan += f";look:{deg};wait:2.5;sync:h{deg};dump:h{deg};shot:h{deg}"
     # Walking north with the look east (90° off): held at look_walk_deg; F3 (to "where you walk")
     # releases it while walking, then standing.
     plan += (";look:90;hold:0;wait:2;sync:walk;key:F3:tap;wait:1.5;sync:released;stop;wait:1.5;key:F3:tap;look:270;wait:2;sync:looked;key:F3:tap;wait:1.5;sync:stood;"
              "click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;shot:03_settings_on;dump:03;click:@settings:facing_sight;wait:2.5;shot:04_settings_off;dump:04;quit")
-    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", "senses=sql|SELECT * FROM character_senses WHERE id = {me}"] + [snap(f"h{d}") for d in FOV_LOOKS] + [body(n) for n in ("walk", "released", "looked", "stood")]
     places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, FOV_PLACES)]
     env = {"LIVING_GAME_CONTROL": "cursor", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::controls=debug"}
     old = {k: os.environ.get(k) for k in list(env) + ["LIVING_SIGHT_FIELD_DUMP"]}
@@ -670,10 +698,17 @@ def field(run, c):
     c.check(s, "F5 turns it on: the field has the law's five values", on.get("on") and all(abs(fv.get(k, -1) - v) < 1e-3 for k, v in want.items() if v is not None) and fv.get("near_m") in (2.0, 3.0), json.dumps(on))
     c.check(s, "the readout shows the five values when it changes", re.search(r"facing: Facing sight on — Focal ±70° · side ±110° at 33% of sight · near [23] m all round · margin 10°", L) is not None)
     toasts = (d["02_on"] or {}).get("toasts") or []
-    c.check(s, "…on screen, as two notes", any(t.startswith("Facing sight on") for t in toasts) and any(t.startswith("Focal ±70°") for t in toasts), str(toasts))
+    note = ((d["02_on"] or {}).get("extra") or {}).get("facing_note") or ""
+    pill = "facing:pill" in ((d["02_on"] or {}).get("tags") or {}) or note.startswith("Facing sight on")
+    c.check(s, "…on screen as a short note at the top (not over my character), the values off the play view", note.startswith("Facing sight on") and pill and not any(t.startswith("Focal ±") for t in toasts), f"note {note!r}; toasts {toasts}")
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     snaps = sc.get("snaps") or {}
+    # The client's senses are the authority's own (`my_senses`, owner SQL on `character_senses`).
+    row = ((snaps.get("senses") or [{}])[0].get("rows") or [None])[0]
+    keys = ["focal_deg", "side_deg", "side_share", "near_m", "margin_deg"]
+    same = row is not None and row.get("field") is True and on.get("source") == "Authority" and abs((on.get("sight") or -1) - row["sight"]) < 1e-3 and all(abs(fv.get(k, -1) - row[k]) < 1e-3 for k in keys)
+    c.check(s, "after F5 the client's sight and five values are my_senses' (the authority's row)", same, f"client {json.dumps(on)}; my_senses {json.dumps(row)}")
     results = {}
     for deg in FOV_LOOKS:
         r = compare_fov(snaps.get(f"h{deg}") or [], dumps, me) if snaps.get(f"h{deg}") else None
@@ -717,7 +752,7 @@ def field(run, c):
     face_moving = re.search(r"pub const FACE_WHILE_MOVING: bool = (\w+);", open(os.path.join(ROOT, "living/game/src/controls.rs")).read())
     face_moving = face_moving and face_moving.group(1) == "true"
     if walk:
-        h = math.degrees(heading_at(walk, snaps["walk"][0]["wall_ms"]))
+        h = math.degrees(facing_at(walk, snaps["walk"][0]["wall_ms"]))
         off = abs(math.degrees(wrap(math.radians(h - north))))
         speed = math.hypot(walk["vx"], walk["vy"])
         if face_moving:
@@ -727,14 +762,14 @@ def field(run, c):
         moving_rel = re.search(r"look: human_face\(0\.000, 0\.000\)", L) is not None
         c.check(s, "…the release went as human_face(0, 0)", moving_rel or face_moving)
     if rel:
-        h = math.degrees(heading_at(rel, snaps["released"][0]["wall_ms"]))
+        h = math.degrees(facing_at(rel, snaps["released"][0]["wall_ms"]))
         c.check(s, "a release while walking snaps back to the travel (north)", abs(math.degrees(wrap(math.radians(h - north)))) < 4.0, f"heading {h:.1f}°")
     if looked and stood:
-        h1 = math.degrees(heading_at(looked, snaps["looked"][0]["wall_ms"]))
-        h2 = math.degrees(heading_at(stood, snaps["stood"][0]["wall_ms"]))
+        h1 = math.degrees(facing_at(looked, snaps["looked"][0]["wall_ms"]))
+        h2 = math.degrees(facing_at(stood, snaps["stood"][0]["wall_ms"]))
         c.check(s, "standing, a look west turns the body there and a release leaves it there", abs(abs(h1) - 180.0) < 4.0 and abs(math.degrees(wrap(math.radians(h2 - h1)))) < 2.0, f"looked {h1:.1f}°, after the release {h2:.1f}°")
     sends = len(re.findall(r"look: human_face\(", L))
-    refusals = re.findall(r"face refused: ([^\n]+)", L)
+    refusals = re.findall(r"(?:look|face) refused: ([^\n]+)", L)
     c.check(s, "looks went through human_face, none refused for anything but the input bucket", sends >= 6 and all("too many movement inputs" in x for x in refusals), f"{sends} sends; refusals {refusals[:3]}")
     c.check(s, "Settings › Play shows facing sight on, its switch and the values", fs("03").get("on") and "settings:facing_sight" in ((d["03"] or {}).get("tags") or {}))
     c.check(s, "the Settings switch turns it off; the field goes", fs("04").get("on") is False and dumps and dumps[-1][0].get("facing") is None, json.dumps(fs("04")))
@@ -846,7 +881,15 @@ def look_walk_one(run, c, preset):
     for r in rows:
         r["legs_off"] = wrapd(r["yaw"] - 180.0 - r["heading"]) if r.get("heading") is not None else None
         r["sep"] = r["sep_raw"] * sep_sign if r.get("sep_raw") is not None else None
-        r["crossed"] = r["cross_w"] > 0.25 or (r["sep"] is not None and r["sep"] < -0.03)
+        # The feet test counts only while the legs are turned off the travel (or its reverse)
+        # by more than 15°: square on it, a forward or back gait is the clip's own stride, and a
+        # run puts its feet near one line (its ankles overlap up to 4–9 cm with the look straight
+        # ahead too: `run` at the 2.8 m/s walk/run boundary, `run_fast` on a road). Those frames
+        # are counted apart (`own_overlap` in look_walk.json).
+        off = abs(r["legs_off"]) if r["legs_off"] is not None else 0.0
+        r["aside"] = min(off, 180.0 - off) > 15.0
+        r["crossed"] = r["cross_w"] > 0.25 or (r["aside"] and r["sep"] is not None and r["sep"] < -0.03)
+        r["own_overlap"] = not r["aside"] and r["sep"] is not None and r["sep"] < -0.03
     # Segments: consecutive walking frames with the same look (to 1°) and travel (to 5°).
     segs, cur = [], []
     for r in walking:
@@ -887,13 +930,28 @@ def look_walk_one(run, c, preset):
         st = [r for r in seg if r["t"] >= t0]
         # The drawn speed: the median of 0.5 s windows' net displacement (the drawn track's
         # per-frame steps jitter at segment renewals, and a window over a snap is an outlier).
+        # Frames up to 2.5 s after a jump of the display clock (a resync) are left out: the drawn
+        # body leaps, then closes the gap at up to `live.rs` CATCH_UP faster than the authority.
+        jumps_at = [b["t"] for a, b in zip(rows, rows[1:]) if a.get("mine_ms") is not None and b.get("mine_ms") is not None and (b["mine_ms"] - a["mine_ms"]) - (b["t"] - a["t"]) * 1000 > 300]
+        recovering = lambda t: any(0 <= t - x < 2.5 for x in jumps_at)
         wins, j = [], 0
         for i, r in enumerate(st):
             while st[j]["t"] < r["t"] - 0.5:
                 j += 1
-            if r["t"] - st[j]["t"] >= 0.45:
-                wins.append(((r["sim"][0] - st[j]["sim"][0]) ** 2 + (r["sim"][1] - st[j]["sim"][1]) ** 2) ** 0.5 / (r["t"] - st[j]["t"]))
-        v = statistics.median(wins) if wins else 0.0
+            # A window over a jump of the display clock (a resync: the drawn body leaps, then
+            # catches up) says nothing about the gait; the authority's speed is the ground speed.
+            jumped = r.get("mine_ms") is not None and st[j].get("mine_ms") is not None and (r["mine_ms"] - st[j]["mine_ms"]) - (r["t"] - st[j]["t"]) * 1000 > 300
+            if r["t"] - st[j]["t"] >= 0.45 and not jumped and not recovering(r["t"]) and not recovering(st[j]["t"]):
+                d = ((r["sim"][0] - st[j]["sim"][0]) ** 2 + (r["sim"][1] - st[j]["sim"][1]) ** 2) ** 0.5 / (r["t"] - st[j]["t"])
+                a = statistics.median(x["seg"][2] for x in st[j:i + 1] if x.get("seg")) if any(x.get("seg") for x in st[j:i + 1]) else 0.0
+                wins.append((d, d / a if a > 0.3 else None))
+        v = statistics.median(w[0] for w in wins) if wins else 0.0
+        # The drawn speed against the authority's over the same windows, where the segment speed
+        # is the stretch's own (±2%): onto a road the newest segment's speed (`mine_seg`) trails
+        # the road share and the drawn track runs ~10% ahead of it, which is not the gait's.
+        auth = statistics.median(r["seg"][2] for r in st if r.get("seg"))
+        ratios = [w[1] for w in wins if w[1] is not None and abs(w[0] / w[1] / auth - 1) <= 0.02]
+        ratio = statistics.median(ratios) if ratios else 0.0
         # The authority's segment speed is the ground speed the rules give the body.
         auth = statistics.median(r["seg"][2] for r in st if r.get("seg"))
         crossed = [r for r in st if r["crossed"]]
@@ -901,8 +959,8 @@ def look_walk_one(run, c, preset):
         # Forward: turned toward the look by what the head and chest leave, at most `body`;
         # backwards (past the back limit): the same from the travel's reverse.
         want = 180.0 - min(max((180 - off) - upper, 0), body) if off > LOOK_WALK_BACK.get(preset, 135) else min(max(off - upper, 0), body)
-        row = {"off": off, "speed": round(v, 3), "authority_speed": auth, "legs_off_median": round(legs, 1), "legs_want": want, "crossed_frames": len(crossed), "frames": len(st),
-               "min_sep_m": round(min((r["sep"] for r in st if r["sep"] is not None), default=0), 3), "cross_weight_max": round(max(r["cross_w"] for r in st), 2)}
+        row = {"off": off, "speed": round(v, 3), "drawn_over_authority": round(ratio, 3), "drawn_windows": len(ratios), "clock_jumps": len([x for x in jumps_at if st[0]["t"] - 2.5 <= x <= st[-1]["t"]]), "authority_speed": auth, "legs_off_median": round(legs, 1), "legs_want": want, "crossed_frames": len(crossed), "frames": len(st),
+               "min_sep_m": round(min((r["sep"] for r in st if r["sep"] is not None), default=0), 3), "own_overlap_frames": sum(1 for r in st if r["own_overlap"]), "cross_weight_max": round(max(r["cross_w"] for r in st), 2)}
         result["segments"].append(row)
         if off == 0:
             base_v, base_auth = v, auth
@@ -913,7 +971,13 @@ def look_walk_one(run, c, preset):
         c.check(s, f"steady {off}°: the legs settle {want:.0f}° off the travel (±8°)", abs(legs - want) <= 8, f"{legs:.1f}°")
         if base_v and off:
             c.check(s, f"steady {off}°: the authority's ground speed as straight (±2%)", abs(auth / base_auth - 1) <= 0.02, f"{auth:.3f} vs {base_auth:.3f} m/s")
-            c.check(s, f"steady {off}°: the drawn speed as straight (±8%)", abs(v / base_v - 1) <= 0.08, f"{v:.2f} vs {base_v:.2f} m/s")
+        # A segment the display clock jumped in (a resync, `bodies.rs`) is left out here and said
+        # so in look_walk.json: the drawn track recovers at its own pace, which is the client's
+        # clock and not the gait (the authority's speed above is the ground speed).
+        if row["clock_jumps"]:
+            row["drawn_check"] = f"skipped: {row['clock_jumps']} display-clock jump(s)"
+        else:
+            c.check(s, f"steady {off}°: the drawn speed is the authority's (±8%, over the same windows)", abs(ratio - 1) <= 0.08 and len(ratios) >= 3, f"{ratio:.3f} of it ({v:.2f} m/s drawn) over {len(ratios)} windows")
     # Sudden turns: the travel turns 90° (then 180°) with the look held.
     limit = 3 * body_s + 0.6
     for turn, look_c in [(90, 0), (180, 180)]:
@@ -939,7 +1003,7 @@ def look_walk_one(run, c, preset):
                 after.append(r)
         crossed = [r for r in after if r["crossed"]]
         last = (crossed[-1]["t"] - t_s) if crossed else 0.0
-        result[f"sudden{turn}"] = {"crossed_frames": len(crossed), "last_cross_s": round(last, 2), "limit_s": round(limit, 2), "cross_weight_max": round(max([r["cross_w"] for r in after] or [0]), 2)}
+        result[f"sudden{turn}"] = {"crossed_frames": len(crossed), "last_cross_s": round(last, 2), "limit_s": round(limit, 2), "cross_weight_max": round(max([r["cross_w"] for r in after] or [0]), 2), "own_overlap_frames": sum(1 for r in after if r["own_overlap"])}
         c.check(s, f"sudden {turn}°: any crossing ends within {limit:.2f} s", last <= limit, f"last crossing {last:.2f} s after the turn ({len(crossed)} frames)")
     json.dump(result, open(os.path.join(out, "look_walk.json"), "w"), indent=1)
     return result

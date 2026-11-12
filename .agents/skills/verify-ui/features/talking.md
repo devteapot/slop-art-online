@@ -10,6 +10,7 @@ Enter talks to the person under the cursor (the owner's rule, 2026-11-11), and w
 - `tab`: Tab cycles people in earshot, then the room.
 - `modes`: the box's modes from `talk::MODES` (a person, the room; whisper greyed, not built).
 - `person-window`: opened by talking, by a tap on them, by F, from the list of acts (Their window) or from Log › People.
+- `repeats`: the same words said again in a row by the same speaker to the same one are one bubble with "×N" after the name (`people.rs` `collapse`, unit test `the_same_words_again_are_one_line_with_a_count`; in the person window and the log). In Glass a person's window stops at 42% of the screen's height (`Theme::person_cap`) and its conversation scrolls to its end.
 - `conversation`: my `said` lines to them and their `speech` lines; "did not hear you" from a `silence` row.
 - `introduce`: "Introduce yourself" puts "I'm <name>." in the box, editable, to them.
 - `labels`: looks ("a child in red"; a second colour when two read alike), never a name the rules have not given.
@@ -23,7 +24,7 @@ Enter talks to the person under the cursor (the owner's rule, 2026-11-11), and w
 
 ## Driving it with drive.py
 
-Preconditions: baseline; two residents placed beside the player with `--place ID:-2.5:2.0 --place ID:2.0:2.5` (apart across the view; the arrival point is in a market stall; the other side is blocked from sight), held still, and placed again at `sync:hold` just before the cursor goes to the first: in the 11 s of the room's note they may walk (town life), once onto one spot, stacked exactly on screen.
+Preconditions: baseline; two residents placed beside the player with `--place ID:-2.5:2.0 --place ID:2.0:2.5` (apart across the view; since arrival-open (2026-11-12) the island's arrival point is on open ground, 3 m from any stall, crate or well; before, it was inside a market stall and the stall side was blocked from sight), held still, and placed again at `sync:hold` just before the cursor goes to the first: in the 11 s of the room's note they may walk (town life), once onto one spot, stacked exactly on screen. `place_at` keeps one body per tile (`free_spot`): beside the old arrival stall both landed on one tile; on open ground they stand apart (the exact tie is `pick::tests::two_bodies_on_one_spot_give_one_answer_in_any_order`).
 
 - **The room.** `cursor:0.5,0.12;key:Enter:tap` → dump `typing.to` null, `typing.window == Log`, `typing.label == "To the room"`. `type:Good morning, all.;enter` → log `say: "…" to no one in particular`; after 11 s the log has `talk: room note "Heard by N — no one took it up…"`.
 - **A person.** `point:<ID>;key:Enter:tap` (the cursor on them) → `typing.window == Person<ID>`, `typing.label` "To a …" (looks, no name). `type:Hello there.;enter` → log `say: "Hello there." to #<ID>`; owner SQL `SELECT kind, object, text FROM experience WHERE kind = 'said'` has the line with `object` = the addressee (and the room's with 0).

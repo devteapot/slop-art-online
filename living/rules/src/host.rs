@@ -227,15 +227,47 @@ pub fn arrival_settlement(land: &Land) -> Option<&Settlement> {
 const ARRIVAL_STEP_M: f32 = 6.0;
 /// How far beyond the square's outline (tiles) the walkable ground connected to it is searched.
 const ARRIVAL_MARGIN: i32 = 16;
+/// Open ground round a newcomer (metres): nothing one cannot walk on and no lot or prop of the
+/// town (a stall, a crate, a well) within this distance of the arrival, so one does not arrive
+/// inside or behind a stall where the camera cannot see one (play-tests 2-5).
+pub const ARRIVAL_CLEAR_M: f32 = 3.0;
+
+/// The distance from `p` to a rectangle (centre, unit `front`, half width and half depth).
+fn rect_distance(p: (f32, f32), centre: (f32, f32), front: (f32, f32), hw: f32, hd: f32) -> f32 {
+    let (fx, fy) = front;
+    let (dx, dy) = (p.0 - centre.0, p.1 - centre.1);
+    let (a, b) = ((dx * -fy + dy * fx).abs() - hw, (dx * fx + dy * fy).abs() - hd);
+    a.max(0.0).hypot(b.max(0.0))
+}
+
+/// Whether a newcomer standing at tile `(x, y)` has [`ARRIVAL_CLEAR_M`] of open ground round
+/// them: every tile within it walkable, and no lot or prop of settlement `si` within it.
+fn open_ground(land: &Land, map: &Map, si: usize, x: i32, y: i32) -> bool {
+    let p = (x as f32 + 0.5, y as f32 + 0.5);
+    let r = ARRIVAL_CLEAR_M.ceil() as i32;
+    for j in y - r..=y + r {
+        for i in x - r..=x + r {
+            if (i as f32 + 0.5 - p.0).hypot(j as f32 + 0.5 - p.1) <= ARRIVAL_CLEAR_M && !map.walkable(i, j) {
+                return false;
+            }
+        }
+    }
+    let lots = land.lots.iter().filter(|l| l.settlement as usize == si).map(|l| (l.centre, l.front, l.width_m * 0.5, l.depth_m * 0.5));
+    let props = land.props.iter().filter(|q| q.settlement as usize == si).map(|q| (q.centre, q.front, q.width_m * 0.5, q.depth_m * 0.5));
+    !lots.chain(props).any(|(c, f, hw, hd)| rect_distance(p, c, f, hw, hd) <= ARRIVAL_CLEAR_M)
+}
 
 /// Where newcomers arrive on a hosted land (`map` from [`hosted_map`]): on the arrival
 /// settlement's square, where its people gather, a few metres from its heart on the side of
-/// the town's first gate (the way one comes in), on a walkable tile connected to the square.
-/// Without a settlement, the walkable tile nearest the land's middle. Deterministic for a seed,
+/// the town's first gate (the way one comes in), on a walkable tile connected to the square:
+/// the nearest with open ground round it ([`ARRIVAL_CLEAR_M`]: not inside or beside a stall,
+/// a crate or a well), else the nearest. Without a settlement, the walkable tile nearest the
+/// land's middle. Deterministic for a seed,
 /// size and parameters; part of the layout digest.
 pub fn arrival(land: &Land, map: &Map) -> (f32, f32) {
     let middle = (land.size as f32 / 2.0, land.size as f32 / 2.0);
     let Some(s) = arrival_settlement(land) else { return map.nearest_walkable(middle.0, middle.1).unwrap_or(middle) };
+    let si = land.settlements.iter().position(|t| std::ptr::eq(t, s)).unwrap_or(0);
     let c = s.plaza.centre;
     // Where one can stand on the square: its heart, or round a building standing in it (the
     // megacity core's arcology) near its outline's corners and the middles of its edges.
@@ -278,12 +310,15 @@ pub fn arrival(land: &Land, map: &Map) -> (f32, f32) {
             queue.push_back((x, y));
         }
     }
-    let mut best: Option<((f32, f32), f32)> = None;
+    let (mut best, mut open): (Option<((f32, f32), f32)>, Option<((f32, f32), f32)>) = (None, None);
     while let Some((x, y)) = queue.pop_front() {
         let p = (x as f32 + 0.5, y as f32 + 0.5);
         let d = (p.0 - want.0).hypot(p.1 - want.1);
         if best.map_or(true, |(_, bd)| d < bd) {
             best = Some((p, d));
+        }
+        if open.map_or(true, |(_, od)| d < od) && open_ground(land, map, si, x, y) {
+            open = Some((p, d));
         }
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let (nx, ny) = (x + dx, y + dy);
@@ -293,7 +328,7 @@ pub fn arrival(land: &Land, map: &Map) -> (f32, f32) {
             }
         }
     }
-    best.map(|b| b.0).or_else(|| map.nearest_walkable(c.0, c.1)).unwrap_or(c)
+    open.or(best).map(|b| b.0).or_else(|| map.nearest_walkable(c.0, c.1)).unwrap_or(c)
 }
 
 /// Digests the authority stores with the world and a client recomputes after regenerating the
@@ -461,6 +496,35 @@ mod tests {
             }
             eprintln!("seed {seed}: arrival {a:?}, {d:.1} m from the square's heart");
         }
+    }
+
+    /// A newcomer arrives on open ground: nothing one cannot walk on and no lot or prop of the
+    /// town within `ARRIVAL_CLEAR_M` (play-tests 2-5 arrived inside a market stall on the island,
+    /// at (410.5, 258.5), where the camera's cutaway hid them), on the island's world seeds and on
+    /// the megacity floor.
+    #[test]
+    fn arrival_has_open_ground_round_it() {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).unwrap();
+        let mega: LandParams = serde_json::from_value(v["map"]["params"].clone()).unwrap();
+        let worlds = [7u64, 11, 13].map(|s| (s, LandParams::default())).into_iter().chain([(v["seed"].as_u64().unwrap(), mega)]);
+        for (seed, p) in worlds {
+            let l = land::generate(seed, 2048, &p);
+            let (map, _) = hosted_map(&l, &p);
+            let a = arrival(&l, &map);
+            let s = arrival_settlement(&l).expect("a settlement");
+            let si = l.settlements.iter().position(|t| std::ptr::eq(t, s)).unwrap();
+            assert!(open_ground(&l, &map, si, a.0.floor() as i32, a.1.floor() as i32), "seed {seed}: arrival {a:?} has {ARRIVAL_CLEAR_M} m of open ground");
+            let nearest = l.lots.iter().filter(|q| q.settlement as usize == si).map(|q| rect_distance(a, q.centre, q.front, q.width_m * 0.5, q.depth_m * 0.5))
+                .chain(l.props.iter().filter(|q| q.settlement as usize == si).map(|q| rect_distance(a, q.centre, q.front, q.width_m * 0.5, q.depth_m * 0.5)))
+                .fold(f32::INFINITY, f32::min);
+            eprintln!("seed {seed}: arrival {a:?}, the town's nearest lot or prop {nearest:.1} m away");
+        }
+        // The rule itself: inside a lot is never open, open ground is.
+        let l = island();
+        let (map, _) = hosted_map(l, &LandParams::default());
+        let si = l.settlements.iter().position(|t| std::ptr::eq(t, arrival_settlement(l).unwrap())).unwrap();
+        let stall = l.lots.iter().find(|q| q.settlement as usize == si && q.kind == LotKind::MarketStall).expect("a market stall");
+        assert!(!open_ground(l, &map, si, stall.centre.0.floor() as i32, stall.centre.1.floor() as i32), "a stall's own ground is not open");
     }
 
     /// The island (seed 7 at 2048 m, default parameters), generated once for the sight tests.
@@ -672,8 +736,11 @@ mod tests {
             // Tiles moved on 2026-11-11 (eye-2: models hide only where solid at eye height) from
             // 1a2a9a096caa8e21 and a3d6f6164c07192c, which the height rule (the last field: the
             // same land with no model's `eye_cells`) still gives exactly.
-            ("island", island["seed"].as_u64().unwrap(), island["map"]["size"].as_u64().unwrap() as u32, params(&island), (0xe051dd1788c4d9f9u64, 0x0d2f77752781845c, 0x8ff57472b004a13f), 0x1a2a9a096caa8e21u64),
-            ("floor-megacity-2k", mega["seed"].as_u64().unwrap(), 2048, params(&mega), (0x5340b81e0eef2bd4, 0xc06f16f3dcac1290, 0x0c6b3f2c51f13129), 0xa3d6f6164c07192c),
+            // Layouts moved on 2026-11-11 (arrival-open: newcomers arrive on open ground, the
+            // arrival is in the layout digest) from 8ff57472b004a13f and 0c6b3f2c51f13129; tiles
+            // and heights unchanged.
+            ("island", island["seed"].as_u64().unwrap(), island["map"]["size"].as_u64().unwrap() as u32, params(&island), (0xe051dd1788c4d9f9u64, 0x0d2f77752781845c, 0xe798f6a9f302d538), 0x1a2a9a096caa8e21u64),
+            ("floor-megacity-2k", mega["seed"].as_u64().unwrap(), 2048, params(&mega), (0x5340b81e0eef2bd4, 0xc06f16f3dcac1290, 0xfce494ea2cf1e408), 0xa3d6f6164c07192c),
         ];
         let mut bad = Vec::new();
         for (name, seed, size, p, want, by_height) in cases {

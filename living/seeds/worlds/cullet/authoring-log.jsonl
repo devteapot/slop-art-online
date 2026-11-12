@@ -37,3 +37,12 @@
 {"at": "2026-11-11T16:50:02", "purpose": "ties:Edda Hollin", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14290, "cached": 13568, "completion": 86, "seconds": 1.2}
 {"at": "2026-11-11T16:50:03", "purpose": "ties:Kit Calloway", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14100, "cached": 13568, "completion": 76, "seconds": 0.8}
 {"at": "2026-11-11T16:50:04", "purpose": "ties:Anselm Faro", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14214, "cached": 0, "completion": 89, "seconds": 0.8}
+{"at": "2026-11-12T00:03:19", "purpose": "sheets:morrow", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14344, "cached": 0, "completion": 2593, "seconds": 8.9}
+{"at": "2026-11-12T00:03:21", "purpose": "sheets:quill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 15299, "cached": 0, "completion": 4152, "seconds": 10.4}
+{"at": "2026-11-12T00:03:27", "purpose": "ties:Aldous Quill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14472, "cached": 13568, "completion": 83, "seconds": 6.2}
+{"at": "2026-11-12T00:03:28", "purpose": "ties:Sabine Quill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14170, "cached": 13568, "completion": 77, "seconds": 0.8}
+{"at": "2026-11-12T00:03:28", "purpose": "ties:Ingrid Morrow", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14255, "cached": 0, "completion": 79, "seconds": 0.8}
+{"at": "2026-11-12T00:04:04", "purpose": "sheets:quill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 15299, "cached": 15232, "completion": 4681, "seconds": 19.2}
+{"at": "2026-11-12T00:04:05", "purpose": "ties:Kenji Sato", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14295, "cached": 13568, "completion": 78, "seconds": 1.0}
+{"at": "2026-11-12T00:04:05", "purpose": "ties:Aldous Quill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14451, "cached": 13824, "completion": 85, "seconds": 0.9}
+{"at": "2026-11-12T00:04:06", "purpose": "ties:Sabine Quill", "profile": "deepseek-flash", "model": "deepseek-v4-1-flash-1017", "effort": null, "prompt": 14239, "cached": 13696, "completion": 79, "seconds": 0.8}

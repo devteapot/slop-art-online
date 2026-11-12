@@ -14,7 +14,7 @@
 use rhai::packages::Package;
 use rhai::{Array, Dynamic, Engine, Map, Scope, AST};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 pub mod body;
@@ -689,6 +689,18 @@ impl Tables {
         let Some((names, m)) = self.by.get(table) else { return Vec::new() };
         names.iter().filter(|n| m.get(n.as_str()).and_then(|e| e.get(t)).is_some_and(|v| !v.is_unit() && v.as_bool() != Ok(false))).cloned().collect()
     }
+
+    /// The entries, in order, whose trait `t` is the text `value`; an entry without it counts as
+    /// `absent` (`entries_where("recipes", "by", "make", "make")`: a recipe names its way, or is
+    /// made by `make`).
+    pub fn entries_where(&self, table: &str, t: &str, value: &str, absent: &str) -> Vec<&Map> {
+        let Some((names, m)) = self.by.get(table) else { return Vec::new() };
+        names.iter().filter_map(|n| m.get(n.as_str())).filter(|e| match e.get(t) {
+            None => absent == value,
+            Some(v) if v.is_unit() => absent == value,
+            Some(v) => v.clone().into_string().is_ok_and(|s| s == value),
+        }).collect()
+    }
 }
 
 /// The engine's primitives over the data tables (see [`Tables`]).
@@ -702,6 +714,8 @@ fn register_tables(e: &mut Engine, t: &Rc<RefCell<Tables>>) {
     // A world constant in force: the script's `laws()` value, or the world's own
     // (`world_law_values()`, which `set_world_law` and a seed's `rules` write). Unit when no
     // such law.
+    let t5 = t.clone();
+    e.register_fn("entries_where", move |table: &str, tr: &str, value: &str, absent: &str| -> Array { t5.borrow().entries_where(table, tr, value, absent).into_iter().map(|m| m.clone().into()).collect() });
     let t4 = t.clone();
     e.register_fn("law", move |name: &str| -> Dynamic { t4.borrow().laws.get(name).cloned().unwrap_or(Dynamic::UNIT) });
 }
@@ -861,6 +875,9 @@ pub struct Scripts {
     /// How each skill is presented (`<name>_ui()` over its defaults), and what was wrong with
     /// the declarations (an install refuses them; a client plays on with the defaults).
     ui: ui::UiRead,
+    /// What each way of making makes (a skill with `<skill>_making()`), in the script's order:
+    /// each product's recipe as data (`recipe_parts`).
+    makings: BTreeMap<String, Vec<RecipeParts>>,
     /// The body's meters and the memo of its statuses (`meters()`, `status_of(a)`).
     body: body::Body,
 }
@@ -885,6 +902,50 @@ pub struct StructureTraits {
     /// The kind it counts as wherever a kind is asked by name (`like: "storage"`: a graph's
     /// `nearest storage` finds it too); empty: only its own name.
     pub like: String,
+}
+
+/// One product of a way of making, as a recipe grid lays it out (`Scripts::recipe_parts`): the
+/// script's `recipe_parts(skill, way, product)`, read once at install, with each name's look.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RecipeParts {
+    /// The skill whose grid it is in (`make`, `craft`, `cook`, `smoke`, or a world's own way).
+    pub skill: String,
+    /// What is made, and how it looks (`recipe_look`).
+    pub product: String,
+    pub look: ItemLook,
+    /// How many one act makes.
+    pub makes: u32,
+    /// What the act names as its item (`human_act`'s `item`): the product, or for a way whose item
+    /// is what is used (`cook`, `smoke`), the item it is made from.
+    pub item: String,
+    /// Used up from the pack.
+    pub takes: Vec<RecipePart>,
+    /// Held and not used up (none yet: goods-3 adds the recipes' `tools`).
+    pub tools: Vec<RecipePart>,
+    /// The structure kind it is made at, `"fire"` for any fire, or empty: anywhere.
+    pub at: String,
+    /// The fire there must be burning.
+    pub lit: bool,
+    /// Units of fuel it draws from that fire (0: none).
+    pub fuel: f32,
+    /// The technique it needs (empty: none).
+    pub knows: String,
+    /// How long one act takes.
+    pub ms: u64,
+}
+
+/// A name a recipe asks for and how many: an item, or a trait that any item carrying it
+/// satisfies (`alkali`: ash, or a world's soda).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RecipePart {
+    pub name: String,
+    pub qty: u32,
+    /// The items that satisfy it, in the items' order: the item itself, or every item with the
+    /// trait.
+    pub any_of: Vec<String>,
+    /// How it looks: the item's look; for a trait, the look of the trait's name (its name as the
+    /// icon and the label), which a client may draw as its first item's.
+    pub look: ItemLook,
 }
 
 /// What a client shows of an item or of what a recipe makes (`Scripts::item_look_of`).
@@ -1140,7 +1201,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default(), body: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1162,6 +1223,7 @@ impl Scripts {
         skills.structures = s.kinds_of("structures");
         skills.techniques = s.read_know_how()?;
         s.skills = std::sync::Arc::new(skills);
+        s.makings = s.read_makings()?;
         s.ways = s.read_ways()?;
         s.structures = s.read_structures()?;
         s.seasons = s.read_seasons()?;
@@ -1544,6 +1606,92 @@ impl Scripts {
             return None;
         }
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok()?.into_string().ok()
+    }
+
+    /// What a way of making makes (`craft`, `cook`, `smoke`, `make`, or a world's own: a skill
+    /// with `<skill>_making()`), in the script's order: a recipe grid's cells. Empty for a skill
+    /// that is no way of making, or that makes nothing in this world.
+    pub fn products_of(&self, skill: &str) -> Vec<&str> {
+        self.makings.get(skill).map(|v| v.iter().map(|p| p.product.as_str()).collect()).unwrap_or_default()
+    }
+
+    /// What an act of a way of making names as its item to make `product`: the product itself,
+    /// or for a way whose item is what is used (`cook`, `smoke`), the item it is made from
+    /// (`cooked_fish` → `fish`). None when the way does not make it.
+    pub fn making_item(&self, skill: &str, product: &str) -> Option<&str> {
+        self.recipe_parts(skill, product).map(|p| p.item.as_str())
+    }
+
+    /// A product of a way of making as data, for a recipe grid's cell: what it takes and holds,
+    /// where, with what heat and knowing, how long; each name with its look. None when the way
+    /// does not make it. `made_how(product)` is the same recipe in words.
+    pub fn recipe_parts(&self, skill: &str, product: &str) -> Option<&RecipeParts> {
+        self.makings.get(skill)?.iter().find(|p| p.product == product)
+    }
+
+    /// The ways of making and what they make (`products_of`, `making_item`), read once: for each
+    /// skill with `<skill>_making()`, the script's `products_of(skill)` and, for each product,
+    /// `making_item(skill, way, product)`. A script without them (from before recipes-1) has none.
+    fn read_makings(&self) -> Result<BTreeMap<String, Vec<RecipeParts>>, String> {
+        let mut out = BTreeMap::new();
+        if !self.unary.contains("products_of") || !self.fns.contains("recipe_parts") {
+            return Ok(out);
+        }
+        let mut ways: Vec<&String> = self.nullary.iter().filter(|f| f.ends_with("_making")).collect();
+        ways.sort();
+        for f in ways {
+            let skill = f.trim_end_matches("_making");
+            if self.skills.get(skill).is_none() {
+                return Err(format!("{f}: `{skill}` is not a skill (no `{skill}_spec()`): a way of making is a skill's"));
+            }
+            let way = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?;
+            if !way.is_map() {
+                return Err(format!("{f} must return a map"));
+            }
+            let products = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "products_of", (skill.to_string(),)).map_err(|e| format!("products_of(\"{skill}\"): {e}"))?;
+            let products = products.try_cast::<Array>().ok_or_else(|| format!("products_of(\"{skill}\") must return a list of names"))?;
+            let mut made: Vec<RecipeParts> = Vec::new();
+            for p in products {
+                let p = p.into_string().map_err(|_| format!("products_of(\"{skill}\") must return a list of names"))?;
+                if made.iter().any(|q| q.product == p) {
+                    continue;
+                }
+                let bad = |what: &str| format!("recipe_parts(\"{skill}\", \"{p}\"): {what}");
+                let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "recipe_parts", (skill.to_string(), way.clone(), p.clone())).map_err(|e| bad(&e.to_string()))?;
+                let Some(m) = m.try_cast::<Map>() else { return Err(bad("must return a map")) };
+                let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
+                let num = |k: &str| m.get(k).and_then(|v| v.as_float().ok().or_else(|| v.as_int().ok().map(|n| n as f64))).unwrap_or(0.0);
+                let parts = |k: &str| -> Result<Vec<RecipePart>, String> {
+                    let Some(t) = m.get(k).and_then(|v| v.clone().try_cast::<Map>()) else { return Ok(Vec::new()) };
+                    let mut out = Vec::new();
+                    for (name, n) in t {
+                        let qty = n.as_int().map_err(|_| bad(&format!("`{k}.{name}` must be a whole number")))?.max(0) as u32;
+                        let name = name.to_string();
+                        let tables = self.tables.borrow();
+                        let any_of = if tables.entry("items", &name).is_some() { vec![name.clone()] } else { tables.having("items", &name) };
+                        drop(tables);
+                        out.push(RecipePart { look: self.item_look_of("item_look", &name).unwrap_or_default(), name, qty, any_of });
+                    }
+                    Ok(out)
+                };
+                made.push(RecipeParts {
+                    skill: skill.to_string(),
+                    look: self.item_look_of("recipe_look", &p).unwrap_or_default(),
+                    makes: num("makes").max(0.0) as u32,
+                    item: text("item"),
+                    takes: parts("takes")?,
+                    tools: parts("tools")?,
+                    at: text("at"),
+                    lit: m.get("lit").and_then(|v| v.as_bool().ok()).unwrap_or(false),
+                    fuel: num("fuel") as f32,
+                    knows: text("knows"),
+                    ms: num("ms").max(0.0) as u64,
+                    product: p,
+                });
+            }
+            out.insert(skill.to_string(), made);
+        }
+        Ok(out)
     }
 
     /// How an item looks in a client (`item_look`), or what a recipe makes (`recipe_look`: its
@@ -3655,6 +3803,69 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         let text = s.world_text(&[]);
         assert!(text.contains("a furnace burns 3 fuel a game hour (wood or peat)") && text.contains("glass: make it at a furnace"), "{text}");
         assert!(!shipped.world_text(&[]).contains("Fires that burn fuel"));
+    }
+
+    /// Everything made is a recipe in one table, made by one mechanism through four ways in
+    /// (recipes-1): craft, cook and smoke keep their names, items and words; a recipe grid reads
+    /// what each way makes as data; a cell greys with the rules' own words when only its inputs
+    /// are missing; and a world whose recipes leave the shipped ones out offers no cooking.
+    #[test]
+    fn making_is_one_mechanism_through_four_ways() {
+        let (island, c) = (scripts(), cullet());
+        // What each way makes, and what its acts name.
+        assert_eq!(island.products_of("craft"), ["spear", "cloak", "torch", "axe", "pick", "net", "basket", "bow", "arrow", "salve", "leather", "armor"]);
+        assert_eq!(island.products_of("cook"), ["cooked_fish", "cooked_meat"]);
+        assert_eq!(island.products_of("smoke"), ["smoked_fish", "smoked_meat"]);
+        assert!(island.products_of("make").is_empty() && island.products_of("eat").is_empty());
+        assert_eq!(c.products_of("make"), ["ash", "glass", "smoked_fish", "smoked_meat", "baked_roots", "lamp_oil"]);
+        assert_eq!(c.products_of("cook"), island.products_of("cook"), "Cullet's people cook as the island's do");
+        assert_eq!((island.making_item("cook", "cooked_meat"), island.making_item("craft", "arrow"), c.making_item("make", "smoked_fish")), (Some("meat"), Some("arrow"), Some("smoked_fish")));
+        assert_eq!(island.making_item("cook", "spear"), None);
+        // A grid cell's parts, as data.
+        let glass = c.recipe_parts("make", "glass").unwrap();
+        fn part(p: &RecipePart) -> (&str, u32, Vec<String>) {
+            (p.name.as_str(), p.qty, p.any_of.clone())
+        }
+        assert_eq!(glass.takes.iter().map(part).collect::<Vec<_>>(), [("alkali", 1, vec!["ash".to_string()]), ("sand", 2, vec!["sand".to_string()])]);
+        assert_eq!((glass.at.as_str(), glass.lit, glass.fuel, glass.knows.as_str(), glass.ms, glass.makes, glass.tools.len()), ("furnace", true, 1.0, "glassmaking", 15000, 1, 0));
+        assert_eq!((glass.look.label.as_str(), glass.takes[1].look.label.as_str()), ("glass", "sand"));
+        let cook = island.recipe_parts("cook", "cooked_fish").unwrap();
+        assert_eq!((cook.item.as_str(), cook.takes.iter().map(part).collect::<Vec<_>>(), cook.at.as_str(), cook.lit, cook.knows.as_str(), cook.ms), ("fish", vec![("fish", 1, vec!["fish".to_string()])], "fire", true, "cooking", 4000));
+        let arrow = island.recipe_parts("craft", "arrow").unwrap();
+        assert_eq!((arrow.makes, arrow.at.as_str(), arrow.lit, arrow.ms, arrow.look.group.as_str()), (3, "", false, 8000, "weapon"));
+        assert_eq!(island.text_of("made_how", "cooked_fish").unwrap(), "cook it at a fire from 1 fish (knowing cooking)");
+        assert_eq!(island.text_of("made_how", "spear").unwrap(), "craft it from 1 stone, 2 wood (knowing spear)");
+        assert_eq!(c.text_of("made_how", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it (knowing glassmaking)");
+        // The grids are declared: each way's cells are its products, described in its words.
+        for (w, s) in [("island", &island), ("cullet", &c)] {
+            for skill in ["craft", "cook", "smoke"] {
+                let u = s.ui(skill).unwrap();
+                assert_eq!((u.choose, u.source, u.detail.as_deref()), (crate::ui::Choose::Grid, Some(crate::ui::ItemSource::Products), Some("made_how")), "{w} {skill}");
+            }
+        }
+        // A cell greys with the check's own words when only its inputs are missing, and the act
+        // passes once the pack holds them: for every product of every way, in both worlds.
+        for (w, s) in [("island", &island), ("cullet", &c)] {
+            let names = s.tables().names("know_how").to_vec();
+            let know: Vec<&str> = names.iter().map(|k| k.as_str()).collect();
+            for skill in ["craft", "cook", "smoke", "make"] {
+                for p in s.products_of(skill) {
+                    let r = s.recipe_parts(skill, p).unwrap();
+                    let at = match r.at.as_str() { "" | "fire" => "campfire", k => k };
+                    let have: Vec<(&str, u32)> = r.takes.iter().map(|t| (t.any_of[0].as_str(), t.qty)).collect();
+                    let without = s.check(skill, &at_fire(at, true, 6.0, &[], &know, skill, &r.item, 1)).unwrap_err();
+                    assert!(!without.is_empty() && !without.contains("{"), "{w}: {skill} {p} without its inputs: {without:?}");
+                    s.check(skill, &at_fire(at, true, 6.0, &have, &know, skill, &r.item, 1)).unwrap_or_else(|e| panic!("{w}: {skill} {p} with its inputs: {e}"));
+                }
+            }
+        }
+        assert_eq!(island.check("cook", &at_fire("campfire", true, 0.0, &[], &["cooking"], "cook", "fish", 1)).unwrap_err(), "no fish in your pack (fish: gather it at a fishing_spot, or take it from a storage)");
+        assert_eq!(island.check("craft", &at_fire("campfire", true, 0.0, &[("wood", 2)], &["spear"], "craft", "spear", 1)).unwrap_err(), "need 1 stone for a spear (stone: gather it at a boulder, or take it from a storage)");
+        // A world whose recipes leave out the shipped ones makes nothing by them, and is not
+        // offered crafting, cooking or smoking (its own overlay must add `base_recipes()`).
+        let bare = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), "fn recipes() { [#{ name: \"ash\", at: \"fire\", lit: true, takes: #{ wood: 2 } }] }").unwrap()).unwrap();
+        assert!(bare.products_of("cook").is_empty() && !bare.skills().get("cook").unwrap().listed && !bare.skills().get("craft").unwrap().listed);
+        assert_eq!(bare.products_of("make"), ["ash"]);
     }
 
     /// Every item says how a client shows it (`icon`, `label`, `group`), as data no rule reads;

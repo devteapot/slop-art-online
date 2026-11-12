@@ -85,9 +85,29 @@ impl Plugin for LivePlugin {
                     .after(me)
                     .run_if(island),
             )
-            .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island));
+            .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island))
+            // After sight, which sets every thing's visibility each frame: what stands inside a
+            // closed building is hidden over it.
+            .add_systems(Update, indoors.in_set(Phase::Camera).after(crate::sight::update).run_if(island));
         if let Some(s) = Script::from_env() {
             app.insert_resource(s).add_systems(Update, script.in_set(Phase::Input).before(crate::controls::movement).before(crate::ui::UiInput));
+        }
+    }
+}
+
+/// What stands inside a planned lot's building ([`crate::world::Indoors`]: a household's hearth
+/// and store on its house's floor) is hidden while that building is drawn closed, or not drawn at
+/// all; while the cutaway has it open, it is drawn as sight says (`sight::update`, which runs
+/// first and sets every thing's visibility each frame), and a kit model once it is fitted.
+fn indoors(live: Res<Live>, lots: Query<&crate::envs::Occluder>, mut q: Query<(&crate::world::Indoors, &mut Visibility)>, mut was: Local<HashMap<u32, bool>>) {
+    for (inside, mut vis) in &mut q {
+        let open = live.lots.get(&inside.0).and_then(|es| es.first()).and_then(|e| lots.get(*e).ok()).is_some_and(|o| o.open);
+        if was.insert(inside.0, open) != Some(open) {
+            // For checks (`RUST_LOG=living_game::live=debug`): once each time a building opens or closes.
+            debug!("indoors: lot {} {}", inside.0, if open { "open: what stands inside it is drawn" } else { "closed: what stands inside it is hidden" });
+        }
+        if !open && *vis != Visibility::Hidden {
+            *vis = Visibility::Hidden;
         }
     }
 }
@@ -1455,5 +1475,44 @@ fn script(
         s.at += 1;
         s.since = 0.0;
         s.frames = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A structure inside a house is hidden while the house is drawn closed, or not drawn, and
+    /// shown while the cutaway has it open; a kit model waits for its fit.
+    #[test]
+    fn what_stands_indoors_shows_only_while_its_house_is_open() {
+        let mut app = App::new();
+        // A stand-in for `sight::update`, which sets every thing's visibility each frame first.
+        let sight = |mut q: Query<&mut Visibility, With<crate::world::Indoors>>| {
+            for mut v in &mut q {
+                *v = Visibility::Inherited;
+            }
+        };
+        app.init_resource::<Live>().add_systems(Update, (sight, indoors).chain());
+        let house = app.world_mut().spawn(crate::envs::Occluder { height: 9.0, open: false }).id();
+        app.world_mut().resource_mut::<Live>().lots.insert(7, vec![house]);
+        let hearth = app.world_mut().spawn((crate::world::Indoors(7), Visibility::Inherited)).id();
+        let elsewhere = app.world_mut().spawn((crate::world::Indoors(8), Visibility::Inherited)).id();
+        let vis = |app: &App, e: Entity| *app.world().get::<Visibility>(e).unwrap();
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Hidden, "closed");
+        assert_eq!(vis(&app, elsewhere), Visibility::Hidden, "its house is not drawn");
+        app.world_mut().get_mut::<crate::envs::Occluder>(house).unwrap().open = true;
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Inherited, "open");
+        app.world_mut().get_mut::<crate::envs::Occluder>(house).unwrap().open = false;
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Hidden, "closed again");
+        // A kit model not fitted yet is hidden too while its house is closed (no flash at its
+        // unfitted size).
+        let model = crate::lookdev::Model { vrm: false, file: "envs/k/hearth/hearth.glb".into(), height: 0.0, ground_y: 0.0, glow: None };
+        let unfitted = app.world_mut().spawn((crate::world::Indoors(7), model, Visibility::Inherited)).id();
+        app.update();
+        assert_eq!(vis(&app, unfitted), Visibility::Hidden, "unfitted, its house closed");
     }
 }

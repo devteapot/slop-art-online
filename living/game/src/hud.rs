@@ -54,7 +54,7 @@ pub fn draw(
     mut style: ResMut<crate::style::Style>,
     lookdev: Option<ResMut<crate::lookdev::Lookdev>>,
     envs: Option<ResMut<crate::envs::Envs>>,
-    keys: Res<ButtonInput<KeyCode>>,
+    (keys, fov): (Res<ButtonInput<KeyCode>>, Option<Res<crate::facing::FovState>>),
     time: Res<Time>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -78,6 +78,10 @@ pub fn draw(
             match (net.my_id, net.my_body()) {
                 (Some(id), Some(b)) => {
                     ui.label(format!("{} (#{id}) at {:.1}, {:.1}", names.get(&id).map_or(net.name.as_str(), |n| n.as_str()), b.x, b.y));
+                    // Facing sight's five values, for the developer (`facing.rs`).
+                    if let Some(f) = fov.as_ref().and_then(|f| f.field) {
+                        ui.label(egui::RichText::new(format!("facing sight: {}", crate::facing::values(&f))).small());
+                    }
                 }
                 _ => {
                     ui.label(format!("joining as {}…", net.name));

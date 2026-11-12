@@ -2,8 +2,8 @@
 
 While the world's `fov_on` law is on, what a character sees depends on where its body faces (`living_rules::sight::sees`, docs/PERCEPTION.md "The field of view"). The client draws the same rule from the same law:
 
-- `living/game/src/sightedge.rs`: `senses(a)` from the installed script gives `field` with five values (`focal_deg`, `side_deg`, `side_share`, `near_m`, `margin_deg`) while `fov_on` is on.
-- `living/game/src/sightfield.rs`: the field texture is the sight lines AND `sight::reach` at each texel's angle off `body.heading`. The heading comes from `steer::pose` on my own `my_body` row. It is recomputed on a 2° turn, as well as on the old triggers. With no field it is exactly the old field.
+- `living/game/src/sightedge.rs`: my senses are the authority's `my_senses` row (sight, hearing and, while `fov_on` is on, the field's five values: `focal_deg`, `side_deg`, `side_share`, `near_m`, `margin_deg`). Without the row (before it arrives, or while minds hold the character) the client asks the installed script's `senses(a)` for the sight only, with no field.
+- `living/game/src/sightfield.rs`: the field texture is the sight lines AND `sight::reach` at each texel's angle off `body.heading`. The facing comes from my own `my_body` row: `steer::facing` over `steer::pose`'s travel heading and look-2's `face_off`/`face_turn`/`face_turn_s`, as the authority's `common::facing_at`. It is recomputed on a 2° turn, as well as on the old triggers. With no field it is exactly the old field.
 - `living/game/src/facing.rs`: the readout and the switch. Two notes show on each change: "Facing sight on/off" and the five values. F5 switches it through an admin-only second connection, only with `LIVING_GAME_ADMIN_TOKEN_FILE` set and only to `verify-*` worlds.
 - `living/game/src/ui/facing.rs`: Settings › Play › Facing sight, with the switch (read-only without the admin link), "Facing sight: on/off" and the values.
 - `living/game/src/heardmark.rs`: a soft ground mark per `heard_sounds` row, keyed by its per-viewer key. It sits that compass way at its band's rough distance and fades after the row goes.
@@ -17,7 +17,8 @@ While the world's `fov_on` law is on, what a character sees depends on where its
 
 - `off`: with `fov_on` false, `facing_sight.on` is false, the field dumps have `"facing": null` and nothing changes.
 - `switch`: F5, or Settings › Play › Facing sight's switch, calls `set_world_law("fov_on", …)` over the admin link. Each switch is a `law_change` row (owner SQL).
-- `readout`: the log line `facing: Facing sight on — Focal ±70° · side ±110° at 33% of sight · near 3 m all round · margin 10°` and the two toasts (the dump's `toasts`).
+- `senses`: after F5, the dump's `facing_sight` (`source: Authority`, `sight`, the field) equals the `character_senses` row for the player (owner SQL; `my_senses` is its view).
+- `readout`: the log line `facing: Facing sight on — Focal ±70° · side ±110° at 33% of sight · near 3 m all round · margin 10°`. On screen, a pill at the top centre (under the target plate, away from my character) says "Facing sight on · F5 switches it" for 3 s (the dump's `extra.facing_note`). The five values are never over the play view: they are in Settings › Play and in the developer panel (F1).
 - `match`: at a look (live script `look:DEG`, which `human_face` sends), the authority's `perceived` rows for the player agree with the client's field texel under each creature within 15 m. Creatures that the keep margins (1 m, 10°) or a light could decide are counted apart.
 - `walk`: walking north with the cursor east, the client releases its look while a direction is held (`controls::FACE_WHILE_MOVING`, off until dev-box's look-2), so the body faces and walks north. With the switch on, the authority would hold the heading 30° off the travel (`look_walk_deg`); the check follows the switch. A release (F3 to "where you walk") leaves the walk on its travel. Standing, a release leaves the facing where it was.
 - `heard`: each authority `heard` row (owner SQL) has a live mark with the same key, bearing and band in the dump's `extra.heard`. None is for someone in sight. Marks fade after their rows go.
