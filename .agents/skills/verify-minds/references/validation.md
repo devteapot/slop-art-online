@@ -19,6 +19,11 @@ Branch `fix-takeover` (from main `8c5b8530`), own container `fixtake-stdb` (2.14
   - Full suite `minds-fixtake-full-003429`, exit 1. Passing: `takeover`, roundtrip, acts, conversation, prune, reject, only, reconnect, lod, sight, fov, drop, resident, night, jev, rethink, rethink-llm, dealings, parked, death-names, frame, reasons, speech, health-seen, alongside and greet. `consolidation` is its known XFAIL. `animals` hit its known gap ("a request answered by instinct"). `answers` failed (below).
   - `answers` failed in the same suite on the ask race recipes-1 fixed in `dealings`. The mind accepted and declined 4 s after start, so the case found no pending deliberation, asked again and waited 65 s for a row that had come and gone. The case now asks only while the terms are open and takes the pending request or the terms declined. It passed 5 of 5 (`minds-fixtake-a1`–`a5`): a1–a2 found the request pending, and a3–a5 went through the ask-or-declined wait.
 - `just living-check` passes (366 s).
+- Full suite on the final code, `minds-fixtake-full2-013217`, exit 1. `takeover` and `answers` pass, and so do the other cases except these three:
+  - `consolidation` is its known XFAIL.
+  - `animals` hit its known gap.
+  - `greet` failed in its first arm (it passed in suite 1). The shared `Run.request` helper installed its `set_behavior` think for Datha at 01:23:35, while the mind's start-up deliberation for Datha was under way. Its reply installed at 01:23:48, which replaced the test graph and set the deliberation clock, so nothing was asked within the 65 s wait. This is the same race class as `takeover`, in the helper about a dozen cases share. It is not fixed here.
+- `paid_safety.py` passes (`minds-duel-safety-fixtake`).
 - **Not changed:** if the `takeover_s` law were set below `think_min_s`, the takeover's own ask could be declined (`hand_back` leaves `deliberated_ms` as the minds left it). With the default 30 s against 20 s it cannot happen, and no case sets it.
 
 ## 2026-11-12 fix-dealings: `dealings` passes again on main (dev-box)
