@@ -1151,20 +1151,24 @@ def wheel_workplace(run, c):
         return
     f = fs[0]
     plan = (f"ready;wait:2;sync:there;wait:6;pointat:{f['x']},{f['y']}:0.8;wait:0.8;dump:00;key:KeyF:down;wait:0.5;shot:01_open;dump:01;"
-            "nudge:0,-50;wait:0.3;shot:02_make;dump:02;key:KeyF:up;wait:3;shot:03_sent;dump:03;quit")
+            "nudge:0,-50;wait:0.3;shot:02_make;dump:02;key:KeyF:up;wait:1;shot:03_grid;dump:03;key:Digit1:tap;wait:2;shot:04_sent;dump:04;quit")
     # Beside the furnace (admin place_at, scene setup); F aims at the nearest thing.
     there = f"there=place_at|{{me}}|{f['x'] + 1.2}|{f['y']}"
     out, code, text = drive(run, s, plan, syncs=[there])
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) for k in ["00", "01", "02", "03"]}
+    d = {k: dump(out, k) for k in ["00", "01", "02", "03", "04"]}
     w = lambda k: (d[k] or {}).get("wheel") or {}
     secs = {x["dir"]: x for x in w("01").get("sections", [])}
     c.check(s, f"F held at a {f['kind']} opens its wheel: Make north, Feed east", secs.get("n", {}).get("what") == "make" and secs.get("e", {}).get("what") == "feed", str({k: v["what"] for k, v in secs.items()}))
     mk = secs.get("n", {})
     c.check(s, "with the fire out, Make greys with the rules' reason", mk.get("allowed") is False and bool(mk.get("reason")), str(mk))
     L = log(out)
-    c.check(s, "choosing it still sends it (grey is a hint)", "ui: wheel chose n make (grey: sent, the authority decides)" in L and re.search(r'verbs: .* → \{"do":"make"', L) is not None)
-    c.check(s, "and the authority's words are noted", len((d["03"] or {}).get("notes") or []) > 0, str((d["03"] or {}).get("notes")))
+    # Make is a way of making with a recipe grid: choosing it opens the grid (its cells greyed with
+    # the rules' reasons), and a greyed cell is still sent (grey is a hint).
+    g3 = (d["03"] or {}).get("grid") or {}
+    c.check(s, "choosing it opens Make's recipe grid, its cells greyed with the rules' reasons", g3.get("skill") == "make" and g3.get("cells") and all(x["reason"] for x in g3["cells"] if not x["allowed"]), str([(x["product"], x["allowed"]) for x in g3.get("cells") or []][:4]))
+    c.check(s, "a greyed cell is still sent (grey is a hint)", re.search(r"ui: grid make chose \w+ \(grey", L) is not None and re.search(r'verbs: .* → \{"do":"make"', L) is not None)
+    c.check(s, "and the authority's words are noted", len((d["04"] or {}).get("notes") or []) > 0, str((d["04"] or {}).get("notes")))
 
 
 def grid(run, c):
