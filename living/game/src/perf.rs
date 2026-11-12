@@ -30,7 +30,8 @@
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each
-//!   shadow cascade; every 10 s, what the loaded assets hold (`assets:`);
+//!   shadow cascade; every 10 s, what the loaded assets hold (`assets:`); with `matnames` too,
+//!   people's distinct materials in the camera's view by the file's material name;
 //! - `rebuild=S`: S seconds after the first load's cover lifts, every character's scene is
 //!   spawned again, as a changed scene asset would make Bevy do (`characters::force_rebuild`), to
 //!   check that they are fitted, shaped and animated again; `nokeep` skips that (what happened
@@ -370,6 +371,7 @@ pub fn log_views(
     children: Query<&Children>,
     mats: Query<&MeshMaterial3d<crate::style::Toon>>,
     toons: Res<Assets<crate::style::Toon>>,
+    names: Query<&bevy::gltf::GltfMaterialName>,
 ) {
     if !has("diag") {
         return;
@@ -409,6 +411,17 @@ pub fn log_views(
             }
         }
         info!("views: {} toon materials; {}", toons.len(), out.join("; "));
+        if has("matnames") {
+            // `matnames`: people's distinct materials in the camera's view by the file's material
+            // name, so a material that should be shared shows as one.
+            let mut by: std::collections::BTreeMap<&str, std::collections::HashSet<_>> = Default::default();
+            for e in vis.get(id).iter().filter(|e| people.contains(*e)) {
+                if let (Ok(m), Ok(n)) = (mats.get(*e), names.get(*e)) {
+                    by.entry(n.0.as_str()).or_default().insert(m.0.id());
+                }
+            }
+            info!("view materials: {}", by.iter().map(|(k, v)| format!("{k} ×{}", v.len())).collect::<Vec<_>>().join(", "));
+        }
     }
 }
 
