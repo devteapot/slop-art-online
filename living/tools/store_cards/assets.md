@@ -16,7 +16,7 @@ tags:
 # Slop Art Online assets
 
 Generated assets from a **research build** of [Slop Art Online](https://github.com/devteapot/slop-art-online),
-which is not a finished game. They are kept here so that any machine can rebuild the game's look
+which is not a finished game. They are kept here so that the game's look can be rebuilt from them
 without copying folders between disks.
 
 **The motion takes are AI-generated:** they are raw output of a text-to-motion model, generated

@@ -5,10 +5,10 @@ Status: **published** (2026-11-11, branch `tool-store-2`, from the Spark).
 | Dataset | Holds | Address |
 | --- | --- | --- |
 | `carlid/slop-art-online-runs` | 62 trial batches, as `batches/spark/<batch>/`: the fake `hm1`, `l9` and 60 more real batches (527 instances, 212,758 model calls, 935,249 rows, 1,192 prompts); play-test 2's session as `sessions/spark/playtest-2/` (133 calls, 5 prompts) | <https://huggingface.co/datasets/carlid/slop-art-online-runs> |
-| `carlid/slop-art-online-assets` | the motion library, as `motion/raw/`: 626 Kimodo takes and `batch_stats.json`, with `motion/MANIFEST.json` | <https://huggingface.co/datasets/carlid/slop-art-online-assets> |
+| `carlid/slop-art-online-assets` | the motion library, as `motion/raw/`: 645 Kimodo takes and `batch_stats.json`, plus the skeleton file `motion/somaskel77_skeleton.json`, with `motion/MANIFEST.json` (626 takes on 2026-11-11; 19 added, 2 starts replaced and the skeleton added on 2026-11-12) | <https://huggingface.co/datasets/carlid/slop-art-online-assets> |
 
 **Checks.**
-- **Fetch-backs.** `l9` came back byte-identical to the local pack. Unpacked, all 170 files equal the scrubbed source byte for byte. Play-test 2 came back byte-identical to its scrubbed tree (38 of 38 files). The motion library came back with every sha256 matching: 626 takes byte-identical, and `batch_stats.json` equal as JSON (one trailing newline added by the scrubber).
+- **Fetch-backs.** `l9` came back byte-identical to the local pack. Unpacked, all 170 files equal the scrubbed source byte for byte. Play-test 2 came back byte-identical to its scrubbed tree (38 of 38 files). The motion library, as first published on 2026-11-11, came back with every sha256 matching: 626 takes byte-identical, and `batch_stats.json` equal as JSON (one trailing newline added by the scrubber).
 - **Viewer.** It converted all six tables (`instances` 527, `calls` 212,758, `rows` 935,249, `prompts` 1,192, `session_calls` 133, `session_prompts` 5): row counts equal to the packs' manifests, nothing failed, and the previews, search and filter are on (checked 22:03). The first conversion of `calls` had failed ("Couldn't cast array of type string to null") because `hm1`'s `error` column is null throughout. The card now declares every column's type (`dataset_info`). The assets dataset has the viewer off, since its takes are binary.
 - **Held.**
   - `b1`–`b3`: calls from `mistral-small-latest` and `gpt-6-luna`, whose terms are not read.
@@ -414,6 +414,7 @@ The proposed licence of both cards is MIT, matching the code. That is the owner'
 
 ## Fetch and publish
 
+- **Asset packs name no machine** (`store-no-machine`): the motion library's `MANIFEST.json` has no `machine` field, its paths and commit message ("motion library") carry no machine label or host name, and the assets card says the takes were made "on our own hardware". The self-test `AssetPacksNameNoMachine` packs and publishes (local backend) with `STORE_MACHINE` set and searches every file, path, the commit log and the card for the label, the host name, `spark`, `laptop` and `dev-box`. The runs dataset still uses role labels in its layout; see the open question in the coordinator's thread.
 - **`fetch motion-library`** copies `motion/raw/*.npz` from the assets repository into `.local/kimodo/outputs/library/`, the folder `gen_anim.sh` and `gen_person.sh` read. This replaces the `rsync` from the Spark in `spark.sh`.
   - Every take is checked against `motion/MANIFEST.json`'s sha256.
   - A take already there with the same content is kept.
