@@ -2,7 +2,7 @@
 
 | Feature | File | Proof |
 | --- | --- | --- |
-| A resident's mind from the world's facts | [facts-minds.md](facts-minds.md) | `facts_mind.py`: the first identity made at start from facts only (no sheet, no perception), before the first deliberation; marks `world`/`ai`, its given `work` place in its mind; talk on the `people` mix's talk model; acts (food, a lesson, `host`); a stranger stays a stranger; paid: `residents_real.py` |
+| A resident's mind from the world's facts; a grown run-born mind's first identity from facts (its parents as `CHILD_OF`, no model call) | [facts-minds.md](facts-minds.md) | `facts_mind.py`: the first identity made at start from facts only (no sheet, no perception), before the first deliberation; marks `world`/`ai`, its given `work` place in its mind; talk on the `people` mix's talk model; acts (food, a lesson, `host`); a stranger stays a stranger; paid: `residents_real.py`. The grown path: verify-minds `body` with Neo4j |
 | Acquiring techniques and truthful refusals | [know-how.md](know-how.md) | Seed, grant, teach, experiment, gating, practice and idempotence; a world's own technique taught (`world-know-how`, cullet-laws) |
 | Consolidation and projections | [consolidation.md](consolidation.md) | Real mind, fake reply, saved Cypher and five authority tables |
 | Names from what happened: an introduction is an `acquaintance` and an `introduced` row, consolidation anchors it to the person, the graph names the person after it, and no one out of earshot learns it | [names.md](names.md) | `names.py`: real mind, fake reply, Neo4j (the trial stack's or any, `LIVING_PRIVACY_NEO4J`) |
