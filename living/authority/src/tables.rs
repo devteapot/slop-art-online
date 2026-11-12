@@ -365,6 +365,11 @@ pub struct Steer {
     /// of sight (0 while it is in sight); `gx`/`gy` where it was last seen.
     #[default(0u64)]
     pub unseen_ms: u64,
+    /// A movement intent's `apart` (m, 0 none): how far it keeps from others of its own kind it
+    /// sees while it holds the intent (docs/PACK_MIND.md, A5). Appended (an automatic migration
+    /// with this default).
+    #[default(0.0f32)]
+    pub apart: f32,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
