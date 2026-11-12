@@ -11,7 +11,7 @@
 
 use crate::net::Net;
 use crate::style::{outline, Outlined, Style};
-use bevy_mod_outline::{OutlineMeshExt, PropagateOutline};
+use bevy_mod_outline::PropagateOutline;
 use crate::world::{hash, rgb, scale, MeshBuf, Scene};
 use bevy::prelude::*;
 use living_bindings::*;
@@ -437,7 +437,7 @@ pub fn update(
 pub fn spawn(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &crate::world::Palette, style: &Style, kind: &str, id: u32, mine: bool, tf: Transform, p: Vec2) -> Entity {
     let parts = parts(kind, id, mine);
     let smooth = |mut m: Mesh| {
-        let _ = m.generate_outline_normals(&Default::default());
+        crate::style::outline_normals(&mut m);
         m
     };
     let body = meshes.add(smooth(parts.body));
