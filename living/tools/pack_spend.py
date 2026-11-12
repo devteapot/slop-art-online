@@ -24,7 +24,10 @@ import trials  # noqa: E402
 
 def spent(bdir):
     total, calls, unpriced = 0.0, 0, 0
-    for f in bdir.glob("*/journal/*.jsonl"):
+    # The live journals (`.local/living/journal/<db>`, as the runner reads them), else the
+    # copies a finished instance keeps (`<instance>/journal`).
+    live = list((trials.ROOT / ".local/living/journal").glob(f"verify-trial-{bdir.name}-*/*.jsonl"))
+    for f in live or bdir.glob("*/journal/*.jsonl"):
         for line in open(f):
             try:
                 r = json.loads(line)
