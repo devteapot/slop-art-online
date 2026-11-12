@@ -742,6 +742,8 @@ fn bone_scale(name: &str, p: &Proportions) -> Option<BoneScale> {
         // The belly bone (under the spine, `compose::belly_offset`) takes the spine's own scale:
         // its vertices are the waist's front, and kept at the base's girth they stood 6-7 mm in
         // from the spine's on lean and strong builds.
+        // `LIVING_GAME_PERF=oldbelly`: the belly at the base's girth, as before (to compare).
+        ("J_Fit_Belly", _) if crate::perf::has("oldbelly") => return None,
         ("J_Bip_C_Spine" | "J_Fit_Belly", _) => Own(Vec3::new(g * lerp(1.0, p.hips, 0.5), p.torso, g)),
         ("J_Bip_C_Chest", _) => Own(Vec3::new(lerp(g, chest, 0.5), p.torso, g)),
         ("J_Bip_C_UpperChest", _) => Own(Vec3::new(chest, p.torso, g)),
