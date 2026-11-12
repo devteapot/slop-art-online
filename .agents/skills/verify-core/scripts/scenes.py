@@ -2985,7 +2985,8 @@ def doing_seen(s):
         v = seen.get(a, {}).get("visibly")
         s.expect("front: W's scene shows A visibly attacking, about to release, at you", v == {"is": "attack", "phase": "about to release", "at": "you"}, seen.get(a))
 
-        # 4. F, 5 m off and too far to make out, holds up a guard: seen, and W reacts.
+        # 4. F, 5 m off and too far to make out, holds up a guard: seen, and W reacts. A guard is
+        # aimed at nobody; its `at` is "you" only when F happens to face W (its drawn aim).
         place()
         guard = {"who": "person", "is": "guard", "phase": "holding"}
         routine("far", guard)
@@ -2996,7 +2997,8 @@ def doing_seen(s):
         seen = s.wait(lambda: scene_since(t0, "far"), seconds=10)
         fe = seen.get(f, {})
         s.expect("far: W's scene shows F as someone too far away to make out, visibly holding a block",
-                 fe.get("who") == FAR and "name" not in fe and fe.get("visibly") == {"is": "block", "phase": "holding"}, fe)
+                 fe.get("who") == FAR and "name" not in fe and {k: v for k, v in (fe.get("visibly") or {}).items() if k != "at"} == {"is": "block", "phase": "holding"}
+                 and (fe.get("visibly") or {}).get("at", "you") == "you", fe)
         s.graph(f, {"wait": 60 + next(rounds)})
         time.sleep(1.5)
 

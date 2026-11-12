@@ -940,7 +940,7 @@ def doing_case(run):
     """What someone is visibly doing reaches a mind (docs/PERCEPTION.md, "What someone is visibly
     doing"): a resident faces another 3 m east of it who holds up a guard (`block`, held). The
     scene of its deliberation request lists the other with `visibly` {is: block, phase: holding}
-    (no `at`: a guard is aimed at nobody), the prompt the fake model is sent carries it, and the
+    (`at` only as `you`, when the other's guard happens to face it), the prompt the fake model is sent carries it, and the
     graph grammar the mind is given documents the `doing` condition."""
     people = prepare(run)
     eye, other = [p['id'] for p in people]
@@ -959,7 +959,9 @@ def doing_case(run):
     scene = json.loads(pending[0]['scene']) if pending and 'scene' in pending[0] else {}
     (run.directory / 'scene.json').write_text(json.dumps(scene, indent=2))
     entry = next((c for c in scene.get('creatures', []) if c.get('id') == other), {})
-    assert entry.get('visibly') == {'is': 'block', 'phase': 'holding'}, entry
+    seen = entry.get('visibly') or {}
+    # A guard is aimed at nobody: `at` is 'you' only when the other happens to face the eye.
+    assert {k: v for k, v in seen.items() if k != 'at'} == {'is': 'block', 'phase': 'holding'} and seen.get('at', 'you') == 'you', entry
     run.start(models, [eye])
     reqs = run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] in ('think', 'deliberate')] or None, 'prompts sent to the model', 60)
     run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'deliberate'] or None, 'the deliberate prompt', 60)
