@@ -262,8 +262,18 @@ class Hair:
 
     # The layers styles are made of. ---------------------------------------------------------
 
-    def under(self, z_end, n=13, width=0.078, back_drop=0.0, g=42.0, blunt=0.3, chain=None, span=(56, 304), el=34.0, taper=2.6, ragged=0.0):
-        """The sides and back, hanging from mid-height: az from the temple round the back."""
+    def under(self, z_end, n=13, width=0.078, back_drop=0.0, g=42.0, blunt=0.3, chain=None, span=(64, 296), el=34.0, taper=2.6, ragged=0.0):
+        """The sides and back, hanging from mid-height: az from in front of the ear round the
+        back. Nothing of it hangs forward of the ear's front, where it would lie over the eye
+        from a three-quarter view; the scalp between it and the fringe is the temple locks'."""
+        for side in (-1, 1):
+            # From high on the temple, combed down and back to hang with the sides in front of
+            # the ear: they cover the scalp between the fringe's edge and this layer's roots.
+            # The last hangs straight, over the square root of this layer's first lock.
+            for az, e, back in ((54, 60, 0.95), (62, 54, 0.75), (67, 50, 0.15)):
+                a = side * az
+                self.lock(a + self.u(-2, 2), e + self.u(-2, 2), DOWN + np.array([0.0, -back, 0.0]), z_end=z_end + self.u(-0.003, 0.003), length=0.9, width=(0.040 if back > 0.3 else 0.056) + self.u(-0.003, 0.004), lift=0.006 if back > 0.3 else 0.008, g=20.0,
+                          blunt=blunt, layer=1, chain=-1 if chain is None else chain(side * 75.0), shade=-0.02, taper=taper)
         for i in range(n):
             az = span[0] + (span[1] - span[0]) * i / (n - 1)
             a = az if az <= 180 else az - 360

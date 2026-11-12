@@ -61,7 +61,7 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **Four Cullet residents composed against their own files:** every attached mesh matches the rule to 0.000 mm; clothes of ordinary build are within 1.3 to 3.2 mm of the own file's, and a full beard within 0.3 mm.
 - **Pass 3, the hair's finish** ([hair finish and cuts](#hair-finish-and-cuts)).
   - **The fringe** is finer locks to one line where it was seven broad blocks; **the ends** of hanging hair are cut to one hem; **the temple** is covered: the hairline on a type's head comes down to a sideburn and sits close over the ear.
-  - **Three cuts of every style** (`<style>`, `.2`, `.3`): 50 hair files, 16.3 MB. Cullet's 64 wear 30 of them where they wore 14, and six people (three pairs) share both a file and a colour.
+  - **Three cuts of every style** (`<style>`, `.2`, `.3`): 50 hair files, 17.0 MB. Cullet's 64 wear 30 of them where they wore 14, and six people (three pairs) share both a file and a colour.
   - **A far beard** for the far head: one plain mesh a beard form, about 450 triangles.
 - **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the eyes' drawing, the face's painted softness, clothes and silhouette, hands, and hair that is still locks of one thickness.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
@@ -1053,17 +1053,18 @@ Pass 3, after overlays (2026-11-12). Three faults of the hair's finish, more var
 |---|---|---|
 | A blocky fringe | Seven broad locks (48 mm), their ends up to 8 mm apart, each cut square | Half as many locks again and each narrower (0.74), ends within 1.5 mm of one line with every second a little longer, tips less square |
 | Ragged ends | The hanging layers' locks ended up to 16 mm apart; `long` tapered every lock to a point at a length of its own | Ends within 3 to 4 mm of one hem, locks a tenth wider so the hem closes; `long` is cut (blunt 0.4) with 6 mm of unevenness, where it had 35 |
-| The temple gap | The hairline tuned on pass 2's head left a bare temple and skin above the ear on a type's head; a short style's scattered locks did not cover it | On a type's head the line is 18 mm lower at the temple, runs down to a sideburn at the middle of the ear, and sits 4 to 6 mm closer over the ear's top; `crop`, `short` and `tousled` get six short locks a side there |
+| The temple gap | The hairline tuned on pass 2's head left a bare temple and skin above the ear on a type's head; a short style's scattered locks did not cover it | On a type's head the line is 18 mm lower at the temple, runs down to a sideburn at the middle of the ear, and sits 4 to 6 mm closer over the ear's top; `crop`, `short` and `tousled` get six short locks a side there. A style with hanging sides (`bob`, `long`, `shag`) had bare scalp between the fringe's edge and the side hair: three locks a side now come from high on the temple, two combed down and back and one straight, and the side layer starts at the ear's front (64° round, where it started at 56°), so nothing of it hangs over the eye from a three-quarter view |
 
 - Checked on `adult-f-b`, `adult-m-a`, `child-u-a` and `elder-f-c`, with `bob`, `long`, `tousled`, `short` and `bun`, from the front, three-quarter and side, and at the game camera (the board's `hair-finish`).
 - **At the game camera** the differences are a pixel or two: the fringe's line and the covered temple show, the ends do not.
 - **What it did not change:** locks are still ribbons of one thickness with no strand breaking away, and a spiky style (`tousled`) is still spikes. That is the style's drawing, not a fault of finish.
+- **What is left of the temple:** a strip of skin a finger wide beside a straight fringe, from the front and three-quarter. From the exact side a full `bob` or `long` hides the face but for the nose, as it did before; the reference's side hair starts 3 cm further back.
 
 **Variety: three cuts of each style, as separate files.**
 
 - **What was chosen.** Each style is written three times, `<style>`, `<style>.2` and `<style>.3` (`person_params.CUTS`), each from its own seed, so each has its own length, parting, fringe, volume and curl, drawn as a person's used to be. A person wears the cut their seed picks. `kerchief` has one, and the seven styles written for under a cap have one each.
 - **Why files and not bones.** A parting on the other side moves every root; a curtain fringe is other locks than a straight one; a longer cut has more rings in each lock. Those are different meshes. A bone could lengthen a hanging lock or lift a fringe, but it needs a table and code in the client, and it gives one axis where a cut gives five. A file needs nothing new from the client: the name in a person's line is the file.
-- **What it costs.** 50 hair files, 16.3 MB (0.12 to 0.60 MB each), where there were 22 and 5.7 MB.
+- **What it costs.** 50 hair files, 17.0 MB (0.12 to 0.68 MB each), where there were 22 and 5.7 MB.
 - **What it gives Cullet.** The 64 wear 30 hair files where they wore 14. The most worn is `tousled.2`, by six. With the hair's colour, six people in three pairs have the same file and the same colour; the other 58 differ from everyone in one or the other.
 - **If more is wanted,** `CUTS` is one number: a fourth cut of every style is about 5 MB.
 
@@ -1074,7 +1075,7 @@ Pass 3, after overlays (2026-11-12). Three faults of the hair's finish, more var
 1. Nothing for the cuts: `styles.hair` in a person's line names the file, cut included.
 2. Beyond the far switch, take a beard overlay's `FarOverlay` mesh with the far head, tinted as the near one is.
 
-**Cullet's 64 after this step:** 95 shared files worn, 35.9 MB (17 types, 30 hair, 20 outfit, 28 overlay). Everything on disk: 169 files, 52.3 MB.
+**Cullet's 64 after this step:** 95 shared files worn, 36.4 MB (17 types 18.0, 30 hair 11.1, 20 outfit 4.2, 28 overlay 3.2). Everything on disk: 169 files, 53.0 MB.
 
 ### Type files
 
