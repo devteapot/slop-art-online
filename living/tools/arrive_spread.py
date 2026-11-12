@@ -56,7 +56,11 @@ resident thought for and in range (within 12 m of the newcomer during a stand):
   curiosity, sociability and caution (the run's seed sheet, `LIVING_SEED` in mind-env.json), and
   `first`: whether a first-sight line named the newcomer (subject or object), or `-` when none did;
 - `class`, exclusive, in this order: `asks` (a line to the newcomer, heard or not); `approaches`
-  (came within 4 m, or waved, nodded, faced or aimed an act at them, with no line); `inward` (a
+  (deliberately, with no line: a `goto` or `follow` aimed at them, a wave or nod at them, or a path
+  that bent toward them and stayed within 4 m for 6 s, `bent_toward`; turning to face them is not
+  one; since stage 2b a routine path that only passes
+  within 4 m is not an approach, and such residents are counted as `passed_by` and classed by
+  what else they did); `inward` (a
   thought after the join names them by id, or calls someone a stranger/newcomer while they are in
   that prompt, with no act toward them; in Cullet a scene's "a stranger" is also a neighbour past
   the naming distance); `unaware` (none of these);
@@ -330,6 +334,61 @@ def cue_before(fired, who, at_ms):
     return {"s_before": round((at_ms - x["at_ms"]) / 1000, 1), "why": x["whys"], "serves": x["serves"]}
 
 
+BENT_LOOK_S = 10.0
+BENT_MISS_M = 6.0
+BENT_STAY_S = 6.0
+# Acts aimed at the newcomer that bring one to them, and gestures that greet them (turning to
+# face or appraise them is looking, not approaching).
+APPROACH_SKILLS = {"goto", "follow", "approach", "walk"}
+GREET_GESTURES = {"wave", "nod"}
+
+
+def bent_toward(prow, sid, join):
+    """Residents whose path bent toward the newcomer: each time one comes within 4 m of them (after
+    the join, from beyond 6 m), the straight line of its walk 10 s earlier (position and velocity
+    from two samples) would have passed them by more than BENT_MISS_M, or it was standing still
+    then and set off toward them. A routine path that passes them anyway is not bent."""
+    track = defaultdict(list)
+    for q in prow:
+        if q["ms"] < join or str(sid) not in q["pos"]:
+            continue
+        for k, v in q["pos"].items():
+            if int(k) != sid:
+                track[int(k)].append((q["ms"], v[:2], q["pos"][str(sid)][:2]))
+    out = set()
+    for i, xs in track.items():
+        far = True
+        for n, (ms, p, me) in enumerate(xs):
+            d = ((p[0] - me[0]) ** 2 + (p[1] - me[1]) ** 2) ** 0.5
+            if d > BENT_MISS_M:
+                far = True
+            if d <= 4.0 and far:
+                far = False
+                # It stays: within 4 m for at least BENT_STAY_S after arriving.
+                stay = [x for x in xs[n:] if x[0] - ms <= BENT_STAY_S * 1000]
+                if not stay or stay[-1][0] - ms < BENT_STAY_S * 1000 - 2500 or any(((x[1][0] - x[2][0]) ** 2 + (x[1][1] - x[2][1]) ** 2) ** 0.5 > 4.0 for x in stay):
+                    continue
+                before = [x for x in xs[:n] if ms - x[0] >= BENT_LOOK_S * 1000]
+                if len(before) < 2:
+                    continue
+                (t0, a, _), (t1, b, _) = before[-2], before[-1]
+                dt = max(1e-3, (t1 - t0) / 1000)
+                v = ((b[0] - a[0]) / dt, (b[1] - a[1]) / dt)
+                speed = (v[0] ** 2 + v[1] ** 2) ** 0.5
+                if ((p[0] - b[0]) ** 2 + (p[1] - b[1]) ** 2) ** 0.5 < 2.0:
+                    continue  # it stood: the newcomer came to it
+                if speed < 0.2:
+                    out.add(i)  # standing, then walked to them
+                    continue
+                # Closest approach of the straight line from b to the newcomer's position now.
+                wx, wy = me[0] - b[0], me[1] - b[1]
+                t = max(0.0, (wx * v[0] + wy * v[1]) / (speed ** 2))
+                cx, cy = b[0] + v[0] * t - me[0], b[1] + v[1] * t - me[1]
+                if (cx * cx + cy * cy) ** 0.5 > BENT_MISS_M:
+                    out.add(i)
+    return out
+
+
 def strangers(d, r, sid, names, minds, x):
     """The strangers measures for one run (module docstring, "Strangers")."""
     join = x["join_ms"]
@@ -368,18 +427,31 @@ def strangers(d, r, sid, names, minds, x):
             if e.get("purpose") == "deliberate" and re.search(r'"relation"\s*:\s*"stranger"', e.get("reply") or ""):
                 routines += 1
     rows = []
+    bent = bent_toward(prow, sid, join)
+    moved = defaultdict(set)
+    for q in prow:
+        if q["ms"] >= join:
+            for k, (skill, target) in (q.get("act") or {}).items():
+                if target == sid and skill in APPROACH_SKILLS:
+                    moved[int(k)].add(skill)
+    greeted = {g["actor"] for g in jl(d / "gestures.jsonl") if g.get("target") == sid and g.get("accepted_ms") and g.get("skill") in GREET_GESTURES}
     for z in r["residents"]:
         name = z["name"]
         tr, duty = people.get(name, ({}, False))
+        # Silent approaches are deliberate ones only (stage 2b): an activity aimed at the
+        # newcomer, a gesture at them, or a path that bent toward them. A routine path that only
+        # passes within 4 m is not one (`passed`).
+        deliberate = z["id"] in moved or z["id"] in greeted or z["id"] in bent
+        passed = bool(z["approach"] or z["close"]) and not deliberate
         if z["to_them"]:
             cls = "asks"
-        elif z["approach"] or z["close"] or z["gesture"] or z["aimed"]:
+        elif deliberate:
             cls = "approaches"
         elif name in inward:
             cls = "inward"
         else:
             cls = "unaware"
-        rows.append({"name": name, "duty": duty, "cur": tr.get("curiosity"), "soc": tr.get("sociability"), "cau": tr.get("caution"),
+        rows.append({"name": name, "duty": duty, "passed": passed, "bent": z["id"] in bent, "cur": tr.get("curiosity"), "soc": tr.get("sociability"), "cau": tr.get("caution"),
                      "first": "yes" if z["id"] in cover else "-", "class": cls,
                      "thought": inward.get(name, (None, ""))[1] if cls == "inward" else ""})
     speech = jl(d / "speech.jsonl")
@@ -424,7 +496,7 @@ def strangers(d, r, sid, names, minds, x):
     # First sights in crowds: lines, lines naming several people, the most named in one line.
     fs = [e for e in jl(d / "experiences_all.jsonl") if (e.get("text") or "").startswith("For the first time you see")]
     parts = [len((e.get("text") or "").split("; ")) for e in fs]
-    return {"far_prompts": far_prompts, "far_replies": far_replies, "far_examples": far_examples,
+    return {"passed_by": sum(1 for z in rows if z["passed"] and z["class"] != "asks"), "far_prompts": far_prompts, "far_replies": far_replies, "far_examples": far_examples,
             "room_unheard": len(room), "room_speakers": len({e["observer"] for e in room}),
             "first_sight_lines": len(fs), "first_sight_batched": sum(1 for n in parts if n > 1), "first_sight_people": sum(parts), "first_sight_most": max(parts, default=0),
             "residents": rows, "classes": {c: sum(1 for z in rows if z["class"] == c) for c in ("asks", "approaches", "inward", "unaware")},
@@ -547,7 +619,7 @@ def main():
                 print(f"### {arm} r{r['rep']}\n")
                 print(f"classes {st['classes']}; tells {st['tells']} ({st['tells_out']} beyond 12 m at the join); first heard line {st['first_heard']}; "
                       f"first-sight lines naming the newcomer {st['fs_cover']} persons within 12 m after the join (without one: {st['fs_missing']}); "
-                      f"routines with relation stranger {st['routines']}; far label in think prompts {st['far_prompts']}, in replies {st['far_replies']}; "
+                      f"routines with relation stranger {st['routines']}; passed by on their own way {st.get('passed_by')}; far label in think prompts {st['far_prompts']}, in replies {st['far_replies']}; "
                       f"room lines nobody heard {st['room_unheard']} (by {st['room_speakers']}); first-sight lines {st['first_sight_lines']} ({st['first_sight_batched']} naming several, "
                       f"{st['first_sight_people']} people, at most {st['first_sight_most']} in one); delib/res-h {r.get('delib_ph')}; spoken ids {r.get('id_lines')} {r.get('id_by') or ''}; converge_60s {st['converge_60s']}; together_4m {st['together_4m']}; re-asks {st['reasks']}\n")
                 for ex in st.get("far_examples") or []:
