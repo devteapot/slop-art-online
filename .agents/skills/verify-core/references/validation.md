@@ -1,6 +1,6 @@
 # Core validation record
 
-## 2026-11-12 far-label: someone too far away to make out (Spark)
+## 2026-11-12 far-label: someone too far away to make out (Spark) After merging main with speech-truth (`03d32e09`, `core-farlabel-c`, `core-farlabel-ch`): `stranger_filter` 9/9, `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7, speech `channels` 29/29.
 
 Branch `far-label` (`2095a272`, on strangers-1 `9b4fd9d2`), the trial service `slop-trials-stdb`, default seed, `scoped`. `core-farlabel-b`: `stranger_filter` 9/9 (law off and on as before; with an overlay making everyone past 4 m `far`: F, known, at 5 m is "someone too far away to make out" with its id and no name or community; A keeps name and community; N is "a stranger"; law on and N gone: F not waved at; a "stranger" relation about F is not written, about N it is; U gets no first sight at 5 m and "For the first time you see a stranger, 2 tiles northeast" at 2 m), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7. The first attempt (`core-farlabel-a`, `6e42c0b5`) failed the last check: a far figure's look was meant to be retried in 5 s by back-dating its `recently_seen` mark, but that mark is refreshed while someone stays in sight, so the first sight never came; fixed with a mark of its own (`FAR_MARK`, `far_wait`). Strangers-1's merge with main (`9b4fd9d2`, `core-strangers1m`): `crowd_sight` 8/8, `stranger_filter` 3/3.
 
