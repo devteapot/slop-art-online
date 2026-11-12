@@ -1133,16 +1133,10 @@ Answer with ONE JSON object: {{\"feeling\": \"what you sense and feel, in plain 
     ))
 }
 
-/// What an animal choosing is told: what it would be told to feel an impulse, its pack when
-/// it decides for them, and the options.
-pub fn animal_choose_user(think_user: String, pack: &[String], options: &[String]) -> String {
+/// What an animal choosing is told: what it would be told to feel an impulse, and the
+/// options. It decides for itself alone (docs/PACK_MIND.md: the `pack` switch is retired).
+pub fn animal_choose_user(think_user: String, options: &[String]) -> String {
     let mut out = think_user;
-    if !pack.is_empty() {
-        out.push_str("\n# Your pack (what you pick, they do too, each in its own way)\n");
-        for p in pack {
-            out.push_str(&format!("- {p}\n"));
-        }
-    }
     out.push_str("\n# What you can do now\n");
     for (i, o) in options.iter().enumerate() {
         out.push_str(&format!("{i}. {o}\n"));

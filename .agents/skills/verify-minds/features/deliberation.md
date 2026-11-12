@@ -60,7 +60,7 @@ Evidence: `sent-prompt-run.txt`, `running-body.json`, `running-vitals.json`.
 
 Since `move-intents` (2026-11-12, docs/COMBAT_MIND.md §3.3), the case `intents` checks that a mind's plan can say how to move relative to someone (`intents_case`):
 
-- **The reference.** The prompt's skill list documents `keep_distance(target, min, max, run, qty)`, `close_in(target, distance, run)`, `circle(target, radius, side, run, qty)`, `back_off(target, distance, run)` and `follow(target, distance, run, qty)`, with speeds in m/s from the `motion` law and the sight rule ("lost sight of them" after the `lost_after_s` law).
+- **The reference.** The prompt's skill list documents `keep_distance(target, min, max, run, qty, apart)`, `close_in(target, distance, run, apart)`, `circle(target, radius, side, run, qty, apart)` (`apart` since `packs`: how far to keep from seen others of one's own kind), `back_off(target, distance, run)` and `follow(target, distance, run, qty)`, with speeds in m/s from the `motion` law and the sight rule ("lost sight of them" after the `lost_after_s` law).
 - **The plan.** Two people stand 4 m apart on an open row; the fake model's deliberation plans `{"do": "keep_distance", "target": {"id": other}, "min": 3, "max": 6, "qty": 120}`. The `current plan` routine holds it as written (normalized, `"min":3.0,"max":6.0`), and the character's `steer` row is the band (goal 5, `keep` 3, `far` 6, flag 128: held by sight).
 - **The behaviour.** The other walks at the character (an admin `goto`): it backs off.
 

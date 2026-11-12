@@ -24,6 +24,7 @@ pub struct Steer {
     pub run_pace: f32,
     pub far: f32,
     pub unseen_ms: u64,
+    pub apart: f32,
 }
 
 impl __sdk::InModule for Steer {
@@ -51,6 +52,7 @@ pub struct SteerCols {
     pub run_pace: __sdk::__query_builder::Col<Steer, f32>,
     pub far: __sdk::__query_builder::Col<Steer, f32>,
     pub unseen_ms: __sdk::__query_builder::Col<Steer, u64>,
+    pub apart: __sdk::__query_builder::Col<Steer, f32>,
 }
 
 impl __sdk::__query_builder::HasCols for Steer {
@@ -74,6 +76,7 @@ impl __sdk::__query_builder::HasCols for Steer {
             run_pace: __sdk::__query_builder::Col::new(table_name, "run_pace"),
             far: __sdk::__query_builder::Col::new(table_name, "far"),
             unseen_ms: __sdk::__query_builder::Col::new(table_name, "unseen_ms"),
+            apart: __sdk::__query_builder::Col::new(table_name, "apart"),
         }
     }
 }

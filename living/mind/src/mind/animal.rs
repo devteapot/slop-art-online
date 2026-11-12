@@ -10,10 +10,9 @@
 //!   scene and the species' skills (flee from, hunt, follow its kind, rest, roam, signal, or
 //!   carry on) and how strongly; the mind builds the graph from a template, so it is valid by
 //!   construction (and still checked against the body).
-//! - `pack`: one mind per pack. An animal that thinks decides for the others of its kind it
-//!   sees (its pack, as it perceives it). For `LIVING_ANIMAL_PACK_S` (60 s) their requests reuse
-//!   that decision without a call, each weighed by its own temperament (a bold wolf commits
-//!   harder to a hunt, a nervous deer to fleeing).
+//! - `pack` (retired 2026-11-12, docs/PACK_MIND.md): one animal's decision copied into the
+//!   graphs of the others of its kind it saw, which perceived nothing of it. That was shared
+//!   hidden state, so every animal now decides on its own; the word is ignored with a warning.
 //!
 //! The rules are not touched: what the animal can do is what its species' skills allow, and
 //! every graph goes through the same `mind_install_way` (with no line) as a person's.
@@ -21,29 +20,27 @@
 use living_bindings::*;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
-use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, Default)]
 pub struct Config {
     pub salient: bool,
     pub choose: bool,
-    pub pack: bool,
-    pub pack_ttl: Duration,
 }
 
 impl Config {
     pub fn from_env() -> Self {
         let on: Vec<String> = std::env::var("LIVING_ANIMAL_MINDS").unwrap_or_default().split(',').map(|s| s.trim().to_lowercase()).collect();
+        if on.iter().any(|s| s == "pack") {
+            log::warn!("LIVING_ANIMAL_MINDS: `pack` is retired (one animal's decision copied to others is shared hidden state, docs/PACK_MIND.md); every animal decides on its own");
+        }
         Self {
             salient: on.iter().any(|s| s == "salient"),
             choose: on.iter().any(|s| s == "choose"),
-            pack: on.iter().any(|s| s == "pack"),
-            pack_ttl: Duration::from_secs(std::env::var("LIVING_ANIMAL_PACK_S").ok().and_then(|v| v.parse().ok()).unwrap_or(60)),
         }
     }
 
     pub fn any(&self) -> bool {
-        self.salient || self.choose || self.pack
+        self.salient || self.choose
     }
 }
 
@@ -191,24 +188,6 @@ pub fn weight(strength: &str, drive: &str, traits: &Value) -> f32 {
     (base * scale as f32 * 100.0).round() / 100.0
 }
 
-/// A decision shared with a pack: the option picked and its strength (each member weighs it
-/// by its own temperament), for whom, until when.
-#[derive(Clone, Debug)]
-pub struct PackDecision {
-    pub by: u32,
-    pub option: Option_,
-    pub strength: String,
-    pub feeling: String,
-    pub impulse: String,
-    pub members: Vec<u32>,
-    pub until: Instant,
-}
-
-/// The same kind it sees: its pack as it perceives it.
-pub fn pack_of(kind: &str, scene: &Value) -> Vec<u32> {
-    creatures(scene).into_iter().filter(|c| c.kind == kind && !c.smelled).map(|c| c.id as u32).collect()
-}
-
 impl super::Minds {
     /// An animal's thought with the switches of `LIVING_ANIMAL_MINDS` (see the module docs).
     pub(super) async fn deliberate_animal_cheap(&self, d: &living_bindings::Deliberation, c: &living_bindings::Character, lane: crate::llm::Lane) -> anyhow::Result<()> {
@@ -219,14 +198,6 @@ impl super::Minds {
         let Some(sp) = self.species.get(&c.kind).cloned() else { return Ok(()) };
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
         let traits = |id: u32| self.conn.db.persona().id().find(&id).and_then(|p| serde_json::from_str::<Value>(&p.traits).ok()).unwrap_or(json!({}));
-        // A decision its pack's mind made for it a moment ago.
-        if cfg.pack {
-            let shared = self.packs.lock().unwrap().get(&actor).filter(|p| p.by != actor && p.until > Instant::now()).cloned();
-            if let Some(p) = shared {
-                let model = format!("pack of #{}", p.by);
-                return self.animal_install(d, c, &sp, &p.option, &p.strength, &traits(actor), &p.feeling, &p.impulse, json!({"mode": "pack", "by": p.by, "pack": p.members}), (0, 0, model)).await;
-            }
-        }
         if cfg.salient {
             let deaths = self.experiences(actor).iter().filter(|e| (e.text.contains(" died") || e.text.contains(" dies") || e.text.contains("was killed")) && [e.subject, e.object].iter().any(|x| *x != actor && self.conn.db.character().id().find(x).is_some_and(|o| o.kind == c.kind))).count();
             let sig = Signature::of(&c.kind, &scene, deaths);
@@ -256,13 +227,11 @@ impl super::Minds {
             all.iter().skip(n.saturating_sub(8)).map(|e| self.exp_line(e, &fmt, false)).collect()
         };
         let temperament = self.conn.db.persona().id().find(&actor).map(|p| format!("{} (mood: {})", p.traits, p.mood)).unwrap_or_default();
-        let members: Vec<u32> = if cfg.pack { pack_of(&c.kind, &scene).into_iter().filter(|m| self.mine_animal(*m, &c.kind)).collect() } else { Vec::new() };
-        let pack_lines: Vec<String> = members.iter().map(|m| format!("#{m} {}: {}", self.name(*m), traits(*m))).collect();
         let skills = sp.skills.clone().unwrap_or_default();
         let signals: Vec<String> = sp.signals.keys().cloned().collect();
         let options = menu(&c.kind, &skills, &sp.eats, &signals, &scene);
         let labels: Vec<String> = options.iter().map(|o| o.label.clone()).collect();
-        let user = prompts::animal_choose_user(prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason), &pack_lines, &labels);
+        let user = prompts::animal_choose_user(prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason), &labels);
         let msgs = [Msg { role: "system", content: prompts::animal_choose_system(&c.kind, &sp.nature) }, Msg { role: "user", content: user }];
         let reply = self.llm.chat_in_lane(&route, at, "deliberate", &c.name, &msgs, lane).await.map_err(super::unavailable)?;
         let v = llm::parse_json(&reply.content).unwrap_or(json!({}));
@@ -271,22 +240,8 @@ impl super::Minds {
         let strength = v["strength"].as_str().filter(|s| matches!(*s, "low" | "mid" | "high")).unwrap_or("mid").to_string();
         let feeling = v["feeling"].as_str().unwrap_or_default().to_string();
         let impulse = option.label.clone();
-        if cfg.pack && !members.is_empty() {
-            let until = Instant::now() + cfg.pack_ttl;
-            let decision = PackDecision { by: actor, option: option.clone(), strength: strength.clone(), feeling: feeling.clone(), impulse: impulse.clone(), members: members.clone(), until };
-            let mut packs = self.packs.lock().unwrap();
-            packs.retain(|_, p| p.until > Instant::now());
-            for m in &members {
-                packs.insert(*m, decision.clone());
-            }
-        }
-        let detail = json!({"mode": "choose", "options": labels, "pick": pick, "valid_pick": pick.is_some(), "pack": members});
+        let detail = json!({"mode": "choose", "options": labels, "pick": pick, "valid_pick": pick.is_some()});
         self.animal_install(d, c, &sp, &option, &strength, &traits(actor), &feeling, &impulse, detail, (reply.latency_ms, reply.tokens, reply.model)).await
-    }
-
-    /// An animal of this service, of a kind, alive (a pack member it may decide for).
-    fn mine_animal(&self, id: u32, kind: &str) -> bool {
-        self.conn.db.character().id().find(&id).is_some_and(|o| o.ai && o.alive && o.kind == kind && o.stage != 0 && o.controller == self.me && self.allowed(id))
     }
 
     /// Install a picked option as the animal's impulse, weighed by its temperament (or carry on).
