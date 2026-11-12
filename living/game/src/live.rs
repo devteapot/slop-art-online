@@ -1045,7 +1045,9 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
 ///   (a headless run has no cursor); `lookwalk:PRESET[,key=value…]` sets how the body looks aside
 ///   while walking (`twist::LookWalk::parse`); `cursor:X,Y` puts the game's cursor there (fractions of the
-///   picture, or `@NAME`, a tagged node; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
+///   picture, or `@NAME`, a tagged node; `cursor:` takes it away), `pointat:X,Y[:H]` keeps it on a point
+///   of the world (sim m, H m above the ground), `nudge:DX,DY` moves it by logical px
+///   (an open wheel takes it as motion), `wheel:DIR` points the open wheel as the arrows do, and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
 ///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
@@ -1121,6 +1123,8 @@ pub struct Script {
     pts: Option<(Vec2, Vec2)>,
     /// `point:ID[:H]`: the cursor follows this character, H m above its feet.
     pointing: Option<(u64, f32)>,
+    /// `pointat:X,Y[:H]`: keep the cursor on a point of the world (sim m, H m above the ground).
+    pointing_at: Option<(Vec2, f32)>,
     started: Option<u32>,
 }
 
@@ -1129,7 +1133,7 @@ impl Script {
         let dir = std::env::var("LIVING_GAME_LIVE").ok().filter(|d| !d.is_empty())?;
         std::fs::create_dir_all(&dir).ok()?;
         let plan = std::env::var("LIVING_GAME_LIVE_PLAN").unwrap_or_else(|_| "ready;wait:3;shot:join;walk:0:6;shot:street;say:Good morning!;wait:1;shot:say;wait:20;shot:later;quit".into());
-        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, frames: 0, held: 0.0, pts: None, pointing: None, started: None })
+        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, frames: 0, held: 0.0, pts: None, pointing: None, pointing_at: None, started: None })
     }
 }
 
@@ -1171,6 +1175,12 @@ fn script(
             cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, ground).ok()?, c.logical_viewport_size()?)))
         });
         if let Some((p, size)) = at {
+            pointer.scripted = Some(p / size);
+        }
+    }
+    if let Some((at, lift)) = s.pointing_at {
+        let p3 = island.as_ref().map_or(Vec3::new(at.x, lift, at.y), |i| Vec3::new(at.x, i.height(at.x, at.y) + lift, at.y));
+        if let Some((p, size)) = cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, p3).ok()?, c.logical_viewport_size()?))) {
             pointer.scripted = Some(p / size);
         }
     }
@@ -1237,9 +1247,24 @@ fn script(
             cam.rig.frame = arg != "0";
             true
         }
+        "nudge" => {
+            // The cursor moved by DX,DY logical px (a held wheel takes it as motion).
+            s.pointing = None;
+            s.pointing_at = None;
+            if let Some((dx, dy)) = arg.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))) {
+                let size = crate::capture::size().as_vec2();
+                pointer.scripted = pointer.scripted.map(|f| f + Vec2::new(dx, dy) / size);
+            }
+            true
+        }
+        "wheel" => {
+            verbs.wheel = Some(arg.to_string());
+            true
+        }
         "cursor" => {
             // X,Y (fractions of the picture) or @NAME (a tagged node: hovering a slot, a button).
             s.pointing = None;
+            s.pointing_at = None;
             pointer.scripted = frac(arg);
             true
         }
@@ -1256,6 +1281,7 @@ fn script(
             match s.frames {
                 1 => {
                     s.pointing = None;
+            s.pointing_at = None;
                     pointer.scripted = frac(arg);
                     false
                 }
@@ -1288,6 +1314,7 @@ fn script(
                 (Some(f), Some(t)) => {
                     if s.frames == 1 {
                         s.pointing = None;
+            s.pointing_at = None;
                         pointer.scripted = Some(f);
                         false
                     } else if s.frames == 2 {
@@ -1310,10 +1337,19 @@ fn script(
                 }
             }
         }
+        "pointat" => {
+            // Keep the cursor on a point of the world (a thing's place), as `point:` on someone.
+            let (xy, h) = arg.rsplit_once(':').map_or((arg, 0.5), |(a, h)| (a, h.parse().unwrap_or(0.5)));
+            s.pointing = None;
+            s.pointing_at = None;
+            s.pointing_at = xy.split_once(',').and_then(|(x, y)| Some((Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?), h)));
+            true
+        }
         "point" => {
             // Keep the cursor on character ID as drawn (their feet, where the cursor's ground
             // point finds them), frame after frame as the camera eases: hovering them, as a
             // player keeps pointing. Until a `cursor:` step or another `point:`.
+            s.pointing_at = None;
             s.pointing = match arg.split_once(':') {
                 Some((id, h)) => id.parse().ok().map(|id| (id, h.parse().unwrap_or(0.3))),
                 None => arg.parse().ok().map(|id| (id, 0.3)),

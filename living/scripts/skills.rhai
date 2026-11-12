@@ -1633,15 +1633,37 @@ fn making_grid(skill, text) {
     if products_of(skill).len() > 0 { u.source = "products"; u.detail = "made_how"; }
     u
 }
-fn make_ui() { making_grid("make", "Making {item}") }
-fn craft_ui() { making_grid("craft", "Making {item}") }
-fn cook_ui() { making_grid("cook", "Cooking {item}") }
-fn smoke_ui() { making_grid("smoke", "Smoking {item}") }
+// Each way of making with its icon (a wheel's section, a list's row).
+fn making_look(u, icon) { u.look = #{ icon: icon }; u }
+fn make_ui() { making_look(making_grid("make", "Making {item}"), "hammer") }
+fn craft_ui() { making_look(making_grid("craft", "Making {item}"), "hammer") }
+fn cook_ui() { making_look(making_grid("cook", "Cooking {item}"), "pot") }
+fn smoke_ui() { making_look(making_grid("smoke", "Smoking {item}"), "pot") }
 // A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
 // theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
 fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
 fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+// The person wheel's acts look as they read (an icon each; what they do is their spec and check).
+fn give_ui() { #{ look: #{ icon: "give" } } }
+fn offer_ui() { #{ look: #{ icon: "trade" } } }
+fn teach_ui() { #{ look: #{ icon: "book" } } }
+fn appraise_ui() { #{ label: "Look over", look: #{ icon: "eye" } } }
+fn wave_ui() { #{ look: #{ icon: "wave" } } }
+fn nod_ui() { #{ look: #{ icon: "wave" } } }
+// A workplace's wheel (Cullet's fuel fires): feeding (making's look is with its grid above).
+fn feed_ui() { #{ look: #{ icon: "fire" } } }
+// Which places get a wheel, and its layout (docs/INTERFACE.md §8): hold F on a target, move
+// toward a section, let go. A person's social acts are pinned, so a direction learned once keeps
+// working (a refused one greys in place); anything else the rules offer is behind More. Any
+// other creature or thing gets a wheel of what the rules allow now, nothing pinned. Oneself (C)
+// keeps its list. Presentation only: what a skill may do is its spec, shape and check.
+fn menus() { [
+    #{ on: "person", kinds: ["person"], choose: "wheel", fill: false,
+       wheel: #{ n: "talk", ne: "give", e: "offer", se: "teach", s: "more", sw: "window", w: "appraise", nw: "wave" } },
+    #{ on: "person", choose: "wheel" },
+    #{ on: "thing", choose: "wheel" },
+] }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }

@@ -610,6 +610,11 @@ pub struct Verbs {
     pub want_intro: Option<u32>,
     /// Open every act toward a person, unfolded, at a place (a person window's More…).
     pub open_list: Option<(u32, Option<Vec2>)>,
+    /// The open wheel (`ui/wheel.rs`, docs/INTERFACE.md §8), and a script's direction for it.
+    pub wheel: Option<crate::ui::wheel::WheelOpen>,
+    pub wheel_point: Option<living_rules::ui::Dir>,
+    /// Where the cursor was when F went down (a flick opens the wheel with its direction).
+    f_at: Option<Vec2>,
     composing: bool,
     pending: Vec<Pending>,
     last: HashMap<String, Choice>,
@@ -630,6 +635,8 @@ pub struct Scripted {
     pub menu: Vec<String>,
     /// `panel:inventory|know-how|none`.
     pub panel: Vec<String>,
+    /// `wheel:DIR`: point the open wheel at a direction (as the arrows do).
+    pub wheel: Option<String>,
 }
 
 pub struct VerbsPlugin;
@@ -834,6 +841,85 @@ fn options(conn: &DbConnection, rules: &Scripts, skills: &[Skill], me: &Me, my_a
     (t.title, c)
 }
 
+/// Where a target's list opens, for `menus()`: the place and the target's kind.
+fn place_of(conn: &DbConnection, aim: &Aim) -> (living_rules::ui::On, String) {
+    use living_rules::ui::On;
+    match aim {
+        Aim::Creature { id } => (On::Person, conn.db.seen_characters().id().find(id).map_or_else(String::new, |c| c.kind)),
+        Aim::Thing { kind, .. } => (On::Thing, kind.clone()),
+        Aim::Me => (On::Me, String::new()),
+    }
+}
+
+/// The rules' own words for refusing a skill toward this target now (its `_check`), for the
+/// wheel's hub: the same text a mind gets back for the same facts.
+fn refusal(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill) -> (String, String) {
+    // An item-taking skill is asked with a real item: its own first (a product to make), else
+    // the first I carry; the act sent from a greyed section names the same one.
+    let item = if spec.item { spec.items.first().cloned().or_else(|| me.actor.inv.first().map(|(i, _)| i.clone())).unwrap_or_default() } else { String::new() };
+    let t = target.cloned().unwrap_or_else(|| TargetFacts { class: "none".into(), ..Default::default() });
+    let want = if spec.args.iter().any(|a| a == "want") { catalog::item_names().into_iter().find(|w| *w != item).unwrap_or_default() } else { String::new() };
+    let ctx = SkillCtx { actor: me.actor.clone(), target: t, item, qty: 1, want_qty: (!want.is_empty()) as u32, want, night: me.night, hour: me.hour, season: me.season.clone(), roll: 0.5, skill: spec.name.clone(), raining: me.raining, ..Default::default() };
+    (sc.check(&spec.name, &ctx).err().unwrap_or_default(), ctx.item)
+}
+
+/// The wheel toward a target, where the world's `menus()` gives its place one
+/// (`living_rules::ui::wheel_of` over the list's own choices): None keeps the list.
+#[allow(clippy::too_many_arguments)]
+fn wheel_toward(conn: &DbConnection, sc: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim, person: bool, title: String, at: Vec2) -> Option<crate::ui::wheel::WheelOpen> {
+    use living_rules::ui::{wheel_of, Candidate, Choose, Pin, Section};
+    let (on, kind) = place_of(conn, aim);
+    let spec = sc.menu_for(on, &kind).filter(|m| m.choose == Choose::Wheel)?.clone();
+    let t = toward(conn, sc, me, my_at, aim);
+    let choices = if t.open { choices(sc, me, aim, t.target.as_ref(), skills) } else { Vec::new() };
+    let mut cands: Vec<Candidate> = Vec::new();
+    let own = |s: Section| Candidate { what: Pin::Own(s), allowed: true, sub: false, words: false };
+    if person {
+        cands.push(own(Section::Talk));
+        cands.push(own(Section::Window));
+    }
+    // One section per skill (Give is one section whatever I carry), in the list's order.
+    for c in &choices {
+        let name = if c.say.is_some() { "ask".to_string() } else { c.skill.clone() };
+        if cands.iter().any(|k| k.what.name() == name) {
+            continue;
+        }
+        let all: Vec<&Choice> = choices.iter().filter(|o| o.skill == c.skill && o.say.is_none() == c.say.is_none()).collect();
+        let sub = all.len() > 1 || c.item.is_some() || c.want.is_some();
+        cands.push(Candidate { what: Pin::Skill(name), allowed: true, sub, words: !sub && c.words });
+    }
+    if person {
+        cands.push(own(Section::Introduce));
+    }
+    let layout = wheel_of(&spec, &cands);
+    let mut w = crate::ui::wheel::WheelOpen { aim: aim.clone(), title, layout, choices, labels: Default::default(), icons: Default::default(), abouts: Default::default(), reasons: Default::default(), grey_items: Default::default(), held: true, at, vec: Vec2::ZERO, sel: None };
+    for sec in w.layout.sections.clone() {
+        let (label, icon, about) = match &sec.what {
+            Pin::Own(Section::Talk) => ("Talk".to_string(), None, "Say something to them.".to_string()),
+            Pin::Own(Section::Window) => ("Their window".to_string(), None, "What you know of them and what you have said.".to_string()),
+            Pin::Own(Section::Introduce) => ("Introduce yourself".to_string(), None, "Tell them your name.".to_string()),
+            Pin::Own(Section::More) => ("More".to_string(), None, "Every act toward them.".to_string()),
+            Pin::Skill(k) => {
+                let u = sc.ui(k);
+                let help = skills.iter().find(|s| &s.name == k).map(|s| s.help.clone()).unwrap_or_default();
+                (u.map_or_else(|| pretty(k), |u| u.label.clone()), u.and_then(|u| u.look.icon.map(String::from)), crate::ui::wheel::first_sentence(&help))
+            }
+        };
+        if let (false, Pin::Skill(k)) = (sec.allowed, &sec.what) {
+            let (why, item) = skills.iter().find(|s| &s.name == k).map(|s| refusal(sc, me, t.target.as_ref(), s)).unwrap_or_default();
+            let why = if why.is_empty() { "Not now".to_string() } else { why };
+            w.reasons.insert(sec.what.clone(), crate::ui::label(&why));
+            if !item.is_empty() {
+                w.grey_items.insert(sec.what.clone(), item);
+            }
+        }
+        w.labels.insert(sec.what.clone(), label);
+        w.icons.insert(sec.what.clone(), icon);
+        w.abouts.insert(sec.what.clone(), about);
+    }
+    Some(w)
+}
+
 /// The hint's choices being worked out a few rule checks at a time ([`HINT_BUDGET`]), so the
 /// checks toward a person (a hundred script calls and more, `teach` alone about 4 ms) never stall
 /// one frame. What the hint shows changes only once a job is done.
@@ -1017,13 +1103,15 @@ pub fn input(
     time: Res<Time>,
     mut v: ResMut<Verbs>,
     (binds, looks, mut talk): (Res<crate::keys::Binds>, Res<crate::looks::Looks>, Option<ResMut<crate::talk::Talk>>),
-    (clock, live): (Res<crate::daylight::Clock>, Res<crate::live::Live>),
+    (clock, live, mut pointer, mouse): (Res<crate::daylight::Clock>, Res<crate::live::Live>, ResMut<crate::pointer::Pointer>, Res<ButtonInput<MouseButton>>),
 ) {
     let now = time.elapsed_secs_f64();
     let now_ms = scene.now_ms;
-    wants.menu = v.menu.is_some();
+    wants.menu = v.menu.is_some() || v.wheel.is_some();
     let (Some(conn), Some(me), Some(me3), Some(sc)) = (net.conn.as_ref(), net.my_id, target.0, rules.scripts.as_ref()) else {
         v.menu = None;
+        v.wheel = None;
+        pointer.hold = false;
         return;
     };
     let my_at = Vec2::new(me3.x, me3.z);
@@ -1044,7 +1132,124 @@ pub fn input(
         let at = v.place_next.take();
         v.menu = Some(Menu { aim, title, choices, group: None, item, person, at, more: false });
     };
+    // A wheel where the world's `menus()` gives the target's place one, else the list.
+    let wheel_or_list = |v: &mut Verbs, aim: Aim, held: bool, at: Vec2| {
+        let title = match &aim {
+            Aim::Creature { id } => looks.cap(*id),
+            _ => label_of_aim(conn, &aim),
+        };
+        match wheel_toward(conn, sc, &rules.skills, &facts(&aim), my_at, &aim, is_person(&aim), title, at) {
+            Some(mut w) => {
+                w.held = held;
+                info!("ui: wheel toward {} ({}): {}; behind More: {}", w.title, if held { "held" } else { "sticky" }, w.layout.sections.iter().map(|s| format!("{} {}{}", s.dir.as_str(), s.what.name(), if s.allowed { "" } else { " (grey)" })).collect::<Vec<_>>().join(", "), w.more_names());
+                v.wheel = Some(w);
+                v.menu = None;
+            }
+            None => open(v, aim, None),
+        }
+    };
     let mut pick: Option<usize> = None;
+
+    // The wheel (`ui/wheel.rs`): the held cursor's motion picks a section; letting go of F (or,
+    // opened sticky, a click, Enter or F) chooses; letting go in the hub chooses nothing.
+    let mut chosen: Option<Option<living_rules::ui::Dir>> = None;
+    if let Some(d) = scripted.wheel.take().and_then(|d| living_rules::ui::Dir::parse(&d)) {
+        v.wheel_point = Some(d);
+    }
+    if let (Some(d), Some(w)) = (v.wheel_point.take(), v.wheel.as_mut()) {
+        w.point(d);
+    }
+    if let Some(w) = v.wheel.as_mut() {
+        use living_rules::ui::Dir;
+        w.nudge(pointer.held_delta);
+        // The arrows point it (they are unbound by default).
+        let k = |c: KeyCode| free && keys.pressed(c);
+        let (x, y) = ((k(KeyCode::ArrowRight) as i32 - k(KeyCode::ArrowLeft) as i32) as f32, (k(KeyCode::ArrowDown) as i32 - k(KeyCode::ArrowUp) as i32) as f32);
+        if x != 0.0 || y != 0.0 {
+            let deg = x.atan2(-y).to_degrees().rem_euclid(360.0);
+            w.point(Dir::at(((deg / 45.0).round() as usize) % 8));
+        }
+        // 1–8 choose at once, clockwise from north.
+        const NUM: [KeyCode; 8] = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8];
+        if let Some(i) = NUM.iter().position(|c| pressed(*c)) {
+            if w.layout.at(Dir::at(i)).is_some() {
+                chosen = Some(Some(Dir::at(i)));
+            }
+        }
+        let f_up = binds.just_released(crate::keys::Act::Interact, &keys) || !binds.pressed(crate::keys::Act::Interact, &keys);
+        if chosen.is_none() {
+            if w.held && f_up {
+                chosen = Some(w.sel);
+            } else if !w.held && (pressed(KeyCode::Enter) || (free && binds.just_pressed(crate::keys::Act::Interact, &keys)) || mouse.just_pressed(MouseButton::Left)) {
+                chosen = Some(w.sel);
+            }
+        }
+        // Another bar key closes it without choosing (a player attacked mid-choice can fight).
+        let bar = [crate::keys::Act::Skill1, crate::keys::Act::Skill2, crate::keys::Act::Skill3, crate::keys::Act::Jump, crate::keys::Act::Dodge, crate::keys::Act::Run];
+        // Digits belong to the wheel (1–3 are also the skill keys' twins).
+        let fled = chosen.is_none() && bar.iter().any(|a| binds.just_pressed(*a, &keys));
+        // Its target left sight (or died): it closes, saying so.
+        let gone = matches!(&w.aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_none());
+        let note = gone.then(|| format!("{} is out of sight", w.title));
+        if gone || fled {
+            info!("ui: wheel closed ({})", if gone { "its target left sight" } else { "another key" });
+            v.wheel = None;
+            chosen = None;
+        }
+        if let Some(text) = note {
+            v.toasts.push(Toast { text, ok: None, at: now });
+        }
+    }
+    if let Some(sel) = chosen {
+        use living_rules::ui::{Pin, Section};
+        if let Some(w) = v.wheel.take() {
+            let sec = sel.and_then(|d| w.layout.at(d).cloned());
+            info!("ui: wheel chose {}", sec.as_ref().map_or("the hub: nothing sent".to_string(), |s| format!("{} {}{}", s.dir.as_str(), s.what.name(), if s.allowed { "" } else { " (grey: sent, the authority decides)" })));
+            let id = match &w.aim {
+                Aim::Creature { id } => Some(*id),
+                _ => None,
+            };
+            match sec.map(|s| s.what) {
+                None => {}
+                Some(Pin::Own(Section::Talk)) => {
+                    if let (Some(id), Some(t)) = (id, talk.as_mut()) {
+                        t.open_to = Some(id);
+                    }
+                }
+                Some(Pin::Own(Section::Window)) => v.open_window = id,
+                Some(Pin::Own(Section::Introduce)) => v.introduce = id,
+                Some(Pin::Own(Section::More)) => {
+                    let person = is_person(&w.aim);
+                    v.menu = Some(Menu { aim: w.aim.clone(), title: w.title.clone(), choices: w.choices.clone(), group: None, item: None, person, at: None, more: true });
+                }
+                Some(Pin::Skill(k)) => {
+                    let cs: Vec<&Choice> = w.choices.iter().filter(|c| if k == "ask" { c.say.is_some() } else { c.skill == k && c.say.is_none() }).collect();
+                    match cs.as_slice() {
+                        [c] if c.item.is_none() && c.want.is_none() => {
+                            let c = (*c).clone();
+                            if c.words {
+                                v.compose = Some((w.aim.clone(), c));
+                            } else {
+                                send(&net, conn, sc, &w.aim, &c, None, now_ms, &mut v, &mut controls);
+                            }
+                        }
+                        // Greyed: sent all the same; the authority decides and says why.
+                        [] => {
+                            let item = w.grey_items.get(&Pin::Skill(k.clone())).cloned();
+                            let c = Choice { item, ..Choice::new(&k, pretty(&k)) };
+                            send(&net, conn, sc, &w.aim, &c, None, now_ms, &mut v, &mut controls);
+                        }
+                        // A further choice: its sub-list, beside the hub.
+                        _ => {
+                            let person = is_person(&w.aim);
+                            let group = if cs.iter().any(|c| c.want.is_some()) { "offer".to_string() } else { k.clone() };
+                            v.menu = Some(Menu { aim: w.aim.clone(), title: w.title.clone(), choices: w.choices.clone(), group: Some(group), item: None, person, at: None, more: true });
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Panels.
     // I and K are the game UI's windows (`ui/win.rs`): the pack and skills and know-how.
@@ -1064,8 +1269,24 @@ pub fn input(
 
     // F: tap acts, hold opens the list.
     let interact = |k: &ButtonInput<KeyCode>| binds.just_pressed(crate::keys::Act::Interact, k);
-    if v.menu.is_none() && free && interact(&keys) {
+    if v.menu.is_none() && v.wheel.is_none() && chosen.is_none() && free && interact(&keys) {
         v.f_down = Some(now);
+        v.f_at = pointer.pos;
+    }
+    // F down and a flick before the wheel would draw: it opens with that direction chosen.
+    if let (Some(t0), Some(at), Some(pos), Some(aim)) = (v.f_down, v.f_at, pointer.pos, v.aim.clone()) {
+        let moved = pos - at;
+        if now - t0 >= crate::ui::wheel::FLICK_MIN_S && moved.length() >= crate::ui::wheel::FLICK_PX && binds.pressed(crate::keys::Act::Interact, &keys) {
+            let (on, kind) = place_of(conn, &aim);
+            if sc.menu_for(on, &kind).is_some_and(|m| m.choose == living_rules::ui::Choose::Wheel) {
+                v.f_down = None;
+                wheel_or_list(&mut v, aim, true, at);
+                if let Some(w) = v.wheel.as_mut() {
+                    w.nudge(moved);
+                }
+                pointer.place = Some(at);
+            }
+        }
     }
     if let Some(t0) = v.f_down {
         let released = binds.just_released(crate::keys::Act::Interact, &keys) || !binds.pressed(crate::keys::Act::Interact, &keys);
@@ -1080,10 +1301,16 @@ pub fn input(
             if let (Some(id), false, Some(t)) = (person.filter(|id| !crate::combat::hostile_to_me(conn, *id, me, now_ms)), held, talk.as_mut()) {
                 t.open_to = Some(id);
             } else if let Some(aim) = v.aim.clone() {
+                // Held, or a tap with nothing likely: the wheel where the world gives one (held
+                // or sticky), else the list.
+                let at = v.f_at.or(pointer.pos).unwrap_or(Vec2::new(800.0, 450.0));
                 match v.likely.clone().filter(|_| !held) {
                     Some(c) if c.words => v.compose = Some((aim, c)),
                     Some(c) => send(&net, conn, sc, &aim, &c, None, now_ms, &mut v, &mut controls),
-                    None if v.has_options => open(&mut v, aim, None),
+                    None if v.has_options => wheel_or_list(&mut v, aim, held, at),
+                    // Held where the world pins acts: the wheel, greyed, says what belongs here
+                    // and why not now (a cold hearth's Make and Feed).
+                    None if held && sc.menu_for(place_of(conn, &aim).0, &place_of(conn, &aim).1).is_some_and(|m| m.choose == living_rules::ui::Choose::Wheel && m.wheel.iter().any(|p| p.is_some())) => wheel_or_list(&mut v, aim, true, at),
                     None => {
                         let text = format!("Nothing to do with {}", v.aim_name);
                         v.toasts.push(Toast { text, ok: None, at: now });
@@ -1098,6 +1325,8 @@ pub fn input(
     } else if v.menu.as_ref().is_some_and(|m| m.aim != Aim::Me) && pressed(INTERACT) {
         v.menu = None;
     }
+    // The wheel holds the cursor while it is open (`pointer.rs`).
+    pointer.hold = v.wheel.is_some();
     // C: acts on myself.
     if std::mem::take(&mut v.open_self) {
         open(&mut v, Aim::Me, None);
