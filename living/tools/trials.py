@@ -943,6 +943,7 @@ class Instance:
         self.latency = defaultdict(list)
         self.pending = []
         self.fired = Counter()
+        self.held = {}  # a `near … beyond … for_s` trigger: since when its condition has held
         self.status = "starting"
         self.stopped_by = None
         self.last_rows = {}
@@ -1375,14 +1376,26 @@ class Instance:
                     self.schedule(self.subst_addressee(e, c["b"]), self.t())
                     break
             elif "near" in w:
-                a = self.ids(w["near"].get("who", "subject"))
-                if "to" in w["near"]:
-                    spot = self.anchor(w["near"]["to"])
-                    close = any(dist(positions.get(x, (1e9, 1e9)), spot) <= w["near"]["within"] for x in a)
+                n = w["near"]
+                a = self.ids(n.get("who", "subject"))
+                if "to" in n:
+                    spot = self.anchor(n["to"])
+                    ds = [dist(positions[x], spot) for x in a if x in positions]
                 else:
-                    b = self.ids(w["near"]["of"])
-                    close = any(dist(positions.get(x, (1e9, 1e9)), positions.get(y, (-1e9, -1e9))) <= w["near"]["within"] for x in a for y in b)
-                if close:
+                    b = self.ids(n["of"])
+                    ds = [dist(positions[x], positions[y]) for x in a for y in b if x in positions and y in positions]
+                # `within`: fires when any is that close; `beyond`: when all are farther than that
+                # (both placed), and with `for_s` only once it has held that long (then the clock
+                # starts again).
+                hit = bool(ds) and (all(d > n["beyond"] for d in ds) if "beyond" in n else any(d <= n["within"] for d in ds))
+                if hit and n.get("for_s"):
+                    since = self.held.setdefault(k, self.t())
+                    hit = self.t() - since >= n["for_s"]
+                    if hit:
+                        self.held.pop(k, None)
+                elif not hit:
+                    self.held.pop(k, None)
+                if hit:
                     self.fired[k] += 1
                     self.schedule(e, self.t())
             elif "hour" in w and hour >= w["hour"] and self.t() > 0:
@@ -1602,6 +1615,7 @@ class Instance:
         if not self.subject:
             raise RuntimeError("no subject in state.json: the run had not started; run it again instead")
         self.fired = Counter({tuple(json.loads(k)) if k.startswith("[") else json.loads(k): v for k, v in st.get("fired", {}).items()})
+        self.held = {}
         self.done_at = set(self.done_at or [])
         pid = st.get("mind_pid")
         if pid and proc_start(pid) == st.get("mind_start") and proc_start(pid) is not None:
