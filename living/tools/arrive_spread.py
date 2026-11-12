@@ -22,7 +22,11 @@ control is `<trial>:arrive-control`. Per run:
   don't seem to be within earshot" or, since `speech_truth`, "… could not have heard you.", in `experiences_all.jsonl`; without it, the speaker beyond
   EARSHOT_M, 12 m, Cullet's speech, of the newcomer's position interpolated from `positions.jsonl`).
   `lines_to`: lines said to the newcomer; `far`: those out of earshot, which never reached it;
-  `heard_res`: residents who said at least one line to it that reached it.
+  `heard_res`: residents who said at least one line to it that reached it. `said_all`: every
+  resident's lines, to anyone or the room; `far_all`: those whose speaker the authority told
+  they reached no one they were for (the same `silence` verdict, any addressee; the earshot stage),
+  split as `far_seen` (the addressee in sight but too far), `far_unseen` (out of sight) and
+  `far_room` (a line to the room that no one received).
 - **First contact class** (arrive_report's classes per resident): `c_line` (greeting, question,
   offer, warning or other line), `c_watch` (watching), `c_pass` (approach, no line).
 - **Follow-through** of contact (no answer comes in `arrive`; in `arrive-answer` one does):
@@ -181,6 +185,19 @@ def extra(d, sid, names, minds):
             out = not (p and s.get("x") is not None and ((p[0] - s["x"]) ** 2 + (p[1] - s["y"]) ** 2) ** 0.5 <= EARSHOT_M)
         (far if out else heard).append(s)
     n_far = len(earshot) if (d / "experiences_all.jsonl").exists() else len(far)
+    # Every resident's lines, to anyone or the room, and those the authority's own verdict says
+    # reached no one they were for (the earshot stage, docs/COMMUNICATION.md §17): `said` rows,
+    # and `silence` rows (`UNHEARD`, a planned line not said left out as above).
+    exp_all = jl(d / "experiences_all.jsonl")
+    said_all = sum(1 for r in exp_all if r.get("kind") == "said" and r.get("observer") in minds)
+    unheard_all = [r.get("text") or "" for r in exp_all if r.get("kind") == "silence" and r.get("observer") in minds
+                   and UNHEARD.search(r.get("text") or "") and UNSAID not in (r.get("text") or "")]
+    far_all = len(unheard_all)
+    # Split by what the speaker could have judged (`speech_truth`'s words): the addressee was in
+    # sight but too far, out of sight, or a line to the room reached no one.
+    far_seen = sum(1 for t in unheard_all if "too far away: they could not" in t or "is too far to hear you" in t)
+    far_room = sum(1 for t in unheard_all if t.startswith("Nobody was near enough"))
+    far_unseen = far_all - far_seen - far_room
     intro, invite, asked, reasks = set(), set(), set(), 0
     for s in heard:
         a, w = s["a"], quoted(s["text"])
@@ -208,7 +225,7 @@ def extra(d, sid, names, minds):
     return {"minutes": minutes, "residents": len(minds),
             "contact_join_s": None, "heard_join_s": round((heard[0]["at_ms"] - join_ms) / 1000, 1) if heard else None,
             "first_heard_by": heard[0]["a"] if heard else None,
-            "lines_to": len(heard) + n_far, "far": n_far, "heard": len(heard), "heard_res": len({s["a"] for s in heard}),
+            "lines_to": len(heard) + n_far, "far": n_far, "said_all": said_all, "far_all": far_all, "far_seen": far_seen, "far_unseen": far_unseen, "far_room": far_room, "heard": len(heard), "heard_res": len({s["a"] for s in heard}),
             "intro": len(intro), "invite": len(invite), "gave": len(gave), "threat": len(threat), "reasks": reasks,
             "delib_ph": round(delibs / res_h, 1) if res_h else None, "talk_ph": round(turns / res_h, 1) if res_h else None,
             "res_h": res_h, "join_ms": join_ms, "id_lines": sum(hashed.values()), "id_by": dict(hashed), "to_new_ms": {(s["a"], s["at_ms"]) for s in to_new}}
@@ -251,11 +268,11 @@ def proxy_score(lives, model):
     return round(statistics.mean(scores), 2) if scores else None
 
 
-COLS = ["id_lines", "in_range", "acted_share", "heard_res", "contact_join_s", "heard_join_s", "lines_to", "far", "c_line", "c_watch", "c_pass",
+COLS = ["id_lines", "in_range", "acted_share", "heard_res", "contact_join_s", "heard_join_s", "lines_to", "far", "said_all", "far_all", "far_seen", "far_unseen", "far_room", "c_line", "c_watch", "c_pass",
         "intro", "invite", "gave", "threat", "told", "reasks", "converge_60s", "together_4m", "false_min", "group_talk_min", "rep_res", "rep_new",
         "led_res", "plc_res", "led_new", "score", "delib_ph", "talk_ph", "reused", "reused_ev", "carried_again", "usd", "usd_rh"]
 # Which direction is a cost: +1 when more is worse (for the "worse" marks of the guards).
-WORSE = {"false_min": 1, "rep_res": 1, "rep_new": 1, "led_res": -1, "converge_60s": 1, "together_4m": 1, "reasks": 1, "far": 1}
+WORSE = {"false_min": 1, "rep_res": 1, "rep_new": 1, "led_res": -1, "converge_60s": 1, "together_4m": 1, "reasks": 1, "far": 1, "far_all": 1, "far_seen": 1, "far_room": 1}
 
 
 FAR_PERSON = "someone too far away to make out"

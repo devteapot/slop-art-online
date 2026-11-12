@@ -159,8 +159,13 @@ JOINTS = {
     "J_Fit_Belly": (0, 0.110, 1.070),  # a helper no clip keys: moved forward, it carries a belly on the clothes in front of it
     "J_Bip_C_Chest": (0, 0.012, 1.180),
     "J_Bip_C_UpperChest": (0, 0.004, 1.310),
-    "J_Bip_C_Neck": (0, -0.020, 1.475),
-    "J_Bip_C_Head": (0, -0.010, 1.560),
+    # The neck's and the head's joints are where the reference has them, measured from the chin
+    # (reference/neck.py; the chin is at 1.535 and a head is 0.2564 high): the neck's 0.168 of a
+    # head below it, the head's 0.135 above, each a little ahead of where they were. Until the
+    # joints step the neck's was 0.234 below (1.475, y -0.020) and the head's 0.098 above (1.560,
+    # y -0.010).
+    "J_Bip_C_Neck": (0, -0.012, 1.492),
+    "J_Bip_C_Head": (0, -0.003, 1.570),
     "J_Bip_L_Shoulder": (-0.025, -0.012, 1.435),
     "J_Bip_L_UpperArm": (SHOULDER_X, ARM_Y, ARM_Z),
     "J_Bip_L_LowerArm": (SHOULDER_X - 0.280, ARM_Y, ARM_Z),
@@ -1009,6 +1014,10 @@ def make_face(arm, spec, atlas_path):
     world = base + np.array(m.v) * HEAD_SCALE
     eye_bone = {-1: "J_Adj_L_FaceEye", 1: "J_Adj_R_FaceEye"}
     weights = [{"J_Bip_C_Head": 1.0} if e is None else ({eye_bone[e[0]]: e[1], "J_Bip_C_Head": 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}) for e in m.eye]
+    v_kind = [None] * len(m.v)
+    for f, k in zip(m.f, m.fm):
+        for v in f:
+            v_kind[v] = k
     if TYPED:
         # Each vertex's share of the identity bones, by where it lies; an eye's own parts ride its orbit.
         shares = cage_head.identity_weights(HF, np.array(m.v))
@@ -1018,6 +1027,9 @@ def make_face(arm, spec, atlas_path):
             else:
                 orbit = f"J_Id_Orbit_{'L' if e[0] < 0 else 'R'}"
                 weights[i] = {eye_bone[e[0]]: e[1], orbit: 1.0 - e[1]} if e[1] < 1 else {eye_bone[e[0]]: 1.0}
+        for i, k in enumerate(v_kind):  # a brow rides its own bone whole
+            if k == "brow":
+                weights[i] = {f"J_Id_Brow_{'L' if m.v[i][0] < 0 else 'R'}": 1.0}
         for i in face.under_neck:  # the neck's ring turns with the neck
             weights[i] = {"J_Bip_C_Neck": 0.75, "J_Bip_C_Head": 0.25}
     for i, v in enumerate(tint_src):  # the layer moves exactly as the skin under it
@@ -2192,7 +2204,8 @@ def spread_head_weights(obs):
             continue
         pts = np.array([(np.array(me.vertices[i].co) - np.array(HEAD)) / HEAD_SCALE for i in idx])
         groups = {}
-        for i, w, parts in zip(idx, share, cage_head.identity_weights(HF, pts)):
+        # The far head has its brows painted on its skin, which follows the brows' bones there.
+        for i, w, parts in zip(idx, share, cage_head.identity_weights(HF, pts, brows=ob.name.split(".")[0] == "FarHead")):
             g.remove([i])
             for n, x in parts.items():
                 vg = groups.get(n) or ob.vertex_groups.get(n) or ob.vertex_groups.new(name=n)
