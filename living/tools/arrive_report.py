@@ -275,17 +275,25 @@ def thinkers_of(d):
     return {int(x) for x in only.split(",") if x.strip()} if only else None
 
 
-def windows_of(events, end_ms=None):
-    """The silent stands (arrive) or listening windows (greet) as [(from_ms, to_ms)]. A stand
-    the run's end cut short (no `_end` event) ends at `end_ms`, the run's last position sample,
-    when given."""
+# Whether the newcomer's walks through the town (`human_route` .. `human_route_end`, the strangers
+# trial's walk along the Strand) count as windows beside its stands: residents it passes are then
+# in range too (st2b analysis, docs/TRIALS.md). `--stands-only` (arrive_spread) gives the old measure.
+WALKS = True
+
+
+def windows_of(events, end_ms=None, walks=None):
+    """The silent stands (arrive) or listening windows (greet) as [(from_ms, to_ms)], and the
+    newcomer's walks (`human_route`) unless `walks` is false. A stand the run's end cut short (no
+    `_end` event) ends at `end_ms`, the run's last position sample, when given."""
+    walks = WALKS if walks is None else walks
     out, opened = [], {}
+    keys = (("human_stand", "human_stand_end"), ("human_listen", "human_listen_end")) + ((("human_route", "human_route_end"),) if walks else ())
     for e in events:
-        for key, end in (("human_stand", "human_stand_end"), ("human_listen", "human_listen_end")):
+        for key, end in keys:
             if key in e:
-                opened[(key, e[key].get("stand", e[key].get("cycle")))] = e[key]["from_ms"]
+                opened[(key, e[key].get("stand", e[key].get("cycle", e[key].get("name"))))] = e[key]["from_ms"]
             if end in e:
-                k = (key, e[end].get("stand", e[end].get("cycle")))
+                k = (key, e[end].get("stand", e[end].get("cycle", e[end].get("name"))))
                 if k in opened:
                     out.append((opened.pop(k), e[end]["to_ms"]))
     out += [(a, end_ms) for a in opened.values() if end_ms and end_ms > a]

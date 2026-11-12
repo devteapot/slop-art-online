@@ -521,11 +521,14 @@ def main():
     ap.add_argument("--arrive-tools", default=str(HERE), help="directory holding arrive_report.py (branch exp-arrive)")
     ap.add_argument("--feel-model", help="a feel_tune fit's tune_result*.json, for the proxy-tuned score")
     ap.add_argument("--json")
+    ap.add_argument("--stands-only", action="store_true", help="in range during the stands only (before the st2b analysis), not the newcomer's walks too")
     ap.add_argument("--strangers", action="store_true", help="the strangers measures per run and resident (docs/STRANGERS.md)")
     ap.add_argument("--control", help="the control arm for every arm (`trial:variant`); default `<trial>:arrive-control`")
     a = ap.parse_args()
     global AR, FE, FT
     AR = load("arrive_report", a.arrive_tools)
+    if AR is not None and a.stands_only:
+        AR.WALKS = False
     if AR is None:
         sys.exit(f"no arrive_report.py in {a.arrive_tools}: pass --arrive-tools (a checkout of exp-arrive)/living/tools")
     import feel_excerpts as FE  # noqa: E402
