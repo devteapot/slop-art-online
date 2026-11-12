@@ -248,6 +248,7 @@ COLS = ["id_lines", "in_range", "acted_share", "heard_res", "contact_join_s", "h
 WORSE = {"false_min": 1, "rep_res": 1, "rep_new": 1, "led_res": -1, "converge_60s": 1, "together_4m": 1, "reasks": 1, "far": 1}
 
 
+FAR_PERSON = "someone too far away to make out"
 STRANGER_WORDS = re.compile(r"\b(stranger|strangers|newcomer|new arrival|traveller|traveler|visitor|outsider|new face|someone new|just arrived|wanderer|arrival)\b", re.I)
 DUTY = re.compile(r"arrivals?_must|book of arrivals|ship-day book|the one who sees|sees everyone who walks|every back on", re.I)
 
@@ -335,7 +336,30 @@ def strangers(d, r, sid, names, minds, x):
     me0 = pos_join.get(str(sid))
     out = [t for t in tellers if me0 and str(t) in pos_join and ((pos_join[str(t)][0] - me0[0]) ** 2 + (pos_join[str(t)][1] - me0[1]) ** 2) ** 0.5 > 12.0]
     heard_by = x.get("first_heard_by")
-    return {"residents": rows, "classes": {c: sum(1 for z in rows if z["class"] == c) for c in ("asks", "approaches", "inward", "unaware")},
+    # Someone too far away to make out (far-label): think prompts whose scene lists one, and the
+    # replies that speak of a figure they cannot make out (examples kept).
+    far_prompts = far_replies = 0
+    far_examples = []
+    for f in sorted((d / "journal").glob("*.jsonl")) if (d / "journal").exists() else []:
+        for e in jl(f):
+            if e.get("purpose") != "think":
+                continue
+            if FAR_PERSON in AR.user_text(e):
+                far_prompts += 1
+            rep_ = AR.reply_text(e)
+            if re.search(r"too far (away )?to make out|can(no|')t make (them|him|her|out)|make out who", rep_, re.I):
+                far_replies += 1
+                if len(far_examples) < 3:
+                    far_examples.append(f"{f.stem.replace('_', ' ')}: {rep_[:200]}")
+    # The room line nobody heard (speech_truth: a line to no one with nobody in earshot).
+    room = [e for e in jl(d / "experiences_all.jsonl") if e.get("kind") == "silence" and (e.get("text") or "").startswith("Nobody was near enough to hear you")]
+    # First sights in crowds: lines, lines naming several people, the most named in one line.
+    fs = [e for e in jl(d / "experiences_all.jsonl") if (e.get("text") or "").startswith("For the first time you see")]
+    parts = [len((e.get("text") or "").split("; ")) for e in fs]
+    return {"far_prompts": far_prompts, "far_replies": far_replies, "far_examples": far_examples,
+            "room_unheard": len(room), "room_speakers": len({e["observer"] for e in room}),
+            "first_sight_lines": len(fs), "first_sight_batched": sum(1 for n in parts if n > 1), "first_sight_people": sum(parts), "first_sight_most": max(parts, default=0),
+            "residents": rows, "classes": {c: sum(1 for z in rows if z["class"] == c) for c in ("asks", "approaches", "inward", "unaware")},
             "tells": [names.get(t, f"#{t}") for t in tellers], "tells_out": len(out),
             "first_heard": f"{x['heard_join_s']} s, {names.get(heard_by, heard_by)}" if x.get("heard_join_s") is not None else None,
             "fs_cover": f"{len(near_ever & cover)} of {len(near_ever)}", "fs_missing": sorted(names.get(i, f"#{i}") for i in near_ever - cover),
@@ -454,7 +478,11 @@ def main():
                 print(f"### {arm} r{r['rep']}\n")
                 print(f"classes {st['classes']}; tells {st['tells']} ({st['tells_out']} beyond 12 m at the join); first heard line {st['first_heard']}; "
                       f"first-sight lines naming the newcomer {st['fs_cover']} persons within 12 m after the join (without one: {st['fs_missing']}); "
-                      f"routines with relation stranger {st['routines']}; spoken ids {r.get('id_lines')} {r.get('id_by') or ''}; converge_60s {st['converge_60s']}; together_4m {st['together_4m']}; re-asks {st['reasks']}\n")
+                      f"routines with relation stranger {st['routines']}; far label in think prompts {st['far_prompts']}, in replies {st['far_replies']}; "
+                      f"room lines nobody heard {st['room_unheard']} (by {st['room_speakers']}); first-sight lines {st['first_sight_lines']} ({st['first_sight_batched']} naming several, "
+                      f"{st['first_sight_people']} people, at most {st['first_sight_most']} in one); delib/res-h {r.get('delib_ph')}; spoken ids {r.get('id_lines')} {r.get('id_by') or ''}; converge_60s {st['converge_60s']}; together_4m {st['together_4m']}; re-asks {st['reasks']}\n")
+                for ex in st.get("far_examples") or []:
+                    print(f"- far label in a thought: {ex}")
                 if st["residents"]:
                     print("| resident | duty | curiosity | sociability | caution | first sight | class | thought |")
                     print("|---|---|---:|---:|---:|---|---|---|")

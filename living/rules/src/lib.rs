@@ -5,6 +5,7 @@ pub mod acts;
 pub mod catalog;
 pub mod combat;
 pub mod det;
+pub mod doing;
 pub mod fire;
 pub mod graph;
 pub mod height;
