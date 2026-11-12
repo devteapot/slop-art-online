@@ -1,1 +1,14 @@
-{}
+{
+  "animals": {
+    "case": "animals",
+    "first_main": "540522fc",
+    "first_seen": "2026-11-12T18:30:22+01:00",
+    "last_evidence": "/home/gooning/slop-evidence/pursue-last-seen/ (minds-an-main-173050: suitor race; branch runs: both races); verify-minds validation 2026-11-12 pursue-last-seen",
+    "last_main": "540522fc",
+    "last_seen": "2026-11-12T18:30:22+01:00",
+    "owner": "Spark",
+    "reason": "flaky, two staging races in verify_minds.py animals_case (main 2 of 3 pass): (1) a deer outside the case's three, on instinct, asks one of them to start a family before the lead is asked, so that member thinks first and the lead takes its pick as a pack decision ('timed out waiting for a chosen option'); (2) a member's held 'Nothing in my current plan works (flee: no #1 in sight)' matures ~240 s after its pack install, as the case asks the lead again, and the case counts every choose call ('nothing new: no call'). Fix on fix-animals-race.",
+    "skill": "verify-minds",
+    "times": 0
+  }
+}
