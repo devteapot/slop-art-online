@@ -24,6 +24,11 @@ const ROOT_MARK: u16 = u16::MAX - 1;
 const FAIL_MARK: u16 = u16::MAX - 2;
 pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
 thread_local! {
+    /// Attention cues (`Ev::cues`), per character: when its cues were last checked, and the
+    /// (cue, thing) pairs that have fired or were held back by the cooldown and have matched at
+    /// every check since, so a cue fires when a thing begins to match, not while it goes on
+    /// matching. Lost on a module update: the durable cooldown (`Cue::fired`) then holds.
+    static CUE_HELD: std::cell::RefCell<std::collections::HashMap<u32, (u64, Vec<(u64, u64)>)>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// The hunger and energy levels where each body's need rates change, from the law's last
     /// answer for it (`NeedLaw::cuts`).
     static NEED_CUTS: std::cell::RefCell<std::collections::HashMap<u32, [f32; 4]>> = std::cell::RefCell::new(std::collections::HashMap::new());
@@ -1192,6 +1197,165 @@ impl<'a> Ev<'a> {
         self.st.alerts = (self.st.alerts & !LAW_ALARMS) | felt_now;
     }
 
+    /// Attention cues (docs/ATTENTION.md): what this character's mind wrote should bring it to
+    /// think, matched by type against what it perceives now (the scene this evaluation built),
+    /// at most once a second, while the `cues_on` law holds. A thing that begins to match a cue
+    /// becomes one `noticed` experience quoting the mind's own reason, and a request to think;
+    /// once per thing per `cue_cooldown_s`, and once per character per `cue_gap_s` (things that
+    /// begin to match together are told in one line). A person too far away to make out matches
+    /// nothing, as they are no one in particular to the scene.
+    fn cues(&mut self) {
+        let laws = common::laws(self.ctx);
+        if !laws.cues_on {
+            return;
+        }
+        let (me, now) = (self.me.id, self.now);
+        let due = CUE_HELD.with(|m| m.borrow().get(&me).map_or(true, |(t, _)| now.saturating_sub(*t) >= 1_000));
+        if !due {
+            return;
+        }
+        // The scene `noticed` builds anyway, built first so the span times the cues' own work.
+        self.scene();
+        let _span = common::span("brain.cues");
+        let cues: Vec<Cue> = self.ctx.db.cue().actor().filter(me).filter(|c| c.refused.is_empty()).collect();
+        if cues.is_empty() {
+            CUE_HELD.with(|m| m.borrow_mut().insert(me, (now, Vec::new())));
+            return;
+        }
+        let ctx = self.ctx;
+        let at = self.at;
+        let places: Vec<Place> = if cues.iter().any(|c| !c.at.is_empty()) { ctx.db.place().actor().filter(me).collect() } else { Vec::new() };
+        let place_of = |name: &str| places.iter().find(|p| p.name.eq_ignore_ascii_case(name)).map(|p| (p.id, (p.x, p.y)));
+        let creatures: Vec<NearCreature> = self.scene().creatures.clone();
+        let things: Vec<(u64, String, (f32, f32), f32)> = {
+            let sc = self.scene();
+            sc.resources.iter().map(|(r, d)| (CUE_RESOURCE | r.id, r.kind.clone(), (r.x, r.y), *d)).chain(sc.structures.iter().map(|(s, d)| (CUE_STRUCTURE | s.id, s.kind.clone(), (s.x, s.y), *d))).collect()
+        };
+        let scripts = common::scripts(ctx);
+        // Who each person in sight is to me, worked out only once and only if a cue asks.
+        let mut who_cache: Vec<(u32, bool, bool)> = Vec::new();
+        let mut matched: Vec<(usize, u64, String)> = Vec::new();
+        for (i, c) in cues.iter().enumerate() {
+            let near_place = |p: (f32, f32)| -> bool {
+                if c.at.is_empty() {
+                    return true;
+                }
+                place_of(&c.at).is_some_and(|(_, q)| dist(p, q) <= c.within)
+            };
+            let near_me = |d: f32| c.near_me <= 0.0 || d <= c.near_me;
+            if c.who_id != 0 || !c.who.is_empty() {
+                for n in &creatures {
+                    if n.id == me || (c.who_id != 0 && n.id != c.who_id) || !near_me(n.dist) || !near_place(n.pos) {
+                        continue;
+                    }
+                    let kind_ok = match c.who.as_str() {
+                        "" | "unknown" => true,
+                        k => &*n.kind == k,
+                    };
+                    if !kind_ok || (c.who == "unknown" && &*n.kind != "person") {
+                        continue;
+                    }
+                    if &*n.kind == "person" {
+                        let (named, far) = match who_cache.iter().find(|w| w.0 == n.id) {
+                            Some(w) => (w.1, w.2),
+                            None => {
+                                let Some(ch) = ctx.db.character().id().find(n.id) else { continue };
+                                let w = (n.id, crate::perception::knows_name(ctx, &self.me, &ch), crate::perception::regard(ctx, &self.me, &ch, now).far);
+                                who_cache.push(w);
+                                (w.1, w.2)
+                            }
+                        };
+                        if far || (c.who == "unknown" && named) {
+                            continue;
+                        }
+                    }
+                    // What it is visibly doing, and in which phase: what COMBAT_MIND 3.2's `doing`
+                    // condition reads (`perception::visibly`), under the same sight.
+                    let mut seen_doing = String::new();
+                    if !c.doing.is_empty() || !c.phase.is_empty() {
+                        let Some(v) = crate::perception::visibly(ctx, &scripts, n.id, now) else { continue };
+                        let want = living_rules::doing::Phase::parse(&c.phase);
+                        if (!c.doing.is_empty() && !v.is(&scripts, &c.doing)) || want.is_some_and(|p| !v.phase.fits(p)) {
+                            continue;
+                        }
+                        seen_doing = format!(", {} ({})", v.skill.replace('_', " "), v.phase.word());
+                    }
+                    let who = common::label_for(ctx, &self.me, n.id);
+                    let doing = seen_doing;
+                    matched.push((i, n.id as u64, format!("{who}, {:.0} tiles {}{doing}", n.dist, direction(at, n.pos))));
+                }
+            } else if !c.thing.is_empty() {
+                for (id, kind, pos, d) in &things {
+                    if (kind == &c.thing || (*id & CUE_STRUCTURE != 0 && scripts.is_kind(kind, &c.thing))) && near_me(*d) && near_place(*pos) {
+                        matched.push((i, *id, format!("{} {}, {:.0} tiles {}", article(kind), kind.replace('_', " "), d, direction(at, *pos))));
+                    }
+                }
+            } else if let Some((pid, p)) = place_of(&c.at) {
+                // Only a place: being there.
+                if dist(at, p) <= c.within {
+                    matched.push((i, CUE_PLACE | pid, format!("that you are at {}", c.at)));
+                }
+            }
+        }
+        let cooldown = (laws.cue_cooldown_s * 1000.0) as u64;
+        let gap = (laws.cue_gap_s * 1000.0) as u64;
+        let last_fire = cues.iter().flat_map(|c| c.fired.iter().map(|f| f.at_ms)).max().unwrap_or(0);
+        let mut held = CUE_HELD.with(|m| m.borrow().get(&me).map(|(_, h)| h.clone()).unwrap_or_default());
+        held.retain(|(cue, subj)| matched.iter().any(|(i, s, _)| cues[*i].id == *cue && s == subj));
+        let mut fire: Vec<(usize, u64, String)> = Vec::new();
+        for (i, subj, text) in matched {
+            let c = &cues[i];
+            if held.contains(&(c.id, subj)) || fire.iter().any(|f| f.0 == i && f.1 == subj) {
+                continue;
+            }
+            if c.fired.iter().any(|f| f.subject == subj && now.saturating_sub(f.at_ms) < cooldown) {
+                held.push((c.id, subj));
+                continue;
+            }
+            fire.push((i, subj, text));
+        }
+        let gap_ok = last_fire == 0 || now.saturating_sub(last_fire) >= gap;
+        if !fire.is_empty() && gap_ok {
+            let mut lines: Vec<String> = Vec::new();
+            let mut updates: Vec<Cue> = Vec::new();
+            let mut newly: Vec<(u64, u64)> = Vec::new();
+            for (i, c) in cues.iter().enumerate() {
+                let parts: Vec<&str> = fire.iter().filter(|f| f.0 == i).map(|f| f.2.as_str()).collect();
+                if parts.is_empty() {
+                    continue;
+                }
+                let why = if c.why.trim().is_empty() { c.for_key.split_once(':').map_or(c.for_key.as_str(), |(_, k)| k).replace('_', " ") } else { c.why.trim().to_string() };
+                lines.push(format!("You notice {}: you watch for this (\"{why}\").", parts.join("; ")));
+                let mut row = c.clone();
+                for f in fire.iter().filter(|f| f.0 == i) {
+                    row.fired.retain(|x| x.subject != f.1);
+                    row.fired.push(CueFire { subject: f.1, at_ms: now });
+                    row.fires += 1;
+                    newly.push((c.id, f.1));
+                }
+                if row.fired.len() > CUE_FIRED {
+                    let cut = row.fired.len() - CUE_FIRED;
+                    row.fired.drain(..cut);
+                }
+                updates.push(row);
+            }
+            let text = lines.join(" ");
+            // A cue fires only when its request to think is taken: one asked too soon after the
+            // last thought (the species' `think_min_s`) is tried again at the next check, so what
+            // the mind watched for is not told without the thought it asked for.
+            if crate::perceive::ask_to_think(ctx, me, &text, now) {
+                for row in updates {
+                    ctx.db.cue().id().update(row);
+                }
+                held.extend(newly);
+                let creatures_fired: Vec<u32> = fire.iter().filter(|f| f.1 >> 32 == 0).map(|f| f.1 as u32).collect();
+                let (subject, object) = (creatures_fired.first().copied().unwrap_or(0), creatures_fired.get(1).copied().unwrap_or(0));
+                percept(ctx, &self.me, now, "noticed", subject, object, at, text, 0.65);
+            }
+        }
+        CUE_HELD.with(|m| m.borrow_mut().insert(me, (now, held)));
+    }
+
     /// Look up (and refresh) bodily familiarity; returns the previous record, if any.
     fn familiarity(&mut self, thing: u64) -> Option<Familiar> {
         let prev = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, thing)).next();
@@ -1257,6 +1421,7 @@ impl<'a> Ev<'a> {
         if !self.me.ai {
             return;
         }
+        self.cues();
         let now = self.now;
         let at = self.at;
         let day = self.w.day_ms.max(1);
@@ -1566,6 +1731,11 @@ const FIRST_SIGHTS_PER_LINE: usize = 8;
 /// "For the first time you see Bram, 3 tiles north, wait." One line for several seen together:
 /// "For the first time you see a stranger, 9 tiles west, wait; Bram, 3 tiles north; and Edda,
 /// 5 tiles east." Its experience's subject and object are the first two named in it.
+/// "a" or "an" before a kind's words.
+fn article(kind: &str) -> &'static str {
+    if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" }
+}
+
 fn first_sight_text(parts: &[String]) -> String {
     match parts {
         [] => String::new(),

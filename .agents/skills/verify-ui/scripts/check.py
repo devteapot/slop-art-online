@@ -1614,6 +1614,43 @@ def far(run, c):
     notes_clear(c, s, out)
 
 
+def committed(run, c):
+    """committed-moves in the client: a windup or a dash, once started, runs its whole course.
+    A fire bolt (R) cast at the ground and W pressed during its windup: the authority keeps the
+    windup (the bolt goes) and holds the walk, which follows once it ends; the client draws no
+    movement meanwhile (the dump's `me_at`: drawn, and the authority's row). Then a dodge (`dodge:D`)
+    and the guard (Q) pressed mid-dodge: the rules' refusal ("in the middle of a dodge") once,
+    quietly, as a note; the dodge completes; the guard is sent but not predicted (client.log)."""
+    s = "committed"
+    cards = {r["skill"]: r for r in sql(run, "SELECT skill, windup_ms, recover_ms FROM skill_card")}
+    wb = (cards.get("firebolt") or {}).get("windup_ms", 600) / 1000.0
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}"]
+    plan = ("ready;sync:noon;sync:spot;wait:2;key:KeyX:tap;wait:0.6;cursor:0.5,0.3;wait:0.3;dump:a0;"
+            f"key:KeyR:down;wait:0.08;key:KeyW:down;wait:0.05;dump:a1;wait:{max(wb / 2 - 0.13, 0.05):.2f};dump:a2;wait:{wb / 2 + 0.2:.2f};key:KeyR:up;dump:a3;"
+            "wait:1.2;dump:a4;key:KeyW:up;wait:1.8;dump:b0;dodge:D;wait:0.06;key:KeyQ:down;wait:0.12;dump:b1;key:KeyQ:up;wait:1.0;shot:02_dodged;dump:b2;quit")
+    out, code, text = drive(run, s, plan, syncs=syncs)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("a0", "a1", "a2", "a3", "a4", "b0", "b1", "b2")}
+    at = lambda k, w: ((d[k].get("me_at") or {}).get(w))
+    pos = lambda k, w: (lambda v: (v["x"], v["y"]) if isinstance(v, dict) else (tuple(v) if v else None))(at(k, w))
+    dist = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 if a and b else None
+    still = [dist(pos("a0", w), pos(k, w)) for k in ("a1", "a2") for w in ("body", "drawn")]
+    c.check(s, "W pressed in the windup: neither the authority's body nor the drawn one moves", all(x is not None and x < 0.1 for x in still), f"windup {wb:.2f} s; moved {still}")
+    after = dist(pos("a0", "body"), pos("a4", "body"))
+    c.check(s, "the walk follows once the windup ends (held, then resumed)", after is not None and after > 0.5, f"{after}")
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    bolts = [r for r in (sql(run, f"SELECT id, kind, skill, why FROM act_outcome WHERE observer = {me}") if me else []) if r.get("skill") == "firebolt"]
+    c.check(s, "the authority kept the windup: the bolt went (its outcome told)", bool(bolts), str(bolts)[:200])
+    notes = [n for k in ("a1", "a2", "a3", "a4") for n in d[k].get("notes") or []]
+    c.check(s, "no note of a cancel while walking was held", not any("moved" in n.lower() or "broke off" in n.lower() for n in notes), str(notes))
+    mid = [n for k in ("b1", "b2") for n in d[k].get("notes") or [] if "middle of a dodge" in n]
+    c.check(s, "the guard mid-dodge: the rules' words, once, as a note", len(set(mid)) == 1 and all(n.count("middle of a dodge") == 1 for n in mid), str([d[k].get("notes") for k in ("b1", "b2")]))
+    dodged = dist(pos("b0", "body"), pos("b2", "body"))
+    c.check(s, "the dodge completes", dodged is not None and dodged > 1.5, f"{dodged}")
+    c.check(s, "the guard was sent but not predicted", "pressed during my dodge: sent, not predicted" in log(out), "client.log")
+
+
 def seed_names(run):
     """The proper names the seed this world was made from gives people and places (residents,
     their first names, buildings, plan lots and spots), from `living/seeds/<seed>.json`."""
@@ -1843,7 +1880,7 @@ def shot(run, c):
     c.check(s, "the shooter's name is nowhere", not any(sname in t for k in d for _, t in d[k].get("naming") or []), sname)
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death, "houses": houses, "shot": shot}
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death, "houses": houses, "shot": shot, "committed": committed}
 
 
 def main():

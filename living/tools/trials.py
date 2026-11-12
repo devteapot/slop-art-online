@@ -1782,7 +1782,9 @@ class Instance:
                         ("skill_use", f"SELECT * FROM skill_use WHERE actor = {S}"), ("deliberation", f"SELECT * FROM deliberation WHERE actor = {S}"),
                         ("structure", f"SELECT * FROM structure WHERE owner = {S}"), ("chronicle", "SELECT * FROM chronicle"),
                         ("character", "SELECT * FROM character WHERE " + " OR ".join(f"id = {i}" for ids in self.roles.values() for i in ids)),
-                        ("stats", "SELECT * FROM stats")):
+                        ("stats", "SELECT * FROM stats"),
+                        # Every attention cue in the world (at most 8 per character; docs/ATTENTION.md).
+                        ("cue", "SELECT * FROM cue")):
             try:
                 snap[name] = self.rows(q)
             except RuntimeError as e:

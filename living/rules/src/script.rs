@@ -490,6 +490,13 @@ pub struct Laws {
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
     pub stranger_by_name: bool,
+    /// Attention cues (docs/ATTENTION.md): what a mind wrote it should be brought to think
+    /// about, matched against what its character perceives. Off: nothing is matched.
+    pub cues_on: bool,
+    /// A cue fires at most once per thing it matched within this many seconds.
+    pub cue_cooldown_s: f32,
+    /// A character is brought to think by its cues at most once within this many seconds.
+    pub cue_gap_s: f32,
     /// A sound heard but not seen is near within this, close within the next (metres), and
     /// lingers this long after it was last heard (seconds).
     pub heard_near_m: f32,
@@ -556,6 +563,9 @@ impl Default for Laws {
             longing_food: 0.0,
             fov_on: false,
             stranger_by_name: false,
+            cues_on: false,
+            cue_cooldown_s: 600.0,
+            cue_gap_s: 60.0,
             heard_near_m: 5.0,
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
@@ -2510,6 +2520,9 @@ impl Scripts {
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
+            cues_on: flag("cues_on", l.cues_on),
+            cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
+            cue_gap_s: g("cue_gap_s", l.cue_gap_s).clamp(0.0, 3_600.0),
             heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
             heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
             heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),
@@ -3345,6 +3358,24 @@ mod tests {
 
     /// How far a walker's facing may turn from its way toward a held look is the world's law:
     /// 75 degrees shipped, a world's own value taken (and kept within 0..180).
+    /// Attention cues (docs/ATTENTION.md): off by default, with their cooldown and gap as laws
+    /// a world may set (`set_world_law`), clamped to sane bounds.
+    #[test]
+    fn attention_cues_are_the_world_s_laws() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        let l = shipped.laws();
+        assert!(!l.cues_on);
+        assert_eq!((l.cue_cooldown_s, l.cue_gap_s), (600.0, 60.0));
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5))])).unwrap();
+        on.validate().unwrap();
+        let l = on.laws();
+        assert!(l.cues_on);
+        assert_eq!((l.cue_cooldown_s, l.cue_gap_s), (30.0, 0.0));
+    }
+
     #[test]
     fn the_walking_look_limit_is_the_world_s_law() {
         let src = include_str!("../../scripts/skills.rhai");

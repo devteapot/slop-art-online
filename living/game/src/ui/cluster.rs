@@ -164,7 +164,8 @@ pub fn fill(
         if *at > *noted {
             *noted = *at;
             if now_ms - at < 2_000.0 {
-                verbs.toasts.push(crate::verbs::Toast { text: super::label(&wood::readable(why)), ok: Some(false), at: time.elapsed_secs_f64() });
+                // Quiet: the rules' words, once ("in the middle of a dodge"); the slot flashes.
+                verbs.toasts.push(crate::verbs::Toast { text: super::label(&wood::readable(why)), ok: None, at: time.elapsed_secs_f64() });
             }
         }
     }

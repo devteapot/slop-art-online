@@ -340,6 +340,9 @@ fn dump(
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone()), "tab": talk.as_ref().and_then(|t| t.tabbed.as_ref().map(|(p, e, c)| serde_json::json!({"prev": p, "earshot": e, "chose": c})))})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+        // Where my body is drawn (game x, z) and the authority's row for it as this client holds
+        // it (x, y, speed): committed-moves holds movement through a windup or a dash.
+        "me_at": me_at(&extra),
         // Every text that names a person or a place on screen (perceived-names-1), by where it
         // shows, and what the authority has given me to name (`known_names`, `given_places`).
         "naming": naming(&model, &verbs, talk.as_deref(), &ws, &extra),
@@ -377,6 +380,13 @@ fn dump(
         Ok(()) => info!("ui: state written to {}", path.display()),
         Err(e) => warn!("ui: could not write {}: {e}", path.display()),
     }
+}
+
+fn me_at(x: &DumpExtra) -> serde_json::Value {
+    let Some((conn, me)) = x.net.conn.as_ref().zip(x.net.my_id) else { return serde_json::Value::Null };
+    let drawn = x.scene.shown.get(&me).map(|(p, _)| [p.x, p.y]);
+    let body = crate::net::find_body(conn, me).map(|b| serde_json::json!({"x": b.x, "y": b.y, "speed": b.speed, "t_ms": b.t_ms}));
+    serde_json::json!({"drawn": drawn, "body": body})
 }
 
 /// Every person- or place-naming text the client shows, as (where, text): plates and hover
@@ -431,8 +441,9 @@ pub struct DumpExtra<'w, 's> {
     weapon: Res<'w, crate::weapon::Weapon>,
     slots: Res<'w, prim::Slots>,
     talks: Res<'w, people::Talks>,
-    looks: Res<'w, crate::looks::Looks>,
     net: NonSend<'w, crate::net::Net>,
+    scene: NonSend<'w, crate::world::Scene>,
+    looks: Res<'w, crate::looks::Looks>,
     tip: Query<'w, 's, &'static Node, With<prim::Tooltip>>,
     tip_title: Query<'w, 's, &'static Text, (With<prim::TooltipTitle>, Without<prim::TooltipText>)>,
     tip_text: Query<'w, 's, &'static Text, (With<prim::TooltipText>, Without<prim::TooltipTitle>)>,
