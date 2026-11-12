@@ -864,6 +864,67 @@ python3 living/tools/ooc.py .local/living/trials/<b>
 
 **Not established:** whether the frame changes what real minds do, or how often they break character. That needs a real batch (paid; the coordinator runs it).
 
+## Arenas: R2 against scripted opponents (2026-11-12)
+
+[Combat mind](COMBAT_MIND.md) §4 and §5, run R2: does a mind's fighting change within one fight after it has seen the opponent's pattern, with the existing machinery only (no new mind code)? Branch `arena-r2`, cut from origin/main `5d5ce4e1`.
+
+**Build and switches.** The trial module and `living-mind` were built from `5d5ce4e1` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force: stamina-1 (12d96e66), the two combat facts (`force_outcomes` on, 94baa708; `LIVING_SKILL_TIMINGS` on, ccafb3e4), the attack's timing in the COMBAT law from the skill cards (5b18c74f), look-2 (`look_walk_deg` 75), fix-dealings. `fov_on` is the shipped default, off: facing sight is a law on main that this world does not turn on. Models: the `default` variant (glm-flash, overflow deepseek-flash). Every guard of the runner applies (the laws guard, the runaway and outage watchdogs, the protected containers; nothing touches `verify-trial-bi1-*`).
+
+**The fixtures** (trial files only; nothing is shipped or installed into a character): a picked adult resident, `foe`, whose graph the trial sets one minute after the start, 6 m from the subject.
+- `arena-heavy`: the spear `attack` (the slowest, hardest melee move a person has under stamina-1: a 750 ms windup the target sees, 9 damage, against `strike`'s 350 ms and 8), then a pause of 2 or 3 s (`chance`), again and again. The answer that fits: out of reach or a dodge during the windup, a blow in the pause.
+- `arena-kiter`: a bow shot whenever it sees the subject (300 ms windup, 7 damage), running off whenever the subject comes within 6 m, following when it has lost sight. The answer that fits: shoot back, break its sight, or close through cover or a dodge.
+- Subject: a spawned newcomer (the wolves trial's traveller sheet, no word about fighting), on its instinct graph, with the newcomer's kit and a spear; its mind the only one thinking. 10 minutes from 10:00 (day sight), a 700,000-token cap per instance.
+
+**Runner and tools.** `record.uses` (new, generic): every skill use by the subject and the cast, written again as its outcome settles, to `uses.jsonl`. [`arena_report.py`](../living/tools/arena_report.py) reads the evidence: exposures (the heavy blows aimed at the subject; the arrows loosed at it), answered or not by their outcome, the defence in the windup and the counter in the pause, K (the first exposure after which three in a row were answered), the mind's revisions and words between exposures, its own outcome lines and timings used, spoken lines that carry an internal id (`#123`), calls, latency and cost.
+
+**Free dry run `r2f`** (`--fake`, one replicate each): both fixtures run as written. The heavy foe's blows landed "hit for 9"; the subject's instinct struck back with its own `attack` and killed the foe at 169 s, 6 heavy blows in (its line: "You finished: attack → person. killed Agnes Fenner (9)", see the defect below). The kiter loosed 12 arrows in reach of the subject, many more broken off as it fled; the subject closed within 6 m three times. No spoken line carried an id (0 of 2). A fake mind decides nothing, so these runs show the setup, not behaviour.
+
+**The first paid attempt `r2` did not run**: this session had no model key and stopped at the mind's start; nothing was spent. **R2 ran as `r2b`** (2026-11-12, 04:12–04:23), built from `arena-r2` at `07a1de10` (origin/main `ec5561f1`, fix-kill-name in), 5 replicates per fixture, the `default` variant, `fov_on` off (the shipped default), the key loaded from a copied `.env` (deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 410 files). Evidence: `.local/living/trials/r2b/` (`arena_report.json`, `report.md`) on the Spark.
+
+### R2 results (`r2b`, 10 fights, $0.40)
+
+**Main measure: within one fight, does behaviour change after the pattern is seen, after how many exposures, and does the change fit?**
+
+| | Heavy blow (5) | Kiter (5) |
+|---|---|---|
+| Exposures per fight | 4, 0, 5, 1, 2 (12) | 10, 13, 5, 4, 16 (48) |
+| Answered (did not land in full) | **0 of 12** | **5 of 48**: 0 of 15 in the first three, 5 of 33 after |
+| K (three answered in a row) | never | never |
+| Defence in the windup (dodge, guard) | 0 of 12 | blocks and dodges used (18 guards in one fight, 18 dodges in another), arrows still struck |
+| Counter in the opponent's pause | 9 of 12, **from the first exposure** | return fire 3 shots in 3 fights (2 hit); closed within 6 m 1–6 times a fight |
+| End | the subject killed the fixture in 3 (after 4, 5 and 2 heavies); 2 were no fight (below) | all survived (lowest health 15–82) |
+
+- **No body-level change that fits the pattern, in either arena.** Against the heavy blow the subject traded blows in the pause from the first exposure; that is its seeded reflex ("hurt: attack the attacker"), not something learned, and it won. Against the kiter, the share of arrows answered stayed near zero throughout.
+- **The minds named the pattern in words, late.** Heavy: by the third or fourth exposure in 3 of 4 fights ("at my arm again mid-swing", "give ground, let their blow miss, then hit back", "slip #9's swing", "I've traded blows with him before and come off better each time"). Kiter: in 5 of 5 ("keep my distance, ready my bow", "put an arrow in them if they close the distance", "break away, put distance between us"). One kiter's subject read arrows as blows ("already swinging", "struck me from behind"): an arrow is told as "A stranger attacked you (7 damage)", which does not say it was an arrow (the gap COMBAT_MIND §3.2 names).
+- **The answer reached the plans, not the body in time.** Compiled plans held `dodge` in 3 of 5 heavy fights and 4 of 5 kiter fights, `threatened` conditions in 3 and 4, a bow shot in 3 kiter fights, a `combat` patch in 2; but they were installed around the third or fourth exposure, and the heavy fights ended within one or two more. Revisions in the fights: 4–10 deliberations each.
+- **Fixture faults (heavy):** two of five heavy runs had no fight worth measuring. In one the subject stood 11–12 m off, past day sight, and the fixture's `attack` cannot start on someone it does not see; its graph has no approach. In another it stayed 60 m away after its placement. And the fixture loses to the subject's reflex in 2–5 exposures. A rerun needs a fixture that follows when it cannot see the subject and lasts long enough for a pattern to be learned (leather armor, the 0.65 the rules give, is a fixture's gear, not a rule change).
+
+**What the minds did with the real timings and outcomes.** No reply cited a timing (no "ms", "winds up", "ready again" in any think or compile reply): the timing lines went unused. Outcome lines were told (heavy 0–14 a fight, kiter 0–20) and used in words ("come off better each time", "they're barely standing"), not as numbers.
+
+**Spoken ids.** 0 of 66 spoken lines carried an internal id (`#123`). Ids appear in the minds' thoughts ("#9"), their handle for the scene, as allowed.
+
+**Cost and latency.** $0.40 for the batch (glm-flash $0.09, deepseek-flash $0.31; 355 calls, 1.86 M tokens); per 10-minute fight $0.027–0.053 (mean $0.040), 20–42 calls; think and compile p50 5.5–5.8 s per call. GLM's consolidation failed 23 of 30 calls (retried on DeepSeek), a reliability note for the default mix, not a cost.
+
+**Defect found (3.1, `force_outcomes`).** A melee kill is told to the killer with the victim's real name: "You finished: attack → person. killed Agnes Fenner (9)", where the killer knew her only as a stranger. The line's words are `act::damage`'s result, which names the victim by `common::display`; a missile's kill avoids it (`act::Far::Killed`, "struck a stranger and killed them"), a blow that resolves at its release does not. Before `force_outcomes` this reached minds only for `attack` (a notable skill); now it reaches every striker, players included. The fix is to tell a kill in the maker's terms (`label_for`) in `act.rs` `report`; not made here.
+
+### What the told outcome lines cost in a battle
+
+[`outcome_cost.py`](../living/tools/outcome_cost.py) on a scratch `verify-core` world (`core-r2cost-025725`, default seed, 186–188 people alive): 20 minded spear fighters (`spawn_crowd(20, true)`: held like a mind's, so their outcomes are told), packed 1.5 m apart, striking the nearest person, timed by `bench.py` (profiled tick spans, no subscribers) over a 22 s window per arm, each arm a fresh battle; the fighters' new experience rows were read during the window, so the lines of those who died count.
+
+| | `force_outcomes` on | off |
+|---|---:|---:|
+| Blows a second (hits, dodged, blocked) | 9.2 | 8.9 |
+| Told strike lines a second (done + failed) | 14.4 (10.6 + 3.8) | 3.8 (failed only) |
+| `act_outcome` rows | 0 | 0 |
+| Tick p50 / p95 / p99 / max (ms) | 1.68 / 3.60 / 5.58 / 7.21 | 1.72 / 3.40 / 5.12 / 6.59 |
+| `tick.combat` work (ms a second) | 8.29 | 8.23 |
+| `tick.activity` work (ms a second) | 3.89 | 3.81 |
+
+- The law adds one experience row per resolved blow: about 10.6 rows a second here, written to the striker only. The failures (3.8 a second) are told either way; each fighter's repeated refusals ("not ready", "out of breath") are each told once (the `repeat_failure_s` window).
+- The tick does not show it: the differences between the arms (p99 5.6 against 5.1 ms, 0.06 ms a second of combat work) are within one battle's variation. **At 20 fighters it is not material.** A minded fighter's rows go when its mind integrates them; minded fighters with no mind service here kept theirs in the experience window.
+- `act_outcome` rows are written only for a character a person plays (`outcomes::write`): none here. A player's character gets one per told line, kept with the newest 64 lines (`frame::LINES_SHOWN`).
+- A first run (`core-r2cost-025417`, 30 s windows) counted lines by snapshot and came out negative (a dead character's experience rows go with it) and ran past the battle's end; it is not used.
+
 ## What still special-cases trials (to remove later)
 
 No engine code knows about trials. The authority gained one generic admin-only scene reducer, `spawn_newcomer` (a player's `join`, thought for by the minds). Everything else a trial sets up uses existing admin scene reducers, `mind_say`/`mind_act` for admin-controlled characters, behaviour graphs with the existing skills (the ladder's scribe is a graph plus the ordinary `teach` act), the player reducers (the human session) and the real presence path (the takeover). What the runner itself still hard-codes:
