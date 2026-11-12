@@ -10,3 +10,5 @@ Branch `speech-address` from `06be6921`, the trial service `slop-trials-stdb`, f
 - "A stranger said to the room while talking with Walker2: “Has anyone seen the cart?”".
 
 The line to Walker2 has no room detail.
+
+After merging main `d80a1373`: `minds-sam-11121029` `room-address` passes.

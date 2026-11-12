@@ -8,3 +8,5 @@ The first run (`core-sa-11121005-channels`) failed "call: d, 20 m away, hears it
 
 - a private way's line (`only_to`) no longer counts as a conversation;
 - the shipped `call` template places the detail at `{how}` ("{a} calls out{how} from about {d} m").
+
+After merging main `d80a1373`, `core-sam-11121029-channels` failed one check: "call: a second within 6 s is refused". The second call came 9.5 s after the first at load average ~34, so the call was rightly accepted; this was harness timing, not the change. The rerun, `core-sam2-11121034-channels`, passed 31/31.
