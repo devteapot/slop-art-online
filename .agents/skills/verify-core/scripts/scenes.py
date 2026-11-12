@@ -2761,37 +2761,64 @@ def crowd_sight_on(s, line, obs, crowd):
     s.expect("both have their familiar rows", fam(new) == set(new), sorted(fam(new)))
 
 
+FAR = "someone too far away to make out"
+
+
 def stranger_filter(s):
-    """What a graph's `relation: "stranger"` matches (docs/STRANGERS.md section 3): with the
-    world's `stranger_by_name` law off, someone with no relation row (or one labelled "stranger");
-    on, someone whose name one does not know (`perception::knows_name`). On an open line O stands
-    at the west end; A, of O's community and with no relation row, 2 m east; N, unknown to O but
-    with a relation row O's mind wrote ("wary"), 5 m east. O's graph waves at the nearest
-    stranger: off it waves at A, on at N. The law is set and reset with `set_world_law`."""
+    """What a graph's `relation: "stranger"` matches (docs/STRANGERS.md section 3), and how a
+    person too far away to make out is perceived (far-label). With the world's `stranger_by_name`
+    law off, "stranger" is someone with no relation row (or one labelled "stranger"); on, someone
+    whose name one does not know (`perception::knows_name`). On an open line O stands at the west
+    end; A, of O's community with no relation row, 2 m east; N, unknown to O but with a relation
+    row O's mind wrote ("wary"), 3 m east; F, of O's community, 5 m east. O's graph waves at the
+    nearest stranger: off at A, on at N. Then an overlay of `perceived_of` (as Cullet's law: who
+    someone is only within 4 m, `far` beyond) is installed: O's scene shows F as "someone too far
+    away to make out" with its id, no name and no `community`; with the law on and N gone, O's
+    graph finds no stranger and does not wave at F; a relation "stranger" O's mind writes about F
+    (whose name O knows) is not written, one about N is; an unknown U placed 5 m away gets no
+    first sight until brought within 4 m. The law and the shipped script are restored at the end."""
     line = clear_line(s)
-    o, a, n = s.people(3)
+    o, a, n, f = s.people(4)
     s.act(o, {"do": "found", "text": f"Verify Strand {o}"})
     s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {o}"))
-    s.call("place_near", a, o)
-    s.act(a, {"do": "join", "target": {"id": o}})
-    s.wait(lambda: s.rows(f"SELECT * FROM join_request WHERE asker = {a}"))
-    s.act(o, {"do": "welcome", "target": {"id": a}})
-    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {a}"))
+    for m in (a, f):
+        s.call("place_near", m, o)
+        s.act(m, {"do": "join", "target": {"id": o}})
+        s.wait(lambda m=m: s.rows(f"SELECT * FROM join_request WHERE asker = {m}"))
+        s.act(o, {"do": "welcome", "target": {"id": m}})
+        s.wait(lambda m=m: s.rows(f"SELECT * FROM membership WHERE member = {m}"))
     s.call("mind_update", o, {"persona": None, "relations": [{"other": n, "trust": -10, "affinity": -5, "label": "wary", "note": "verification fixture: seen, never named"}],
                               "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False})
     s.rows(f"SELECT * FROM relation WHERE actor = {o}", "relations")
-    s.call("place_at", o, *line[0])
-    s.call("place_at", a, *line[2])
-    s.call("place_at", n, *line[5])
-    for x in (a, n):
+    for who, k in ((o, 0), (a, 2), (n, 3), (f, 5)):
+        s.call("place_at", who, *line[k])
+    for x in (a, n, f):
         s.graph(x, {"wait": 300})
     sel = {"nearest": {"kind": "person", "relation": "stranger"}}
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    extra = []
 
-    def waved_at():
-        since = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    def waved_at(wait=20):
+        since = now()
         s.graph(o, {"seq": [{"do": "wave", "target": sel}, {"wait": 300}]})
-        rows = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM skill_use WHERE actor = {o}") if r["skill"] == "wave" and r["at_ms"] >= since], 20)
+        rows = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM skill_use WHERE actor = {o}") if r["skill"] == "wave" and r["at_ms"] >= since], wait)
         return rows[0]["target"]
+
+    def scene():
+        stamp = lambda: next((d["updated_ms"] for d in s.rows(f"SELECT actor, updated_ms FROM deliberation WHERE actor = {o}")), -1)
+        before = stamp()
+        end = time.monotonic() + 75
+        while time.monotonic() < end:
+            # A `think` leaf asks only 45 s after the last deliberation, so it is installed again.
+            s.call("set_behavior", o, json.dumps({"seq": [{"think": "a look around"}, {"wait": 300}]}))
+            row = next((d for d in s.rows(f"SELECT * FROM deliberation WHERE actor = {o}") if d["updated_ms"] > before), None)
+            if row:
+                sc = json.loads(row["scene"])
+                (s.out / f"{s.name}-scene-far.json").write_text(json.dumps(sc, indent=1, ensure_ascii=False) + "\n")
+                return {c["id"]: c for c in sc.get("creatures", [])}
+            time.sleep(5)
+        raise TimeoutError("no deliberation scene for O in 75 s")
     try:
         off = waved_at()
         s.expect("law off: the nearest stranger is A, of O's community with no relation row", off == a, {"waved_at": off, "A": a, "N": n})
@@ -2799,9 +2826,43 @@ def stranger_filter(s):
         s.wait(lambda: any(r["name"] == "stranger_by_name" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
         on = waved_at()
         s.expect("law on: the nearest stranger is N, whose name O does not know (its relation row does not count)", on == n, {"waved_at": on, "A": a, "N": n})
+        # Too far away to make out: who someone is only within 4 m (as Cullet's law within 24 m).
+        far_law = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
+        s.call("install_script", compose(shipped, {"perceived_of": far_law}))
+        seen = scene()
+        fe, ae, ne = seen.get(f, {}), seen.get(a, {}), seen.get(n, {})
+        s.expect("far: F (known, 5 m) is someone too far away to make out, with its id, no name and no community",
+                 fe.get("who") == FAR and "name" not in fe and "community" not in fe and fe.get("id") == f, fe)
+        s.expect("near: A keeps its name and community; N is a stranger", ae.get("name") and ae.get("community") == "yours" and ne.get("who") == "a stranger" and "community" not in ne, {"A": ae, "N": ne})
+        # The filter (law on) never matches a known neighbour, however far.
+        s.call("place_at", n, line[0][0] + 70, line[0][1] + 52)
+        since = now()
+        s.graph(o, {"seq": [{"do": "wave", "target": sel}, {"wait": 300}]})
+        time.sleep(8)
+        waves = [r for r in s.rows(f"SELECT * FROM skill_use WHERE actor = {o}") if r["skill"] == "wave" and r["at_ms"] >= since]
+        s.expect("law on, N gone: no stranger in sight, F (far, known) is not waved at", not waves, waves)
+        # No "stranger" relation about someone whose name one knows, however they were seen.
+        s.call("mind_update", o, {"persona": None, "relations": [{"other": f, "trust": 0, "affinity": 0, "label": "stranger", "note": "verification fixture: a figure far off"},
+                                                                  {"other": n, "trust": 0, "affinity": 0, "label": "stranger", "note": "verification fixture: never named"}],
+                                  "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False})
+        rel = {r["other"]: r["label"] for r in s.rows(f"SELECT * FROM relation WHERE actor = {o}", "relations-after")}
+        s.expect("a relation \"stranger\" to F (known by name) is not written; to N (unknown) it is", "stranger" not in rel.get(f, "") and rel.get(n) == "stranger", rel)
+        # A first sight waits until someone can be made out.
+        u = s.people(1)[0]
+        extra.append(u)
+        t0 = now()
+        s.call("place_at", u, line[5][0], line[5][1] + 1.0)
+        time.sleep(8)
+        firsts = lambda: [r for r in s.rows(f"SELECT at_ms, subject, object, text FROM experience WHERE observer = {o}") if r["at_ms"] >= t0 and "first time you see" in r["text"] and u in (r["subject"], r["object"])]
+        early = firsts()
+        s.call("place_at", u, line[2][0], line[2][1] - 1.0)
+        late = s.wait(firsts, 15) if not early else early
+        s.expect("U at 5 m (too far to make out) gets no first sight; within 4 m it does, as a stranger",
+                 not early and late and "a stranger" in late[0]["text"] and FAR not in late[0]["text"], {"at_5m": early, "at_2m": late})
     finally:
+        s.call("install_script", shipped, check=False)
         set_law(s, "stranger_by_name", False, check=False)
-        off_the_line(s, line, [o, a, n], dy=50)
+        off_the_line(s, line, [o, a, n, f] + extra, dy=50)
 
 
 

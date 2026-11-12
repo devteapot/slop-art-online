@@ -1176,8 +1176,21 @@ impl<'a> Ev<'a> {
             if self.recently_seen(c.id) && !danger {
                 continue;
             }
-            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let Some(ch) = self.ctx.db.character().id().find(c.id) else { continue };
+            // A person too far away to make out (the `perceived_of` law's `far`) is not yet a
+            // first sight, nor someone seen again: who they are cannot be told. They stay in the
+            // scene as a figure; the look is retried in 5 s and told once they can be made out,
+            // and no `familiar` row is written from afar (far-label, docs/STRANGERS.md).
+            if ch.kind == "person" {
+                let due = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().map_or(true, |f| now.saturating_sub(f.last_ms) > day);
+                if due && crate::perception::regard(self.ctx, &self.me, &ch, now).far {
+                    if let Some(s) = self.st.seen.iter_mut().find(|s| s.id == c.id) {
+                        s.at_ms = now.saturating_sub(FAR_RECHECK_MS);
+                    }
+                    continue;
+                }
+            }
+            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let who = common::label_for(self.ctx, &self.me, c.id);
             let doing = crate::perception::doing_of(self.ctx, c.id, (self.me.id, &me_kind, at), &cands, now).map(|d| format!(", {d}")).unwrap_or_default();
             let place = format!("{:.0} tiles {}{doing}", c.dist, direction(at, c.pos));
@@ -1399,6 +1412,10 @@ impl<'a> Ev<'a> {
         }
     }
 }
+
+/// A person too far away to make out is looked at again after 5 s (`noticed`): `recently_seen`
+/// holds a mark for 90 s, so a mark this old is due again in 5.
+const FAR_RECHECK_MS: u64 = 85_000;
 
 /// First sights of one look that share one line (`noticed`).
 const FIRST_SIGHTS_PER_LINE: usize = 8;

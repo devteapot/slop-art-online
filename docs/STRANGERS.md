@@ -15,7 +15,17 @@ Status: **design approved 2026-11-12 with the decisions at the end; nothing buil
 | **I do not know this person's name** | **Yes.** Each person in sight carries `name` when known, else `who: "a stranger"` (`perceive.rs:431-436`). `community: "yours"` marks one's own community (`:437-438`). Both come from `perception::knows_name` (`perception.rs:315`): oneself, family, the same community, or someone who told you their name. | **No.** The filter `relation: "stranger"` (`graph.rs:412`) means "has no relation row, or a row whose label contains *stranger*" (`brain.rs:1385`). That is not the same fact. In Cullet each resident has relation rows for only 4–15 of the other 63 (the sheets), so the filter matches about 50 fellow residents. It stops matching a newcomer once a consolidation writes a relation such as "wary". The prompt still offers it as if it meant "someone I don't know" (`prompts.rs:343`). |
 | **I have never seen this person** | Only as a one-time percept: "For the first time you see a stranger, 9 tiles west, wait." (salience 0.45, `brain.rs:1170`). In a crowd (more than 6 people in sight, `skills.rhai:11`), a person with no relation row is skipped (`brain.rs:1157`). A newcomer who arrives among a crowd gets no first-sight line, and no `familiar` row is written for them. | No. |
 
-**For Cullet the name fact is enough.** "Everyone knows everyone by name and by face. A stranger has not been seen in living memory" (`bible.md:91`). All 64 residents are in one community, so the only person a resident's scene can call "a stranger" is the newcomer.
+**For Cullet the name fact is enough, but the scene's word was not (corrected 2026-11-12, `far-label`).** "Everyone knows everyone by name and by face. A stranger has not been seen in living memory" (`bible.md:91`). All 64 residents are in one community, so `knows_name` is false only for the newcomer.
+
+This section first said that the only person a resident's scene could call "a stranger" was the newcomer. That was wrong.
+- **The cause.** Cullet's `perceived_of` law gives a name only within 24 m (`known_within`). Past it, a neighbour was labelled "a stranger" too, and still carried `"community": "yours"`.
+- **The effect in stage 1** (docs/TRIALS.md, st1):
+  - Aldous thought of far neighbours as "the west strangers carrying fish" and told Neve Calloway about them.
+  - His mind wrote a relation "Tobiah Dunmore: stranger" from a far first sight ("A stranger (#19) came in from the west").
+- **The fix.** The law now marks such a sighting `far`. Someone too far away to make out is "someone too far away to make out", known or not:
+  - in the scene, with their `id` and with no `name` and no `community`;
+  - in percepts and in players' `seen_*` labels.
+  Nobody is told a first sight of them until they can be made out. A relation labelled "stranger" about someone whose name one knows is not written. Within 24 m an unknown person is "a stranger" and a known one is named, as before.
 
 **On worlds with several settlements it is not enough.** There, "a stranger" also covers the people of another settlement whom one sees every day (ar2 finding 3). The smallest truthful fact for that case would be a scene key `seen` on unnamed people: `"never before"`, or `"before, N times"` from the `familiar` row. It costs one point lookup, `by_actor_thing`. It is specified here but not proposed now: Cullet cannot test it.
 
