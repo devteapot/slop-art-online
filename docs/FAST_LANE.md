@@ -188,7 +188,7 @@ An estimate only. No paid battle runs until the 100-fighter collapse is understo
   - Turns go first to the character triggered most recently.
 - **Measured** (verify-llm `fast-cap`, fake model, 20 fighters in ten pairs attacking each other, all served, each fast reply held 2.5 s, 30 s):
   - at most 4 issued at once and 4 in flight at the provider;
-  - at most 3 started in any one second (the bucket's 2 plus one refill);
+  - at most 3 started in any one second in that run; the bucket allows up to 4 (its burst of 2 plus one second's refill of 2), which the test now checks (fix-fast-cap-test);
   - 28 calls, and 19 of the 20 fighters got a call (9 got two);
   - the wait from trigger to issue was 0.09 s at p50, 4.7 s at p90 and 5.7 s at most (under the 8 s stale limit).
   - **No tick numbers.** Any reading in a battle would be confounded by the battle collapse under diagnosis, and nothing is tuned for battles.

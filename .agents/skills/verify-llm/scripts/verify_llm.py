@@ -247,7 +247,8 @@ def fast_case(run, case):
     fast-cap: a battle of 20 (ten pairs attacking each other), all served, under the world's laws
     as shipped (`fast_lane_rate` 2 a second, `fast_lane_inflight` 4), each fast reply held 2.5 s.
     At most 4 requests are ever issued at once (sampled `fast_ask`) and in flight at the provider,
-    and no more start in any second than the rate allows (the bucket holds one second's worth).
+    and no more are issued in any one second than the bucket allows: its burst, one second's worth
+    (2), plus one second's refill (2), 4 as shipped, counted at the authority's issue times.
     Records how many fighters got a call and how long each trigger waited for its turn."""
     run.harness('launch')
     run.harness('doctor')
@@ -316,8 +317,17 @@ def fast_case(run, case):
     calls = sorted(r['at_ms'] for r in rows(fast_log) if r['purpose'] == 'fast')
     spans = [(r['at_ms'], r['at_ms'] + int(r['delay_s'] * 1000)) for r in rows(fast_log) if r['purpose'] == 'fast']
     concurrent = max((sum(1 for s, e in spans if s <= t < e) for t, _ in spans), default=0)
-    per_second = max((sum(1 for u in calls if t <= u < t + 1000) for t in calls), default=0)
     done = thoughts()
+    # The bucket (`fast::pump`) holds at most one second's worth, max(rate, 1), and refills `rate`
+    # a second, so up to burst + rate can start in any one second: 2 + 2 = 4 as shipped. Starts are
+    # counted where the bucket acts, at the authority's issue times (each answer's `issued_ms`);
+    # arrival at the provider adds the mind's pickup jitter and is recorded, not checked.
+    rate, inflight = 2, 4
+    burst = max(rate, 1)
+    one_second_limit = burst + rate
+    issued = sorted({json.loads(t['detail'] or '{}').get('issued_ms') for t in done} - {None, 0})
+    per_second = max((sum(1 for u in issued if t <= u < t + 1000) for t in issued), default=0)
+    at_provider = max((sum(1 for u in calls if t <= u < t + 1000) for t in calls), default=0)
     waits, by_fighter = [], {}
     for t in done:
         d = json.loads(t['detail'] or '{}')
@@ -326,12 +336,13 @@ def fast_case(run, case):
         by_fighter[t['actor']] = by_fighter.get(t['actor'], 0) + 1
     q = sorted(waits)
     pct = lambda p: round(q[min(len(q) - 1, int(p * len(q)))], 2) if q else None
-    record = {'case': case, 'fighters': len(made), 'laws': {'fast_lane_rate': 2, 'fast_lane_inflight': 4, 'fast_lane_gap_s': 6},
+    record = {'case': case, 'fighters': len(made), 'laws': {'fast_lane_rate': rate, 'fast_lane_inflight': inflight, 'fast_lane_gap_s': 6},
               'window_s': 30, 'samples': samples, 'issued_at_once_max': issued_max, 'in_flight_at_provider_max': concurrent,
-              'started_in_one_second_max': per_second, 'calls': len(calls), 'fighters_with_a_call': len(by_fighter),
+              'issued_in_one_second_max': per_second, 'one_second_limit': one_second_limit, 'arrived_at_provider_in_one_second_max': at_provider,
+              'calls': len(calls), 'fighters_with_a_call': len(by_fighter),
               'calls_per_fighter': sorted(by_fighter.values()), 'wait_s_p50': pct(0.5), 'wait_s_p90': pct(0.9), 'wait_s_max': q[-1] if q else None}
     (run.directory / 'result.json').write_text(json.dumps(record, indent=2))
-    assert calls and issued_max <= 4 and concurrent <= 4 and per_second <= 3, record
+    assert calls and issued and issued_max <= inflight and concurrent <= inflight and per_second <= one_second_limit, record
     record['pass'] = True
     (run.directory / 'result.json').write_text(json.dumps(record, indent=2))
 
