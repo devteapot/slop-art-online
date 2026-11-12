@@ -471,7 +471,7 @@ pub fn convert(
         let face_map = (kind == Kind::Face)
             .then(|| {
                 let own = owner.file.trim_end_matches(".glb").to_string() + ".face.png";
-                std::iter::once(own).chain(extras.and_then(|x| face_map_of(&x.value))).find(|f| std::path::Path::new(&asset_root()).join(f).exists())
+                std::iter::once(own).chain(extras.and_then(|x| face_map_of(&x.value))).flat_map(|f| face_map_files(&f)).find(|f| std::path::Path::new(&asset_root()).join(f).exists())
             })
             .flatten();
         let kind = if kind == Kind::Face && face_map.is_none() { Kind::Skin } else { kind };
@@ -555,6 +555,12 @@ pub fn convert(
             ec.insert(crate::style::stencil());
         }
     }
+}
+
+/// A face shadow map's files, the first there wins: its block-compressed copy (`.face.ktx2`,
+/// BC7 with mips, looks-tex-1), then the PNG it was made from.
+pub fn face_map_files(png: &str) -> [String; 2] {
+    [format!("{}.ktx2", png.trim_end_matches(".png")), png.to_string()]
 }
 
 /// The shadow map a face material's glTF extras name (`{"face_map": "lookdev/pages/…face.png"}`).
@@ -1072,6 +1078,7 @@ mod tests {
     fn a_paged_face_names_its_map_in_its_extras() {
         assert_eq!(face_map_of(r#"{"face_map": "lookdev/pages/cullet-0.face.png"}"#).as_deref(), Some("lookdev/pages/cullet-0.face.png"));
         assert_eq!(face_map_of("{}"), None);
+        assert_eq!(face_map_files("lookdev/types/adult-f-a.face.png"), ["lookdev/types/adult-f-a.face.ktx2".to_string(), "lookdev/types/adult-f-a.face.png".to_string()]);
         assert_eq!(face_map_of("not json"), None);
     }
 }

@@ -627,6 +627,7 @@ impl Plugin for CharactersPlugin {
             .init_resource::<compose::HairTints>()
             .init_resource::<Thumbs>()
             .add_systems(PreUpdate, (place_scenes, force_rebuild, thumb_pictures))
+            .add_systems(Startup, gpu_formats)
             .insert_resource(SpringSettings::from_env())
             .init_resource::<SpringClock>()
             .init_resource::<SpringStats>()
@@ -1062,6 +1063,11 @@ impl Thumb {
     fn of(img: &Image) -> Option<Self> {
         let (w, h) = (img.width().max(1), img.height().max(1));
         img.data.as_ref()?;
+        // Block-compressed texels cannot be read one by one: such a picture's summary is shipped
+        // beside it (`.thumb.png`, [`thumb_pictures`]).
+        if img.is_compressed() {
+            return None;
+        }
         let n = THUMB * THUMB_SAMPLES;
         let mut cells = vec![Vec4::ZERO; (THUMB * THUMB) as usize];
         for sy in 0..n {
@@ -1074,6 +1080,24 @@ impl Thumb {
         }
         let k = 1.0 / (THUMB_SAMPLES * THUMB_SAMPLES) as f32;
         Some(Self { cells: cells.into_iter().map(|c| c * k).collect() })
+    }
+
+    /// A KTX2 picture's summary from its `.thumb.png` (pictures.py, bc7ktx): 64×64 RGBA 16-bit,
+    /// each cell `[r·a, g·a, b·a, a]` in linear light as [`Thumb::of`] makes it, `v / 65535`, rows
+    /// from the top. Anything else is no summary.
+    fn from_image(img: &Image) -> Option<Self> {
+        if img.texture_descriptor.format != bevy::render::render_resource::TextureFormat::Rgba16Unorm || (img.width(), img.height()) != (THUMB, THUMB) {
+            return None;
+        }
+        let d = img.data.as_ref()?;
+        let c = |p: &[u8], i: usize| u16::from_le_bytes([p[i], p[i + 1]]) as f32 / 65535.0;
+        Some(Self { cells: d.chunks_exact(8).map(|p| Vec4::new(c(p, 0), c(p, 2), c(p, 4), c(p, 6))).collect() })
+    }
+
+    fn from_file(path: &std::path::Path) -> Option<Self> {
+        let bytes = std::fs::read(path).ok()?;
+        let img = Image::from_buffer(&bytes, bevy::image::ImageType::Extension("png"), bevy::image::CompressedImageFormats::NONE, false, bevy::image::ImageSampler::Default, bevy::asset::RenderAssetUsages::MAIN_WORLD).ok()?;
+        Self::from_image(&img)
     }
 
     /// The cell under a texture coordinate (wrapped).
@@ -1093,6 +1117,13 @@ pub struct Thumbs(HashMap<AssetId<Image>, Thumb>);
 /// the main world's copy once it has uploaded them. A town's face pages were about 500 MiB kept
 /// on the CPU for nothing but the recolouring's mean colour, which the shader already applies
 /// per fragment (`toon.wesl` `recolor`, mode 3). `LIVING_GAME_PERF=keeppixels` keeps them.
+///
+/// A KTX2 picture (BC7, a bundle built by `pictures.py`, docs/CHARACTERS.md "Pictures as KTX2")
+/// cannot be summarised from its blocks: its summary is the `<name>.thumb.png` beside it, the
+/// cells [`Thumb::of`] makes from the PNG ([`Thumb::from_image`]). It is read from disk once, when
+/// the picture arrives, so the summary is there in the same frame as a PNG's own and `compose`
+/// shares materials as before. A KTX2 picture without one has no summary: its recolouring takes
+/// the material's base colour (warned once a picture).
 fn thumb_pictures(mut events: MessageReader<AssetEvent<Image>>, mut images: ResMut<Assets<Image>>, assets: Res<AssetServer>, mut thumbs: ResMut<Thumbs>) {
     let keep = crate::perf::has("keeppixels");
     for ev in events.read() {
@@ -1102,7 +1133,17 @@ fn thumb_pictures(mut events: MessageReader<AssetEvent<Image>>, mut images: ResM
             continue;
         }
         let Some(img) = images.get(*id) else { continue };
-        if let Some(t) = Thumb::of(img) {
+        let thumb = if path.path().extension().is_some_and(|e| e == "ktx2") {
+            let file = path.path().to_string_lossy().to_string();
+            let t = Thumb::from_file(&std::path::Path::new(&crate::lookdev::asset_root()).join(thumb_file(&file)));
+            if t.is_none() {
+                warn_thumb(&file);
+            }
+            t
+        } else {
+            Thumb::of(img)
+        };
+        if let Some(t) = thumb {
             thumbs.0.insert(*id, t);
         }
         if !keep {
@@ -1110,6 +1151,34 @@ fn thumb_pictures(mut events: MessageReader<AssetEvent<Image>>, mut images: ResM
                 img.asset_usage = bevy::asset::RenderAssetUsages::RENDER_WORLD;
             }
         }
+    }
+}
+
+/// A KTX2 picture's summary file: `x.ktx2` → `x.thumb.png`.
+fn thumb_file(picture: &str) -> String {
+    format!("{}.thumb.png", picture.trim_end_matches(".ktx2"))
+}
+
+fn warn_thumb(file: &str) {
+    static SEEN: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    if SEEN.get_or_init(Default::default).lock().unwrap().insert(file.to_string()) {
+        warn!("pictures: {file} has no readable summary ({}: 64×64 RGBA 16-bit); its recolouring takes the material's base colour", thumb_file(file));
+    }
+}
+
+/// At start, the GPU's block formats as one line to grep (`gpu formats: bc=… astc=… etc2=…`), so
+/// each machine's support is read rather than assumed; and a warning when BC is missing: a KTX2
+/// bundle's pictures (BC7) would not load there and it needs a PNG bundle
+/// (`pictures.py bundle … --pictures png`).
+fn gpu_formats(support: Option<Res<bevy::image::CompressedImageFormatSupport>>) {
+    use bevy::image::CompressedImageFormats as F;
+    let Some(s) = support else {
+        info!("gpu formats: unknown (no CompressedImageFormatSupport: no render device)");
+        return;
+    };
+    info!("gpu formats: bc={} astc={} etc2={} ({:?})", s.0.contains(F::BC), s.0.intersects(F::ASTC_LDR | F::ASTC_HDR), s.0.contains(F::ETC2), s.0);
+    if !s.0.contains(F::BC) {
+        warn!("pictures: this GPU has no BC texture compression ({:?}): KTX2 character pictures (BC7) will not load; install a PNG bundle (pictures.py bundle … --pictures png)", s.0);
     }
 }
 
@@ -1614,6 +1683,39 @@ pub fn springs(
 mod tests {
     use super::*;
     use bevy::world_serialization::{WorldInstanceReady, WorldInstanceSpawner};
+
+    /// The `.thumb.png` contract (docs/CHARACTERS.md, pictures.py, bc7ktx): the cells `Thumb::of`
+    /// makes, premultiplied, in 16 bits, read back by `Thumb::from_image` to 1/65535; a wrong size
+    /// is no summary; a block-compressed picture has none of its own texels.
+    #[test]
+    fn a_shipped_summary_reads_back_as_its_pictures_cells() {
+        use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+        let (w, h) = (256u32, 128u32);
+        let mut px = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                px.extend_from_slice(&[(x * 7 % 256) as u8, (y * 13 % 256) as u8, ((x ^ y) % 256) as u8, if (x / 16 + y / 16) % 3 == 0 { 0 } else { (128 + x % 128) as u8 }]);
+            }
+        }
+        let asset = bevy::asset::RenderAssetUsages::MAIN_WORLD;
+        let pic = Image::new(Extent3d { width: w, height: h, depth_or_array_layers: 1 }, TextureDimension::D2, px, TextureFormat::Rgba8UnormSrgb, asset);
+        let want = Thumb::of(&pic).unwrap();
+        let mut shipped = Vec::with_capacity(THUMB as usize * THUMB as usize * 8);
+        for c in &want.cells {
+            for v in [c.x, c.y, c.z, c.w] {
+                shipped.extend_from_slice(&((v * 65535.0).round() as u16).to_le_bytes());
+            }
+        }
+        let thumb = Image::new(Extent3d { width: THUMB, height: THUMB, depth_or_array_layers: 1 }, TextureDimension::D2, shipped, TextureFormat::Rgba16Unorm, asset);
+        let got = Thumb::from_image(&thumb).unwrap();
+        let worst = want.cells.iter().zip(&got.cells).map(|(a, b)| (*a - *b).abs().max_element()).fold(0.0f32, f32::max);
+        assert!(worst <= 0.5 / 65535.0 + 1e-7, "worst cell difference {worst}");
+        let small = Image::new(Extent3d { width: 32, height: 32, depth_or_array_layers: 1 }, TextureDimension::D2, vec![0; 32 * 32 * 8], TextureFormat::Rgba16Unorm, asset);
+        assert!(Thumb::from_image(&small).is_none());
+        let bc7 = Image::new(Extent3d { width: 4, height: 4, depth_or_array_layers: 1 }, TextureDimension::D2, vec![0; 16], TextureFormat::Bc7RgbaUnormSrgb, asset);
+        assert!(Thumb::of(&bc7).is_none());
+        assert_eq!(thumb_file("lookdev/types/adult-f-a.ktx2"), "lookdev/types/adult-f-a.thumb.png");
+    }
 
     #[test]
     fn a_second_spawn_of_a_characters_scene_lets_go_of_what_was_built_on_the_old_one() {
