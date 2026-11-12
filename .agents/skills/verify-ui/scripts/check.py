@@ -206,6 +206,64 @@ def room_detail(run, c):
     c.check(s, "a line to me carries no detail", tome is not None and not tome.get("how"), str(tome))
 
 
+@scenario("earshot")
+def earshot(run, c):
+    """The authority's earshot in the client (the `earshot` law, off by default): with it on, the
+    talk box takes whom Tab goes to, and their order, from `my_earshot`'s `say` list, and shows its
+    sentence (in my own labels) in the box's hint line; someone who steps out of a say's reach
+    drops from it while a call still reaches them. With it off: no row, the client's own reckoning,
+    as before. Residents A and B held 2 m and 6 m off a fresh player; B then 12 m off. The box
+    cannot switch to whisper or call (they have no place in it yet): their lists are only read."""
+    s = "earshot"
+    a, b = residents(run)
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"earshot-{int(time.time())}.token")
+    syncs = ['on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx-12.0)|(my)", 'off=set_world_law|"earshot"|"false"']
+    plan = ("ready;sync:on;sync:scene;wait:3;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
+            "key:Escape:tap;wait:0.3;sync:away;wait:2;key:Enter:tap;wait:1.2;shot:02_away;dump:e2;tab;wait:0.4;dump:t4;tab;wait:0.4;dump:t5;key:Escape:tap;wait:0.3;"
+            "sync:off;wait:2;key:Enter:tap;wait:1.2;shot:03_off;dump:e3;tab;wait:0.4;dump:t6;key:Escape:tap;wait:0.3;quit")
+    try:
+        out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{b}:-6:0"], syncs=syncs, extra=["--token", tok, "--player", "Hearer"])
+    finally:
+        call_admin(run, "set_world_law", ["earshot", "false"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("e1", "t1", "t2", "t3", "e2", "t4", "t5", "e3", "t6")}
+    ty = lambda k: d[k].get("typing") or {}
+    told = lambda k: ty(k).get("told") or {}
+    ways = lambda k: {w: h for w, h in told(k).get("ways") or []}
+    say1 = ways("e1").get("say")
+    c.check(s, "law on: the box's earshot is the authority's say list, both residents in it", say1 is not None and ty("e1").get("earshot") == say1 and a in say1 and b in say1, f"say {say1}; box {ty('e1').get('earshot')}; ways {ways('e1')}")
+    c.check(s, "law on: the sentence is given, in my own labels", bool(told("e1").get("text")) and "earshot" in told("e1").get("text", "").lower(), repr(told("e1").get("text")))
+    # Each press against the list it went by (`typing.tab`): the authority's say list at that
+    # moment, the next after the last, the room after the last of them (others than A and B may
+    # stand within a say's reach too).
+    def nxt(prev, e):
+        if not e:
+            return prev
+        if prev in e:
+            i = e.index(prev)
+            return e[i + 1] if i + 1 < len(e) else None
+        return e[0]
+    def steps(keys):
+        out = []
+        for k in keys:
+            tb = ty(k).get("tab") or {}
+            say = ways(k).get("say")
+            # Whether the press went by the authority's list (the client records it at the press:
+            # the row is rewritten up to four times a second and people walk in and out of reach,
+            # so a later dump's list may differ), and the step by that same list.
+            out.append((tb.get("authority") is True, tb.get("chose") == nxt(tb.get("prev"), tb.get("earshot") or []), tb.get("prev"), tb.get("chose"), tb.get("earshot")))
+        return out
+    st = steps(("t1", "t2", "t3"))
+    c.check(s, "law on: each Tab goes by the authority's say list, in its order", all(x[0] and x[1] for x in st), str(st))
+    say2, call2 = ways("e2").get("say"), ways("e2").get("call")
+    c.check(s, "B steps 12 m off: out of the say list, still in the call's; the box follows", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
+    st2 = steps(("t4", "t5"))
+    c.check(s, "Tab then goes by the new say list and never to B", all(x[0] and x[1] for x in st2) and all(b not in (x[4] or []) and x[3] != b for x in st2), str(st2))
+    c.check(s, "law off: no row, the client's own reckoning (A within it)", not ty("e3").get("told") and a in (ty("e3").get("earshot") or []), f"told {ty('e3').get('told')}; earshot {ty('e3').get('earshot')}")
+    t6 = ty("t6").get("tab") or {}
+    c.check(s, "law off: Tab as before, by the client's own reckoning", t6.get("authority") is False and t6.get("chose") == nxt(t6.get("prev"), t6.get("earshot") or []), str(t6))
+
+
 @scenario("talk")
 def talk(run, c):
     s = "talk"
@@ -1811,11 +1869,16 @@ def names(run, c):
     plan = ("ready;wait:5;dump:00;" + steps + "key:KeyL:tap;wait:0.6;dump:log;click:@log:tab:1;wait:0.6;dump:people;click:@log:person:0;wait:0.8;dump:window;"
             "click:@log:tab:2;wait:0.5;dump:events;quit")
     token = os.path.join(ROOT, ".local/living/verify", run, "ui", f"names-{int(time.time())}.token")
-    out, code, text = drive(run, s, plan, extra=["--token", token, "--player", "Newcomer"])
+    # The earshot law on, so the authority's sentence (in the talk box's hint line) is scanned too.
+    call_admin(run, "set_world_law", ["earshot", "true"])
+    try:
+        out, code, text = drive(run, s, plan, extra=["--token", token, "--player", "Newcomer"])
+    finally:
+        call_admin(run, "set_world_law", ["earshot", "false"])
     c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
     texts, given = naming_of(out)
     kinds = {w.split(":")[1] for w, _ in texts}
-    c.check(s, "names were on screen: plates, the talk box, the Log", {"plate", "talk"} <= kinds, f"{sorted(kinds)}; {len(texts)} texts; residents pointed at {[r['id'] for r in near]}")
+    c.check(s, "names were on screen: plates, the talk box, the Log, the earshot sentence", {"plate", "talk", "earshot"} <= kinds, f"{sorted(kinds)}; {len(texts)} texts; residents pointed at {[r['id'] for r in near]}")
     hits = leaked(texts, seeded, given)
     c.check(s, "no person or place is named by a seed name the player was not given", not hits, f"{hits[:6]}; given {sorted(given)[:8]}")
 
