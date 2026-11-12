@@ -4788,6 +4788,9 @@ def seen_again(s):
     s.call("grant_items", d, "arrow", 30)
     s.graph(c, {"seq": [{"do": {"skill": "face", "target": {"at": [at[0] - 5.0, at[1]]}}}, {"wait": 60}]})
     time.sleep(1.5)
+    # D turns to C first (with fov_on it sees only the way it faces), then shoots again and again.
+    s.graph(d, {"seq": [{"do": {"skill": "face", "target": {"at": [at[0], at[1]]}}}, {"wait": 60}]})
+    time.sleep(1.5)
     s.graph(d, {"first": [{"do": {"skill": "bowshot", "target": {"id": c}}}, {"wait": 0.3}]})
     reasons, end = [], time.monotonic() + 15
     while time.monotonic() < end:
