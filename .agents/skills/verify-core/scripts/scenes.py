@@ -3669,14 +3669,15 @@ def outcomes(s):
     """Whoever strikes or shoots is told how it came out (the `force_outcomes` law,
     docs/COMBAT_MIND.md §3.1). Before 2026-11-11 a mind-held archer was never told how its
     arrow went (0 of 10 tries in the wolves trials), while `attack` reported "hit for 7".
-    Three minded people (`spawn_crowd`, no mind service): an archer shoots a still target 6 m
+    Three minded people (`spawn_crowd`, no mind service): an archer shoots a still target 4.5 m
     off (told "struck …: hit for N" when the arrow lands), a striker beside the target strikes
     it (told "hit for N"), the archer looses at an empty point past its sight (told it came to
     nothing), and with the law off a hit is not told."""
     a, b, c = s.people(3)
     here = body_at(s, a)
-    s.call("place_at", b, here[0] + 6.0, here[1])
-    s.call("place_at", c, here[0] + 6.0, here[1] + 1.2)
+    # 4.5 m: within sight by night too (6 m), so the archer sees its target at any hour.
+    s.call("place_at", b, here[0] + 4.5, here[1])
+    s.call("place_at", c, here[0] + 4.5, here[1] + 1.2)
     s.call("grant_items", a, "bow", 1)
     s.call("grant_items", a, "arrow", 20)
     time.sleep(1.0)
@@ -3733,14 +3734,16 @@ def missiles_told(s):
     arrow: hit for 7"), else by the missile alone ("An arrow struck you from somewhere you could
     not see: hit for 7"); to a witness the same way ("A stranger shot a stranger with an
     arrow"). The missile is named by its skill's `called` (`<skill>_missile`). Four strangers:
-    an archer, a target 6 m off with a witness beside it, and a far target 19 m off (past day
+    an archer, a target 4.5 m off (within night sight) with a witness beside it, and a far target 19 m off (past day
     sight, within the bow's 22 m) shot at by a point aim. No line any of them is told about the
     arrows says "attacked", and the unseen shot names no one."""
     a, b, w, f = s.people(4)
     here = body_at(s, a)
-    s.call("place_at", b, here[0] + 6.0, here[1])
-    s.call("place_at", w, here[0] + 6.0, here[1] + 1.5)
-    s.call("place_at", f, here[0] + 19.0, here[1] - 3.0)
+    # 4.5 m: within sight by night too (6 m); the far target stays past day sight (11 m), and
+    # the line to it passes 1.4 m clear of the near target and the witness.
+    s.call("place_at", b, here[0] + 4.5, here[1])
+    s.call("place_at", w, here[0] + 4.5, here[1] + 1.5)
+    s.call("place_at", f, here[0] + 19.0, here[1] - 6.0)
     s.call("grant_items", a, "bow", 1)
     s.call("grant_items", a, "arrow", 20)
     time.sleep(1.0)
@@ -3760,7 +3763,7 @@ def missiles_told(s):
     s.expect("a witness who sees the shooter is told it shot the one struck with an arrow",
              any(re.search(r"shot .* with an arrow", r["text"]) for r in seen), [r["text"] for r in seen])
 
-    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"at": [here[0] + 19.0, here[1] - 3.0]}}}, {"wait": 60}]})
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"at": [here[0] + 19.0, here[1] - 6.0]}}}, {"wait": 60}]})
     far = s.wait(lambda: [r for r in lines(f) if r["kind"] == "attacked"], seconds=20)
     s.rows(f"SELECT * FROM experience WHERE observer = {f}", "unseen-victim-told")
     s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "archer-uses")
@@ -4416,5 +4419,90 @@ def main():
     return int(error is not None or any(r["status"] in {"FAIL", "XPASS"} for r in s.results.values()))
 
 
+def wall_by(s):
+    """A walkable tile, the next one along an axis walkable and the one after it wall or rock, and
+    the tile beside the first (a quarter turn) walkable, away from people: the tile, the axis
+    toward the wall, and the side."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            tx, ty = cx * 16 + k % 16, cy * 16 + k // 16
+            if tx < W and ty < H:
+                tiles[ty * W + tx] = t
+    at = lambda x, y: tiles[y * W + x] if 0 <= x < W and 0 <= y < H else 4
+    walk = lambda x, y: at(x, y) not in (2, 4, 7, 8, 9)
+    bodies = [(b["x"], b["y"]) for b in s.rows("SELECT x, y FROM body")]
+    for y in range(6, H - 6):
+        for x in range(6, W - 6):
+            if not walk(x, y) or any(math.dist((x + .5, y + .5), q) < 8 for q in bodies):
+                continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if walk(x + dx, y + dy) and at(x + 2 * dx, y + 2 * dy) in (4, 7) and walk(x - dy, y + dx) and walk(x - dy + dx, y + dx + dy):
+                    return (x, y), (dx, dy), (-dy, dx)
+    raise RuntimeError("no wall to dodge into on this map")
+
+
+def dodge_told(s):
+    """A dodge's told outcome gives its real reason, and a cooldown's refusals are told once
+    (fix-dodge-told; docs/COMBAT.md "A dodge over before the blow came"). Two strangers 1.2 m
+    apart in the open. A dodges, toward B, as soon as B's heavy blow (`attack`, a spear) winds up
+    at it: its dash is over before the blow releases, the blow lands, and A is told "You failed to
+    dodge: it was over before the blow came", once, with its `skill_use` saying so. Then A's
+    routine retries a dodge every tick for 4 s: "dodge is not ready yet" is told at most once per
+    cooldown (one more than the dodges made), while the routine's `routine_stat` counts every
+    refusal (recorded in full)."""
+    # A stands two tiles short of a wall (`wall_by`), B beside A. A's dodge, aimed at the wall,
+    # has room for half of its 2.6 m (`begin`: as far as there is room), so it ends 1.6 m from B,
+    # within the blow's reach (1.4 m and the 0.6 m lunge), and the blow lands after it.
+    (x, y), (dx, dy), (sx, sy) = wall_by(s)
+    a, b = s.people(2)
+    at_a = (x + 0.5, y + 0.5)
+    s.call("place_at", a, at_a[0], at_a[1])
+    s.call("place_at", b, at_a[0] + sx, at_a[1] + sy)
+    s.call("grant_items", b, "spear", 1)
+    time.sleep(1.0)
+    clock = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.graph(a, {"first": [{"if": {"cond": {"doing": {"is": "attack", "phase": "winding up", "at_me": True}}, "then": {"do": {"skill": "dodge", "target": {"at": [at_a[0] + 3.0 * dx, at_a[1] + 3.0 * dy]}}}}}, {"wait": 0.2}]})
+    t0 = clock()
+    s.graph(b, {"seq": [{"do": {"skill": "attack", "target": {"id": a}}}, {"wait": 60}]})
+    told = lambda t, words: [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}") if r["at_ms"] >= t and words in r["text"]]
+    early = s.wait(lambda: told(t0, "it was over before the blow came"), seconds=20)
+    uses = [u for u in s.rows("SELECT * FROM skill_use", "early-uses") if u["at_ms"] >= t0 and u["actor"] in (a, b)]
+    s.rows(f"SELECT * FROM experience WHERE observer = {a}", "early-told")
+    blow = [u for u in uses if u["actor"] == b and u["skill"] == "attack"]
+    dodge = [u for u in uses if u["actor"] == a and u["skill"] == "dodge"]
+    s.expect("a dodge made at the windup is over before the blow, and the blow lands", blow and blow[-1]["outcome"].startswith("hit for") and dodge and dodge[-1]["accepted_ms"],
+             {"blow": [(u["accepted_ms"], u["released_ms"], u["outcome"]) for u in blow], "dodge": [(u["accepted_ms"], u["outcome_ms"], u["outcome"]) for u in dodge]})
+    s.expect("the dodger is told its dodge was over before the blow came, once, and its use says so",
+             [r["text"] for r in early] == ["You failed to dodge: it was over before the blow came"] and any(u["outcome"] == "made way: it was over before the blow came" for u in dodge),
+             {"told": [r["text"] for r in early], "dodge": [u["outcome"] for u in dodge]})
+    # A routine retrying a dodge every tick for 4 s.
+    s.graph(b, {"wait": 60})
+    # As r2c's plans did: a dodge whose condition holds and nothing else, so the graph starts it
+    # again on the next tick after each one and is refused until it is ready.
+    s.call("mind_routines", a, [{"name": "hop", "graph": json.dumps({"if": {"cond": {"chance": 1.0}}, "then": {"do": "dodge"}})}])
+    routine = next(r for r in s.rows(f"SELECT id, name FROM routine WHERE actor = {a}") if r["name"] == "hop")
+    t1 = clock()
+    s.graph(a, {"routine": "hop"})
+    time.sleep(4.0)
+    s.graph(a, {"wait": 60})
+    waiting = told(t1, "dodge is not ready yet")
+    made = [u for u in s.rows("SELECT * FROM skill_use", "streak-uses") if u["actor"] == a and u["skill"] == "dodge" and u["at_ms"] >= t1 and u["accepted_ms"]]
+    stat = s.rows(f"SELECT * FROM routine_stat WHERE id = {routine['id']}", "streak-stat")
+    s.expect("a dodge refused while it is not ready is told at most once per cooldown, not once a tick",
+             made and 1 <= len(waiting) <= len(made) + 1, {"told": [r["text"] for r in waiting], "dodges": len(made)})
+    s.expect("every refusal is still recorded (the routine's stat counts more refusals than were told)",
+             stat and stat[0]["failed"] > len(waiting), {"stat": stat, "told": len(waiting)})
+
+
+SCENES["dodge_told"] = dodge_told
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
+
