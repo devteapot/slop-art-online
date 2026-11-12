@@ -223,7 +223,8 @@ fn address(
     talk.resolved = true;
     let label = match talk.to {
         Some(id) => {
-            let who = looks.of(id).map(String::from).unwrap_or_else(|| conn.db.seen_characters().id().find(&id).map_or_else(|| "someone".to_string(), |c| c.label));
+            // As `Looks` names them (the one way the client names anyone).
+            let who = looks.of(id).unwrap_or("someone").to_string();
             let far = if talk.earshot.contains(&id) { "" } else { " (out of earshot)" };
             format!("To {who}{far}")
         }

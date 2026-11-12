@@ -1,5 +1,11 @@
 # Knowledge validation
 
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle`, trial Neo4j (:7699). `strangers.py` 10/10, `names.py` 7/7. The ignored tests `a_far_figure_joins_the_person` (new) and `strangers_stay_apart` pass:
+- after the made-out merge the figure's deed is recalled from `person:15`;
+- `person:<handle>` is `:Merged`.
+
 ## 2026-11-12 far-label (Spark) After merging main (`03d32e09`, `minds-strangers-far3-032043`): `strangers.py` 10/10.
 
 Branch `far-label` (`18b7754b`), trial Neo4j `slop-trials-neo4j` (:7699). `names.py` 7/7 (it was not executable: `chmod +x`), `strangers.py` 10/10, and the ignored test `memory::tests::strangers_stay_apart` with the far-name guard (a node named "Cal" or "a stranger #200" is not renamed to "someone too far away to make out #id") passes. Not run: the full `verify_knowledge.py` runner.

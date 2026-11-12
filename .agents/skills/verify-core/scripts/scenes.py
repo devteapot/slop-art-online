@@ -3152,9 +3152,11 @@ def stranger_filter(s):
         far_law = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
         s.call("install_script", compose(shipped, {"perceived_of": far_law}))
         seen = scene()
-        fe, ae, ne = seen.get(f, {}), seen.get(a, {}), seen.get(n, {})
-        s.expect("far: F (known, 5 m) is someone too far away to make out, with its id, no name and no community",
-                 fe.get("who") == FAR and "name" not in fe and "community" not in fe and fe.get("id") == f, fe)
+        # Since far-handle the far figure is named by a handle of the sighting, never F's id.
+        far_entries = [c for c in seen.values() if c.get("who") == FAR]
+        fe, ae, ne = (far_entries[0] if far_entries else {}), seen.get(a, {}), seen.get(n, {})
+        s.expect("far: F (known, 5 m) is someone too far away to make out, under a handle (not its id), no name and no community",
+                 fe.get("who") == FAR and "name" not in fe and "community" not in fe and fe.get("id", 0) >= 1_000_000_000 and f not in seen, {"far": fe, "ids": sorted(seen)})
         s.expect("near: A keeps its name and community; N is a stranger", ae.get("name") and ae.get("community") == "yours" and ne.get("who") == "a stranger" and "community" not in ne, {"A": ae, "N": ne})
         # The filter (law on) never matches a known neighbour, however far.
         s.call("place_at", n, line[0][0] + 70, line[0][1] + 52)
@@ -3178,9 +3180,15 @@ def stranger_filter(s):
         firsts = lambda: [r for r in s.rows(f"SELECT at_ms, subject, object, text FROM experience WHERE observer = {o}") if r["at_ms"] >= t0 and "first time you see" in r["text"] and u in (r["subject"], r["object"])]
         early = firsts()
         s.call("place_at", u, line[2][0], line[2][1] - 1.0)
-        late = s.wait(firsts, 15) if not early else early
+        # Within 25 s: the far figure is looked at again 5 s after each look, on O's own look slot.
+        try:
+            late = s.wait(firsts, 25) if not early else early
+        except TimeoutError:
+            late = []
+        bodies = {b["id"]: (b["x"], b["y"]) for b in s.rows(f"SELECT id, x, y FROM body WHERE id = {o} OR id = {u}")}
+        gap = math.dist(bodies[o], bodies[u]) if o in bodies and u in bodies else None
         s.expect("U at 5 m (too far to make out) gets no first sight; within 4 m it does, as a stranger",
-                 not early and late and "a stranger" in late[0]["text"] and FAR not in late[0]["text"], {"at_5m": early, "at_2m": late})
+                 not early and late and "a stranger" in late[0]["text"] and FAR not in late[0]["text"], {"at_5m": early, "at_2m": late, "o_to_u_m": gap})
     finally:
         s.call("install_script", shipped, check=False)
         set_law(s, "stranger_by_name", False, check=False)

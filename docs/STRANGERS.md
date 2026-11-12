@@ -242,3 +242,38 @@ Skin and eye colours, pieces and exact numbers are left out.
 - In Cullet only the newcomer is unnamed, so about 10 tokens a scene.
 - On a world with several settlements, about 100–250 tokens a scene with 10–20 unnamed people in sight.
 - Authority cost: one extra point lookup per perceived person when a projection is rebuilt, and no new subscription.
+
+## Far handles (far-handle, 2026-11-12; built)
+
+Stage 2 showed that the far label alone did not stop a mind from naming far figures (docs/TRIALS.md, "Strangers stage 2"):
+- the far entry kept the person's id;
+- the same prompt maps ids to names, in the community line ("Thessaly Marl (#15)") and the relations list.
+
+The general coordinator decided on a handle of the sighting.
+
+**The handle.**
+- A person the `perceived_of` law marks `far` is named in a mind's scene and experiences by a handle: `1000000000 + n`, from the private table `far_handle` (`living/authority/src/far.rs`).
+- It is never the person's id, so no other prompt line ties it to a name: not the relations, the community line, recall, a conversation or a plan.
+- A figure out of the observer's sight for 60 s is a new sighting with a new handle.
+
+**Acting on it.**
+- Acts and graph targets that name the handle (`{"id": handle}`) reach the person (`brain.rs` `Target::Id`, `far::resolve`), and so does speech (`speech::speak`).
+- `{"named": "..."}` finds only someone whose name the character perceives now, so a name cannot be tried on a figure.
+
+**When they are made out.**
+- When the character can make them out, the authority writes a `made_out` experience: "Bram is the one you saw too far away to make out." Its subject is the person and its object the handle.
+- The mind's consolidation then merges `person:<handle>` into `person:<id>` (`MERGED_INTO`; `made_out_merges`). What it remembered of the figure carries over.
+- Later far sightings get new handles, so nothing is renamed back.
+
+**Other places checked.**
+- Experience tags show the handle (`{someone too far away to make out=#handle}`).
+- The speaker's "heard by" list (`line_heard`) names a far hearer by its handle.
+- A far speaker cannot start a conversation (`talk.rs` `on_speech` needs a character).
+- A relation cannot be written about a handle (`mind_update` needs a character).
+- Players' rows keep real ids: their client draws by id. This change concerns minds.
+
+**The check.** verify-minds `far-figure`:
+- M's neighbour F is in M's relations, 5 m off under an overlay that makes everyone past 4 m far, and says a line.
+- The prompt shows a far figure under a handle, the line tagged with that handle, and no line tying the handle to F's name or id.
+- A wave at the handle reaches F.
+- Brought within 2 m, F is made out (the handle is joined to F's id), and the scene names F.

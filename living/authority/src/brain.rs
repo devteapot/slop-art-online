@@ -799,10 +799,17 @@ impl<'a> Ev<'a> {
             // An id is whatever the scene listed under it: a creature first, else a structure or
             // a resource in sight (a depleted bush still resolves, so its own rule says it is bare
             // instead of the body being told it is not there).
-            Target::Id(id) => self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }).or_else(|| self.visible_thing(*id as u64)),
+            Target::Id(id) => {
+                // A mind names a figure it cannot make out by its sighting's handle (far-handle).
+                let id = &crate::far::resolve(self.ctx, self.me.id, *id);
+                self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }).or_else(|| self.visible_thing(*id as u64))
+            }
             Target::Named(name) => {
                 let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
-                let id = ids.into_iter().find(|id| self.ctx.db.character().id().find(*id).map_or(false, |c| c.name.eq_ignore_ascii_case(name)))?;
+                // Only someone whose name this character perceives now: a figure too far away to
+                // make out is not found by a name (it would tell who they are; far-handle).
+                let (ctx, me, now) = (self.ctx, &self.me, self.now);
+                let id = ids.into_iter().find(|id| ctx.db.character().id().find(*id).is_some_and(|c| c.name.eq_ignore_ascii_case(name) && crate::perception::regard(ctx, me, &c, now).name))?;
                 self.visible_creature(id)
             }
             Target::Nearest(f) => self.nearest(f),
