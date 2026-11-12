@@ -71,6 +71,11 @@ pub struct Talk {
     /// A line to the room awaiting someone to take it up: when it was said (authority ms), and
     /// who heard it as far as I know (perceived in earshot then).
     room: Option<(u64, Vec<u32>)>,
+    /// When the authority last told me a line of mine to the room reached no one (authority ms).
+    room_unheard: Option<u64>,
+    /// The last Tab, for the UI dump: whom it came from, the earshot it went by (refreshed every
+    /// `ASK_S`, so a later dump's list can differ) and whom it chose before the perceived check.
+    pub tabbed: Option<(Option<u32>, Vec<u32>, Option<u32>)>,
     /// Whom the open box addresses has been worked out this opening (the window can follow).
     pub resolved: bool,
     /// Addressed on purpose from their window (its box, Introduce yourself): kept even when
@@ -197,7 +202,9 @@ fn address(
         talk.to = prefer.filter(|id| perceived(*id));
     }
     // Tab: the next one within earshot, nearest first, then the room, then round again.
-    if std::mem::take(&mut talk.cycle) && !talk.earshot.is_empty() {
+    let tab = std::mem::take(&mut talk.cycle);
+    let prev = talk.to;
+    if tab && !talk.earshot.is_empty() {
         talk.pinned = false;
         talk.to = match talk.to.and_then(|t| talk.earshot.iter().position(|e| *e == t)) {
             Some(i) if i + 1 < talk.earshot.len() => Some(talk.earshot[i + 1]),
@@ -205,6 +212,9 @@ fn address(
             None if talk.to.is_some() => talk.earshot.first().copied(),
             None => talk.earshot.first().copied(),
         };
+    }
+    if tab {
+        talk.tabbed = Some((prev, talk.earshot.clone(), talk.to));
     }
     // Someone I no longer perceive: back to the room.
     if !talk.pinned && talk.to.is_some_and(|id| !perceived(id)) {
@@ -255,8 +265,12 @@ fn told(
         // A line of mine to the room: who heard it, as far as I know (perceived in earshot as I
         // spoke; the authority's `heard_by` will replace this, `heard.rs`).
         if e.kind == "said" && e.object == 0 && fresh {
-            let heard = crate::heard::heard_by(&e).unwrap_or_else(|| talk.earshot.clone());
-            talk.room = Some((e.at_ms, heard));
+            // Unless the authority already said nobody heard it (`speech_truth`; its row can come
+            // first): then its words are the note, not this one.
+            if talk.room_unheard != Some(e.at_ms) {
+                let heard = crate::heard::heard_by(&e).unwrap_or_else(|| talk.earshot.clone());
+                talk.room = Some((e.at_ms, heard));
+            }
             continue;
         }
         // Someone who heard it said something since: the room took it up.
@@ -264,7 +278,14 @@ fn told(
             talk.room = None;
         }
         if e.kind == "silence" && fresh {
-            verbs.toasts.push(crate::verbs::Toast { text: e.text.clone(), ok: Some(false), at: now });
+            // The authority's truth about a line not heard (`speech_truth`: "… could not have
+            // heard you.", "Nobody was near enough to hear you."): once, as a quiet note (not a
+            // refusal). A room line's replaces the client's own "No one in earshot" note.
+            if e.subject == 0 {
+                talk.room_unheard = Some(e.at_ms);
+                talk.room = talk.room.take().filter(|(at, _)| *at != e.at_ms);
+            }
+            verbs.toasts.push(crate::verbs::Toast { text: e.text.clone(), ok: None, at: now });
         } else if e.kind == "speech" && fresh && !talk.heard_to_me && e.text.contains(" said to you:") {
             talk.heard_to_me = true;
             if let Some(t) = tips.as_mut() {

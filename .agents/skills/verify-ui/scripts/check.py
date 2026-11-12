@@ -169,18 +169,42 @@ def talk(run, c):
     c.check(s, "their window stays after saying it", d["06"] and (f"Person{a}", "Left") in wins(d["06"]) and not d["06"]["typing"])
     # Up to eight: as many may be within earshot at a busy hour, nearest first, then the room.
     tabs = [(dump(out, f"07{k}") or {}).get("typing") or {} for k in "abcdefgh"]
-    # Who is in earshot, as the client has it (nearest first, Tab's order): B among them, then
-    # each Tab the next after whom the box addressed, its window following, then the room.
+    # Who is in earshot, as the client has it (nearest first, Tab's order): B among them.
     ear = ((d["06"] or {}).get("typing") or {}).get("earshot") or (tabs[0].get("earshot") if tabs else None) or []
     c.check(s, "who is in earshot: both residents beside me", a in ear and b in ear, f"earshot {ear}")
-    want, cur = [], a
-    for _ in tabs:
-        i = ear.index(cur) if cur in ear else -1
-        cur = ear[i + 1] if cur is not None and 0 <= i < len(ear) - 1 else (None if cur is not None else (ear[0] if ear else None))
-        want.append(cur)
+    # Each Tab against the earshot it went by (`typing.tab` in the dump: whom it came from, the
+    # list at that moment, whom it chose), since people walk in and out of earshot between
+    # presses at a busy hour: from someone in the list, the next after them, or the room after
+    # the last; from the room or someone gone from the list, the first. The press starts where
+    # the last one ended; the box then addresses whom it chose (or the room, if they are no
+    # longer perceived and so gone from the list too), its window following.
+    def nxt(prev, e):
+        if not e:
+            return prev
+        if prev in e:
+            i = e.index(prev)
+            return e[i + 1] if i + 1 < len(e) else None
+        return e[0]
     got = [t.get("to") for t in tabs]
-    n = (want.index(None) + 1) if None in want else len(want)
-    c.check(s, "Tab goes to the next in earshot each time, nearest first, the window following, then the room", got[:n] == want[:n] and None in want and all(t.get("window") == (f"Person{t['to']}" if t.get("to") else "Log") for t in tabs[:n]), f"earshot {ear}; tabs {got[:n]}; expected {want[:n]}")
+    steps, bad, lists = [], [], []
+    for k, t in enumerate(tabs):
+        tb = t.get("tab") or {}
+        e, prev, chose = tb.get("earshot") or [], tb.get("prev"), tb.get("chose")
+        lists.append(e)
+        start = a if k == 0 else got[k - 1]
+        win = t.get("window") == (f"Person{got[k]}" if got[k] else "Log")
+        ok = bool(tb) and prev == start and chose == nxt(prev, e) and (got[k] == chose or (got[k] is None and chose not in (t.get("earshot") or []))) and win
+        steps.append(f"{prev}->{got[k]} by {e}")
+        if not ok:
+            bad.append(k)
+    seen_all = [x for e in lists for x in e]
+    left = sorted({x for i, e in enumerate(lists) for x in e if any(x not in f for f in lists[i + 1:])})
+    # Reaching the room within the presses is required only while earshot held still: someone
+    # moving within it or leaving can put the room beyond the eighth press (each press is still
+    # checked against its own list above).
+    changed = any(e != lists[0] for e in lists) if lists else False
+    room = None in got or changed or (lists and min(len(e) for e in lists) >= len(tabs))
+    c.check(s, "Tab goes to the next in earshot at each press, nearest first, the window following, then the room", tabs and not bad and room, f"presses {steps}; wrong at {bad}; room reached {None in got}; earshot changed {changed}; left earshot meanwhile {left}; came in {sorted(set(seen_all) - set(ear))}")
     c.check(s, "Esc closes the box and its window", d["08"] and wins(d["08"]) == [] and not d["08"]["typing"], str(wins(d["08"])))
     c.check(s, "Log › People lists them; a click opens a person's window", d["10"] and any(w.startswith("Person") for w, _ in wins(d["10"])), str(wins(d["10"])))
     t11 = (d["11"] or {}).get("typing") or {}
@@ -1389,7 +1413,70 @@ def own(run, c):
     c.check(s, "the Log is open", "Log" in [w for w, _ in wins(d["02"])], str(wins(d["02"])))
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own}
+UNHEARD_SPOT = (300.0, 330.0)
+
+
+def unheard(run, c):
+    """speech-truth (`speech_truth`, on by default): a line nobody could hear gets the authority's
+    truthful `silence` row and a `reach` act outcome. The client shows those words once, as a
+    quiet note; the Log does not repeat them (only my line's "did not hear you" mark), and a room
+    line nobody heard gets no client-made "No one in earshot" note beside them. A heard line gets
+    none. Speech carries 9 m and a person sees 11 m by day (6 m by night): the scene stands me on
+    open grass at noon (a scratch fixture) with one resident held 10 m away, seen but out of
+    earshot ("… is too far away: they could not have heard you."), then beside me."""
+    s = "unheard"
+    b = residents(run, 1)[0]
+    # Earlier scenes leave residents held where the player stood: anyone within 25 m of the spot
+    # (but me and B) is put 40 m east first, and stays (held, or walks back slowly).
+    people = {r["id"]: r.get("name") for r in sql(run, "SELECT id, name, kind FROM character WHERE kind = 'person'")}
+    near0 = [r for r in sql(run, "SELECT id, x, y FROM body") if r["id"] in people and r["id"] != b and people[r["id"]] != "Verifier"
+             and ((r["x"] - UNHEARD_SPOT[0]) ** 2 + (r["y"] - UNHEARD_SPOT[1]) ** 2) ** 0.5 < 25]
+    clear = ";".join(f"place_at|{r['id']}|{UNHEARD_SPOT[0] + 40}|{UNHEARD_SPOT[1] + 3 * i}" for i, r in enumerate(near0)) or "sql|SELECT id FROM world"
+    plan = ("ready;sync:noon;sync:clear;sync:spot;wait:2;sync:scene;wait:0.5;sync:bodies;wait:2;dump:00;"
+            "point:{B};wait:0.5;key:Enter:tap;wait:0.6;dump:01;type:Can you hear me over there?;enter;wait:2.5;shot:01_far;dump:02;"
+            "cursor:0.5,0.12;wait:0.4;key:Enter:tap;wait:0.6;dump:03a;type:Is anyone here?;enter;wait:2.5;shot:02_room;dump:03;wait:10;dump:04;"
+            "wait:0.3;shot:03_log;dump:05;"
+            "sync:near;wait:2;point:{B};wait:0.5;key:Enter:tap;wait:0.6;type:Hello, now you are close.;enter;wait:3;shot:04_heard;dump:06;key:Escape:tap;wait:0.3;quit").replace("{B}", str(b))
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"clear={clear}", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}", "bodies=sql|SELECT id, x, y FROM body", f"near=place_at|{b}|(mx+1.6)|(my+1.2)"]
+    out, code, text = drive(run, s, plan, places=[f"{b}:0:10"], syncs=syncs)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    d = {k: dump(out, k) or {} for k in ["00", "01", "02", "03a", "03", "04", "05", "06"]}
+    # The premise: nobody but the held resident within 18 m of me as the scene began.
+    snap0 = ((sc.get("snaps") or {}).get("bodies") or [{}])[0]
+    rows_b = snap0.get("rows") or []
+    since = snap0.get("wall_ms", 0) - 2000
+    at = {r["id"]: (r["x"], r["y"]) for r in rows_b if "x" in r}
+    mine = at.get(me)
+    dist = lambda p: ((p[0] - mine[0]) ** 2 + (p[1] - mine[1]) ** 2) ** 0.5
+    near = sorted(i for i, p in at.items() if i in people and i != me and dist(p) < 9.5) if mine else None
+    bd = round(dist(at[b]), 1) if mine and b in at else None
+    c.check(s, "scene: no one within 9 m of me (speech carries 9 m); the resident held 10 m away, within sight (11 m)", near == [] and bd is not None and 9.2 < bd < 10.8, f"me {mine}; within 9.5 m {near}; #{b} at {bd} m")
+    t1 = d["01"].get("typing") or {}
+    c.check(s, "addressing them far away: the box says out of earshot", t1.get("to") == b and "out of earshot" in (t1.get("label") or ""), json.dumps(t1))
+    reach = [r for r in (sql(run, f"SELECT id, kind, ok, code, what, why, other, at_ms FROM act_outcome WHERE observer = {me} AND code = 'reach'") if me else []) if r.get("at_ms", 0) >= since]
+    reach.sort(key=lambda r: r.get("at_ms", 0))
+    far = [r for r in reach if r.get("other") == b]
+    room = [r for r in reach if r.get("other") == 0]
+    c.check(s, "the authority: a reach row for the line to them and one for the room line", len(far) == 1 and len(room) == 1 and room[0].get("why") == "Nobody was near enough to hear you." and "could not have heard you" in far[0].get("why", ""), str(reach)[:600])
+    def shown(k, words):
+        return sum(1 for n in d[k].get("notes") or [] if words and words in n)
+    fw = far[0]["why"] if far else None
+    rw = room[0]["why"] if room else None
+    c.check(s, "the words for the line to them show once, as a note", fw is not None and shown("02", fw) == 1 and all(shown(k, fw) <= 1 for k in d), f"{fw!r} in notes {d['02'].get('notes')}")
+    c.check(s, "the words for the room line show once, as a note", rw is not None and shown("03", rw) == 1 and all(shown(k, rw) <= 1 for k in d), f"{rw!r} in notes {d['03'].get('notes')}")
+    L = log(out)
+    c.check(s, "no client-made room note beside them (No one in earshot heard you)", "talk: room note" not in L and not any("No one in earshot heard you" in n for k in d for n in d[k].get("notes") or []), str(d["04"].get("notes")))
+    ev = [e for k in ("05", "06") for e in ((d[k].get("extra") or {}).get("events") or [])]
+    c.check(s, "the Log does not repeat them", not any((fw and fw in e) or (rw and rw in e) or "could not have heard" in e or "near enough to hear" in e for e in ev), str(ev)[:400])
+    said = [r for r in (sql(run, f"SELECT id, kind, object, text, at_ms FROM experience WHERE observer = {me} AND kind = 'said' AND object = {b}") if me else []) if r.get("at_ms", 0) >= since]
+    c.check(s, "a heard line: said to them beside me, and no further reach row", len(said) == 2 and len(reach) == 2, f"said to #{b} in this drive: {len(said)}; reach rows {len(reach)}")
+    n6 = d["06"].get("notes") or []
+    c.check(s, "a heard line: no reach note", not any("could not have heard" in n or "near enough to hear" in n or "out of earshot" in n for n in n6), str(n6))
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard}
 
 
 def main():

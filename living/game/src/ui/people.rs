@@ -95,6 +95,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
     }
     let mut fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !t.seen.contains(&e.id)).collect();
     fresh.sort_by_key(|e| e.id);
+    let mut unheard: Vec<(u32, u64)> = Vec::new();
     for e in fresh {
         t.seen.insert(e.id);
         // Someone I have talked with, or who is in my scene now, counts as met.
@@ -114,15 +115,22 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
             t.met.entry(who).or_default().last_line = Some(text.clone());
             t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: who, to, text, mine: false, heard_by: None, unheard: false });
         } else if let Some(to) = heard::unheard(&e) {
-            if let Some(l) = t.lines.values_mut().rev().find(|l| l.mine && l.to == to && l.at_ms == e.at_ms) {
-                l.unheard = true;
+            // The authority's words show once, as a note (`talk.rs`); here only my line's mark
+            // (after the loop: the silence row can come before my `said` row). A room line nobody
+            // heard needs no mark: its `heard_by` is empty.
+            if to != 0 {
+                unheard.push((to, e.at_ms));
             }
-            t.events.push((e.at_ms, wood::readable(&e.text)));
         } else if let Some(who) = heard::introduced(&e) {
             t.met.entry(who).or_default().introduced_ms = Some(e.at_ms);
             t.events.push((e.at_ms, wood::readable(&e.text)));
         } else if matches!(e.kind.as_str(), "act" | "record") {
             t.events.push((e.at_ms, net.conn.as_ref().map_or_else(|| crate::verbs::outcome_text(&e.text).1, |c| crate::verbs::outcome_of(c, &e).1)));
+        }
+    }
+    for (to, at) in unheard {
+        if let Some(l) = t.lines.values_mut().rev().find(|l| l.mine && l.to == to && l.at_ms == at) {
+            l.unheard = true;
         }
     }
     // A name the rules gave since: an event too.
@@ -556,10 +564,11 @@ pub fn update(
         }
     }
     for (m, mut t, mut n) in &mut texts.p4() {
-        // Under my line: who heard it, once the authority reports it; a known "not heard".
+        // Under my line: who heard it, once the authority reports it; a known "not heard" (why is
+        // the authority's note, `talk.rs`: not repeated here in other words).
         let note = line_of(&m.0, m.1).filter(|l| l.mine).and_then(|l| {
             if l.unheard {
-                return Some(format!("{} did not hear you: out of earshot", looks.cap(l.to)));
+                return Some(format!("addressed {}, not heard by them", lower(l.to)));
             }
             let by = l.heard_by.as_ref()?;
             let seen: Vec<String> = by.iter().filter(|id| looks.of(**id).is_some()).map(|id| lower(*id)).collect();
