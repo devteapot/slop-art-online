@@ -216,11 +216,31 @@ def check_looks(seed, rows):
     present("no animal or dead character has a look row", all(i in alive and alive[i]["kind"] == "person" for i in by_id))
     named = {r["name"]: r["look"] for t in seed.get("towns", []) + seed.get("villages", []) for r in t.get("residents", []) if r.get("look")}
     wearing = [(c["name"], by_id.get(c["id"], {}).get("person")) for c in persons if c["name"] in named]
-    present("each seeded resident wears its own entry", wearing and all(p == named[n] for n, p in wearing), {"residents": len(wearing), "wrong": [x for x in wearing if x[1] != named[x[0]]][:10]})
+    # A seed may name no one (the island: the pool alone, living/tools/pool_looks.py).
+    present("each seeded resident wears its own entry" + ("" if named else " (none: the seed names no one's look)"), all(p == named[n] for n, p in wearing) and (wearing or not named), {"residents": len(wearing), "wrong": [x for x in wearing if x[1] != named[x[0]]][:10]})
     pool = set(looks.get("pool", []))
     others = [by_id[c["id"]]["person"] for c in persons if c["name"] not in named and c["id"] in by_id]
     present("everyone else wears a pool entry" + ("" if others else " (none)"), all(p in pool for p in others), {"others": len(others)})
+    # A pool pick is the rules' `pool_pick(world seed, id, pool length)` (splitmix64), recomputed here.
+    M = (1 << 64) - 1
+    def mix(x):
+        z = (x + 0x9E3779B97F4A7C15) & M
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & M
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & M
+        return z ^ (z >> 31)
+    picked = [(c["id"], by_id[c["id"]]["person"]) for c in persons if c["name"] not in named and c["id"] in by_id and looks.get("pool")]
+    wrong_pick = [i for i, p in picked if p != looks["pool"][mix(int(w["seed"]) ^ ((i * 0xD1B54A32D192ED03) & M)) % len(looks["pool"])]]
+    present("each pool entry is the one pool_pick names for the world seed and id" + ("" if picked else " (none)"), not wrong_pick, {"picked": len(picked), "wrong": wrong_pick[:10]})
     present("every line key is lk_ and 16 hex digits", all(re.fullmatch(r"lk_[0-9a-f]{16}", k) for k in keyed))
+    # The client's book (git-ignored; char-4's bundles carry it): `LIVING_LOOK_BOOK`, else the game's assets.
+    book_path = Path(os.environ.get("LIVING_LOOK_BOOK") or ROOT / "living/game/assets/characters/looks.json")
+    if book_path.exists():
+        book = json.loads(book_path.read_text())
+        unresolved = sorted({r["line"] for r in lines} - set(book.get("lines", {})))
+        present(f"every look row's line is in the client's book ({book_path.name}, generation {book.get('generation')})", not unresolved and looks["generation"] in book.get("generations", [book.get("generation")]),
+                {"rows": len(lines), "unresolved": unresolved[:10], "book_generations": book.get("generations")})
+    else:
+        checks.append({"check": "the client's book was not found (set LIVING_LOOK_BOOK): look lines not checked against it", "pass": True, "detail": str(book_path)})
     # char-4's cases for an authored world (worlds/<run>/look-cases.json, look_lines.py): the key
     # rule over the drawn fields only, and residents of each band wearing the case's entry and line.
     cases_file = ROOT / "living/seeds/worlds" / seed["run"] / "look-cases.json"

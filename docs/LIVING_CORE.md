@@ -601,6 +601,7 @@ python3 living/tools/play.py --cost <journal dir>  # price any journal (an evide
 
 **Resume and fresh.**
 - **Resume.** Each start resumes the world named in `<state>/current.json`, with the same `LIVING_RUN`, the same Neo4j volume and the same player token. That means the same world, the same minds and the same character. The world stays paused until the client's connection opens, so a pending takeover is cancelled rather than fired.
+- **Looks on a resumed world** ([LOOK.md](LOOK.md) §9). A world made before its seed carried `looks` (the island before `look-1-island`) resumes with VRoid stand-ins: it has no look rows. `--fresh` makes a new world with them; to keep the world, the admin runs `relook` with the seed's generation (`spacetime call -s local <db> relook '"c4-aa393793"'`), and its people take their looks without losing anything else.
 - **`--fresh`.** It lists what it will delete: the database and everything in it. It also lists what it keeps: the run's logs, the journal, and the old run's nodes in the store (minds are keyed by run). From a terminal it asks before deleting; otherwise it needs `--yes`.
 - **Refusals.**
   - A start refuses a world whose laws read-back fails; use `--fresh`.
