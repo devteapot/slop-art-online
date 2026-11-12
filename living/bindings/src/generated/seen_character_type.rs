@@ -18,6 +18,7 @@ pub struct SeenCharacter {
     pub band: u8,
     pub hp: f32,
     pub max_hp: f32,
+    pub look: String,
 }
 
 impl __sdk::InModule for SeenCharacter {
@@ -39,6 +40,7 @@ pub struct SeenCharacterCols {
     pub band: __sdk::__query_builder::Col<SeenCharacter, u8>,
     pub hp: __sdk::__query_builder::Col<SeenCharacter, f32>,
     pub max_hp: __sdk::__query_builder::Col<SeenCharacter, f32>,
+    pub look: __sdk::__query_builder::Col<SeenCharacter, String>,
 }
 
 impl __sdk::__query_builder::HasCols for SeenCharacter {
@@ -56,6 +58,7 @@ impl __sdk::__query_builder::HasCols for SeenCharacter {
             band: __sdk::__query_builder::Col::new(table_name, "band"),
             hp: __sdk::__query_builder::Col::new(table_name, "hp"),
             max_hp: __sdk::__query_builder::Col::new(table_name, "max_hp"),
+            look: __sdk::__query_builder::Col::new(table_name, "look"),
         }
     }
 }

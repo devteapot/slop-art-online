@@ -9,13 +9,16 @@ The player sleeps through its own command (`human_act` with a run of sleeps), th
   "You woke up: … calls out to you …", and the quiet line comes after it as "While you slept, you
   heard: …";
 - someone else's baby crying about 3 m away wakes it;
-- a fight beyond the reach does not wake it; the same fight about 3 m away does.
+- a fight beyond the reach does not wake it; the same fight about 3 m away does;
+- struck mid-fight, its own sleep is refused ("you cannot sleep: you were struck moments ago");
+  and with the alert laws off, a sleeping player is woken by a fight's second blow as well as its
+  first (`perceive::wake_struck`).
 
     sleep.py --run RUN
 
 Needs `verify.py launch --run RUN --seed $PWD/.agents/skills/verify-core/scripts/infant` (a
 baby and four AI adults). Admin reducers set the scene only: `place_at`, `set_behavior` and
-`mind_say` (the residents' lines, as their minds would say them). Writes `RUN/sleep.json`.
+`mind_say` (the residents' lines, as their minds would say them), and `set_world_law` (the alert laws, restored at the end). Writes `RUN/sleep.json`.
 Python standard library only.
 """
 
@@ -159,6 +162,47 @@ def main():
     snaps["woken_all"] = woken("")
     check("a fight about 3 m away wakes it", got, {"distances": [near1, near2], "told": got, "woken": snaps["woken_all"][-3:], "fighters": snaps["fighters_after"]})
     call("human_act", [json.dumps({"wait": 1})])
+
+    # 4. Mid-fight (alert-after-hit): struck, the player's own sleep is refused in the body
+    #    fact's words; and with both laws off (a struck body may sleep again), a sleeping player
+    #    is woken by the fight's second blow, not only its first.
+    hurt = lambda: sql(f"SELECT hurt_ms FROM vitals WHERE id = {me}", admin)[0]["hurt_ms"]
+
+    def strike_me(seconds=20):
+        before = hurt()
+        at(f1, 1)
+        call("set_behavior", [f1, json.dumps({"seq": [{"do": "attack", "target": {"nearest": "person"}}, {"wait": 300}]})], as_admin=True)
+        wait_for(lambda: hurt() > before, seconds)
+        call("set_behavior", [f1, json.dumps({"wait": 300})], as_admin=True)
+        return hurt()
+
+    since = lambda rows, t: [r for r in rows if r["at_ms"] >= t]
+    for who in (f2, speaker, baby["id"]):
+        park(who)
+    t = strike_me()
+    park(f1)
+    call("human_act", [json.dumps({"do": "sleep"})])
+    refused = wait_for(lambda: since(log("you cannot sleep: you were struck moments ago"), t), 8)
+    snaps["refused_mid_fight"] = refused
+    check("struck, the player's own sleep is refused in the body fact's words", refused and not asleep(), refused)
+    try:
+        call("set_world_law", ["alert_after_hit_s", json.dumps(0)], as_admin=True)
+        call("set_world_law", ["alert_while_attacker_near", json.dumps(False)], as_admin=True)
+        time.sleep(31)  # the last fight is over: the next blow is a new fight's first
+        sleep()
+        t1 = strike_me()
+        first = wait_for(lambda: since(woken(""), t1), 10)
+        park(f1)
+        again = wait_for(lambda: asleep(), 15)
+        t2 = strike_me()
+        second = wait_for(lambda: since(woken(""), t2), 10)
+        snaps["second_blow"] = {"t1": t1, "t2": t2, "first": first, "second": second}
+        check("a sleeping player is woken by the fight's second blow too", first and again and t2 - t1 < 30_000 and second and "attacking you" in second[0]["text"], snaps["second_blow"])
+    finally:
+        call("set_world_law", ["alert_after_hit_s", json.dumps(15)], as_admin=True)
+        call("set_world_law", ["alert_while_attacker_near", json.dumps(True)], as_admin=True)
+        call("set_behavior", [f1, json.dumps({"wait": 120})], as_admin=True)
+        call("human_act", [json.dumps({"wait": 1})])
 
     out = V.run_dir(a.run) / "sleep.json"
     out.write_text(json.dumps({"results": results, "snapshots": snaps}, indent=2) + "\n")

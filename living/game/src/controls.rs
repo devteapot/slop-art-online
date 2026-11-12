@@ -397,13 +397,17 @@ pub const LOOK_DEG: f32 = 4.0;
 /// …and at most this often (s), except a release.
 pub const LOOK_S: f64 = 0.1;
 
-/// Send a chat line to whoever is in earshot, addressed to `to` (0: no one in particular).
-/// Returns whether it was sent.
-pub fn say(net: &Net, text: &str, to: u32) -> bool {
+/// Send a chat line to whoever is in earshot, addressed to `to` (0: no one in particular), in
+/// one of the world's ways of speaking (`speech_card`; `human_speak`, the rules minds' speech
+/// meets), else plainly (`human_say`) when the world names none. Returns whether it was sent.
+pub fn say(net: &Net, text: &str, to: u32, way: Option<&str>) -> bool {
     let text = text.trim();
     let Some(conn) = net.conn.as_ref().filter(|_| !text.is_empty()) else { return false };
-    info!("say: \"{text}\" to {}", if to == 0 { "no one in particular".to_string() } else { format!("#{to}") });
-    let r = conn.reducers.human_say_then(text.to_string(), to, net.on_reply("say", "human_say", || serde_json::json!({"text": text, "to": to})));
+    info!("say: \"{text}\" to {}{}", if to == 0 { "no one in particular".to_string() } else { format!("#{to}") }, way.map_or(String::new(), |w| format!(" ({w})")));
+    let r = match way {
+        Some(w) => conn.reducers.human_speak_then(text.to_string(), to, w.to_string(), net.on_reply("say", "human_speak", || serde_json::json!({"text": text, "to": to, "way": w}))),
+        None => conn.reducers.human_say_then(text.to_string(), to, net.on_reply("say", "human_say", || serde_json::json!({"text": text, "to": to}))),
+    };
     let ok = r.is_ok();
     net.report("say", r);
     ok

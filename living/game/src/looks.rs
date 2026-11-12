@@ -3,10 +3,12 @@
 //! - **A name only when the rules give it:** the projection's `name` from `seen_characters`
 //!   (empty until my character knows it: kin, community, or someone who told it their name,
 //!   docs/PERCEPTION.md). The client never shows a name from anywhere else.
-//! - **Strangers by looks only:** the projection's own label ("a stranger", "a child", "an old
-//!   stranger", "a baby") with the colour of their clothes as this client draws them (the recipe
-//!   seeded by the land and their id, in the projection's folk and dress: `live::recipe_for`),
-//!   "a child in red". When two strangers shown read alike, the second colour tells them apart
+//! - **Strangers by looks only:** someone drawn from their look's line (`live::recipe_for`) by
+//!   its words as `living_rules::look::phrase` says them, the words a mind is told: "a woman in
+//!   a green smock and dark trousers, dark-haired". Someone drawn as a VRoid recipe (no look) by
+//!   the projection's own label ("a stranger", "a child", "an old stranger", "a baby") with the
+//!   colour of their clothes as this client draws them, "a child in red". A line's chips are its
+//!   pieces' own colours ([`clothes`]). When two strangers shown read alike, the second colour tells them apart
 //!   ("a stranger in blue and brown"). No role and no place.
 //! - Animals keep the projection's label ("a wolf").
 //! - **Too far to make out** (far-label: beyond the world's recognising range, Cullet's
@@ -34,6 +36,12 @@ pub struct Looks {
     plates: HashMap<u32, String>,
     /// The top and second colours drawn, by id (sRGB hex), for portraits.
     pub colours: HashMap<u32, (Option<String>, Option<String>)>,
+    /// The look key each one's colours were read from (empty: a VRoid recipe), so a new look
+    /// reads them again.
+    drawn_from: HashMap<u32, String>,
+    /// For someone drawn from a line: what a glance says of them made out and from afar
+    /// (`living_rules::look::phrase`, the words a mind is told too). None for a VRoid recipe.
+    phrases: HashMap<u32, Option<(String, String)>>,
     /// When a name first arrived for someone (they were a stranger to me before).
     pub named: Vec<(u32, String)>,
     known: HashMap<u32, bool>,
@@ -160,10 +168,65 @@ pub fn colour_name(hex: &str) -> Option<&'static str> {
 }
 
 /// The colours a person is seen wearing: the top (or an outfit piece worn over it), then the
-/// bottom.
+/// bottom. A composed line's are its outermost upper and lower pieces' own colours
+/// (`colors.outfit` by piece name; which piece is which from [`place`]).
 fn clothes(r: &crate::characters::Recipe) -> (Option<String>, Option<String>) {
+    if let Some(p) = &r.person {
+        let outer = |want: Part| p.styles.outfit.iter().filter_map(|piece| place(piece).filter(|(part, _)| *part == want).map(|(_, layer)| (layer, piece))).max_by_key(|(layer, _)| *layer).and_then(|(_, piece)| p.colors.outfit.get(piece).cloned());
+        return (outer(Part::Upper), outer(Part::Lower));
+    }
     let over = ["torso", "coat", "jacket", "top", "body"].iter().find_map(|s| r.colors.outfit.get(*s).cloned());
     (over.or_else(|| r.colors.top.clone()), r.colors.bottom.clone())
+}
+
+/// Which part of the body an outfit piece covers, for its chip.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Part {
+    Upper,
+    Lower,
+}
+
+/// An outfit style's part and layer (higher is worn over lower) from the style file's scene
+/// extras, `outfit: { piece, slot, layer, trim }` (char-4's, in every outfit file since bundle
+/// `0d54681a`): `upper` or `lower` give a chip; `feet` (boots), `head` (cap, kerchief) and a
+/// `trim` (a smock's bands, no garment of its own) give none. A file without them falls back on
+/// its name, with the same values.
+fn place(piece: &str) -> Option<(Part, i32)> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<String, Option<(Part, i32)>>>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(p) = cache.lock().unwrap().get(piece) {
+        return *p;
+    }
+    let part = |slot: &str| match slot {
+        "upper" => Some(Part::Upper),
+        "lower" => Some(Part::Lower),
+        _ => None,
+    };
+    let from_file = || {
+        let file = format!("{}/outfit/{piece}.glb", crate::characters::compose::STYLES);
+        let j = crate::lookdev::glb_json(&file)?;
+        let x = &j["scenes"][j["scene"].as_u64().unwrap_or(0) as usize]["extras"]["outfit"];
+        let slot = x["slot"].as_str()?;
+        Some((!x["trim"].as_bool().unwrap_or(false)).then(|| part(slot).map(|p| (p, x["layer"].as_i64().unwrap_or(0) as i32))).flatten())
+    };
+    let p = from_file().unwrap_or_else(|| place_by_name(piece));
+    cache.lock().unwrap().insert(piece.to_string(), p);
+    p
+}
+
+/// A piece's part and layer by its name's stem (`smock_58-f` → `smock`), for a file without its
+/// extras: char-4's values (jersey 0, smock or coat 1, apron 3; trousers 0; a smock's bands are
+/// trim).
+fn place_by_name(piece: &str) -> Option<(Part, i32)> {
+    let stem = piece.trim_end_matches("-f").trim_end_matches("-m");
+    let stem = stem.rsplit_once('_').filter(|(_, n)| n.chars().all(|c| c.is_ascii_digit())).map_or(stem, |(s, _)| s);
+    match stem {
+        "jersey" | "jersey_smock" | "jersey_coat" => Some((Part::Upper, 0)),
+        "smock" | "coat" => Some((Part::Upper, 1)),
+        "apron" => Some((Part::Upper, 3)),
+        "trousers" | "skirt" => Some((Part::Lower, 0)),
+        _ => None,
+    }
 }
 
 /// Keep the labels of everyone perceived (Mirror phase, after the rows arrive).
@@ -179,6 +242,7 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
     let seed = island.as_ref().map(|i| i.land.seed);
     let seen: Vec<SeenCharacter> = conn.db.seen_characters().iter().filter(|c| Some(c.id) != me).collect();
     let mut base: Vec<(u32, String, Option<String>, Option<String>)> = Vec::with_capacity(seen.len());
+    let mut phrased: HashMap<u32, (String, String)> = HashMap::new();
     for c in &seen {
         if !c.name.trim().is_empty() {
             let was = looks.known.insert(c.id, true);
@@ -196,16 +260,28 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
             base.push((c.id, c.label.clone(), None, None));
             continue;
         }
-        // The recipe is fixed by the land, the id and the projection's folk and dress.
-        let (top, bottom) = match (looks.colours.get(&c.id), seed) {
+        // The recipe is fixed by their look (else the land, the id and the projection's folk and
+        // dress); read again when the look changes.
+        let key = crate::characters::seen::of(c).look;
+        let fresh = looks.drawn_from.get(&c.id) == Some(&key);
+        let (top, bottom) = match (looks.colours.get(&c.id).filter(|_| fresh), seed) {
             (Some(k), _) => k.clone(),
             (None, Some(s)) => {
-                let k = clothes(&crate::live::recipe_for(s, c, false));
+                let recipe = crate::live::recipe_for(crate::characters::book::book(), s, c);
+                let k = clothes(&recipe);
+                // Drawn from the line: its words, as `phrase` says them.
+                let words = recipe.person.as_ref().and_then(|_| crate::characters::book::book()?.words(&key));
+                let ph = words.map(|(w, band)| (living_rules::look::phrase(&w, living_rules::look::LookSeen::Full, band), living_rules::look::phrase(&w, living_rules::look::LookSeen::Far, band)));
                 looks.colours.insert(c.id, k.clone());
+                looks.phrases.insert(c.id, ph);
+                looks.drawn_from.insert(c.id, key);
                 k
             }
             (None, None) => (None, None),
         };
+        if let Some(Some(p)) = looks.phrases.get(&c.id) {
+            phrased.insert(c.id, p.clone());
+        }
         base.push((c.id, c.label.clone(), top, bottom));
     }
     // "a child in red"; a second colour where two read alike. Someone too far away to make out
@@ -217,6 +293,23 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
         None => shown(l),
     }).collect();
     for (i, (id, l, t, b)) in base.iter().enumerate() {
+        // Someone drawn from a line is named by its words: "a woman in a green smock and dark
+        // trousers, dark-haired" made out; too far to make out, the projection's words, and for
+        // plates and hover "a tall figure in a green smock" (no sex, hair or beard).
+        if let Some((full, from_afar)) = phrased.get(id) {
+            let label = if far(l) { l.clone() } else { full.clone() };
+            if far(l) {
+                if looks.plates.get(id) != Some(from_afar) {
+                    looks.plates.insert(*id, from_afar.clone());
+                }
+            } else {
+                looks.plates.remove(id);
+            }
+            if looks.labels.get(id) != Some(&label) {
+                looks.labels.insert(*id, label);
+            }
+            continue;
+        }
         let twin = t.is_some() && first.iter().enumerate().any(|(j, f)| j != i && *f == first[i]);
         let dressed = match (twin, t.as_deref().and_then(colour_name), b.as_deref().and_then(colour_name)) {
             (true, Some(a), Some(c)) if a != c => format!("{} in {a} and {c}", shown(l)),
@@ -243,7 +336,27 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
 
 #[cfg(test)]
 mod tests {
-    use super::colour_name;
+    use super::{clothes, colour_name, place_by_name, Part};
+
+    /// A composed line's chips are its outermost upper and lower pieces' own colours.
+    #[test]
+    fn a_lines_chips_are_its_outer_pieces() {
+        assert_eq!(place_by_name("smock_58-f"), Some((Part::Upper, 1)));
+        assert_eq!(place_by_name("jersey_smock-m"), Some((Part::Upper, 0)));
+        assert_eq!(place_by_name("trousers-f"), Some((Part::Lower, 0)));
+        assert_eq!(place_by_name("apron_58-f"), Some((Part::Upper, 3)));
+        assert_eq!(place_by_name("smock_bands-f"), None);
+        assert_eq!(place_by_name("boots-f"), None);
+        let person: crate::characters::compose::Person = serde_json::from_value(serde_json::json!({
+            "type": "adult-f-a", "height": 1.66,
+            "colors": { "outfit": { "smock_58-f": "#c8bfa8", "smock_bands-f": "#5a4a3a", "jersey_smock-f": "#3a3a3a", "apron_58-f": "#e0d8c8", "trousers-f": "#33363e" } },
+            "styles": { "outfit": ["smock_58-f", "smock_bands-f", "jersey_smock-f", "apron_58-f", "trousers-f"] }
+        }))
+        .unwrap();
+        let r = crate::characters::Recipe { person: Some(person), ..crate::characters::Recipe::default_for("lookdev/types/adult-f-a.glb") };
+        // The apron is worn over the smock (layer 3): it is the top chip.
+        assert_eq!(clothes(&r), (Some("#e0d8c8".into()), Some("#33363e".into())));
+    }
 
     #[test]
     fn clothes_colours_read_as_plain_words() {

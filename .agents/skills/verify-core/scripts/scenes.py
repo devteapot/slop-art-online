@@ -3142,6 +3142,21 @@ def say(s):
     s.expect("a sequence of two lines speaks the second", heard(two, t0, 10), lines(t0, "two-lines")[:3], fatal=False)
     time.sleep(2.5)
 
+    # Ids are not words: a line naming people by the `#<id>` a mind is shown them by is heard as
+    # the speaker refers to them (`normalize::spoken_without_ids`, applied by `speech::speak`).
+    # r2e's minds said three such lines (docs/TRIALS.md).
+    idline = f"Watch out, #{b} is here, and the archer #{far} too."
+    t0 = now()
+    install("mind_install", {"seq": [{"say": {"text": idline, "to": {"id": b}}}, hold]})
+    got = heard("Watch out,", t0)
+    said_text = got[0]["text"] if got else ""
+    s.expect("a line naming people by id is spoken without the ids", bool(got) and f"#{b}" not in said_text and f"#{far}" not in said_text and "and the archer too." in said_text, got[:1], fatal=False)
+    told_b = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {b}", "id-line-heard") if r["at_ms"] >= t0 and "Watch out," in r["text"]]
+    s.expect("the listener hears it without the ids", len(told_b) >= 1 and all(f"#{b}" not in r["text"] and f"#{far}" not in r["text"] for r in told_b), told_b[:2], fatal=False)
+    kept = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}", "id-line-kept") if r["at_ms"] >= t0 and r["kind"] == "spoken_as"]
+    s.expect("the speaker keeps what it wrote beside what was said (spoken_as)", len(kept) == 1 and idline in kept[0]["text"] and "and the archer too." in kept[0]["text"], kept, fatal=False)
+    time.sleep(2.5)
+
     # Out of sight: not spoken, and the speaker is told why.
     lost = "Can you hear me over there?"
     t0 = now()
@@ -5116,6 +5131,83 @@ SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
 
 
+
+def alert_after_hit(s):
+    """A body does not fall asleep in a fight (the script's `sleep_check`, the same for every
+    controller): struck within the `alert_after_hit_s` law (15 s) it is refused, "you cannot sleep:
+    you were struck moments ago", and sleeps once that has passed; with the one who struck it within
+    `wake_reach` and the fight on (struck within 30 s, the fact `hurt_by_near`, law
+    `alert_while_attacker_near`) it is refused, "you cannot sleep: someone who struck you is close",
+    until they go. A refused sleep fails its routine. And every blow wakes a sleeping victim, not only
+    a fight's first (`perceive::wake_struck`): with both laws off a struck body sleeps again at once,
+    and the fight's second blow wakes it. The laws are restored at the end."""
+    line = clear_line(s)
+    a, b = s.people(2)
+    struck = lambda: s.rows(f"SELECT hurt_ms, hurt_by FROM vitals WHERE id = {a}")[0]
+    sleeping = lambda: [x for x in s.rows(f"SELECT skill, phase FROM activity WHERE id = {a}") if x["skill"] == "sleep"]
+    told = lambda words, since=0: [e for e in s.rows(f"SELECT text, at_ms, kind FROM experience WHERE observer = {a}") if words in e["text"] and e["at_ms"] >= since]
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    def blow(seconds=20):
+        """b, beside a, strikes it once; returns the blow's time."""
+        before = struck()["hurt_ms"]
+        s.call("place_at", b, line[1][0], line[1][1])
+        s.graph(b, {"seq": [{"do": "attack", "target": {"nearest": "person"}}, {"wait": 300}]})
+        s.wait(lambda: struck()["hurt_ms"] > before, seconds=seconds, every=0.3)
+        s.graph(b, {"wait": 300})
+        return struck()["hurt_ms"]
+    try:
+        s.call("place_at", a, *line[0])
+        s.graph(a, {"wait": 300})
+        # 1. Struck: sleep refused for 15 s, then allowed (b walks off at once).
+        t = blow()
+        s.call("place_at", b, line[0][0] + 30, line[0][1])
+        s.graph(a, {"seq": [{"do": "sleep"}]})
+        refused = s.wait(lambda: told("you cannot sleep: you were struck moments ago", t), seconds=10)
+        time.sleep(max(0.0, (t + 12_000 - now()) / 1000))
+        s.expect("struck: a sleep is refused, in the body fact's words", bool(refused) and not sleeping(), refused)
+        s.expect("and not slept for the law's 15 s", not sleeping() and not s.rows(f"SELECT * FROM slumber WHERE actor = {a}"), now() - t)
+        s.wait(lambda: sleeping(), seconds=15, every=0.5)
+        began = now()
+        s.expect("once 15 s have passed it sleeps", 15_000 <= began - t < 25_000, began - t)
+        s.graph(a, {"wait": 300})
+        s.wait(lambda: not sleeping(), seconds=10)
+        # 2. The one who struck stays close: refused past 15 s, while the fight is on; allowed once they go.
+        t = blow()
+        s.call("place_at", b, line[2][0], line[2][1])
+        s.graph(a, {"seq": [{"do": "sleep"}]})
+        time.sleep(max(0.0, (t + 18_000 - now()) / 1000))
+        near = told("you cannot sleep: someone who struck you is close", t)
+        s.expect("past 15 s, with the one who struck within reach: refused, in the body fact's words", bool(near) and not sleeping(), near)
+        s.call("place_at", b, line[0][0] + 30, line[0][1])
+        s.wait(lambda: sleeping(), seconds=12, every=0.5)
+        s.expect("they go beyond reach: it sleeps, the fight still within 30 s", now() - t < 30_000, now() - t)
+        s.graph(a, {"wait": 300})
+        s.wait(lambda: not sleeping(), seconds=10)
+        # 3. Every blow wakes a sleeper: both laws off, so a struck body sleeps again at once.
+        set_law(s, "alert_after_hit_s", 0)
+        set_law(s, "alert_while_attacker_near", False)
+        time.sleep(31)  # the last fight is over: the next blow is a new fight's first
+        s.graph(a, {"seq": [{"do": "sleep"}]})
+        s.wait(lambda: sleeping(), seconds=15)
+        t1 = blow()
+        s.wait(lambda: told("You woke up: ", t1), seconds=10)
+        s.call("place_at", b, line[0][0] + 30, line[0][1])
+        s.wait(lambda: sleeping(), seconds=15)
+        t2 = blow()
+        s.expect("the fight's second blow is not its first (within 30 s)", t2 - t1 < 30_000, t2 - t1)
+        woke = s.wait(lambda: told("You woke up: ", t2), seconds=10)
+        s.expect("and wakes the sleeper, told why", bool(woke) and woke[0]["kind"] == "body" and "attacking you" in woke[0]["text"], woke)
+    finally:
+        set_law(s, "alert_after_hit_s", 15, check=False)
+        set_law(s, "alert_while_attacker_near", True, check=False)
+        for who in (a, b):
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, [a, b], dy=56)
+
+
+SCENES["alert_after_hit"] = alert_after_hit
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("scene", choices=SCENES)
@@ -5748,5 +5840,3 @@ SCENES["heard_first"] = heard_first
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
