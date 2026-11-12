@@ -57,10 +57,10 @@ EYE_COLOURS = dict(
 # which greys the pupil.
 SHARED_IRIS = (0.66, 0.551, 0.165)
 # That picture's source colour as the client learns it (linear light): the mean of the texels
-# the iris's vertices lie on. It is about a third as light as the colour the iris is painted
+# the iris's vertices lie on. It is about a quarter as light as the colour the iris is painted
 # with, since the vertices crowd the dark rim and the pupil. `eye_colours.py --check` holds
 # every type's iris to it.
-SHARED_IRIS_SOURCE = (0.13680, 0.09073, 0.02767)
+SHARED_IRIS_SOURCE = (0.09883, 0.06980, 0.01522)
 # How much of a picture's spread of hue the client keeps when it recolours (characters.rs).
 HUE_SPREAD = 0.4
 # How drawn the whole town's faces are (docs/CHARACTERS.md, "Style"): 0 keeps the proportions of
@@ -355,7 +355,7 @@ def resolve(p):
         hair=hair, hair_tip=hair_tip, hair_natural=natural, hair_natural_tip=natural_tip, hair_silver=silver, hair_grey=grey, brow=brow, lash=lash, lash_tip=mix(lash, (0.42, 0.20, 0.14), 0.6),
         lash_k=(0.66 + 0.74 * fem + 0.34 * child * (1 - masc) + 0.12 * child) * (1 + STYLE["lash"] * drawn), lash_wing=0.14 + 0.22 * fem + 0.06 * child, wing_lift=0.10 + 0.22 * fem,
         lashes=int(round(9 * fem + 5 * child * (1 - masc) + 2 * child * masc)), lashes_low=int(round(4 * fem + 2 * child * (1 - masc))),
-        brow_hairs=int(round(22 + 8 * masc * teen + 4 * elder)), fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
+        fold=clip(0.65 + 0.5 * face.get("eye_fold", 0) + 0.35 * elder, 0, 1.6),
         lower=clip(0.35 + 0.45 * fem + 0.2 * child, 0, 1), iris=colour(p["eyes"]["colour"], EYE_COLOURS, "eyes.colour"),
         white_shade=mix((0.62, 0.60, 0.68), shade, 0.25),
     )
@@ -603,6 +603,27 @@ def from_overlay(spec):
         given.update(age=max(given["age"], 66), skin=dict(given["skin"], weathered=0.6))
     return given
 HEAD_PIECES = dict(cap=(dict(headwear="cap"), ("Cap", "CapPeak")), kerchief=(dict(headwear="kerchief"), ("Kerchief", "KerchiefKnot")))
+
+
+# Where an outfit piece is worn and how far out: its slot (`upper`, `lower`, `feet` or `head`)
+# and its layer within the slot, 0 innermost. A client finds the outermost upper and lower
+# piece by these (for a colour chip, say) and need not read a piece's name. `trim` marks a
+# piece that is a garment's trimming and not a garment: the smock's bands of other cloth.
+PIECE_WEAR = dict(
+    jersey=("upper", 0), jersey_coat=("upper", 0), jersey_smock=("upper", 0), coat=("upper", 1), smock=("upper", 1), smock_bands=("upper", 2), apron=("upper", 3),
+    trousers=("lower", 0), boots=("feet", 0), cap=("head", 0), kerchief=("head", 0),
+)
+
+
+def piece_wear(name):
+    """An outfit piece's slot and layer (`PIECE_WEAR`), by its file's name: `smock_58-f`."""
+    base = name[:-2] if name[-2:] in ("-m", "-f") else name
+    kind = base if base in PIECE_WEAR else base.rsplit("_", 1)[0]
+    slot, layer = PIECE_WEAR[kind]
+    out = dict(slot=slot, layer=layer)
+    if kind == "smock_bands":
+        out["trim"] = True
+    return out
 
 
 def piece_parts(name):
