@@ -407,7 +407,11 @@ The island seed: its about 310 residents, all AI, and no mind service. Fighters 
 
 - **What the fold saves.** Writing what onlookers see (`tick.activity`) falls from 223 to 138 ms/s; the fold's own flush takes 58–63 back. Experience rows fall by two thirds.
 - **What the cheaper paths save.** A fighter's evaluation at combat cadence costs 0.13 ms with them, against 0.18 with the fold alone and 0.23 before it (`tick.combat` over its evaluations: 224 ms/s for 1,711 a second, 244 for 1,320, 243 for 1,042). The faster world runs more evaluations in the same time.
-- **The drift** comes with the refills, about 1,700 in 15 minutes, and the about 1,750 remains at the site. The load generator is to be fixed before the next acceptance.
+- **The drift** comes with the refills, about 1,700 in 15 minutes, and the about 1,750 remains at the site. The load generator dropped every refill into the battle, all the dead at once every 3 s.
+- **The load generator is fixed** (`battle-cheap`, `battle_diag.py`).
+  - A refill now appears 30 m off (`--refill-from`) at a random bearing, one at a time, at most one every 0.5 s (`--refill-gap`).
+  - It walks in, and is given the fight within 9 m of the site.
+  - A 3-minute test with 40 fighters (`minds-loadgen-*`): 43 refills arrived one by one as fighters fell, 1–5 walking in at any moment, 33–40 fighting throughout.
 - **An offset between builds.** Idle, the `battle-scale` world ticks 61.5 times a second and the other two 59.5, with no tick over budget. The tick interval (16,667 µs) and `bench.py` are the same in both, so it lies in how the ticks are scheduled, not in the work. To be looked at.
 
 ## Verification it would need
