@@ -2249,12 +2249,19 @@ def summarize(d, trial, extra):
         p["capacity_429"] = p.get("capacity_429", 0) + (1 if out_of_capacity(r.get("error")) else 0)
         if r.get("latency_ms"):
             p["latency_ms"].append(r["latency_ms"])
-        m = by_model[r.get("model")]
-        m["calls"] += 1
-        m["tokens"] += r.get("tokens") or 0
-        m["prompt"] += r.get("prompt_tokens") or 0
-        m["completion"] += r.get("completion_tokens") or 0
-        m["cached"] += r.get("cached_tokens") or 0
+        # The rethink gate's decisions (`rethink-gate`) are journaled beside the calls but are not
+        # model calls; its judge's calls are (`rethink`), priced by the mind (`cost_usd`, from the
+        # local prices file for Jev).
+        if r.get("purpose") != "rethink-gate":
+            m = by_model[r.get("model")]
+            m["calls"] += 1
+            m["tokens"] += r.get("tokens") or 0
+            m["prompt"] += r.get("prompt_tokens") or 0
+            m["completion"] += r.get("completion_tokens") or 0
+            m["cached"] += r.get("cached_tokens") or 0
+            if r.get("cost_usd") is not None:
+                m["cost_usd"] = m.get("cost_usd", 0.0) + float(r["cost_usd"])
+                m["cost_known"] = m.get("cost_known", 0) + 1
         if r.get("purpose") == "consolidate":
             rep = parse_reply(r.get("reply"))
             if isinstance(rep, dict) and isinstance(rep.get("remember"), list):
@@ -2816,9 +2823,13 @@ def report(a):
             tok[m]["prompt"] += v["prompt"]
             tok[m]["completion"] += v["completion"]
             tok[m]["cached"] += v["cached"]
+            tok[m]["cost_usd"] += v.get("cost_usd", 0.0)
+            tok[m]["cost_known"] += v.get("cost_known", 0)
     out.append("| Model | Calls | Tokens | Prompt | Completion | Cached | Est. cost (USD) |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for m, v in tok.items():
         c = cost(m, v["prompt"], v["completion"], v["cached"])
+        if c is None and v["calls"] and v["cost_known"] == v["calls"]:
+            c = v["cost_usd"]  # priced by the mind on every call (Jev, from the local prices file)
         out.append(f"| {m} | {v['calls']} | {v['tokens']:,} | {v['prompt']:,} | {v['completion']:,} | {v['cached']:,} | {f'{c:.2f}' if c is not None else 'unknown'} |")
     out.append("")
     pm = defaultdict(lambda: Counter())
