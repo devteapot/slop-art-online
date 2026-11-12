@@ -347,7 +347,8 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
 }
 
 /// What wakes a sleeping body (whoever plays it), so that its mind thinks on it at once. Every
-/// other reason to think waits in the sleeper's `Slumber` row until it wakes.
+/// other reason to think waits in the sleeper's `Slumber` row until it wakes. An attention cue
+/// does not wake: a sleeping body is not watching, so a cue's thought (`ask_to_think`) waits too.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Wake {
     /// Being attacked (also told by the reason's words, "… is attacking you", "The fight with").
@@ -356,11 +357,6 @@ pub enum Wake {
     Body,
     /// One's infant crying in distress (cold, starving or hurt) where its carer can hear it.
     Cry,
-    /// An attention cue the mind wrote for itself, firing while the world's `cues_on` law is on
-    /// (docs/ATTENTION.md, on the `attention-cues` branch). The cue matcher asks for its thought
-    /// with `request_waking(ctx, id, line, now, Wake::Cue)`; nothing on main fires one yet.
-    #[allow(dead_code)]
-    Cue,
 }
 
 /// Ask the mind to reconsider for a reason that wakes a sleeping body (`Wake`): a sleeper wakes,
@@ -434,6 +430,14 @@ pub fn slept(ctx: &ReducerContext, c: &Character, now: u64) {
         }
         (None, None) => {}
     }
+}
+
+/// As `request_deliberation`, saying whether the request was taken (false: no mind, or a mind
+/// asked again within its species' `think_min_s` of its last thought with nothing pending). A
+/// sleeper's is taken and waits in its `Slumber` until it wakes (the cue matcher's: a cue does
+/// not wake the body).
+pub fn ask_to_think(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bool {
+    request(ctx, id, reason, now, false, None)
 }
 
 fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool, wake: Option<Wake>) -> bool {

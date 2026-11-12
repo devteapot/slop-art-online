@@ -145,6 +145,12 @@ async fn main() -> Result<()> {
             // conversation switches that need it (`LIVING_GREET`, `nearest` by default): its own
             // subscription, so that a world whose module has no such table (built before it)
             // still starts; `LIVING_GREET` then falls back to the old rule there (talk.rs).
+            // What each character watches for (private, at most 8 rows each, written by the
+            // projection and on a fire; docs/ATTENTION.md): its own subscription, so that a
+            // world whose module has no such table still starts (prompts then show no cues).
+            c.subscription_builder()
+                .on_error(|_, e| log::warn!("no `cue` subscription ({e:?}): this world keeps no attention cues"))
+                .subscribe(["SELECT * FROM cue".to_string()]);
             if mind::greet_audience() {
                 c.subscription_builder()
                     .on_error(|_, e| log::warn!("no `audience` subscription ({e:?}): this world does not keep who heard a line; LIVING_GREET falls back to `off` here"))

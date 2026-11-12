@@ -967,6 +967,62 @@ pub struct Judged {
 
 pub const JUDGED_PER_ACTOR: usize = 8;
 
+/// What a mind wrote should bring it to think (docs/ATTENTION.md): one attention cue, tied to
+/// the stance, project or goal it serves (`for_key`), matched by type against what its
+/// character perceives (`brain.rs` `cues`). Private: written only by `mind_update` (the
+/// projection of the mind's memory, which replaces the set) and read once a second per
+/// character with cues while the `cues_on` law holds. At most `CUES_PER_ACTOR` per character.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = cue)]
+pub struct Cue {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    /// `stance:<key>`, `project:<key>` or `goal:<key>`.
+    pub for_key: String,
+    /// The mind's own words for why it watches (quoted in the line a match gives).
+    pub why: String,
+    /// A person or creature by id (0: any).
+    pub who_id: u32,
+    /// `unknown` (a person whose name one does not know), a creature kind, or empty.
+    pub who: String,
+    /// What the matched creature is visibly doing (`perception::visibly`: a skill's name, its
+    /// label, or a kind word such as `melee`), or empty.
+    pub doing: String,
+    /// The phase it is visibly in (`living_rules::doing::Phase`'s words), or empty.
+    pub phase: String,
+    /// A resource or structure kind, or empty.
+    pub thing: String,
+    /// One of the actor's own places the match must be within `within` metres of, or empty.
+    pub at: String,
+    pub within: f32,
+    /// The match must be within this many metres of the actor (0: anywhere in sight).
+    pub near_me: f32,
+    /// Why the authority does not watch for it (empty: it is watched).
+    pub refused: String,
+    /// The things it fired on lately (at most `CUE_FIRED`) and when.
+    pub fired: Vec<CueFire>,
+    pub fires: u32,
+    pub set_ms: u64,
+    /// The mind's thought that wrote it (its journal reference), for the inspector.
+    pub source: String,
+}
+
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct CueFire {
+    /// A creature id, or `CUE_RESOURCE | id`, `CUE_STRUCTURE | id` or `CUE_PLACE | id`.
+    pub subject: u64,
+    pub at_ms: u64,
+}
+
+pub const CUES_PER_ACTOR: usize = 8;
+pub const CUE_FIRED: usize = 8;
+pub const CUE_RESOURCE: u64 = 1 << 62;
+pub const CUE_STRUCTURE: u64 = 1 << 61;
+pub const CUE_PLACE: u64 = 1 << 60;
+
 #[spacetimedb::table(accessor = judgment)]
 pub struct Judgment {
     #[primary_key]

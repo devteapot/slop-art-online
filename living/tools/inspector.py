@@ -153,6 +153,8 @@ def table_kind(cols):
         return "thought"
     if {"actor", "other", "trust", "affinity"} <= c:
         return "relation"
+    if {"actor", "for_key", "fired"} <= c:
+        return "cue"
     if {"speaker", "hearers"} <= c:
         return "audience"
     if {"id", "graph"} <= c and ("revision" in c or "installed_ms" in c):
@@ -386,7 +388,7 @@ class Run:
             if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
                 continue
             kind = table_kind(rows[0].keys())
-            if kind in ("chronicle", "experience", "relation", "brain"):
+            if kind in ("chronicle", "experience", "relation", "brain", "cue"):
                 self.ingest(kind, rows, f"{self.src(p)}#{k}")
 
     def load_rows_path(self, p, quiet=False):
@@ -439,6 +441,15 @@ class Run:
             elif kind == "audience":
                 x["_src"] = s
                 self.audience.append(x)
+            elif kind == "cue":
+                # What the mind watches for (docs/ATTENTION.md), on its mind timeline: the cue when it
+                # was set, and each fire still in its row (the `noticed` experience is the line told).
+                what = ", ".join(f"{k} {x[k]}" for k in ("who_id", "who", "doing", "thing", "at", "near_me") if x.get(k) not in (None, "", 0, 0.0))
+                state = f"not watched: {x['refused']}" if x.get("refused") else f"fired {x.get('fires', 0)} times"
+                self.graphs[x["actor"]].append([x.get("set_ms") or 0, f"watches for ({x.get('for_key')}): {what} — \"{x.get('why')}\"; {state}", s, None])
+                for f in x.get("fired") or []:
+                    subj, at = (f[0], f[1]) if isinstance(f, list) else (f.get("subject"), f.get("at_ms"))
+                    self.graphs[x["actor"]].append([at, f"cue ({x.get('for_key')}) fired on #{subj}: \"{x.get('why')}\"", s, None])
             elif kind == "brain":
                 self.graphs[x["id"]].append([x.get("installed_ms") or 0, f"brain revision {x.get('revision')} from {x.get('source')}: {x.get('plan')}", s, x.get("graph")])
 
