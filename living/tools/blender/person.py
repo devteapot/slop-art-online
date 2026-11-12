@@ -141,7 +141,7 @@ TYPED = False  # the head is a face type's cage, with the identity bones in it
 # living/tools/characters/share.py puts on files that people share. `far` is the far model's
 # skin (head, neck and hands), textured with the far picture.
 MAT = dict(
-    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", line="M00_000_00_FaceEyeline_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
+    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", overlay_face="M00_000_00_FaceOverlay_00_FACE", line="M00_000_00_FaceEyeline_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
     hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
 )
 FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
@@ -1079,23 +1079,45 @@ OVERLAY_OUT = 0.0003  # how far an overlay lies off the skin, metres
 def make_overlay(arm, spec, face, m, world, weights, atlas_path):
     """A detail a person has and a type does not, as a thin layer over the type's own face skin:
     a beard (the skin under it already stands out by the beard's thickness), stubble, age lines
-    or freckles. Its picture is what the face's paint adds for that detail, as grey with an
-    alpha: the client tints grey pictures by the tag, so the layer takes the person's hair
-    colour (a beard, stubble) or skin colour (lines, freckles) and blends over the type's face.
+    or freckles. Its picture is what the face's paint adds for that detail, with an alpha.
+
+    - A beard and stubble are grey: the client tints a grey picture by the tag, moving its mean
+      to the person's beard colour.
+    - Age lines and freckles are one fixed colour, in a material the client neither shades nor
+      tints (`…FaceOverlay_00_FACE`, as lips and blush are). Tinted by the skin's tag they came
+      out at the skin's own colour: the client moves a picture's mean to the tag's colour, and
+      the mean of a picture of lines is the lines.
+
     It has the face's weights and expressions, so it rides the identity bones and the morphs."""
     look = spec["look"]
     rng = lambda: np.random.default_rng(int(look.get("seed", 0)) + 77)
     plain = dict(look, lines=0.0, stubble=0.0, freckles=0.0, beard=None)
-    with_, _ = face_paint.paint_skin(HF, look, rng())
+    # The one detail, on plain skin. An old type's own figure has age lines whatever is asked for:
+    # painted from its whole look, its freckles and its beard carried the lines as well, and a
+    # person wearing both wore the lines twice.
+    key = "beard" if OVERLAY.startswith("beard") else OVERLAY
+    strong = dict(lines=face_paint.LINE_OVERLAY, freckles=face_paint.FRECKLE_OVERLAY).get(OVERLAY, (1.0, 1.0, 1.0))
+    with_, _ = face_paint.paint_skin(HF, dict(plain, detail_size=strong[2], **{key: look[key]}), rng())
     without, _ = face_paint.paint_skin(HF, plain, rng())
     hairy = OVERLAY.startswith("beard") or OVERLAY == "stubble"
     diff = np.abs(with_ - without).max(axis=2)
     alpha = np.clip(diff / (0.10 if OVERLAY.startswith("beard") else 0.16), 0.0, 1.0)
     tint = np.array(look["beard_colour"] if OVERLAY.startswith("beard") else (look["stubble_colour"] if OVERLAY == "stubble" else look["skin"]))
     grey = np.clip((with_ @ np.array([0.3, 0.59, 0.11])) / max(float(tint @ np.array([0.3, 0.59, 0.11])), 1e-3), 0.0, 1.0)
+    fixed = OVERLAY in ("lines", "freckles")
     rows = head_mesh.ATLAS - head_mesh.EYE_ROWS
     pic = np.zeros((head_mesh.ATLAS, head_mesh.ATLAS, 4))
-    pic[head_mesh.EYE_ROWS :, :, :3] = grey[..., None]
+    if fixed:
+        # How much of the pigment, as the client draws it, takes the type's skin to what was painted.
+        pigment = np.array(face_paint.LINE_PIGMENT if OVERLAY == "lines" else face_paint.FRECKLE_PIGMENT)
+        toward = without - np.clip(pigment * face_paint.PART_GAIN, 0.0, 1.0)
+        alpha = np.clip(((without - with_) * toward).sum(axis=2) / np.maximum((toward * toward).sum(axis=2), 1e-6), 0.0, 1.0) * (diff > 0.004)
+        # Drawn for the screen (face_paint.FRECKLE_OVERLAY, LINE_OVERLAY): stronger than the
+        # paint's own strength, up to nearly the whole pigment at a core.
+        alpha = np.clip(alpha * strong[0], 0.0, strong[1])
+        pic[..., :3] = pigment
+    else:
+        pic[head_mesh.EYE_ROWS :, :, :3] = grey[..., None]
     pic[head_mesh.EYE_ROWS :, :, 3] = alpha
     small = (np.clip(pic.reshape(head_mesh.ATLAS // 2, 2, head_mesh.ATLAS // 2, 2, 4).mean(axis=(1, 3)), 0, 1) * 255 + 0.5).astype(np.uint8)
     path = atlas_path.replace(".atlas.png", ".overlay.png")
@@ -1112,12 +1134,27 @@ def make_overlay(arm, spec, face, m, world, weights, atlas_path):
     n = face.skin_n + len(face._extra)
     px = np.clip((uv[:n, 0] % 1.0) * head_mesh.ATLAS, 0, head_mesh.ATLAS - 1).astype(int)
     py = np.clip((1.0 - uv[:n, 1]) * head_mesh.ATLAS - head_mesh.EYE_ROWS, 0, rows - 1).astype(int)
-    touched = alpha[py, px] > 0.02
+    # A freckle or a line is finer than the mesh: the paint is spread a few millimetres before it
+    # is sampled at the vertices, so every face that has any of it is taken. Sampled as painted,
+    # a freckle between two vertices was left out, and a type could come out with none.
+    near = alpha.copy()
+    for axis in (0, 1):
+        grown = near.copy()
+        for shift in range(1, 15):
+            for sgn in (1, -1):
+                moved = np.roll(near, sgn * shift, axis=axis)
+                if axis == 0:
+                    moved[(slice(0, shift) if sgn > 0 else slice(-shift, None)), :] = 0
+                else:
+                    moved[:, (slice(0, shift) if sgn > 0 else slice(-shift, None))] = 0
+                grown = np.maximum(grown, moved)
+        near = grown
+    touched = near[py, px] > 0.02
     faces = [f for f in face.skin_faces if any(touched[v] for v in f)]
     used = sorted({v for f in faces for v in f})
     index = {v: i for i, v in enumerate(used)}
     out = np.array(face.skin_normals)[used] * OVERLAY_OUT * HEAD_SCALE
-    name = MAT["overlay_hair" if hairy else "overlay_skin"]
+    name = MAT["overlay_hair" if hairy else "overlay_face"]
     ob = raw_object("Overlay", world[used] + out, [tuple(index[v] for v in f) for f in faces], [weights[v] for v in used], [(1.0, 1.0, 1.0)] * len(used), name, arm, uvs=[tuple(uv[v]) for v in used])
     ob.shape_key_add(name="Basis", from_mix=False)
     for key_name, delta in face.morphs.items():

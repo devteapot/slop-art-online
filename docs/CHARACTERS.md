@@ -1015,7 +1015,7 @@ Pass 3, after outfits (2026-11-12). A composed person lost what a type does not 
 
 - **A thin layer over the type's own face:** the faces of the face's skin the detail touches, 0.3 mm off it, as one mesh, `Overlay`, with the face's own weights and its two expressions, so it rides the identity bones, the blink and the open mouth. Under a beard the layer stands off the skin by the beard's thickness, as the skin itself did in a per-person file.
 - **Its picture is what the face's paint adds for that detail,** as grey with an alpha (512 × 512). The client tints a grey picture by the tag in place of moving its mean colour, so the layer takes the person's colour and blends over the type's face.
-- **Two materials:** `M00_000_00_Overlay_00_HAIR` (a beard, stubble), which the hair's tag reaches, and `M00_000_00_FaceOverlay_00_SKIN` (lines, freckles), which the skin's tag reaches and which is lit as a face is: its file has the type's shadow map beside it. Both are `alphaMode: BLEND`; today's client blends them as they are.
+- **Two materials.** `M00_000_00_Overlay_00_HAIR` (a beard, stubble) is a grey picture the hair's tag tints. `M00_000_00_FaceOverlay_00_FACE` (lines, freckles) is one fixed colour with an alpha, which the client draws as it draws lips and blush: unshaded and untinted. Until the paired change with the client (`char-4-lines` and `overlay-fixed-1`) lines and freckles were `M00_000_00_FaceOverlay_00_SKIN`, grey, tinted by the skin's tag and lit with their type's shadow map; see [lines and freckles as a fixed colour](#lines-and-freckles-as-a-fixed-colour).
 - **One file a type, and no `hair_fit`.** That fit lays one skull onto another. A beard lies on the jaw, which differs between types by more than a fit of six numbers carries, and its picture is drawn in the type's own skin layout. So an overlay is built on each type that can wear it, and attaches with the type's own inverse bind matrices, as a body piece does.
 
 | Overlay | For | Triangles (on `elder-m-b`) | File |
@@ -1229,7 +1229,7 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **Hair's mean is its picture's, and the client should take the whole picture's.** Measured at each mesh's own vertices, as the client measures a mean today, it runs from 0.49 (`crop`) to 0.57 (`kerchief`) in linear light: short hair uses more of the picture's dark root and tip. A shared hair material that held the first cut's mean would make everyone's hair up to 8% lighter or darker by which cut came first. The whole picture's mean is 0.55 (linear grey), the same for all, since the picture is one file.
 - **Overlays stay a material a file.** Each has a picture of its own, and lines and freckles are lit with their type's shadow map. The 64 wear 28 of them. One material a class would need the pictures laid on shared pages, and lines and freckles drawn as lips and blush now are (a fixed colour with an alpha, no shadow map). That is not done here.
 
-**Lines and freckles come out fainter in the client than they were drawn** (found here, not fixed). The client moves an overlay picture's mean to the tag's colour. A beard's mean becoming the beard's colour is right. Lines and freckles are tagged with the skin's colour, so their mean becomes the skin's own colour, and only what is darker than their mean shows: a freckle's core comes out 11% darker than the skin where it was drawn about 40% darker, a line's core 26% darker, and their soft edges a little lighter than the skin. `compose.py` multiplied the picture by the colour, which is why the overlay step's pictures looked right; it now tints as the client does. The remedy is the one lips and blush have: lines and freckles as a fixed colour with an alpha in a `…_FACE` material, which the client must then leave untinted (today it tags those two overlays by name). That would also free them from their type's shadow map, which is what sharing their material needs. It wants both sides at once, so it is not done here.
+**Lines and freckles came out fainter in the client than they were drawn** (found here; mended in [lines and freckles as a fixed colour](#lines-and-freckles-as-a-fixed-colour)). The client moves an overlay picture's mean to the tag's colour. A beard's mean becoming the beard's colour is right. Lines and freckles are tagged with the skin's colour, so their mean becomes the skin's own colour, and only what is darker than their mean shows: a freckle's core comes out 11% darker than the skin where it was drawn about 40% darker, a line's core 26% darker, and their soft edges a little lighter than the skin. `compose.py` multiplied the picture by the colour, which is why the overlay step's pictures looked right; it now tints as the client does. The remedy is the one lips and blush have: lines and freckles as a fixed colour with an alpha in a `…_FACE` material, which the client must then leave untinted (today it tags those two overlays by name). That would also free them from their type's shadow map, which is what sharing their material needs. It wants both sides at once, so it is not done here.
 
 **What a piece's colour is now.** A piece is grey, so its colour is only the person's. What was another hue inside a piece (a coat's patches, its lining, the hem's weathering) is a lighter or darker tone of the piece's colour, as the client's recolouring already made it.
 
@@ -1244,6 +1244,35 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **A line with painted colours needs the person built.** `person_params.py` alone still prints the cloth each piece is cut from. The lines of Cullet's 64 are in the pass page's `cullet-people.json`.
 
 **Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
+
+### Lines and freckles as a fixed colour
+
+Pass 3 (2026-11-12), on branch `char-4-lines`, paired with the client's `overlay-fixed-1`. The two halves merge together: with this half alone, a client that still tags lines and freckles with the skin's colour would turn the fixed colour into skin.
+
+**Why.** The client moves a tinted picture's mean to the tag's colour. Lines and freckles were tagged with the skin's colour, so their mean became the skin's own colour: a freckle's core came out 11% darker than the skin where it was drawn about 40% darker.
+
+**What changed** (`person.py` `make_overlay`, `face_paint.py`):
+
+- **One fixed colour each, with an alpha.** Lines are `LINE_PIGMENT` (0.26, 0.14, 0.12) and freckles `FRECKLE_PIGMENT` (0.36, 0.21, 0.14), sRGB. The picture's colour is that pigment everywhere; its alpha is how much of it takes a type's own skin to what the face's paint drew, allowing for the client drawing unshaded parts about 1.3 times lighter than lit skin (`PART_GAIN`). So on the skin a type is painted in they look as they were drawn, and on any other skin the same pigment lies over it.
+- **Drawn for the screen, not as the skin's paint drew them** (`face_paint.FRECKLE_OVERLAY`, `LINE_OVERLAY`; 2026-11-12, after the laptop's check). At the paint's own strength a freckle was one or two texels at an alpha of 0.3, and through the client's bilinear sampling and tone mapping its core came out 9% darker than the skin at the median, where about 40% was meant. An overlay's marks are now drawn one and a half times the paint's size for freckles and one and a quarter for lines, and at up to 0.92 and 0.90 of the pigment (five and 3.6 times the alpha the paint's strength gives, so a mark's whole core is at the most). The pigments are unchanged. Measured through the client (the asset view, a type's bare head, unshaded, untinted and alpha blended as the client draws a face part; each mark's darkest point against the skin round it, on three types each): a freckle's core is 27% to 39% darker at the median close up and 30% to 37% at half that size on screen, and 40% at full strength; a line's is 26% to 40% at the median close up, 23% to 39% at half size, and 45% at full strength. On darker skin the same pigment is less dark against it.
+- **No shadow map.** A `lines` or `freckles` file has no `.face.png` beside it, and `gen_styles.sh` removes one that is there.
+- **Each overlay is built from its one detail.** An old type's own figure has age lines whatever is asked for, and the overlay was painted from the whole look: an elder's freckles and beards carried the age lines too, and a person wearing both wore the lines twice. An elder's `freckles` goes from about 1,070 triangles to about 300.
+- **Every face with paint on it is taken.** A freckle or a fine line is smaller than the skin's mesh; the paint is spread a few millimetres before it is sampled at the vertices. Sampled as painted, a freckle between two vertices was left out.
+
+**What the client must recognise.** In `lookdev/styles/overlay/<type>/lines.glb` and `…/freckles.glb`:
+
+| | Name |
+|---|---|
+| Mesh node | `Overlay` (as before) |
+| Material | `M00_000_00_FaceOverlay_00_FACE` (was `M00_000_00_FaceOverlay_00_SKIN`), `alphaMode` `BLEND`, a picture of its own |
+| Morph targets | `Fcl_EYE_Close`, `Fcl_MTH_A` (as before) |
+| Shadow map | none (was `<name>.face.png`) |
+
+The client draws it as it draws `M00_000_00_FaceTint_00_FACE`: a face part, unshaded, in the file's own colours, with no tag. It must not give these two overlays the skin's tag by their names. Beards and stubble are unchanged (`M00_000_00_Overlay_00_HAIR`, grey, tagged with `colors.beard`; a beard's `FarOverlay` as before).
+
+**Checked** in the asset view on `elder-f-a` with lines and freckles and on `youth-m-a` with freckles, at Cullet's light, middle and darkest skin tones: both show at all three, fainter on the darkest, as a fixed pigment over dark skin does.
+
+**Not done:** their materials are still one a file, because each has a picture of its own. With no shadow map and no tag, the pictures could now go on shared pages and every `lines` and `freckles` file share one material.
 
 ### Long hair, short hair and the hair's shading
 

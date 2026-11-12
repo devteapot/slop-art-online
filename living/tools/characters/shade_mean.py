@@ -150,7 +150,7 @@ def _pictures(j):
     seen = {}
     for m in j["materials"]:
         tex = (m.get("pbrMetallicRoughness") or {}).get("baseColorTexture")
-        if tex is None or m.get("alphaMode") != "BLEND":
+        if tex is None or m.get("alphaMode") != "BLEND" or m.get("name", "").endswith("_FACE"):  # a fixed colour is no shading mean
             continue
         ii = j["textures"][tex["index"]]["source"]
         if "bufferView" in j["images"][ii]:
