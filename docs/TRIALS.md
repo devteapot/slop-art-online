@@ -188,6 +188,26 @@ The script:
 
 **Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
 
+## First sight fs1n (2026-11-12) — first sight with the neutral think framing (N2); target, written before any paid call
+
+Approved by the general coordinator at about $2.7, after the ordinary-think replay (docs/FRAMING.md). It runs only once `think-framing` is on main and the trial server is free, and only when the general coordinator says so.
+- **What it runs:** one arm, batch `fs1n`, `strangers-2b-c:strangers-first-sight-n2`, with `first_sight_thinks` and `think_framing` on (set by `set_world_law`, read back from `world_law`). `heard_first_rethinks` and `earshot` are off, so the arm compares with fs1f (first sight alone).
+- **The naming fix** is on in every world.
+- **The world and script:** as fs1 (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **A free fake smoke run first** (`fs1ns`). It checks that both laws read back and that the think prompts carry "# What just happened".
+
+**The target and the stop rule are fs1's, unchanged** (under "First sight fs1").
+- **Stop rule:** `converge_60s` 4 or more (the old definition), or `together_4m` 3 or more.
+- **Measures:** as fs1e:
+  - the stage-2 table beside fs1f, fs1h and fs1e;
+  - `converge_60s` heard and unheard;
+  - lines out of earshot, first sight → thought;
+  - the asks with their reasons grouped (curiosity, duty or role, manners, others asking, greeted first, something else);
+  - false replies with group talk, spoken ids.
+- **Added:** the share of first-sight thoughts that speak to the newcomer (`framing_replay.py asks`' measure, live), against fs1e's 22 of 36 recorded and the replay's N2 17 of 36.
+
+**Switches:** as fs1f, plus `think_framing` on.
+
 ## First sight fs1e (2026-11-12) — one combined arm: first sight, heard_first and earshot; target, written before any paid call
 
 Approved by the general coordinator at about $2.7. It runs after the earshot stage, and only when the general coordinator says so.

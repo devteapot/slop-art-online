@@ -267,5 +267,14 @@
   "env": {
    "LIVING_ANIMAL_MINDS": "salient,choose"
   }
+ },
+ "strangers-first-sight-n2": {
+  "about": "C + first sight with the think prompt's neutral framing (fs1n, docs/FRAMING.md): `first_sight_thinks` and `think_framing` on (set_world_law after the laws guard); the naming fix is on in every world. `heard_first_rethinks` and `earshot` off.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "think_framing": true
+  }
  }
 }
