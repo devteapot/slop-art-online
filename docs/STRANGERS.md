@@ -294,4 +294,3 @@ The general coordinator decided on a handle of the sighting.
 **Measure change (2026-11-12, st2b analysis).**
 - "In range" now includes the newcomer's walks (`human_route`), not only its stands. Anyone it passes within 12 m on the Strand is classed (`arrive_report.WALKS`; `arrive_spread.py --stands-only` gives the old measure).
 - The target's "about 10–16 in range" was written for the stands. Re-scored, st2b has 18–24 in range.
-
