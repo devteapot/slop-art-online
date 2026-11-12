@@ -2958,6 +2958,92 @@ def alarms(s):
         s.call("install_script", shipped)
 
 
+def sleeper(s):
+    """A sleeping body's mind thinks only on what wakes it (perceive.rs `Wake`, the `slumber`
+    table). Any other reason to think waits in its `slumber` row, through the moments between two
+    sleeps of one rest, and is asked for, after "You woke up.", once the body wakes. Being
+    attacked wakes it at once whoever plays it: the sleep stops, it is told why, and its mind is
+    asked with the waking reason first and what waited after it. No mind runs here, so requests
+    stay pending in `deliberation`."""
+    a, b = s.people(2)
+    marker = "verify sleeper thought"
+    pending = lambda label=None: "\n".join(r["reason"] for r in s.rows(f"SELECT reason FROM deliberation WHERE actor = {a}", label))
+    slumber = lambda label=None: s.rows(f"SELECT * FROM slumber WHERE actor = {a}", label)
+    sleeping = lambda: [x for x in s.rows(f"SELECT skill FROM activity WHERE id = {a}") if x["skill"] == "sleep"]
+    # A rest of short sleeps (5 s rested) with a think between them: the think comes in the gap,
+    # where the body has no sleep act and still sleeps.
+    s.graph(a, {"seq": [{"do": "sleep"}, {"think": marker}]})
+    s.wait(lambda: slumber(), seconds=20)
+    # (a think node asks once the deliberation clock has settled 45 s, brain.rs)
+    s.wait(lambda: any(marker in r["reason"] for r in slumber()), seconds=90, every=1)
+    row = slumber("deferred")[0]
+    s.expect("a reason that arrives while asleep waits in slumber, not in deliberation", marker not in pending("pending-asleep"), row)
+    s.wait(lambda: sleeping(), seconds=10)
+    s.expect("the body sleeps on through the gap between two sleeps", bool(slumber()), row)
+    # It wakes on its own (its graph gives it something else to do): told, and asked then.
+    s.graph(a, {"wait": 120})
+    s.wait(lambda: not slumber(), seconds=20)
+    reason = s.wait(lambda: (lambda p: p if "You woke up." in p and marker in p else None)(pending("pending-woke")), seconds=20)
+    s.expect("on waking, the waited reasons are asked after \"You woke up.\"", reason.index("You woke up.") < reason.index(marker), reason)
+    s.expect("the sleeper is told it woke", bool(s.told(a, "You woke up.", "body")))
+    # Asleep again, and attacked: woken at once with the attack as the reason.
+    s.graph(a, {"seq": [{"do": "sleep"}, {"think": marker + " again"}]})
+    # (a think node asks at most every 90 s, brain.rs)
+    s.wait(lambda: any((marker + " again") in r["reason"] for r in slumber()), seconds=150, every=1)
+    s.graph(b, {"wait": 120})
+    s.call("place_near", b, a)
+    # (an attack is graph behaviour, not a one-off act; the sleeper is the one beside it)
+    s.graph(b, {"do": "attack", "target": {"nearest": "person"}})
+    s.wait(lambda: s.told(a, "You woke up: ", "body"), seconds=30)
+    reason = s.wait(lambda: (lambda p: p if "You woke up: " in p and "attacking you" in p else None)(pending("pending-attacked")), seconds=10)
+    s.expect("an attack wakes a sleeper and its mind is asked why it woke", "attacking you" in reason.split("You woke up: ", 1)[1].split("\n")[0], reason)
+    s.expect("what waited is asked with the waking reason", (marker + " again") in reason, reason)
+    broke = [e for e in s.rows(f"SELECT text FROM experience WHERE observer = {a} AND kind = 'body'", "woken") if e["text"].startswith("You woke up: ")]
+    s.expect("it is told it woke and why", "attacking you" in broke[0]["text"], broke)
+    s.graph(b, {"wait": 120})
+    s.graph(a, {"wait": 120})
+    sleeper_cue(s)
+
+
+def sleeper_cue(s):
+    """An attention cue does not wake a sleeper (a sleeping body is not watching): under `cues_on`,
+    a cue of a sleeper's mind (an unknown person near its bed) that begins to match fires, and
+    its thought waits in `slumber` like any other reason; no request is made and the body sleeps
+    on. Woken, its mind is asked with the cue's line after "You woke up."."""
+    line = clear_line(s)
+    o, n = s.people(2)
+    s.call("place_at", n, line[0][0] + 80, line[0][1] + 60)
+    s.graph(n, {"wait": 300})
+    s.call("place_at", o, *line[0])
+    bed = {"name": "verify bed", "x": line[0][0], "y": line[0][1]}
+    rows = lambda: s.rows(f"SELECT * FROM cue WHERE actor = {o}")
+    slumber = lambda label=None: s.rows(f"SELECT * FROM slumber WHERE actor = {o}", label)
+    pending = lambda label=None: "\n".join(r["reason"] for r in s.rows(f"SELECT reason FROM deliberation WHERE actor = {o}", label))
+    try:
+        set_law(s, "cues_on", True)
+        set_cues(s, o, [cue("stance:verify_watch", who="unknown", at="verify bed", within=20.0)], [bed])
+        s.wait(lambda: any(w["name"] == "cues_on" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.graph(o, {"seq": [{"do": "sleep"}]})
+        s.wait(lambda: slumber(), seconds=20)
+        s.call("place_at", n, line[2][0], line[2][1] + 1.0)
+        s.wait(lambda: rows() and rows()[0]["fires"] >= 1, seconds=20)
+        time.sleep(2)
+        kept = slumber("cue-asleep")
+        s.expect("a cue that matches for a sleeper fires and its thought waits in slumber", kept and WHY in kept[0]["reason"], kept)
+        s.expect("no request is made while it sleeps", WHY not in pending("cue-pending-asleep"), pending())
+        woken = [e for e in s.rows(f"SELECT text FROM experience WHERE observer = {o} AND kind = 'body'") if e["text"].startswith("You woke up: ")]
+        s.expect("the cue does not wake the body", bool(slumber()) and not woken, woken)
+        s.graph(o, {"wait": 300})
+        reason = s.wait(lambda: (lambda p: p if "You woke up." in p and WHY in p else None)(pending("cue-pending-woke")), seconds=20)
+        s.expect("woken, its mind is asked with the cue's line after \"You woke up.\"", reason.index("You woke up.") < reason.index(WHY), reason)
+    finally:
+        set_law(s, "cues_on", False, check=False)
+        set_cues(s, o, [])
+        s.graph(o, {"wait": 300})
+        # (off the open line, so a later scene's cues and sight see no one of this one)
+        off_the_line(s, line, [o, n], dy=56)
+
+
 def world_tiles(s):
     """This world's tiles (`terrain_chunk`) and a walkable test by tile code (water, rock,
     wall, drop and low tiles are not walkable; off the map is rock)."""
@@ -3368,6 +3454,57 @@ def cues(s):
         set_law(s, "cue_gap_s", 60, check=False)
         set_cues(s, o, [])
         off_the_line(s, line, [o, k, n, u, v], dy=56)
+
+def regard_check(s):
+    """The shared answers (docs/ATTENTION.md, "Cost"; `perception.rs` `with_answers`) equal
+    fresh ones. With the `regard_cache_check` law on, every answer the transaction's cache gives
+    (whether one knows a target's name, the `perceived_of` answer) is computed afresh too and any
+    difference logged and counted (`regard answers: ... compared=N differed=M`, one line a
+    second). Drives what asks: first sights in a crowd (`crowd_sight`), the stranger filter and
+    the far label under an overlay (`stranger_filter`), cues (`cues`), and on a world with the
+    bow (the island) the told lines naming others (`outcomes`); then a fight watched by minded
+    onlookers while one says its name to another (an introduction mid-run). Passes when many
+    answers were compared and none differed. The law is restored at the end."""
+    t0 = time.time()
+    set_law(s, "regard_cache_check", True)
+    try:
+        crowd_sight(s)
+        stranger_filter(s)
+        cues(s)
+        if any(c["skill"] == "bowshot" for c in s.rows("SELECT skill FROM skill_card")):
+            outcomes(s)
+        line = clear_line(s)
+        a, b, *watch = s.people(6)
+        s.call("place_at", a, *line[1])
+        s.call("place_at", b, line[2][0], line[2][1])
+        for k, w in enumerate(watch):
+            s.call("place_at", w, line[4 + k][0], line[4 + k][1] + 1.5)
+        s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}}}]})
+        s.graph(b, {"first": [{"do": {"skill": "attack", "target": {"id": a}}}]})
+        time.sleep(4)
+        name = next(c["name"] for c in s.rows(f"SELECT id, name FROM character WHERE id = {watch[0]}"))
+        s.graph(watch[0], {"seq": [{"say": {"text": f"I am {name}.", "to": watch[1]}}, {"wait": 60}]})
+        time.sleep(8)
+        off_the_line(s, line, [a, b, *watch], dy=60)
+        time.sleep(2)
+    finally:
+        set_law(s, "regard_cache_check", False, check=False)
+    logs = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout
+    compared = differed = hits = 0
+    for m in re.finditer(r'regard answers: hits=(\d+) computed=(\d+) compared=(\d+) differed=(\d+)', logs):
+        hits += int(m.group(1))
+        compared += int(m.group(3))
+        differed += int(m.group(4))
+    errors = [l for l in logs.splitlines() if "regard cache:" in l][:10]
+    told = s.rows(f"SELECT * FROM acquaintance WHERE observer = {watch[1]}", "regard-check-acquaintance")
+    (s.out / f"{s.name}-regard-check.json").write_text(json.dumps({"hits": hits, "compared": compared, "differed": differed, "errors": errors, "introduced": told, "seconds": round(time.time() - t0)}, indent=1) + "\n")
+    print(f"MEASURE regard answers: hits {hits}, compared {compared}, differed {differed}", flush=True)
+    s.expect("the introduction happened mid-run (an acquaintance row)", any(r.get("known") == watch[0] for r in told), told, fatal=False)
+    s.expect("many shared answers were compared with fresh ones", compared >= 1000, {"compared": compared, "hits": hits})
+    s.expect("no shared answer differed from a fresh one", differed == 0 and not errors, errors)
+
+
+
 def doing_seen(s):
     """What someone is visibly doing, and how far into it (docs/PERCEPTION.md, "What someone is
     visibly doing"; docs/COMBAT_MIND.md §3.2): a graph's `doing` condition and the scene's
@@ -3962,7 +4099,7 @@ def owners(s):
         s.expect("someone of the owner's community is told whose it is, by name", entry is not None and owner_name in (entry.get("home_of"), entry.get("by")), {"entry": entry, "owner": owner_name})
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
 
 
 def goods(s):
@@ -4475,6 +4612,7 @@ SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners
 SCENES["intents"] = intents
 SCENES["intents_cost"] = intents_cost
+SCENES["sleeper"] = sleeper
 
 
 def main():

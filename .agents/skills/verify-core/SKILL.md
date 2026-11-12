@@ -32,6 +32,8 @@ python3 "$C/cargo_checks.py" --run "$R"
 python3 "$C/scenes.py" tick --run "$R" > "$E/tick.txt" 2>&1
 python3 "$C/scenes.py" needs --run "$R" > "$E/needs.txt" 2>&1
 python3 "$C/scenes.py" alarms --run "$R" > "$E/alarms.txt" 2>&1
+# A sleeper thinks only on what wakes it; other requests wait in `slumber` (features/needs.md, about 4 min).
+python3 "$C/scenes.py" sleeper --run "$R" > "$E/sleeper.txt" 2>&1
 python3 "$C/scenes.py" food --run "$R" > "$E/food.txt" 2>&1
 python3 "$C/scenes.py" refusal --run "$R" > "$E/refusal.txt" 2>&1
 python3 "$C/scenes.py" teach --run "$R" > "$E/teach.txt" 2>&1
@@ -52,6 +54,9 @@ python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&1
 # Attention cues under the cues_on law: once per thing, the cooldown and the gap, never a far figure, nothing off (features/cues.md, about 1.5 min).
 python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
+# The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
+# on an island run it also drives the told lines of `outcomes`).
+python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1

@@ -90,7 +90,13 @@ fn laws() {
         // bring it to think about one of its stances, goals or projects. Off: none is matched.
         // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
         // brought to think by its cues at most once within `cue_gap_s`.
-        cues_on: false, cue_cooldown_s: 600.0, cue_gap_s: 60.0,
+        // Cues are checked every `cue_check_s` (a world may trade freshness for cost).
+        cues_on: false, cue_cooldown_s: 600.0, cue_gap_s: 60.0, cue_check_s: 1.0,
+        // What each observer makes of each target (name known, the `perceived_of` answer) is
+        // worked out once per transaction and shared by all who ask (`regard_cache`); off, each
+        // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
+        // compares every shared answer with a fresh one and logs any difference.
+        regard_cache: true, regard_cache_check: false,
         fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
         fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
         // What is heard but not seen (only while the field is on) is told by its distance:
@@ -256,7 +262,7 @@ fn call_speech() {
     #{ label: "Call out", order: 2,
        about: `Call out over a distance: everyone within ${short(hearing_of_people() * call_carry())} m hears you, and animals too (a shout can startle deer or draw wolves). Short lines (80 characters), at most one every ${short(call_gap_s())} s.`,
        to: "optional", words: #{ hearing: call_carry() }, animals: "a person shouting",
-       said: "You called out", said_to: "You called out to {b}", heard: "{a} calls out from about {d} m", heard_to: "{a} calls out to {b} from about {d} m", heard_to_you: "{a} calls out to you from about {d} m",
+       said: "You called out", said_to: "You called out to {b}", heard: "{a} calls out{how} from about {d} m", heard_to: "{a} calls out to {b} from about {d} m", heard_to_you: "{a} calls out to you from about {d} m",
        gap_s: call_gap_s(), max_chars: 80 }
 }
 
@@ -2931,6 +2937,9 @@ fn laws_about(l) {
         cues_on: if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         cue_cooldown_s: `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
         cue_gap_s: `what one watches for brings one to think at most once in ${short(l.cue_gap_s)} s`,
+        cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
+        regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
+        regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
