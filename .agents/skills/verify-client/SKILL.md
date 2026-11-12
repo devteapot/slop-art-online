@@ -52,6 +52,8 @@ On a launched and doctored `client-*` run (any seed), `scripts/house_label.py --
 
 On a launched and doctored `client-*` run (any seed), `scripts/far_label.py --run "$R"` joins a player, installs an overlay that makes everyone past 4 m `far` (as Cullet's law does past 24 m), places two strangers at 2 m and 6 m, and reads the player's `seen_characters` through the SDK probe: `a stranger` near, `someone too far away to make out` far, then `a stranger` once the far one is brought close ([features/perception.md](features/perception.md)). Admin calls set the scene. It installs the shipped script again at the end; run cleanup after it.
 
+On a launched and doctored `client-*` run with `--seed cullet` (a `perceived_of` that reads distance), `scripts/sweep_rows.py --run "$R" [--expect-kept]` records a player's `seen_characters` rows of a fixed scene step by step: strangers across the 24 m cut, an introduction, a known person going too far away to make out and back, new know-how, a death. Run it once on main's module and once on a branch's, then `scripts/sweep_rows.py --compare <run-a>/sweep_rows.json <run-b>/sweep_rows.json` must find the same rows at every step ([features/perception.md](features/perception.md)). It turns the `regard_cache_check` law on for the scene and off at the end.
+
 ## Looks
 
 On a launched and doctored `client-*` run whose seed has looks (`--seed plan-test` or `--seed cullet`), `scripts/look_rows.py --run "$R"` checks the look key a real client receives: `look` and `look_line` refused, an `lk_` key on every seen person row, far rows included, none for the unseen, the same after a reconnect ([features/looks.md](features/looks.md)).

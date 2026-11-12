@@ -5606,6 +5606,85 @@ def heard_first(s):
 SCENES["heard_first"] = heard_first
 
 
+def sweep_kept(s):
+    """A player's rows under a law that reads distance are each what projecting it afresh gives
+    (docs/PERCEPTION.md, "The perceived set"; `perception::kept_sweep`). On a world whose
+    `perceived_of` reads `p.dist` (Cullet's `known_within`, 24 m), the sweep keeps what each row
+    was projected from and projects it again only when that changed. With the
+    `regard_cache_check` law on, every kept sweep compares every row of the player with a fresh
+    projection and counts differences (`sweep kept: kept=… projected=… full=… compared=…
+    differed=…`, one line a second). On an open ray a player watches, for about 50 s: two walkers
+    going back and forth across the cut (20 m and 28 m), a pair fighting at 6 m (bands, the
+    frames' and blows' writes to rows), one of them appraised by the player (a reveal, exact
+    health), a stranger telling the player its name, the player learning a technique, and a
+    death in sight (admin `kill`). Passes when rows were kept, many compared, and none differed.
+    Needs a seed whose law reads distance (`--seed cullet`); the law is restored at the end."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    known = law_number(src, "known_within") if "fn known_within()" in src else None
+    s.expect("the world's perceived_of reads distance (a seed like Cullet's)", known is not None, None)
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "join", "Sweeper"], check=False, capture_output=True)
+    st = json.loads((s.out / "state.json").read_text())
+    viewer = st["identity"]
+    present = lambda: subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
+    present()
+    me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{viewer}")), None))["id"]
+    ray = open_ray(s, int(known) + 8)
+    (s.out / f"{s.name}-ray.json").write_text(json.dumps(ray) + "\n")
+    walk_a, walk_b, fight_a, fight_b, talker, dying = s.people(6)
+    set_law(s, "regard_cache_check", True)
+    t0 = time.time()
+    try:
+        s.call("place_at", me, *ray[0])
+        s.call("place_at", walk_a, *ray[int(known) - 4])
+        s.call("place_at", walk_b, *ray[int(known) + 4])
+        s.call("place_at", fight_a, *ray[6])
+        s.call("place_at", fight_b, *ray[7])
+        s.call("place_at", talker, *ray[3])
+        s.call("place_at", dying, *ray[10])
+        name = s.rows(f"SELECT name FROM character WHERE id = {talker}")[0]["name"]
+        for k in range(6):
+            present()
+            near, far = ray[int(known) - 4], ray[int(known) + 4]
+            s.graph(walk_a, {"seq": [{"do": {"skill": "goto", "target": {"at": list(far if k % 2 == 0 else near)}}}, {"wait": 60}]})
+            s.graph(walk_b, {"seq": [{"do": {"skill": "goto", "target": {"at": list(near if k % 2 == 0 else far)}}}, {"wait": 60}]})
+            if k == 0:
+                s.graph(fight_a, {"first": [{"do": {"skill": "attack", "target": {"id": fight_b}}}, {"wait": 1}]})
+                s.graph(fight_b, {"first": [{"do": {"skill": "attack", "target": {"id": fight_a}}}, {"wait": 1}]})
+            if k == 1:
+                subprocess.run(["python3", *verify, "player", "--run", st["run"], "act", json.dumps({"do": {"skill": "appraise", "target": {"id": fight_a}}})], check=False, capture_output=True)
+                s.graph(talker, {"seq": [{"say": f"I am {name}."}, {"wait": 300}]})
+            if k == 2:
+                s.call("grant_know_how", me, "wound_tending")
+            if k == 3:
+                s.call("kill", dying, "verify sweep_kept")
+                for f in (fight_a, fight_b):
+                    s.graph(f, {"wait": 120})
+            time.sleep(8)
+    finally:
+        set_law(s, "regard_cache_check", False, check=False)
+        for who in (walk_a, walk_b, fight_a, fight_b, talker):
+            s.graph(who, {"wait": 120})
+        off_the_line(s, ray, [me, walk_a, walk_b, fight_a, fight_b, talker], dy=50)
+    logs = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout
+    kept = [tuple(int(x) for x in m.groups()) for m in re.finditer(r"sweep kept: kept=(\d+) projected=(\d+) full=(\d+) compared=(\d+) differed=(\d+)", logs)]
+    total = dict(zip(("kept", "projected", "full", "compared", "differed"), [sum(k[i] for k in kept) for i in range(5)]))
+    errors = [l for l in logs.splitlines() if "sweep kept: #" in l][:10]
+    told = s.rows(f"SELECT * FROM acquaintance WHERE observer = {me} AND known = {talker}")
+    revealed = s.rows(f"SELECT * FROM chronicle WHERE kind = 'attack' AND a = {fight_a}")
+    (s.out / f"{s.name}-sweep-kept.json").write_text(json.dumps({**total, "errors": errors, "told": told, "seconds": round(time.time() - t0)}, indent=1) + "\n")
+    print(f"MEASURE sweep kept: {total}", flush=True)
+    s.expect("the talker told the player its name mid-run", bool(told), told, fatal=False)
+    s.expect("the pair fought in sight", bool(revealed), None, fatal=False)
+    s.expect("rows were kept across sweeps (the kept path ran)", total["kept"] > 0 and total["projected"] > 0, total)
+    s.expect("many rows were compared with fresh projections", total["compared"] >= 1000, total)
+    s.expect("no row differed from a fresh projection", total["differed"] == 0 and not errors, errors)
+
+
+SCENES["sweep_kept"] = sweep_kept
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
 

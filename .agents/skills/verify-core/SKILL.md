@@ -68,6 +68,9 @@ python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
 # on an island run it also drives the told lines of `outcomes`).
 python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
+# A player's rows kept across sweeps under a law that reads distance, each equal to a fresh projection
+# (regard_cache_check; features/sight.md, about 1.5 min). Only on a run launched with --seed cullet.
+python3 "$C/scenes.py" sweep_kept --run "$R" > "$E/sweep_kept.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 # A flight out of inside corners by open ground, never cornered (features/steering.md#flight, about 1.5 min).
 python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
