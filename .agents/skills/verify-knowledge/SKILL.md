@@ -1,6 +1,6 @@
 ---
 name: verify-knowledge
-description: Verify living-core know-how, teaching, experimentation, tablets, signs, practice, death cleanup, truthful feedback, personal memory graphs, recall, projection and fading, and player memory (a human-played character internalizing what it lived). Use when changing knowledge rules, artifacts, memory.rs, mind recall, authored pasts, mind projections or mind/lived.rs.
+description: "Verify living-core know-how and memory: techniques taught, practised and experimented with, tablets and signs, death cleanup, truthful feedback, the personal memory graph (scratch Neo4j), recall, projection and fading, names and strangers in memory, and player memory. Use when changing knowledge rules, artifacts, memory.rs, mind recall or projections, authored pasts or mind/lived.rs."
 ---
 
 # Verify knowledge and memory
@@ -85,7 +85,7 @@ For a running attempt:
 
 ## Drive and evidence
 
-[features/README.md](features/README.md) lists every proof. [references/design.md](references/design.md) records source ownership and documentation implications. [references/validation.md](references/validation.md) records actual runs.
+[features/README.md](features/README.md) lists every proof. [references/design.md](references/design.md) records source ownership and documentation implications. [references/validation/](references/validation/README.md) holds one record per actual run; the newest files are the last validated runs.
 
 The runner asserts table changes, exact knowledge sources, preserved row IDs and acquisition times, negative effects for blocked actions, successful practice counts, graph content, projected rows and recalled prompt content. Admin reducers prepare and drive deterministic authority scenes. They do not prove player permissions.
 

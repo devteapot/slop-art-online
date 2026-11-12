@@ -1,6 +1,6 @@
 ---
 name: verify-player
-description: Verify the human-player surface of the living core. A person's character joins, moves, acts, gestures (wave, nod, face), speaks (human_say, human_speak in a way of speaking) and fights (use_skill, release_skill) through the player reducers with its own non-admin identity, turns to look (human_face), perceives by facing when the world's fov_on law is on (heard_sounds), reads what its character senses (my_senses) and how its acts and death came out (my_act_outcomes), and is refused what players may not do (set_world_law among them). Use when changing join, human_move, human_face, human_act, human_say, human_speak, ways of speaking, use_skill, release_skill, player permissions, or rules a player's commands run through.
+description: "Verify the human-player surface of the living core: a person's character, with its own non-admin identity, joins, moves, acts, gestures, speaks, fights and perceives through the player reducers and its own views, and is refused what players may not do. Use when changing the player reducers (join, the human_* reducers, use_skill, release_skill), player permissions, the player's own my_* views, or a rule a player's commands run through."
 ---
 
 # Verify the human player
@@ -22,10 +22,10 @@ Every player action goes through `$V player`, which uses the run's own identity 
 
 ## Feature map
 
-[features/README.md](features/README.md) lists the player features. [references/validation.md](references/validation.md) records the last real run.
+[features/README.md](features/README.md) lists the player features. [references/validation/](references/validation/README.md) holds one record per real run; the newest files are the last validated runs.
 
 ## What this skill does not prove
 
 - What a connecting client receives over subscriptions: use `verify-client`.
 - Whether the rule a command triggers is correct in general: use `verify-core`.
-- How the player appears in the UI: use the future UI skill (not built; see `verify`).
+- How the player appears in the game interface: use `verify-ui`.
