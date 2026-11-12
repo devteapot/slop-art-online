@@ -461,6 +461,10 @@ def from_type(tid):
 
 STYLES = ("tousled", "short", "crop", "shag", "swept", "sides", "balding", "bob", "bob_parted", "braids", "tail", "long", "bun", "braid", "kerchief")
 CAPPED = ("tousled", "short", "crop", "shag", "swept", "sides", "balding")  # the styles also written as worn under a cap (`<style>.cap`)
+# The styles that hang past the collar are also written as worn over a coat (`<style>.collar`, each
+# cut): a shared style is combed over a smock's low collar and back, and a coat's collar stands
+# 4 cm higher and 3 cm wider, so hair that lies close on the one cuts through the other.
+COLLARED = ("long", "tail", "braid")
 CUTS = 3  # how many cuts of each style are written: `<style>`, `<style>.2`, `<style>.3`, each with its own length, parting, fringe and volume
 STYLE_HEAD = "adult-f-b"  # the head every shared hair style is built on; a type's file carries its fit onto that type (hair_fit.py)
 
@@ -470,8 +474,9 @@ def from_style(style):
     every identity value at 0, and the style at the lengths and parting its own seed draws."""
     parts = style.split(".")
     style, under, cut = parts[0], ("cap" if parts[-1] == "cap" else ""), next((int(x) for x in parts[1:] if x.isdigit()), 1)
-    if style not in STYLES or (under and style not in CAPPED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + (cut > 1):
-        raise SystemExit(f"style {'.'.join(parts)!r}: one of {STYLES}, with `.2` to `.{CUTS}` for another cut and `.cap` for {CAPPED} under a cap")
+    collar = parts[-1] == "collar"
+    if style not in STYLES or (under and style not in CAPPED) or (collar and style not in COLLARED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + collar + (cut > 1):
+        raise SystemExit(f"style {'.'.join(parts)!r}: one of {STYLES}, with `.2` to `.{CUTS}` for another cut, `.cap` for {CAPPED} under a cap and `.collar` for {COLLARED} over a coat")
     male = style in ("short", "crop", "swept", "sides", "shag", "tousled", "balding")
     # Another cut is the same style from another seed: the generator draws its length, parting,
     # fringe, volume and curl from it, as it did for each person.
@@ -481,7 +486,7 @@ def from_style(style):
         # a seed draws almost none: until the sheets step this style's file had a full head of hair.
         hair["recede"] = (0.85, 1.0, 0.74)[cut - 1]
     return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style) + 100 * (cut - 1), sex="male" if male else "female", age=30, hair=hair, beard=dict(style="none", stubble=0.0),
-                build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none")))
+                build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none"), coat="coat" if collar else "smock"))
 
 
 # Outfit pieces as shared style files (gen_styles.sh): the outfit that makes each, and the parts of
@@ -564,6 +569,8 @@ def worn(spec):
     style = spec["hair"]["style"]
     cut = spec["seed"] % CUTS + 1  # which cut of the style this person wears
     hair = "kerchief" if head == "kerchief" else (f"{style}.cap" if head == "cap" and style in CAPPED else (style if cut == 1 or style == "kerchief" else f"{style}.{cut}"))
+    if coat == "coat" and style in COLLARED and head != "kerchief":
+        hair += ".collar"  # the cut as combed over a coat's collar
     return hair, top + [f"trousers-{form}", f"boots-{form}"], [head] if head else []
 
 

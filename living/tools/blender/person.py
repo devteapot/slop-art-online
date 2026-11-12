@@ -1336,9 +1336,18 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     # The locks.
     hs = dict(spec["hair"], colour=look["hair_natural"], tip=look["hair_natural_tip"], silver=look["hair_silver"], grey=look["hair_grey"], seed=seed)
     hd = lambda z: (z - HEAD.z) / HEAD_SCALE
-    collar = dict(coat=0.090, smock=0.068).get(spec["coat"], 0.064)
-    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(-0.018 - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if spec["coat"] else 0.014)),
-                half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE)
+    # What long hair lies on below the head: the garment's collar and back, measured on the
+    # pieces themselves at the standard build (their radius about the neck's axis and their depth
+    # behind the body's, by height, plus 4 mm). A person's own hair is combed over what they wear;
+    # a shared style's figure wears a smock, or a coat for the style's `.collar` file.
+    wears = spec["coat"]  # a shared style's figure wears a smock, or a coat for its `.collar` file
+    collar = dict(coat=0.090, smock=0.068).get(wears, 0.064)
+    cone = dict(coat=((1.47, 1.50, 1.54, 1.570), (0.104, 0.106, 0.118, 0.124)), smock=((1.47, 1.50, 1.530), (0.094, 0.096, 0.096))).get(wears, ((1.47, 1.50, 1.565), (0.081, 0.081, 0.079)))
+    back = ((0.95, 1.10, 1.20, 1.30, 1.35, 1.40, 1.44, 1.47, 1.50, 1.53), (0.123, 0.110, 0.110, 0.120, 0.125, 0.126, 0.119, 0.115, 0.103, 0.085))
+    thick = dict(coat=0.015, smock=0.014).get(wears, 0.0)
+    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(-0.018 - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
+                half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE,
+                collar=(np.array([hd(z) for z in cone[0]]), np.array(cone[1]) / HEAD_SCALE), back=(np.array([hd(z) for z in back[0]]), (np.array(back[1]) + thick) * GIRTH / HEAD_SCALE))
     h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body, detail=0.4 if FAR else 1.0)
     base = len(verts)
     # The far model's hair follows the bones the full model's hair added, when both are built.
