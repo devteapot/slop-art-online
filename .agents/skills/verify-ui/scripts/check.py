@@ -28,6 +28,20 @@ def sql(run, q):
     return json.loads(t[i:]) if i >= 0 else []
 
 
+def sql_as_player(run, q):
+    """SQL as verify.py's player identity (`$V player join`), through its views."""
+    r = subprocess.run([sys.executable, V, "sql", "--run", run, q, "--as-player"], capture_output=True, text=True)
+    t = r.stdout
+    i = t.find("[")
+    return json.loads(t[i:]) if i >= 0 else []
+
+
+def call_admin(run, reducer, args):
+    """An admin reducer call (scene setup or restore), its output for evidence."""
+    r = subprocess.run([sys.executable, V, "call", "--run", run, reducer, json.dumps(args), "--as-admin"], capture_output=True, text=True)
+    return r.stdout + r.stderr
+
+
 def residents(run, n=2):
     """Adults the scene can place beside the player: alive people with a mind, not players."""
     rows = sql(run, "SELECT id, name, stage, alive, kind FROM character WHERE kind = 'person'")
@@ -1600,7 +1614,236 @@ def far(run, c):
     notes_clear(c, s, out)
 
 
-SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far}
+def seed_names(run):
+    """The proper names the seed this world was made from gives people and places (residents,
+    their first names, buildings, plan lots and spots), from `living/seeds/<seed>.json`."""
+    st = json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json")))
+    path = os.path.join(ROOT, "living/seeds", f"{st.get('seed', 'island')}.json")
+    if not os.path.exists(path):
+        return []
+    seed = json.load(open(path))
+    names = set()
+    for t in seed.get("towns") or []:
+        names.add(t.get("name") or "")
+        for r in t.get("residents") or []:
+            n = (r.get("name") or "").strip()
+            names.add(n)
+            first = n.split(" ")[0]
+            if len(first) >= 3 and first[:1].isupper():
+                names.add(first)
+        for b in t.get("buildings") or []:
+            names.add(b.get("name") or "")
+    for plan in ((seed.get("map") or {}).get("params") or {}).get("plans") or []:
+        for lot in plan.get("lots") or []:
+            names.add(lot.get("name") or "")
+            for sp in lot.get("spots") or []:
+                names.add(sp.get("name") or "")
+    # Proper names only (a capital letter): spots such as "bench by the door" or "gate" describe
+    # a thing anyone sees, and would match a thing's kind.
+    out = set()
+    for n in names:
+        n = n.strip()
+        n = n[4:] if n.lower().startswith("the ") else n
+        if len(n) >= 3 and any(ch.isupper() for ch in n):
+            out.add(n)
+    return sorted(out)
+
+
+def leaked(texts, names, given):
+    """Seed names found in the shown texts, but those the authority gave me (a known name, a
+    place of mine). A name with a capital matches as written; a lower-case one as a phrase."""
+    allowed = set()
+    for g in given:
+        allowed.add(g)
+        allowed.update(w for w in g.split(" ") if len(w) >= 3)
+    hits = []
+    for where, t in texts:
+        for n in names:
+            if n in allowed:
+                continue
+            found = (n in t) if any(ch.isupper() for ch in n) else re.search(rf"\b{re.escape(n)}\b", t, re.I) is not None
+            if found:
+                hits.append((where, n, t[:80]))
+    return hits
+
+
+def naming_of(out):
+    """Every dump's `naming` texts, and what the authority gave me to name."""
+    texts, given = [], set()
+    for f in sorted(glob.glob(os.path.join(out, "*.json"))):
+        try:
+            d = json.load(open(f)) or {}
+        except (ValueError, OSError):
+            continue
+        if not isinstance(d, dict):
+            continue
+        texts.extend((f"{os.path.basename(f)}:{k}", t) for k, t in d.get("naming") or [])
+        given.update(d.get("known_names") or [])
+        given.update(d.get("given_places") or [])
+    return texts, given
+
+
+def names(run, c):
+    """perceived-names-1's guard: a fresh player on a world from a named seed (Cullet) points at
+    residents, opens their wheel, the talk box, the Log and its People, and a person's window. No
+    text that names a person or a place on screen (the dump's `naming`) holds a seed resident's
+    name, a first name, a building's or a plan lot's or spot's name the player was not given (the
+    dump's `known_names`, `given_places`)."""
+    s = "names"
+    seeded = seed_names(run)
+    c.check(s, "the seed names people and places", len(seeded) > 0, f"{len(seeded)} names")
+    st = json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json")))
+    people = {r["id"] for r in sql(run, "SELECT id, kind, alive FROM character WHERE kind = 'person'") if r.get("alive")}
+    bodies = [r for r in sql(run, "SELECT id, x, y FROM body") if r["id"] in people]
+    arrive = (sql(run, "SELECT arrive_x, arrive_y FROM land") or [{}])[0]
+    ax, ay = arrive.get("arrive_x", 0.0), arrive.get("arrive_y", 0.0)
+    near = sorted(bodies, key=lambda r: (r["x"] - ax) ** 2 + (r["y"] - ay) ** 2)[:4]
+    steps = "".join(f"point:{r['id']};wait:0.7;dump:p{i};key:KeyF:down;wait:0.7;dump:w{i};key:KeyF:up;wait:0.2;key:Escape:tap;wait:0.3;"
+                    f"point:{r['id']};wait:0.4;key:Enter:tap;wait:0.6;dump:t{i};key:Escape:tap;wait:0.3;" for i, r in enumerate(near))
+    plan = ("ready;wait:5;dump:00;" + steps + "key:KeyL:tap;wait:0.6;dump:log;click:@log:tab:1;wait:0.6;dump:people;click:@log:person:0;wait:0.8;dump:window;"
+            "click:@log:tab:2;wait:0.5;dump:events;quit")
+    token = os.path.join(ROOT, ".local/living/verify", run, "ui", f"names-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, extra=["--token", token, "--player", "Newcomer"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    texts, given = naming_of(out)
+    kinds = {w.split(":")[1] for w, _ in texts}
+    c.check(s, "names were on screen: plates, the talk box, the Log", {"plate", "talk"} <= kinds, f"{sorted(kinds)}; {len(texts)} texts; residents pointed at {[r['id'] for r in near]}")
+    hits = leaked(texts, seeded, given)
+    c.check(s, "no person or place is named by a seed name the player was not given", not hits, f"{hits[:6]}; given {sorted(given)[:8]}")
+
+
+def death(run, c):
+    """The death screen names no one it should not (perceived-names-1). An admin's `kill` whose
+    cause names a resident (code `other`) says "You died", not the cause; killed by a stranger
+    (verify.py's player identity, striking with the scene's sharper, free strike) says "Killed by"
+    the stranger as perceived ("a stranger in …"), never their name. Each drive is a fresh player."""
+    s = "death"
+    rid = residents(run, 1)[0]
+    real = (sql(run, f"SELECT id, name FROM character WHERE id = {rid}") or [{}])[0].get("name", "")
+    d = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    os.makedirs(d, exist_ok=True)
+    tok = lambda k: os.path.join(d, f"death-{k}-{int(time.time())}.token")
+    # 1. An admin's cause that names someone.
+    plan = "ready;wait:3;dump:00;sync:kill;wait:3;shot:01_died;dump:01;quit"
+    out, code, text = drive(run, "death-other", plan, syncs=[f'kill=kill|{{me}}|"killed by {real}"'], extra=["--token", tok("other"), "--player", "Fallen"])
+    c.check(s, "client ran and joined (killed by the admin)", code == 0, text[-300:])
+    dt = (dump(out, "01") or {})
+    words = [t for k, t in dt.get("naming") or [] if k == "death"]
+    c.check(s, "a cause that names someone: the screen says only You died", words[:1] == ["You died"] and not any(real and real in t for _, t in dt.get("naming") or []), f"{words}; resident {real!r}")
+    # 2. Killed by a stranger.
+    subprocess.run([sys.executable, V, "player", "--run", run, "join", "Striker"], capture_output=True, text=True)
+    me2 = (sql_as_player(run, "SELECT * FROM my_characters") or [{}])
+    striker = next((r["id"] for r in me2 if r.get("alive")), None)
+    sname = next((r.get("name") for r in me2 if r.get("id") == striker), "Striker")
+    c.check(s, "the stranger who strikes is a living player character", striker is not None, str(me2)[:200])
+    # A sync runs once per name (drive.py waits for NAME.go): one name per strike.
+    hits = "".join(f"sync:hit{i};wait:0.9;" for i in range(8))
+    plan = "ready;wait:3;sync:sharp;sync:near;wait:1.5;dump:00;" + hits + "wait:2;shot:02_killed;dump:02;sync:blunt;quit"
+    syncs = ['sharp=set_world_law|"dmg_strike"|"40";set_world_law|"cost_strike"|"0"', f"near=place_at|{striker}|(mx+0.9)|(my)",
+             *[f'hit{i}=player|use_skill|strike|{{me}}|(mx)|(my)' for i in range(8)], 'blunt=set_world_law|"dmg_strike"|"5";set_world_law|"cost_strike"|"20"']
+    try:
+        out, code, text = drive(run, "death-struck", plan, syncs=syncs, extra=["--token", tok("struck"), "--player", "Struck"])
+    finally:
+        call_admin(run, "set_world_law", ["dmg_strike", "5"])
+        call_admin(run, "set_world_law", ["cost_strike", "20"])
+    c.check(s, "client ran and joined (struck)", code == 0, text[-300:])
+    dt = (dump(out, "02") or {})
+    words = [t for k, t in dt.get("naming") or [] if k == "death"]
+    c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and words[0].startswith("Killed by a stranger") and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}")
+
+
+def houses(run, c):
+    """owner-known in the client: a structure is named by its kind, "{name}'s {kind}" only once
+    my character knows the owner by name (`my_known_names`), "your {kind}" when mine. The scene
+    holds a resident beside the arrival and puts a house by them (admin `place_structure`: owned
+    by them); a fresh player points at it ("house"); the resident says their name to the player
+    (admin `mind_say`, the speech minds use: an introduction), and it reads "{name}'s house"; a
+    house put by the player reads "your house"."""
+    s = "houses"
+    b = residents(run, 1)[0]
+    bname = (sql(run, f"SELECT id, name FROM character WHERE id = {b}") or [{}])[0].get("name", "")
+    # On open grass, cleared (anyone within 25 m put 40 m east): the cursor's aim takes a body
+    # before a thing, so neither the owner nor I stand by a house when it is pointed at.
+    ax, ay = UNHEARD_SPOT
+    people = {r["id"]: r.get("name") for r in sql(run, "SELECT id, name, kind FROM character WHERE kind = 'person'")}
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] != b and people[x["id"]] != "Verifier" and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 25):
+        call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
+    call_admin(run, "set_behavior", [b, json.dumps({"wait": 600})])
+    call_admin(run, "place_at", [b, ax + 4.0, ay + 4.0])
+    time.sleep(1.0)
+    before = {r["id"] for r in sql(run, "SELECT id FROM structure")}
+    call_admin(run, "place_structure", [b, "house"])
+    theirs = [r for r in sql(run, f"SELECT id, kind, owner, x, y FROM structure WHERE owner = {b}") if r["id"] not in before]
+    c.check(s, "a house of the resident's on the cleared spot", len(theirs) == 1, str(theirs))
+    if not theirs:
+        return
+    # Off the house, within the 9 m speech carries to where I will stand (their name must reach me).
+    call_admin(run, "place_at", [b, ax + 5.0, ay - 3.0])
+    h = theirs[0]
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}", f'intro=mind_say|{b}|"I\'m {bname}."|{{me}}|""|0|{thought}',
+             'mine=place_structure|{me}|"house"', f"off=place_at|{{me}}|{ax - 3.0}|{ay}"]
+    plan = (f"ready;sync:noon;wait:1;sync:spot;wait:2;pointat:{h['x']},{h['y']};wait:1.2;shot:01_house;dump:01;"
+            f"sync:intro;wait:3;pointat:{h['x']},{h['y']};wait:1.2;shot:02_theirs;dump:02;"
+            f"sync:mine;wait:1;sync:off;wait:2;pointat:{ax + 0.8},{ay};wait:1.2;shot:03_mine;dump:03;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"houses-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, syncs=syncs, extra=["--token", tok, "--player", "Lodger"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    aim = lambda k: [t for w, t in (dump(out, k) or {}).get("naming") or [] if w == "aim"]
+    every = [t for k in ("01", "02", "03") for _, t in (dump(out, k) or {}).get("naming") or []]
+    c.check(s, "a stranger's house: the kind alone, no owner", aim("01") == ["house"] and not any(bname in t for _, t in (dump(out, "01") or {}).get("naming") or []), f"{aim('01')}; owner {bname!r}")
+    known = (dump(out, "02") or {}).get("known_names") or []
+    c.check(s, "told their name, I know them (my_known_names)", bname in known, f"{bname!r} in {known[:8]}")
+    c.check(s, "then it is their house, by name", aim("02") == [f"{bname}'s house"], str(aim("02")))
+    c.check(s, "a house of mine: your house", aim("03") == ["your house"], str(aim("03")))
+
+
+def shot(run, c):
+    """fix-missile-told in the client: an arrow on me is told as a shot, by the shooter as my
+    character perceives them when it sees them, else by the arrow alone; the weapon's note is
+    that line ("A stranger shot you with an arrow: hit for 7. Your weapon is drawn."), never an
+    "attacked" of ours beside it; an unseen shooter (the feed's id 0) is named, targeted and
+    plated by nothing. verify.py's player identity ("Striker", given a bow and arrows, held still)
+    shoots a fresh player at noon on open grass from 6 m (in sight), then, the weapon sheathed
+    again, from 16 m (beyond the 11 m one sees by day, within the bow's 22)."""
+    s = "shot"
+    subprocess.run([sys.executable, V, "player", "--run", run, "join", "Striker"], capture_output=True, text=True)
+    mine = sql_as_player(run, "SELECT * FROM my_characters")
+    striker = next((r["id"] for r in mine if r.get("alive")), None)
+    sname = next((r.get("name") for r in mine if r.get("id") == striker), "Striker")
+    c.check(s, "the shooter is a living player character", striker is not None, str(mine)[:200])
+    if striker is None:
+        return
+    for item, n in (("bow", 1), ("arrow", 6)):
+        call_admin(run, "grant_items", [striker, item, n])
+    call_admin(run, "set_behavior", [striker, json.dumps({"wait": 600})])
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}",
+             f"near=place_at|{striker}|(mx+6.0)|(my)", f"far=place_at|{striker}|(mx+16.0)|(my)", "shoot1=player|use_skill|bowshot|{me}|(mx)|(my)", "shoot2=player|use_skill|bowshot|{me}|(mx)|(my)",
+             "hurt1=sql|SELECT id, hurt_by, hurt_ms FROM vitals WHERE id = {me}", "hurt2=sql|SELECT id, hurt_by, hurt_ms FROM vitals WHERE id = {me}"]
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:near;wait:2;dump:00;sync:shoot1;wait:2.2;sync:hurt1;shot:01_seen;dump:01;"
+            "weapon:sheathe;wait:0.6;sync:far;wait:2.5;dump:02;sync:shoot2;wait:2.5;sync:hurt2;shot:02_unseen;dump:03;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"shot-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, syncs=syncs, extra=["--token", tok, "--player", "Target"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("00", "01", "02", "03")}
+    seen = lambda k: set(d[k].get("perceived") or [])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    lines = sorted(sql(run, f"SELECT id, kind, subject, text, at_ms FROM experience WHERE observer = {me} AND kind = 'attacked'") if me else [], key=lambda r: r["at_ms"])
+    c.check(s, "the authority told both arrows as shots: by the shooter in sight, by the arrow alone unseen", len(lines) >= 2 and "shot you with" in lines[0]["text"] and lines[0]["subject"] == striker and "could not see" in lines[-1]["text"] and lines[-1]["subject"] == 0, str([(l["subject"], l["text"]) for l in lines])[:400])
+    n1 = d["01"].get("notes") or []
+    c.check(s, "in sight: the shooter is seen, and the note is the authority's shot, the weapon drawn", striker in seen("00") and any("shot you with" in n and "Your weapon is drawn" in n for n in n1) and not any("attacked you" in n for n in n1) and (d["01"].get("extra") or {}).get("drawn") is True, f"{n1}; seen {sorted(seen('00'))}")
+    n3 = d["03"].get("notes") or []
+    c.check(s, "out of sight: the shooter is not seen, and the note says the arrow came from somewhere unseen", striker not in seen("02") and any("could not see" in n for n in n3) and (d["03"].get("extra") or {}).get("drawn") is True, f"{n3}; seen {sorted(seen('02'))}")
+    # fix-unseen-killer-id: `my_vitals.hurt_by` names the shooter only when my character sees them.
+    hurt = lambda k: ((((sc.get("snaps") or {}).get(k) or [{}])[0].get("rows") or [{}])[0])
+    h1, h2 = hurt("hurt1"), hurt("hurt2")
+    c.check(s, "hurt_by: the shooter in sight, 0 once unseen (a newer hurt)", h1.get("hurt_by") == striker and h2.get("hurt_by") == 0 and h2.get("hurt_ms", 0) > h1.get("hurt_ms", 0), f"{h1}; {h2}")
+    c.check(s, "nothing targets or hovers the hidden shooter, and the target plate is not theirs", d["03"].get("targeted") != striker and not any(h.get("id") == striker for h in d["03"].get("hovered") or []), f"targeted {d['03'].get('targeted')}; hovered {d['03'].get('hovered')}")
+    c.check(s, "the shooter's name is nowhere", not any(sname in t for k in d for _, t in d[k].get("naming") or []), sname)
+
+
+SCENARIOS = {"field": field, "windows": windows, "talk": talk, "items": items, "themes": themes, "film": film, "pick": pick, "turns": turns, "look-walk": look_walk, "bar": bar, "offers": offers, "wheel": wheel, "wheel-workplace": wheel_workplace, "grid": grid, "walk-law": walk_law, "pools": pools, "support": support, "own": own, "unheard": unheard, "far": far, "names": names, "death": death, "houses": houses, "shot": shot}
 
 
 def main():
@@ -1612,7 +1855,7 @@ def main():
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
     # `support` needs a Cullet world (`--seed cullet`), the others the island's residents.
-    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace", "grid")]:
+    for name in a.scenarios or [k for k in SCENARIOS if k not in ("support", "wheel-workplace", "grid", "names")]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)
