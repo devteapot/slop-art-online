@@ -1,0 +1,73 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-bc4317ce-9082f8",
+ "published": "2026-11-12T08:02:16+01:00",
+ "imported": "2026-11-12T08:02:16+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3: long hair falls close to the back (combed over the garment's measured collar and back, gathered behind the shoulders, front hair ending at the jaw, .collar files for a coat) and is held on it in motion by spheres in the file's spring block; short hair is one sheet from the whorl to the hairline in place of rings of tiles; hair is shaded as one smooth shape, so the client's highlight is one hard ring and its shadow one edge. 59 hair files, 16.9 MB.",
+ "source": {
+  "commit": "bc4317ce25c5ce88647b563a614f0dae930e87bb",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/hair.py",
+  "generator_sha256": "1763ab57e0044a13ef8fdf247ec7fffe354f717b1603b7678af11b58b3998a65",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "hair-short and hair-long: every hair style on a type's head before and after, from the front, 40 degrees, the side, 140 degrees and the back and at the game camera (each screen pixel enlarged), with the reference's head from the same five sides in the last row; hair-people: four whole people before and after on a frame of the idle clip from the front, three-quarter, side and back and at the game camera, the reference at the same views in the last row; hair-close: four people close up after, the reference in the last row; hair-motion: the woman's long hair on idle and walk frames, the reference below. All under the client's own hair light: the earlier sheets' stand-in that turned hair normals to the camera is not used, so the before columns show the ring and shadow edge as the client drew them on the old files. Eyes are held open by the photo tool. The vroid member is the reference at the same views; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-bc4317ce-9082f8",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "7e82e185406879f066a1e8a31a04f63d00209c2dd8e5c1bd0f067482ac50c8d1",
+   "shots": [
+    "hair-close",
+    "hair-long",
+    "hair-motion",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "3b00a6899c5b65aef36ea5d3bdebb3d4a7da6d9f121d0f9060346e10db36ee38",
+   "shots": [
+    "hair-close",
+    "hair-long",
+    "hair-motion",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "8ee399ef2c5809b02747747c77f0253dab847db2f9c178cf7e0dff9f757ac1e2",
+   "shots": [
+    "hair-close",
+    "hair-long",
+    "hair-motion",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
