@@ -1822,6 +1822,73 @@ def earshot_case(run):
     return {'status': 'pass', **result}
 
 
+@case('say-way')
+def say_way_case(run):
+    """A decision's line names its way of speaking (mind-say-way, `mind_install_way`,
+    docs/COMMUNICATION.md §18). On a quiet open line, H (thought for) stands with A 15 m east
+    (beyond a said line, within a call) and B 1 m west. H's think prompt names the optional
+    `"way"` of its `say`. Four think requests, each answered by the fake model with a line:
+    a call to A (A hears it from about 15 m; the chronicle keeps "<H> (call) to <A>"), a whisper to
+    no one (refused in the rules' words, told to H as `unsaid`, and the decision stands), a
+    whisper to B (B gets the words as a whisper), and a line in "shout", a way the world lacks
+    (said aloud: B hears "said to you")."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 3, True)
+    h, a, b = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    for who in (h, a, b):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 28)
+    run.admin('place_at', h, *line[10])
+    run.admin('place_at', a, *line[25])
+    run.admin('place_at', b, *line[9])
+    time.sleep(1.5)
+    think = lambda marker, say: {'purpose': 'think', 'contains': f'verify {marker}', 'times': 1,
+                                 'reply': {'thought': f'verify {marker}', 'intend': ['wait'], 'say': say}}
+    script = {'replies': {'think': {'thought': 'I listen.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}},
+              'rules': [think('way-call', {'text': 'Verify call: can you hear me down there?', 'to': a, 'way': 'call'}),
+                        think('way-whisper-none', {'text': 'Verify whisper to no one.', 'to': None, 'way': 'whisper'}),
+                        think('way-whisper-b', {'text': 'Verify whisper: keep this between us.', 'to': b, 'way': 'whisper'}),
+                        think('way-shout', {'text': 'Verify shout: said aloud instead.', 'to': b, 'way': 'shout'})]}
+    run.start(model(run, script), [h])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    rows = lambda who: run.private(f'SELECT * FROM experience WHERE observer = {who}', f'experiences-{who}')
+    def decide(marker, words):
+        run.admin('set_behavior', h, json.dumps({'think': f'I finished my plan. verify {marker}'}))
+        run.wait(lambda: any(words in r['text'] for who in (h, a, b) for r in rows(who) if r['kind'] in ('speech', 'whisper', 'said', 'unsaid')), f'the {marker} line', 60)
+        time.sleep(2.6)
+    decide('way-call', 'can you hear me down there')
+    decide('way-whisper-none', 'whisper to no one')
+    decide('way-whisper-b', 'keep this between us')
+    decide('way-shout', 'said aloud instead')
+    prompt = next((sent_text(e) for e in requests() if 'verify way-call' in sent_text(e)), '')
+    (run.directory / 'prompt-say-way.txt').write_text(prompt)
+    rh, ra, rb = rows(h), rows(a), rows(b)
+    find = lambda rs, words, kind=None: [r for r in rs if words in r['text'] and (kind is None or r['kind'] == kind)]
+    dist = round(math.dist(line[10], line[25]), 1)
+    thoughts = [t['summary'] for t in run.thoughts(h) if t['kind'] == 'deliberate']
+    checks = {
+        'think_format_names_the_way': '"way": "say" or "whisper" or "call" (optional; default "say")' in prompt,
+        'a_is_beyond_a_said_line_within_a_call': 9.0 < dist <= 22.5,
+        'call_reaches_a': bool(find(ra, 'can you hear me down there', 'speech')) and 'calls out to you' in (find(ra, 'can you hear me down there') or [{'text': ''}])[0]['text'],
+        # H's own row may be integrated (and deleted) by its mind already: the chronicle keeps the way.
+        'h_called_out': any(' (call) to ' in r['text'] and 'can you hear me down there' in r['text'] for r in run.private(f"SELECT * FROM chronicle WHERE kind = 'speech'", 'chronicle-speech') if r['a'] == h),
+        'whisper_to_no_one_is_refused_and_told': any(r['text'] == 'You did not say “Verify whisper to no one.”: a whisper needs someone to whisper to.' for r in find(rh, 'whisper to no one', 'unsaid')),
+        'refused_whisper_said_to_no_one': not any(find(rs, 'whisper to no one', k) for rs in (ra, rb) for k in ('speech', 'whisper')),
+        'decisions_stand': sum(1 for t in thoughts if 'verify way-' in t) >= 4,
+        'whisper_reaches_b_only': bool(find(rb, 'keep this between us', 'whisper')) and not find(ra, 'keep this between us'),
+        'a_way_the_world_lacks_is_said_aloud': bool(find(rb, 'said aloud instead', 'speech')) and any(r['text'].startswith('You said to') for r in find(rh, 'said aloud instead', 'said')),
+    }
+    result = {'h': h, 'a': a, 'b': b, 'dist_a': dist, 'h_rows': [r['text'] for r in rh if 'Verify' in r['text']],
+              'a_rows': [r['text'] for r in ra if 'Verify' in r['text']], 'b_rows': [r['text'] for r in rb if 'Verify' in r['text']], 'checks': checks}
+    (run.directory / 'say-way.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('think-framing')
 def think_framing_case(run):
     """The think prompt's framing is the world's `think_framing` law (docs/FRAMING.md). With the

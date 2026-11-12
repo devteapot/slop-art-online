@@ -110,7 +110,7 @@ UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
           'human_face': [1.0, 0.0]}
-MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
+MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged']
 # The fast lane's answers (docs/FAST_LANE.md): for an open request only, which exists only for a
 # body its mind holds, so a player is refused even on its own character.
@@ -150,6 +150,8 @@ def mind_args(name, actor, marker):
     return {
         'mind_routines': [actor, [{'name': 'client probe', 'graph': '{"wait":30}'}]],
         'mind_install': [actor, '{"wait":30}', marker, '', 0, 0, t],
+        # A decision whose line names its way (mind-say-way); the same controller rule.
+        'mind_install_way': [actor, '{"wait":30}', marker, '', 0, 'say', 0, t],
         'mind_say': [actor, '', 0, '', 0, t],
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
