@@ -1,6 +1,6 @@
 # The trial server's disk: deleted databases, their commitlogs, and a plan
 
-Status: **plan for the owner, nothing removed** (2026-11-12, branch `trials-records`). Everything below was read, not changed. The code changes on this branch are written but not yet run: they wait for the end of the battle quiet window.
+Status: **plan for the owner, nothing removed** (2026-11-12, branch `trials-records`). Everything below was read, not changed. The code changes on this branch were tested after the battle quiet window ("Tested", below).
 
 ## What is on disk (read 2026-11-12, `slop-trials-stdb`, SpacetimeDB 2.14.1)
 
@@ -41,7 +41,11 @@ The host disk is 93% full: 67 GB free of 917 GB.
 - **No GitHub issue** about it was found (searched 2026-11-12, without login).
 - **Republishing adds more.** Every `publish --delete-data` to an existing name also leaves the old replica (`living/tools/reclaim_disk.sh`'s header). Our runs publish once per instance, but verify scenes republish.
 
-**Why the list looked empty.** A deleted database leaves the list at once: each trial run pauses and deletes its own database when it ends. The fs1c, fs1f and fs1h samplers saw their databases after the 12:53 restart. Only fs1e's sampler (17:55–18:16) saw none, although publishing and SQL worked. Its 68-character name, the longest of these batches, is the one difference found; to test with a scratch database after the window.
+**Why the list looked empty: a database name of 64 characters or more breaks it.** Tested on a scratch fake run, 2026-11-12.
+- **The reproduction.** SpacetimeDB 2.14.1 publishes a database named `verify-trial-trtestlong…-wolves-default-r1` (68 characters), and lookup by that name answers 200. But `GET /v1/database/<identity>/names` then answers 500: "Domain name parts must be shorter than 64 characters".
+- **Its effect.** `spacetime list` fails as a whole ("Error: … 500 Internal Server Error") and lists nothing for any database, while such a database exists.
+- **fs1e is exactly this.** Its database was named `verify-trial-fs1e-strangers-2b-c-strangers-first-sight-hf-earshot-r1`, 68 characters. While it lived (17:55–18:16), every consumer of the list saw no databases: `trials.py clean` and `down`, the tick samplers, `verify.py cleanup` and `speech.py`'s metrics.
+- **Otherwise the list was sound.** A deleted database leaves the list at once: each trial run pauses and deletes its own database at its end. The fs1c, fs1f and fs1h samplers saw theirs after the 12:53 restart.
 
 ## The 1,766 deleted directories, by kind
 
@@ -137,8 +141,37 @@ The commitlog archives can go to the store later as their own unit, once the own
   - the verify harness (`verify.py cleanup`, `verify-core/scripts/speech.py`) also reads `spacetime list`;
   - `living/tools/reclaim_disk.sh` removes idle replicas in the `sao-living` reference container and must not be run there while the reference worlds are kept.
 
-**To check after the window:**
-- a fake batch records an identity and a replica for each instance;
-- `dbs` and `clean` work from the records;
-- `reclaim` runs as a dry run, with its totals matching the table above.
-- Plus the fs1e name-length test and a full compression measurement.
+- **Names of 64 characters or more are refused** before anything is published: `trials.py run` (`MAX_DB_NAME` 63) and `verify.py launch`.
+  - `databases()` raises when `spacetime list` fails, instead of returning an empty list. `clean` and `down` then fall back to the records.
+  - `verify.py cleanup` treats a failed listing as "other databases may be live" and leaves the server up.
+  - `verify-core/scripts/speech.py` looks the identity up by name.
+- **`living/tools/reclaim_disk.sh` refuses.**
+  - It refuses unless run with `--owner-approved`.
+  - It refuses whenever the server it targets holds a kept reference world (`aske-coast*`, `stage*`), or its listing fails, so the reference worlds cannot be ruled out.
+
+## Tested (2026-11-12, after the battle quiet window)
+
+- **Records.** A fake batch (`trtest1`, wolves, 2 minutes, `--keep-db`) recorded `database_identity` and `replica` 6001417 in `state.json` and `summary.json`, and logged them. `trials.py dbs --batch trtest1` printed them.
+- **`clean` from the records.** It deleted the kept database: the world was paused first, then deleted (SQL 404), and the Neo4j minds were removed.
+- **The 68-character name.** A fake run under that name was published and kept. `spacetime list` failed as above while it existed. `clean` deleted it from the records (SQL 404), and the listing worked again.
+  - Now `trials.py run` refuses the same name before publishing: "database names over 63 characters break the server's listing: … (68)".
+- **`reclaim` (dry run).**
+  - **Classified:** 1,820 directories. It found 12 live databases by their module logs: the four bi1 hamlets, fs1n's running database, and seven verify worlds of other sessions.
+  - **Totals:**
+
+    | Class | Directories | Size |
+    |---|---:|---:|
+    | live | 12 | 4.3 GB |
+    | paid | 180 | 25.6 GB |
+    | no-model | 272 | 51.2 GB |
+    | fake | 159 | 28.5 GB |
+    | verify | 1,195 | 148.5 GB |
+
+    These are larger than the read-only tally above: more of the machine's checkouts were scanned, and more runs have happened since.
+  - **Nothing removed.**
+- **`reclaim_disk.sh`** without the flag printed its refusal and exited 1, before any docker call. The reference-world check was not run: it would read the `sao-living` server, which this work must not touch.
+- **Archived run records** (the checkout-only paid batches): r2b, r2c, r2d, r2e, ar1, ar2, st1, st2, es1, bi1 and gl1, as `tar` + `zstd` in `~/slop-evidence/trial-records-20261112/`.
+  - Each archive has a per-file sha256 manifest (`<batch>.files.sha256`) and its own sha256.
+  - A test decompress listed the same file count as the source for all 11.
+  - They total 93 MB, from 1.5 GB of records.
+- **Not run:** `speech.py`'s metrics path (the change is a lookup by name; the verify-core speech scene was not driven). The full compression measurement of the paid commitlogs also waits for the owner's decision on the plan.

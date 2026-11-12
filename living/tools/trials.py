@@ -364,7 +364,11 @@ def up(_a=None):
 
 def down(_a=None):
     guard()
-    live = [d for d in databases() if d.startswith(PREFIX)]
+    try:
+        live = [d for d in databases() if d.startswith(PREFIX)]
+    except RuntimeError as e:
+        live = []
+        print(f"note: {e}")
     if live:
         print(f"note: {len(live)} trial databases are still published; they pause with the server")
     for name in (CONTAINER, NEO4J):
@@ -381,7 +385,16 @@ def databases():
     backstop only: deleting a database removes it from the list but not from disk, and a run's
     own records (`state.json`, `batch_databases`) are what clean, reclaim and samplers use."""
     r = sh("docker", "exec", CONTAINER, "spacetime", "list", check=False)
+    if r.returncode != 0 or "Error" in (r.stderr or "") or "Error" in r.stdout:
+        # One database whose name is 64 characters or more makes the server's `/names` answer
+        # 500 and the whole listing fail (2026-11-12, fs1e): an empty list is not "none".
+        raise RuntimeError(f"spacetime list failed: {(r.stderr or r.stdout).strip()[-300:]}")
     return [l.split("|")[0].strip() for l in r.stdout.splitlines() if l.strip().startswith(PREFIX)]
+
+
+# SpacetimeDB 2.14.1 accepts a longer database name at publish, but its `/names` route then
+# fails ("Domain name parts must be shorter than 64 characters"), and with it `spacetime list`.
+MAX_DB_NAME = 63
 
 
 REPLICAS = "/home/spacetime/.local/share/spacetime/data/replicas"
@@ -2688,6 +2701,10 @@ def run(a):
             sys.exit(f"unknown variant {v}; see living/trials/variants.json")
     # A trial may name the only variants it runs with (`variants`): others are skipped for it.
     plan = [(t, v, r) for t in trials for v in names if not t.get("variants") or v in t["variants"] for r in range(1, a.replicates + 1)]
+    # Instance names follow Instance.__init__ (`<trial>-<variant>-r<rep>`).
+    long = [n for n in (f"{PREFIX}{a.batch}-{t['name']}-{v}-r{r}" for t, v, r in plan) if len(n) > MAX_DB_NAME]
+    if long:
+        sys.exit(f"refusing: database names over {MAX_DB_NAME} characters break the server's listing: {long[0]} ({len(long[0])}); use a shorter batch name")
     led = ledger()
     spent = sum(b.get("tokens", 0) for b in led["batches"].values())
     print(f"batch {a.batch}: {len(plan)} instances; real tokens so far {spent:,}{f' of a cap of {TOTAL_CAP:,}' if TOTAL_CAP else ' (no cap)'}{' (fake: not counted)' if a.fake else ''}")
@@ -3138,7 +3155,12 @@ def clean(a):
     guard()
     bdir = OUT / a.batch
     # The batch's own records first (the runner's names), the server's list as a backstop.
-    dbs = sorted(set(batch_databases(a.batch)) | {d for d in databases() if d.startswith(f"{PREFIX}{a.batch}-")})
+    try:
+        listed = {d for d in databases() if d.startswith(f"{PREFIX}{a.batch}-")}
+    except RuntimeError as e:
+        listed = set()
+        print(f"note: {e}; deleting from the batch's records only")
+    dbs = sorted(set(batch_databases(a.batch)) | listed)
     for db in dbs:
         # delete_db pauses the world first and treats 404 as already deleted
         print(f"delete {db}: {'ok (SQL 404)' if delete_db(db) else 'STILL ANSWERS'}")

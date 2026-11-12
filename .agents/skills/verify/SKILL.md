@@ -121,6 +121,7 @@ Run cleanup after failed attempts too.
 ## Safety rules
 
 - Only publish or delete `verify-*` databases. The same server holds paused reference worlds (`aske-coast*`, `stage*`). Never publish, reset, pause or delete them, and never run `living/tools/lab.py --reclaim`.
+- Keep run names short: a database name of 64 characters or more breaks SpacetimeDB 2.14.1's `/names` route, and with it `spacetime list` for every database on the server. `verify.py launch` refuses names over 63 characters (docs/TRIAL_DISK.md).
 - `just living-reset` and `just living-publish` target the active world. Do not use them for verification.
 - Kill only processes your run started, by pid. Never `pkill -f` a pattern that also appears in your own command line.
 - Neo4j: `:7689` (A) is full and holds the paused worlds' minds; never write to it. Mind-side checks use run names starting with `verify-`, and their cleanup removes only nodes with that run.
