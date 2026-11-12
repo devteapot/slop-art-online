@@ -66,6 +66,74 @@ pub struct Edges {
     pub sight_shade: Vec4,
     /// rgb: the style's `shadow_tint`.
     pub sight_tint: Vec4,
+    /// The film ([`Film`]): x 0 screen, 1 soft (weighted by the pixel's light); y, z: the
+    /// luminance (linear) over which soft goes from none of the film to all of it; w how much
+    /// soft spares dark pixels now (1 by day, 0 by night: [`soft_by_light`]).
+    pub film: Vec4,
+}
+
+/// The film finish (`edges.wesl`): a warm gradient from the top of the frame. Settings › Play ›
+/// Film; kept in the settings file only once chosen there, so a viewer who never chose one
+/// follows this default. `LIVING_GAME_FILM=soft|screen|off` starts in one (headless captures).
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Film {
+    /// The screen blend weighted by the pixel's own light: the sky and lit things take it as
+    /// the screen did; dark hair, cloth and shadows keep their colour (film-1, 2026-11-12). By
+    /// day only: at night it is the screen, the moonlit haze the night look is built on. A
+    /// tint (`color * (1 + g)`) was tried and dropped: it moved the sky and greens and pushed
+    /// skin orange.
+    #[default]
+    Soft,
+    /// The screen blend on every pixel, as before film-1: it lifts dark pixels most.
+    Screen,
+    Off,
+}
+
+impl Film {
+    pub const ALL: [Film; 3] = [Film::Soft, Film::Screen, Film::Off];
+
+    pub fn parse(s: &str) -> Option<Film> {
+        match s {
+            "soft" => Some(Film::Soft),
+            "screen" | "today" => Some(Film::Screen),
+            "off" | "none" => Some(Film::Off),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Film::Soft => "soft",
+            Film::Screen => "screen",
+            Film::Off => "off",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Film::Soft => "Soft",
+            Film::Screen => "Full",
+            Film::Off => "None",
+        }
+    }
+
+    pub fn from_env() -> Option<Film> {
+        std::env::var("LIVING_GAME_FILM").ok().and_then(|v| Film::parse(&v))
+    }
+}
+
+/// Soft film: below `SOFT_FROM` (linear luminance, as the pass sees it) a pixel takes none of the
+/// film, above `SOFT_TO` all of it.
+const SOFT_FROM: f32 = 0.02;
+const SOFT_TO: f32 = 0.25;
+
+/// How much the soft film spares dark pixels at the atmosphere's light (lux): fully by day, not at
+/// night, where the day curve's film is the moonlit blue haze the night look is built on (and
+/// unseen ground's shade was tuned with). Without an atmosphere, day.
+fn soft_by_light(lux: Option<f32>) -> f32 {
+    const NIGHT: f32 = 2800.0;
+    const DAY: f32 = 7000.0;
+    lux.map_or(1.0, |l| ((l - NIGHT) / (DAY - NIGHT)).clamp(0.0, 1.0))
 }
 
 /// The sight field's texture and the memory of it (`sightfield.rs`), on the camera beside its
@@ -78,6 +146,7 @@ pub struct SightTexture(pub Handle<Image>, pub Handle<Image>);
 #[allow(clippy::type_complexity)]
 pub fn update(
     style: Res<crate::style::Style>,
+    film: Res<Film>,
     atmo: Option<Res<crate::daylight::Atmo>>,
     time: Res<Time>,
     mut drift: Local<Vec2>,
@@ -120,7 +189,8 @@ pub fn update(
         rim: Vec4::new(rr, rg, rb, 0.0),
         // z: the smallest step a crease line marks (`Style::crease_step`).
         sun: screen_sun.extend(s.crease_step).extend(0.0),
-        grade: Vec4::new(gr, gg, gb, if on { s.grade } else { 0.0 }),
+        grade: Vec4::new(gr, gg, gb, if on && *film != Film::Off { s.grade } else { 0.0 }),
+        film: Vec4::new(if *film == Film::Soft { 1.0 } else { 0.0 }, SOFT_FROM, SOFT_TO, soft_by_light(atmo.as_ref().map(|a| a.lux))),
         screen: Vec4::new(w, h, 1.0 / w, 1.0 / h),
         world_from_clip: gtf.to_matrix() * camera.clip_from_view().inverse(),
         eye: gtf.translation().extend(time.elapsed_secs_wrapped()),
@@ -152,6 +222,9 @@ pub struct PostPlugin;
 impl Plugin for PostPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "edges.wesl");
+        let film = Film::from_env().unwrap_or_default();
+        info!("film: {}", film.name());
+        app.insert_resource(film);
         app.add_plugins((ExtractComponentPlugin::<Edges>::default(), UniformComponentPlugin::<Edges>::default(), ExtractComponentPlugin::<SightTexture>::default()));
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else { return };
         render_app.add_systems(RenderStartup, init_pipeline).add_systems(Core3d, draw.in_set(Core3dSystems::PostProcess));

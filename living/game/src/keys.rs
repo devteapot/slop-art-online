@@ -370,11 +370,14 @@ pub struct Prefs {
     pub look_walk: Option<String>,
     /// How unseen ground is drawn (`sightedge::Look`: memory, grey, wash, lantern, shadows, hatch).
     pub sight_look: Option<String>,
+    /// The film (`post::Film`: soft, screen, off), once chosen in Settings; none follows the
+    /// client's default (soft since film-1).
+    pub film: Option<String>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None }
+        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None }
     }
 }
 
@@ -420,6 +423,7 @@ pub fn load() -> (Binds, Prefs) {
         theme: v["theme"].as_str().map(String::from),
         look_walk: v["look_walk"].as_str().map(String::from),
         sight_look: v["sight_look"].as_str().map(String::from),
+        film: v["film"].as_str().map(String::from),
     };
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
     (binds, prefs)
@@ -438,6 +442,7 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "theme": prefs.theme,
         "look_walk": prefs.look_walk,
         "sight_look": prefs.sight_look,
+        "film": prefs.film,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);

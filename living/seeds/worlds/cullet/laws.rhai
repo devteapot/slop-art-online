@@ -128,16 +128,18 @@ fn senses_law() {
         topic: "senses",
         covers: ["glow"],
         reach: #{ day: sight_in("day"), night: sight_in("torch"), hearing: hearing_of_people(), glow: carried_light_seen() },
-        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are a figure. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`,
+        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are someone too far away to make out, and you cannot tell whose community they belong to. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`,
     }
 }
 
-// Who a figure is, only within `known_within` metres.
+// Who a figure is, only within `known_within` metres: farther off someone is too far away to
+// make out (`far`: no name, no community, "someone too far away to make out").
 fn perceived_of(p) {
     let r = base_perceived_of(p);
     if !p.self && p.dist > known_within() {
         r.name = false;
         r.health = "none";
+        r.far = true;
     }
     r
 }

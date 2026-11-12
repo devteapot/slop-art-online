@@ -2693,6 +2693,178 @@ def placement(s):
              {"request": deep, "exit": r.returncode, "error": out[-300:]})
 
 
+def clear_line(s):
+    """An open line more than 10 m from every person now in the world: scenes before this one
+    (`doing`, ...) leave their actors on the first open line, and these scenes count who is in
+    sight."""
+    people = {c["id"] for c in s.rows("SELECT id, kind FROM character WHERE alive = true") if c["kind"] == "person"}
+    return open_line(s, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT id, x, y FROM body") if b["id"] in people])
+
+
+def off_the_line(s, line, actors, dy=40):
+    """Move a scene's actors far off its open line (as `say` does), so that the scenes after it,
+    which find the same line, do not find them on it."""
+    for k, who in enumerate(actors):
+        s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + dy, check=False)
+
+
+def crowd_sight(s):
+    """Everyone in sight is perceived (docs/STRANGERS.md, decision 3; `brain.rs` `noticed`): in a
+    crowd (more than 6 people in sight) a person seen for the first time is still told, first
+    sights of one look sharing one line ("For the first time you see a stranger, 2 tiles east;
+    and ..."), and each gets its `familiar` row. On an open line an observer O stands among 8
+    minded strangers within 4.5 m (a crowd of 9), then two more are brought in. Measures the
+    first-sight lines (count, characters) for the before/after record; `--baseline` on a build
+    from before the fix records them without asserting (there: none in a crowd)."""
+    line = clear_line(s)
+    obs, *crowd = s.people(9)
+    try:
+        crowd_sight_on(s, line, obs, crowd)
+    finally:
+        off_the_line(s, line, [obs, *crowd, *getattr(s, "crowd_new", [])], dy=44)
+
+
+def crowd_sight_on(s, line, obs, crowd):
+    spots = [(dx, dy) for dx in (1, 2, 3, 4) for dy in (-1.0, 1.0)]
+    s.call("place_at", obs, *line[0])
+    for a, (dx, dy) in zip(crowd, spots):
+        s.call("place_at", a, line[dx][0], line[dx][1] + dy)
+    t1 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    time.sleep(10)
+    fam = lambda ids: {r["thing"] & 0xFFFFFFFF for r in s.rows(f"SELECT thing FROM familiar WHERE actor = {obs}") if r["thing"] >> 40 == 2} & set(ids)
+    firsts = lambda since: [r for r in s.rows(f"SELECT id, at_ms, kind, subject, object, text, salience FROM experience WHERE observer = {obs}") if r["at_ms"] >= since and "first time you see" in r["text"]]
+    exps = s.rows(f"SELECT id, at_ms, kind, subject, object, text FROM experience WHERE observer = {obs}", "experiences-crowd")
+    lines1 = firsts(t1 - 2000)
+    parts1 = sum(len(r["text"].split("; ")) for r in lines1)
+    m1 = {"lines": len(lines1), "chars": sum(len(r["text"]) for r in lines1), "people_named": parts1, "crowd_line": any("among a crowd" in r["text"] for r in exps), "texts": [r["text"] for r in lines1]}
+    print("MEASURE crowd of 9 (8 new to O):", json.dumps(m1), flush=True)
+    # Two more, brought in from wherever they were spawned (out of O's sight).
+    new = s.crowd_new = s.people(2)
+    t2 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.call("place_at", new[0], line[5][0], line[5][1] - 1.0)
+    s.call("place_at", new[1], line[5][0], line[5][1] + 1.0)
+    time.sleep(10)
+    lines2 = [r for r in firsts(t2) if r["at_ms"] >= t2]
+    named2 = {i for r in lines2 for i in (r["subject"], r["object"]) if i in new}
+    parts2 = sum(len(r["text"].split("; ")) for r in lines2)
+    m2 = {"lines": len(lines2), "chars": sum(len(r["text"]) for r in lines2), "people_named": parts2, "both_by_id": sorted(named2), "texts": [r["text"] for r in lines2]}
+    print("MEASURE two more among 10 (2 new to O):", json.dumps(m2), flush=True)
+    (s.out / f"{s.name}-measure.json").write_text(json.dumps({"crowd_of_9": m1, "two_more": m2, "observer": obs, "crowd": crowd, "new": new}, indent=1) + "\n")
+    if getattr(s, "baseline", False):
+        print("BASELINE: recorded, not asserted", flush=True)
+        return
+    s.expect("the crowd is a crowd (more than 6 people in sight)", m1["crowd_line"], m1)
+    s.expect("all 8 first seen in the crowd are told", parts1 >= 8, m1)
+    s.expect("first sights of one look share a line (fewer lines than people)", 1 <= len(lines1) < 8, m1)
+    s.expect("each of the 8 has its familiar row", fam(crowd) == set(crowd), sorted(fam(crowd)))
+    s.expect("the two seen for the first time among 10 are both mentioned", parts2 >= 2 and named2 == set(new), m2)
+    s.expect("both have their familiar rows", fam(new) == set(new), sorted(fam(new)))
+
+
+FAR = "someone too far away to make out"
+
+
+def stranger_filter(s):
+    """What a graph's `relation: "stranger"` matches (docs/STRANGERS.md section 3), and how a
+    person too far away to make out is perceived (far-label). With the world's `stranger_by_name`
+    law off, "stranger" is someone with no relation row (or one labelled "stranger"); on, someone
+    whose name one does not know (`perception::knows_name`). On an open line O stands at the west
+    end; A, of O's community with no relation row, 2 m east; N, unknown to O but with a relation
+    row O's mind wrote ("wary"), 3 m east; F, of O's community, 5 m east. O's graph waves at the
+    nearest stranger: off at A, on at N. Then an overlay of `perceived_of` (as Cullet's law: who
+    someone is only within 4 m, `far` beyond) is installed: O's scene shows F as "someone too far
+    away to make out" with its id, no name and no `community`; with the law on and N gone, O's
+    graph finds no stranger and does not wave at F; a relation "stranger" O's mind writes about F
+    (whose name O knows) is not written, one about N is; an unknown U placed 5 m away gets no
+    first sight until brought within 4 m. The law and the shipped script are restored at the end."""
+    line = clear_line(s)
+    o, a, n, f = s.people(4)
+    s.act(o, {"do": "found", "text": f"Verify Strand {o}"})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {o}"))
+    for m in (a, f):
+        s.call("place_near", m, o)
+        s.act(m, {"do": "join", "target": {"id": o}})
+        s.wait(lambda m=m: s.rows(f"SELECT * FROM join_request WHERE asker = {m}"))
+        s.act(o, {"do": "welcome", "target": {"id": m}})
+        s.wait(lambda m=m: s.rows(f"SELECT * FROM membership WHERE member = {m}"))
+    s.call("mind_update", o, {"persona": None, "relations": [{"other": n, "trust": -10, "affinity": -5, "label": "wary", "note": "verification fixture: seen, never named"}],
+                              "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False})
+    s.rows(f"SELECT * FROM relation WHERE actor = {o}", "relations")
+    for who, k in ((o, 0), (a, 2), (n, 3), (f, 5)):
+        s.call("place_at", who, *line[k])
+    for x in (a, n, f):
+        s.graph(x, {"wait": 300})
+    sel = {"nearest": {"kind": "person", "relation": "stranger"}}
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    extra = []
+
+    def waved_at(wait=20):
+        since = now()
+        s.graph(o, {"seq": [{"do": "wave", "target": sel}, {"wait": 300}]})
+        rows = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM skill_use WHERE actor = {o}") if r["skill"] == "wave" and r["at_ms"] >= since], wait)
+        return rows[0]["target"]
+
+    def scene():
+        stamp = lambda: next((d["updated_ms"] for d in s.rows(f"SELECT actor, updated_ms FROM deliberation WHERE actor = {o}")), -1)
+        before = stamp()
+        end = time.monotonic() + 75
+        while time.monotonic() < end:
+            # A `think` leaf asks only 45 s after the last deliberation, so it is installed again.
+            s.call("set_behavior", o, json.dumps({"seq": [{"think": "a look around"}, {"wait": 300}]}))
+            row = next((d for d in s.rows(f"SELECT * FROM deliberation WHERE actor = {o}") if d["updated_ms"] > before), None)
+            if row:
+                sc = json.loads(row["scene"])
+                (s.out / f"{s.name}-scene-far.json").write_text(json.dumps(sc, indent=1, ensure_ascii=False) + "\n")
+                return {c["id"]: c for c in sc.get("creatures", [])}
+            time.sleep(5)
+        raise TimeoutError("no deliberation scene for O in 75 s")
+    try:
+        off = waved_at()
+        s.expect("law off: the nearest stranger is A, of O's community with no relation row", off == a, {"waved_at": off, "A": a, "N": n})
+        set_law(s, "stranger_by_name", True)
+        s.wait(lambda: any(r["name"] == "stranger_by_name" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
+        on = waved_at()
+        s.expect("law on: the nearest stranger is N, whose name O does not know (its relation row does not count)", on == n, {"waved_at": on, "A": a, "N": n})
+        # Too far away to make out: who someone is only within 4 m (as Cullet's law within 24 m).
+        far_law = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
+        s.call("install_script", compose(shipped, {"perceived_of": far_law}))
+        seen = scene()
+        fe, ae, ne = seen.get(f, {}), seen.get(a, {}), seen.get(n, {})
+        s.expect("far: F (known, 5 m) is someone too far away to make out, with its id, no name and no community",
+                 fe.get("who") == FAR and "name" not in fe and "community" not in fe and fe.get("id") == f, fe)
+        s.expect("near: A keeps its name and community; N is a stranger", ae.get("name") and ae.get("community") == "yours" and ne.get("who") == "a stranger" and "community" not in ne, {"A": ae, "N": ne})
+        # The filter (law on) never matches a known neighbour, however far.
+        s.call("place_at", n, line[0][0] + 70, line[0][1] + 52)
+        since = now()
+        s.graph(o, {"seq": [{"do": "wave", "target": sel}, {"wait": 300}]})
+        time.sleep(8)
+        waves = [r for r in s.rows(f"SELECT * FROM skill_use WHERE actor = {o}") if r["skill"] == "wave" and r["at_ms"] >= since]
+        s.expect("law on, N gone: no stranger in sight, F (far, known) is not waved at", not waves, waves)
+        # No "stranger" relation about someone whose name one knows, however they were seen.
+        s.call("mind_update", o, {"persona": None, "relations": [{"other": f, "trust": 0, "affinity": 0, "label": "stranger", "note": "verification fixture: a figure far off"},
+                                                                  {"other": n, "trust": 0, "affinity": 0, "label": "stranger", "note": "verification fixture: never named"}],
+                                  "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False})
+        rel = {r["other"]: r["label"] for r in s.rows(f"SELECT * FROM relation WHERE actor = {o}", "relations-after")}
+        s.expect("a relation \"stranger\" to F (known by name) is not written; to N (unknown) it is", "stranger" not in rel.get(f, "") and rel.get(n) == "stranger", rel)
+        # A first sight waits until someone can be made out.
+        u = s.people(1)[0]
+        extra.append(u)
+        t0 = now()
+        s.call("place_at", u, line[5][0], line[5][1] + 1.0)
+        time.sleep(8)
+        firsts = lambda: [r for r in s.rows(f"SELECT at_ms, subject, object, text FROM experience WHERE observer = {o}") if r["at_ms"] >= t0 and "first time you see" in r["text"] and u in (r["subject"], r["object"])]
+        early = firsts()
+        s.call("place_at", u, line[2][0], line[2][1] - 1.0)
+        late = s.wait(firsts, 15) if not early else early
+        s.expect("U at 5 m (too far to make out) gets no first sight; within 4 m it does, as a stranger",
+                 not early and late and "a stranger" in late[0]["text"] and FAR not in late[0]["text"], {"at_5m": early, "at_2m": late})
+    finally:
+        s.call("install_script", shipped, check=False)
+        set_law(s, "stranger_by_name", False, check=False)
+        off_the_line(s, line, [o, a, n, f] + extra, dy=50)
+
+
 
 def outcomes(s):
     """Whoever strikes or shoots is told how it came out (the `force_outcomes` law,
@@ -2753,7 +2925,7 @@ def outcomes(s):
     s.expect("with force_outcomes off, a hit is not told", after == before, {"before": before, "after": after})
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter}
 
 
 def goods(s):
