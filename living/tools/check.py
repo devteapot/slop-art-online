@@ -149,7 +149,8 @@ SHARED_INPUTS = [
 # Files a package compiles from outside its own directory besides the shared inputs (the
 # audit finds any that are missing here): the game's #[path] modules from the viewer, and the
 # script bench's Rust port of the laws.
-EXTRA_INPUTS = {"living-game": ["living/viewer/src/clock.rs", "living/viewer/src/sync.rs"],
+# The game's character types (living/tools/characters/types.json, include_str!) too.
+EXTRA_INPUTS = {"living-game": ["living/viewer/src/clock.rs", "living/viewer/src/sync.rs", "living/tools/characters/types.json"],
                 "sb-bench": ["living/tools/script_bench/port.rs"]}
 
 # Environment that can change what a step builds or how its tests run: exact names and
