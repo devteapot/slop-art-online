@@ -206,6 +206,20 @@ pub fn fire_state(ctx: &ReducerContext, s: &Structure, now: u64) -> (bool, f32) 
     t.fire_state(s.lit_until_ms, now, day_ms)
 }
 
+/// A fight is on while its blows come within this long of each other: a blow after a longer
+/// gap is a new fight's first (`damage`), and the one who struck is no longer a fight's party
+/// for `hurt_by_near`.
+pub const FIGHT_MS: u64 = 30_000;
+
+/// Whether the one who last hurt `id` is alive and within the `wake_reach` law of it, with the
+/// fight still on (struck within `FIGHT_MS`): the fact `hurt_by_near` of the actor.
+fn hurt_by_near(ctx: &ReducerContext, at: (f32, f32), hurt_by: u32, hurt_ago: Option<f32>, now: u64) -> bool {
+    hurt_by != 0
+        && hurt_ago.is_some_and(|ago| (ago as u64) <= FIGHT_MS)
+        && ctx.db.character().id().find(hurt_by).is_some_and(|c| c.alive)
+        && ctx.db.body().id().find(hurt_by).is_some_and(|b| dist(pos(&b, now), at) <= common::laws(ctx).wake_reach)
+}
+
 pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
     facts_reading(ctx, id, now, &Reads::all())
 }
@@ -244,6 +258,7 @@ fn facts_reading(ctx: &ReducerContext, id: u32, now: u64, reads: &Reads) -> Acto
         pasture: 0.0,
         hurt_by,
         hurt_ago,
+        hurt_by_near: hurt_by_near(ctx, at, hurt_by, hurt_ago, now),
         yielded_ago: None,
         sensed: Vec::new(),
         bold: false,
@@ -275,7 +290,7 @@ pub fn law_ctx(ctx: &ReducerContext, id: u32, w: &World, now: u64, plan: &living
     if !top("actor") {
         return c;
     }
-    let reads = |f: &str| plan.actor & (1 << ACTOR.iter().position(|t| *t == f).expect("an actor field")) != 0;
+    let reads = |f: &str| plan.actor & (1u64 << ACTOR.iter().position(|t| *t == f).expect("an actor field")) != 0;
     // Fields only `facts` (or a skill's context) works out: take them all.
     const CHEAP: [&str; 12] = ["id", "kind", "inv", "knows", "stage", "age", "life", "speed", "strength", "endurance", "vitality", "lit"];
     if ACTOR.iter().any(|f| !CHEAP.contains(f) && reads(f)) {
@@ -2506,7 +2521,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     // `Attacker` target, a yield's addressee), like the told line and the combat feed.
     let hurt_by = if seen_shooter { attacker } else { 0 };
     let struck_since_yield = yielded && yielded_ago(ctx, victim, now).is_some_and(|ago| v.hurt_ms >= now.saturating_sub(ago as u64) && v.hurt_by == hurt_by);
-    let first_blow = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != hurt_by;
+    let first_blow = now.saturating_sub(v.hurt_ms) > FIGHT_MS || v.hurt_by != hurt_by;
     common::settle(ctx, &mut v, now);
     v.hp = (v.hp - amount).max(0.0);
     v.hurt_ms = now;
@@ -2575,6 +2590,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         // Wakes a sleeping victim whoever plays it; a mind thinks on it.
         perceive::request_waking(ctx, victim, &format!("{pleading}!"), now, perceive::Wake::Attack);
     } else if !dead {
+        // Every blow wakes a sleeping victim, whoever plays it (not only a fight's first).
+        perceive::wake_struck(ctx, victim, &format!("{pleading}!"), now);
         fight_report(ctx, victim, hurt_by, now);
         fight_report(ctx, attacker, victim, now);
     }

@@ -3,7 +3,7 @@
 Free: the fake model; scratch `verify-minds-*` databases on the trial stack.
 
   battle_diag.py --run minds-bd-<stamp> [--battle 100] [--walkers 116] [--minutes 30]
-                 [--window 30] [--period 60] [--no-mind] [--no-refill] [--refill-from 30]
+                 [--window 30] [--period 60] [--no-mind] [--fast-lane] [--no-refill] [--refill-from 30]
                  [--refill-gap 0.5] [--law NAME=VALUE ...]
 
 Seed `island` (its residents and animals on their own rules). `--battle` minded people
@@ -17,6 +17,11 @@ the fight within 9 m of the site, so a battle's drift is the battle's, not the g
 for the unfolded lines, `profile_detail=true` to time the parts of each evaluation). The mind service thinks for all of them on the fake
 model (think 5 s, compile 4 s, consolidation 4 s, talk 2 s), its compile keeping the fight graph,
 unless `--no-mind` (requests to think then stay pending, refreshed with their scene).
+`--fast-lane` sets the world law `fast_lane_on` (docs/FAST_LANE.md) and answers each fast call
+after 1.0 s (r2e's model p50) with no change (`keep`), so the battle is the same as without it:
+what it adds is the lane's own work (triggers, turns, the `fast_ask` rows, the replies). Each
+sample then counts the fast calls of its window (`thought` rows of kind `fast`, by issue time) and
+the `fast_ask` rows.
 
 Every `--period` seconds a `--window`-second `bench.py` window (profiling on) gives the tick's
 rate, durations and spans, and the authority's diagnostic counts for the window (`diag:` lines,
@@ -123,6 +128,7 @@ def main():
     ap.add_argument("--window", type=int, default=30)
     ap.add_argument("--period", type=int, default=60)
     ap.add_argument("--no-mind", action="store_true")
+    ap.add_argument("--fast-lane", action="store_true", help="the world law fast_lane_on true; fast calls answered `keep` after 1.0 s")
     ap.add_argument("--no-refill", action="store_true", help="deaths are permanent: the dead are not replaced, and the battle runs down")
     ap.add_argument("--refill-from", type=float, default=30.0,
                     help="a refill appears this far from the site (m), at a random bearing, and walks in before it fights")
@@ -137,6 +143,8 @@ def main():
     try:
         run.harness("launch", "--seed", "island")
         run.harness("doctor")
+        if a.fast_lane:
+            run.admin("set_world_law", "fast_lane_on", "true")
         for law in a.law:
             name, value = law.split("=", 1)
             run.admin("set_world_law", name, value)
@@ -199,7 +207,8 @@ def main():
             # again), and a prompt opens "# Who you are (<name>)".
             fight = [{"purpose": "deliberate", "contains": f"# Who you are (Walker{n})", "delay_s": 4.0, "times": -1,
                       "reply": {"graph": graph(0), "plan": "diag fixture: keep fighting", "weight": 1.5}} for n in range(1, a.battle + 1)]
-            script = {"replies": replies, "rules": fight + [{"purpose": p, "delay_s": d, "times": -1, "reply": replies[p]} for p, d in (("think", 5.0), ("deliberate", 4.0), ("consolidate", 4.0), ("talk", 2.0))]}
+            replies["fast"] = {"keep": True, "thought": "diag fixture: as it is."}
+            script = {"replies": replies, "rules": fight + [{"purpose": p, "delay_s": d, "times": -1, "reply": replies[p]} for p, d in (("think", 5.0), ("deliberate", 4.0), ("consolidate", 4.0), ("talk", 2.0), ("fast", 1.0))]}
             # The minds of everyone spawned, and of the fighters spawned later to refill the battle:
             # ids are handed out in order, so the next few thousand are theirs (an empty
             # LIVING_ONLY would mean no one).
@@ -239,7 +248,7 @@ def main():
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
         keeper.start()
-        head = {"battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind,
+        head = {"battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane,
                 "nproc": os.cpu_count(), "db_identity": ident}
         (run.directory / "diag-head.json").write_text(json.dumps(head, indent=1))
         print(json.dumps(head), flush=True)
@@ -257,6 +266,18 @@ def main():
                       "diag_per_s": d, "diag_seconds": secs, "load_1m": [round(load0, 1), round(os.getloadavg()[0], 1)], "respawns": state["respawns"], "fighters_alive": len(state["fighters"]), "arriving": len(state["arriving"]), "fighter_deaths": state.get("deaths", 0)}
             sample["rows"] = {tb: count(run, tb) for tb in TABLES}
             sample["alive"] = sum(1 for c in run.sql("SELECT id, alive FROM character", "census") if c["alive"])
+            if a.fast_lane:
+                # Fast calls whose request was issued in this window, from their `thought` rows.
+                fast = []
+                for r in run.private("SELECT kind, detail, at_ms FROM thought WHERE kind = 'fast'", f"fast-{k:02d}"):
+                    try:
+                        issued = json.loads(r["detail"]).get("issued_ms") or r["at_ms"]
+                    except (ValueError, TypeError):
+                        issued = r["at_ms"]
+                    fast.append(issued)
+                w0, w1 = t0 * 1000, t1 * 1000
+                sample["fast"] = {"calls_in_window": sum(1 for x in fast if w0 <= x < w1), "per_s": round(sum(1 for x in fast if w0 <= x < w1) / a.window, 3),
+                                  "total": len(fast), "fast_ask_rows": count(run, "fast_ask")}
             sample["metrics"] = metrics(ident) if ident else {}
             # How long remains lie (`rot` rows: when each is due, against when it was made) and how
             # many are left at the site; a death is permanent with --no-refill.

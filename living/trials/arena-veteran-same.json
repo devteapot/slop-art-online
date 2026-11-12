@@ -1,0 +1,1449 @@
+{
+ "title": "Arena R3: a veteran meets A again",
+ "about": "R3 (docs/COMBAT_MIND.md §5.4), written by living/tools/arena_veteran.py from arena-heavy (the same fixture graph): A meets the subject four times over two world days (day 1 12:00, day 2 08:00 and 14:00, day 3 08:00; 2 minutes each), then a fifth time (day 3 14:00, 3 minutes). Each meeting places the fixture 6 m from the subject with arena-heavy's heavy-blow graph and lets it walk back to the subject while the meeting lasts; at its end it waits, 60 m off. The fixture is a trial fixture, never game content: nothing here is installed into any character, and the subject's mind is told nothing about it. Subject, kit and world as arena-heavy.",
+ "world": {
+  "seed": "island",
+  "start_hour": 10.0
+ },
+ "record": {
+  "uses": true,
+  "positions": true,
+  "bodies": {
+   "hz": 5
+  }
+ },
+ "subject": {
+  "spawn": {
+   "name": "Wren"
+  },
+  "clear_items": true,
+  "background": {
+   "origin": "traveller",
+   "sheet": {
+    "narrative": "I came over the water two days ago with a bow and little else. I am walking to the town to find work and a roof.",
+    "values": [
+     "staying alive",
+     "paying my own way"
+    ],
+    "goals": [
+     "reach the town",
+     "find work and a place to sleep"
+    ],
+    "mood": "tired but hopeful",
+    "relations": [],
+    "memories": [],
+    "stances": [],
+    "places": []
+   }
+  }
+ },
+ "probes": [
+  "survived",
+  "hp_min",
+  "skills"
+ ],
+ "minutes": 30,
+ "budget": {
+  "tokens": 2500000
+ },
+ "cast": {
+  "foe": {
+   "pick": {
+    "kind": "person",
+    "stage": 2,
+    "nearest": {
+     "arrival": true
+    }
+   }
+  }
+ },
+ "arena": {
+  "pattern": "attack",
+  "foes": [
+   "foe"
+  ]
+ },
+ "timeline": [
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "subject",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "foe",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "subject",
+   "to": {
+    "arrival": true,
+    "offset": [
+     -60,
+     0
+    ]
+   }
+  },
+  {
+   "at": "start",
+   "do": "graph",
+   "who": "subject",
+   "graph": "instinct:person"
+  },
+  {
+   "at": "start",
+   "do": "items",
+   "who": "subject",
+   "items": {
+    "bow": 1,
+    "arrow": 30,
+    "berries": 4,
+    "spear": 1
+   }
+  },
+  {
+   "at": "start",
+   "do": "know",
+   "who": "subject",
+   "techniques": [
+    "fire",
+    "fire_bolt",
+    "wound_tending"
+   ]
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "foe",
+   "to": {
+    "who": "subject",
+    "offset": [
+     60,
+     0
+    ]
+   }
+  },
+  {
+   "at": "start",
+   "do": "items",
+   "who": "foe",
+   "items": {
+    "spear": 1
+   }
+  },
+  {
+   "at": "start",
+   "do": "know",
+   "who": "foe",
+   "techniques": [
+    "wound_tending"
+   ]
+  },
+  {
+   "at": "start",
+   "do": "graph",
+   "who": "foe",
+   "graph": {
+    "wait": 1800
+   }
+  },
+  {
+   "at": 1.0,
+   "steps": [
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       6,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 1: foe (day 1 12:00)"
+    },
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "attack",
+           "target": "$subject"
+          }
+         },
+         {
+          "if": {
+           "cond": {
+            "health": {
+             "below": 70
+            }
+           },
+           "then": {
+            "first": [
+             {
+              "seq": [
+               {
+                "do": {
+                 "skill": "heal",
+                 "target": "self"
+                }
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 1.5
+                   }
+                  }
+                 },
+                 {
+                  "wait": 2.5
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            ]
+           },
+           "else": {
+            "first": [
+             {
+              "if": {
+               "cond": {
+                "chance": 0.5
+               },
+               "then": {
+                "wait": 2
+               }
+              }
+             },
+             {
+              "wait": 3
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 1.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "seq": [
+       {
+        "do": {
+         "skill": "goto",
+         "target": {
+          "at": "$subject_xy"
+         }
+        }
+       },
+       {
+        "first": [
+         {
+          "seq": [
+           {
+            "do": {
+             "skill": "attack",
+             "target": "$subject"
+            }
+           },
+           {
+            "if": {
+             "cond": {
+              "health": {
+               "below": 70
+              }
+             },
+             "then": {
+              "first": [
+               {
+                "seq": [
+                 {
+                  "do": {
+                   "skill": "heal",
+                   "target": "self"
+                  }
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 1.5
+                     }
+                    }
+                   },
+                   {
+                    "wait": 2.5
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              ]
+             },
+             "else": {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "before_min": 3.0
+  },
+  {
+   "at": 3.0,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "wait": 600
+     }
+    },
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       60,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 1 ends: foe"
+    }
+   ]
+  },
+  {
+   "at": 11.0,
+   "steps": [
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       6,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 2: foe (day 2 08:00)"
+    },
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "attack",
+           "target": "$subject"
+          }
+         },
+         {
+          "if": {
+           "cond": {
+            "health": {
+             "below": 70
+            }
+           },
+           "then": {
+            "first": [
+             {
+              "seq": [
+               {
+                "do": {
+                 "skill": "heal",
+                 "target": "self"
+                }
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 1.5
+                   }
+                  }
+                 },
+                 {
+                  "wait": 2.5
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            ]
+           },
+           "else": {
+            "first": [
+             {
+              "if": {
+               "cond": {
+                "chance": 0.5
+               },
+               "then": {
+                "wait": 2
+               }
+              }
+             },
+             {
+              "wait": 3
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 11.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "seq": [
+       {
+        "do": {
+         "skill": "goto",
+         "target": {
+          "at": "$subject_xy"
+         }
+        }
+       },
+       {
+        "first": [
+         {
+          "seq": [
+           {
+            "do": {
+             "skill": "attack",
+             "target": "$subject"
+            }
+           },
+           {
+            "if": {
+             "cond": {
+              "health": {
+               "below": 70
+              }
+             },
+             "then": {
+              "first": [
+               {
+                "seq": [
+                 {
+                  "do": {
+                   "skill": "heal",
+                   "target": "self"
+                  }
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 1.5
+                     }
+                    }
+                   },
+                   {
+                    "wait": 2.5
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              ]
+             },
+             "else": {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "before_min": 13.0
+  },
+  {
+   "at": 13.0,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "wait": 600
+     }
+    },
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       60,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 2 ends: foe"
+    }
+   ]
+  },
+  {
+   "at": 14.0,
+   "steps": [
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       6,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 3: foe (day 2 14:00)"
+    },
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "attack",
+           "target": "$subject"
+          }
+         },
+         {
+          "if": {
+           "cond": {
+            "health": {
+             "below": 70
+            }
+           },
+           "then": {
+            "first": [
+             {
+              "seq": [
+               {
+                "do": {
+                 "skill": "heal",
+                 "target": "self"
+                }
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 1.5
+                   }
+                  }
+                 },
+                 {
+                  "wait": 2.5
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            ]
+           },
+           "else": {
+            "first": [
+             {
+              "if": {
+               "cond": {
+                "chance": 0.5
+               },
+               "then": {
+                "wait": 2
+               }
+              }
+             },
+             {
+              "wait": 3
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 14.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "seq": [
+       {
+        "do": {
+         "skill": "goto",
+         "target": {
+          "at": "$subject_xy"
+         }
+        }
+       },
+       {
+        "first": [
+         {
+          "seq": [
+           {
+            "do": {
+             "skill": "attack",
+             "target": "$subject"
+            }
+           },
+           {
+            "if": {
+             "cond": {
+              "health": {
+               "below": 70
+              }
+             },
+             "then": {
+              "first": [
+               {
+                "seq": [
+                 {
+                  "do": {
+                   "skill": "heal",
+                   "target": "self"
+                  }
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 1.5
+                     }
+                    }
+                   },
+                   {
+                    "wait": 2.5
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              ]
+             },
+             "else": {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "before_min": 16.0
+  },
+  {
+   "at": 16.0,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "wait": 600
+     }
+    },
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       60,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 3 ends: foe"
+    }
+   ]
+  },
+  {
+   "at": 23.0,
+   "steps": [
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       6,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 4: foe (day 3 08:00)"
+    },
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "attack",
+           "target": "$subject"
+          }
+         },
+         {
+          "if": {
+           "cond": {
+            "health": {
+             "below": 70
+            }
+           },
+           "then": {
+            "first": [
+             {
+              "seq": [
+               {
+                "do": {
+                 "skill": "heal",
+                 "target": "self"
+                }
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 1.5
+                   }
+                  }
+                 },
+                 {
+                  "wait": 2.5
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            ]
+           },
+           "else": {
+            "first": [
+             {
+              "if": {
+               "cond": {
+                "chance": 0.5
+               },
+               "then": {
+                "wait": 2
+               }
+              }
+             },
+             {
+              "wait": 3
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 23.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "seq": [
+       {
+        "do": {
+         "skill": "goto",
+         "target": {
+          "at": "$subject_xy"
+         }
+        }
+       },
+       {
+        "first": [
+         {
+          "seq": [
+           {
+            "do": {
+             "skill": "attack",
+             "target": "$subject"
+            }
+           },
+           {
+            "if": {
+             "cond": {
+              "health": {
+               "below": 70
+              }
+             },
+             "then": {
+              "first": [
+               {
+                "seq": [
+                 {
+                  "do": {
+                   "skill": "heal",
+                   "target": "self"
+                  }
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 1.5
+                     }
+                    }
+                   },
+                   {
+                    "wait": 2.5
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              ]
+             },
+             "else": {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "before_min": 25.0
+  },
+  {
+   "at": 25.0,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "wait": 600
+     }
+    },
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       60,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 4 ends: foe"
+    }
+   ]
+  },
+  {
+   "at": 26.0,
+   "steps": [
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       6,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 5: foe (day 3 14:00)"
+    },
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "attack",
+           "target": "$subject"
+          }
+         },
+         {
+          "if": {
+           "cond": {
+            "health": {
+             "below": 70
+            }
+           },
+           "then": {
+            "first": [
+             {
+              "seq": [
+               {
+                "do": {
+                 "skill": "heal",
+                 "target": "self"
+                }
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 1.5
+                   }
+                  }
+                 },
+                 {
+                  "wait": 2.5
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            ]
+           },
+           "else": {
+            "first": [
+             {
+              "if": {
+               "cond": {
+                "chance": 0.5
+               },
+               "then": {
+                "wait": 2
+               }
+              }
+             },
+             {
+              "wait": 3
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 26.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "seq": [
+       {
+        "do": {
+         "skill": "goto",
+         "target": {
+          "at": "$subject_xy"
+         }
+        }
+       },
+       {
+        "first": [
+         {
+          "seq": [
+           {
+            "do": {
+             "skill": "attack",
+             "target": "$subject"
+            }
+           },
+           {
+            "if": {
+             "cond": {
+              "health": {
+               "below": 70
+              }
+             },
+             "then": {
+              "first": [
+               {
+                "seq": [
+                 {
+                  "do": {
+                   "skill": "heal",
+                   "target": "self"
+                  }
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 1.5
+                     }
+                    }
+                   },
+                   {
+                    "wait": 2.5
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              ]
+             },
+             "else": {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "before_min": 29.0
+  },
+  {
+   "at": 29.0,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "wait": 600
+     }
+    },
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       60,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "meeting 5 ends: foe"
+    }
+   ]
+  }
+ ]
+}

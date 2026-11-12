@@ -46,7 +46,9 @@
 //! `LIVING_GAME_PERF=frames` logs frame times every 2 s outside the island (whose own
 //! `island perf` line does it), with the number of characters and outfit meshes.
 
+pub mod book;
 pub mod compose;
+pub mod seen;
 pub mod identity;
 pub mod outfit;
 
