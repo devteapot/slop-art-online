@@ -14,7 +14,8 @@ rules list (`speech_card`), is refused in the world's words, and reads who heard
   reducer's error must be exactly what that check says on the same facts, run outside the
   authority the way a client runs it before sending (`living-rules` example `way_check`, the
   installed script, `speech::check_way`). A refused line writes nothing.
-- a line naming someone by `#<id>` is said as the speaker refers to them (ids are not words).
+- a line naming someone by `#<id>` is said as the speaker refers to them (ids are not words), and a
+  `spoken_as` row keeps what the player wrote beside it.
 
     speak.py --run RUN
 
@@ -222,6 +223,9 @@ def main():
     words = said[0]["text"] if said else ""
     expect("a player's line naming someone by #id is said without the id",
            code == 200 and said and f"#{resident}" not in words and "verify speak: is " in words and " about?" in words, {"code": code, "body": body[:200], "said": words})
+    kept = [r for r in sql("SELECT * FROM my_experience", me_token) if r["kind"] == "spoken_as" and r["at_ms"] >= t4]
+    expect("the player's spoken_as row keeps what it wrote beside what was said",
+           len(kept) == 1 and f"verify speak: is #{resident} about?" in kept[0]["text"] and words.split("“")[-1].rstrip("”") in kept[0]["text"], [r["text"] for r in kept])
     out = Path(V.run_dir(a.run)) / "speak.json"
     out.write_text(json.dumps({"db": db, "me": me, "resident": resident, "cards": cards, "checks": checks}, indent=2) + "\n")
     print(out)

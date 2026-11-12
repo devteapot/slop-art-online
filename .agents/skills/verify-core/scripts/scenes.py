@@ -3013,6 +3013,8 @@ def say(s):
     s.expect("a line naming people by id is spoken without the ids", bool(got) and f"#{b}" not in said_text and f"#{far}" not in said_text and "and the archer too." in said_text, got[:1], fatal=False)
     told_b = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {b}", "id-line-heard") if r["at_ms"] >= t0 and "Watch out," in r["text"]]
     s.expect("the listener hears it without the ids", len(told_b) >= 1 and all(f"#{b}" not in r["text"] and f"#{far}" not in r["text"] for r in told_b), told_b[:2], fatal=False)
+    kept = [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}", "id-line-kept") if r["at_ms"] >= t0 and r["kind"] == "spoken_as"]
+    s.expect("the speaker keeps what it wrote beside what was said (spoken_as)", len(kept) == 1 and idline in kept[0]["text"] and "and the archer too." in kept[0]["text"], kept, fatal=False)
     time.sleep(2.5)
 
     # Out of sight: not spoken, and the speaker is told why.
