@@ -193,6 +193,7 @@ Each change is general: it serves any time-critical thing a character does, with
 - **Change:** for urgent reasons the mind already never holds (being attacked, a fight report, a child in danger), one call on the fastest acceptable model that writes **one routine or one labelled patch** in the graph grammar, in the character's own words and stances, instead of a full think and compile. The slow deliberation still follows when it is due. This is a lane in the mind service, chosen by urgency, not by subject.
 - **Model:** DeepSeek V4.1 Flash with thinking off answered talk-sized prompts at 1.8 s p50 and compiled at 3.8 s p50 in a good hour (MODEL_COST); its compile quality without thinking was judged weak (5/24), so this lane must be measured for intention fidelity, not assumed.
 - **What it must not become:** a combat planner. Its prompt is the character's own situation, stances and routines and the grammar; it holds no tactic text, and the rules text keeps physics only.
+- **Designed** (2026-11-12, [FAST_LANE.md](FAST_LANE.md), not built): the trigger, a blow taken or the same visible move by the same creature seen `seen_again_n` (a law, 3) times; one call on DeepSeek Flash writing only the `combat` branch or switching to a routine the character wrote; about 3 s from a blow to the patch installed; per-character gap and a global cap; never while a person controls the body; tested as an R2 arm.
 
 ### 3.5 A decision model that picks among what the mind prepared (mind architecture)
 
